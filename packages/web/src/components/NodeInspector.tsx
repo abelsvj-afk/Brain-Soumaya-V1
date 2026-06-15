@@ -6,10 +6,9 @@ import { TYPE_COLORS } from "../graph/theme.js";
 interface Props {
   node: GraphNode | null;
   onFocus: (id: number) => void;
-  onClose: () => void;
 }
 
-export function NodeInspector({ node, onFocus, onClose }: Props) {
+export function NodeInspector({ node, onFocus }: Props) {
   const [neighborhood, setNeighborhood] = useState<GraphData | null>(null);
 
   useEffect(() => {
@@ -26,14 +25,14 @@ export function NodeInspector({ node, onFocus, onClose }: Props) {
     };
   }, [node]);
 
-  if (!node) return null;
+  if (!node) {
+    return <p className="empty">Click a star to inspect a memory and its connections.</p>;
+  }
+
   const neighbors = neighborhood ? neighborhood.nodes.filter((n) => n.id !== node.id) : [];
 
   return (
-    <div className="panel inspector">
-      <button className="close" onClick={onClose} aria-label="Close">
-        ×
-      </button>
+    <div className="dock-body">
       <span className="chip" style={{ background: TYPE_COLORS[node.type] }}>
         {node.type.replace(/_/g, " ")}
       </span>

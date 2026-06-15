@@ -53,6 +53,19 @@ export function upsertEmbedding(db: RawDb, nodeId: number, vec: Float32Array): v
   );
 }
 
+/** Read back a stored embedding as a Float32Array (e.g. to KNN from an existing node). */
+export function getEmbedding(db: RawDb, nodeId: number): Float32Array | undefined {
+  const row = db.prepare(`SELECT embedding FROM vec_nodes WHERE node_id = ?`).get(BigInt(nodeId)) as
+    | { embedding: Buffer }
+    | undefined;
+  if (!row) return undefined;
+  const buf = row.embedding;
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const arr = new Float32Array(buf.byteLength / 4);
+  for (let i = 0; i < arr.length; i++) arr[i] = view.getFloat32(i * 4, true);
+  return arr;
+}
+
 export interface KnnHit {
   nodeId: number;
   distance: number;

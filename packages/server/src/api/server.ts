@@ -5,6 +5,8 @@ import { ingestRoutes } from "./routes/ingest.js";
 import { graphRoutes } from "./routes/graph.js";
 import { nodesRoutes } from "./routes/nodes.js";
 import { searchRoutes } from "./routes/search.js";
+import { digestRoutes } from "./routes/digest.js";
+import { chatRoutes } from "./routes/chat.js";
 
 /** Assemble the Express app over an AppContext. */
 export function createApp(ctx: AppContext): Express {
@@ -25,6 +27,8 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/graph", graphRoutes(ctx));
   app.use("/api/nodes", nodesRoutes(ctx));
   app.use("/api/search", searchRoutes(ctx));
+  app.use("/api/digest", digestRoutes(ctx));
+  app.use("/api/chat", chatRoutes(ctx));
 
   // Centralized error handler (Express 5 forwards rejected async handlers here).
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

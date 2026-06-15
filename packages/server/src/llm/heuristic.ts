@@ -45,4 +45,32 @@ export class HeuristicProvider implements LlmProvider {
   ): Promise<LinkValidation> {
     return { linked: true, relationship: "relates_to", weight: similarity };
   }
+
+  async synthesize(
+    a: LinkCandidate,
+    b: LinkCandidate,
+    similarity: number,
+  ): Promise<{ text: string; score: number }> {
+    return {
+      text: `"${a.label}" and "${b.label}" seem related (${Math.round(
+        similarity * 100,
+      )}% similar) but aren't connected yet — worth a closer look.`,
+      score: similarity,
+    };
+  }
+
+  async answer(
+    question: string,
+    context: ContextNode[],
+  ): Promise<{ answer: string; citations: number[] }> {
+    if (context.length === 0) {
+      return { answer: "I don't have any memories related to that yet.", citations: [] };
+    }
+    const top = context.slice(0, 5);
+    const answer =
+      `Related memories for "${question}":\n` +
+      top.map((c) => `• ${c.label}: ${c.content}`).join("\n") +
+      `\n\n(Set GEMINI_API_KEY for synthesized answers.)`;
+    return { answer, citations: top.map((c) => c.id) };
+  }
 }

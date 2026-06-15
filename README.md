@@ -51,4 +51,7 @@ API key** (a heuristic provider stands in for the LLM until a key is set).
 - [x] **Phase III** — REST API + bounded/lazy graph service.
 - [x] **Phase IV** — celestial 3D galaxy UI: custom node bodies, sprite labels,
       starfield, UnrealBloom, directional particles, hover-highlight, fly-to.
-- [ ] Phase V — synthesis digest + chat-with-your-brain
+- [x] **Phase V** — signature features: synthesis digest (latent connections) +
+      chat-with-your-brain (GraphRAG with camera-fly-to citations).
+
+**V1 complete.** Next (V2 backlog): time-travel growth scrubber, voice capture.

@@ -66,3 +66,28 @@ export interface GraphData {
   nodes: GraphNode[];
   links: GraphEdge[];
 }
+
+/** A lightweight node reference used in insights and chat citations. */
+export interface NodeRef {
+  id: number;
+  label: string;
+  type: NodeType;
+}
+
+/** A synthesized cross-cluster insight (the "compounding memory" feature). */
+export interface Insight {
+  id: number;
+  text: string;
+  /** 0..1 — how strong/surprising the latent connection is. */
+  score: number;
+  createdAt: string;
+  nodes: NodeRef[];
+}
+
+/** Answer from chat-with-your-brain (GraphRAG), with node citations. */
+export interface ChatResponse {
+  answer: string;
+  citations: NodeRef[];
+  /** Ids of the subgraph used as context (for camera/highlight). */
+  contextIds: number[];
+}

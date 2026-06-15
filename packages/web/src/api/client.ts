@@ -1,4 +1,4 @@
-import type { GraphData, GraphNode } from "@brain/shared";
+import type { ChatResponse, GraphData, GraphNode, Insight } from "@brain/shared";
 
 const API = "/api";
 
@@ -50,4 +50,23 @@ export async function getNeighbors(id: number, depth = 2): Promise<GraphData> {
 export async function getHealth(): Promise<Health> {
   const res = await fetch(`${API}/health`);
   return res.json() as Promise<Health>;
+}
+
+export async function getDigest(): Promise<Insight[]> {
+  const res = await fetch(`${API}/digest`);
+  return res.json() as Promise<Insight[]>;
+}
+
+export async function runDigest(): Promise<Insight[]> {
+  const res = await fetch(`${API}/digest/run`, { method: "POST" });
+  return res.json() as Promise<Insight[]>;
+}
+
+export async function askChat(question: string): Promise<ChatResponse> {
+  const res = await fetch(`${API}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  return res.json() as Promise<ChatResponse>;
 }

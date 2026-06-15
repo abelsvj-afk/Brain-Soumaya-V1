@@ -1,6 +1,15 @@
 import { NODE_TYPES, RELATIONSHIP_TYPES, ExtractionResultSchema, type ExtractionResult } from "@brain/shared";
 import type { ContextNode, LinkCandidate, LinkValidation, LlmProvider } from "./adapter.js";
-import { EXTRACTION_SYSTEM, LINK_SYSTEM, buildExtractionPrompt, buildLinkPrompt } from "./prompts.js";
+import {
+  EXTRACTION_SYSTEM,
+  LINK_SYSTEM,
+  SYNTHESIS_SYSTEM,
+  ANSWER_SYSTEM,
+  buildExtractionPrompt,
+  buildLinkPrompt,
+  buildSynthesisPrompt,
+  buildAnswerPrompt,
+} from "./prompts.js";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 const ENDPOINT = "https://api.openai.com/v1/chat/completions";
@@ -108,6 +117,51 @@ export class OpenAiProvider implements LlmProvider {
       linked: Boolean(raw.linked),
       relationship: raw.relationship ?? undefined,
       weight: typeof raw.weight === "number" ? raw.weight : similarity,
+    };
+  }
+
+  async synthesize(
+    a: LinkCandidate,
+    b: LinkCandidate,
+    similarity: number,
+  ): Promise<{ text: string; score: number }> {
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      properties: { text: { type: "string" }, score: { type: "number" } },
+      required: ["text", "score"],
+    };
+    const raw = await this.json<{ text: string; score: number }>(
+      SYNTHESIS_SYSTEM,
+      buildSynthesisPrompt(a, b, similarity),
+      schema,
+      "synthesis",
+    );
+    return { text: raw.text, score: typeof raw.score === "number" ? raw.score : similarity };
+  }
+
+  async answer(
+    question: string,
+    context: ContextNode[],
+  ): Promise<{ answer: string; citations: number[] }> {
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        answer: { type: "string" },
+        citations: { type: "array", items: { type: "integer" } },
+      },
+      required: ["answer", "citations"],
+    };
+    const raw = await this.json<{ answer: string; citations: number[] }>(
+      ANSWER_SYSTEM,
+      buildAnswerPrompt(question, context),
+      schema,
+      "answer",
+    );
+    return {
+      answer: raw.answer ?? "",
+      citations: Array.isArray(raw.citations) ? raw.citations : [],
     };
   }
 }

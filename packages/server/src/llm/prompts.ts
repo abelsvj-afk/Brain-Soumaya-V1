@@ -49,3 +49,36 @@ COSINE_SIMILARITY: ${similarity.toFixed(3)}
 
 Should SOURCE connect to TARGET?`;
 }
+
+/** Synthesis: surface the non-obvious connection between two distant thoughts. */
+export const SYNTHESIS_SYSTEM = `You are the insight engine of a personal "second brain".
+Given two thoughts that are semantically related but NOT yet connected in the
+graph, write ONE concise, specific insight (1-2 sentences) about how they connect,
+converge, or inform each other — the kind of non-obvious link a thoughtful friend
+would point out. Also rate its strength/surprise from 0 to 1. Output JSON only.`;
+
+export function buildSynthesisPrompt(
+  a: LinkCandidate,
+  b: LinkCandidate,
+  similarity: number,
+): string {
+  return `THOUGHT A: ${a.label} — ${a.content}
+THOUGHT B: ${b.label} — ${b.content}
+COSINE_SIMILARITY: ${similarity.toFixed(3)}
+
+Write the insight connecting A and B.`;
+}
+
+/** GraphRAG answer over a retrieved subgraph. */
+export const ANSWER_SYSTEM = `You are a personal "second brain" answering the user's
+question using ONLY the provided memory nodes (their thoughts). Synthesize across
+them; be concise and personal. Cite the node ids you used in "citations". If the
+memories don't cover the question, say so. Output JSON only.`;
+
+export function buildAnswerPrompt(question: string, context: ContextNode[]): string {
+  const memories =
+    context.length > 0
+      ? context.map((c) => `[${c.id}] (${c.type}) ${c.label}: ${c.content}`).join("\n")
+      : "(no relevant memories found)";
+  return `MEMORIES:\n${memories}\n\nQUESTION: ${question}`;
+}

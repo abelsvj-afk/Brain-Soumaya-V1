@@ -29,6 +29,19 @@ class FakeLlm implements LlmProvider {
   ): Promise<LinkValidation> {
     return { linked: true, relationship: "relates_to", weight: similarity };
   }
+  async synthesize(
+    a: LinkCandidate,
+    b: LinkCandidate,
+    similarity: number,
+  ): Promise<{ text: string; score: number }> {
+    return { text: `${a.label} ~ ${b.label}`, score: similarity };
+  }
+  async answer(
+    _question: string,
+    context: ContextNode[],
+  ): Promise<{ answer: string; citations: number[] }> {
+    return { answer: "ok", citations: context.map((c) => c.id) };
+  }
 }
 
 let handle: DbHandle;

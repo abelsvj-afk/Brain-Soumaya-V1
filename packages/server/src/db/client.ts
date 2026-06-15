@@ -39,6 +39,14 @@ export function bootstrapSchema(sqlite: RawDb): void {
     );
     CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source);
     CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target);
+    CREATE TABLE IF NOT EXISTS insights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      node_a INTEGER NOT NULL REFERENCES nodes(id),
+      node_b INTEGER NOT NULL REFERENCES nodes(id),
+      text TEXT NOT NULL,
+      score REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 

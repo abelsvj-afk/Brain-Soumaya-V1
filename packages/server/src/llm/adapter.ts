@@ -38,6 +38,17 @@ export interface LlmProvider {
     target: LinkCandidate,
     similarity: number,
   ): Promise<LinkValidation>;
+  /** Write a short insight about a latent (semantically near, graph-distant) pair. */
+  synthesize(
+    a: LinkCandidate,
+    b: LinkCandidate,
+    similarity: number,
+  ): Promise<{ text: string; score: number }>;
+  /** Answer a question grounded in a retrieved subgraph; cite node ids. */
+  answer(
+    question: string,
+    context: ContextNode[],
+  ): Promise<{ answer: string; citations: number[] }>;
 }
 
 export type LlmProviderKind = "gemini" | "openai" | "heuristic";
