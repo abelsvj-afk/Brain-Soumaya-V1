@@ -1,42 +1,40 @@
-# Fly.io config for Soumaya Second Brain (single container: API + static web).
-# Rename `app` to match your Fly app (or run `fly launch --no-deploy --copy-config`).
-app = "soumaya-second-brain"
-primary_region = "iad"
+# fly.toml app configuration file generated for brain-soumaya-v1 on 2026-06-15T22:23:59Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'brain-soumaya-v1'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PORT = "8080"
-  WEB_DIR = "/app/packages/web/dist"
-  EMBED_CACHE_DIR = "/app/.model-cache"
-  DB_PATH = "/data/brain.db"
-  # LLM_PROVIDER defaults to gemini; set GEMINI_API_KEY via `fly secrets set`.
-  # Without a key the app runs in heuristic mode (still fully functional).
+  DB_PATH = '/data/brain.db'
+  EMBED_CACHE_DIR = '/app/.model-cache'
+  PORT = '8080'
+  WEB_DIR = '/app/packages/web/dist'
+
+[[mounts]]
+  source = 'brain_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  # Persistent SQLite on a volume pins us to a single machine.
   min_machines_running = 1
 
   [[http_service.checks]]
-    method = "GET"
-    path = "/api/health"
-    interval = "15s"
-    timeout = "3s"
-    grace_period = "20s"
-
-# Persistent storage for the SQLite brain (create with:
-#   fly volumes create brain_data --size 1 --region iad)
-[[mounts]]
-  source = "brain_data"
-  destination = "/data"
+    interval = '15s'
+    timeout = '3s'
+    grace_period = '20s'
+    method = 'GET'
+    path = '/api/health'
 
 [[vm]]
-  # Embeddings model + Node need headroom.
-  memory = "1gb"
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 1024
