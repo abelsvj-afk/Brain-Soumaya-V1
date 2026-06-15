@@ -42,6 +42,22 @@ Copy `.env.example` to `.env` and add `GEMINI_API_KEY` to enable LLM extraction.
 Everything — ingest, embeddings, the API, and the 3D galaxy — runs **without any
 API key** (a heuristic provider stands in for the LLM until a key is set).
 
+## Deploy (Fly.io)
+
+Single container: the Express server serves the API and the built web app; SQLite
+lives on a persistent volume; the embedding model is baked into the image.
+
+```bash
+fly launch --no-deploy --copy-config   # or set `app` in fly.toml to your app name
+fly volumes create brain_data --size 1 --region iad
+fly secrets set GEMINI_API_KEY=...      # optional; omit to run in heuristic mode
+fly deploy
+```
+
+`fly.toml` + `Dockerfile` are at the repo root. The build downloads the MiniLM
+model into the image (`warm.ts`), so the container starts fast and works offline.
+The previous deploy failed because the repo had **no Dockerfile** — that's fixed.
+
 ## Status
 
 - [x] **Phase I** — data foundation: schema, sqlite-vec KNN, recursive-CTE

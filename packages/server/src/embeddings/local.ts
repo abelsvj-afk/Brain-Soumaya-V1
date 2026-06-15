@@ -1,8 +1,14 @@
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import { pipeline, env, type FeatureExtractionPipeline } from "@huggingface/transformers";
 import { EMBED_DIM } from "../db/vec.js";
 import type { EmbeddingProvider } from "./adapter.js";
 
 const MODEL = process.env.EMBED_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+
+// Allow baking the model into the image: point the cache at a fixed dir at build
+// time (see warm.ts + Dockerfile) and reuse it offline at runtime.
+if (process.env.EMBED_CACHE_DIR) {
+  env.cacheDir = process.env.EMBED_CACHE_DIR;
+}
 
 /**
  * Server-side local embeddings via transformers.js. Uses mean pooling +

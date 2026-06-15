@@ -1,3 +1,4 @@
+import path from "node:path";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import type { AppContext } from "../context.js";
@@ -29,6 +30,18 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/search", searchRoutes(ctx));
   app.use("/api/digest", digestRoutes(ctx));
   app.use("/api/chat", chatRoutes(ctx));
+
+  // In production, serve the built web app (set WEB_DIR to packages/web/dist)
+  // and fall back to index.html for client-side routes (non-API GETs).
+  const webDir = process.env.WEB_DIR;
+  if (webDir) {
+    const dir = path.resolve(webDir);
+    app.use(express.static(dir));
+    app.use((req, res, next) => {
+      if (req.method !== "GET" || req.path.startsWith("/api")) return next();
+      res.sendFile(path.join(dir, "index.html"));
+    });
+  }
 
   // Centralized error handler (Express 5 forwards rejected async handlers here).
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

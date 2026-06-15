@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+.model-cache
+.git
+.github
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+npm-debug.log*
+*.log
+.DS_Store
