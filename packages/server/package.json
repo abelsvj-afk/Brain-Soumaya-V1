@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@brain/shared": "*",
+    "@google/genai": "^2.8.0",
+    "@huggingface/transformers": "^4.2.0",
     "better-sqlite3": "12.11.1",
     "drizzle-orm": "0.45.2",
     "sqlite-vec": "0.1.9",
