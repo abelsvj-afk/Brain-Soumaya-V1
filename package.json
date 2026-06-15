@@ -1,0 +1,14 @@
+{
+  "name": "soumaya-second-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered 3D knowledge-graph second brain",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "seed": "npm run seed -w @brain/server",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

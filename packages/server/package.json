@@ -1,0 +1,26 @@
+{
+  "name": "@brain/server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "seed": "tsx src/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@brain/shared": "*",
+    "better-sqlite3": "12.11.1",
+    "drizzle-orm": "0.45.2",
+    "sqlite-vec": "0.1.9",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "25.9.3",
+    "drizzle-kit": "0.31.10",
+    "tsx": "4.22.4",
+    "typescript": "6.0.3",
+    "vitest": "4.1.9"
+  }
+}
