@@ -58,6 +58,13 @@ fly deploy
 model into the image (`warm.ts`), so the container starts fast and works offline.
 The previous deploy failed because the repo had **no Dockerfile** — that's fixed.
 
+### Auto-deploy via GitHub Actions
+
+`.github/workflows/fly-deploy.yml` runs typecheck + tests + web build, then
+`flyctl deploy` on every push to this branch. Add a repo secret named
+`FLY_API_TOKEN` (Settings → Secrets and variables → Actions). Generate a fresh
+token with `fly tokens create deploy` — do **not** reuse a token shared in chat.
+
 ## Status
 
 - [x] **Phase I** — data foundation: schema, sqlite-vec KNN, recursive-CTE
