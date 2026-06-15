@@ -7,6 +7,9 @@
     "packages/*"
   ],
   "scripts": {
+    "dev:server": "npm run dev -w @brain/server",
+    "dev:web": "npm run dev -w @brain/web",
+    "build": "npm run build -w @brain/web",
     "test": "npm test --workspaces --if-present",
     "seed": "npm run seed -w @brain/server",
     "typecheck": "npm run typecheck --workspaces --if-present"

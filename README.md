@@ -29,19 +29,26 @@ packages/
 
 ```bash
 npm install          # install all workspaces
-npm test             # run the test suite (server data layer)
+npm test             # run the test suite (server data layer + API)
 npm run typecheck    # typecheck all workspaces
 npm run seed         # seed a sample graph into ./brain.db
+
+# Run the app (two terminals):
+npm run dev:server   # API on http://localhost:3001
+npm run dev:web      # galaxy UI on http://localhost:5173 (proxies /api)
 ```
 
 Copy `.env.example` to `.env` and add `GEMINI_API_KEY` to enable LLM extraction.
-Everything up to and including the 3D galaxy renders **without any API key**.
+Everything — ingest, embeddings, the API, and the 3D galaxy — runs **without any
+API key** (a heuristic provider stands in for the LLM until a key is set).
 
 ## Status
 
 - [x] **Phase I** — data foundation: schema, sqlite-vec KNN, recursive-CTE
       multi-hop traversal, tests.
-- [ ] Phase II — AI pipeline (embeddings + Gemini extraction + associative linking)
-- [ ] Phase III — REST API + graph wiring
-- [ ] Phase IV — celestial 3D UI + fluidity
+- [x] **Phase II** — AI pipeline: local embeddings, Gemini/OpenAI/heuristic LLM
+      adapters, ingestion + associative linking.
+- [x] **Phase III** — REST API + bounded/lazy graph service.
+- [x] **Phase IV** — celestial 3D galaxy UI: custom node bodies, sprite labels,
+      starfield, UnrealBloom, directional particles, hover-highlight, fly-to.
 - [ ] Phase V — synthesis digest + chat-with-your-brain

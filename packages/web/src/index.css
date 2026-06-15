@@ -1,0 +1,238 @@
+:root {
+  --bg: #05010d;
+  --glass: rgba(18, 14, 34, 0.62);
+  --glass-border: rgba(150, 140, 220, 0.22);
+  --text: #ecebff;
+  --muted: #9b96c4;
+  --accent: #7af9ff;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+}
+
+/* Glass panels floating over the galaxy */
+.panel {
+  position: absolute;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brand {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  z-index: 10;
+}
+.brand h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 24px rgba(122, 249, 255, 0.4);
+}
+.brand .sep {
+  color: var(--accent);
+}
+.brand .status {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Search (top center) */
+.search {
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, 70vw);
+  padding: 8px;
+}
+.search input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+  padding: 8px 10px;
+}
+.search .results {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--glass-border);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Ingest (bottom left) */
+.ingest {
+  bottom: 24px;
+  left: 24px;
+  width: 340px;
+}
+.ingest textarea {
+  width: 100%;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px;
+  font: inherit;
+  font-size: 14px;
+}
+.ingest .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.ingest .msg {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Inspector (right) */
+.inspector {
+  top: 80px;
+  right: 24px;
+  width: 320px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+.inspector .close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+.inspector .chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1a1030;
+  text-transform: capitalize;
+}
+.inspector h2 {
+  margin: 10px 0 6px;
+  font-size: 18px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.inspector .content {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cfcbe8;
+}
+.inspector h3 {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 16px 0 8px;
+}
+.neighbors,
+.results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.neighbors li button,
+.results li button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.neighbors li button:hover,
+.results li button:hover {
+  background: rgba(122, 249, 255, 0.1);
+}
+.results li em {
+  margin-left: auto;
+  color: var(--accent);
+  font-style: normal;
+  font-size: 12px;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.empty {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+/* Buttons */
+button {
+  font: inherit;
+}
+.ingest button,
+.search button {
+  background: linear-gradient(135deg, #7af9ff, #b388ff);
+  color: #0a0420;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+}
+.ingest button:hover {
+  box-shadow: 0 0 20px rgba(122, 249, 255, 0.5);
+}
+.ingest button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

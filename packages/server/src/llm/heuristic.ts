@@ -13,9 +13,15 @@ export class HeuristicProvider implements LlmProvider {
 
   private guessType(text: string): NodeType {
     const t = text.toLowerCase();
-    if (/\b(business|startup|idea|product|market|revenue|customer|saas)\b/.test(t))
+    // Stem-based substring matching (no word boundaries) so "arguing",
+    // "anxious", "venture" etc. are caught.
+    if (/(business|startup|idea|product|market|revenue|customer|saas|launch|venture|profit)/.test(t))
       return "business_idea";
-    if (/\b(she|he|they|him|her|relationship|friend|family|partner|love|argu|feel)\b/.test(t))
+    if (
+      /(sister|brother|mother|father|\bmom\b|\bdad\b|wife|husband|girlfriend|boyfriend|relationship|friend|family|partner|\blove\b|argu|feel|anxious|emotion|lonely|\bshe\b|\bhe\b|\bthey\b)/.test(
+        t,
+      )
+    )
       return "relationship_reflection";
     return "random_thought";
   }
