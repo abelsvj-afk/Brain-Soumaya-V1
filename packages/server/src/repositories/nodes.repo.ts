@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import type { GraphNode, NodeType } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { nodes, type NodeRow } from "../db/schema.js";
@@ -71,6 +71,11 @@ export class NodesRepo {
 
   all(): GraphNode[] {
     return this.h.db.select().from(nodes).all().map(toGraphNode);
+  }
+
+  byIds(ids: number[]): GraphNode[] {
+    if (ids.length === 0) return [];
+    return this.h.db.select().from(nodes).where(inArray(nodes.id, ids)).all().map(toGraphNode);
   }
 
   count(): number {

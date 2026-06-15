@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { GraphEdge, RelationshipType } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { edges, type EdgeRow } from "../db/schema.js";
@@ -50,5 +50,16 @@ export class EdgesRepo {
 
   all(): GraphEdge[] {
     return this.h.db.select().from(edges).all().map(toGraphEdge);
+  }
+
+  /** Edges where BOTH endpoints are in the given id set (subgraph edges). */
+  within(ids: number[]): GraphEdge[] {
+    if (ids.length === 0) return [];
+    return this.h.db
+      .select()
+      .from(edges)
+      .where(and(inArray(edges.source, ids), inArray(edges.target, ids)))
+      .all()
+      .map(toGraphEdge);
   }
 }
