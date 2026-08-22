@@ -56,7 +56,7 @@ function moteStyle(t: Thought, idx: number): React.CSSProperties {
   } as React.CSSProperties;
 }
 
-export function MindSpace({ demo, hidden }: { demo?: boolean; hidden?: boolean }) {
+export function MindSpace({ hidden }: { hidden?: boolean }) {
   const [on, setOn] = useState(mindSpaceEnabled());
   const [thoughts, setThoughts] = useState<Thought[]>([]);
 
@@ -67,7 +67,7 @@ export function MindSpace({ demo, hidden }: { demo?: boolean; hidden?: boolean }
   }, []);
 
   useEffect(() => {
-    if (!on || demo) {
+    if (!on) {
       setThoughts([]);
       return;
     }
@@ -75,10 +75,10 @@ export function MindSpace({ demo, hidden }: { demo?: boolean; hidden?: boolean }
     load();
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
-  }, [on, demo]);
+  }, [on]);
 
   // Vanish while a menu/panel is open so drifting motes never sit over what you're reading.
-  if (!on || demo || hidden || thoughts.length === 0) return null;
+  if (!on || hidden || thoughts.length === 0) return null;
 
   return (
     <div className="mindspace-layer" aria-hidden>

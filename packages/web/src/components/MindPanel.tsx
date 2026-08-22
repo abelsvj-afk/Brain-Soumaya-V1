@@ -41,11 +41,9 @@ import { MemoryAttachments } from "./MemoryAttachments.js";
  */
 export function MindPanel({
   onFocus,
-  demo,
   onChanged,
 }: {
   onFocus: (id: number) => void;
-  demo?: boolean;
   /** Refresh the galaxy after a new cognitive body is charted (so it appears). */
   onChanged?: () => void;
 }) {
@@ -87,7 +85,6 @@ export function MindPanel({
       .then((es) => setEvents(Object.fromEntries(es.map((e) => [e.id, e]))))
       .catch(() => {});
   useEffect(() => {
-    if (demo) return;
     refresh();
     refreshThoughts();
     refreshSuggestions();
@@ -95,11 +92,7 @@ export function MindPanel({
     // Thoughts decay server-side; poll gently so the mind space stays live.
     const t = setInterval(refreshThoughts, 20_000);
     return () => clearInterval(t);
-  }, [demo]);
-
-  if (demo) {
-    return <p className="empty">The cognitive layer lives in your own brain — sign in to map your mind.</p>;
-  }
+  }, []);
 
   const add = async () => {
     if (!label.trim()) return;

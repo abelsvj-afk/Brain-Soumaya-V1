@@ -93,7 +93,7 @@ describe("NodeList", () => {
     vi.spyOn(clientApi, "getVisitorActivity").mockResolvedValue([]);
 
     const onFocus = vi.fn();
-    render(<NodeList nodes={mockNodes} onFocus={onFocus} demo={true} />);
+    render(<NodeList nodes={mockNodes} onFocus={onFocus} />);
 
     // Timeline grouping displays buckets (like "Earlier this week" or "August 2026")
     // Let's assert the labels render
@@ -119,7 +119,7 @@ describe("NodeList", () => {
     vi.spyOn(clientApi, "getVisitorActivity").mockResolvedValue([]);
 
     const onTagChange = vi.fn();
-    render(<NodeList nodes={mockNodes} onFocus={vi.fn()} demo={true} initialTag="space" onTagChange={onTagChange} />);
+    render(<NodeList nodes={mockNodes} onFocus={vi.fn()} initialTag="space" onTagChange={onTagChange} />);
 
     // Only "A beautiful memory" has the tag "space", so "A chilly decision" shouldn't be rendered
     expect(screen.getByText("A beautiful memory")).toBeTruthy();

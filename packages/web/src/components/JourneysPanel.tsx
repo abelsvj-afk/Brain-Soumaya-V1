@@ -16,14 +16,14 @@ const SUGGESTED = [
   { title: "Learn Something New", icon: "📚" },
 ];
 
-export function JourneysPanel({ demo }: { demo?: boolean }) {
+export function JourneysPanel() {
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState("🧭");
 
   const refresh = async () => setJourneys(await getJourneys());
-  useEffect(() => { if (!demo) void refresh(); else setJourneys([]); }, [demo]);
+  useEffect(() => { void refresh(); }, []);
 
   const add = async (t: string, ic: string) => {
     if (!t.trim()) return;
@@ -32,7 +32,6 @@ export function JourneysPanel({ demo }: { demo?: boolean }) {
     await refresh();
   };
 
-  if (demo) return <div className="jn-panel"><p className="jn-empty">Journeys are off in the demo galaxy — sign in to map your life chapters.</p></div>;
   if (!journeys) return <div className="jn-panel"><p className="jn-empty">Loading your journeys…</p></div>;
 
   const active = journeys.filter((j) => j.status !== "done");

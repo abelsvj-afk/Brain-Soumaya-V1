@@ -11,7 +11,7 @@ import { logDiagnosticEvent } from "../diagnostics/buffer";
  * don't act — because you've now seen it; a fresh noticing lights it up again. Tap to
  * read her grounded question, fly to the bodies involved, answer, connect, or wave off.
  *
- * Hidden entirely while a panel/Observatory is up (via `hidden`) and in demo brains.
+ * Hidden entirely while a panel/Observatory is up (via `hidden`).
  */
 export function NoticingCard({
   onFocus,

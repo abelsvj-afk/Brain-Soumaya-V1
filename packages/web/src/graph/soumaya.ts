@@ -86,9 +86,6 @@ export interface SoumayaHandle {
   /** Autonomously fly into view and show a short message to get the user's
    *  attention (she has something to say). No-op until she's free to do it. */
   hail: (message: string) => void;
-  /** Demo galaxy: she flies local patrols only — no real backend jobs are fetched
-   *  or completed (demo node ids must never hit the real brain's API). */
-  setDemoMode: (v: boolean) => void;
   /** Night Replay: she PERFORMS her real overnight work on arrival — flies to
    *  each memory the 24/7 loop touched and re-enacts it (visual only; replay
    *  never re-executes a job against the backend). */
@@ -381,7 +378,6 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
   let currentJob: MaintenanceJob | null = null;
   let isFetching = false;
   let lastMaintenanceRefresh = 0;
-  let demoMode = false; // demo galaxy: local patrols only, no real backend jobs
 
   // Beacons she needs to dispatch (fly to target memory and deploy)
   const beaconQueue: number[] = [];
@@ -473,25 +469,20 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
 
     while (plannedMaintenance.length < 3) {
       let job: MaintenanceJob | null = null;
-      // Demo galaxy: never fetch real jobs — the server would hand out REAL-brain
-      // node ids that don't exist here (and demo completions would mutate the real
-      // brain). Local patrols only.
-      if (!demoMode) {
-        try {
-          isFetching = true;
-          const serverJob = await getNextMaintenanceJob();
-          isFetching = false;
+      try {
+        isFetching = true;
+        const serverJob = await getNextMaintenanceJob();
+        isFetching = false;
 
-          const inProgress = currentJob && currentJob.targets[0] === serverJob.targets[0];
-          const alreadyQueued = plannedMaintenance.some(j => j.targets[0] === serverJob.targets[0]);
-          if (!inProgress && !alreadyQueued) {
-            job = serverJob;
-          }
-        } catch {
-          isFetching = false;
+        const inProgress = currentJob && currentJob.targets[0] === serverJob.targets[0];
+        const alreadyQueued = plannedMaintenance.some(j => j.targets[0] === serverJob.targets[0]);
+        if (!inProgress && !alreadyQueued) {
+          job = serverJob;
         }
+      } catch {
+        isFetching = false;
       }
-      
+
       if (!job) {
         const excludeIds = new Set<number>();
         if (currentJob && currentJob.targets[0] != null) excludeIds.add(currentJob.targets[0]);
@@ -519,7 +510,6 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
     if (isFetching || nodes.length === 0) return;
     isFetching = true;
     try {
-      if (demoMode) throw new Error("demo"); // demo → local patrol fallback below
       currentJob = await getNextMaintenanceJob();
       announceDecision(currentJob);
     } catch (err) {
@@ -1010,10 +1000,9 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
 
         if (orbitTime <= 0) {
           if (currentJob) {
-            // Demo patrols and Night-Replay re-enactments are visual only —
-            // completing them against the backend would double-run real work
-            // (or mutate the real brain with demo node ids).
-            if (!demoMode && (currentJob.type as string) !== "replay") {
+            // Night-Replay re-enactments are visual only — completing them against
+            // the backend would double-run work that already happened server-side.
+            if ((currentJob.type as string) !== "replay") {
               completeMaintenanceJob(currentJob.type, currentJob.targets).catch(() => {});
             }
             pushCompleted("maintenance", currentJob.description || "Completed patrol", `patrol-${currentJob.targets[0]}`);
@@ -1593,9 +1582,6 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
     reorderTasks,
     setShipSkin,
     setTrailColor,
-    setDemoMode: (v: boolean) => {
-      demoMode = v;
-    },
     enqueueReplays: (items: { id: number; label: string }[]) => {
       for (const it of items) {
         if (!replayQueue.some((r) => r.id === it.id)) replayQueue.push(it);

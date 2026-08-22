@@ -49,7 +49,7 @@ const toCents = (s: string): number | null => {
 };
 const today = (): string => new Date().toISOString().slice(0, 10);
 
-export function FinancePanel({ demo }: { demo?: boolean }) {
+export function FinancePanel() {
   const [sum, setSum] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [reservedOpen, setReservedOpen] = useState(false);
@@ -62,7 +62,6 @@ export function FinancePanel({ demo }: { demo?: boolean }) {
   };
   useEffect(() => { void refresh(); }, []);
 
-  if (demo) return <div className="fin-panel"><p className="fin-empty">Money is off in the demo galaxy — sign in to track your budget.</p></div>;
   if (loading && !sum) return <div className="fin-panel"><p className="fin-empty">Loading your budget…</p></div>;
   if (!sum) return <div className="fin-panel"><p className="fin-empty">Couldn't reach the budget (offline?). Try again.</p></div>;
 

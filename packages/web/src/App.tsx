@@ -11,7 +11,6 @@ import { type Graph3DHandle } from "./graph/Graph3D.js";
 // downloads once the galaxy actually mounts (gated by `galaxyWillMount`).
 const Graph3D = lazy(() => import("./graph/Graph3D.js").then((m) => ({ default: m.Graph3D })));
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
-import { makeDemoGalaxy } from "./graph/demoGalaxy.js";
 import { makeAmbientAudio, TRACKS, type AmbientAudio } from "./graph/audio.js";
 import { setGraphicsMode, resolveGraphics, getGraphics } from "./graph/graphicsConfig.js";
 import { IngestPanel } from "./components/IngestPanel.js";
@@ -124,12 +123,7 @@ export default function App() {
   const [showFocusFig1, setShowFocusFig1] = useState<boolean>(true);
   const [showFocusFig2, setShowFocusFig2] = useState<boolean>(true);
 
-  // Simulated stats for testing achievements progression in demo mode
-  const [simulatedMemoriesCount, setSimulatedMemoriesCount] = useState<number>(0);
-  const [simulatedLinksCount, setSimulatedLinksCount] = useState<number>(0);
-  const [demoBypass, setDemoBypass] = useState<boolean>(true);
-
-  // Load equipped customizations and demo stats when the space changes
+  // Load equipped customizations when the space changes
   useEffect(() => {
     if (!space) return;
     const shipKey = `brain.hangar.ship.${space.id}`;
@@ -138,9 +132,6 @@ export default function App() {
     const fig2Key = `brain.hangar.fig2.${space.id}`;
     const focusFig1Key = `brain.hangar.focusFig1.${space.id}`;
     const focusFig2Key = `brain.hangar.focusFig2.${space.id}`;
-    const simMemKey = `brain.demo.sim_memories.${space.id}`;
-    const simLinkKey = `brain.demo.sim_links.${space.id}`;
-    const bypassKey = `brain.demo.bypass.${space.id}`;
 
     setEquippedShip(localStorage.getItem(shipKey) || "default");
     setEquippedTrail(localStorage.getItem(trailKey) || "blue");
@@ -148,18 +139,14 @@ export default function App() {
     setEquippedFig2(localStorage.getItem(fig2Key) || "none");
     setShowFocusFig1(localStorage.getItem(focusFig1Key) !== "false");
     setShowFocusFig2(localStorage.getItem(focusFig2Key) !== "false");
-    setSimulatedMemoriesCount(parseInt(localStorage.getItem(simMemKey) || "0", 10));
-    setSimulatedLinksCount(parseInt(localStorage.getItem(simLinkKey) || "0", 10));
-    setDemoBypass(localStorage.getItem(bypassKey) !== "0");
 
     // Clean up expired notifications on space load
     cleanupNotifications(space.id);
   }, [space]);
 
-  const [demo, setDemo] = useState(false);
-  // Poll fuel for the main-HUD gauge while signed in (skips the demo galaxy).
+  // Poll fuel for the main-HUD gauge while signed in.
   useEffect(() => {
-    if (!space || demo) return;
+    if (!space) return;
     let alive = true;
     const load = () => {
       getFuel().then((f) => alive && setFuel(f));
@@ -171,7 +158,7 @@ export default function App() {
       alive = false;
       window.clearInterval(iv);
     };
-  }, [space, demo]);
+  }, [space]);
 
   // Fuel tracking for visual pops
   useEffect(() => {
@@ -242,7 +229,7 @@ export default function App() {
   // Money urgency → a clickable notification (bills with due dates + risk). Once per bill per
   // day; taps open the Money tab. Re-checked whenever finances change.
   useEffect(() => {
-    if (!space || demo) return;
+    if (!space) return;
     const check = async () => {
       const stars = await getMoneySky();
       if (!stars) return;
@@ -258,13 +245,13 @@ export default function App() {
     const on = () => void check();
     window.addEventListener("brain-finance-changed", on);
     return () => window.removeEventListener("brain-finance-changed", on);
-  }, [space, demo]);
+  }, [space]);
 
   // Make dream cycles VISIBLE: on return, if Soumaya consolidated a new belief while you were
   // away, surface a gentle clickable notification → tap to fly to the belief. (She used to do
   // this silently, so it felt like nothing was happening.)
   useEffect(() => {
-    if (!space || demo) return;
+    if (!space) return;
     getAgentLogs().then((logs) => {
       const dream = logs.find((l) => l.action === "dream"); // newest first
       if (!dream) return;
@@ -276,7 +263,7 @@ export default function App() {
       try { const t = JSON.parse(dream.targets); if (Array.isArray(t)) beliefId = Number(t[0]); } catch { /* ignore */ }
       pushToast(`🌙 ${dream.description}`, "🌙", 10000, "normal", beliefId ? { kind: "focus", value: beliefId } : undefined);
     }).catch(() => {});
-  }, [space, demo]);
+  }, [space]);
 
   // Following any other target clears the fleet button's highlight (its own button clears theirs).
   useEffect(() => {
@@ -376,7 +363,7 @@ export default function App() {
   // the welcome-back card only after a real absence (≥1h) with something to say;
   // otherwise silently advance the window so a quick refresh never nags.
   useEffect(() => {
-    if (!space || demo) return;
+    if (!space) return;
     let alive = true;
     getAwayDigest()
       .then((d) => {
@@ -388,7 +375,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [space, demo]);
+  }, [space]);
 
   // UI sound kit: a soft "tap" on any button press, app-wide, from one delegated
   // listener (covers FABs, dock tabs, panels, mini buttons) — the AudioContext also
@@ -498,11 +485,8 @@ export default function App() {
     return () => window.removeEventListener("brain-shield-saved", onShield);
   }, []);
 
-  // A fake "fuller galaxy" preview — generated once, never persisted/weighted.
-  const demoData = useMemo(() => makeDemoGalaxy(), []);
-  const view = demo ? demoData : data;
   // Tweened HUD counters — ease instead of snapping (honors reduced-motion).
-  const memCountShown = useCountUp(view.nodes.length);
+  const memCountShown = useCountUp(data.nodes.length);
   const streakShown = useCountUp(streak?.current ?? 0);
 
   // Streak stakes: is the streak alive but unfed TODAY? (drives the "at risk" ember)
@@ -518,16 +502,12 @@ export default function App() {
   // streak make her a faster, more seasoned pilot (1.0 → ~1.9×). Distance-aware
   // cruising + her per-task speeds are handled in graph/soumaya.ts.
   const pilotSpeed = useMemo(() => {
-    const mem = (view.nodes as GraphNode[]).filter((n) => n.kind !== "action" && n.kind !== "moc").length;
+    const mem = (data.nodes as GraphNode[]).filter((n) => n.kind !== "action" && n.kind !== "moc").length;
     const lvl = 1 + Math.min(0.7, mem / 200) + Math.min(0.2, (streak?.current ?? 0) / 20);
     return Math.round(lvl * 100) / 100;
-  }, [view.nodes, streak]);
+  }, [data.nodes, streak]);
 
   const refresh = useCallback(async (newIds?: number[], fuelEarned?: number, linkCount?: number) => {
-    if (demo) {
-      setLoaded(true);
-      return;
-    }
     try {
       console.info("[BOOT] loading graph");
       const g = await getGraph();
@@ -580,7 +560,7 @@ export default function App() {
     getHealth()
       .then(setHealth)
       .catch(() => {});
-  }, [demo]);
+  }, []);
 
   // If every beacon fades (its memory got tended) while we're watching one, the
   // beacon button vanishes — so release the follow + close its lore card too.
@@ -625,7 +605,6 @@ export default function App() {
   // pilot isn't already in Performance Mode, OFFER (never force) a downgrade. Auto
   // Mode already picks a sane tier — this catches devices that still struggle.
   useEffect(() => {
-    if (demo) return;
     let frames = 0, t0 = performance.now(), lowStreak = 0, raf = 0, stopped = false;
     const sample = () => {
       frames++;
@@ -645,7 +624,7 @@ export default function App() {
     };
     const warm = window.setTimeout(() => { raf = requestAnimationFrame(sample); }, 8000);
     return () => { window.clearTimeout(warm); cancelAnimationFrame(raf); };
-  }, [demo]);
+  }, []);
 
   // Resolve the stored brain (if any) on first load.
   useEffect(() => {
@@ -655,8 +634,6 @@ export default function App() {
         console.info(`[BOOT] auth finished (${sp ? "brain open" : "no brain"})`);
         logDiagnosticEvent('state', 'App.space', { action: 'load', spaceId: sp?.id });
         setSpace(sp);
-        // Demo mode removed — always your real brain.
-        setDemo(false);
       })
       .catch(() => {})
       .finally(() => setAuthChecked(true));
@@ -668,8 +645,8 @@ export default function App() {
   }, [space]);
 
   // Whether the 3D galaxy is about to mount this render (mirrors the JSX gate below).
-  const galaxyWillMount = (loaded || demo) && !lite;
-  console.log("[App] galaxyWillMount:", galaxyWillMount, { loaded, demo, lite });
+  const galaxyWillMount = loaded && !lite;
+  console.log("[App] galaxyWillMount:", galaxyWillMount, { loaded, lite });
   // Heal any stale "galaxy stuck" flag left by the earlier crash-loop breaker. That
   // safeguard existed only to survive the achievement-DFS freeze (now fixed at the
   // source); with the freeze gone it was misfiring on ordinary lag and hiding a
@@ -688,11 +665,11 @@ export default function App() {
 
   // Badge polls (via usePolledCount): the 🔗 Suggested-Connections count (refreshed on
   // ingest + when the panel closes) and the 🧠 due-recall count. Behaviour unchanged.
-  const candCount = usePolledCount(() => getCandidates().then((d) => d.count), !!space && !demo, 60_000, {
+  const candCount = usePolledCount(() => getCandidates().then((d) => d.count), !!space, 60_000, {
     refreshEvent: "brain-memory-added",
     refreshKey: showConnections,
   });
-  const dueCount = usePolledCount(() => getDueReviews().then((d) => d.length), !!space && !demo, 120_000, {
+  const dueCount = usePolledCount(() => getDueReviews().then((d) => d.length), !!space, 120_000, {
     refreshKey: showReview,
   });
 
@@ -700,7 +677,7 @@ export default function App() {
   // first loads — by name, with what changed while they were away.
   const greetedRef = useRef(false);
   useEffect(() => {
-    if (greetedRef.current || demo || !space || !loaded) return;
+    if (greetedRef.current || !space || !loaded) return;
     greetedRef.current = true;
     const memories = (data.nodes as GraphNode[]).filter((n) => n.kind !== "action");
     if (memories.length === 0) {
@@ -711,7 +688,7 @@ export default function App() {
     const tail = cooling > 0 ? ` · ${cooling} cooling` : "";
     const word = memories.length === 1 ? "memory" : "memories";
     pushToast(`Welcome back, ${space.name} — ${memories.length} ${word}${tail}`, "🛰️", 10000);
-  }, [space, loaded, demo, data.nodes]);
+  }, [space, loaded, data.nodes]);
 
   // (The old memory-count milestone toast is gone: Pilot Rank is the single
   // count ladder now — one celebration per threshold, not three.)
@@ -719,7 +696,7 @@ export default function App() {
   // Gamification (Wave 3): pilot rank level-up — celebrate climbing a rank once
   // each, per brain. Same progression that speeds Soumaya up (real memory count).
   useEffect(() => {
-    if (demo || !space || !loaded) return;
+    if (!space || !loaded) return;
     const real = (data.nodes as GraphNode[]).filter((n) => n.kind !== "action" && n.kind !== "moc").length;
     const rank = pilotRank(real);
     const key = `brain.rank.${space.id}`;
@@ -742,7 +719,7 @@ export default function App() {
       graphRef.current?.celebrate(); // burst salvo around the Sun
       window.setTimeout(() => setRankUp(null), 4600);
     }
-  }, [space, loaded, demo, data.nodes]);
+  }, [space, loaded, data.nodes]);
 
   // Gamification (Wave 1): celebrate when a memory GROWS a tier (asteroid→…→star)
   // as it earns mass over time — the payoff of the slow-growth model. The first
@@ -750,7 +727,7 @@ export default function App() {
   const tierRef = useRef<Map<number, number>>(new Map());
   const tierInitedRef = useRef(false);
   useEffect(() => {
-    if (demo || !loaded) return;
+    if (!loaded) return;
     const idx = (c?: string) => Math.max(0, CELESTIAL_CLASSES.indexOf((c ?? "asteroid") as never));
     const planetIdx = CELESTIAL_CLASSES.indexOf("planet");
     const prev = tierRef.current;
@@ -769,7 +746,7 @@ export default function App() {
       const label = n.label.length > 30 ? `${n.label.slice(0, 30)}…` : n.label;
       pushToast(`"${label}" grew into a ${CELESTIAL_LABEL[n.celestial ?? "planet"]}`, "✦", 10000);
     }
-  }, [data.nodes, demo, loaded]);
+  }, [data.nodes, loaded]);
 
   // Gamification (Wave 2): achievements — qualitative feats unlocked once each,
   // per brain, remembered on this device. Offline-safe (pure over loaded state).
@@ -778,30 +755,19 @@ export default function App() {
   const achvInitedRef = useRef(false);
   useEffect(() => {
     if (!space || !loaded) return;
-    
-    // Evaluate achievements either using real data or simulated data
-    let memories: GraphNode[];
-    let linksCount: number;
-    let linkObjects: any[] = [];
-    
-    if (demo) {
-      if (demoBypass) return; // skip checking if everything is already unlocked
-      memories = Array.from({ length: simulatedMemoriesCount }).map((_, i) => ({ id: i, kind: "memory" } as GraphNode));
-      linksCount = simulatedLinksCount;
-    } else {
-      memories = (data.nodes as GraphNode[]).filter((n) => n.kind !== "action");
-      linksCount = data.links.length;
-      linkObjects = data.links;
-      // Seed "types seen" from the types actually IN your galaxy, so Galaxy Reader is
-      // earnable by logging across kinds (normal use), not only by manually clicking each.
-      try {
-        const tk = `stat.types_seen.${space.id}`;
-        const seenT = new Set<string>(JSON.parse(localStorage.getItem(tk) || "[]"));
-        let changed = false;
-        for (const m of memories) if (m.type && !seenT.has(m.type)) { seenT.add(m.type); changed = true; }
-        if (changed) localStorage.setItem(tk, JSON.stringify([...seenT]));
-      } catch { /* storage unavailable */ }
-    }
+
+    const memories = (data.nodes as GraphNode[]).filter((n) => n.kind !== "action");
+    const linksCount = data.links.length;
+    const linkObjects = data.links;
+    // Seed "types seen" from the types actually IN your galaxy, so Galaxy Reader is
+    // earnable by logging across kinds (normal use), not only by manually clicking each.
+    try {
+      const tk = `stat.types_seen.${space.id}`;
+      const seenT = new Set<string>(JSON.parse(localStorage.getItem(tk) || "[]"));
+      let changed = false;
+      for (const m of memories) if (m.type && !seenT.has(m.type)) { seenT.add(m.type); changed = true; }
+      if (changed) localStorage.setItem(tk, JSON.stringify([...seenT]));
+    } catch { /* storage unavailable */ }
 
     const now = unlockedIds({ memories, links: linksCount, fuel, linkObjects, streak });
     const key = achvKey(space.id);
@@ -823,7 +789,7 @@ export default function App() {
       const a = ACHIEVEMENTS.find((x) => x.id === id);
       if (a) pushToast(`Achievement: ${a.name} — ${a.desc}`, a.icon ?? "🏆", 12000, "high");
     }
-  }, [data.nodes, data.links, fuel, streak, space, demo, loaded, simulatedMemoriesCount, simulatedLinksCount, demoBypass]);
+  }, [data.nodes, data.links, fuel, streak, space, loaded]);
 
   // Random idle FLY-BY: when you're just watching the galaxy (nothing open or focused),
   // Soumaya occasionally swings into view, drops a determined line pulled from your
@@ -831,13 +797,12 @@ export default function App() {
   // cooldowned so it always feels like a special, unscripted moment — never spam.
   const flybyIdleRef = useRef(false);
   flybyIdleRef.current =
-    loaded && !!space && !demo && panel === null && !showChat && !selected && obsSettled && !showObs &&
+    loaded && !!space && panel === null && !showChat && !selected && obsSettled && !showObs &&
     !followShip && !followStation && !followSatellite && !followVisitor && !followFig1 && !followFig2;
   const flybyDataRef = useRef<{ nodes: GraphNode[]; streak: number }>({ nodes: [], streak: 0 });
   flybyDataRef.current = { nodes: data.nodes as GraphNode[], streak: streak?.current ?? 0 };
   const lastFlybyRef = useRef(0);
   useEffect(() => {
-    if (demo) return;
     const composeLine = (): string => {
       const mems = flybyDataRef.current.nodes.filter((n) => n.kind !== "action" && n.kind !== "moc");
       const count = mems.length;
@@ -867,13 +832,13 @@ export default function App() {
       graphRef.current?.hailSoumaya(composeLine());
     }, 45_000);
     return () => window.clearInterval(iv);
-  }, [demo]);
+  }, []);
 
   // Reveal the Observatory home once per app open, AFTER the cinematic fly-in
-  // has settled — never touches the intro itself. Skips the demo galaxy
-  // and won't pop over a panel the user already opened during the swoop.
+  // has settled — never touches the intro itself, and won't pop over a panel
+  // the user already opened during the swoop.
   useEffect(() => {
-    if (obsShownRef.current || demo || !space || !loaded) return;
+    if (obsShownRef.current || !space || !loaded) return;
     
     // The intro animation takes ~3.2s from the point of triggering in Graph3D.
     // Triggering now ensures it follows the intro, regardless of load time.
@@ -883,19 +848,19 @@ export default function App() {
       else setObsSettled(true); // a panel's already open → Observatory won't show; release toasts
     }, 3400);
     return () => window.clearTimeout(t);
-  }, [space, loaded, demo, panel]);
+  }, [space, loaded, panel]);
 
   // Buffer celebratory toasts until the Observatory gate resolves (so they don't
-  // pop behind the cards). Demo / signed-out never gates. Flushes on settle.
+  // pop behind the cards). Signed-out never gates. Flushes on settle.
   useEffect(() => {
-    setToastsPaused(!demo && !!space && (showObs || !obsSettled));
-  }, [demo, space, showObs, obsSettled]);
+    setToastsPaused(!!space && (showObs || !obsSettled));
+  }, [space, showObs, obsSettled]);
 
   // Autonomous hail: once per app open, if Soumaya has surfaced something worth
   // seeing (a latent insight), she flies into view with a message and the 💬 FAB
   // pulses — tap to talk. Fires after the Observatory settles so it never stacks.
   useEffect(() => {
-    if (hailedRef.current || demo || !space || !loaded) return;
+    if (hailedRef.current || !space || !loaded) return;
     const t = window.setTimeout(async () => {
       hailedRef.current = true;
       try {
@@ -909,12 +874,12 @@ export default function App() {
       }
     }, 7000);
     return () => window.clearTimeout(t);
-  }, [space, loaded, demo]);
+  }, [space, loaded]);
 
   // Ambient self-insight pill: foresight (time-sensitive) wins, else her newest
   // belief. Fetched once when the brain loads; purely glanceable.
   useEffect(() => {
-    if (!space || demo || !loaded) return;
+    if (!space || !loaded) return;
     let alive = true;
     (async () => {
       const [contact, beliefs] = await Promise.all([getDailyContact(), getBeliefs()]);
@@ -926,12 +891,12 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [space?.id, demo, loaded]);
+  }, [space?.id, loaded]);
 
   // First-run: show the visual legend ONCE per brain (after data loads) so a new
   // user learns the galaxy's language up front; thereafter it's the 🗺️ FAB.
   useEffect(() => {
-    if (!space || demo || !loaded) return;
+    if (!space || !loaded) return;
     const key = `brain.legendSeen.${space.id}`;
     try {
       if (localStorage.getItem(key)) return;
@@ -943,7 +908,7 @@ export default function App() {
     } catch {
       /* private mode */
     }
-  }, [space?.id, demo, loaded]);
+  }, [space?.id, loaded]);
 
   // Close the Observatory and release any buffered toasts. The 🔭 FAB reopens it.
   const dismissObs = useCallback(() => {
@@ -973,7 +938,7 @@ export default function App() {
     nodesRef.current = data.nodes as GraphNode[];
   }, [data.nodes]);
   useEffect(() => {
-    if (!space || demo || !loaded) return;
+    if (!space || !loaded) return;
     const key = `brain.replay.lastLog.${space.id}`;
     const VERBS: Record<string, { replay: string; live: string }> = {
       research: { replay: "deep-dived", live: "just deep-dived" },
@@ -1041,12 +1006,12 @@ export default function App() {
       disposed = true;
       window.clearInterval(iv);
     };
-  }, [space, loaded, demo]);
+  }, [space, loaded]);
 
   // Offline ingest queue: flush anything captured offline once signed in / back
   // online, then refresh the galaxy + celebrate what synced.
   useEffect(() => {
-    if (!space || demo) return;
+    if (!space) return;
     void flushIngestQueue();
     const onSynced = (e: Event) => {
       const detail = (e as CustomEvent).detail as { newIds?: number[]; synced?: number };
@@ -1055,12 +1020,12 @@ export default function App() {
     };
     window.addEventListener("brain-ingest-synced", onSynced);
     return () => window.removeEventListener("brain-ingest-synced", onSynced);
-  }, [space, demo, refresh]);
+  }, [space, refresh]);
 
   // Navigate to a memory, recording where we came from so Back works.
   const goTo = useCallback(
     (id: number, record = true, ripple = false) => {
-      const n = view.nodes.find((x) => x.id === id);
+      const n = data.nodes.find((x) => x.id === id);
       if (!n) return;
       setHistory((h) => (record && selected && selected.id !== id ? [...h, selected.id] : h));
       setSelected(n);
@@ -1068,7 +1033,7 @@ export default function App() {
       setPanel("dock");
       graphRef.current?.focusNode(id);
       if (ripple) graphRef.current?.spawnBurst(id, "user");
-      if (!demo && space) {
+      if (space) {
         void tendNode(id); // revisiting a memory warms it back up (entropy)
         // Only a GENUINE restore counts toward Grand Restorer / the Codex's
         // "The Gardener" — the memory had actually gone cold before this visit.
@@ -1099,7 +1064,7 @@ export default function App() {
         setTimeout(() => handleChanged(-1), 100);
       }
     },
-    [view, selected, demo, space],
+    [data, selected, space],
   );
 
   const focus = useCallback((id: number) => goTo(id, true, true), [goTo]);
@@ -1138,7 +1103,7 @@ export default function App() {
 
   const triggerFlashback = useCallback(() => {
     // Find an old, high-mass memory (Serendipity hook)
-    const candidates = view.nodes.filter(n => {
+    const candidates = data.nodes.filter(n => {
       if (!n.createdAt || !n.mass) return false;
       const rawDate = n.createdAt;
       const isoDate = rawDate.includes("Z") ? rawDate : rawDate.replace(" ", "T") + "Z";
@@ -1154,20 +1119,20 @@ export default function App() {
       graphRef.current?.spawnBurst(target.id, "calibration");
     } else {
       // Fallback if the brain is too young
-      const all = view.nodes.filter(n => n.mass && n.mass > 0.2);
+      const all = data.nodes.filter(n => n.mass && n.mass > 0.2);
       if (all.length > 0) {
         const target = all[Math.floor(Math.random() * all.length)]!;
         goTo(target.id, true);
         graphRef.current?.spawnBurst(target.id, "calibration");
       }
     }
-  }, [view, goTo]);
+  }, [data, goTo]);
 
   const back = useCallback(() => {
     setHistory((h) => {
       if (h.length === 0) return h;
       const id = h[h.length - 1]!;
-      const n = view.nodes.find((x) => x.id === id);
+      const n = data.nodes.find((x) => x.id === id);
       if (n) {
         setSelected(n);
         setTab("details");
@@ -1176,7 +1141,7 @@ export default function App() {
       }
       return h.slice(0, -1);
     });
-  }, [view]);
+  }, [data]);
 
   // After a weight edit: re-pull the graph (mass/celestial recompute), keep
   // the node selected, no camera move.
@@ -1189,9 +1154,6 @@ export default function App() {
         const fig2Key = `brain.hangar.fig2.${space.id}`;
         const focusFig1Key = `brain.hangar.focusFig1.${space.id}`;
         const focusFig2Key = `brain.hangar.focusFig2.${space.id}`;
-        const simMemKey = `brain.demo.sim_memories.${space.id}`;
-        const simLinkKey = `brain.demo.sim_links.${space.id}`;
-        const bypassKey = `brain.demo.bypass.${space.id}`;
 
         setEquippedShip(localStorage.getItem(shipKey) || "default");
         setEquippedTrail(localStorage.getItem(trailKey) || "blue");
@@ -1199,13 +1161,9 @@ export default function App() {
         setEquippedFig2(localStorage.getItem(fig2Key) || "none");
         setShowFocusFig1(localStorage.getItem(focusFig1Key) !== "false");
         setShowFocusFig2(localStorage.getItem(focusFig2Key) !== "false");
-        setSimulatedMemoriesCount(parseInt(localStorage.getItem(simMemKey) || "0", 10));
-        setSimulatedLinksCount(parseInt(localStorage.getItem(simLinkKey) || "0", 10));
-        setDemoBypass(localStorage.getItem(bypassKey) !== "0");
       }
       return;
     }
-    if (demo) return;
     const g = await getGraph();
     setData(g);
     getFuel().then((f) => f && setFuel(f)).catch(() => {});
@@ -1214,7 +1172,7 @@ export default function App() {
       setSelected(n);
       graphRef.current?.spawnBurst(id, "user");
     }
-  }, [space, demo]);
+  }, [space]);
 
   const handleDeleted = useCallback(() => {
     setSelected(null);
@@ -1257,7 +1215,7 @@ export default function App() {
       <Toasts />
       {/* Left-edge HUD (fuel + streak) — hidden whenever a panel/chat/Observatory is up
           so it never overlaps their content. */}
-      {!demo && panel === null && !showChat && !showObs && !showSettings && !showConnections && !showTimeline && (
+      {panel === null && !showChat && !showObs && !showSettings && !showConnections && !showTimeline && (
         <>
           <FuelGauge fuel={fuel} pops={fuelPops} busy={aiBusy > 0} onClick={() => setShowFuelWays(true)} />
           <StreakEmber streak={streak?.current ?? 0} atRisk={streakAtRisk} shields={streak?.shields ?? 0} />
@@ -1280,7 +1238,7 @@ export default function App() {
 
       {/* When the galaxy is intentionally off (Lite mode), SAY SO — otherwise a missing
           galaxy just looks broken. One tap turns it back on. */}
-      {lite && space && !demo && (
+      {lite && space && (
         <div className="galaxy-off-note" role="status">
           <span>🌌 3D galaxy is off (Lite mode)</span>
           <button
@@ -1314,7 +1272,7 @@ export default function App() {
       <Suspense fallback={null}>
       <Graph3D
         ref={graphRef}
-        data={view}
+        data={data}
         onFirstFrame={() => {
           clearGalaxyStuck();
           setLoaded(true);
@@ -1344,7 +1302,6 @@ export default function App() {
         onVisitorCount={setVisitorCount}
         selectedId={selected?.id ?? null}
         bottomInset={panel === "dock"}
-        demo={demo}
         showShipTask={showShipTask}
         pilotSpeed={pilotSpeed}
         loaded={loaded}
@@ -1485,7 +1442,7 @@ export default function App() {
           )}
           {/* Fuel now lives in the always-visible <FuelGauge> on the left edge (below),
               so an installed PWA's notch can never hide it. */}
-          {streak && streak.current > 0 && !demo && (
+          {streak && streak.current > 0 && (
             <span
               className="status streak-chip"
               title={`🔥 ${streak.current}-day streak — consecutive days you've fed your brain a memory${
@@ -1497,7 +1454,7 @@ export default function App() {
           )}
           {/* Ambient Level-2 presence: her live read on you (foresight or a fresh
               belief) glanceable from the galaxy, tap to open Insights. */}
-          {selfInsight && !demo && (
+          {selfInsight && (
             <button
               className={`status self-insight-chip ${selfInsight.kind}`}
               title={`${selfInsight.text} — tap to open Insights`}
@@ -1537,7 +1494,7 @@ export default function App() {
       {space && (
         <NotificationsBar
           fuel={fuel}
-          nodes={view.nodes as GraphNode[]}
+          nodes={data.nodes as GraphNode[]}
           health={health}
           onFocusNode={goTo}
           onOpenTab={(t) => {
@@ -1545,7 +1502,6 @@ export default function App() {
             setPanel("dock");
           }}
           onEarnFuel={() => setShowFuelWays(true)}
-          demo={demo}
         />
       )}
 
@@ -1559,7 +1515,7 @@ export default function App() {
 
       {showLegend && <Legend onClose={() => setShowLegend(false)} />}
 
-      {showLenses && space && !demo && (
+      {showLenses && space && (
         <LensesPanel
           onClose={() => setShowLenses(false)}
           presetLinkedTo={selected ? { id: selected.id, label: selected.label } : null}
@@ -1568,7 +1524,7 @@ export default function App() {
       )}
 
       {/* One-tap pinned-lens switching, right on the galaxy. */}
-      {space && !demo && (
+      {space && (
         <LensChips
           activeLens={activeLens}
           onOpen={openLens}
@@ -1578,9 +1534,9 @@ export default function App() {
       )}
 
       {/* Galaxy category views — render one category at a time (lighter on a cheap phone). */}
-      {space && !demo && (
+      {space && (
         <GalaxyViews
-          nodes={view.nodes as GraphNode[]}
+          nodes={data.nodes as GraphNode[]}
           activeView={activeLens}
           onOpen={openLens}
           onLayer={openLayer}
@@ -1599,7 +1555,7 @@ export default function App() {
       {/* Ambient Mind Space: live working-memory thoughts drifting over the galaxy
           (toggled from the 🧠 Mind tab; self-contained + pointer-events:none). */}
       <ErrorBoundary label="mindspace" fallback={null}>
-        <MindSpace demo={demo} hidden={panel !== null || showChat || showObs} />
+        <MindSpace hidden={panel !== null || showChat || showObs} />
       </ErrorBoundary>
 
       {/* Proactive intelligence: "Soumaya noticed…" — a grounded question about a
@@ -1622,7 +1578,7 @@ export default function App() {
       {(followStation || followShip || followSatellite) && panel === null && !loreDismissed && !noticingOpen && (
         <ObjectLoreCard
           kind={followShip ? "ship" : followSatellite ? "satellite" : "station"}
-          graph={view}
+          graph={data}
           onClose={() => setLoreDismissed(true)}
         />
       )}
@@ -1908,7 +1864,7 @@ export default function App() {
         />
       )}
 
-      {showConnections && space && !demo && (
+      {showConnections && space && (
         <ConnectionsPanel
           onClose={() => setShowConnections(false)}
           onChanged={() => void refresh()}
@@ -1916,7 +1872,7 @@ export default function App() {
         />
       )}
 
-      {showTimeline && space && !demo && (
+      {showTimeline && space && (
         <TimelineView
           spaceName={space.name}
           nodes={data.nodes as GraphNode[]}
@@ -1925,14 +1881,14 @@ export default function App() {
         />
       )}
 
-      {showReview && space && !demo && (
+      {showReview && space && (
         <ReviewPanel
           onClose={() => setShowReview(false)}
           onFocus={(id) => { setShowReview(false); focus(id); }}
         />
       )}
 
-      {showFuelWays && space && !demo && (
+      {showFuelWays && space && (
         <FuelEarnSheet
           fuel={fuel}
           onClose={() => setShowFuelWays(false)}
@@ -1952,18 +1908,17 @@ export default function App() {
         />
       )}
 
-      {showChat && space && !demo && (
+      {showChat && space && (
         <ChatDock
           spaceName={space.name}
           onClose={() => setShowChat(false)}
           onFocus={(id) => focus(id)}
           onRecall={(ids) => graphRef.current?.fireRecall(ids)}
           onCreated={(ids) => void refresh(ids)}
-          demo={demo}
         />
       )}
 
-      {showObs && !demo && space && (
+      {showObs && space && (
         <Observatory
           spaceName={space.name}
           memories={(data.nodes as GraphNode[]).filter((n) => n.kind !== "action")}
@@ -2002,10 +1957,10 @@ export default function App() {
           tab={tab}
           setTab={setTab}
           selected={selected}
-          graph={view}
+          graph={data}
           onFocus={focus}
           onChanged={handleChanged}
-          onDeleted={demo ? undefined : handleDeleted}
+          onDeleted={handleDeleted}
           onIsolate={(id) => {
             graphRef.current?.isolateSystem(id);
             setClustered(true);
@@ -2014,7 +1969,6 @@ export default function App() {
           onClose={() => setPanel(null)}
           onBack={back}
           canBack={history.length > 0}
-          demo={demo}
           getFleetStatus={() => graphRef.current?.getFleetStatus()}
           showShipTask={showShipTask}
           setShowShipTask={setShowShipTask}

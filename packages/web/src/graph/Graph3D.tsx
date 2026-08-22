@@ -103,8 +103,6 @@ interface Props {
   selectedId?: number | null;
   /** True when the bottom sheet is open — shifts the followed body up so it clears it. */
   bottomInset?: boolean;
-  /** Demo galaxy — don't report visitor activity to the real backend. */
-  demo?: boolean;
   /** Show the floating "current task" label above Soumaya's ship. */
   showShipTask?: boolean;
   /** Progression flight-speed multiplier for Soumaya (~1.0 → ~1.9). */
@@ -138,7 +136,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     onVisitorCount,
     selectedId,
     bottomInset,
-    demo,
     showShipTask,
     pilotSpeed,
     loaded,
@@ -190,17 +187,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   useEffect(() => {
     insetRef.current = !!bottomInset;
   }, [bottomInset]);
-  // Buffer visitor arrivals and flush them to the backend periodically (not in demo).
+  // Buffer visitor arrivals and flush them to the backend periodically.
   const visitBufRef = useRef<{ nodeId: number; type: string }[]>([]);
-  const demoRef = useRef(false);
   const finChangeHandlerRef = useRef<(() => void) | null>(null);
   const journeyChangeHandlerRef = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    demoRef.current = !!demo;
-    // Keep the ship demo-aware: in the demo galaxy she flies local patrols only
-    // (real jobs carry real-brain node ids and completions mutate the real brain).
-    soumayaHandleRef.current?.setDemoMode(!!demo);
-  }, [demo]);
   // Drain the visitor buffer when the tab hides/closes — the 20s flush lives in
   // the rAF loop, which browsers pause for hidden tabs, so the tail was lost on
   // every close/background. keepalive lets the request outlive the page.
@@ -350,21 +340,12 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     // (rather than the line just popping in). The first data load is the baseline —
     // we don't make her redraw the entire pre-existing graph.
     const keys = (data.links as any[]).map(linkKey);
-    // A wholesale dataset swap (entering/leaving the demo galaxy) is NOT incremental
-    // growth — re-baseline so the new graph shows fully wired up immediately instead
-    // of dumping every link onto Soumaya's redraw queue (which left demo looking
-    // empty and made "← Back to mine" feel broken).
-    const datasetSwitched = prevDemoRef.current !== !!demo;
-    prevDemoRef.current = !!demo;
-    if (!linksInitedRef.current || datasetSwitched) {
-      if (loaded || data.nodes.length > 0 || datasetSwitched) {
+    if (!linksInitedRef.current) {
+      if (loaded || data.nodes.length > 0) {
         knownLinksRef.current = new Set(keys);
         knownNodesRef.current = new Set((data.nodes as any[]).map((n) => n.id));
         linksInitedRef.current = true;
         fgRef.current?.refresh?.();
-        // Re-frame the whole galaxy once the new positions settle (reuses the
-        // first-frame logic) so a demo<->real swap opens zoomed-out, not inside the sun.
-        if (datasetSwitched) initialFramedRef.current = false;
       }
     } else {
       // New CONNECTIONS appear immediately (never hidden). We still hand the newest few
@@ -461,7 +442,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         scheduleTimeout(() => doIsolateSystem(hubId, true), 200);
       }
     }
-  }, [data, demo, loaded]);
+  }, [data, loaded]);
 
   // When set, the camera locks onto this node and rides along as it orbits, so a
   // body you jumped to doesn't drift out of frame.
@@ -519,8 +500,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // one refreshes it (Phase 3). Kept client-side so it needs no schema change.
   const linkHealthRef = useRef<Map<string, number>>(new Map());
   const linksInitedRef = useRef(false);
-  // Tracks the demo flag across data updates so a demo<->real swap re-baselines links.
-  const prevDemoRef = useRef(!!demo);
   // New links stay hidden until Soumaya physically flies out and connects them.
   // How many newly-appeared links Soumaya flies over to PULSE per refresh (they're
   // already visible; this just gives the freshest ones her neuron-firing flourish).
@@ -702,14 +681,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     });
     // Money-sky (Stage 4): your bills as stars in their own constellation. Fetched from the
     // server (state → colour/glyph/pulse; cooling=blue, urgent=red pulse) and rebuilt whenever
-    // finances change. Skipped in the demo galaxy (no backend).
+    // finances change.
     const disposeGroup = (g: THREE.Object3D) => g.traverse((o: any) => {
       if (o.material) { const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x: any) => { x.map?.dispose?.(); x.dispose?.(); }); }
       o.geometry?.dispose?.();
     });
     defer(() => {
         const rebuildMoneySky = async () => {
-          if (demoRef.current) return;
           const stars = (await getMoneySky()) ?? [];
           const old = sceneryRef.current.moneysky;
           if (old) { scene.remove(old); disposeGroup(old); }
@@ -728,7 +706,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     // when cold. Same pattern as the money-sky; rebuilt on `brain-journeys-changed`.
     defer(() => {
         const rebuildJourneyHubs = async () => {
-          if (demoRef.current) return;
           const journeys = (await getJourneys()) ?? [];
           const old = sceneryRef.current.journeyhubs;
           if (old) { scene.remove(old); disposeGroup(old); }
@@ -765,7 +742,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
 
       soumaya = makeSoumaya(equippedShipRef.current);
       soumayaHandleRef.current = soumaya;
-      soumaya.setDemoMode(demoRef.current);
       if (soumaya.setTrailColor) {
         soumaya.setTrailColor(equippedTrailRef.current);
       }
@@ -790,7 +766,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       stationObjRef.current = station;
 
       visitors = makeVisitors(3, (nodeId, type) => {
-        if (!demoRef.current) visitBufRef.current.push({ nodeId, type });
+        visitBufRef.current.push({ nodeId, type });
       });
       visitorsRef.current = visitors;
       scene.add(visitors.group);
@@ -1039,12 +1015,12 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // connections and re-energizes them (fireLink → they flare bright + stream
       // packets, then decay over ~3 days). She always has the lowest-activity links
       // to tend (not only sub-threshold ones), so her tending is continuously visible
-      // even on a fresh brain. Skipped only in demo, or if she's already busy on links.
+      // even on a fresh brain. Skipped only if she's already busy on links.
       repairScanT -= dt;
       if (repairScanT <= 0) {
         repairScanT = 10; // a calm, steady housekeeping cadence
         const links = dataRef.current.links as any[];
-        if (!demoRef.current && links.length > 0) {
+        if (links.length > 0) {
           const coldest = links
             .map((l) => ({ l, key: linkKey(l), act: getLinkActivity(l) }))
             .sort((a, b) => a.act - b.act) // least-active first
@@ -1108,8 +1084,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         const pending = satellites.getPendingDispatches();
         if (pending.length > 0) {
           soumayaHandleRef.current.enqueueBeacons(pending);
-          // Demo flights must not feed real progression stats.
-          if (spaceIdRef.current && !demoRef.current) {
+          if (spaceIdRef.current) {
             const key = `stat.beacons_deployed.${spaceIdRef.current}`;
             localStorage.setItem(key, String(parseInt(localStorage.getItem(key) || "0", 10) + pending.length));
             // Force evaluate achievements in App
@@ -1438,8 +1413,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           workNodes,
           d.links as any[],
           (x: number, y: number, z: number, type: string, nodeId: number | undefined) => {
-            // Demo flights must not feed real progression stats.
-            if (spaceIdRef.current && !demoRef.current) {
+            if (spaceIdRef.current) {
               const hopKey = `stat.travel_hops.${spaceIdRef.current}`;
               localStorage.setItem(hopKey, String(parseInt(localStorage.getItem(hopKey) || "0", 10) + 1));
             }

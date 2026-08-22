@@ -5,7 +5,7 @@ import { getLore, evolveLore } from "../api/client.js";
 /**
  * An object's evolving, versioned lore. Shows the latest chapter, lets you expand
  * the full history (how its story changed over time), and "✦ Evolve" to append a
- * new chapter. Hidden in the demo galaxy (no backend).
+ * new chapter.
  */
 export function Chronicle({
   subjectType,

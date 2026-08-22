@@ -8,7 +8,7 @@ import { pushToast } from "./Toasts.js";
  * Attachments on any node (memory OR a Mind object like a person). Images are shown as
  * inline thumbnails you can tap to VIEW full-screen and swipe through — not just a
  * download link. Picked photos are downscaled + re-encoded before upload so full-res
- * phone pictures fit. Non-image files keep a download pill. Disabled in demo.
+ * phone pictures fit. Non-image files keep a download pill.
  */
 const fmtSize = (b: number) => (b < 1024 ? `${b} B` : b < 1e6 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1e6).toFixed(1)} MB`);
 

@@ -117,8 +117,8 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
     }, 350);
   };
 
-  // Direct connections, computed from the in-memory graph (correct in demo mode
-  // too, and no API round-trip). Fixes "N links but 0 connections".
+  // Direct connections, computed from the in-memory graph (no API round-trip).
+  // Fixes "N links but 0 connections".
   const neighbors = useMemo(() => {
     if (!node) return [];
     const ids = new Set<number>();
