@@ -1,9 +1,10 @@
 # Galaxy populate-path render-stall repair — design
 
-**Status:** DRAFT rev 2 — revised per ChatGPT design-review round 1 (verdict:
-revise before approval). For re-review. **No implementation authorized.**
+**Status:** DRAFT rev 3 — revised per ChatGPT design-review round 2 (two
+remaining points: D3 cross-chunk edges, D4 slot lifecycle). For re-review.
+**No implementation authorized.**
 **Branch:** `fix/galaxy-populate-render-stall` (base: `claude/soumaya-second-brain-v1-m4z4hc` @ `06d997c3`)
-**Date:** 2026-10-18 (rev 2)
+**Date:** 2026-10-18 (rev 3)
 **Reviewers:** ChatGPT (relayed), owner
 
 This is the canonical review document for this repair (per repo review workflow:
@@ -66,9 +67,6 @@ defects; an incremental structure would enlarge risk and test surface.
    references; `x`/`y`/`z`/`fx`/`fy`/`fz`/`vx`/`vy`/`vz` and other simulation
    fields), never mutate objects dropped from the new state, and never copy
    unknown/extra fields from a fresh payload onto a retained object.
-   *(Rev 2: restated — the previous "never silently mutate prior React state"
-   contradicted D1, since identity preservation is itself intentional
-   in-place mutation of the objects that become the new state.)*
 6. **Evidence:** regression tests, typecheck, test suite, production build,
    and real-device measurements substantiate the repair.
 
@@ -114,43 +112,84 @@ defects; an incremental structure would enlarge risk and test surface.
 - `noteRefreshInvoked()` diagnostic call stays; expected to go quiet in
   normal use. Satisfies criterion 2.
 
-### D3 — `overview()` honors explicit `includeIds`, with overflow semantics (closes P0-3)
+### D3 — `overview()` honors explicit `includeIds`, with chunking and edge completion (closes P0-3)
 
 - Server: `overview(limit, includeIds?)` returns the union of (a) top-`limit`
   by degree and (b) `byIds(includeIds)` **validated against the current
-  space** (cross-space ids filtered — never leaked), bounded: cap 200.
-  Edges via `within()` over the union id set.
+  space** (cross-space ids filtered — never leaked), bounded:
+  `INCLUDE_IDS_CAP = 200` per request. Edges via `within()` over the union
+  id set.
 - **Overflow contract (no silent loss):** the server rejects `includeIds`
   longer than 200 with an explicit 400 — never truncates. The client chunks
   oversized id lists into ≤200 requests and unions the results, so the
   "new memories always appear" guarantee holds even for bulk offline sync.
-- **Guarantee, precisely:** every requested node id that exists in the space
-  appears in the response. Edges appear for pairs where both endpoints are
-  in the returned set (a new memory's associative neighbors are existing
-  hubs, normally inside the top-300; the residual case — neighbor outside
-  the cut — drops that edge from view but never the node).
+- **Cross-chunk edges (rev 3):** chunked overview requests each run
+  `within()` over their own id set, so an edge between two new nodes that
+  land in *different* chunks would be omitted from every chunk response even
+  though both endpoints end up in the client's union. (Real case: the ingest
+  pipeline's LLM-extracted edges can connect two nodes created by the same
+  ingest — `pipeline.ts:114` — and a bulk sync can split them across chunks.)
+  The design therefore adds a dedicated edge-completion step: after unioning
+  node sets from all chunks, the client issues `GET /api/graph/edges?ids=`
+  over the **full union id set** (new endpoint, space-validated, bounded:
+  `EDGE_IDS_CAP = 2000` ids per call, chunked by the client if the union is
+  larger) and unions the returned edges. Node chunks are then only a node-
+  inclusion mechanism; edge coverage is resolved exactly once, over the
+  complete set — no silent omission by construction.
+- **Result-size bounds (rev 3, provisional constants — the invariants, not
+  the numbers, are the contract):**
+
+  | scope | nodes | edges |
+  |---|---|---|
+  | one overview request | ≤ `limit` (300) + 200 = 500 | `within()` over ≤500 ids |
+  | one edge-completion request | n/a (ids in, edges out) | `within()` over ≤2000 ids |
+  | client union, C chunks | ≤ 300 + N_new (deduped) | union of per-chunk edges + edge completion over the full union id set |
+
+  The server never silently truncates: over-cap inputs are rejected (400),
+  and the client chunks. Total payload stays proportional to the bounded
+  id sets the client itself requested.
+- **Visibility guarantee, precisely:** every requested node id that exists
+  in the space appears in the final union. Every edge whose both endpoints
+  are in the final union id set appears (via edge completion). A new
+  memory's associative neighbors are existing hubs, normally inside the
+  top-300; the residual case (neighbor outside the cut) drops that edge
+  from view but never the node.
 - Client: `getGraph` accepts `includeIds`; `refresh(newIds)` passes the ids
-  from its own ingest response. Default `limit=300` behavior unchanged
-  otherwise. Satisfies criteria 3 and 4.
+  from its own ingest response, then runs edge completion when chunking was
+  used. Default `limit=300` behavior unchanged otherwise. Satisfies criteria
+  3 and 4.
 
-### D4 — parallelize associative-link LLM validation, with a chosen concurrency model (P1)
+### D4 — parallelize associative-link LLM validation, with a specified slot lifecycle (P1)
 
-- **Model (decided, not open):**
+- **Concurrency model (decided):**
   - The per-node validation loop in `associativeLink` keeps its sequential
     cap logic, but `validateLink` calls within a node run with concurrency
-    cap 3 using **synchronous slot reservation**: a slot is reserved before
-    dispatch and released on negative/timeout, so `maxLinks` can never be
-    exceeded regardless of completion order.
+    cap 3.
   - Across nodes: at most 2 concurrent `associativeLink` jobs
     (`pipeline.ts`).
   - **Aggregate bound: at most 6 in-flight `validateLink` calls.**
-- **Failure handling:** per-call try/catch — a single validation failure is
-  treated as not-linked, logged, and the ingest continues; one bad call never
-  aborts the ingest or loses the memory.
+- **Slot lifecycle (rev 3, specified):**
+  - *Reserve:* synchronously increment a `reserved` counter in the same tick
+    as the cap check, before dispatching the `validateLink` promise. The
+    cap check becomes `regularLinks + reserved >= cap` → skip/record
+    withheld. Synchronous reservation is what makes the cap race-free under
+    JS's run-to-completion semantics, regardless of completion order.
+  - *Release:* in a `finally` block on the individual validation promise —
+    covers success, validation-negative, timeout, and exception uniformly.
+    Release is per-promise, so out-of-order completion cannot corrupt
+    accounting: each slot is freed exactly once, by its own settlement.
+  - *Timeout:* each validation call carries a per-call timeout (30s); on
+    timeout the slot is released via the same `finally`, the hit is treated
+    as not-linked and logged.
+  - *Failure semantics:* a single validation failure (throw/timeout) is
+    treated as not-linked, recorded per the existing withheld/skip logic,
+    and the ingest continues — one bad call never aborts the ingest or
+    loses the memory. `reserved` and `regularLinks` are per-node locals, so
+    a failure in one node cannot affect another's accounting.
 - **Rate limits:** the existing `resilient.ts` degradation handling applies;
   the caps are chosen to stay within typical provider limits.
-- Latency improvement is a **hypothesis until measured** (the earlier "÷3"
-  estimate is withdrawn); the on-device gate measures it.
+- Latency improvement is a **hypothesis until measured** (no speedup claimed
+  in this design); the on-device gate measures it.
 
 ### D5 — field-allowlist merges (P1, in scope as reframed)
 
@@ -173,17 +212,24 @@ defects; an incremental structure would enlarge risk and test surface.
    pulse tick; component-level test that `linkColor` output reflects updated
    activity after the tick. **Visual flash confirmation on-device is a gate.**
 3. D3: missing ids skipped, duplicates deduped, cross-space ids filtered,
-   over-cap → explicit 400, client chunking unions correctly, node selection
-   and edge retrieval stay space-scoped and bounded.
-4. D4: `maxLinks` cap cannot be exceeded under concurrent validation
-   (slot-reservation test); single validation failure doesn't abort ingest;
-   aggregate in-flight bound holds.
+   over-cap → explicit 400, client chunking unions nodes correctly,
+   **edge completion returns cross-chunk edges** (two new nodes in different
+   chunks with an edge between them — assert the edge is present in the
+   final union), node selection and edge retrieval stay space-scoped and
+   bounded per the bounds table.
+4. D4: `maxLinks` cap never exceeded under concurrent validation with
+   **out-of-order completion** (randomized delays, reverse-order
+   resolutions); **failure injection** (forced throws/timeouts) releases all
+   slots (`reserved` returns to 0), ingest completes, failures recorded as
+   not-linked; aggregate in-flight bound (≤6) holds under a stress run;
+   per-node accounting isolation (a failing node doesn't affect its
+   sibling's cap).
 5. `npm run typecheck`, full `npm test`, production web build.
 6. On-device (Samsung Xclipse 530): existing in-session `autoRenderDiag`
    harness + BAD/GOOD snapshot before/after D1+D2.
 7. End-to-end populate flow: ingest → memory appears → celebration fires →
    Soumaya fastens without a freeze, on a >300-node brain (D3); bulk offline
-   sync exercises the chunking path.
+   sync exercises the chunking + edge-completion path.
 
 ---
 
@@ -204,10 +250,18 @@ separate owner approval naming this document and its revision.
   4 blockers (D1/D5 vs criterion 5; D2 flash evidence; D3 overflow
   semantics; D4 concurrency underspecified). Decisions: 200-id cap retained
   provisional with explicit overflow contract; link-sort cleanup deferred.
-- 2026-10-18 — rev 2 (this revision): criterion 5 restated as a precise
+- 2026-10-18 — rev 2 (commit `45a63061`): criterion 5 restated as a precise
   invariant; D2 specifies the pulse-tick replacement trigger and stays
-  conditional on on-device evidence (source-confirmed: no render follows the
-  ref write today); D3 adds 400-on-over-cap + client chunking and the exact
-  visibility guarantee; D4 chooses the reservation model with aggregate bound
-  6 and per-call failure isolation; D5 reframed as field-allowlist merges;
-  test plan extended per the review. Submitted for re-review.
+  conditional on on-device evidence; D3 adds 400-on-over-cap + client
+  chunking and the exact visibility guarantee; D4 chooses the reservation
+  model with aggregate bound 6 and per-call failure isolation; D5 reframed
+  as field-allowlist merges; test plan extended.
+- 2026-10-18 — ChatGPT design-review round 2: two remaining points —
+  D3 cross-chunk edges + overall result-size bounds; D4 slot lifecycle
+  (release on failure) + failure/out-of-order test coverage.
+- 2026-10-18 — rev 3 (this revision): D3 adds the edge-completion step
+  (`GET /api/graph/edges?ids=` over the full union id set, `EDGE_IDS_CAP =
+  2000`) and the explicit bounds table; D4 specifies reserve-synchronously /
+  release-in-`finally` / 30s per-call timeout, per-node accounting
+  isolation, and the failure/out-of-order test cases. Submitted for
+  re-review.
