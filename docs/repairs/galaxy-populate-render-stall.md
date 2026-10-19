@@ -256,6 +256,20 @@ defects; an incremental structure would enlarge risk and test surface.
     an intermediate state where the slot is released but the link is not
     yet counted. (better-sqlite3 calls are synchronous; no interleaving is
     possible here.)
+  - *Implementation note (2026-10-18):* the ordering above was corrected
+    during implementation review to **create-before-account**:
+    `const edge = edgesRepo.create(…); reserved--; regularLinks++;
+    created.push(edge); accepted = true;`. If `create()` throws
+    (better-sqlite3 throws synchronously), the counters are untouched and
+    the `finally` releases the reservation exactly once — the previous
+    order double-released the slot and phantom-counted `regularLinks` for
+    an edge that was never created. The block remains a single synchronous
+    run-to-completion unit (no `await` between statements), so the
+    atomicity rationale is unchanged. Pinned by a persistence-failure
+    regression test (`associativeLinkConcurrency.test.ts`) asserting final
+    `{ reserved: 0, regularLinks: <real edges> }` via a test-only
+    `accountingProbe` option. This is an exception-safety correction, not a
+    design change.
 - **Cancellation (rev 4 — required, not optional):** the 30s per-call timeout
   must actually stop the underlying work, not just reject a wrapper —
   otherwise a timed-out call keeps running while its freed slot admits new

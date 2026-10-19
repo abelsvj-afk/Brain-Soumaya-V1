@@ -230,8 +230,50 @@ describe("D4 failure semantics", () => {
     }
   });
 
-  it("per-node isolation: a failing node does not affect its sibling", async () => {
+  it("persistence failure: create-before-account keeps accounting exact (regression)", async () => {
+    // Regression test for the implementation-review finding: the OLD ordering
+    // (reserved--; regularLinks++; edges.create(...)) double-released the
+    // reservation and phantom-counted regularLinks when create() threw.
+    // This test FAILS against that ordering and passes with create-before-account.
     const { handle, newNode, ids } = setupDb(6);
+    try {
+      mockKnn.mockReturnValue(ids.map((id) => ({ nodeId: id, similarity: 0.9 })));
+      const llm = new FakeLinkLlm(async () => ({ linked: true, relationship: "relates_to", weight: 0.9 }));
+      const d = deps(handle, llm);
+      // The FIRST edge persistence throws; the rest succeed.
+      const origCreate = d.edges.create.bind(d.edges);
+      let calls = 0;
+      vi.spyOn(d.edges, "create").mockImplementation((input) => {
+        calls++;
+        if (calls === 1) throw new Error("persistence boom");
+        return origCreate(input);
+      });
+      let finalAccounting: { reserved: number; regularLinks: number } | undefined;
+      // Must resolve (no hang, no unhandled rejection): the persistence
+      // failure is contained and the ingest continues.
+      const created = await associativeLink(handle, d, newNode, new Float32Array(8), {
+        ...baseOpts,
+        maxLinks: 3,
+        accountingProbe: (a) => {
+          finalAccounting = a;
+        },
+      });
+      expect(calls).toBe(3);
+      // Only real edges are returned and persisted; subsequent candidates
+      // still fill the cap correctly (2 real links, not 3).
+      expect(created).toHaveLength(2);
+      const edges = new EdgesRepo(handle, "test-space").within([newNode.id, ...ids]);
+      expect(edges).toHaveLength(2);
+      // (a) reservation released exactly once → back to baseline;
+      // (b) no phantom regularLinks for the uncreated edge.
+      // OLD code produced { reserved: -1, regularLinks: 3 } here.
+      expect(finalAccounting).toEqual({ reserved: 0, regularLinks: 2 });
+    } finally {
+      handle.sqlite.close();
+    }
+  });
+
+  it("per-node isolation: a failing node does not affect its sibling", async () => {    const { handle, newNode, ids } = setupDb(6);
     try {
       mockKnn.mockReturnValue(ids.map((id) => ({ nodeId: id, similarity: 0.9 })));
       const failing = new FakeLinkLlm(async () => {

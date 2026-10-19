@@ -16,6 +16,12 @@ export interface AssociativeLinkOptions {
   maxLinks?: number;
   /** Per-validation timeout ms (D4). Defaults to 30s; override in tests. */
   validateTimeoutMs?: number;
+  /**
+   * Test-only probe: invoked once after all validations settle with the
+   * final `{ reserved, regularLinks }` accounting, so regression tests can
+   * pin the exactly-once release invariant. Not used in production.
+   */
+  accountingProbe?: (accounting: { reserved: number; regularLinks: number }) => void;
 }
 
 // threshold lowered from 0.85 (near-duplicate territory) to 0.72 so a new memory links
@@ -158,6 +164,11 @@ export async function associativeLink(
   // Phase 3: run the reserved validations, at most VALIDATE_CONCURRENCY in flight.
   await mapWithConcurrency(jobs, VALIDATE_CONCURRENCY, (job) => job());
 
+  // Test-only: report final accounting so the persistence-failure regression
+  // test can assert exactly-once release (reserved back to 0) and no phantom
+  // regularLinks.
+  options.accountingProbe?.({ reserved, regularLinks });
+
   return created;
 
   async function validateOne(c: Candidate): Promise<void> {
@@ -172,20 +183,21 @@ export async function associativeLink(
         { signal: controller.signal },
       );
       if (decision.linked) {
-        // Reservation→acceptance transition as ONE synchronous block: no await
-        // between the statements, so no concurrent completion can observe an
-        // intermediate state where the slot is released but the link isn't
-        // counted yet. (better-sqlite3 calls are synchronous; no interleaving.)
+        // Create-before-account: edge persistence happens FIRST, while the
+        // reservation is still held. better-sqlite3 is synchronous, so if
+        // create() throws the counters below are untouched and the finally
+        // releases the reservation exactly once — no double-release, no
+        // phantom regularLinks. The block stays synchronous (no await
+        // between statements), preserving run-to-completion atomicity.
+        const edge = deps.edges.create({
+          source: newNode.id,
+          target: c.hit.nodeId,
+          relationship: decision.relationship ?? "relates_to",
+          weight: decision.weight ?? c.hit.similarity,
+        });
         reserved--;
         regularLinks++;
-        created.push(
-          deps.edges.create({
-            source: newNode.id,
-            target: c.hit.nodeId,
-            relationship: decision.relationship ?? "relates_to",
-            weight: decision.weight ?? c.hit.similarity,
-          }),
-        );
+        created.push(edge);
         accepted = true;
       } else {
         // The gate wasn't confident — don't draw it, but surface it so YOU can decide.
