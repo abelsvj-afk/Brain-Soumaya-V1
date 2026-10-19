@@ -240,7 +240,11 @@ function makeAsteroidBelt(inner: number, outer: number, count = 360): THREE.Poin
     new THREE.PointsMaterial({
       color: "#b9b2a0",
       size: 1.1,
-      sizeAttenuation: true,
+      // Fixed point size: with sizeAttenuation:true, three.js computes
+      // gl_PointSize = size*(scale/-mvPosition.z) with NO upper bound, so
+      // points near the camera balloon into huge alpha-blended quads
+      // (overdraw hazard on mobile GPUs). Attenuation off = small fixed px.
+      sizeAttenuation: false,
       transparent: true,
       opacity: 0.55,
       depthWrite: false,
