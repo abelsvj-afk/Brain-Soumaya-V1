@@ -21,8 +21,34 @@ export const BOOTSTRAP_SQL = `
       aliases TEXT,
       idempotency_key TEXT,
       fired_by_approval INTEGER,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      -- W1 temporal truth (wisdom layer): bitemporal columns.
+      -- valid_from/valid_to: when the fact was true in the real world (NULL = unknown).
+      -- recorded_at: when the system recorded the row (immutable; backstop default).
+      -- superseded_at/superseded_by/supersede_reason: transaction-time supersession pointer.
+      valid_from TEXT,
+      valid_to TEXT,
+      recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      superseded_at TEXT,
+      superseded_by INTEGER,
+      supersede_reason TEXT
     );
+    -- W1: append-only correction events. Corrections are events, not row mutations —
+    -- a mutable flag on the row would corrupt historical as-of queries. The "never
+    -- true" status is DERIVED from this table, never stored on the node row.
+    CREATE TABLE IF NOT EXISTS corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      node_id INTEGER NOT NULL,
+      correction_type TEXT NOT NULL,
+      corrected_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      corrected_by TEXT NOT NULL,
+      reason TEXT,
+      superseding_node_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_corrections_node ON corrections(node_id);
+    CREATE INDEX IF NOT EXISTS idx_corrections_space_time ON corrections(space_id, corrected_at);
     CREATE TABLE IF NOT EXISTS edges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       space_id TEXT NOT NULL DEFAULT 'legacy',
@@ -111,6 +137,7 @@ export const BOOTSTRAP_SQL = `
       quiet_end TEXT NOT NULL DEFAULT '04:30',
       digest_time TEXT NOT NULL DEFAULT '06:00',
       daily_proactive_cap INTEGER NOT NULL DEFAULT 5,
+      w1_cascade_enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     -- Telegram: bind a chat to a brain so messages route to the right space and

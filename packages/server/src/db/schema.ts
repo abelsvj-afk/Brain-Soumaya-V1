@@ -55,6 +55,22 @@ export const nodes = sqliteTable("nodes", {
   // Phase 1 agent loop: which approval fired this reminder (fire_reminder's
   // side effect is an UPDATE). Set atomically with reminder_fired_at.
   firedByApproval: integer("fired_by_approval"),
+  // W1 temporal truth (wisdom layer): bitemporal columns.
+  // valid_from/valid_to: when the fact was true in the real world (NULL = unknown).
+  // recorded_at: when the system recorded the row (immutable). Fresh schemas get a
+  // DB-level expression default as a backstop; application code always sets it
+  // explicitly. Migrated schemas have nullable recorded_at (SQLite forbids
+  // expression defaults on ALTER TABLE ADD COLUMN) — enforced by app code + test.
+  validFrom: text("valid_from"),
+  validTo: text("valid_to"),
+  recordedAt: text("recorded_at"),
+  // superseded_at/superseded_by/supersede_reason: transaction-time pointer.
+  // NULL superseded_at = current. Plain INTEGER for superseded_by (application-
+  // validated; the supersede() writer in agent/temporal.ts is the single entry
+  // point). See docs/wisdom/w1-design-revision.md §7.
+  supersededAt: text("superseded_at"),
+  supersededBy: integer("superseded_by"),
+  supersedeReason: text("supersede_reason"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
@@ -296,6 +312,9 @@ export const spaceMeta = sqliteTable("space_meta", {
   quietEnd: text("quiet_end").notNull().default("04:30"),
   digestTime: text("digest_time").notNull().default("06:00"),
   dailyProactiveCap: integer("daily_proactive_cap").notNull().default(5),
+  // W1 temporal truth: dependent-fact cascade gate (disabled by default = 0).
+  // May only be enabled after depends_on/assumes edge semantics are verified.
+  w1CascadeEnabled: integer("w1_cascade_enabled").notNull().default(0),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
@@ -426,6 +445,34 @@ export type CandidateLinkRow = typeof candidateLinks.$inferSelect;
 export type NodeRow = typeof nodes.$inferSelect;
 export type EdgeRow = typeof edges.$inferSelect;
 export type InsightRow = typeof insights.$inferSelect;
+/**
+ * W1 temporal truth: append-only correction events. Corrections are events, not
+ * row mutations — a mutable flag on the node row would corrupt historical as-of
+ * queries (an Oct 5 query would see a flag set on Oct 10). The "never true"
+ * status is DERIVED via isNeverTrue(), never stored on the node.
+ * correction_type: 'factual_update' | 'false_belief' | 'preference_override'.
+ */
+export const corrections = sqliteTable(
+  "corrections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull().default(DEFAULT_SPACE),
+    nodeId: integer("node_id").notNull(),
+    correctionType: text("correction_type").notNull(),
+    correctedAt: text("corrected_at").notNull(),
+    correctedBy: text("corrected_by").notNull(),
+    reason: text("reason"),
+    supersedingNodeId: integer("superseding_node_id"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    index("idx_corrections_node").on(t.nodeId),
+    index("idx_corrections_space_time").on(t.spaceId, t.correctedAt),
+  ],
+);
+export type CorrectionRow = typeof corrections.$inferSelect;
 export type AgentLogRow = typeof agentLogs.$inferSelect;
 export type DailyLogRow = typeof dailyLogs.$inferSelect;
 export type SpaceRow = typeof spaces.$inferSelect;
