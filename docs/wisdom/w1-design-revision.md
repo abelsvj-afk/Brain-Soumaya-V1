@@ -1,12 +1,26 @@
 # W1 Design Revision — Temporal Truth
 ### Soumaya Second Brain · Wisdom Layer Phase W1
-### Status: **Revision 4** — addressing sign-off review B1–B3 (2026-10-19)
+### Status: **Revision 5** — addressing sign-off review query-contract blocker (2026-10-19)
 
 > **Core principle (the foundation everything else depends on):** *A memory can stop being current without its history being rewritten, and a correction must not create false historical truth.*
 
 ---
 
-## 0. What changed in Revision 4
+## 0. What changed in Revision 5
+
+The sign-off review found one remaining correctness issue: §2.3's historical query contradicted itself. It filtered out superseded rows (correct for an as-of belief query) but then claimed the Oct 11 query returns the row with `was_corrected_as_false = 1` — impossible, since the row is excluded by the WHERE clause. Additionally, the `LEFT JOIN` to corrections could duplicate node rows when multiple false-belief events exist.
+
+| # | Change | Trigger |
+|---|---|---|
+| 1 | **Two separate query contracts.** §2.3 now defines Contract 1 (as-of belief query: "what facts were believed current at time T?") and Contract 2 (correction-history query: "show me this node's full history including all correction events"). Each has its own SQL, its own purpose, and its own test. The old combined query is removed. | Query-contract blocker |
+| 2 | **EXISTS instead of LEFT JOIN for correction status.** Contract 2 uses `EXISTS (...)` so multiple correction events can never duplicate a node row. The full event timeline is returned as a `correction_history` JSON array via `json_group_array`. | Query-contract blocker |
+| 3 | **T-HIST-1 split into T-HIST-1a / T-HIST-1b.** 1a tests the as-of belief contract (Oct 5 → believed true; Oct 11 → excluded as not current). 1b tests the correction-history contract (full event timeline for the node regardless of as-of time). | Query-contract blocker |
+
+**This document is design only. No implementation is authorized by this document.**
+
+---
+
+## 0a. What changed in Revision 4
 
 The round-4 sign-off review found three remaining blockers (B1–B3). All are narrow, focused fixes — no structural redesign.
 
@@ -20,7 +34,7 @@ The round-4 sign-off review found three remaining blockers (B1–B3). All are na
 
 ---
 
-## 0a. What changed in Revision 3
+## 0b. What changed in Revision 3
 
 The round-3 gauntlet found four blockers (B1–B4) plus two additional checks. Every one is addressed below. The structural changes from Revision 2:
 
@@ -37,7 +51,7 @@ The round-3 gauntlet found four blockers (B1–B4) plus two additional checks. E
 
 ---
 
-## 0b. What changed in Revision 2 (retained)
+## 0c. What changed in Revision 2 (retained)
 
 The round-2 gauntlet found five blockers (B1–B5) plus six additional issues. Every one is addressed below. The structural changes from Revision 1:
 
@@ -190,34 +204,59 @@ This `opTime` is passed explicitly to ALL three writes in the transaction: the o
 - **Does NOT touch the temporal columns of any fact.** Trucking memories remain factually current; they are suppressed by a separate mechanism (a `directives` entry or the W6 wisdom gate's suppression rules — out of W1 scope, but W1 must not corrupt factual history to implement a preference).
 - If a caller attempts `supersede_reason = 'user_override'`, the writer treats it as Type 1 with `valid_to = <opTime>` ONLY if the user is asserting the fact is no longer true ("I'm not doing trucking anymore" = the *pursuit* ended). If the user is only asking for silence, no supersession occurs.
 
-### 2.3 Retrieval with correction events (Revision 3 — fixes B3)
+### 2.3 Two retrieval contracts: as-of belief vs. correction history (Revision 5 — fixes query-contract blocker)
 
-The "what's true now" filter is unchanged (superseded rows are excluded by `superseded_at IS NULL`). Correction events matter for **historical as-of queries** and **audit**:
+Revision 4's §2.3 combined two different questions into one query and contradicted itself: it filtered out superseded rows (correct for "what was believed current at time T") but then claimed the Oct 11 query returns the row with `was_corrected_as_false = 1` — impossible, since the WHERE clause excludes it. It also used `LEFT JOIN`, which duplicates node rows when multiple correction events exist.
+
+These are **two distinct contracts** with different SQL, different purposes, and different tests.
+
+#### Contract 1 — As-of belief query: "what facts were believed current at time T?"
 
 ```sql
--- Historical: "what did we believe on Oct 5?"
--- A node was believed-true at time T iff:
---   recorded_at <= T AND (superseded_at IS NULL OR superseded_at > T)
--- AND no false_belief correction event with corrected_at <= T.
-SELECT n.id, n.label, n.content, n.recorded_at, n.superseded_at, n.supersede_reason,
-       CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END AS was_corrected_as_false
+SELECT n.id, n.label, n.content, n.recorded_at, n.superseded_at
 FROM nodes n
-LEFT JOIN corrections c ON c.node_id = n.id
-  AND c.correction_type = 'false_belief'
-  AND c.corrected_at <= ?          -- as-of time: only corrections known by then
 WHERE n.space_id = ?
   AND n.recorded_at <= ?
   AND (n.superseded_at IS NULL OR n.superseded_at > ?);
 ```
 
-**Why this is correct (the B3 scenario):**
-- Oct 1: system records "car insurance $200/mo" (`recorded_at = Oct 1`).
-- Oct 10: user says "never had a car." Row gets `superseded_at = Oct 10`. Correction event: `correction_type = 'false_belief'`, `corrected_at = Oct 10`.
-- **Query as-of Oct 5:** `recorded_at (Oct 1) <= Oct 5` ✓, `superseded_at (Oct 10) > Oct 5` ✓, no correction with `corrected_at <= Oct 5`. Result: `was_corrected_as_false = 0`. The system correctly reconstructs "believed true on Oct 5." ✓
-- **Query as-of Oct 11:** `superseded_at (Oct 10) <= Oct 11`, so the node is excluded from "current" results. In history mode, the correction event with `corrected_at = Oct 10 <= Oct 11` shows `was_corrected_as_false = 1`. The system correctly shows "believed Oct 1 – Oct 10, then corrected as false." ✓
-- **Current truth query:** `superseded_at IS NULL` excludes the row entirely. The derived `isNeverTrue()` helper is available for callers that need the false-belief status without a historical join.
+- No correction join. Superseded rows are correctly excluded — a fact superseded before T was not believed current at T.
+- This is the query the digest, chat context builder, and all "what's true" paths use (with T = now).
 
-**Test T-HIST-1** (new, from round-3 review): asserts both the Oct 5 and Oct 11 reconstructions above.
+#### Contract 2 — Correction-history query: "show me this node's full history, including all corrections"
+
+```sql
+SELECT n.id, n.label, n.content, n.recorded_at, n.superseded_at, n.superseded_by,
+       EXISTS (
+         SELECT 1 FROM corrections c
+         WHERE c.node_id = n.id
+           AND c.correction_type = 'false_belief'
+       ) AS was_corrected_as_false,
+       (SELECT json_group_array(
+          json_object('type', c2.correction_type, 'at', c2.corrected_at,
+                      'by', c2.corrected_by, 'reason', c2.reason)
+        )
+        FROM corrections c2
+        WHERE c2.node_id = n.id
+        ORDER BY c2.corrected_at ASC
+       ) AS correction_history
+FROM nodes n
+WHERE n.space_id = ? AND n.id = ?;
+```
+
+- `EXISTS` (not `LEFT JOIN`) for the boolean — multiple correction events can never duplicate the row.
+- `correction_history` returns the full event timeline as a JSON array, ordered by correction time. For audit/history views only — never for "what's true now" queries.
+
+#### Walkthrough: the car-insurance scenario
+
+- Oct 1: system records "car insurance $200/mo" (`recorded_at = Oct 1`).
+- Oct 10: user says "never had a car." Row gets `superseded_at = Oct 10` (shared `opTime`). Correction event: `correction_type = 'false_belief'`, `corrected_at = Oct 10`.
+- **Contract 1, as-of Oct 5:** `recorded_at (Oct 1) <= Oct 5` ✓, `superseded_at (Oct 10) > Oct 5` ✓ → row returned, believed true. The system correctly reconstructs the Oct 5 belief state. ✓
+- **Contract 1, as-of Oct 11:** `superseded_at (Oct 10) <= Oct 11` → row excluded. Correct — it was not believed current on Oct 11. ✓
+- **Contract 2, node history:** returns the row with `was_corrected_as_false = 1` and `correction_history = [{"type":"false_belief","at":"2026-10-10T...","by":"user","reason":"..."}]`. The full story — believed Oct 1–Oct 10, then corrected as false — is visible in one row, with no duplication regardless of how many correction events exist. ✓
+- **Current truth query** (`superseded_at IS NULL`): excludes the row entirely. The derived `isNeverTrue()` helper (§2.4) is available for callers that need the false-belief status without a history join.
+
+**Tests T-HIST-1a / T-HIST-1b** (split from T-HIST-1, see §10): 1a asserts the Contract 1 reconstructions (Oct 5 → present/believed-true; Oct 11 → excluded); 1b asserts the Contract 2 history view (single row, `was_corrected_as_false = 1`, `correction_history` array with exactly one event, no row duplication when a second correction event is added).
 
 ### 2.4 The `corrections` table (new in Revision 3 — fixes B3)
 
@@ -799,7 +838,7 @@ All tests in `packages/server/src/agent/__tests__/w1-temporal.test.ts`.
 
 - **T-MIG-1**: migration order and assertion (§9.2). Fixture DB with mixed-format `created_at` values → run migration → assert all temporal columns match canonical format; assert the post-migration assertion throws on a deliberately corrupted row.
 - **T-RTR-2**: iterative over-fetch survives superseded flooding (§6.2). 500 superseded high-similarity nodes + 3 valid lower-similarity nodes, k=3 → all 3 valid returned, loop terminates.
-- **T-HIST-1**: historical as-of reconstruction (§2.3). Oct 5 query shows believed-true; Oct 11 query shows corrected-as-false.
+- **T-HIST-1a / T-HIST-1b**: as-of belief contract and correction-history contract (§2.3). 1a: Oct 5 as-of → believed-true; Oct 11 as-of → excluded. 1b: history view returns single row with `was_corrected_as_false = 1` and full `correction_history` array; adding a second correction event does not duplicate the row.
 - **T-NT-1** (revised): false-belief correction via `corrections` table, no `never_true` column (§2.4).
 - **T-CAS-1**: atomic cascade failure (§5.1, retained).
 
@@ -822,18 +861,25 @@ T-NT-1: Correction of a never-true fact creates no false interval
   AND no timestamp on A suggests it was ever true
 ```
 
-**New test: historical as-of reconstruction (from round-3 review, B3):**
+**New tests: as-of belief and correction history (from round-3 review, B3; split in Revision 5):**
 ```
-T-HIST-1: As-of queries reconstruct pre-correction belief state
+T-HIST-1a: As-of belief query reconstructs pre-correction belief state (Contract 1)
   GIVEN node A "Car insurance: $200/mo" (recorded_at = Oct 1T10:00:00.000Z)
   AND on Oct 10T14:00:00.000Z user corrects it as false_belief
     (A.superseded_at = Oct 10T14:00:00.000Z; corrections row with corrected_at = Oct 10T14:00:00.000Z)
-  WHEN querying as-of Oct 5T00:00:00.000Z
-  THEN A is returned as believed-true (was_corrected_as_false = 0)
+  WHEN querying as-of Oct 5T00:00:00.000Z via Contract 1
+  THEN A is returned (believed current on Oct 5)
   AND the result does NOT imply the system knew it was false on Oct 5
-  WHEN querying as-of Oct 11T00:00:00.000Z
-  THEN A is excluded from current-truth results (superseded_at <= Oct 11)
-  AND in history mode, A shows was_corrected_as_false = 1 with corrected_at = Oct 10
+  WHEN querying as-of Oct 11T00:00:00.000Z via Contract 1
+  THEN A is excluded (superseded_at <= Oct 11 — it was not believed current on Oct 11)
+
+T-HIST-1b: Correction-history query returns full event timeline without duplication (Contract 2)
+  GIVEN the same node A and correction as T-HIST-1a
+  AND a second correction event is later recorded for A (correction_type = 'factual_update', corrected_at = Oct 12)
+  WHEN querying Contract 2 for node A
+  THEN exactly ONE row is returned (no duplication from the two correction events)
+  AND was_corrected_as_false = 1 (EXISTS finds the false_belief event)
+  AND correction_history is a JSON array with exactly 2 events in corrected_at order
 ```
 
 **New test: atomic cascade failure (from review):**
@@ -865,7 +911,7 @@ W1 is accepted iff **all** of the following hold:
 
 **AC6 — No regressions.** Full `npm test` + `npm run typecheck` pass.
 
-**AC7 — Corrections don't create false truth.** T-NT-1 + T-HIST-1 + T-TIME-5 pass. No correction produces a row with non-NULL `valid_from`/`valid_to` for a false-belief correction. As-of queries reconstruct pre-correction belief states correctly. All three temporal writes in a supersession share one identical timestamp (no boundary drift).
+**AC7 — Corrections don't create false truth.** T-NT-1 + T-HIST-1a + T-HIST-1b + T-TIME-5 pass. No correction produces a row with non-NULL `valid_from`/`valid_to` for a false-belief correction. As-of queries reconstruct pre-correction belief states correctly; history views show the full correction timeline without row duplication. All three temporal writes in a supersession share one identical timestamp (no boundary drift).
 
 **AC8 — Uncertain inferences don't mutate history.** T-TRIG-1 passes.
 
@@ -906,6 +952,6 @@ All 12 non-goals from Revision 1 stand. Additionally:
 | `packages/server/src/synthesis/dailyDigest.ts` | Add supersession filter to cooling + reminders inline SQL; verify LLM digest path input filtering |
 | `packages/server/src/agent/tools/memorySearch.ts` | Verify `byIds()` filter propagates |
 | `packages/server/src/agent/loop.ts` | Tag new facts with `origin` (`user_statement` | `user_correction` | `model_inference`); only the first two qualify for auto-supersession |
-| `packages/server/src/agent/__tests__/w1-temporal.test.ts` | **New file.** Tests T1–T8 (revised) + T-TIME-1–5 + T-WRITE-1 + T-TRIG-1 + T-RTR-1 + T-RTR-2 + T-RTR-3 + T-RB-1 + T-FK-1 + T-SEC-1 + T-PAR-1 + T-NT-1 + T-HIST-1 + T-MIG-1 + T-CAS-1 |
+| `packages/server/src/agent/__tests__/w1-temporal.test.ts` | **New file.** Tests T1–T8 (revised) + T-TIME-1–5 + T-WRITE-1 + T-TRIG-1 + T-RTR-1 + T-RTR-2 + T-RTR-3 + T-RB-1 + T-FK-1 + T-SEC-1 + T-PAR-1 + T-NT-1 + T-HIST-1a + T-HIST-1b + T-MIG-1 + T-CAS-1 |
 
 **Estimated scope:** ~300 lines of new production code (temporal.ts + corrections helpers + iterative vec search + filter helpers + method contracts), ~200 lines of migration/schema changes (including `corrections` table), ~700 lines of tests. No new dependencies. No LLM calls in the supersession writer (deterministic SQL + audit INSERT). The `origin` tagging in the agent loop is metadata only, not a new LLM call.
