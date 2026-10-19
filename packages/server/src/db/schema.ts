@@ -93,7 +93,9 @@ export const insights = sqliteTable("insights", {
     .default(sql`CURRENT_TIMESTAMP`),
 });
 
-/** Logs of all autonomous agent activity. */
+/** Logs of all autonomous agent activity. APPEND-ONLY: BEFORE UPDATE/DELETE
+ * triggers (created in migrateSchema) abort any mutation. Operational state
+ * lives in toolApprovals; rows here are immutable evidence. */
 export const agentLogs = sqliteTable("agent_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   spaceId: text("space_id").notNull().default(DEFAULT_SPACE),
@@ -105,6 +107,36 @@ export const agentLogs = sqliteTable("agent_logs", {
   createdAt: text("created_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
+});
+
+/**
+ * Phase 1 agent loop: operational approval state machine (MUTABLE by design).
+ * States: pending -> confirmed -> executing -> executed | failed
+ *         pending -> denied | expired
+ * Every transition appends an agent_logs row (the immutable audit trail).
+ * argsJson holds the exact args to execute — may contain user text; it is
+ * operational necessity and is NEVER copied into agent_logs. Terminal rows
+ * are pruned after 7 days; the audit trail is permanent.
+ */
+export const toolApprovals = sqliteTable("tool_approvals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  spaceId: text("space_id").notNull(),
+  /** Who requested it: "telegram:<chatId>" or "web:<userId>". */
+  principal: text("principal").notNull(),
+  tool: text("tool").notNull(),
+  argsJson: text("args_json").notNull(),
+  /** sha256 of canonical args_json — confirmation binds to the exact args. */
+  argsHash: text("args_hash").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  expiresAt: text("expires_at").notNull(),
+  decidedAt: text("decided_at"),
+  executionAttempts: integer("execution_attempts").notNull().default(0),
+  lastError: text("last_error"),
+  /** agent_logs.id of the successful execution audit row (set on executed). */
+  executionLogId: integer("execution_log_id"),
 });
 
 /** Global configuration for the system (shared — e.g. the deployment API budget). */
