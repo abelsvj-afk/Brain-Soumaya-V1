@@ -3,13 +3,29 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
-> ## 2026-10-19 — Phase 1 agent loop (branch `phase-1-agent-loop`, NOT merged/deployed)
-> Final sign-off received to BUILD on a dedicated branch. Conversational function-calling loop
-> (`agent/loop.ts`) with 5 tools, crash-safe approval lifecycle (`tool_approvals`), append-only
-> `agent_logs`, strict batch semantics, and full acceptance tests (`agent/__tests__/phase1.test.ts`).
-> Scope: web `POST /api/chat/agent` + Telegram loop swap. No OAuth, no destructive tools.
-> **Not approved: merge or deploy** — those require passing tests, security review, and acceptance
-> evidence. Previous note: this file's historical sections below remain stale (see banner).
+## 2026-10-19 — Phase 2 notification policy (branch `phase-2-notification-policy`)
+
+**Status:** BUILT, awaiting `npm run typecheck` + `npm test`. Design signed off after 5 review rounds.
+**Not approved:** merge, deploy.
+
+Proactive Telegram sends now go through a single policy boundary: per-space quiet hours
+(21:00–04:30 default), daily cap (5, default), timezone-aware scheduling, urgent bypass
+(fresh reminders, bills due <6h), crash-safe outbox (`queued→sending→sent|failed|dropped|ambiguous`),
+atomic cap claims, Telegram commands (`/quiet /digest /cap /tz /settings`). Digest fires at
+per-space `digest_time` (06:00 default) instead of midnight UTC.
+
+**Blocked:** automated verification — work WiFi bars GitHub on the test device; tests run on good network.
+**Telegram:** not configured on Fly (no `TELEGRAM_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET` yet).
+
+## 2026-10-19 — Phase 1 agent loop (branch `phase-1-agent-loop`)
+
+**Status:** BUILT, statically reviewed (9 bugs fixed), awaiting `npm run typecheck` + `npm test`.
+**Not approved:** merge, deploy.
+
+Conversational function-calling loop: 5 tools (memory_search, web_lookup, check_in,
+fire_reminder, create_task), approval state machine with per-approval idempotency keys,
+strict ordered batch semantics (6 iterations / 4 calls / 12 executions), append-only audit.
+Web `POST /api/chat/agent`; Telegram free-text routed through the loop.
 
 > **⚠️ STALE (flagged 2026-08-25):** this snapshot is dated 2026-06-30 and predates roughly two
 > months of active commits (feature-growth work, Vision 2.0/Journeys, and a full-project review/fix

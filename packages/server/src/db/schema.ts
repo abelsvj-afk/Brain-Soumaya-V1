@@ -285,10 +285,64 @@ export const spaceMeta = sqliteTable("space_meta", {
   lastActiveDate: text("last_active_date"),
   lastSeenAt: text("last_seen_at"),
   researchEnabled: text("research_enabled"),
+  lastDreamDate: text("last_dream_date"),
+  timelineBackfilled: integer("timeline_backfilled").notNull().default(0),
+  streakShields: integer("streak_shields").notNull().default(2),
+  soul: text("soul"),
+  groundedInsight: integer("grounded_insight").notNull().default(1),
+  // Phase 2 notification policy (see agent/notify/policy.ts).
+  timezone: text("timezone").notNull().default("America/New_York"),
+  quietStart: text("quiet_start").notNull().default("21:00"),
+  quietEnd: text("quiet_end").notNull().default("04:30"),
+  digestTime: text("digest_time").notNull().default("06:00"),
+  dailyProactiveCap: integer("daily_proactive_cap").notNull().default(5),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * Phase 2: outbox for deferred proactive notifications.
+ * Lifecycle: queued -> sending -> sent | failed | dropped | ambiguous.
+ * - notif_key: UNIQUE dedup key = sha256(space_id|tool|occurrence_id).
+ * - cap_day: local YYYY-MM-DD whose cap this counts against (NULL = uncounted).
+ * - send_started_at: set immediately before the Telegram request; distinguishes
+ *   definite non-delivery (NULL on crash recovery) from ambiguous outcome.
+ * - ambiguous: terminal; cap retained, never auto-retried (see design doc).
+ */
+export const notificationOutbox = sqliteTable(
+  "notification_outbox",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    notifKey: text("notif_key").notNull().unique(),
+    spaceId: text("space_id").notNull(),
+    tool: text("tool").notNull(),
+    occurrenceId: text("occurrence_id").notNull(),
+    message: text("message").notNull(),
+    priority: text("priority").notNull().default("normal"),
+    isUrgent: integer("is_urgent").notNull().default(0),
+    urgentReason: text("urgent_reason"),
+    status: text("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    deliverAfter: text("deliver_after").notNull(),
+    billDueAt: text("bill_due_at"),
+    capDay: text("cap_day"),
+    sendStartedAt: text("send_started_at"),
+    claimedBy: text("claimed_by"),
+    claimedAt: text("claimed_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    index("notification_outbox_status_idx").on(t.status, t.deliverAfter),
+    index("notification_outbox_space_idx").on(t.spaceId, t.capDay, t.status),
+  ]
+);
 
 /** A private brain ("space"), opened by name + passcode (works across devices). */
 export const spaces = sqliteTable("spaces", {
