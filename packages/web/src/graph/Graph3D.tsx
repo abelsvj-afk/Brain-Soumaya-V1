@@ -2281,6 +2281,17 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
             (fidelityCapped ||
               (wasMacroView ? dist > MACRO_DIST - MACRO_HYST : dist > MACRO_DIST + MACRO_HYST));
           o.userData.isMacroView = isMacroView;
+          // Sector titles (and the own-label far fade below) key off DISTANCE-based
+          // far view only — never on the fidelity cap. isMacroView conflates the two:
+          // a close hub that falls outside the nearest-N fidelity set flips
+          // isMacroView, and its giant sector title pops on/off as the set churns
+          // during flight. Titles are map labels; they belong to far view. Body LOD
+          // keeps using isMacroView (the cap correctly affects rendering cost).
+          const wasTitleFarView = o.userData.isTitleFarView ?? false;
+          const isTitleFarView = wasTitleFarView
+            ? dist > MACRO_DIST - MACRO_HYST
+            : dist > MACRO_DIST + MACRO_HYST;
+          o.userData.isTitleFarView = isTitleFarView;
           // Same hysteresis pattern as isMacroView immediately above, just a tighter
           // threshold applied only to the glow/corona sprite child (see GLOW_DIST and
           // computeGlowFar's own doc comment) — state cached on the same `o` object.
@@ -2343,7 +2354,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           if (child.userData?.isSectorTitle) {
             // Galaxy Performance Isolation Mode: same reasoning as the other LOD/label
             // visibility guards in this loop — see the isFidelity/isMacro comment above.
-            child.visible = isDiagForceHidden(child) ? false : isMacroView && !occludedBySun;
+            child.visible = isDiagForceHidden(child) ? false : isTitleFarView && !occludedBySun;
             if (child.visible) {
               const mat = child.material as THREE.SpriteMaterial;
               mat.opacity = 0.92;
@@ -2429,7 +2440,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               // hysteresis buffer), so the handoff is continuous — briefly overlapping as the
               // sector title fades in is fine; a gap where nothing is shown is not.
               const labelFadeFar = o.userData?.hasSectorTitle ? MACRO_DIST + MACRO_HYST : FADE_FAR;
-              const labelVis = (isMacroView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
+              const labelVis = (isTitleFarView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
               // Galaxy Performance Isolation Mode: same reasoning as the LOD-swap guard
               // above — this line otherwise reassigns label visibility every frame,
               // fighting the one-time diagnostic hide. `diag.enabled &&` short-circuits
