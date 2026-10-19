@@ -10,6 +10,7 @@ import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../economy.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
 import { SpacesRepo } from "../auth/spaces.js";
 import { TelegramLinksRepo } from "./links.js";
+import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
 
 /**
  * Talk to your Soumaya brain from Telegram. This deployment hosts many private
@@ -75,6 +76,11 @@ const HELP =
   "• Send me anything and I'll answer from your memories (with what I drew on).\n" +
   "• /log <thought> — save a new memory; I'll tell you what landed.\n" +
   "• /digest — get today's digest now (I also send it once a day on my own).\n" +
+  "• /digest 07:00 — change when the daily digest arrives.\n" +
+  "• /quiet 21:00 04:30 — set quiet hours (I won't ping you then unless it's urgent).\n" +
+  "• /cap 5 — max proactive pings per day (urgent ones don't count).\n" +
+  "• /tz America/Chicago — set your timezone for quiet hours + digest.\n" +
+  "• /settings — show your current notification settings.\n" +
   "• /unlink — disconnect this chat.\n" +
   "• /help — show this again.";
 
@@ -182,9 +188,74 @@ export async function handleTelegramUpdate(
   }
   const spaceId = link.spaceId;
 
-  if (text === "/digest") {
+  // /digest — send now; /digest HH:MM — set the daily digest time.
+  if (text === "/digest" || text.startsWith("/digest ")) {
+    const arg = text.slice("/digest".length).trim();
+    if (arg) {
+      const r = setPreference(ctx.handle.sqlite, spaceId, "digestTime", arg);
+      await send(chatId, r.ok ? `Digest time set to ${arg}.` : `Couldn't set that: ${r.error}`);
+      return;
+    }
     const digest = buildDailyDigest(ctx.handle, spaceId);
     await send(chatId, formatDigest(digest, link.spaceName));
+    return;
+  }
+
+  // Phase 2 notification preferences.
+  if (text.startsWith("/quiet")) {
+    const m = /^\/quiet\s+(\S+)\s+(\S+)\s*$/.exec(text);
+    if (!m) {
+      await send(chatId, "Usage: /quiet <start HH:MM> <end HH:MM> — e.g. /quiet 21:00 04:30");
+      return;
+    }
+    const prefsBefore = getPreferences(ctx.handle.sqlite, spaceId);
+    const r1 = setPreference(ctx.handle.sqlite, spaceId, "quietStart", m[1]);
+    if (!r1.ok) {
+      await send(chatId, `Couldn't set that: ${r1.error}`);
+      return;
+    }
+    const r2 = setPreference(ctx.handle.sqlite, spaceId, "quietEnd", m[2]);
+    if (!r2.ok) {
+      setPreference(ctx.handle.sqlite, spaceId, "quietStart", prefsBefore.quietStart);
+      await send(chatId, `Couldn't set that: ${r2.error} (quiet hours unchanged)`);
+      return;
+    }
+    await send(chatId, `Quiet hours set: ${m[1]}–${m[2]}.`);
+    return;
+  }
+
+  if (text.startsWith("/cap")) {
+    const m = /^\/cap\s+(\S+)\s*$/.exec(text);
+    if (!m) {
+      await send(chatId, "Usage: /cap <number> — e.g. /cap 5 (max proactive pings per day)");
+      return;
+    }
+    const r = setPreference(ctx.handle.sqlite, spaceId, "dailyProactiveCap", m[1]);
+    await send(chatId, r.ok ? `Daily cap set to ${m[1]}.` : `Couldn't set that: ${r.error}`);
+    return;
+  }
+
+  if (text.startsWith("/tz")) {
+    const m = /^\/tz\s+(\S+)\s*$/.exec(text);
+    if (!m) {
+      await send(chatId, "Usage: /tz <IANA timezone> — e.g. /tz America/Chicago");
+      return;
+    }
+    const r = setPreference(ctx.handle.sqlite, spaceId, "timezone", m[1]);
+    await send(chatId, r.ok ? `Timezone set to ${m[1]}.` : `Couldn't set that: ${r.error}`);
+    return;
+  }
+
+  if (text === "/settings") {
+    const p = getPreferences(ctx.handle.sqlite, spaceId);
+    await send(
+      chatId,
+      `🔔 Notification settings:\n` +
+        `• Timezone: ${p.timezone}\n` +
+        `• Quiet hours: ${p.quietStart}–${p.quietEnd}\n` +
+        `• Digest time: ${p.digestTime}\n` +
+        `• Daily cap: ${p.dailyProactiveCap} proactive pings (urgent bypasses)`
+    );
     return;
   }
 
@@ -264,11 +335,16 @@ export async function handleTelegramUpdate(
  * this can never drain the API budget. Returns how many digests were sent.
  */
 export async function sendDailyDigests(ctx: AppContext, send: Send): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10); // UTC YYYY-MM-DD
+  const now = new Date();
   const links = new TelegramLinksRepo(ctx.handle);
   let sent = 0;
   for (const link of links.all()) {
+    // Phase 2: digest fires at the space's digest_time in its timezone, not midnight UTC.
+    // lastDigestDate is the LOCAL date.
+    const prefs = getPreferences(ctx.handle.sqlite, link.spaceId);
+    const today = localDay(now, prefs.timezone);
     if (link.lastDigestDate === today) continue;
+    if (localTime(now, prefs.timezone) < prefs.digestTime) continue;
     try {
       const digest = buildDailyDigest(ctx.handle, link.spaceId);
       let msg = formatDigest(digest, link.spaceName);

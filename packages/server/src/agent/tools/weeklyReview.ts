@@ -148,7 +148,7 @@ export const weeklyReviewTool: Tool = {
 
     let delivered = false;
     try {
-      await tc.notify(digest);
+      await tc.notify(digest, { tool: "weeklyReview" });
       delivered = true;
     } catch {
       /* the router still logs the digest in-app regardless of Telegram */

@@ -1,22 +1,14 @@
 # Soumaya's Tools — an agentic tool-router she can call on her own
 
-Status: **BUILT (v1 complete) + Phase 1 agent loop (in progress)** · Owner: Claude · Branch: `phase-1-agent-loop`
+Status: **BUILT (v1 complete)** · Owner: Claude · Branch: `claude/soumaya-second-brain-v1-m4z4hc`
 
-> **Done (2026-07-10).** The original six tools + the agentic router shipped: `fire_reminder` ·
-> `create_task` · `surface_orphan` · `review_nudge` · `check_in` · `web_lookup` (Gemini grounding,
-> gated). The registry has since grown to 12 tools (see below). The router is two-phase — every
-> tool DETECTS deterministic candidates (offline-safe), and when Research Mode is on + a working
-> `llm.route` exists, Soumaya CURATES which candidates to execute. Runs on the 60s interval;
-> delivery → Telegram if linked, always logged to `agent_logs`.
->
-> **Phase 1 agent loop (2026-10-19, branch `phase-1-agent-loop`, NOT merged).** A conversational
-> function-calling loop (`agent/loop.ts`) lets Soumaya call tools mid-conversation via the new
-> `LlmProvider.callWithTools()`. The registry owns all tool definitions; providers translate them
-> (never define them). Five tools exposed: `memory_search` (new), `web_lookup`, `check_in` (reads,
-> auto) + `fire_reminder`, `create_task` (writes, require explicit user approval). Approvals use a
-> crash-safe lifecycle (`tool_approvals`: pending→confirmed→executing→executed/failed, approval-id
-> idempotency keys, effectively-once). `agent_logs` is append-only (BEFORE UPDATE/DELETE triggers).
-> See "Phase 1 agent loop" section below.
+> **Done (2026-07-10).** All six tools + the agentic router are shipped on `master`, gate-green:
+> `fire_reminder` · `create_task` · `surface_orphan` · `review_nudge` · `check_in` · `web_lookup`
+> (Gemini grounding, gated). The router is two-phase — every tool DETECTS deterministic candidates
+> (offline-safe), and when Research Mode is on + a working `llm.route` exists, Soumaya CURATES which
+> candidates to execute (she can only pick from validated candidates, never invent one). Runs on the
+> 60s interval; delivery → Telegram if linked, always logged to `agent_logs`. **Needs a `fly deploy`
+> to go live.**
 
 ## Why
 
@@ -124,31 +116,62 @@ the LLM/web are gated by Research Mode + USD budget (+ Fuel for expansion), same
 
 ---
 
-## Phase 1 agent loop (2026-10-19 — branch `phase-1-agent-loop`, NOT merged/deployed)
+## Phase 2: Notification Policy (branch `phase-2-notification-policy`)
 
-A second way for Soumaya to use tools, alongside the deterministic router:
+**Status: BUILT, awaiting tests.** Design signed off 2026-10-19 after 4 review rounds.
 
-| | Deterministic router (existing) | Agent loop (Phase 1) |
+### Problem
+Six tools could push to Telegram via `tc.notify()` with no shared policy: no quiet
+hours, no rate coordination, no user preferences. A 3am reminder went straight
+to the user's phone.
+
+### Architecture
+A **single policy boundary** wraps the router tick's notify closure (`index.ts`).
+Tools pass identity + occurrence hints; the policy decides send-now / queue /
+drop. Deferred messages wait in `notification_outbox`, delivered by a sweeper.
+
+### Preferences (`space_meta`, per-space)
+| Setting | Default | Set via |
 |---|---|---|
-| Trigger | 60s tick, `detect()` finds opportunities | User message in chat / Telegram |
-| Choice | LLM curates from deterministic candidates | LLM proposes tool calls from schemas |
-| Tools | All 12 in registry | 5: `memory_search`, `web_lookup`, `check_in`, `fire_reminder`, `create_task` |
-| Writes | N/A (router tools are self-contained) | Require explicit user approval |
+| `timezone` | `America/New_York` | `/tz <IANA>` (validated, invalid rejected) |
+| `quiet_start` / `quiet_end` | `21:00` / `04:30` | `/quiet <HH:MM> <HH:MM>` |
+| `digest_time` | `06:00` | `/digest <HH:MM>` |
+| `daily_proactive_cap` | `5` | `/cap <n>` |
+`/settings` shows current values. Web UI deferred.
 
-**Key files:**
-- `agent/loop.ts` — the loop (6 iterations, 4 calls/response, 12 executions/turn, strict in-order batches)
-- `agent/approvals.ts` — approval state machine + crash recovery + 7-day pruning
-- `agent/tools/validation.ts` — ajv (draft 2020-12) arg validation, single trusted point
-- `agent/tools/memorySearch.ts` — new read-only tool (space-isolated hybrid retrieval)
-- `llm/adapter.ts` — `callWithTools()` on `LlmProvider`; implemented by Gemini, OpenAI, heuristic (offline → text only), forwarded by resilient wrapper
-- `api/routes/chat.ts` — `POST /api/chat/agent` (existing `POST /` untouched)
-- `telegram/bot.ts` — free-text path uses the loop, falls back to `chat()` on error
+### Priority vs urgency
+- **Urgent** (bypasses quiet hours + cap, reason logged): `fire_reminder` due
+  within 60 min; `billRisk` due within 6h (first alert per bill per day only).
+- **Normal**: checkins, nudges, reviews, tasks, stale reminders, ordinary bill warnings.
+- **Low**: reserved.
+`is_urgent` is the bypass authority, persisted per outbox row; queued bill alerts
+are re-evaluated at delivery time (atomic upgrade, one winner).
 
-**Safety invariants (acceptance-tested in `agent/__tests__/phase1.test.ts`):**
-1. Registry owns tool definitions, schemas, validation, authorization, execution. Adapters translate only.
-2. Write tools never execute without an explicit user confirmation bound to the exact args (sha256).
-3. Approval id = idempotency key; `UNIQUE(space_id, idempotency_key)` on nodes + atomic `fired_by_approval` UPDATE give effectively-once execution across crash-retries.
-4. `agent_logs` is append-only (triggers); `tool_approvals.args_json` (operational, may contain user text) is pruned after 7 days and never copied to the log.
-5. `memorySearch` takes spaceId from the server context only — cross-space retrieval is impossible by construction.
+### Outbox lifecycle
+`queued → sending → sent | failed | dropped | ambiguous`
+- `notif_key = sha256(space_id|tool|occurrence_id)` — UNIQUE dedup. Occurrence
+  IDs per tool: `node:{id}:at:{remindAt}`, `action:{id}`, `day:{localDay}`,
+  `week:{isoWeek}`, `bill:{id}:day:{localDay}`.
+- **Atomic cap claim**: single UPDATE with cap check — one winner per slot.
+  Cap derived from outbox rows (`status IN ('sending','sent')` with `cap_day`);
+  no separate counter. Failed/dropped release the slot automatically.
+- **Crash recovery** (lease 5 min): `send_started_at IS NULL` → definite
+  non-delivery → requeue, slot released. `send_started_at` set → **ambiguous**:
+  terminal, cap retained, never auto-retried (Telegram has no idempotency key;
+  a retry risks a duplicate send).
+- **Trade-off (documented)**: on ambiguous outcome we retain the cap slot and
+  don't retry — the cap contract takes precedence over delivery completeness.
 
-**Not in Phase 1:** OAuth integrations (Gmail/Calendar/Drive), destructive tools, PWA, native wrapper. Merge and deploy both require separate approval after passing tests + security review.
+### Digest
+Fires at `digest_time` in the space's timezone (not midnight UTC);
+`last_digest_date` is the local date. Doesn't count toward the cap.
+
+### Audit
+Every decision → `agent_logs` (`notify:sent|queued|dropped|failed|ambiguous|deduped|retry`),
+content-free. Outbox `message` holds user-facing text (operational, pruned with the row).
+
+### Tests
+`packages/server/src/agent/notify/__tests__/phase2.test.ts` — 30+ cases:
+quiet-hour boundaries, cap races, urgent bypass, crash-before/after-send,
+ambiguous cap retention, DST, timezone validation, per-tool staleness,
+bill-upgrade atomicity, digest timing, audit hygiene.

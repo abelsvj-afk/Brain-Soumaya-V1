@@ -103,6 +103,14 @@ export const BOOTSTRAP_SQL = `
       research_enabled TEXT,
       last_dream_date TEXT,
       timeline_backfilled INTEGER NOT NULL DEFAULT 0,
+      streak_shields INTEGER NOT NULL DEFAULT 2,
+      soul TEXT,
+      grounded_insight INTEGER NOT NULL DEFAULT 1,
+      timezone TEXT NOT NULL DEFAULT 'America/New_York',
+      quiet_start TEXT NOT NULL DEFAULT '21:00',
+      quiet_end TEXT NOT NULL DEFAULT '04:30',
+      digest_time TEXT NOT NULL DEFAULT '06:00',
+      daily_proactive_cap INTEGER NOT NULL DEFAULT 5,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     -- Telegram: bind a chat to a brain so messages route to the right space and

@@ -131,7 +131,10 @@ export const taskCreatorTool: Tool = {
     const msg = `✅ I made you an action: "${label}"`;
     let delivered = false;
     try {
-      await tc.notify(msg);
+      await tc.notify(msg, {
+        tool: "create_task",
+        actionId: action.id,
+      });
       delivered = true;
     } catch {
       /* logged by the router regardless */

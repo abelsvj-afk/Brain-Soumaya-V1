@@ -4,6 +4,7 @@ import { NodesRepo } from "./repositories/nodes.repo.js";
 import { setTelegramWebhook, sendDailyDigests, tgSend } from "./telegram/bot.js";
 import { TelegramLinksRepo } from "./telegram/links.js";
 import { runToolRouter } from "./agent/tools/router.js";
+import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
 import { selectJob, executeJob, researchEnabled } from "./maintenance/agent.js";
 import { nextAutonomyBatch } from "./maintenance/autonomyBatch.js";
 import { evolveLore } from "./lore/engine.js";
@@ -148,16 +149,54 @@ setInterval(() => {
     try {
       const rows = ctx.handle.sqlite.prepare(`SELECT id FROM spaces`).all() as { id: string }[];
       const spaceIds = rows.length > 0 ? rows.map((r) => r.id) : [DEFAULT_SPACE];
-      const notify = tgToken
+      // Phase 2: all proactive sends go through the notification policy boundary.
+      // Tools pass metadata; the policy decides send-now vs queue vs drop, and the
+      // outbox sweeper below delivers deferred items. Raw send is Telegram-only.
+      const rawSend = tgToken
         ? async (spaceId: string, text: string) => {
             const links = new TelegramLinksRepo(ctx.handle).all().filter((l) => l.spaceId === spaceId);
             for (const l of links) await tgSend(tgToken, l.chatId, text);
           }
-        : undefined;
+        : async (_spaceId: string, _text: string) => {};
+      const policyNotify = createPolicyNotify({
+        sqlite: ctx.handle.sqlite,
+        send: rawSend,
+        audit: (spaceId, action, detail) => {
+          // Content-free audit via agent_logs. Columns: action, description, targets.
+          try {
+            ctx.handle.sqlite
+              .prepare(`INSERT INTO agent_logs (space_id, action, description, targets) VALUES (?, ?, ?, '[]')`)
+              .run(spaceId, action, detail);
+          } catch { /* audit must never break delivery */ }
+        },
+        workerId: `tick-${process.pid}`,
+      });
+      const notify = tgToken ? policyNotify : undefined;
       for (const spaceId of spaceIds) {
         const results = await runToolRouter(ctx, spaceId, { notify });
         const acted = results.filter((r) => r.ok).length;
         if (acted > 0) console.log(`[tools] ${spaceId.slice(0, 8)}: ${acted} tool action(s)`);
+      }
+      // Phase 2: deliver queued notifications + recover crashed leases.
+      if (tgToken) {
+        const sweep = await sweepNotifications(
+          {
+            sqlite: ctx.handle.sqlite,
+            send: rawSend,
+            audit: (spaceId, action, detail) => {
+              try {
+                ctx.handle.sqlite
+                  .prepare(`INSERT INTO agent_logs (space_id, action, description, targets) VALUES (?, ?, ?, '[]')`)
+                  .run(spaceId, action, detail);
+              } catch { /* audit must never break delivery */ }
+            },
+            workerId: `sweep-${process.pid}`,
+          },
+          new Date()
+        );
+        if (sweep.sent > 0 || sweep.ambiguous > 0) {
+          console.log(`[notify] sweep: ${sweep.sent} sent, ${sweep.ambiguous} ambiguous`);
+        }
       }
     } catch (err) {
       console.error("[tools] router sweep error:", err);

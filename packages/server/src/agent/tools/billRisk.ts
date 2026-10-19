@@ -163,7 +163,16 @@ export const billRiskTool: Tool = {
     });
 
     let delivered = false;
-    try { await tc.notify(msg); delivered = true; } catch { /* router logs it regardless */ }
+    try {
+      await tc.notify(msg, {
+        tool: "billRisk",
+        billId,
+        // Best-effort due date for urgency classification; policy treats
+        // missing as non-urgent (safe default).
+        billDueAt: (bill as { dueDate?: string }).dueDate,
+      });
+      delivered = true;
+    } catch { /* router logs it regardless */ }
     // Phase Z: the same `agent_logs.targets` convention Phase X established for goal_trend —
     // lets the Proactive → Chat handoff (analysis/proactiveContext.ts) resolve exactly which
     // bill this nudge concerned. Purely additive: detect()'s own once-a-day dedup gate is
