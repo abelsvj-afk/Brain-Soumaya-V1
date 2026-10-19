@@ -1,10 +1,10 @@
 # Galaxy populate-path render-stall repair — design
 
-**Status:** DRAFT rev 6 — revised per ChatGPT design-review round 5 (one
-remaining race: write landing after its chunk's reconciliation sweep).
+**Status:** DRAFT rev 7 — revised per ChatGPT design-review round 6 (one
+remaining blocker: 50,000-id predicate vs SQLite bind-variable limit).
 For re-review. **No implementation authorized.**
 **Branch:** `fix/galaxy-populate-render-stall` (base: `claude/soumaya-second-brain-v1-m4z4hc` @ `06d997c3`)
-**Date:** 2026-10-18 (rev 6)
+**Date:** 2026-10-18 (rev 7)
 **Reviewers:** ChatGPT (relayed), owner
 
 This is the canonical review document for this repair (per repo review workflow:
@@ -144,6 +144,32 @@ defects; an incremental structure would enlarge risk and test surface.
     `{edges, nextCursor | null}`. (Implementation note: configure an
     adequate JSON body limit for this route — Express defaults to 100kb,
     and a large union exceeds that; e.g. 5 MB.)
+  - **Database-safe predicate evaluation (rev 7):** binding every id as a
+    separate SQL parameter would need ~2×50,000 binds for
+    `source IN (U) OR target IN (U)`, exceeding SQLite's bind-variable
+    limit (`SQLITE_MAX_VARIABLE_NUMBER`, 32,766 on modern builds, 999 on
+    older ones) on most builds — a request valid under the API contract
+    could fail at the database layer. The server therefore **never binds
+    the id set**. Instead, per request, in one synchronous block:
+    1. `CREATE TEMP TABLE want_ids (id INTEGER PRIMARY KEY)` (temp tables
+       are connection-scoped; see lifecycle note below).
+    2. `INSERT INTO want_ids SELECT value FROM json_each(?)` — a **single**
+       bind parameter carrying the JSON id array (JSON1 is compiled into
+       better-sqlite3's SQLite). No batching, no bind-count concern.
+    3. Incident query joins the indexed temp table:
+       `… WHERE e.space_id = ? AND e.id > ? AND (e.source IN (SELECT id FROM
+       want_ids) OR e.target IN (SELECT id FROM want_ids)) ORDER BY e.id
+       ASC LIMIT 5000` — each row's membership test is an indexed lookup,
+       not a 50k-way bind list.
+    4. `DROP TABLE want_ids` in a `finally`.
+    Lifecycle: the create/fill/query/drop sequence must execute as one
+    synchronous block with **no `await`** between steps (better-sqlite3
+    calls are synchronous), so interleaved requests on a shared connection
+    can never observe another request's temp rows; the `finally` drop
+    guarantees no leakage even on error. This makes the design independent
+    of the build's bind-variable limit — preferred over verifying the
+    limit and lowering the cap, which would stay fragile across builds.
+    The same strategy backs `overview()`'s internal edge fetch.
   - Client: build the full union id set `U` (dedup of top-300 ids ∪ all
     node-chunk ids; held locally); run **one** cursor stream with
     `id > :cursor` and **no upper bound** to null cursor; keep edges with
@@ -278,8 +304,14 @@ defects; an incremental structure would enlarge risk and test surface.
    null cursor; assert the old per-chunk sweep race cannot occur because the
    protocol has no per-chunk sweep phase (regression test for the round-5
    scenario: the same setup against the rev-5 protocol would miss it);
-   **union-id over-cap** — >50000 ids → explicit 400; node selection and
-   edge retrieval stay space-scoped and bounded per the bounds table.
+   **union-id over-cap** — >50000 ids → explicit 400; **bind-limit safety**
+   — a request with the maximum accepted id count (50000) executes
+   end-to-end through the temp-table strategy (proves the documented
+   contract is database-executable, not just HTTP-accepted); temp-table
+   lifecycle — sequential requests never observe each other's ids, and an
+   error mid-request still drops the temp table (no leakage); node
+   selection and edge retrieval stay space-scoped and bounded per the
+   bounds table.
 4. D4: `maxLinks` cap never exceeded under concurrent validation with
    **out-of-order completion** (randomized delays, reverse-order
    resolutions); **failure injection** (forced throws/timeouts) releases all
@@ -364,6 +396,19 @@ separate owner approval naming this document and its revision.
   insert and the documented residual; D4 test plan gains the
   abort-reaches-transport implementation acceptance condition. Submitted
   for re-review.
+- 2026-10-18 — ChatGPT design-review round 6: **revise before approval**,
+  one remaining blocker — the 50,000-id predicate would need ~100k SQL
+  bind parameters, exceeding SQLite's bind-variable limit on most builds;
+  a contract-valid request could fail at the database layer.
+- 2026-10-18 — rev 7 (this revision): the server never binds the id set —
+  `json_each(?)` expands the JSON array into an indexed temp table with a
+  single bind parameter, and the incident query joins it (indexed
+  membership lookups); create/fill/query/drop runs as one synchronous
+  block with `finally` cleanup, making the design independent of the
+  build's bind-variable limit. Same strategy backs `overview()`'s edge
+  fetch. Tests added for max-id-count executability, over-cap rejection,
+  and temp-table lifecycle. The single globally ordered cursor stream and
+  its concurrent-write guarantee are unchanged. Submitted for re-review.
 - 2026-10-18 — ChatGPT design-review round 5: **revise before approval**,
   one remaining race — a write can land after its chunk's reconciliation
   sweep (chunk A swept, edge inserted between two chunk-A nodes while chunk
