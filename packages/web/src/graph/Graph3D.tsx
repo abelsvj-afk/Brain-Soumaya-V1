@@ -1907,13 +1907,26 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       orbitsRef.current.update(motionDt, dataRef.current.nodes as any[], camera.position);
 
       // First frame with real positions → open zoomed-out (not inside the sun).
+      // frameGalaxy reports whether it actually ran: a failed attempt (nodes not
+      // positioned yet) must NOT consume the one-shot — it retries next frame
+      // instead of the intro being lost forever.
       if (!cinematicStartedRef.current) {
-        // Trigger intro if we have loaded data.
         const ns = dataRef.current.nodes as any[];
-        if (ns.length > 0) {
+        if (ns.length > 0 && frameGalaxy(3200, undefined, true)) {
           cinematicStartedRef.current = true;
           initialFramedRef.current = true;
-          frameGalaxy(3200, undefined, true);
+        }
+      }
+
+      // First rendered frame with data → notify App (boot log, stuck-guard).
+      // This prop was stored but never invoked, so App's loading-complete hook
+      // only ever fired from data-fetch.
+      if (!firstFrameDoneRef.current && (dataRef.current.nodes as any[]).length > 0) {
+        firstFrameDoneRef.current = true;
+        try {
+          onFirstFrameRef.current?.();
+        } catch {
+          /* non-fatal: boot logging must never break the frame loop */
         }
       }
 
@@ -2281,17 +2294,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
             (fidelityCapped ||
               (wasMacroView ? dist > MACRO_DIST - MACRO_HYST : dist > MACRO_DIST + MACRO_HYST));
           o.userData.isMacroView = isMacroView;
-          // Sector titles (and the own-label far fade below) key off DISTANCE-based
-          // far view only — never on the fidelity cap. isMacroView conflates the two:
-          // a close hub that falls outside the nearest-N fidelity set flips
-          // isMacroView, and its giant sector title pops on/off as the set churns
-          // during flight. Titles are map labels; they belong to far view. Body LOD
-          // keeps using isMacroView (the cap correctly affects rendering cost).
-          const wasTitleFarView = o.userData.isTitleFarView ?? false;
-          const isTitleFarView = wasTitleFarView
-            ? dist > MACRO_DIST - MACRO_HYST
-            : dist > MACRO_DIST + MACRO_HYST;
-          o.userData.isTitleFarView = isTitleFarView;
           // Same hysteresis pattern as isMacroView immediately above, just a tighter
           // threshold applied only to the glow/corona sprite child (see GLOW_DIST and
           // computeGlowFar's own doc comment) — state cached on the same `o` object.
@@ -2354,7 +2356,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           if (child.userData?.isSectorTitle) {
             // Galaxy Performance Isolation Mode: same reasoning as the other LOD/label
             // visibility guards in this loop — see the isFidelity/isMacro comment above.
-            child.visible = isDiagForceHidden(child) ? false : isTitleFarView && !occludedBySun;
+            child.visible = isDiagForceHidden(child) ? false : isMacroView && !occludedBySun;
             if (child.visible) {
               const mat = child.material as THREE.SpriteMaterial;
               mat.opacity = 0.92;
@@ -2440,7 +2442,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               // hysteresis buffer), so the handoff is continuous — briefly overlapping as the
               // sector title fades in is fine; a gap where nothing is shown is not.
               const labelFadeFar = o.userData?.hasSectorTitle ? MACRO_DIST + MACRO_HYST : FADE_FAR;
-              const labelVis = (isTitleFarView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
+              const labelVis = (isMacroView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
               // Galaxy Performance Isolation Mode: same reasoning as the LOD-swap guard
               // above — this line otherwise reassigns label visibility every frame,
               // fighting the one-time diagnostic hide. `diag.enabled &&` short-circuits
@@ -2986,15 +2988,17 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // Snap to a flattering "best view" of the whole galaxy: a consistent cinematic
   // 3/4 angle (slightly above + to the side) framed to the galaxy's bounding
   // sphere, rather than zoomToFit's lock to whatever angle the camera drifted to.
-  const frameGalaxy = (ms = 900, filter?: (n: any) => boolean, isIntro = false) => {
+  // Returns true when it actually framed (false = no scene/graph yet, or no
+  // positioned nodes — caller must NOT treat that as done; see the intro trigger).
+  const frameGalaxy = (ms = 900, filter?: (n: any) => boolean, isIntro = false): boolean => {
     const fg = fgRef.current;
-    if (!fg) return;
+    if (!fg) return false;
     const pts = (dataRef.current.nodes as any[]).filter(
       (n) => n.x != null && !isNaN(n.x) && n.y != null && !isNaN(n.y) && (!filter || filter(n)),
     );
     if (pts.length === 0) {
       fg.zoomToFit(ms, 80, filter);
-      return;
+      return false;
     }
     const center = new THREE.Vector3();
     for (const n of pts) center.add(new THREE.Vector3(n.x, n.y, n.z ?? 0));
@@ -3068,10 +3072,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       scheduleTimeout(() => {
         fgRef.current?.cameraPosition({ x: camPos.x, y: camPos.y, z: camPos.z }, center, ms);
       }, 40);
-      return;
+      return true;
     }
 
     fg.cameraPosition({ x: camPos.x, y: camPos.y, z: camPos.z }, center, ms);
+    return true;
   };
 
   // Activity per link, memoized with a ~1s TTL: SEVEN accessors call this per
@@ -3101,9 +3106,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     // Always render if active or important (recently tended)
     if (lit || activity > 0.4) return true;
 
-    // Otherwise, check distance
+    // Otherwise, check distance — camera to its look-target (what you're actually
+    // looking at), NOT distance from the world origin. Origin-distance wrongly
+    // reads "zoomed out" when following the ship far from the sun, hiding nearby
+    // weak links that then pop back as the ship's radial distance crosses the band.
     const camera = fgRef.current?.camera();
-    const dist = camera ? camera.position.length() : 1200;
+    const lookTarget = fgRef.current?.controls?.()?.target as THREE.Vector3 | undefined;
+    const dist = camera ? (lookTarget ? camera.position.distanceTo(lookTarget) : camera.position.length()) : 1200;
 
     // Hysteresis band around the 800-unit cutoff — same reasoning as linkLodZoomedInRef
     // above: a bare distance check re-evaluated every frame flips visibility on/off every
@@ -3725,8 +3734,16 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // discarded per-frame tick work stops once settled. A small nonzero allotment
       // (not 0) is kept as a conservative margin against any other code path that
       // might read a link's resolved endpoints before orbits.ts's own first update.
-      cooldownTicks={30}
-      cooldownTime={2000}
+      // Effectively never stops: the d3 engine must keep ticking every frame,
+      // because layoutTick() is the ONLY path that refreshes link-tube geometry
+      // to match the orbit system's per-frame mesh moves. Letting it cool down
+      // (the old 30/2000) froze tube positions while meshes kept moving — a
+      // focused planet visibly drifted off its lines until a re-render reheated
+      // the engine for one sync frame. The tick itself is trivially cheap now
+      // (charge/center forces nulled, link strength 0, all nodes fx/fy/fz-pinned),
+      // so an always-on engine costs ~nothing — see the comment above.
+      cooldownTicks={1000000000}
+      cooldownTime={86400000}
       nodeVisibility={(n: any) => !cluster || cluster.has(n.id)}
       linkVisibility={(l: any) => {
         // Galaxy Performance Isolation Mode: LINKS off. Uses the exact same mechanism
@@ -3756,8 +3773,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         // zoom in past LINK_LOD_ZOOM and every link returns. Small graphs draw everything.
         const total = dataRef.current.links.length;
         if (total <= LINK_LOD_MIN) return true;
+        // "Zoomed out" = camera to its look-target, not to the world origin (see
+        // shouldRenderLink above for why origin-distance is the wrong metric).
         const camera = fgRef.current?.camera();
-        const dist = camera ? camera.position.length() : 1200;
+        const lookTarget = fgRef.current?.controls?.()?.target as THREE.Vector3 | undefined;
+        const dist = camera ? (lookTarget ? camera.position.distanceTo(lookTarget) : camera.position.length()) : 1200;
         // Hysteresis band around LINK_LOD_ZOOM (see linkLodZoomedInRef above) — without
         // it, orbiting the camera near this exact distance flipped every link's
         // visibility on/off every single frame ("lines disappear and pop back up").
