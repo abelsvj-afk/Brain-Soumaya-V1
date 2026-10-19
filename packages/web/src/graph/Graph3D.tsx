@@ -40,7 +40,7 @@ import {
 import { selectDetailedLinks, isBoundedLinksEnabled, getDetailedLinkBudget, type LinkSelectionInput } from "./renderModel.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { GraphData, GraphNode } from "@brain/shared";
-import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleMassThreshold, sectorTitleThresholdFor } from "./nodeObject.js";
+import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds } from "./nodeObject.js";
 import { makeStarfield, makeGalaxies, makeMilkyWay } from "./starfield.js";
 import { makeConstellations } from "./skybox.js";
 import { makeDeepSpace, makeBackdropBakeSources, DEEP_SPACE_BASE } from "./deepSpace.js";
@@ -3730,7 +3730,8 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // data reload, old entries are GC'd and new links always build on first sight.
   // A Map keyed by id would keep stale positions and could skip building tubes
   // for recreated link objects entirely (returning "handled" for nonexistent
-  // geometry → invisible links).
+  // geometry → invisible links). Falls back to always-update for links without
+  // a usable object identity (defensive; shouldn't happen).
   const lastTubePosRef = useRef(new WeakMap<object, number[]>());
   const linkPositionUpdateCb = useCallback(
     (obj: any, pos: LinkPositions, link: any) => {
@@ -3776,14 +3777,15 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   );
 
   // Far-zoom labels: guarantee the recentered whole-galaxy view is never empty.
-  // The threshold is memoized on the node array and applied during render (not
-  // in an effect) so it is current before three-forcegraph's digest calls
-  // nodeThreeObject/nodeVisualCacheKey for this data.
-  const sectorTitleThreshold = useMemo(
-    () => sectorTitleThresholdFor(data.nodes as any[]),
+  // Sector hubs: the few most-massive, well-separated hubs whose names label
+  // galaxy regions at far zoom. Memoized on the node array and applied during
+  // render (not in an effect) so it is current before three-forcegraph's digest
+  // calls nodeThreeObject/nodeVisualCacheKey for this data.
+  const sectorHubIds = useMemo(
+    () => pickSectorHubIds(data.nodes as any[]),
     [data.nodes],
   );
-  setSectorTitleMassThreshold(sectorTitleThreshold);
+  setSectorTitleIds(sectorHubIds);
 
   return (
     <ForceGraph3D
