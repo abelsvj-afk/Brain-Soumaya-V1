@@ -1,6 +1,8 @@
 import type { DailyDigest } from "@brain/shared";
 import type { AppContext } from "../context.js";
 import { chat } from "../chat/graphrag.js";
+import { agentLoop, maybeConfirmPending } from "../agent/loop.js";
+import type { ToolContext } from "../agent/tools/types.js";
 import { ingest, ingestWithContext } from "../ingestion/pipeline.js";
 import { buildDailyDigest } from "../synthesis/dailyDigest.js";
 import { getDailyContact } from "../analysis/dailyContact.js";
@@ -206,9 +208,6 @@ export async function handleTelegramUpdate(
       await send(chatId, "Usage: /quiet <start HH:MM> <end HH:MM> — e.g. /quiet 21:00 04:30");
       return;
     }
-    // Validate both before writing either (no partial updates).
-    // setPreference validates without writing on failure, so check r2's input
-    // first via a dry-run on the format, then write both.
     const prefsBefore = getPreferences(ctx.handle.sqlite, spaceId);
     const r1 = setPreference(ctx.handle.sqlite, spaceId, "quietStart", m[1]);
     if (!r1.ok) {
@@ -217,7 +216,6 @@ export async function handleTelegramUpdate(
     }
     const r2 = setPreference(ctx.handle.sqlite, spaceId, "quietEnd", m[2]);
     if (!r2.ok) {
-      // Roll back: restore the original start.
       setPreference(ctx.handle.sqlite, spaceId, "quietStart", prefsBefore.quietStart);
       await send(chatId, `Couldn't set that: ${r2.error} (quiet hours unchanged)`);
       return;
@@ -292,13 +290,41 @@ export async function handleTelegramUpdate(
     return;
   }
 
-  // Anything else = a question for the brain (GraphRAG).
-  const answer = await chat(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, text, undefined, spaceId);
-  let reply = answer.answer?.trim() || "I don't have anything on that yet — add a memory with /log.";
-  if (answer.citations.length > 0) {
-    reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
+  // Anything else = a turn for the agent loop (Phase 1). Falls back to
+  // single-shot GraphRAG when the provider can't do function-calling.
+  const principal = `telegram:${chatId}`;
+  const tc: ToolContext = {
+    ctx,
+    spaceId,
+    now: Date.now(),
+    notify: (msg) => send(chatId, msg),
+  };
+  // A "yes"/"no" here may confirm or deny a pending write approval.
+  const confirmation = await maybeConfirmPending(ctx, spaceId, principal, text, tc);
+  if (confirmation !== null) {
+    await send(chatId, confirmation);
+    return;
   }
-  await send(chatId, reply);
+  try {
+    const result = await agentLoop({
+      ctx,
+      spaceId,
+      principal,
+      userMessage: text,
+      history: [],
+      now: Date.now(),
+      notify: (msg) => send(chatId, msg),
+    });
+    await send(chatId, result.text || "I don't have anything on that yet — add a memory with /log.");
+  } catch (err) {
+    console.error("[telegram] agent loop failed, falling back to chat:", err);
+    const answer = await chat(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, text, undefined, spaceId);
+    let reply = answer.answer?.trim() || "I don't have anything on that yet — add a memory with /log.";
+    if (answer.citations.length > 0) {
+      reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
+    }
+    await send(chatId, reply);
+  }
 }
 
 /**

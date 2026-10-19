@@ -19,6 +19,8 @@ export const BOOTSTRAP_SQL = `
       research_answers TEXT,
       progress REAL,
       aliases TEXT,
+      idempotency_key TEXT,
+      fired_by_approval INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS edges (
@@ -52,6 +54,26 @@ export const BOOTSTRAP_SQL = `
       result TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    -- Phase 1 agent loop: operational approval state machine. Mutable by
+    -- design; every transition appends an immutable row to agent_logs.
+    CREATE TABLE IF NOT EXISTS tool_approvals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      principal TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      args_json TEXT NOT NULL,
+      args_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      decided_at TEXT,
+      execution_attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      execution_log_id INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS tool_approvals_space_idx ON tool_approvals(space_id, status);
+    CREATE INDEX IF NOT EXISTS tool_approvals_principal_idx ON tool_approvals(principal, status);
+    CREATE UNIQUE INDEX IF NOT EXISTS nodes_idem_idx ON nodes(space_id, idempotency_key);
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
