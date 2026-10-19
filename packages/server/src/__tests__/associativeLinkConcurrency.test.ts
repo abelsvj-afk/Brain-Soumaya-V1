@@ -240,7 +240,13 @@ describe("D4 failure semantics", () => {
       const succeeding = new FakeLinkLlm(async () => ({ linked: true, relationship: "relates_to", weight: 0.9 }));
       const r1 = await associativeLink(handle, deps(handle, failing), newNode, new Float32Array(8), baseOpts);
       expect(r1).toHaveLength(0);
-      const newNode2: GraphNode = { ...newNode, id: newNode.id + 1000, label: "new2" };
+      // A real second node (FK constraints require inserted nodes).
+      const newId2 = Number(
+        handle.sqlite
+          .prepare("INSERT INTO nodes (space_id, label, type, content) VALUES ('test-space', 'new2', 'memory', 'c')")
+          .run().lastInsertRowid,
+      );
+      const newNode2: GraphNode = { id: newId2, label: "new2", type: "memory", content: "c" };
       const r2 = await associativeLink(handle, deps(handle, succeeding), newNode2, new Float32Array(8), baseOpts);
       expect(r2).toHaveLength(3);
     } finally {
