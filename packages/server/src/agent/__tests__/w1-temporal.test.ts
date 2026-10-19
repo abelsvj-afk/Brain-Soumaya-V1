@@ -11,7 +11,7 @@ import {
   CANONICAL_TS,
   normalizeTimestamp,
 } from "../temporal.js";
-import { MAX_CANDIDATES } from "../../db/vec.js";
+import { MAX_CANDIDATES, vecSearchCurrent } from "../../db/vec.js";
 import { keywordSearch } from "../../db/fts.js";
 import { buildDailyDigest } from "../../synthesis/dailyDigest.js";
 
@@ -387,6 +387,35 @@ describe("T-TRIG-1: model uncertainty", () => {
       }),
     ).toThrow(SupersessionConflictError);
   });
+
+  it("LLM proposal with user origin is STILL blocked (advisory only)", () => {
+    // Blocker 1 regression: llmProposed=true must NEVER auto-execute, even
+    // when paired with a user-origin value. The old guard only blocked when
+    // origin was NOT user-originated — this case slipped through.
+    const a = seedNode("Some fact");
+    expect(() =>
+      supersede(handle, SPACE, {
+        oldNodeId: a,
+        newNode: { label: "Replacement", type: "memory", content: "new" },
+        correctionType: "factual_update",
+        correctedBy: "user",
+        origin: "user_statement",
+        llmProposed: true,
+      }),
+    ).toThrow(SupersessionConflictError);
+    // NOTHING changed: old node still current, no new node, no correction event
+    expect(getNode(a).superseded_at).toBeNull();
+    const newNodes = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS n FROM nodes WHERE label = 'Replacement'`)
+      .get() as { n: number };
+    expect(newNodes.n).toBe(0);
+    expect(getCorrections(handle.sqlite, a)).toHaveLength(0);
+    // Proposal was logged as advisory
+    const proposed = handle.sqlite
+      .prepare(`SELECT * FROM agent_logs WHERE action = 'supersession_proposed'`)
+      .get();
+    expect(proposed).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -394,34 +423,75 @@ describe("T-TRIG-1: model uncertainty", () => {
 // ---------------------------------------------------------------------------
 
 describe("T-RTR-2: iterative over-fetch survives superseded flooding", () => {
-  it("finds valid nodes buried under superseded ones", () => {
-    // This test uses direct vecSearchCurrent with mocked data.
-    // 500 superseded high-similarity + 3 valid lower-similarity, k=3.
-    // Full vector-index mocking is complex; we verify the function's
-    // contract via the repo-level filters instead.
-    const valid1 = repo.create({ label: "Valid one", type: "memory", content: "real" }, EMB);
-    const valid2 = repo.create({ label: "Valid two", type: "memory", content: "real" }, EMB);
-    const sup = repo.create({ label: "Superseded", type: "memory", content: "old" }, EMB);
-    supersede(handle, SPACE, {
-      oldNodeId: sup.id,
-      newNode: null,
-      correctionType: "false_belief",
-      correctedBy: "user",
-      origin: "user_correction",
-    });
-    // byIds excludes superseded
-    const results = repo.byIds([valid1.id, valid2.id, sup.id]);
-    expect(results.map((r) => r.id).sort()).toEqual([valid1.id, valid2.id].sort());
+  it("finds valid nodes buried under superseded ones via vecSearchCurrent", () => {
+    // 500 superseded + 3 valid. The injected page function returns superseded
+    // IDs first (positions 0-499) and valid IDs at 500-502. A single-shot fetch
+    // would return zero valid results; iterative widening must find all 3.
+    // This test FAILS if the iterative loop is removed.
+    const SUP_COUNT = 500;
+    const supIds: number[] = [];
+    for (let i = 0; i < SUP_COUNT; i++) {
+      supIds.push(seedNode(`Superseded ${i}`, SPACE, { superseded_at: "2026-10-10T00:00:00.000Z" }));
+    }
+    const validIds: number[] = [seedNode("Valid one"), seedNode("Valid two"), seedNode("Valid three")];
+    const ordering = [...supIds, ...validIds]; // valid buried at the end
+    const fakeFetchPage = (fetchSize: number, offset: number) => {
+      return ordering
+        .slice(offset, offset + fetchSize)
+        .map((nodeId, idx) => ({ nodeId, distance: 0.1 + (offset + idx) * 0.001 }));
+    };
+    const qv = new Float32Array(384).fill(0.1);
+    const hits = vecSearchCurrent(handle.sqlite, SPACE, qv, 3, undefined, fakeFetchPage);
+    expect(hits.map((h) => h.nodeId).sort((a, b) => a - b)).toEqual(
+      [...validIds].sort((a, b) => a - b),
+    );
+    // And the repo-level filter agrees
+    const byIds = repo.byIds([...validIds, supIds[0]]);
+    expect(byIds.map((r) => r.id).sort()).toEqual([...validIds].sort((a, b) => a - b));
   });
 });
 
 describe("T-RTR-3: safety bound", () => {
-  it("MAX_CANDIDATES is a circuit breaker, not a completeness guarantee", () => {
+  it("MAX_CANDIDATES is 2000", () => {
     expect(MAX_CANDIDATES).toBe(2000);
-    // The truncation diagnostic contract: vecSearchCurrent accepts a
-    // logDiagnostic callback. Verify it's invoked on truncation by
-    // checking the function signature accepts it (integration tested
-    // against real vec0 in CI).
+  });
+
+  it("emits truncation diagnostic and returns partial results on bound hit", () => {
+    // 2500 superseded + 2 valid at positions 100-101 (within the bound), k=3.
+    // The loop finds 2 valid but exhausts MAX_CANDIDATES before a 3rd exists.
+    // Must return partial results + diagnostic — never claim completeness.
+    const SUP_COUNT = 2500;
+    const supIds: number[] = [];
+    for (let i = 0; i < SUP_COUNT; i++) {
+      supIds.push(seedNode(`Sup ${i}`, SPACE, { superseded_at: "2026-10-10T00:00:00.000Z" }));
+    }
+    const validIds: number[] = [seedNode("V1"), seedNode("V2")];
+    const ordering = [...supIds.slice(0, 100), ...validIds, ...supIds.slice(100)];
+    const fakeFetchPage = (fetchSize: number, offset: number) => {
+      return ordering
+        .slice(offset, offset + fetchSize)
+        .map((nodeId, idx) => ({ nodeId, distance: 0.1 + (offset + idx) * 0.001 }));
+    };
+    const diagnostics: { event: string; data: Record<string, unknown> }[] = [];
+    const qv = new Float32Array(384).fill(0.1);
+    const hits = vecSearchCurrent(
+      handle.sqlite,
+      SPACE,
+      qv,
+      3,
+      (event, data) => diagnostics.push({ event, data }),
+      fakeFetchPage,
+    );
+    // Partial results: the 2 valid nodes that exist within the bound
+    expect(hits.map((h) => h.nodeId).sort((a, b) => a - b)).toEqual(
+      [...validIds].sort((a, b) => a - b),
+    );
+    // Truncation diagnostic emitted exactly once, with honest counts
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].event).toBe("vecSearchTruncated");
+    expect(diagnostics[0].data["wanted"]).toBe(3);
+    expect(diagnostics[0].data["found"]).toBe(2);
+    expect(diagnostics[0].data["space_id"]).toBe(SPACE);
   });
 });
 

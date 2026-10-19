@@ -93,8 +93,10 @@ export function supersede(
       "Supersession blocked: ambiguous contradiction flagged for W3 review",
     );
   }
-  if (input.llmProposed && input.origin !== "user_statement" && input.origin !== "user_correction") {
-    // An LLM proposal without user-origin backing is advisory only.
+  // HARD BLOCK (design §3.1): an LLM proposal is ADVISORY ONLY and must NEVER
+  // auto-execute — regardless of the stated origin. This check runs FIRST,
+  // before any origin logic. Log for review, change nothing.
+  if (input.llmProposed === true) {
     h.sqlite
       .prepare(
         `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
@@ -102,12 +104,12 @@ export function supersede(
       )
       .run(
         spaceId,
-        `supersession proposed old_node_id=${input.oldNodeId} origin=${input.origin}`,
+        `supersession proposed old_node_id=${input.oldNodeId} origin=${input.origin} (advisory only)`,
         JSON.stringify({ old_id: input.oldNodeId, origin: input.origin }),
       );
-    logPotentialContradiction(h, spaceId, input, "llm_proposal_not_user_origin");
+    logPotentialContradiction(h, spaceId, input, "llm_proposal_advisory_only");
     throw new SupersessionConflictError(
-      "Supersession blocked: LLM proposals require user-origin facts",
+      "Supersession blocked: LLM proposals are advisory only and never auto-execute",
     );
   }
   if (input.origin !== "user_statement" && input.origin !== "user_correction") {

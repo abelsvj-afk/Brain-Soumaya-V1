@@ -157,6 +157,12 @@ export function vecSearchCurrent(
   queryVec: Float32Array,
   k: number,
   logDiagnostic?: (event: string, data: Record<string, unknown>) => void,
+  /**
+   * Injectable page fetcher for tests. Returns the next page of
+   * { nodeId, distance } candidates (already offset — NOT a cumulative window).
+   * Defaults to the real vec0 windowed query.
+   */
+  fetchPage?: (fetchSize: number, offset: number) => { nodeId: number; distance: number }[],
 ): ScoredHit[] {
   if (!isVectorEnabled(db)) {
     return [];
@@ -180,18 +186,24 @@ export function vecSearchCurrent(
      ORDER BY distance`,
   );
 
+  // Default page fetcher: vec0 KNN has no OFFSET, so emulate paging by growing
+  // the fetch window and slicing off the already-seen prefix.
+  const doFetchPage =
+    fetchPage ??
+    ((fetchSize: number, offset: number) => {
+      const windowed = knnStmt.all(vecToBlob(queryVec), fetchSize + offset) as {
+        nodeId: number;
+        distance: number;
+      }[];
+      return windowed.slice(offset);
+    });
+
   while (valid.length < k) {
     if (offset >= MAX_CANDIDATES) {
       truncated = true;
       break;
     }
-    // vec0 KNN has no OFFSET; emulate paging by growing the fetch window and
-    // slicing off the already-seen prefix.
-    const windowed = knnStmt.all(vecToBlob(queryVec), fetchSize + offset) as {
-      nodeId: number;
-      distance: number;
-    }[];
-    const page = windowed.slice(offset);
+    const page = doFetchPage(fetchSize, offset);
 
     // EXHAUSTION CONTRACT: only an empty page means "no more candidates."
     // A short non-empty page is NOT exhaustion — continue to the next offset.
