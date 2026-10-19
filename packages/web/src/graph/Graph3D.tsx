@@ -3725,15 +3725,23 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   const TUBE_SYNC_MS = 100;
   const TUBE_EPS = 0.12; // world units; endpoint drift below this is sub-pixel
   const TUBE_NEAR_TARGET = 350; // links this close to the look-target sync every frame
-  const lastTubePosRef = useRef(new Map<any, number[]>());
+  const TUBE_NEAR_CAM_DIST = 1200; // ...but only when the camera is this close (zoomed in)
+  // WeakMap keyed by link OBJECT (not id): when link objects are replaced on a
+  // data reload, old entries are GC'd and new links always build on first sight.
+  // A Map keyed by id would keep stale positions and could skip building tubes
+  // for recreated link objects entirely (returning "handled" for nonexistent
+  // geometry → invisible links).
+  const lastTubePosRef = useRef(new WeakMap<object, number[]>());
   const linkPositionUpdateCb = useCallback(
     (obj: any, pos: LinkPositions, link: any) => {
       const linkId = link?.id;
       // Smooth where it matters: near the look-target (e.g. a focused planet's
-      // links), tubes track every frame — no stepping.
+      // links), tubes track every frame — no stepping. Gated by camera distance
+      // so galaxy-view doesn't waste every-frame updates on sub-pixel tubes.
+      const camera = fgRef.current?.camera();
       const target = fgRef.current?.controls?.()?.target as THREE.Vector3 | undefined;
       let nearTarget = false;
-      if (target) {
+      if (camera && target && camera.position.distanceToSquared(target) < TUBE_NEAR_CAM_DIST * TUBE_NEAR_CAM_DIST) {
         const mx = (pos.start.x + pos.end.x) * 0.5;
         const my = ((pos.start.y || 0) + (pos.end.y || 0)) * 0.5;
         const mz = ((pos.start.z || 0) + (pos.end.z || 0)) * 0.5;
@@ -3742,7 +3750,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       }
 
       if (!nearTarget) {
-        const last = lastTubePosRef.current.get(linkId);
+        const last = lastTubePosRef.current.get(link);
         if (last) {
           const dx1 = pos.start.x - last[0], dy1 = (pos.start.y || 0) - last[1], dz1 = (pos.start.z || 0) - last[2];
           const dx2 = pos.end.x - last[3], dy2 = (pos.end.y || 0) - last[4], dz2 = (pos.end.z || 0) - last[5];
@@ -3758,7 +3766,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       }
 
       const ok = curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link));
-      lastTubePosRef.current.set(linkId, [
+      lastTubePosRef.current.set(link, [
         pos.start.x, pos.start.y || 0, pos.start.z || 0,
         pos.end.x, pos.end.y || 0, pos.end.z || 0,
       ]);
