@@ -2460,7 +2460,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                 intensity = (p.base * 1.5 + 0.65 * s) * bf;
               } else {
                 s = Math.sin(now * p.speed + p.phase) * 0.5 + 0.5;
-                intensity = (p.base + p.amp * s) * bf * (p.vitality ?? 1);
+                // Floor the combined multiplier: bf (0.25× near) × vitality
+                // (~0.1× for old/neglected memories) used to stack to ~0.03 —
+                // effectively black — making the macro→fidelity LOD swap a
+                // visible cliff ("planets go dark up close"). The floor keeps
+                // relative dimming cues above it while sitting near the macro
+                // body's constant 0.5 emissive at the swap boundary.
+                intensity = Math.max(0.45, (p.base + p.amp * s) * bf * (p.vitality ?? 1));
               }
 
               const mat = child.material as any;
