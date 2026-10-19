@@ -8,6 +8,7 @@ import { validateArgs } from "./tools/validation.js";
 import {
   requestApproval,
   confirmApproval,
+  denyApproval,
   executeApproval,
   findPendingApproval,
   type ApprovalRow,
@@ -130,7 +131,6 @@ export async function maybeConfirmPending(
   if (!pending) return null;
 
   if (isDeny) {
-    const { denyApproval } = await import("./approvals.js");
     denyApproval(ctx, spaceId, principal, pending.id, tc.now);
     return "Got it — I won't do that.";
   }
