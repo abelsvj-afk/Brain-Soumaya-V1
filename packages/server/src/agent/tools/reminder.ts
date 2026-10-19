@@ -109,7 +109,11 @@ export const reminderTool: Tool = {
     const msg = buildReminderMessage({ label: row.label, overdueMs, preferConcise, manyRemindersToday });
     let delivered = false;
     try {
-      await tc.notify(msg);
+      await tc.notify(msg, {
+        tool: "fire_reminder",
+        nodeId,
+        remindAt: row.remind_at,
+      });
       delivered = true;
     } catch {
       /* logged below regardless; the in-app bar still surfaces it */

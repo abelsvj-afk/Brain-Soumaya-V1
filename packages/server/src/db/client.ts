@@ -216,7 +216,61 @@ function migrateSchema(sqlite: RawDb): void {
     if (!metaCols.some((c) => c.name === "grounded_insight")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN grounded_insight INTEGER NOT NULL DEFAULT 1`);
     }
+    // Phase 2 notification policy: per-space proactive messaging preferences.
+    // timezone: IANA identifier used for quiet hours, digest time, and cap-day
+    // boundaries. Validated at set-time via Intl; invalid values are rejected.
+    if (!metaCols.some((c) => c.name === "timezone")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN timezone TEXT NOT NULL DEFAULT 'America/New_York'`);
+    }
+    // quiet_start / quiet_end: HH:MM local time; proactive normal-priority sends
+    // are queued during this window. May cross midnight (e.g. 21:00-04:30).
+    if (!metaCols.some((c) => c.name === "quiet_start")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN quiet_start TEXT NOT NULL DEFAULT '21:00'`);
+    }
+    if (!metaCols.some((c) => c.name === "quiet_end")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN quiet_end TEXT NOT NULL DEFAULT '04:30'`);
+    }
+    // digest_time: HH:MM local time for the daily digest (replaces midnight UTC).
+    if (!metaCols.some((c) => c.name === "digest_time")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN digest_time TEXT NOT NULL DEFAULT '06:00'`);
+    }
+    // daily_proactive_cap: max normal-priority proactive sends per local day.
+    // Urgent bypasses; digest never counts.
+    if (!metaCols.some((c) => c.name === "daily_proactive_cap")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN daily_proactive_cap INTEGER NOT NULL DEFAULT 5`);
+    }
   }
+  // Phase 2: outbox for deferred proactive notifications. The policy layer queues
+  // here instead of dropping when quiet hours or the daily cap block a send.
+  // See agent/notify/outbox.ts for the lifecycle (queued->sending->sent|failed|
+  // dropped|ambiguous) and docs/SOUMAYA_TOOLS.md for the design.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS notification_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      notif_key TEXT NOT NULL UNIQUE,
+      space_id TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      occurrence_id TEXT NOT NULL,
+      message TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      is_urgent INTEGER NOT NULL DEFAULT 0,
+      urgent_reason TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      deliver_after TEXT NOT NULL,
+      cap_day TEXT,
+      send_started_at TEXT,
+      claimed_by TEXT,
+      claimed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS notification_outbox_status_idx
+      ON notification_outbox(status, deliver_after);
+    CREATE INDEX IF NOT EXISTS notification_outbox_space_idx
+      ON notification_outbox(space_id, cap_day, status);
+  `);
   // Life Vision (docs/specs/life-vision.md): optional one-to-many link from a Financial
   // Goal to the Life Vision node it helps fund. Nullable, no SQL FK (matches bucket_id's
   // own style in this table) — validated at the application layer only. `tcols.length > 0`

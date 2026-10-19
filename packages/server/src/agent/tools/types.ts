@@ -1,4 +1,5 @@
 import type { AppContext } from "../../context.js";
+import type { NotifyMeta } from "../notify/policy.js";
 
 /**
  * The tool-router seam (docs/SOUMAYA_TOOLS.md). Each Tool is something Soumaya can
@@ -14,8 +15,11 @@ export interface ToolContext {
   spaceId: string;
   /** "Now" in ms — injected so tests are deterministic. */
   now: number;
-  /** Deliver a message to the user's real channel (Telegram today). Best-effort. */
-  notify: (text: string) => Promise<void>;
+  /** Deliver a message to the user's real channel (Telegram today). Best-effort.
+   *  Phase 2: tools SHOULD pass meta (tool identity + occurrence data) so the
+   *  notification policy can classify urgency and dedup. Omitted meta → the
+   *  policy treats it as a generic normal-priority notification. */
+  notify: (text: string, meta?: NotifyMeta) => Promise<void>;
 }
 
 /** One concrete call the router will execute: which tool, with what args, and why. */

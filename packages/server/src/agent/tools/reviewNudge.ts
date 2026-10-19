@@ -85,7 +85,7 @@ export const reviewNudgeTool: Tool = {
     });
     let delivered = false;
     try {
-      await tc.notify(msg);
+      await tc.notify(msg, { tool: "reviewNudge" });
       delivered = true;
     } catch {
       /* router logs it regardless */

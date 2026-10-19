@@ -121,7 +121,7 @@ export const checkinTool: Tool = {
     const msg = buildCheckinMessage({ kind, text, preferConcise, preferDirect, alreadyCheckedInRecently });
     let delivered = false;
     try {
-      await tc.notify(msg);
+      await tc.notify(msg, { tool: "checkin" });
       delivered = true;
     } catch {
       /* router logs it regardless */
