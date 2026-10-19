@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lte, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { GraphNode, NodeType } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { nodes, DEFAULT_SPACE, type NodeRow } from "../db/schema.js";
@@ -168,11 +168,12 @@ export class NodesRepo {
 
   /** Soft-delete: flag a redundant memory as merged into another (recoverable). */
   softDelete(id: number, mergedIntoId: number): boolean {
+    // W1: use canonical ISO timestamp (not CURRENT_TIMESTAMP legacy format).
     const info = this.h.sqlite
       .prepare(
-        `UPDATE nodes SET deleted_at = CURRENT_TIMESTAMP, merged_into = ? WHERE id = ? AND space_id = ?`,
+        `UPDATE nodes SET deleted_at = ?, merged_into = ? WHERE id = ? AND space_id = ?`,
       )
-      .run(mergedIntoId, id, this.spaceId);
+      .run(new Date().toISOString(), mergedIntoId, id, this.spaceId);
     deleteEmbedding(this.h.sqlite, id); // drop from KNN/redundancy index
     ftsDelete(this.h.sqlite, id);
     return info.changes > 0;

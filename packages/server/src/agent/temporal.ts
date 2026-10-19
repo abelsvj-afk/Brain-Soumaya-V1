@@ -16,13 +16,15 @@
 
 import type { DbHandle } from "../db/client.js";
 import type { RawDb } from "../db/vec.js";
+import { upsertEmbedding } from "../db/vec.js";
+import { ftsUpsert } from "../db/fts.js";
 import type { NodeRow, CorrectionRow } from "../db/schema.js";
 
 /** The three correction types (design §2.2). */
 export type CorrectionType = "factual_update" | "false_belief" | "preference_override";
 
 /** Reason codes stored on the superseded row (denormalized convenience). */
-export type SupersedeReason = "update" | "false_belief" | "correction" | "user_override";
+export type SupersedeReason = "update" | "false_belief" | "user_override";
 
 /** Origin of a new fact — only user-originated facts qualify for W1 auto-supersession. */
 export type FactOrigin = "user_statement" | "user_correction" | "model_inference" | "tool_output" | "document";
@@ -44,6 +46,9 @@ export interface SupersedeInput {
     content: string;
     /** When the fact became true in the real world (canonical ISO UTC). Null = unknown. */
     validFrom?: string | null;
+    /** Embedding for vector search indexing (optional but recommended — without it
+     * the replacement node is invisible to memorySearch). */
+    embedding?: Float32Array;
   } | null;
   /** Which kind of correction this is. */
   correctionType: CorrectionType;
@@ -183,6 +188,14 @@ export function supersede(
           opTime,
         );
       newNodeId = Number(r.lastInsertRowid);
+      // Index the replacement node for search (vector + FTS). Without this,
+      // the new "current truth" is invisible to memorySearch and keywordSearch.
+      // Embedding is optional — callers that don't have one (e.g. tests) get
+      // FTS indexing at minimum.
+      if (input.newNode.embedding) {
+        upsertEmbedding(h.sqlite, newNodeId, input.newNode.embedding);
+      }
+      ftsUpsert(h.sqlite, newNodeId, input.newNode.label, input.newNode.content);
     }
 
     // 3. Supersede the old row (optimistic guard: superseded_at IS NULL).
@@ -242,7 +255,7 @@ export function supersede(
     } catch {
       cascadeOn = false; // column missing (very old volume) → disabled
     }
-    if (cascadeOn && (reason === "false_belief" || reason === "correction")) {
+    if (cascadeOn && reason === "false_belief") {
       h.sqlite
         .prepare(
           `UPDATE nodes
