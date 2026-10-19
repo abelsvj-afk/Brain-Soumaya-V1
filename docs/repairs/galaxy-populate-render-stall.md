@@ -1,10 +1,11 @@
 # Galaxy populate-path render-stall repair — design
 
-**Status:** DRAFT rev 7 — revised per ChatGPT design-review round 6 (one
-remaining blocker: 50,000-id predicate vs SQLite bind-variable limit).
-For re-review. **No implementation authorized.**
+**Status:** DRAFT rev 8 — design **APPROVED** (ChatGPT round 7; owner
+2026-10-18). Duplicate-ID handling resolved per review. **Implementation
+requires separate explicit owner authorization naming this document and
+revision — not yet given.**
 **Branch:** `fix/galaxy-populate-render-stall` (base: `claude/soumaya-second-brain-v1-m4z4hc` @ `06d997c3`)
-**Date:** 2026-10-18 (rev 7)
+**Date:** 2026-10-18 (rev 8)
 **Reviewers:** ChatGPT (relayed), owner
 
 This is the canonical review document for this repair (per repo review workflow:
@@ -153,9 +154,12 @@ defects; an incremental structure would enlarge risk and test surface.
     the id set**. Instead, per request, in one synchronous block:
     1. `CREATE TEMP TABLE want_ids (id INTEGER PRIMARY KEY)` (temp tables
        are connection-scoped; see lifecycle note below).
-    2. `INSERT INTO want_ids SELECT value FROM json_each(?)` — a **single**
-       bind parameter carrying the JSON id array (JSON1 is compiled into
-       better-sqlite3's SQLite). No batching, no bind-count concern.
+    2. `INSERT OR IGNORE INTO want_ids SELECT value FROM json_each(?)` — a
+       **single** bind parameter carrying the JSON id array (JSON1 is
+       compiled into better-sqlite3's SQLite). No batching, no bind-count
+       concern. `OR IGNORE` makes duplicate ids safe (set semantics; the
+       client dedupes `U` before sending, so duplicates indicate nothing
+       about correctness either way).
     3. Incident query joins the indexed temp table:
        `… WHERE e.space_id = ? AND e.id > ? AND (e.source IN (SELECT id FROM
        want_ids) OR e.target IN (SELECT id FROM want_ids)) ORDER BY e.id
@@ -396,6 +400,16 @@ separate owner approval naming this document and its revision.
   insert and the documented residual; D4 test plan gains the
   abort-reaches-transport implementation acceptance condition. Submitted
   for re-review.
+- 2026-10-18 — ChatGPT design-review round 7: **APPROVED for design**
+  (rev 7, commit `4dd9d9b8`) — no remaining design blockers. Implementation
+  acceptance notes (not redesign blockers): duplicate-id handling,
+  json_each verification on the real build, concurrent-write integration
+  test, provider-level cancellation + physical concurrency proof, on-device
+  flash gate for D2. Design approval does not authorize implementation.
+- 2026-10-18 — rev 8 (this revision): records the design approval; resolves
+  the duplicate-ID detail (`INSERT OR IGNORE`, set semantics; client
+  dedupes `U`). **Implementation requires separate explicit owner
+  authorization naming this document and revision.**
 - 2026-10-18 — ChatGPT design-review round 6: **revise before approval**,
   one remaining blocker — the 50,000-id predicate would need ~100k SQL
   bind parameters, exceeding SQLite's bind-variable limit on most builds;
