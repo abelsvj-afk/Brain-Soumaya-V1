@@ -1,6 +1,6 @@
 # W2 Design — Episodes + User Model
 
-**Status:** Revision 3 (addressing ChatGPT's round 2 review of Revision 2)
+**Status:** Revision 4 (addressing ChatGPT's round 3 review of Revision 3)
 **Depends on:** W1 (temporal truth) — Revision 7
 **Scope:** Episodic memory (C1) + Theory of Mind user model (C3) from the wisdom-layer research
 **Surfaces:** Shared backend (`packages/server`) — web app and Telegram both benefit
@@ -8,7 +8,8 @@
 **Revision history:**
 - Rev 1 (commit `dd64a82`, branch `w2-design`): initial draft — Tulving episodes, 6-slot user model, anti-weak-inference rules, knowledge check.
 - Rev 2 (commit `7294dfa`): addressed round 1 review — 5 P0 blockers (B1–B5), 5 P1 items (B6–B10), 5 additional gaps (11–15), and applied the 5 open-question decisions. Structural changes: episodes split into immutable `episodes` + versioned `episode_enrichments`; `user_model` gains stable `id`, `replaced_by`, `evidence_strength`; new `forget_requests` table and forget/deletion contract; recall-oriented knowledge-check candidate generation; explicit enrichment lifecycle; separated confidence/evidence/truth semantics.
-- Rev 3 (this document): addresses round 2 review — P0 (B1: redaction exception + versioned linking; B2: lease reclaim with fencing; B3: topic normalization contract + uncertainty boundary), P1 (B4: atomic quota ledger; B5: forget-state alignment; B6: application-enforced references; B7: provenance coverage validation; B8: migration constraint equivalence), and the correction-targeting confidence note. No structural redesign — all changes are targeted contract tightenings.
+- Rev 3 (commit `38a2940`): addressed round 2 review — P0 (B1: redaction exception + versioned linking; B2: lease reclaim with fencing; B3: topic normalization contract + uncertainty boundary), P1 (B4: atomic quota ledger; B5: forget-state alignment; B6: application-enforced references; B7: provenance coverage validation; B8: migration constraint equivalence), and the correction-targeting confidence note. No structural redesign — all changes were targeted contract tightenings.
+- Rev 4 (this document): addresses round 3 review — P0 (B1: forget/worker race with fence revocation + `forgotten_at` in commit predicate; B2: `topic_labels` column in `user_model` schema; B3: corrected adversarial tests — topic overlap is candidate-only, entity identity required for contradiction; B4: content-free forget audit with `target_query` nulling), P1 (B5: `not_reported` label reconciliation; B6: retry off-by-one resolved; B7: space-timezone quota dates; B8: constraints exempt from candidate cap; B9: canonical tombstone format). Test plan expanded with race, audit, and tombstone acceptance tests exercising actual transactional predicates.
 
 ---
 
@@ -124,9 +125,9 @@ CREATE INDEX idx_episodes_enrichment ON episodes(enrichment_status, enrichment_l
 **The redaction exception (B1, Rev 3).** The immutability contract has exactly one exception, and it is narrow:
 
 - **Trigger:** only `applyForgetRequest()` executing an *approved* user forget request (§3.7). No other code path — no enrichment, no consolidation, no hot path — may modify capture columns. Ever.
-- **Permitted changes:** `summary` → the tombstone constant `"[redacted per forget request #N]"` (N = the request id); `embedding` → NULL (on the enrichment record); `forgotten_at` → now. Nothing else. The tombstone is a fixed string, not a parameter — there is no "edit the summary" capability, only "replace with tombstone."
+- **Permitted changes:** `summary` → the tombstone constant `"[redacted per forget request #N]"` (N = the request id; the canonical format defined in §3.7, B9 Rev 4); `forgotten_at` → now; `enrichment_fence` → fresh random token (revokes any in-flight worker claim, B1 Rev 4); `enrichment_lease` → NULL. Nothing else. The tombstone is a fixed string, not a parameter — there is no "edit the summary" capability, only "replace with tombstone."
 - **What is NOT permitted:** partial redaction, rewriting the summary to something else, redacting `occurred_at`/`recorded_at`/`kind` (the *fact that an event occurred at a time* is structural metadata, not content — the timeline retains "something happened here" without retaining *what*).
-- **Audit without content:** the `forget_requests` row records `target_episode_id`, `target_query` (the user's original scope description), `status` transitions, and timestamps — but never the redacted content itself. The audit proves *that* a redaction occurred and *which* request authorized it; it cannot be used to recover *what* was forgotten. `agent_logs` records `action='forget_applied'` with `{request_id, episode_ids}` only.
+- **Audit without content:** the `forget_requests` row records `target_episode_id`, `scope_episode_ids`, `scope_node_ids`, `scope_topics`, `status` transitions, and timestamps — but never the redacted content itself, and never the original `target_query` text (nulled at approval, B4 Rev 4). The audit proves *that* a redaction occurred and *which* request authorized it; it cannot be used to recover *what* was forgotten. `agent_logs` records `action='forget_applied'` with `{request_id, episode_ids}` only.
 - **Enforcement:** `applyForgetRequest()` is the only function with UPDATE privileges on `episodes.summary`. Code review gate: any PR touching `episodes` UPDATE statements outside `applyForgetRequest()` is rejected. Test T-E4b verifies the tombstone constant, the NULL embedding, and that the audit contains no content substrings.
 
 **Why no `valid_to`/`superseded_at` on episodes:** an episode is a record *of* an event, not a claim *about* the world. The event happened when it happened (`occurred_at`); the system learned about it when it recorded it (`recorded_at`). There is no "stopped being true" for a lived event — October 16 happened. If the *record* is wrong, the correction pattern (append + `corrects_episode_id` link) preserves both the error and its correction, exactly as W1's `corrections` table does for facts.
@@ -197,18 +198,20 @@ CREATE INDEX idx_enrichments_current ON episode_enrichments(episode_id) WHERE su
 **Provenance coverage validation (B7, Rev 3).** The `{}` default is valid *only* when no interpretive fields are populated (the minimal version-1 linking record from `linkEpisodeToNodes()`). Otherwise:
 
 - **Completeness:** every populated field must have a label. Populated = `detail` non-NULL, `emotion` non-NULL, `emotional_weight` non-NULL, `importance` ≠ 0.5 (the default), `participants` non-empty array, `place` non-NULL, `source_node_ids` non-empty array, `embedding` non-NULL. Missing label for a populated field → write rejected with `ValidationError {field, reason: 'missing_provenance'}`.
-- **Allowed label per field** (value+label combinations):
+- **Allowed label per field** (value+label combinations; B5 Rev 4):
 
-  | Field | Allowed labels |
-  |---|---|
-  | `detail` | `direct_quote`, `explicit`, `generated` |
-  | `emotion` | `direct_quote`, `explicit`, `inferred` |
-  | `emotional_weight` | `explicit`, `inferred` |
-  | `importance` | `inferred` (always a judgment call) |
-  | `participants` | `explicit`, `inferred` |
-  | `place` | `explicit`, `inferred` |
-  | `source_node_ids` | `explicit` (mechanical link, never interpretation) |
-  | `embedding` | `explicit` (deterministic computation, not interpretation) |
+  | Field | Allowed labels | NULL permitted? |
+  |---|---|-----------------|
+  | `detail` | `direct_quote`, `explicit`, `generated`, `not_reported` | Yes — NULL + `not_reported` = "not reported, valid" |
+  | `emotion` | `direct_quote`, `explicit`, `inferred`, `not_reported` | Yes — NULL + `not_reported` = "not reported, valid" |
+  | `emotional_weight` | `explicit`, `inferred`, `not_reported` | Yes — NULL + `not_reported` |
+  | `importance` | `inferred` (always a judgment call) | No — has a 0.5 default; the default does not require a label (not "populated" per the completeness rule) |
+  | `participants` | `explicit`, `inferred`, `not_reported` | Yes — empty array + `not_reported` |
+  | `place` | `explicit`, `inferred`, `not_reported` | Yes — NULL + `not_reported` |
+  | `source_node_ids` | `explicit` (mechanical link, never interpretation) | Yes — empty array is valid without a label (mechanical, not interpretive) |
+  | `embedding` | `explicit` (deterministic computation, not interpretation) | Yes — NULL before computation; no label required (not interpretive) |
+
+  **NULL + `not_reported` semantics (B5):** a NULL (or empty) field with a `not_reported` label is a *complete, valid* state meaning "the source interaction did not contain this information." It is distinct from a NULL field *without* a label, which means "not yet classified" and is a validation error (except for the minimal linking record where `{}` is permitted). T-E13 tests exactly this: enrichment of a terse interaction leaves `detail`/`emotion` NULL *with* `not_reported` labels — valid, no invented content, no validation error.
 
   A label outside the field's allowed set → write rejected (`invalid_provenance_label`). An unknown field name in the map → write rejected (`unknown_provenance_field`).
 
@@ -248,7 +251,7 @@ The `kind` column is a closed vocabulary enforced by CHECK constraint in the fre
 
 The capture path does **zero LLM calls and zero embedding calls**. It is a single INSERT. It cannot fail the interaction — on any error, it logs and continues (episodes are observability-grade, not transaction-critical).
 
-**What capture checks first (B2, B5):** the forget-list. If the interaction's content matches the scope of any forget request with `status IN ('approved', 'applied')` (§3.7), capture writes a tombstone row (`summary`: `"[redacted per forget request]"`, `forgotten_at` set) rather than the content. The tombstone preserves the *fact that an interaction occurred* (for timeline continuity) without preserving its content. `pending` requests do not block capture (scope unconfirmed); `rejected` requests do not block.
+**What capture checks first (B2, B5, B9 Rev 4):** the forget-list. If the interaction's content matches the scope of any forget request with `status IN ('approved', 'applied')` (§3.7), capture writes a tombstone row (`summary`: `"[redacted per forget request #N]"` — the canonical format with the matching request's ID, §3.7; `forgotten_at` set) rather than the content. Tombstoned episodes are never eligible for enrichment (`claimEnrichment()` filters `forgotten_at IS NULL`) or search indexing (no FTS/vec rows are written for tombstones). The tombstone preserves the *fact that an interaction occurred* (for timeline continuity) without preserving its content. `pending` requests do not block capture (scope unconfirmed); `rejected` requests do not block.
 
 **Significance filter (hot path, heuristic, free).** Determines whether the episode qualifies for background enrichment. An episode qualifies if ANY of:
 
@@ -278,6 +281,8 @@ claims are reclaimable, with fencing so a stale worker cannot commit after recla
   WHERE id = (
     SELECT id FROM episodes
     WHERE space_id = ?
+      AND forgotten_at IS NULL           -- B1 Rev 4: tombstoned episodes are never
+                                         -- eligible for enrichment (see §3.7)
       AND (
         enrichment_status IN ('pending', 'failed_retryable')
         OR (
@@ -303,20 +308,24 @@ claims are reclaimable, with fencing so a stale worker cannot commit after recla
 - **Fencing (B2):** every claim generates a fresh `enrichment_fence` token. The worker's commit transaction is:
   ```sql
   -- Commit (in the same transaction as the enrichment INSERT):
+  -- B1 Rev 4: forgotten_at IS NULL is a hard commit requirement. A worker
+  -- whose episode was forgotten (by any ordering) cannot commit.
   UPDATE episodes
   SET enrichment_status = 'completed',
       enriched_at = <now>,
       enrichment_lease = NULL
-  WHERE id = ? AND enrichment_fence = <my token> AND enrichment_status = 'processing';
+  WHERE id = ? AND enrichment_fence = <my token> AND enrichment_status = 'processing'
+    AND forgotten_at IS NULL;
   -- Then check changes(): if 0 rows affected → another worker reclaimed this
-  -- episode (or it was otherwise transitioned) → ABORT the transaction, discard
-  -- the enrichment work, log 'enrichment_fence_conflict'. The stale worker's
-  -- enrichment record is never written. No partial state, no double-enrichment.
+  -- episode, or it was forgotten → ABORT the transaction, discard
+  -- the enrichment work, log 'enrichment_commit_rejected' with {episode_id, reason}.
+  -- The stale worker's enrichment record is never written. No partial state,
+  -- no double-enrichment, no resurrection of forgotten content.
   ```
   A crashed worker that wakes up after its lease expired and tries to commit will find its fence token no longer matches (the reclaiming worker overwrote it) — the commit affects 0 rows and the transaction aborts. This is the standard fencing-token pattern: the token, not the lease timestamp, is the authority on who owns the work.
-- **Retry accounting (B2):** `enrichment_attempts` increments on every claim (including reclaims). At claim time, if `enrichment_attempts >= 3` after incrementing, the worker instead transitions the row to `failed_permanent` (no LLM call wasted):
+- **Retry accounting (B2, B6 Rev 4):** `enrichment_attempts` increments on every claim (including reclaims). **Exactly three attempts are allowed.** At claim time, after incrementing, if `enrichment_attempts > 3` the worker instead transitions the row to `failed_permanent` (no LLM call wasted on the fourth attempt):
   ```sql
-  -- Inside the claim transaction, after the UPDATE:
+  -- Inside the claim transaction, after the UPDATE that increments attempts:
   -- if the claimed row now has enrichment_attempts > 3:
   UPDATE episodes SET enrichment_status = 'failed_permanent',
       enrichment_lease = NULL WHERE id = ?;
@@ -324,6 +333,7 @@ claims are reclaimable, with fencing so a stale worker cannot commit after recla
   -- diagnostics; never retried automatically. A human or W3 can reset to
   -- 'pending' (resets attempts to 0) if the failure cause is fixed.
   ```
+  The predicate is `> 3` everywhere — prose, SQL, and tests agree. Attempt 1, 2, 3 each get one LLM call; the claim that would be attempt 4 goes permanent instead. (Test T-E8 asserts the exact sequence: claim→fail→claim→fail→claim→fail→claim→`failed_permanent`, no fourth LLM call.)
 - **Crash safety:** if the worker crashes mid-enrichment, no partial enrichment record is visible — the enrichment INSERT and the episode status update happen in a single transaction. Either both commit (status → `completed`, `enriched_at` set) or neither does (lease expires, another worker reclaims with a new fence).
 - **Original preserved on failure:** the capture row is never modified by enrichment. A failed enrichment leaves a pristine capture row and a `failed_retryable` status. Retries are idempotent: re-running enrichment for an episode with a `completed` status is a no-op (guarded by status check, tested T-E3).
 
@@ -332,20 +342,23 @@ claims are reclaimable, with fencing so a stale worker cannot commit after recla
   ```sql
   CREATE TABLE enrichment_quota (
     space_id TEXT NOT NULL,
-    quota_date TEXT NOT NULL,       -- YYYY-MM-DD (space-local date)
+    quota_date TEXT NOT NULL,       -- YYYY-MM-DD in the SPACE's local timezone (B7 Rev 4)
     claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed >= 0),
     PRIMARY KEY (space_id, quota_date)
   );
   ```
 
+  **Timezone contract (B7, Rev 4):** `quota_date` is the space-local date, computed in application code — never via SQLite `date('now')` (which is UTC). The helper `spaceLocalDate(spaceId): string` reads `space_meta.timezone` (the Phase 2 notification-policy timezone, default `America/New_York`) and returns `YYYY-MM-DD` in that zone. The reservation and refund statements take it as a bound parameter:
+
   **Claim flow (single transaction):**
   ```sql
   BEGIN IMMEDIATE;
+  -- spaceLocalDate(spaceId) computed in TS before the transaction.
   -- Step 1: atomically reserve one quota unit. The WHERE clause makes this a
   -- check-and-increment in a single statement — SQLite serializes writers, so
   -- two concurrent workers cannot both succeed when one unit remains.
   INSERT INTO enrichment_quota (space_id, quota_date, claimed)
-  VALUES (?, date('now'), 1)
+  VALUES (?, ?, 1)                              -- (?, spaceLocalDate, 1)
   ON CONFLICT (space_id, quota_date) DO UPDATE
     SET claimed = claimed + 1
     WHERE claimed < <daily_cap>
@@ -354,7 +367,7 @@ claims are reclaimable, with fencing so a stale worker cannot commit after recla
   -- Step 2: claim one episode (the UPDATE ... RETURNING above).
   -- If Step 2 claims nothing (no claimable episodes) → refund the reservation:
   UPDATE enrichment_quota SET claimed = claimed - 1
-  WHERE space_id = ? AND quota_date = date('now');
+  WHERE space_id = ? AND quota_date = ?;        -- (?, spaceLocalDate)
   COMMIT;
   ```
 
@@ -405,16 +418,21 @@ CREATE TABLE forget_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   space_id TEXT NOT NULL,
   requested_by TEXT NOT NULL DEFAULT 'user' CHECK (requested_by = 'user'),
-  -- What to forget: one of these selectors must be set
+  -- What to forget: one of these selectors must be set at creation
   target_episode_id INTEGER,       -- specific episode
   target_node_id INTEGER,          -- specific node (propagates to derived records)
   target_query TEXT,               -- free-text description ("everything about the trucking job")
-  -- Durable scope representation (B5, Rev 3): resolved at approval time, not re-derived.
+                                   -- B4 Rev 4: set to NULL at approval time (see below).
+                                   -- Never retained after scope confirmation.
+  -- Durable scope representation (B5 Rev 3, B4 Rev 4): resolved at approval time.
   -- Capture-time matching uses these, never re-interprets target_query.
   scope_episode_ids TEXT NOT NULL DEFAULT '[]',  -- JSON array of episode ids in scope
   scope_node_ids TEXT NOT NULL DEFAULT '[]',     -- JSON array of node ids in scope
-  scope_keywords TEXT NOT NULL DEFAULT '[]',     -- JSON array of normalized keywords
-                                                 -- extracted from target_query at approval
+  -- B4 Rev 4: scope_topics replaces scope_keywords. Controlled topic labels
+  -- (same vocabulary as §6.2) — coarse enough to be content-free, specific
+  -- enough for capture-time matching. Raw keywords could leak sensitive terms;
+  -- topic labels ("relationships", "employment") cannot reconstruct content.
+  scope_topics TEXT NOT NULL DEFAULT '[]',       -- JSON array of controlled topic labels
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending','approved','applied','rejected')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -424,17 +442,26 @@ CREATE TABLE forget_requests (
 
 **Scope resolution (at approval time, before `status='approved'`):**
 1. If `target_episode_id` / `target_node_id` set: scope is those IDs (+ propagation targets per the table above).
-2. If `target_query` set: the system resolves it to specific episode/node IDs via keyword + vector search, presents the list to the user, and the user confirms or edits. Only the confirmed IDs enter `scope_episode_ids` / `scope_node_ids`. `scope_keywords` is the normalized keyword set from the confirmed scope (lowercased, stemmed, stop-words removed) — used for capture-time matching of *future* content.
-3. **Scope changes after approval:** any narrowing or broadening requires re-confirmation — status returns to `pending`, scope is re-resolved, user re-approves. There is no "edit scope in place."
+2. If `target_query` set: the system resolves it to specific episode/node IDs via keyword + vector search, presents the list to the user, and the user confirms or edits. Only the confirmed IDs enter `scope_episode_ids` / `scope_node_ids`. `scope_topics` is assigned from the confirmed scope via the §6.2 topic mapper (controlled vocabulary — coarse labels, never raw sensitive terms).
+3. **Content-free audit (B4, Rev 4):** at the moment scope is confirmed (the same transaction that sets `status='approved'`), `target_query` is set to **NULL**. The user's free-text description — which may itself contain the sensitive content to be forgotten — is never retained after confirmation. What remains: `scope_episode_ids`, `scope_node_ids` (IDs, not content), `scope_topics` (coarse controlled labels), timestamps, status transitions. The audit proves *that* a forget occurred, *when*, *by whom*, and *how many records* it covered — never *what* was forgotten.
+4. **Scope changes after approval:** any narrowing or broadening requires re-confirmation — status returns to `pending`, scope is re-resolved, user re-approves. There is no "edit scope in place."
 
 **Capture-time blocking rule (B5, Rev 3):** capture checks for forget requests with `status IN ('approved', 'applied')` — *both* states block, not just `applied`. Rationale: once the user has approved the scope, the intent to forget is established; content matching that scope must not be stored even if propagation hasn't run yet. `pending` does not block (scope unconfirmed — the user might reject). `rejected` does not block.
 
 **Capture matching:** for each incoming interaction, capture checks:
 - Would this interaction create nodes/episodes matching `scope_episode_ids` / `scope_node_ids` patterns? (Direct ID match — rare on hot path, cheap to check.)
-- Does the interaction text share ≥2 keywords with any approved/applied request's `scope_keywords`? (Keyword overlap — the primary hot-path check.)
+- Do the interaction's topic labels (via the §6.2 topic mapper) overlap with any approved/applied request's `scope_topics`? (Topic overlap — the primary hot-path check. Coarse by design: it may over-match, which is safe — see ambiguous matches below.)
 - If either matches → write tombstone instead of content, log `forget_capture_blocked` with `{request_id}` (no content in the log).
 
-**Ambiguous matches:** if keyword overlap is exactly 1 (weak signal), capture tombstones *and* logs `forget_ambiguity` for user review. False tombstones are recoverable (the user can re-state the content after resolving the ambiguity); false captures of forgotten content are not. The bias is toward over-redaction at capture, with a review path.
+**Canonical tombstone format (B9, Rev 4):** one format, everywhere. Both capture-time blocks and completed forget operations write exactly:
+
+```
+[redacted per forget request #N]
+```
+
+where N is the `forget_requests.id`. The capture path uses the lowest matching request ID when multiple requests match (deterministic), and logs all matching IDs. There is no bare `"[redacted per forget request]"` variant — the request ID is always present, making every tombstone traceable to its authorizing request without revealing content.
+
+**Ambiguous matches:** if topic overlap is weak (exactly one shared topic label, or the interaction's topic mapping was uncertain), capture tombstones *and* logs `forget_ambiguity` for user review. False tombstones are recoverable (the user can re-state the content after resolving the ambiguity); false captures of forgotten content are not. The bias is toward over-redaction at capture, with a review path.
 
 **No content while awaiting propagation:** between `approved` and `applied`, capture tombstones per the rule above. The window is small (propagation runs promptly after approval), but the guarantee holds regardless of timing.
 
@@ -444,15 +471,22 @@ CREATE TABLE forget_requests (
 
 | Record | Action | Rationale |
 |---|---|---|
-| Target episode(s) | `summary` → tombstone constant `"[redacted per forget request #N]"`; `forgotten_at` = now. `occurred_at`, `recorded_at`, `kind` untouched. | Content removed; structural metadata retained for timeline continuity and referential integrity. The tombstone is a fixed string — no arbitrary edits permitted. |
+| Target episode(s) | `summary` → tombstone constant `"[redacted per forget request #N]"` (N = request id); `forgotten_at` = now; `enrichment_fence` → fresh random token (revokes outstanding worker claims, B1 Rev 4); `enrichment_lease` → NULL. `occurred_at`, `recorded_at`, `kind` untouched. | Content removed; structural metadata retained. The fence rotation guarantees any in-flight worker's commit predicate fails even if it already passed the status check. The tombstone is a fixed string — no arbitrary edits permitted. |
 | Enrichment records of target episodes | DELETE (all versions), including `embedding` | Interpretation of forgotten content has no standing |
 | Embeddings (vec tables) | DELETE corresponding rows | Forgets must propagate to vector search |
 | FTS entries | DELETE corresponding rows | Forgets must propagate to keyword search |
 | User-model entries citing the forgotten records as **sole** evidence | `invalid_at` = now, `invalid_reason` = `'evidence_withdrawn'` | The entry's justification is gone; the claim is suspended, not deleted |
 | User-model entries with **independent** remaining evidence | Kept; `evidence_ids` pruned of the forgotten refs | The claim survives on its other legs |
 | `agent_logs` | Untouched (already content-free: IDs and action names only) | Audit integrity preserved |
-| `forget_requests` row | `status='applied'`, `applied_at` set. Records request scope and timestamps — **never the redacted content**. | Permanent audit trail of *that* forgetting occurred, not *what* was forgotten |
+| `forget_requests` row | `status='applied'`, `applied_at` set, `target_query` already NULL (nulled at approval, B4). Records scope IDs, scope topics, timestamps — **never the redacted content or the original query text**. | Permanent audit trail of *that* forgetting occurred, not *what* was forgotten |
 | Nodes distilled from forgotten episodes | **Not** auto-deleted. Flagged for user review (surfaced as an inquiry: "this fact came from something you asked to forget — keep or remove?") | Deleting facts the user may still rely on is destructive; the user decides |
+
+**Forget/worker race contract (B1, Rev 4).** Both transaction orderings are safe:
+
+- **Ordering A (forget completes, then worker commits):** the worker holds fence token F1 from its claim. `applyForgetRequest()` rotates the fence to F2 and sets `forgotten_at`. The worker's commit predicate (`enrichment_fence = F1 AND forgotten_at IS NULL`) matches 0 rows → transaction aborts → no enrichment written, no embedding stored, nothing searchable recreated. The worker logs `enrichment_commit_rejected` with `{episode_id, reason: 'forgotten'}`.
+- **Ordering B (worker commit in flight during forget):** SQLite serializes the two transactions (both use `BEGIN IMMEDIATE`). If the worker's commit lands first, the enrichment record exists when `applyForgetRequest()` runs — and the forget transaction DELETES it (enrichment records of target episodes are deleted in the same transaction). If forget lands first, the worker's commit fails per Ordering A. Either way, no enrichment of forgotten content survives. There is no interleaving in which a committed enrichment outlives the forget — the forget transaction is the linearizing point.
+
+The commit predicate's `forgotten_at IS NULL` check is load-bearing, not belt-and-suspenders: the fence rotation alone would suffice for Ordering A, but the explicit forgotten check makes the invariant visible in the predicate itself and protects against any future code path that might bypass fence validation. (Test T-F4 exercises both orderings against the actual SQL.)
 
 4. `status='applied'`, `applied_at` set. The request row itself is permanent (audit trail of what was forgotten and when).
 
@@ -532,6 +566,14 @@ CREATE TABLE user_model (
   evidence_ids TEXT NOT NULL DEFAULT '[]',
     -- JSON array of {type: 'episode'|'node'|'correction'|'enrichment', id: N}.
     -- Validated by validateEvidenceRefs() (§3.8). Non-empty required (INV-EV-1).
+
+  -- Topic labels (B2, Rev 4): JSON array of controlled topic labels from the
+  -- §6.2 vocabulary. Assigned at write time by recordStated()/updateUserModel()
+  -- via the topic mapper; used by the knowledge check's recall-first candidate
+  -- generation. Both BOOTSTRAP_SQL and the migration path create this column
+  -- (see §8.1). An entry with topic_labels = '[]' is treated as
+  -- topic_uncertain=true at read time (the check widens rather than narrows).
+  topic_labels TEXT NOT NULL DEFAULT '[]',
 
   valid_at TEXT NOT NULL,          -- when this entry became the model's belief (canonical ISO UTC)
   invalid_at TEXT,                 -- when superseded (NULL = current). Cf. W1 bi-temporal pattern.
@@ -739,23 +781,36 @@ The Rev 1 design gated candidates on embedding similarity > 0.82. That misses co
   3. **LLM fallback:** if no keyword rule fires, a bounded LLM call proposes topic labels (or abstains). The LLM's output is constrained to the controlled vocabulary — it selects, never invents.
 - **When mapping is uncertain (the uncertainty boundary):** if no keyword rule fires AND the LLM abstains or reports low confidence, the candidate is labeled `topic_uncertain=true`. The check then **widens, never narrows**: it pulls all current entries from the candidate's slot (or all slots if the slot is unknown), capped at 25 by confidence, and sets `recall_uncertain=true` in the result. The verdict `ok` is **never** returned on a narrowed candidate set when recall is uncertain — the worst case is `uncertain` → `flag_for_review`, not a false `ok`.
 
-**Explicit guarantee boundary (B3):** the check guarantees contradiction recall over:
+**Topic overlap is necessary but not sufficient for contradiction (B3, Rev 4).** Sharing an employment label only generates a *candidate* for review — it never itself establishes a contradiction. A contradiction requires **entity identity + incompatible states**:
+
+- **Entity identity:** the two claims must concern the *same* entity (same employer, same person, same object). "Quit the warehouse" vs "works at Samsonite" share the employment topic but do not establish the same employer — "warehouse" is a generic workplace term, not an entity identifier. Without entity resolution linking "warehouse" to "Samsonite" (via an explicit alias, a prior stated mapping, or an entity-resolution result with confidence), these are two compatible statements about possibly different workplaces.
+- **Incompatible states:** the claims must assert states that cannot both hold. "Only free on weekdays" and "works Saturdays" are *compatible* — weekday freedom and Saturday work do not conflict. "I work at Samsonite" and "I don't work at Samsonite" are incompatible (genuine negation, same entity). "Quit Samsonite" then "started at Amazon" is a contradiction *via explicit transition* — the quit terminates the Samsonite state, the Amazon start asserts a new one, and X≠Y.
+
+The deterministic contradiction rules (§6.2 Stage 2) are therefore:
+
+1. **Genuine negation:** same entity + A asserts P, B asserts ¬P → contradiction.
+2. **Explicit transition:** A asserts "ended state S at entity X" (quit, left, stopped, no longer) + B asserts "began state S' at entity Y" with X≠Y → contradiction (the old state is terminated, the new state replaces it).
+3. **Topic overlap alone → candidate only.** The pair proceeds to LLM judgment (Stage 2 step 3) with an explicit instruction: "determine whether these claims concern the same entity and assert incompatible states; if entity identity is uncertain, return `uncertain`, not `contradiction`."
+
+This prevents the trust-destroying false positives the round-3 review identified: the system must not tell the user "you contradicted yourself" when the two statements are compatible.
+
+**Explicit guarantee boundary (B3):** the check guarantees contradiction *recall* over:
   (a) entries sharing at least one topic label with the candidate (via the vocabulary above),
   (b) state-change verb patterns ("started", "quit", "no longer", "now", "stopped") applied to topic-matched entries,
   (c) negation patterns ("don't", "never", "not", "no longer") applied to topic-matched entries,
   (d) all current `constraint` entries (always pulled, no filtering).
 
-It does **not** guarantee recall over paraphrases that evade both the keyword vocabulary and the LLM topic mapper (e.g., a novel metaphor for unemployment that matches no synonym and that the LLM fails to classify). In that case the uncertainty boundary applies: widen + flag. The design claims "recall-first within the topic system," not "comprehensive natural-language contradiction detection" — the boundary is explicit and tested.
+Recall is not judgment: the boundary above defines which *candidates* are pulled. Whether a candidate *is* a contradiction is decided by the entity-identity + incompatible-states rules. It does **not** guarantee recall over paraphrases that evade both the keyword vocabulary and the LLM topic mapper (e.g., a novel metaphor for unemployment that matches no synonym and that the LLM fails to classify). In that case the uncertainty boundary applies: widen + flag. The design claims "recall-first within the topic system," not "comprehensive natural-language contradiction detection" — the boundary is explicit and tested.
 
 **Stage 1 — candidate generation (recall-oriented, no similarity threshold):**
 1. Extract topics/entities from the candidate; assign `topic_labels` (with `topic_uncertain` flag if mapping failed).
-2. Query user-model rows (`invalid_at IS NULL`, slots `belief`/`knowledge`/`constraint`) matching ANY of:
+2. **Constraints first, outside the cap (B8, Rev 4):** all current `constraint` entries are pulled in a *separate query* with no limit. Constraints are safety-critical and few in practice; the safety contract ("all constraints are always checked") holds unconditionally. They do not consume the 25-candidate budget.
+3. Query user-model rows (`invalid_at IS NULL`, slots `belief`/`knowledge`) matching ANY of:
    - Shared topic label with the candidate.
    - **State-change patterns:** the candidate contains a state-change verb → pull all same-topic entries regardless of similarity.
    - **Negation patterns:** the candidate negates a proposition → pull entries asserting the positive form (same topic).
-   - **Slot-wide constraint pull:** all current `constraint` entries, always.
    - **Uncertain recall:** if `topic_uncertain`, pull all current entries from the candidate's slot (or all slots), capped at 25 by confidence desc, and set `recall_uncertain=true`.
-3. Cap: max 25 candidates (deterministic ordering: constraints first, then by confidence desc).
+4. Cap: max 25 non-constraint candidates (deterministic ordering: by confidence desc). Constraints are in addition to this cap, not within it. The total candidate set is therefore at most 25 + (# constraints).
 
 **Stage 2 — contradiction judgment (deterministic first, LLM only for ambiguity):**
 1. **Deterministic rules** (no LLM): direct negation ("I work at X" vs "I don't work at X"), temporal succession ("in between jobs" valid_at < "started Samsonite" valid_at with overlapping topic → the older is superseded, not contradictory), explicit constraint violation (candidate matches a constraint's prohibited pattern).
@@ -841,8 +896,8 @@ The repo rule stands: **table creation lives only in `db/schemaSql.ts` `BOOTSTRA
 ```sql
 CREATE TABLE IF NOT EXISTS episodes (...);       -- same column set as BOOTSTRAP_SQL
 CREATE TABLE IF NOT EXISTS episode_enrichments (...);
-CREATE TABLE IF NOT EXISTS user_model (...);
-CREATE TABLE IF NOT EXISTS forget_requests (...);
+CREATE TABLE IF NOT EXISTS user_model (...);     -- includes topic_labels (B2 Rev 4)
+CREATE TABLE IF NOT EXISTS forget_requests (...); -- includes scope_topics, no scope_keywords (B4 Rev 4)
 CREATE TABLE IF NOT EXISTS enrichment_quota (...);  -- B4, Rev 3
 CREATE INDEX IF NOT EXISTS ...;
 ```
@@ -866,8 +921,9 @@ Drizzle definitions in `db/schema.ts` for all five tables (`episodes`, `episode_
 |---|---|
 | `captureEpisode(handle, spaceId, input)` | Hot-path capture (template summary, free). Non-blocking, never throws. Checks forget-list first. |
 | `isSignificant(interaction)` | Significance filter (pure function, unit-tested). |
-| `claimEnrichment(handle, spaceId)` | Atomic worker claim with quota reservation + fencing (B2, B4 Rev 3). Returns `{episodeId, fence}` or null. |
-| `enrichEpisode(handle, spaceId, episodeId, fence)` | Background enrichment (LLM). Writes versioned enrichment record in-transaction; commit guarded by fence token. Idempotent. |
+| `claimEnrichment(handle, spaceId)` | Atomic worker claim with quota reservation + fencing (B2, B4 Rev 3). Filters `forgotten_at IS NULL` (B1 Rev 4). Returns `{episodeId, fence}` or null. |
+| `enrichEpisode(handle, spaceId, episodeId, fence)` | Background enrichment (LLM). Writes versioned enrichment record in-transaction; commit guarded by fence token + `forgotten_at IS NULL` (B1 Rev 4). Idempotent. |
+| `spaceLocalDate(spaceId)` | Returns `YYYY-MM-DD` in the space's `space_meta.timezone` (B7 Rev 4). Used for quota dates — never SQLite `date('now')`. |
 | `getEpisodes(handle, spaceId, opts)` | Timeline backend API: recency/kind/provenance, cursor pagination. |
 | `episodeSearch(handle, spaceId, queryVec, k)` | Vector + canonical-scorer episode search. |
 | `linkEpisodeToNodes(handle, episodeId, nodeIds)` | Creates a NEW enrichment version with merged `source_node_ids` (B1, Rev 3 — never mutates). |
@@ -920,14 +976,23 @@ Every function takes `spaceId`. Every query includes `space_id = ?`. Cross-space
 - T-E5: `episodeSearch()` — similar finds, unrelated doesn't, recency rerank prefers recent (canonical scorer).
 - T-E6: `source_node_ids` on enrichment record; "episodes for node X" join works.
 - T-E7: Space isolation.
-- T-E8: **Enrichment lifecycle (B6)** — claim → processing → completed; 3 failures → `failed_permanent`.
+- T-E8: **Enrichment lifecycle (B6, B6 Rev 4)** — claim → processing → completed. Exact attempt sequence: claim (attempts=1, LLM called, fail) → claim (attempts=2, LLM called, fail) → claim (attempts=3, LLM called, fail) → claim (attempts would be 4, `> 3`) → `failed_permanent`, NO fourth LLM call. The predicate is `enrichment_attempts > 3` in prose, SQL, and test — no off-by-one.
 - T-E8b: **Lease reclaim (B2, Rev 3)** — set episode to `status='processing'` with expired `enrichment_lease` (simulated crash). Run the ACTUAL `claimEnrichment()` query. Verify: the episode is claimed by the new worker (new fence token), `enrichment_attempts` incremented. Then simulate the stale worker's commit with its old fence token → 0 rows affected, transaction aborts, no enrichment record written.
 - T-E9: **Daily cap (B6)** — cap=2, three significant episodes → third stays `pending` until next day.
-- T-E9b: **Concurrent cap (B4, Rev 3)** — two simulated concurrent workers (interleaved transactions), cap=2, three claimable episodes → exactly 2 claims succeed, third returns null. Assert `enrichment_quota.claimed = 2`, never 3.
+- T-E9b: **Concurrent cap (B4, Rev 3)** — two simulated concurrent workers (interleaved transactions), cap=2, three claimable episodes → exactly 2 claims succeed, third returns null. Assert `enrichment_quota.claimed = 2`, never 3. Uses the actual quota reservation SQL.
+- T-E9c: **Quota timezone boundary (B7, Rev 4)** — space timezone set to `America/New_York`. Simulate wall-clock 2026-10-19 23:30 EDT (2026-10-20 03:30 UTC). `spaceLocalDate()` must return `2026-10-19` (not `2026-10-20`). Exhaust the cap on the 19th, advance wall-clock to 2026-10-20 00:30 EDT → new `quota_date` row, cap resets. Assert the reservation SQL used the space-local date as a bound parameter (never SQLite `date('now')`).
 - T-E10: Correction episode appends with `corrects_episode_id`; original unmutated.
 - T-E11: **Forget propagation (B2)** — approved request redacts episode, deletes enrichments/embeddings/FTS, invalidates sole-evidence user-model entry, prunes multi-evidence entry. All in one transaction (rollback on failure tested by injecting a fault).
 - T-F2: **Capture blocking (B5, Rev 3)** — create forget request, approve it (status='approved', propagation not yet run). Capture an interaction matching the scope → tombstone written, no content stored. Then reject a different request → capture proceeds normally.
-- T-F3: **Scope keywords (B5, Rev 3)** — forget request with `scope_keywords=['trucking','orientation']`. Capture "talking about trucking orientation" → tombstone. Capture "talking about the CNA fee" → normal. Single-keyword weak match → tombstone + `forget_ambiguity` logged.
+- T-F3: **Scope topics (B4, Rev 4)** — forget request with `scope_topics=['employment']`. Capture "talking about the Samsonite job" (topic: employment) → tombstone. Capture "talking about the CNA fee" (topic: finance) → normal. Weak single-topic overlap → tombstone + `forget_ambiguity` logged.
+- T-F4: **Forget/enrichment race, both orderings (B1, Rev 4)** — uses the ACTUAL `claimEnrichment()` SQL, the ACTUAL worker commit predicate, and the ACTUAL `applyForgetRequest()` transaction. No mocks of the expected outcome.
+  - *Ordering A (forget-then-commit):* worker claims episode E (receives fence F1). `applyForgetRequest()` runs to completion (fence rotated to F2, `forgotten_at` set, enrichments deleted). Worker then attempts its commit with F1 using the real commit predicate. Assert: 0 rows affected, transaction aborts, NO enrichment record exists for E, NO embedding row exists, episode summary is the tombstone.
+  - *Ordering B (commit in flight during forget):* worker claims E (fence F1), completes enrichment work but has not committed. Start `applyForgetRequest()` in a second connection with `BEGIN IMMEDIATE` (blocks until the worker's transaction resolves). Worker commits first (succeeds — not yet forgotten). Then forget proceeds: assert the just-written enrichment record is DELETED in the forget transaction, embeddings removed, episode tombstoned. Then reverse: forget's transaction starts first, worker's commit blocks on the lock, forget commits, worker's commit then affects 0 rows (fence rotated + `forgotten_at` set). Assert no enrichment survives in either interleaving.
+- T-F5: **Content-free audit (B4, Rev 4)** — episode E contains sensitive content ("my private medical diagnosis is X"). Forget request created with `target_query` containing sensitive text ("forget everything about my medical diagnosis X"). Approve (scope confirmed) → assert `target_query IS NULL` in the same transaction. Apply → assert: NO substring of the sensitive content (from either the episode or the original query) appears in ANY column of `forget_requests`, in `agent_logs`, or in any other retained audit field. The audit contains only: request ID, timestamps, scope IDs (integers), scope topics (controlled labels), status transitions.
+- T-F6: **Tombstone enforcement (B9, Rev 4)** — two paths, one format:
+  - *Capture path:* approved forget request (scope: employment). Capture an interaction matching the scope → assert summary is exactly `"[redacted per forget request #N]"` with the correct N, `forgotten_at` set.
+  - *Forget path:* approved request applied to an existing episode → assert summary is exactly `"[redacted per forget request #N]"` (same format, same N semantics).
+  - *Exclusion:* assert the tombstoned episode is NOT returned by `claimEnrichment()` (the actual claim query filters `forgotten_at IS NULL`), does NOT appear in `episodeSearch()` results, and has no FTS or vec rows. Run the real claim query and the real search — not a stub.
 - T-E12: **Provenance quarantine (B5)** — `generated`-labeled enrichment content cannot become user-model evidence (write rejected).
 - T-E13: **`not_reported` valid (B5)** — enrichment of terse interaction leaves `detail`/`emotion` NULL with `not_reported` provenance; no invented content.
 - T-E14: **Grounding (B5)** — `direct_quote` fields are substrings of the source interaction; adversarial terse input produces no vivid detail.
@@ -963,10 +1028,14 @@ Every function takes `spaceId`. Every query includes `space_id = ?`. Cross-space
 - T-K8: **Temporal succession (B3)** — old belief + newer superseding fact → identified as succession, not contradiction.
 - T-K11: **Paraphrase recall (B3, Rev 3)** — "between gigs right now" vs `belief: "started at Samsonite"` → contradiction detected via employment topic mapping (gigs → employment synonym set).
 - T-K12: **Synonym recall (B3, Rev 3)** — "jobless" vs `belief: "employed at Samsonite"` → contradiction via synonym set.
-- T-K13: **Implicit negation (B3, Rev 3)** — "only free on weekdays" vs `belief: "works Saturdays"` → contradiction via negation pattern + temporal entity overlap.
-- T-K14: **Different entities, same topic (B3, Rev 3)** — "quit the warehouse" vs `belief: "works at Samsonite"` → contradiction (warehouse = Samsonite via entity resolution in synonym set).
+- T-K13: **Compatible schedules, same topic (B3, Rev 4)** — `belief: "works Saturdays"` (employment) vs candidate "only free on weekdays" (employment). Topic overlap generates a candidate, but the claims are *compatible* (weekday freedom + Saturday work). The check must NOT return `contradicts_belief`. Expected: `ok` (or `uncertain` if the LLM cannot resolve, never a false contradiction). This test would have failed under the Rev 3 design, which declared these contradictory.
+- T-K14: **Different entities, same topic (B3, Rev 4)** — `belief: "works at Samsonite"` vs candidate "quit the warehouse". Both map to employment, but "warehouse" is a generic term that does not establish entity identity with Samsonite. Without an entity-resolution link, these are *compatible* (possibly different workplaces). Expected: candidate generated, verdict NOT `contradicts_belief`. The check must require entity identity before declaring contradiction.
 - T-K15: **Unrelated state change (B3, Rev 3)** — "quit smoking" vs `belief: "works at Samsonite"` → NO contradiction (different topics: health vs employment). Tests that state-change verbs don't over-fire.
 - T-K16: **Uncertain recall (B3, Rev 3)** — candidate with unmapped topic ("florpingle the zorg") → `topic_uncertain=true`, candidate set widens to slot-wide, `recall_uncertain=true` in result, verdict is `uncertain` (never false `ok`).
+- T-K17: **Genuine negation, same entity (B3, Rev 4)** — `belief: "works at Samsonite"` (0.95, stated) vs candidate "I don't work at Samsonite anymore". Same entity (Samsonite), incompatible states (works vs doesn't work). Expected: `contradicts_belief` + `suppress`. This is the positive control for the entity-identity rule.
+- T-K18: **Explicit job transition (B3, Rev 4)** — `belief: "works at Samsonite"` vs candidate "quit Samsonite, started at Amazon last week". The quit explicitly terminates the Samsonite state; the Amazon start asserts a new one; X≠Y. Expected: `contradicts_belief` (via explicit-transition rule, deterministic — no LLM needed) + the old belief invalidated with `replaced_by` → new "works at Amazon" entry.
+- T-K19: **Different employers, no transition (B3, Rev 4)** — `belief: "works at Samsonite"` vs candidate "picked up a shift at Amazon". No quit/termination language; both employments could coexist. Expected: candidate generated (topic overlap), verdict NOT `contradicts_belief` — at most `uncertain` + `flag_for_review`. The system must not declare contradiction from two employer names alone.
+- T-K20: **Constraint cap exemption (B8, Rev 4)** — seed 30 current `constraint` entries + 30 belief entries. Run `knowledgeCheck()` with a candidate matching one constraint. Verify: ALL 30 constraints were evaluated (the violated one is cited), AND the belief candidate set was capped at 25. The safety contract holds regardless of candidate volume.
 - T-K9: **Proactive fail-closed (B9)** — mocked check timeout → `defer` + logged.
 - T-K10: **Conversational fail-open (B9)** — mocked check timeout → proceeds.
 
@@ -1049,4 +1118,4 @@ W1 (temporal truth)          W2 (episodes + user model)         W3+ (consolidati
 
 ---
 
-*Revision 3 prepared 2026-10-19. Addresses ChatGPT's round 2 P0 (B1: redaction exception + versioned linking; B2: lease reclaim with fencing; B3: topic normalization contract + uncertainty boundary), P1 (B4: atomic quota ledger; B5: forget-state alignment; B6: application-enforced references; B7: provenance coverage validation; B8: migration constraint equivalence), and the correction-targeting confidence note. Test plan expanded to ~60 tests. Awaiting round 3 review.*
+*Revision 4 prepared 2026-10-19. Addresses ChatGPT's round 3 P0 (B1: forget/worker race — fence revocation + `forgotten_at` in commit predicate + both orderings tested; B2: `topic_labels` column in `user_model` DDL; B3: topic overlap is candidate-only — entity identity + incompatible states required, T-K13/T-K14 replaced with correct semantics; B4: content-free forget audit — `target_query` nulled at approval, `scope_topics` replaces `scope_keywords`), P1 (B5: `not_reported` reconciled in allowed-label table; B6: retry predicate standardized to `> 3`; B7: space-timezone quota dates via bound parameter; B8: constraints exempt from candidate cap; B9: canonical tombstone `"[redacted per forget request #N]"` everywhere). Test plan expanded to ~70 tests, all exercising actual transactional predicates and worker commit paths per the user's guardrail. Awaiting round 4 review.*
