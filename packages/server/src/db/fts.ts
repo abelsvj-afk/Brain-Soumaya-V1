@@ -50,7 +50,9 @@ function ftsQuery(raw: string): string {
   return terms.map((t) => `"${t}"`).join(" OR ");
 }
 
-/** BM25 keyword hits (space-scoped, live nodes only), best first. */
+/** BM25 keyword hits (space-scoped, live nodes only), best first.
+ * W1: superseded rows are excluded in the WHERE clause (before LIMIT), so they
+ * never occupy result slots. */
 export function keywordSearch(
   sqlite: RawDb,
   spaceId: string,
@@ -65,6 +67,7 @@ export function keywordSearch(
         `SELECT f.rowid AS nodeId FROM nodes_fts f
          JOIN nodes n ON n.id = f.rowid
          WHERE nodes_fts MATCH ? AND n.space_id = ? AND n.deleted_at IS NULL AND n.status != 'archived'
+           AND n.superseded_at IS NULL
          ORDER BY bm25(nodes_fts) LIMIT ?`,
       )
       .all(match, spaceId, k) as { nodeId: number }[];

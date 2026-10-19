@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lte, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { GraphNode, NodeType } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { nodes, DEFAULT_SPACE, type NodeRow } from "../db/schema.js";
@@ -25,7 +25,14 @@ export interface NewNode {
   tags?: string[];
   /** Phase 1 agent loop: idempotency key (the approval id). */
   idempotencyKey?: string;
+  /** W1 temporal truth: when the fact became true in the real world (canonical ISO UTC). */
+  validFrom?: string;
+  /** W1 temporal truth: when the fact stopped being true (canonical ISO UTC). */
+  validTo?: string;
 }
+
+/** W1: the "what's true now" drizzle condition — superseded rows are excluded. */
+const currentOnly = isNull(nodes.supersededAt);
 
 function toGraphNode(row: NodeRow): GraphNode {
   return {
@@ -88,6 +95,11 @@ export class NodesRepo {
 
   /** Insert a node and (atomically) store its embedding. */
   create(input: NewNode, embedding: Float32Array): GraphNode {
+    // W1: canonical timestamps set explicitly in application code (never rely on
+    // SQLite CURRENT_TIMESTAMP — the old 'YYYY-MM-DD HH:MM:SS' format breaks
+    // lexicographic comparison). recorded_at is the immutable "when the system
+    // learned this" marker; the DB default is only a backstop.
+    const nowIso = new Date().toISOString();
     const tx = this.h.sqlite.transaction(() => {
       const row = this.h.db
         .insert(nodes)
@@ -109,7 +121,11 @@ export class NodesRepo {
           remindAt: input.remindAt ?? null,
           tags: input.tags && input.tags.length > 0 ? JSON.stringify(input.tags) : null,
           idempotencyKey: input.idempotencyKey ?? null,
-          lastTendedAt: new Date().toISOString(), // freshly tended on creation
+          validFrom: input.validFrom ?? null,
+          validTo: input.validTo ?? null,
+          recordedAt: nowIso,
+          createdAt: nowIso,
+          lastTendedAt: nowIso, // freshly tended on creation
         })
         .returning()
         .get();
@@ -129,13 +145,35 @@ export class NodesRepo {
     return row ? toGraphNode(row) : undefined;
   }
 
+  /**
+   * W1: "is this currently true?" — returns the row only if it has not been
+   * superseded. For truth queries (digest, chat context, proactive candidates).
+   * getById() remains the history/detail path (returns superseded rows as-is).
+   */
+  getCurrentById(id: number): GraphNode | undefined {
+    const row = this.h.db
+      .select()
+      .from(nodes)
+      .where(
+        and(
+          eq(nodes.id, id),
+          eq(nodes.spaceId, this.spaceId),
+          isNull(nodes.deletedAt),
+          currentOnly,
+        ),
+      )
+      .get();
+    return row ? toGraphNode(row) : undefined;
+  }
+
   /** Soft-delete: flag a redundant memory as merged into another (recoverable). */
   softDelete(id: number, mergedIntoId: number): boolean {
+    // W1: use canonical ISO timestamp (not CURRENT_TIMESTAMP legacy format).
     const info = this.h.sqlite
       .prepare(
-        `UPDATE nodes SET deleted_at = CURRENT_TIMESTAMP, merged_into = ? WHERE id = ? AND space_id = ?`,
+        `UPDATE nodes SET deleted_at = ?, merged_into = ? WHERE id = ? AND space_id = ?`,
       )
-      .run(mergedIntoId, id, this.spaceId);
+      .run(new Date().toISOString(), mergedIntoId, id, this.spaceId);
     deleteEmbedding(this.h.sqlite, id); // drop from KNN/redundancy index
     ftsDelete(this.h.sqlite, id);
     return info.changes > 0;
@@ -189,29 +227,48 @@ export class NodesRepo {
 
 
 
-  /** Most recent nodes, for grounding LLM extraction context. */
-  recent(limit = 20): GraphNode[] {
+  /** Most recent nodes, for grounding LLM extraction context.
+   * W1: superseded rows are excluded by default (they're not "recent truth").
+   * Pass { includeSuperseded: true } for history views. */
+  recent(limit = 20, opts: { includeSuperseded?: boolean } = {}): GraphNode[] {
+    const conditions = [eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)];
+    if (!opts.includeSuperseded) conditions.push(currentOnly);
     return this.h.db
       .select()
       .from(nodes)
-      .where(and(eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)))
+      .where(and(...conditions))
       .orderBy(desc(nodes.id))
       .limit(limit)
       .all()
       .map(toGraphNode);
   }
 
-  /** Live memories for the galaxy — excludes archived (they rest out of view). */
-  all(): GraphNode[] {
+  /** Live memories for the galaxy — excludes archived (they rest out of view).
+   * W1: also excludes superseded by default; opt-in via includeSuperseded. */
+  all(opts: { includeSuperseded?: boolean } = {}): GraphNode[] {
+    const conditions = [
+      eq(nodes.spaceId, this.spaceId),
+      isNull(nodes.deletedAt),
+      ne(nodes.status, "archived"),
+    ];
+    if (!opts.includeSuperseded) conditions.push(currentOnly);
     return this.h.db
       .select()
       .from(nodes)
-      .where(and(eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt), ne(nodes.status, "archived")))
+      .where(and(...conditions))
       .all()
       .map(toGraphNode);
   }
 
-  /** Archived memories (for the Browse "Archived" lens). */
+  /**
+   * Archived memories (for the Browse "Archived" lens).
+   *
+   * W1: this is a HISTORY/BROWSE view — archival status is orthogonal to
+   * temporal truth. Archived rows MAY include superseded nodes; hiding them
+   * would conflate "user put this away" with "this is no longer true".
+   * Callers that need only currently-true archived facts should filter
+   * `superseded_at IS NULL` themselves.
+   */
   archived(): GraphNode[] {
     return this.h.db
       .select()
@@ -229,16 +286,26 @@ export class NodesRepo {
     return info.changes > 0;
   }
 
-  byIds(ids: number[]): GraphNode[] {
+  byIds(ids: number[], opts: { includeSuperseded?: boolean } = {}): GraphNode[] {
     if (ids.length === 0) return [];
+    const conditions = [inArray(nodes.id, ids), eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)];
+    if (!opts.includeSuperseded) conditions.push(currentOnly);
     return this.h.db
       .select()
       .from(nodes)
-      .where(and(inArray(nodes.id, ids), eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)))
+      .where(and(...conditions))
       .all()
       .map(toGraphNode);
   }
 
+  /**
+   * Total non-deleted records in this space.
+   *
+   * W1: this counts ALL non-deleted rows INCLUDING superseded ones — it is a
+   * storage total, not a count of currently-believed facts. If a feature
+   * needs the current-truth count, add a separately named method (e.g.
+   * `countCurrent()`) with explicit semantics rather than changing this one.
+   */
   count(): number {
     const r = this.h.sqlite
       .prepare(`SELECT COUNT(*) AS c FROM nodes WHERE deleted_at IS NULL AND space_id = ?`)

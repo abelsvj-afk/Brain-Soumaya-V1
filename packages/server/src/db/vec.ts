@@ -132,6 +132,122 @@ export interface KnnHit {
 export const cosineSimilarity = (distance: number): number => 1 - distance;
 
 /**
+ * W1 temporal truth: KNN search that excludes superseded nodes via iterative
+ * over-fetch with adaptive widening (design §6.2, Rev 4).
+ *
+ * The problem: superseded candidates can crowd out valid results if filtering
+ * happens only after a bounded candidate selection. This loop keeps fetching
+ * batches until k valid results are found, the pool is exhausted, or the
+ * safety bound is hit.
+ *
+ * Exhaustion contract: ONLY an empty page means "no more candidates." A short
+ * non-empty page is NOT proof of exhaustion — the loop continues.
+ *
+ * Safety bound honesty: MAX_CANDIDATES = 2000 is a circuit breaker, NOT a
+ * completeness guarantee. On bound-hit: return partial results + emit a
+ * queryable vecSearchTruncated diagnostic. Do NOT claim completeness.
+ */
+export const MAX_CANDIDATES = 2000;
+
+export interface ScoredHit extends KnnHit {}
+
+export function vecSearchCurrent(
+  db: RawDb,
+  spaceId: string,
+  queryVec: Float32Array,
+  k: number,
+  logDiagnostic?: (event: string, data: Record<string, unknown>) => void,
+  /**
+   * Injectable page fetcher for tests. Returns the next page of
+   * { nodeId, distance } candidates (already offset — NOT a cumulative window).
+   * Defaults to the real vec0 windowed query.
+   */
+  fetchPage?: (fetchSize: number, offset: number) => { nodeId: number; distance: number }[],
+): ScoredHit[] {
+  if (!isVectorEnabled(db)) {
+    return [];
+  }
+  if (queryVec.length !== EMBED_DIM) {
+    throw new Error(`Query dim mismatch: got ${queryVec.length}, expected ${EMBED_DIM}.`);
+  }
+  const valid: ScoredHit[] = [];
+  let offset = 0;
+  let fetchSize = Math.min(500, Math.max(k * 6, k + 40));
+  let truncated = false;
+
+  const lookup = db.prepare(
+    `SELECT space_id AS s, deleted_at AS d, status AS st, superseded_at AS sup
+     FROM nodes WHERE id = ?`,
+  );
+  const knnStmt = db.prepare(
+    `SELECT node_id AS nodeId, distance
+     FROM vec_nodes
+     WHERE embedding MATCH ? AND k = ?
+     ORDER BY distance`,
+  );
+
+  // Default page fetcher: vec0 KNN has no OFFSET, so emulate paging by growing
+  // the fetch window and slicing off the already-seen prefix.
+  const doFetchPage =
+    fetchPage ??
+    ((fetchSize: number, offset: number) => {
+      const windowed = knnStmt.all(vecToBlob(queryVec), fetchSize + offset) as {
+        nodeId: number;
+        distance: number;
+      }[];
+      return windowed.slice(offset);
+    });
+
+  while (valid.length < k) {
+    if (offset >= MAX_CANDIDATES) {
+      truncated = true;
+      break;
+    }
+    const page = doFetchPage(fetchSize, offset);
+
+    // EXHAUSTION CONTRACT: only an empty page means "no more candidates."
+    // A short non-empty page is NOT exhaustion — continue to the next offset.
+    if (page.length === 0) break;
+
+    let batchValid = 0;
+    for (const h of page) {
+      const row = lookup.get(h.nodeId) as
+        | { s: string; d: string | null; st: string | null; sup: string | null }
+        | undefined;
+      if (
+        row !== undefined &&
+        row.s === spaceId &&
+        row.d === null &&
+        row.st !== "archived" &&
+        row.sup === null // W1: exclude superseded
+      ) {
+        valid.push({ nodeId: h.nodeId, distance: h.distance, similarity: cosineSimilarity(h.distance) });
+        batchValid++;
+        if (valid.length >= k) break;
+      }
+    }
+
+    offset += page.length;
+
+    // Adaptive widening: if this batch was mostly superseded, double the fetch.
+    if (page.length > 0 && batchValid < page.length / 2) {
+      fetchSize = Math.min(fetchSize * 2, Math.max(1, MAX_CANDIDATES - offset));
+    }
+  }
+
+  if (truncated && logDiagnostic) {
+    logDiagnostic("vecSearchTruncated", {
+      space_id: spaceId,
+      found: valid.length,
+      wanted: k,
+      scanned: offset,
+    });
+  }
+
+  return valid.slice(0, k);
+}
+
+/**
  * K-nearest-neighbour search over stored embeddings. Returns hits ordered by
  * ascending distance (most similar first).
  *

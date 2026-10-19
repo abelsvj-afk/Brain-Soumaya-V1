@@ -3,6 +3,23 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-19 — W1 temporal truth (branch `w1-implementation`)
+
+**Status:** BUILT, awaiting `npm run typecheck` + `npm test`. Design signed off after 6 review revisions.
+**Not approved:** merge, deploy.
+
+Wisdom layer phase 1: bitemporal columns on `nodes` (`valid_from`/`valid_to`/`recorded_at`/
+`superseded_at`/`superseded_by`/`supersede_reason`) + append-only `corrections` table.
+`agent/temporal.ts`: `supersede()` writer (3 correction types, single shared opTime,
+atomic transaction, optimistic concurrency, content-free audit), `isNeverTrue()` /
+`getCorrections()` derived helpers, Contract 1 (as-of) + Contract 2 (history) queries.
+Retrieval: `NodesRepo` filters superseded by default (`getCurrentById`, `recent`/`all`/
+`byIds` with opt-in), `vecSearchCurrent()` iterative over-fetch, FTS WHERE filter,
+digest cooling/reminders filtered. Cascade disabled by default. 26 acceptance tests
+in `agent/__tests__/w1-temporal.test.ts`.
+
+**Blocked:** automated verification — work WiFi bars GitHub on the test device; tests run on good network.
+
 ## 2026-10-19 — Phase 2 notification policy (branch `phase-2-notification-policy`)
 
 **Status:** BUILT, awaiting `npm run typecheck` + `npm test`. Design signed off after 5 review rounds.

@@ -140,13 +140,14 @@ export function buildDailyDigest(h: DbHandle, spaceId: string = DEFAULT_SPACE): 
   // Cooling memories (high entropy from neglect) — the "tend me" nudge.
   // Computed via targeted SQL: loading the WHOLE enriched graph (GraphService
   // .full()) per digest read was O(nodes+edges) work for a 5-item list.
+  // W1: superseded rows are excluded (they're not "going cold" — they're retired).
   const coolingRows = h.sqlite
     .prepare(
       `SELECT n.id,
          julianday('now') - julianday(COALESCE(n.last_tended_at, n.created_at)) AS days,
          (SELECT COUNT(*) FROM edges e WHERE e.space_id = n.space_id AND (e.source = n.id OR e.target = n.id)) AS degree
        FROM nodes n
-       WHERE n.space_id = ? AND n.deleted_at IS NULL AND (n.kind IS NULL OR n.kind NOT IN ('action','moc'))
+       WHERE n.space_id = ? AND n.deleted_at IS NULL AND n.superseded_at IS NULL AND (n.kind IS NULL OR n.kind NOT IN ('action','moc'))
          AND julianday('now') - julianday(COALESCE(n.last_tended_at, n.created_at)) > 7
        ORDER BY days DESC LIMIT 40`,
     )
@@ -164,13 +165,14 @@ export function buildDailyDigest(h: DbHandle, spaceId: string = DEFAULT_SPACE): 
 
   // Due reminders: memories whose user-set remind_at has arrived (ISO compares
   // lexicographically). Surfaced so a scheduled nudge actually resurfaces.
+  // W1: superseded rows are excluded.
   const nowIso = new Date().toISOString();
   let reminders: { node: NodeRef; remindAt: string }[] = [];
   try {
     const due = h.sqlite
       .prepare(
         `SELECT id, remind_at FROM nodes
-         WHERE space_id = ? AND deleted_at IS NULL AND remind_at IS NOT NULL AND remind_at <= ?
+         WHERE space_id = ? AND deleted_at IS NULL AND superseded_at IS NULL AND remind_at IS NOT NULL AND remind_at <= ?
            AND (kind IS NULL OR kind != 'life_vision')
          ORDER BY remind_at ASC LIMIT 5`,
       )

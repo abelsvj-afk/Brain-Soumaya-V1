@@ -239,6 +239,12 @@ function migrateSchema(sqlite: RawDb): void {
     if (!metaCols.some((c) => c.name === "daily_proactive_cap")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN daily_proactive_cap INTEGER NOT NULL DEFAULT 5`);
     }
+    // W1 temporal truth: dependent-fact cascade gate. DISABLED BY DEFAULT (0).
+    // May only be enabled after depends_on/assumes edge semantics are verified
+    // (see docs/wisdom/w1-design-revision.md §4 Rule 2, §5.1).
+    if (!metaCols.some((c) => c.name === "w1_cascade_enabled")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w1_cascade_enabled INTEGER NOT NULL DEFAULT 0`);
+    }
   }
   // Phase 2: outbox for deferred proactive notifications. The policy layer queues
   // here instead of dropping when quiet hours or the daily cap block a send.
@@ -358,6 +364,82 @@ function migrateSchema(sqlite: RawDb): void {
     sqlite.exec(`ALTER TABLE nodes ADD COLUMN fired_by_approval INTEGER`);
   }
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS nodes_idem_idx ON nodes(space_id, idempotency_key)`);
+
+  // W1 temporal truth (wisdom layer): bitemporal columns on nodes + append-only
+  // corrections table. See docs/wisdom/w1-design-revision.md for the full design.
+  //
+  // SQLite forbids parenthesized expression defaults on ALTER TABLE ADD COLUMN,
+  // so migrated schemas get nullable recorded_at WITHOUT a DB default. The
+  // fresh-schema BOOTSTRAP_SQL uses an expression default (legal in CREATE TABLE)
+  // as a backstop; application code (NodesRepo.create + supersede()) always sets
+  // recorded_at explicitly. This is a known, accepted schema asymmetry — parity
+  // is behavioral, not definitional (see test T-PAR-1).
+  for (const [col, ddl] of [
+    ["valid_from", `ALTER TABLE nodes ADD COLUMN valid_from TEXT`],
+    ["valid_to", `ALTER TABLE nodes ADD COLUMN valid_to TEXT`],
+    ["recorded_at", `ALTER TABLE nodes ADD COLUMN recorded_at TEXT`],
+    ["superseded_at", `ALTER TABLE nodes ADD COLUMN superseded_at TEXT`],
+    ["superseded_by", `ALTER TABLE nodes ADD COLUMN superseded_by INTEGER`],
+    ["supersede_reason", `ALTER TABLE nodes ADD COLUMN supersede_reason TEXT`],
+  ] as const) {
+    if (!cols.some((c) => c.name === col)) sqlite.exec(ddl);
+  }
+  // Corrections are append-only events (never updated/deleted). CREATE TABLE IF
+  // NOT EXISTS is idempotent — no ALTER needed for a new table.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      node_id INTEGER NOT NULL,
+      correction_type TEXT NOT NULL,
+      corrected_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      corrected_by TEXT NOT NULL,
+      reason TEXT,
+      superseding_node_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_corrections_node ON corrections(node_id);
+    CREATE INDEX IF NOT EXISTS idx_corrections_space_time ON corrections(space_id, corrected_at);
+  `);
+  // W1 backfill — ORDER MATTERS (see design §9.2):
+  // STEP 1: normalize created_at to canonical ISO 8601 UTC FIRST.
+  //   This runs UNCONDITIONALLY — even on fresh databases where recorded_at
+  //   never needs backfilling, created_at may still carry SQLite's legacy
+  //   CURRENT_TIMESTAMP format from its column default. Skipping normalization
+  //   here would trip the canonical-format assertion below on next startup.
+  // STEP 2: backfill recorded_at from the NOW-NORMALIZED created_at (only where NULL).
+  // Reversing this order leaves recorded_at in the old SQLite format.
+  sqlite.exec(`
+    UPDATE nodes
+    SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
+    WHERE created_at NOT LIKE '%T%';
+    UPDATE edges
+    SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
+    WHERE created_at NOT LIKE '%T%';
+  `);
+  const needsBackfill = sqlite
+    .prepare(`SELECT COUNT(*) AS n FROM nodes WHERE recorded_at IS NULL`)
+    .get() as { n: number };
+  if (needsBackfill.n > 0) {
+    sqlite.exec(`UPDATE nodes SET recorded_at = created_at WHERE recorded_at IS NULL`);
+  }
+  // Post-migration assertion: every non-null temporal timestamp must match the
+  // canonical format. Loud failure (throw) — not silent corruption.
+  // recorded_at backfilled from created_at is the best available proxy for
+  // "when the system learned the fact" — documented, not proof of exact time.
+  const bad = sqlite
+    .prepare(
+      `SELECT COUNT(*) AS n FROM nodes
+       WHERE (created_at IS NOT NULL AND created_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+          OR (recorded_at IS NOT NULL AND recorded_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+          OR (valid_from IS NOT NULL AND valid_from NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+          OR (valid_to IS NOT NULL AND valid_to NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+          OR (superseded_at IS NOT NULL AND superseded_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')`,
+    )
+    .get() as { n: number };
+  if (bad.n > 0) {
+    throw new Error(`W1 migration: ${bad.n} rows have non-canonical timestamps after normalization`);
+  }
 }
 
 /**
