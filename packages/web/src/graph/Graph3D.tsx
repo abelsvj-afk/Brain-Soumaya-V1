@@ -3667,8 +3667,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // formula — both this function and the <ForceGraph3D linkCurvature> prop call it.
   const computeLinkCurvature = (l: any) => {
     const activity = getLinkActivity(l);
+    // "Macro zoom" = camera to its look-target (see shouldRenderLink) — not
+    // origin-distance, which misreads a close follow far from the sun.
     const camera = fgRef.current?.camera();
-    const dist = camera ? camera.position.length() : 1200;
+    const lookTarget = fgRef.current?.controls?.()?.target as THREE.Vector3 | undefined;
+    const dist = camera ? (lookTarget ? camera.position.distanceTo(lookTarget) : camera.position.length()) : 1200;
 
     // At macro zoom (> 800 distance), links curve significantly with organic wavy variance per link
     if (dist > 800) {
