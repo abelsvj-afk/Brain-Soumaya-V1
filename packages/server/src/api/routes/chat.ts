@@ -4,6 +4,8 @@ import type { AppContext } from "../../context.js";
 import { chat, DEFAULT_CHAT } from "../../chat/graphrag.js";
 import { recordProactiveDiscussion } from "../../analysis/proactiveContext.js";
 import { spaceOf } from "../middleware.js";
+import { agentLoop, maybeConfirmPending } from "../../agent/loop.js";
+import type { ToolContext } from "../../agent/tools/types.js";
 
 const ChatBody = z.object({
   question: z.string().min(1).max(2000),
@@ -105,6 +107,43 @@ export function chatRoutes(ctx: AppContext): Router {
       recordProactiveDiscussion(ctx.handle, spaceOf(res), parsed.data.proactiveContext);
     }
     res.json(result);
+  });
+
+  // POST /api/chat/agent { question, history? } -> agentic answer with tools.
+  // Phase 1: the agent loop (function-calling) instead of single-shot GraphRAG.
+  // The existing POST / route above is untouched (legacy fallback).
+  r.post("/agent", async (req, res) => {
+    const parsed = ChatBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Body must be { question: string }" });
+      return;
+    }
+    const spaceId = spaceOf(res);
+    // On web, the space IS the identity (name+passcode login) — the principal
+    // binds approvals to this brain's owner.
+    const principal = `web:${spaceId}`;
+    const tc: ToolContext = {
+      ctx,
+      spaceId,
+      now: Date.now(),
+      notify: async () => {}, // web has no push channel; in-app surfaces it
+    };
+    // A "yes"/"no" here may confirm or deny a pending write approval.
+    const confirmation = await maybeConfirmPending(ctx, spaceId, principal, parsed.data.question, tc);
+    if (confirmation !== null) {
+      res.json({ answer: confirmation, citations: [], agent: true });
+      return;
+    }
+    const result = await agentLoop({
+      ctx,
+      spaceId,
+      principal,
+      userMessage: parsed.data.question,
+      history: parsed.data.history ?? [],
+      now: Date.now(),
+      notify: async () => {},
+    });
+    res.json({ answer: result.text, citations: [], agent: true, pendingApprovalId: result.pendingApprovalId ?? null });
   });
   return r;
 }
