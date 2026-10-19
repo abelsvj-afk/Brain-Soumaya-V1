@@ -2294,6 +2294,17 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
             (fidelityCapped ||
               (wasMacroView ? dist > MACRO_DIST - MACRO_HYST : dist > MACRO_DIST + MACRO_HYST));
           o.userData.isMacroView = isMacroView;
+
+          // TITLE FAR VIEW: distance ONLY — no fidelity-cap term. Sector-title
+          // visibility was keyed off isMacroView, which is also true when a hub
+          // falls outside the nearest-N fidelity set, so a CLOSE hub's giant title
+          // popped on/off as the set churned during flight. Titles are map labels;
+          // they only care how far the camera is, not which LOD the body uses.
+          const wasTitleFarView = o.userData.isTitleFarView ?? false;
+          const isTitleFarView = wasTitleFarView
+            ? dist > MACRO_DIST - MACRO_HYST
+            : dist > MACRO_DIST + MACRO_HYST;
+          o.userData.isTitleFarView = isTitleFarView;
           // Same hysteresis pattern as isMacroView immediately above, just a tighter
           // threshold applied only to the glow/corona sprite child (see GLOW_DIST and
           // computeGlowFar's own doc comment) — state cached on the same `o` object.
@@ -2356,7 +2367,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           if (child.userData?.isSectorTitle) {
             // Galaxy Performance Isolation Mode: same reasoning as the other LOD/label
             // visibility guards in this loop — see the isFidelity/isMacro comment above.
-            child.visible = isDiagForceHidden(child) ? false : isMacroView && !occludedBySun;
+            // No sun-occlusion gate: titles only show in far (map) view, where the sun
+            // is scenery, not an occluder. Occluding them made titles blink on/off as
+            // hubs grazed the sun's limb during orbit ("pops up for a second then
+            // disappears"). The hub's own close-up label keeps its occlusion check.
+            child.visible = isDiagForceHidden(child) ? false : isTitleFarView;
             if (child.visible) {
               const mat = child.material as THREE.SpriteMaterial;
               mat.opacity = 0.92;
@@ -2442,7 +2457,9 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               // hysteresis buffer), so the handoff is continuous — briefly overlapping as the
               // sector title fades in is fine; a gap where nothing is shown is not.
               const labelFadeFar = o.userData?.hasSectorTitle ? MACRO_DIST + MACRO_HYST : FADE_FAR;
-              const labelVis = (isMacroView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
+              // A hub's own label fades out when its sector title takes over (far view),
+              // gated on the distance-only flag so it can't flicker with the LOD set.
+              const labelVis = (isTitleFarView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
               // Galaxy Performance Isolation Mode: same reasoning as the LOD-swap guard
               // above — this line otherwise reassigns label visibility every frame,
               // fighting the one-time diagnostic hide. `diag.enabled &&` short-circuits
@@ -3689,9 +3706,24 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // data-dependent 0-1 FPS collapse on a large/full Galaxy View, per the Round 4
   // regression audit). Returning true from linkPositionUpdate tells three-forcegraph
   // to skip its own calcLinkCurve()+geometry-rebuild for a link entirely.
+  // Tube-sync throttle: a full tube recompute per link per frame (Frenet frames +
+  // ~217 sin/cos vertex writes + dual GPU buffer uploads + bounding-sphere pass,
+  // ×941 links) collapsed FPS to ~5 once the d3 engine stopped cooling down.
+  // Endpoints move sub-pixel distances per frame under the orbit system, so
+  // syncing every link every frame is pure waste. Shard links across 100ms time
+  // buckets (~1/6th of links per frame ≈ 10Hz per link): visually identical,
+  // ~6× cheaper. Returning true keeps the old geometry and tells three-forcegraph
+  // to skip its own rebuild for the skipped links.
+  const TUBE_SYNC_SHARDS = 6;
+  const TUBE_SYNC_MS = 100;
   const linkPositionUpdateCb = useCallback(
-    (obj: any, pos: LinkPositions, link: any) =>
-      curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link)),
+    (obj: any, pos: LinkPositions, link: any) => {
+      const linkShard = Math.abs(Number(link?.id) || 0) % TUBE_SYNC_SHARDS;
+      if (Math.floor(performance.now() / TUBE_SYNC_MS) % TUBE_SYNC_SHARDS !== linkShard) {
+        return true;
+      }
+      return curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link));
+    },
     [linkWidthCb],
   );
 
