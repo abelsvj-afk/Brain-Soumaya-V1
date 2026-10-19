@@ -6,11 +6,14 @@ import { makeStarMaterial, makePlanetMaterial, type ShaderTier } from "./shaders
 // --- Sector-title threshold (far-zoom labels) ---
 // Effective mass threshold for awarding a far-zoom sector title. Defaults to
 // SECTOR_MASS; Graph3D may lower it (never raise it) via
-// setSectorTitleMassThreshold so that at least a minimum number of hubs carry
-// titles even in a young/sparse galaxy where few reach SECTOR_MASS alone.
-let sectorTitleMassThreshold = SECTOR_MASS;
-export function setSectorTitleMassThreshold(t: number): void {
-  sectorTitleMassThreshold = t;
+// Pick the sector-hub ids: the most massive hubs, spatially separated so each
+// "owns" a region of the galaxy. At most maxSectors (default 5) — a galaxy
+// should show a handful of region names, not a crowd. Replaces the old
+// threshold-lowering approach (which guaranteed 8 hubs with no separation,
+// causing unreadable title pile-ups).
+let sectorTitleIds: Set<string | number> = new Set();
+export function setSectorTitleIds(ids: Set<string | number>): void {
+  sectorTitleIds = ids;
 }
 /** Mass signal for a node (server-precomputed or derived): single source of truth. */
 export function nodeMass(node: GraphNode): number {
@@ -25,10 +28,48 @@ export function nodeMass(node: GraphNode): number {
 }
 /** Effective sector-title threshold for a node set: SECTOR_MASS, lowered just
  * enough to guarantee at least minHubs titled hubs (never raised). */
-export function sectorTitleThresholdFor(nodes: GraphNode[], minHubs = 8): number {
-  const masses = nodes.map(nodeMass).sort((a, b) => b - a);
-  const nth = masses[Math.min(minHubs - 1, masses.length - 1)] ?? 0;
-  return Math.min(SECTOR_MASS, nth);
+export function pickSectorHubIds(nodes: GraphNode[], maxSectors = 5): Set<string | number> {
+  // Sort by mass descending; greedily take the most massive hub that is far
+  // enough from every already-picked hub. Separation is relative to galaxy
+  // scale (1/4 of the max node radius) so it adapts to small and large brains.
+  // Nodes without positions can't be separated — they sort by mass only and
+  // are taken in order if we still have slots.
+  const sorted = [...nodes].sort((a, b) => nodeMass(b) - nodeMass(a));
+  let maxR = 1;
+  for (const n of nodes) {
+    if (n.x != null && n.y != null && !isNaN(n.x) && !isNaN(n.y)) {
+      const r = Math.sqrt(n.x * n.x + n.y * n.y + (n.z ?? 0) * (n.z ?? 0));
+      if (r > maxR) maxR = r;
+    }
+  }
+  const minSep = maxR / 4;
+  const minSep2 = minSep * minSep;
+  const picked: GraphNode[] = [];
+  const noPos: GraphNode[] = [];
+  for (const n of sorted) {
+    if (picked.length >= maxSectors) break;
+    if (n.x == null || n.y == null || isNaN(n.x) || isNaN(n.y)) {
+      noPos.push(n);
+      continue;
+    }
+    const nx = n.x, ny = n.y, nz = n.z ?? 0;
+    let tooClose = false;
+    for (const p of picked) {
+      const dx = nx - (p.x as number), dy = ny - (p.y as number), dz = nz - ((p.z as number) ?? 0);
+      if (dx * dx + dy * dy + dz * dz < minSep2) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (!tooClose) picked.push(n);
+  }
+  // Fill remaining slots with position-less hubs by mass (rare; keeps the
+  // guarantee that young galaxies still get some titles).
+  for (const n of noPos) {
+    if (picked.length >= maxSectors) break;
+    picked.push(n);
+  }
+  return new Set(picked.map((n) => n.id));
 }
 
 const FONT_SIZE = 44;
@@ -434,7 +475,7 @@ function bucketEntropy(raw: number | null | undefined): number {
 export function nodeVisualCacheKey(node: GraphNode): string {
   // The sector-title decision changes the built label set, so it belongs in
   // the key per the contract above (a threshold change rebuilds affected nodes).
-  const titled = nodeMass(node) >= sectorTitleMassThreshold ? 1 : 0;
+  const titled = sectorTitleIds.has(node.id) ? 1 : 0;
   return `${node.label}_${node.importance}_${node.degree}_${bucketEntropy(node.entropy)}_${node.color || ""}_${node.kind}_${titled}`;
 }
 
@@ -725,8 +766,8 @@ export function makeNodeObject(node: GraphNode, tier: ShaderTier = "quality"): T
   // 2. The Macro Body (low-poly self-lit sphere; spins so it never looks frozen)
   const macro = makeMacroBody(color, size, isStarLike);
 
-  // 3. Sector Title — every hub gets a name at macro/zoomed-out view
-  const hasSectorTitle = mass >= sectorTitleMassThreshold;
+  // 3. Sector Title — a few well-separated massive hubs get a name at macro/zoomed-out view
+  const hasSectorTitle = sectorTitleIds.has(node.id);
   if (hasSectorTitle) {
     const sectorLabel = makeLabel((node.celestialTitle ?? node.label).toUpperCase());
     sectorLabel.scale.multiplyScalar(2.5); // Giant sector name
