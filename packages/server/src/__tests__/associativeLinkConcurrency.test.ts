@@ -33,9 +33,13 @@ import type { GraphNode } from "@brain/shared";
  */
 
 const mockKnn = vi.fn();
-vi.mock("../db/vec.js", () => ({
-  knn: (...args: unknown[]) => mockKnn(...args),
-}));
+vi.mock("../db/vec.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../db/vec.js")>();
+  return {
+    ...actual,
+    knn: (...args: unknown[]) => mockKnn(...args),
+  };
+});
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
