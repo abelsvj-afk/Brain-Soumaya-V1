@@ -1,12 +1,25 @@
 # W1 Design Revision — Temporal Truth
 ### Soumaya Second Brain · Wisdom Layer Phase W1
-### Status: **Revision 5** — addressing sign-off review query-contract blocker (2026-10-19)
+### Status: **Revision 6** — addressing sign-off review JSON ordering blocker (2026-10-19)
 
 > **Core principle (the foundation everything else depends on):** *A memory can stop being current without its history being rewritten, and a correction must not create false historical truth.*
 
 ---
 
-## 0. What changed in Revision 5
+## 0. What changed in Revision 6
+
+The sign-off review found one SQL correctness issue: §2.3's correction-history subquery used `ORDER BY` on the aggregate query, which does not reliably order the rows consumed by `json_group_array`. The timeline was not guaranteed to be chronological.
+
+| # | Change | Trigger |
+|---|---|---|
+| 1 | **Deterministic ordering via inner subquery.** The `correction_history` JSON array is now built from an inner subquery with `ORDER BY corrected_at ASC, id ASC`, then aggregated. The `id` tiebreaker guarantees deterministic order even for same-timestamp events. | JSON ordering blocker |
+| 2 | **T-HIST-1b strengthened.** Now asserts the `correction_history` array order explicitly, including a same-timestamp second event. | JSON ordering blocker |
+
+**This document is design only. No implementation is authorized by this document.**
+
+---
+
+## 0a. What changed in Revision 5
 
 The sign-off review found one remaining correctness issue: §2.3's historical query contradicted itself. It filtered out superseded rows (correct for an as-of belief query) but then claimed the Oct 11 query returns the row with `was_corrected_as_false = 1` — impossible, since the row is excluded by the WHERE clause. Additionally, the `LEFT JOIN` to corrections could duplicate node rows when multiple false-belief events exist.
 
@@ -233,19 +246,22 @@ SELECT n.id, n.label, n.content, n.recorded_at, n.superseded_at, n.superseded_by
            AND c.correction_type = 'false_belief'
        ) AS was_corrected_as_false,
        (SELECT json_group_array(
-          json_object('type', c2.correction_type, 'at', c2.corrected_at,
-                      'by', c2.corrected_by, 'reason', c2.reason)
+          json_object('type', ordered_c.correction_type, 'at', ordered_c.corrected_at,
+                      'by', ordered_c.corrected_by, 'reason', ordered_c.reason)
         )
-        FROM corrections c2
-        WHERE c2.node_id = n.id
-        ORDER BY c2.corrected_at ASC
+        FROM (
+          SELECT c2.correction_type, c2.corrected_at, c2.corrected_by, c2.reason
+          FROM corrections c2
+          WHERE c2.node_id = n.id
+          ORDER BY c2.corrected_at ASC, c2.id ASC
+        ) AS ordered_c
        ) AS correction_history
 FROM nodes n
 WHERE n.space_id = ? AND n.id = ?;
 ```
 
 - `EXISTS` (not `LEFT JOIN`) for the boolean — multiple correction events can never duplicate the row.
-- `correction_history` returns the full event timeline as a JSON array, ordered by correction time. For audit/history views only — never for "what's true now" queries.
+- `correction_history` returns the full event timeline as a JSON array, ordered by correction time then row id (deterministic even for same-timestamp events). Ordering is enforced in an inner subquery before aggregation — `ORDER BY` on the aggregate query itself does not guarantee `json_group_array` input order. For audit/history views only — never for "what's true now" queries.
 
 #### Walkthrough: the car-insurance scenario
 
@@ -256,7 +272,7 @@ WHERE n.space_id = ? AND n.id = ?;
 - **Contract 2, node history:** returns the row with `was_corrected_as_false = 1` and `correction_history = [{"type":"false_belief","at":"2026-10-10T...","by":"user","reason":"..."}]`. The full story — believed Oct 1–Oct 10, then corrected as false — is visible in one row, with no duplication regardless of how many correction events exist. ✓
 - **Current truth query** (`superseded_at IS NULL`): excludes the row entirely. The derived `isNeverTrue()` helper (§2.4) is available for callers that need the false-belief status without a history join.
 
-**Tests T-HIST-1a / T-HIST-1b** (split from T-HIST-1, see §10): 1a asserts the Contract 1 reconstructions (Oct 5 → present/believed-true; Oct 11 → excluded); 1b asserts the Contract 2 history view (single row, `was_corrected_as_false = 1`, `correction_history` array with exactly one event, no row duplication when a second correction event is added).
+**Tests T-HIST-1a / T-HIST-1b** (split from T-HIST-1, see §10): 1a asserts the Contract 1 reconstructions (Oct 5 → present/believed-true; Oct 11 → excluded); 1b asserts the Contract 2 history view (single row, `was_corrected_as_false = 1`, `correction_history` array with exactly one event ordered by `corrected_at ASC, id ASC`, no row duplication when a second correction event is added — including a second event with the same timestamp, which must still sort deterministically by `id`).
 
 ### 2.4 The `corrections` table (new in Revision 3 — fixes B3)
 
@@ -838,7 +854,7 @@ All tests in `packages/server/src/agent/__tests__/w1-temporal.test.ts`.
 
 - **T-MIG-1**: migration order and assertion (§9.2). Fixture DB with mixed-format `created_at` values → run migration → assert all temporal columns match canonical format; assert the post-migration assertion throws on a deliberately corrupted row.
 - **T-RTR-2**: iterative over-fetch survives superseded flooding (§6.2). 500 superseded high-similarity nodes + 3 valid lower-similarity nodes, k=3 → all 3 valid returned, loop terminates.
-- **T-HIST-1a / T-HIST-1b**: as-of belief contract and correction-history contract (§2.3). 1a: Oct 5 as-of → believed-true; Oct 11 as-of → excluded. 1b: history view returns single row with `was_corrected_as_false = 1` and full `correction_history` array; adding a second correction event does not duplicate the row.
+- **T-HIST-1a / T-HIST-1b**: as-of belief contract and correction-history contract (§2.3). 1a: Oct 5 as-of → believed-true; Oct 11 as-of → excluded. 1b: history view returns single row with `was_corrected_as_false = 1` and full `correction_history` array ordered by `corrected_at ASC, id ASC`; adding a second correction event (including same-timestamp) does not duplicate the row and preserves deterministic order.
 - **T-NT-1** (revised): false-belief correction via `corrections` table, no `never_true` column (§2.4).
 - **T-CAS-1**: atomic cascade failure (§5.1, retained).
 
