@@ -1,10 +1,10 @@
 # Galaxy populate-path render-stall repair — design
 
-**Status:** DRAFT rev 5 — revised per ChatGPT design-review round 4 (one
-remaining blocker: D3 completeness-vs-concurrency contract). For re-review.
-**No implementation authorized.**
+**Status:** DRAFT rev 6 — revised per ChatGPT design-review round 5 (one
+remaining race: write landing after its chunk's reconciliation sweep).
+For re-review. **No implementation authorized.**
 **Branch:** `fix/galaxy-populate-render-stall` (base: `claude/soumaya-second-brain-v1-m4z4hc` @ `06d997c3`)
-**Date:** 2026-10-18 (rev 5)
+**Date:** 2026-10-18 (rev 6)
 **Reviewers:** ChatGPT (relayed), owner
 
 This is the canonical review document for this repair (per repo review workflow:
@@ -124,71 +124,74 @@ defects; an incremental structure would enlarge risk and test surface.
   longer than 200 with an explicit 400 — never truncates. The client chunks
   oversized id lists into ≤200 requests and unions the results, so the
   "new memories always appear" guarantee holds even for bulk offline sync.
-- **Edge completion across chunks (rev 5):** chunked overview requests each
+- **Edge completion without chunking (rev 6):** chunked overview requests each
   resolve edges only within their own id set, so an edge between two nodes
-  in *different* chunks would be omitted from every response. Node chunks
-  are therefore only a node-inclusion mechanism; edge coverage is resolved
-  separately with a contract that is complete across chunks *and* across
-  time (rev 4's "concurrent ingest is an accepted residual" contradicted the
-  completeness guarantee — this replaces it):
-  - New endpoint `GET /api/graph/edges?ids=&cursor=`: returns all
-    space-scoped edges **incident to** any given id (`source IN (…)` OR
-    `target IN (…)`), ordered by edge id ASC, cursor-paginated (cursor =
-    last returned edge id). Response: `{edges, nextCursor | null}` —
-    a null cursor is the explicit completeness signal *for that stream*.
-  - Pass start: capture `H0 = SELECT MAX(id) FROM edges WHERE space_id = ?`
-    (one cheap query).
-  - Per chunk Cᵢ (≤2000 ids; chunks may run sequentially or in parallel):
-    paginate the incident query with `id > :cursor` and **no upper bound**
-    to null cursor.
-  - After **all** chunks' streams have terminated: per chunk, run one more
-    paginated incident query with `id > H0` (same cursor mechanism; tiny in
-    practice) — the reconciliation sweep.
+  in *different* chunks would be omitted from every response. Rev 5 closed
+  this with per-chunk incident queries plus an H0 high-water-mark and
+  reconciliation sweeps — but round 5 showed a write can still land *after*
+  its chunk's sweep (e.g. chunk A's sweep done, edge inserted between two
+  chunk-A nodes while chunk B's sweep runs), and no finite sweep ordering
+  closes that window. The structural fix: **remove the chunking, not the
+  race.** Chunking exists only because GET query strings cannot carry large
+  id sets; moving the id set into a POST body removes the reason for
+  multiple sequential streams entirely:
+  - New endpoint `POST /api/graph/edges`: JSON body `{ids: number[]}`
+    (the full union id set `U`; bound `MAX_UNION_IDS = 50000`, over-cap →
+    explicit 400), query `?cursor=`. Returns all space-scoped edges
+    **incident to** any given id (`source IN (…)` OR `target IN (…)`),
+    ordered by edge id ASC, cursor-paginated (cursor = last returned edge
+    id), `MAX_EDGES_PER_RESPONSE = 5000` per page. Response:
+    `{edges, nextCursor | null}`. (Implementation note: configure an
+    adequate JSON body limit for this route — Express defaults to 100kb,
+    and a large union exceeds that; e.g. 5 MB.)
   - Client: build the full union id set `U` (dedup of top-300 ids ∪ all
-    chunk ids; held locally — only *sending* it is bounded); keep edges
-    with **both endpoints in U** (client-side filter); dedupe by edge id
-    across chunks/pages/sweeps.
-  - **Coverage argument:** let e be an edge with both endpoints in U,
-    present at pass end. If e.id ≤ H0, e existed at pass start; some chunk
-    contains an endpoint, and that chunk's unbounded cursor stream returns
-    every incident edge at its fixed id exactly once. If e.id > H0, e was
-    inserted during the pass; some chunk contains an endpoint, and that
-    chunk's reconciliation sweep (`id > H0`) returns it. Either way e is
-    returned — including the case round 4 identified (an insert landing in
-    an already-completed chunk's region, behind its cursor). A null cursor
-    therefore proves coverage *of its stream*, and streams + sweep together
-    prove coverage of the pass. The defect cannot recur a layer down, with
-    or without concurrent writes.
-  - **Honest residual (stated, not hand-waved):** `U` is fixed when chunking
-    starts. Nodes created after that instant are not in `U`; their edges
-    arrive via the next refresh (which re-runs overview+includeIds with the
-    new ids). The client must not claim coverage beyond `U`-as-captured.
-    Edges deleted mid-pass may appear stale until the next refresh —
-    harmless.
+    node-chunk ids; held locally); run **one** cursor stream with
+    `id > :cursor` and **no upper bound** to null cursor; keep edges with
+    **both endpoints in U** (client-side filter); dedupe by edge id when
+    unioning with overview's own links.
+  - **Coverage argument:** the stream is a single id-ordered cursor stream
+    over the fixed predicate P = (incident to U, space-scoped). Edge ids
+    are monotonic (AUTOINCREMENT, never reused): any edge satisfying P that
+    is inserted during the stream receives an id greater than every id the
+    stream has already returned, so a later page's `id > :cursor`
+    necessarily includes it. When the stream terminates (null cursor), it
+    has therefore returned **every edge satisfying P present at the final
+    page's read instant** — concurrent writes are caught by the stream
+    itself, not by a follow-up protocol. There is no per-chunk sweep
+    ordering, so round 5's race has nowhere to live. This is the
+    well-defined consistent view the review asked for; post-view writes are
+    handled by the stream's own self-completion, and anything landing after
+    the final read instant is covered by the next refresh.
+  - **Honest residual (stated, not hand-waved):** `U` is fixed when the
+    node-chunking starts. Nodes created after that instant are not in `U`;
+    their edges arrive via the next refresh (which re-runs
+    overview+includeIds with the new ids). The client claims nothing beyond
+    `U`-as-captured. Edges deleted mid-stream may appear stale until the
+    next refresh — harmless. Node chunking itself needs no H0 or sweep:
+    `byIds` reads are exact per chunk and cannot "miss" a node.
 - **Enforceable edge-result bound (rev 4):** `MAX_EDGES_PER_RESPONSE = 5000`
   (provisional constant) applies to **every** edge-returning read, including
   `overview()`'s internal edge fetch — which gains an additive
   `nextEdgeCursor` field (existing shape otherwise unchanged; in-repo
   consumers must follow cursors, old readers degrade to first-page rather
   than break). A non-null cursor is the explicit "more to fetch" signal;
-  silent truncation is not permitted anywhere. The H0+reconciliation contract
-  above is what makes cursor pagination complete under concurrent writes;
-  `overview()`'s single-stream internal edge fetch has no cross-stream hole
-  and needs no H0.
+  silent truncation is not permitted anywhere. `overview()`'s single-stream
+  internal edge fetch has no cross-stream hole and needs no additional
+  machinery.
 - **Result-size bounds (provisional constants — the invariants, not the
   numbers, are the contract):**
 
   | scope | nodes | edges |
   |---|---|---|
   | one overview request | ≤ `limit` (300) + 200 = 500 | ≤ 5000, cursor-paginated |
-  | one `/api/graph/edges` request | n/a (≤2000 ids in) | ≤ 5000, cursor-paginated |
-  | client union, C chunks | ≤ 300 + N_new (deduped); U fixed at chunking start | incident coverage over U + per-chunk H0 reconciliation sweep, deduped by id; ≤5000/page |
+  | one `POST /api/graph/edges` stream | n/a (≤50000 ids in body) | ≤ 5000/page, single id-ordered stream, self-completing under concurrent writes |
+  | client union | ≤ 300 + N_new (deduped); U fixed at chunking start | overview links ∪ completion edges, deduped by id; complete w.r.t. final read instant |
 
 - **Visibility guarantee, precisely:** every requested node id that exists
-  in the space appears in the final union. Every edge with both endpoints
-  in `U`-as-captured that is present at pass end appears (main streams +
-  H0 reconciliation sweep). Nodes created after `U` was captured — and
-  their edges — arrive via the next refresh; the client claims nothing
+  in the space appears in the final union. Every edge incident to `U` with
+  both endpoints in `U`-as-captured that is present at the completion
+  stream's final read instant appears. Nodes created after `U` was captured
+  — and their edges — arrive via the next refresh; the client claims nothing
   beyond `U`-as-captured. A new memory's associative neighbors are existing
   hubs, normally inside the top-300; the residual case (neighbor outside
   the cut) drops that edge from view but never the node.
@@ -269,14 +272,14 @@ defects; an incremental structure would enlarge risk and test surface.
    chunks assert the edge is present after completion; **edge bound** — a
    chunk with >5000 incident edges returns exactly 5000 + non-null
    `nextCursor`, cursor-following yields the complete deduped set ending
-   with null cursor (no silent truncation); **concurrent-write coverage** —
-   with chunk A's incident stream completed, insert an edge between two
-   chunk-A nodes (fresh id, behind A's cursor), then run the reconciliation
-   sweep: assert the edge appears in the final union; repeat with chunk
-   streams running at different speeds; assert a null cursor is never
-   treated as proof of coverage beyond `U`-as-captured (documented residual:
-   post-capture nodes wait for the next refresh); node selection and edge
-   retrieval stay space-scoped and bounded per the bounds table.
+   with null cursor (no silent truncation); **concurrent-write coverage**
+   — insert an edge between two U nodes *while* the single completion
+   stream is mid-flight (after several pages): assert it appears before the
+   null cursor; assert the old per-chunk sweep race cannot occur because the
+   protocol has no per-chunk sweep phase (regression test for the round-5
+   scenario: the same setup against the rev-5 protocol would miss it);
+   **union-id over-cap** — >50000 ids → explicit 400; node selection and
+   edge retrieval stay space-scoped and bounded per the bounds table.
 4. D4: `maxLinks` cap never exceeded under concurrent validation with
    **out-of-order completion** (randomized delays, reverse-order
    resolutions); **failure injection** (forced throws/timeouts) releases all
@@ -361,3 +364,15 @@ separate owner approval naming this document and its revision.
   insert and the documented residual; D4 test plan gains the
   abort-reaches-transport implementation acceptance condition. Submitted
   for re-review.
+- 2026-10-18 — ChatGPT design-review round 5: **revise before approval**,
+  one remaining race — a write can land after its chunk's reconciliation
+  sweep (chunk A swept, edge inserted between two chunk-A nodes while chunk
+  B's sweep runs), and no finite sweep ordering closes that window.
+- 2026-10-18 — rev 6 (this revision): removed the chunking instead of the
+  race — `POST /api/graph/edges` carries the full union id set in the body
+  (≤50000, else 400; JSON body limit raised for the route), making edge
+  completion a **single** id-ordered cursor stream; monotonic ids make the
+  stream self-completing under concurrent writes (coverage argument), so
+  the round-5 race has nowhere to live and no H0/sweep machinery is needed.
+  Bounds table, guarantee, and tests updated; D4 unchanged. Submitted for
+  re-review.
