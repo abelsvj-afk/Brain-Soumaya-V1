@@ -99,7 +99,10 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS tool_approvals_space_idx ON tool_approvals(space_id, status);
     CREATE INDEX IF NOT EXISTS tool_approvals_principal_idx ON tool_approvals(principal, status);
-    CREATE UNIQUE INDEX IF NOT EXISTS nodes_idem_idx ON nodes(space_id, idempotency_key);
+    -- NOTE: nodes_idem_idx is created in migrateSchema (db/client.ts), NOT here.
+    -- The idempotency_key column is added via ALTER on existing databases, and
+    -- BOOTSTRAP_SQL runs before migrateSchema — creating the index here crashes
+    -- on databases that predate the column (SqliteError: no such column).
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
