@@ -157,9 +157,12 @@ export class OpenAiProvider implements LlmProvider {
     private recordUsage?: (model: string, inputTokens: number, outputTokens: number) => void,
   ) {}
 
-  private async json<T>(system: string, user: string, schema: object, name: string, temperature = 0.2): Promise<T> {
+  private async json<T>(system: string, user: string, schema: object, name: string, temperature = 0.2, signal?: AbortSignal): Promise<T> {
     const res = await fetch(ENDPOINT, {
       method: "POST",
+      // D4: aborts the actual HTTP request — the socket is torn down, the
+      // provider call stops, not just the awaiting wrapper.
+      signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
@@ -352,6 +355,7 @@ export class OpenAiProvider implements LlmProvider {
     source: LinkCandidate,
     target: LinkCandidate,
     similarity: number,
+    opts?: { signal?: AbortSignal },
   ): Promise<LinkValidation> {
     const schema = {
       type: "object",
@@ -368,6 +372,8 @@ export class OpenAiProvider implements LlmProvider {
       buildLinkPrompt(source, target, similarity),
       schema,
       "link",
+      0.2,
+      opts?.signal,
     );
     return {
       linked: Boolean(raw.linked),

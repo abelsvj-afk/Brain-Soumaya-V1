@@ -102,6 +102,11 @@ export interface LlmProvider {
     source: LinkCandidate,
     target: LinkCandidate,
     similarity: number,
+    // D4: additive cancellation. When provided, the provider MUST thread
+    // `signal` into the actual transport operation (the fetch/SDK call), so
+    // aborting it tears down the underlying work — a wrapper-only timeout is
+    // not sufficient. Offline providers may ignore it (no I/O to stop).
+    opts?: { signal?: AbortSignal },
   ): Promise<LinkValidation>;
   /** Write a short insight about a latent (semantically near, graph-distant) pair. */
   synthesize(

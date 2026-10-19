@@ -128,6 +128,9 @@ export class HeuristicProvider implements LlmProvider {
     source: LinkCandidate,
     target: LinkCandidate,
     similarity: number,
+    // D4: accepted for interface conformance; ignored — the heuristic is pure
+    // synchronous CPU work with no I/O to abort.
+    _opts?: { signal?: AbortSignal },
   ): Promise<LinkValidation> {
     // Smarter offline linking: embeddings alone occasionally pull together
     // superficially-similar-but-unrelated thoughts. Without an LLM to reason

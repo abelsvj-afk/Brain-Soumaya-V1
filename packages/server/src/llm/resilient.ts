@@ -106,17 +106,33 @@ export class ResilientLlmProvider implements LlmProvider {
     source: LinkCandidate,
     target: LinkCandidate,
     similarity: number,
+    opts?: { signal?: AbortSignal },
   ): Promise<LinkValidation> {
-    if (this.blocked) return this.fallback.validateLink(source, target, similarity);
+    if (this.blocked) return this.fallback.validateLink(source, target, similarity, opts);
+    // D4: link the caller's signal to a local controller so that OUR timeout
+    // also aborts the underlying provider call. Without this, the withTimeout
+    // race below would reject the wrapper while the real fetch kept running —
+    // a timed-out call holding its socket while its freed slot admits new
+    // work, violating the aggregate in-flight bound physically.
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    opts?.signal?.addEventListener("abort", onAbort);
     try {
-      return await withTimeout(
-        this.primary.validateLink(source, target, similarity),
-        this.timeoutMs,
-        "validateLink",
-      );
-    } catch (err) {
-      this.note(err, "validateLink");
-      return this.fallback.validateLink(source, target, similarity);
+      try {
+        return await withTimeout(
+          this.primary.validateLink(source, target, similarity, { signal: controller.signal }),
+          this.timeoutMs,
+          "validateLink",
+        );
+      } catch (err) {
+        // Our timeout (or the caller's abort) fired: tear down the underlying
+        // provider call before falling back — never orphan it.
+        controller.abort();
+        this.note(err, "validateLink");
+        return this.fallback.validateLink(source, target, similarity, opts);
+      }
+    } finally {
+      opts?.signal?.removeEventListener("abort", onAbort);
     }
   }
 
