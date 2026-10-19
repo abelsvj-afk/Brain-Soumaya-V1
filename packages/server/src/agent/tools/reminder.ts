@@ -86,15 +86,32 @@ export const reminderTool: Tool = {
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
     const nodeId = Number(args.nodeId);
+    // Phase 1 agent loop: the approval id is the idempotency key (0 = the
+    // deterministic router path, which never uses approvals).
+    const approvalId = typeof args._approvalId === "number" ? args._approvalId : 0;
     const s = tc.ctx.handle.sqlite;
     const row = s
-      .prepare(`SELECT id, label, remind_at, reminder_fired_at FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
-      .get(nodeId, tc.spaceId) as (DueRow & { reminder_fired_at: string | null }) | undefined;
-    if (!row || row.reminder_fired_at) return { ok: false, summary: `reminder ${nodeId} already fired or gone` };
+      .prepare(`SELECT id, label, remind_at, reminder_fired_at, fired_by_approval FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
+      .get(nodeId, tc.spaceId) as (DueRow & { reminder_fired_at: string | null; fired_by_approval: number | null }) | undefined;
+    if (!row) return { ok: false, summary: `reminder ${nodeId} gone` };
+    // Crash-retry of the same approval: we already fired this — dedup success.
+    if (approvalId !== 0 && row.fired_by_approval === approvalId) {
+      return { ok: true, summary: `reminder "${row.label}" already fired (deduped)` };
+    }
+    if (row.reminder_fired_at || row.fired_by_approval !== null) {
+      return { ok: false, summary: `reminder ${nodeId} already fired` };
+    }
 
     const firedIso = new Date(tc.now).toISOString();
-    // Mark fired FIRST so a delivery error can never cause a re-fire loop.
-    s.prepare(`UPDATE nodes SET reminder_fired_at = ? WHERE id = ? AND space_id = ?`).run(firedIso, nodeId, tc.spaceId);
+    // Atomic claim: the UPDATE only lands when nobody fired it first, and it
+    // records WHO fired it in the same statement. A lost race → changes === 0.
+    const claimed = s.prepare(
+      `UPDATE nodes SET reminder_fired_at = ?, fired_by_approval = ?
+       WHERE id = ? AND space_id = ? AND fired_by_approval IS NULL`
+    ).run(firedIso, approvalId, nodeId, tc.spaceId);
+    if (claimed.changes === 0) {
+      return { ok: false, summary: `reminder ${nodeId} already fired` };
+    }
 
     // Too-stale reminders are retired silently (marked fired, not delivered) so a long
     // downtime doesn't dump a week of overdue pings on the user.
