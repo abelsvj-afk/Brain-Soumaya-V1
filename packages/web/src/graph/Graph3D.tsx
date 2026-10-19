@@ -2338,10 +2338,15 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           const isFocused = isSelected || id === followRef.current;
           const isCulled = !isFocused && !frustum.current.intersectsSphere(sphere.current);
 
-          if (!cell.isVisible && !isFocused) {
+          if (!cell.isVisible && !isFocused && !o.userData?.hasSectorTitle) {
             o.visible = false;
             return;
           }
+          // Sector-title hubs bypass the spatial grid: titles are far-view map
+          // labels, and the grid's 4000-unit cells flip as the camera orbits —
+          // without this, a far sector's title pops on/off ~1/sec at the cell
+          // boundary ("pops up for a second then disappears"). The body still
+          // uses cheap macro LOD out there, so the bypass costs nothing.
           // Performance Program Stage 5: a frustum-culled body skips its ENTIRE per-
           // child update (spin/label-distance/LOD-swap/pulse/corona) here, not just the
           // pulse/corona tail the old inner `if (isCulled) continue` reached — three.js
@@ -3706,23 +3711,66 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // data-dependent 0-1 FPS collapse on a large/full Galaxy View, per the Round 4
   // regression audit). Returning true from linkPositionUpdate tells three-forcegraph
   // to skip its own calcLinkCurve()+geometry-rebuild for a link entirely.
-  // Tube-sync throttle: a full tube recompute per link per frame (Frenet frames +
-  // ~217 sin/cos vertex writes + dual GPU buffer uploads + bounding-sphere pass,
-  // ×941 links) collapsed FPS to ~5 once the d3 engine stopped cooling down.
-  // Endpoints move sub-pixel distances per frame under the orbit system, so
-  // syncing every link every frame is pure waste. Shard links across 100ms time
-  // buckets (~1/6th of links per frame ≈ 10Hz per link): visually identical,
-  // ~6× cheaper. Returning true keeps the old geometry and tells three-forcegraph
-  // to skip its own rebuild for the skipped links.
+  // Tube-sync: a full tube recompute per link per frame (Frenet frames + ~217
+  // sin/cos vertex writes + dual GPU buffer uploads, ×941 links) collapsed FPS
+  // to ~5 once the d3 engine stopped cooling down. But a fixed time-shard made
+  // tubes visibly step (~10Hz) instead of tracking smoothly. Solution: sync
+  // every frame for links near what you're looking at (smooth where visible),
+  // and for the rest only when their endpoints actually moved (epsilon-gated) —
+  // orbit drift is sub-pixel per frame, so most links skip most frames. A slow
+  // time-shard remains as backstop for width/curvature drift on still links.
+  // Returning true keeps the old geometry and tells three-forcegraph to skip
+  // its own rebuild for skipped links.
   const TUBE_SYNC_SHARDS = 6;
   const TUBE_SYNC_MS = 100;
+  const TUBE_EPS = 0.12; // world units; endpoint drift below this is sub-pixel
+  const TUBE_NEAR_TARGET = 350; // links this close to the look-target sync every frame
+  const TUBE_NEAR_CAM_DIST = 1200; // ...but only when the camera is this close (zoomed in)
+  // WeakMap keyed by link OBJECT (not id): when link objects are replaced on a
+  // data reload, old entries are GC'd and new links always build on first sight.
+  // A Map keyed by id would keep stale positions and could skip building tubes
+  // for recreated link objects entirely (returning "handled" for nonexistent
+  // geometry → invisible links).
+  const lastTubePosRef = useRef(new WeakMap<object, number[]>());
   const linkPositionUpdateCb = useCallback(
     (obj: any, pos: LinkPositions, link: any) => {
-      const linkShard = Math.abs(Number(link?.id) || 0) % TUBE_SYNC_SHARDS;
-      if (Math.floor(performance.now() / TUBE_SYNC_MS) % TUBE_SYNC_SHARDS !== linkShard) {
-        return true;
+      const linkId = link?.id;
+      // Smooth where it matters: near the look-target (e.g. a focused planet's
+      // links), tubes track every frame — no stepping. Gated by camera distance
+      // so galaxy-view doesn't waste every-frame updates on sub-pixel tubes.
+      const camera = fgRef.current?.camera();
+      const target = fgRef.current?.controls?.()?.target as THREE.Vector3 | undefined;
+      let nearTarget = false;
+      if (camera && target && camera.position.distanceToSquared(target) < TUBE_NEAR_CAM_DIST * TUBE_NEAR_CAM_DIST) {
+        const mx = (pos.start.x + pos.end.x) * 0.5;
+        const my = ((pos.start.y || 0) + (pos.end.y || 0)) * 0.5;
+        const mz = ((pos.start.z || 0) + (pos.end.z || 0)) * 0.5;
+        const dx = mx - target.x, dy = my - target.y, dz = mz - target.z;
+        nearTarget = dx * dx + dy * dy + dz * dz < TUBE_NEAR_TARGET * TUBE_NEAR_TARGET;
       }
-      return curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link));
+
+      if (!nearTarget) {
+        const last = lastTubePosRef.current.get(link);
+        if (last) {
+          const dx1 = pos.start.x - last[0], dy1 = (pos.start.y || 0) - last[1], dz1 = (pos.start.z || 0) - last[2];
+          const dx2 = pos.end.x - last[3], dy2 = (pos.end.y || 0) - last[4], dz2 = (pos.end.z || 0) - last[5];
+          const eps2 = TUBE_EPS * TUBE_EPS;
+          const moved = dx1 * dx1 + dy1 * dy1 + dz1 * dz1 > eps2 || dx2 * dx2 + dy2 * dy2 + dz2 * dz2 > eps2;
+          if (!moved) {
+            const linkShard = Math.abs(Number(linkId) || 0) % TUBE_SYNC_SHARDS;
+            if (Math.floor(performance.now() / TUBE_SYNC_MS) % TUBE_SYNC_SHARDS !== linkShard) {
+              return true;
+            }
+          }
+        }
+      }
+
+      const ok = curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link));
+      lastTubePosRef.current.set(link, [
+        pos.start.x, pos.start.y || 0, pos.start.z || 0,
+        pos.end.x, pos.end.y || 0, pos.end.z || 0,
+      ]);
+      return ok;
     },
     [linkWidthCb],
   );
