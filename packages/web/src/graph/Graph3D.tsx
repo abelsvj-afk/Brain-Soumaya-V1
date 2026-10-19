@@ -796,6 +796,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   const PULSE_VISIT_CAP = 4;
   const FOLLOW_FLY_MS = 850; // cinematic fly-to duration when engaging a focus lock
   const satellitesRef = useRef<SatelliteSystem | null>(null);
+  // Tracks whether the previous tick frame had pending beacon dispatches,
+  // so the beacon-deployed stat is recorded once per dispatch batch
+  // (empty -> non-empty transition) instead of every frame while beacons
+  // are pending.
+  const hadPendingBeaconsRef = useRef(false);
   const subAgentsRef = useRef<SubAgentSystem | null>(null);
   const visitorsRef = useRef<VisitorSystem | null>(null);
   const visFollowIndexRef = useRef(0);
@@ -1940,14 +1945,25 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         const pending = satellites.getPendingDispatches();
         if (pending.length > 0) {
           soumayaHandleRef.current.enqueueBeacons(pending);
-          if (spaceIdRef.current) {
+          if (spaceIdRef.current && !hadPendingBeaconsRef.current) {
+            // Record the dispatch batch once, on the empty -> non-empty
+            // transition. Previously this block ran every frame while any
+            // beacon was pending: the localStorage stat was inflated ~60x
+            // per second of pending time, and fg.refresh() forced a full
+            // _flushObjects dispose+rebuild of every node/link Object3D on
+            // every frame of every pending window (the periodic
+            // steady-state freeze). The refresh's comment claimed to "force
+            // evaluate achievements in App", but App's achievement effect
+            // depends on React state references (data.nodes, data.links,
+            // fuel, streak, space, loaded) that a scene-graph refresh()
+            // never changes — so it achieved nothing. Removed; the
+            // diagnostic note goes with it so refreshCallsLast3s keeps
+            // counting actual refresh() invocations.
             const key = `stat.beacons_deployed.${spaceIdRef.current}`;
             localStorage.setItem(key, String(parseInt(localStorage.getItem(key) || "0", 10) + pending.length));
-            // Force evaluate achievements in App
-            noteRefreshInvoked(); // diagnostic-only — see galaxyStateSnapshot.ts
-            fgRef.current?.refresh?.();
           }
         }
+        hadPendingBeaconsRef.current = pending.length > 0;
       }
       // Defender live drifter intercept: wire visitor positions as a hazard context
       let subAgentHazard: SubAgentHazard | undefined = undefined;
