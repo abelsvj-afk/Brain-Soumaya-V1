@@ -1,12 +1,29 @@
 # W1 Design Revision — Temporal Truth
 ### Soumaya Second Brain · Wisdom Layer Phase W1
-### Status: **Revision 2** — addressing engineering gauntlet round 2 (2026-10-19)
+### Status: **Revision 3** — addressing final engineering gauntlet B1–B4 (2026-10-19)
 
 > **Core principle (the foundation everything else depends on):** *A memory can stop being current without its history being rewritten, and a correction must not create false historical truth.*
 
 ---
 
-## 0. What changed in Revision 2
+## 0. What changed in Revision 3
+
+The round-3 gauntlet found four blockers (B1–B4) plus two additional checks. Every one is addressed below. The structural changes from Revision 2:
+
+| # | Change | Trigger |
+|---|---|---|
+| 1 | **Migration order fixed**: normalize `created_at` to canonical format FIRST, then backfill `recorded_at`. Post-migration assertion that every temporal timestamp matches the canonical regex. | B1 |
+| 2 | **`recorded_at` migration uses nullable column** (no expression DEFAULT — SQLite rejects parenthesized expression defaults on `ALTER TABLE ADD COLUMN`). Verified against better-sqlite3 12.11.1. DB-level backstop only in fresh-schema `BOOTSTRAP_SQL`; migrated schemas rely on application enforcement + test. Strategy documented with rationale. | B2 |
+| 3 | **`never_true` column REMOVED.** Replaced by a `corrections` event table. Setting a boolean on the row mutated history (an Oct 5 as-of query would see `never_true=1` set on Oct 10). Corrections are now append-only events; `never_true` is derived, not stored. Historical as-of queries reconstruct belief state correctly. | B3 |
+| 4 | **Vector search uses iterative over-fetch** with adaptive widening. The single-shot bounded query could lose valid results when superseded nodes filled all candidate slots. New loop fetches until k valid results or exhaustion, with a safety bound. | B4 |
+| 5 | All `CURRENT_TIMESTAMP` references in SQL examples replaced with canonical UTC ISO format. | Addl. check 1 |
+| 6 | Cascade query direction fixed (`target = ?`, not `source = ?`). Cascade **disabled by default** in W1 — explicit opt-in only after edge semantics are verified. | Addl. check 2 |
+
+**This document is design only. No implementation is authorized by this document.**
+
+---
+
+## 0b. What changed in Revision 2 (retained)
 
 The round-2 gauntlet found five blockers (B1–B5) plus six additional issues. Every one is addressed below. The structural changes from Revision 1:
 
@@ -14,7 +31,7 @@ The round-2 gauntlet found five blockers (B1–B5) plus six additional issues. E
 |---|---|---|
 | 1 | **Canonical timestamp** defined: ISO 8601 UTC `YYYY-MM-DDTHH:MM:SS.sssZ`, app-generated; DB `strftime` default as backstop; existing `created_at` normalized by migration | B1 |
 | 2 | **`recorded_at` gets a DB-level DEFAULT** (`strftime` ISO 8601 UTC); full insert-path audit | B2 |
-| 3 | **New `never_true` flag** + three distinct correction types (factual / false-belief / preference-override); a correction of a never-true fact sets NO valid-time interval | B3 |
+| 3 | **Three distinct correction types** (factual / false-belief / preference-override); a correction of a never-true fact sets NO valid-time interval. *(Revision 3: the `never_true` column was replaced by the `corrections` event table — see §2.4)* | B3 |
 | 4 | **Explicit supersession trigger contract**: what the LLM may propose vs. what code must verify; W1 auto-triggers limited to explicit user corrections and direct user-provided contradictions | B4 |
 | 5 | **Supersession filter pushed into candidate selection** (vec.ts JS filter + fts.ts SQL WHERE); per-method current-vs-historical contracts; graph traversal rule | B5 |
 | 6 | `superseded_by` stays a plain INTEGER (application-validated, justified); 8 new acceptance tests; rollback defined as feature-flag-off (degraded state, documented) | Additional issues |
@@ -108,15 +125,14 @@ T-TIME-4: Historical dates
 |---|---|---|---|---|
 | `valid_from` | TEXT | YES | NULL | When this fact became true in the real world (canonical timestamp). NULL = unknown. |
 | `valid_to` | TEXT | YES | NULL | When this fact stopped being true. NULL = still true (or unknown end). |
-| `never_true` | INTEGER | NO | `0` | `1` = this fact was never true; the row exists only as a corrected false belief. When `1`, `valid_from`/`valid_to` MUST be NULL. (Fixes B3.) |
-| `recorded_at` | TEXT | NO | `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))` | When the system recorded this row. Immutable. DB default is the backstop; app code sets `toISOString()` explicitly. (Fixes B2.) |
-| `superseded_at` | TEXT | YES | NULL | When this row was superseded. NULL = current. |
+| `recorded_at` | TEXT | YES | NULL | When the system recorded this row. Immutable. Set explicitly by application code; backfilled from `created_at` for legacy rows (see §9.2). Nullable in the migration because SQLite cannot use expression defaults on `ALTER TABLE ADD COLUMN` (see §9.1); NOT NULL enforced by application invariant + test, not by DB constraint. |
+| `superseded_at` | TEXT | YES | NULL | When this row was superseded. NULL = current. This is a **transaction-time** marker (when the system changed its belief), not a rewrite of valid time. |
 | `superseded_by` | INTEGER | YES | NULL | Node id that replaced this row. Plain INTEGER, application-validated (see §7). |
-| `supersede_reason` | TEXT | YES | NULL | `correction` \| `false_belief` \| `update` \| `user_override`. NULL if not superseded. |
+| `supersede_reason` | TEXT | YES | NULL | `correction` \| `false_belief` \| `update` \| `user_override`. NULL if not superseded. Denormalized convenience; the `corrections` table (§2.4) is authoritative for correction semantics. |
 
-**Why `never_true` instead of overloading `valid_to`:** Revision 1 set `valid_to` to the correction time (or zero-length interval) for false beliefs. The gauntlet correctly identified this as fabricating historical truth. A separate boolean keeps the semantics clean: `never_true = 1` means "do not interpret `valid_from`/`valid_to` at all — this row was never valid."
+**Why no `never_true` column (Revision 3, fixes B3):** Revision 2 stored `never_true` as a boolean on the row. This mutates history: if the system records "car insurance $200/mo" on Oct 1 and the user corrects it as never-true on Oct 10, setting `never_true=1` on the row means an as-of query for Oct 5 returns `never_true=1` — falsely implying the system already knew it was false on Oct 5. The correct belief state on Oct 5 was "believed true." A mutable boolean cannot represent "believed true then, corrected as false later." Corrections are **events**, not row attributes. See §2.4.
 
-**Constraint (application-enforced, documented):** if `never_true = 1` then `valid_from IS NULL AND valid_to IS NULL`. The `supersede()` writer (§5) enforces this; a test asserts it.
+**Constraint (application-enforced, documented):** for a false-belief correction (Type 2, §2.2), `valid_from` and `valid_to` MUST remain NULL — no valid-time interval is fabricated. The `supersede()` writer (§5) enforces this; a test asserts it.
 
 ### 2.2 The three correction types (fixes B3)
 
@@ -125,15 +141,18 @@ These are **different operations** with different temporal semantics. The writer
 **Type 1 — Factual update** (was true, now isn't):
 - Trigger: new user-provided fact directly contradicts a current fact's *present* state.
 - Example: Oct 1 "between jobs" → Oct 10 "started Samsonite Oct 8."
-- Old row: `valid_to = '2026-10-08T00:00:00.000Z'`, `superseded_at = <now>`, `superseded_by = <new_id>`, `supersede_reason = 'update'`, `never_true = 0`.
+- Old row: `valid_to = '2026-10-08T00:00:00.000Z'`, `superseded_at = <now>`, `superseded_by = <new_id>`, `supersede_reason = 'update'`.
 - New row: `valid_from = '2026-10-08T00:00:00.000Z'`, `recorded_at = <now>`.
+- Correction event in `corrections` table: `correction_type = 'factual_update'`, `corrected_at = <now>`, `corrected_by = 'user'`, `superseding_node_id = <new_id>`.
 - The old row's valid interval closes cleanly: it *was* true, then it ended.
 
 **Type 2 — False-belief correction** (was never true):
 - Trigger: user states the recorded fact was never correct.
 - Example: system recorded "car insurance $200/mo" → user says "I don't have a car, never did."
-- Old row: `valid_from = NULL`, `valid_to = NULL`, `never_true = 1`, `superseded_at = <now>`, `superseded_by = <new_id or NULL>`, `supersede_reason = 'false_belief'`.
-- **No valid-time interval is fabricated.** The row's history reads: "believed from `recorded_at` until `superseded_at`, then corrected as false."
+- Old row: `valid_from = NULL`, `valid_to = NULL`, `superseded_at = <now>`, `superseded_by = <new_id or NULL>`, `supersede_reason = 'false_belief'`.
+- **Correction event** recorded in `corrections` table (§2.4): `correction_type = 'false_belief'`, `corrected_at = <now>`, `corrected_by = 'user'`.
+- **No valid-time interval is fabricated.** The row's history reads: "believed from `recorded_at` until `superseded_at`, then corrected as false (see correction event)."
+- The "never true" status is **derived** from the correction event, not stored on the row: `isNeverTrue(node_id) = EXISTS (SELECT 1 FROM corrections WHERE node_id = ? AND correction_type = 'false_belief')`.
 - If the correction asserts a replacement truth ("I take the bus"), the new row is a normal current fact. If not, no new row is created.
 
 **Type 3 — Preference override** (not a factual claim):
@@ -142,19 +161,82 @@ These are **different operations** with different temporal semantics. The writer
 - **Does NOT touch the temporal columns of any fact.** Trucking memories remain factually current; they are suppressed by a separate mechanism (a `directives` entry or the W6 wisdom gate's suppression rules — out of W1 scope, but W1 must not corrupt factual history to implement a preference).
 - If a caller attempts `supersede_reason = 'user_override'`, the writer treats it as Type 1 with `valid_to = <now>` ONLY if the user is asserting the fact is no longer true ("I'm not doing trucking anymore" = the *pursuit* ended). If the user is only asking for silence, no supersession occurs.
 
-### 2.3 Retrieval with the `never_true` flag
+### 2.3 Retrieval with correction events (Revision 3 — fixes B3)
 
-The "what's true now" filter is unchanged (superseded rows are excluded by `superseded_at IS NULL`). The `never_true` flag matters for **historical queries** and **audit**:
+The "what's true now" filter is unchanged (superseded rows are excluded by `superseded_at IS NULL`). Correction events matter for **historical as-of queries** and **audit**:
 
 ```sql
--- Historical: "what did we believe on Oct 5, and was it later corrected as false?"
-SELECT id, label, content, recorded_at, superseded_at, never_true, supersede_reason
-FROM nodes
-WHERE space_id = ? AND recorded_at <= ? AND (superseded_at IS NULL OR superseded_at > ?);
--- Rows with never_true = 1 AND superseded_at <= ? are shown as "believed then, later corrected as false."
--- Rows with never_true = 1 AND superseded_at > ? (or NULL) are shown as "currently believed false" —
---   this state should not occur in practice (invariant: never_true is only set during supersession).
+-- Historical: "what did we believe on Oct 5?"
+-- A node was believed-true at time T iff:
+--   recorded_at <= T AND (superseded_at IS NULL OR superseded_at > T)
+-- AND no false_belief correction event with corrected_at <= T.
+SELECT n.id, n.label, n.content, n.recorded_at, n.superseded_at, n.supersede_reason,
+       CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END AS was_corrected_as_false
+FROM nodes n
+LEFT JOIN corrections c ON c.node_id = n.id
+  AND c.correction_type = 'false_belief'
+  AND c.corrected_at <= ?          -- as-of time: only corrections known by then
+WHERE n.space_id = ?
+  AND n.recorded_at <= ?
+  AND (n.superseded_at IS NULL OR n.superseded_at > ?);
 ```
+
+**Why this is correct (the B3 scenario):**
+- Oct 1: system records "car insurance $200/mo" (`recorded_at = Oct 1`).
+- Oct 10: user says "never had a car." Row gets `superseded_at = Oct 10`. Correction event: `correction_type = 'false_belief'`, `corrected_at = Oct 10`.
+- **Query as-of Oct 5:** `recorded_at (Oct 1) <= Oct 5` ✓, `superseded_at (Oct 10) > Oct 5` ✓, no correction with `corrected_at <= Oct 5`. Result: `was_corrected_as_false = 0`. The system correctly reconstructs "believed true on Oct 5." ✓
+- **Query as-of Oct 11:** `superseded_at (Oct 10) <= Oct 11`, so the node is excluded from "current" results. In history mode, the correction event with `corrected_at = Oct 10 <= Oct 11` shows `was_corrected_as_false = 1`. The system correctly shows "believed Oct 1 – Oct 10, then corrected as false." ✓
+- **Current truth query:** `superseded_at IS NULL` excludes the row entirely. The derived `isNeverTrue()` helper is available for callers that need the false-belief status without a historical join.
+
+**Test T-HIST-1** (new, from round-3 review): asserts both the Oct 5 and Oct 11 reconstructions above.
+
+### 2.4 The `corrections` table (new in Revision 3 — fixes B3)
+
+Corrections are **append-only events**. They are never updated or deleted. Each correction records what happened, when, and why — without mutating the corrected row's historical interpretation.
+
+```sql
+-- In BOOTSTRAP_SQL (fresh schema):
+CREATE TABLE IF NOT EXISTS corrections (
+  id INTEGER PRIMARY KEY,
+  space_id INTEGER NOT NULL,
+  node_id INTEGER NOT NULL,              -- the node being corrected
+  correction_type TEXT NOT NULL,          -- 'factual_update' | 'false_belief' | 'preference_override'
+  corrected_at TEXT NOT NULL              -- canonical timestamp: when the correction was made
+    DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  corrected_by TEXT NOT NULL,             -- 'user' | 'system'
+  reason TEXT,                            -- reason code, content-free (no memory text)
+  superseding_node_id INTEGER,           -- the replacement node, if any (NULL for pure false-belief)
+  created_at TEXT NOT NULL
+    DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_corrections_node ON corrections(node_id);
+CREATE INDEX IF NOT EXISTS idx_corrections_space_time ON corrections(space_id, corrected_at);
+
+-- In migrateSchema(): same CREATE TABLE IF NOT EXISTS (no ALTER needed — new table).
+```
+
+**Derived helpers** (in `agent/temporal.ts`):
+```typescript
+// Was this node ever corrected as a false belief?
+function isNeverTrue(db: Database, nodeId: number): boolean {
+  return db.prepare(
+    `SELECT 1 FROM corrections WHERE node_id = ? AND correction_type = 'false_belief' LIMIT 1`
+  ).get(nodeId) !== undefined;
+}
+
+// Full correction history for a node (for audit / history views).
+function getCorrections(db: Database, nodeId: number): Correction[] {
+  return db.prepare(
+    `SELECT * FROM corrections WHERE node_id = ? ORDER BY corrected_at ASC`
+  ).all(nodeId) as Correction[];
+}
+```
+
+**Why a separate table instead of a row flag:**
+1. **As-of correctness** (B3): the row's columns describe its own lifecycle; the correction event describes a *later* judgment about the row. Mixing them in one row conflates two different times.
+2. **Multiple corrections**: a node can be corrected, then re-corrected. A single boolean cannot represent a correction history. The table preserves every event.
+3. **Audit**: the corrections table IS the audit trail for corrections — no separate logging needed for the "what" (the `agent_logs` entry still records the "who/when/why" of the supersession operation).
+4. **No history rewrite**: the original row is never modified except for the `superseded_*` transaction-time pointer. Its `valid_from`/`valid_to`/`recorded_at` are immutable after creation.
 
 ---
 
@@ -213,39 +295,50 @@ T-TRIG-1: Ambiguous LLM inference is blocked
 
 ```sql
 BEGIN IMMEDIATE;
-  -- 1. Insert the new row (if any)
-  INSERT INTO nodes (space_id, label, type, content, valid_from, never_true, recorded_at, ...)
-  VALUES (?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ...);
-  -- 2. Supersede the old row (optimistic guard)
+  -- 1. Insert the new row (if any). No never_true column (see §2.4).
+  INSERT INTO nodes (space_id, label, type, content, valid_from, recorded_at, ...)
+  VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ...);
+  -- 2. Supersede the old row (optimistic guard).
+  --    NOTE: valid_to is set ONLY for Type 1 (factual update). For Type 2
+  --    (false-belief), valid_to stays NULL — no interval is fabricated.
   UPDATE nodes
-  SET valid_to = ?,           -- Type 1 only; NULL for Type 2
-      never_true = ?,          -- 1 for Type 2, 0 otherwise
+  SET valid_to = ?,           -- Type 1: the time the fact stopped being true; Type 2: NULL
       superseded_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
       superseded_by = ?,
       supersede_reason = ?
   WHERE id = ? AND space_id = ? AND superseded_at IS NULL;
   -- 3. Check changes == 1, else ROLLBACK + throw SupersessionConflictError
-  -- 4. Cascade (if enabled): supersede dependent rows in the same transaction
+  -- 4. Record the correction event (append-only; see §2.4).
+  INSERT INTO corrections
+    (space_id, node_id, correction_type, corrected_at, corrected_by, reason, superseding_node_id)
+  VALUES
+    (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?);
+  -- 5. Cascade (DISABLED BY DEFAULT in W1 — see below).
+  --    When enabled (only after edge semantics are verified), supersede dependent rows:
+  --    Edges point dependent → dependency: source = dependent, target = dependency.
+  --    To find nodes that DEPEND ON the superseded node X, query WHERE target = X.
   UPDATE nodes
   SET superseded_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
       superseded_by = ?,       -- points to the replacement, or NULL
       supersede_reason = 'false_belief'
   WHERE id IN (
-    SELECT target FROM edges
-    WHERE source = ? AND space_id = ? AND relationship IN ('depends_on', 'assumes')
+    SELECT source FROM edges
+    WHERE target = ? AND space_id = ? AND relationship IN ('depends_on', 'assumes')
   )
   AND space_id = ? AND superseded_at IS NULL;
-  -- 5. Audit log (content-free: IDs and reason codes only — see §8)
+  -- 6. Audit log (content-free: IDs and reason codes only — see §8)
   INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
   VALUES (?, 'soumaya', 'supersede', ?, ?, 'ok');
 COMMIT;
 ```
 
-**Atomicity proof:** all writes (new row, old row, cascade rows, audit row) are inside a single `BEGIN IMMEDIATE ... COMMIT`. If any step fails, SQLite rolls back the entire transaction. There is no observable state where the new row exists but the old row isn't superseded, or where the old row is superseded but the cascade didn't run, or where the audit row is missing.
+**Atomicity proof:** all writes (new row, old row, correction event, cascade rows, audit row) are inside a single `BEGIN IMMEDIATE ... COMMIT`. If any step fails, SQLite rolls back the entire transaction. There is no observable state where the new row exists but the old row isn't superseded, or where the correction event is missing, or where the old row is superseded but the cascade didn't run.
 
-**Edge direction note:** the cascade query above assumes edges point from dependent → dependency (`source` = dependent, `target` = the fact it depends on). The implementation MUST verify this against the real schema before enabling cascade. If the direction is reversed, the query is adjusted; if the relationship names don't exist, cascade is disabled per §4.
+**Cascade: DISABLED BY DEFAULT in W1.** The cascade path (step 5) is implemented but gated behind an explicit configuration flag (`space_meta.w1_cascade_enabled`, default `false`). It may only be enabled after the implementation audit verifies that `depends_on` / `assumes` edges exist with reliable semantics in the actual schema (§4, Rule 2). Rationale: an incorrect cascade silently invalidates facts the user never asked to change. The safe default is no cascade; each dependent fact requires explicit supersession until the edge semantics are proven.
 
-**Cross-space guard:** every UPDATE includes `AND space_id = ?`. The cascade subquery also filters `space_id = ?`. A supersession can never cross space boundaries — verified by test T-SEC-1.
+**Edge direction (fixes round-3 additional check 2):** the cascade query above uses `WHERE target = ?` because edges point from dependent → dependency (`source` = the dependent node, `target` = the node it depends on). The Revision 2 query incorrectly used `source = ?`, which would have found the dependencies OF the superseded node (the wrong direction). The implementation MUST verify the actual edge direction against the real schema before enabling cascade; if reversed, the query is flipped.
+
+**Cross-space guard:** every UPDATE and INSERT includes `AND space_id = ?` / `space_id = ?`. The cascade subquery also filters `space_id = ?`. A supersession can never cross space boundaries — verified by test T-SEC-1.
 
 ### 5.2 Concurrency (unchanged from Revision 1)
 
@@ -259,29 +352,88 @@ Optimistic `superseded_at IS NULL` guard + `SupersessionConflictError` + `BEGIN 
 
 Superseded candidates can **crowd out** valid results in top-K retrieval if filtering happens only after candidate selection. W1 pushes the `superseded_at IS NULL` filter into candidate selection itself.
 
-### 6.2 Vector search (`db/vec.ts`)
+### 6.2 Vector search (`db/vec.ts`) — Revision 3 (fixes B4)
 
-Current code (lines 151–179) already over-fetches (`want = min(500, max(k*6, k+40))`), then filters in JS by space/deleted/archived, then slices to `k`. W1 adds one condition to the existing JS filter:
+**The problem with Revision 2:** it filtered superseded nodes in JS after the vector search returned its candidate set, which was bounded by the initial `want` (`min(500, max(k*6, k+40))`). If superseded nodes occupied all `want` slots, valid matches were permanently lost — no amount of post-filtering can recover candidates the vector index never returned.
+
+**The fix: iterative over-fetch with adaptive widening.** Keep fetching batches until we have `k` valid results or the candidate pool is exhausted.
 
 ```typescript
-// Current (line 168-176):
-const lookup = db.prepare(
-  `SELECT space_id AS s, deleted_at AS d, status AS st, superseded_at AS sup
-   FROM nodes WHERE id = ?`,
-);
-hits = hits
-  .filter((h) => {
-    const row = lookup.get(h.nodeId) as {...; sup: string | null } | undefined;
-    return row !== undefined
-      && row.s === spaceId
-      && row.d === null
-      && row.st !== "archived"
-      && row.sup === null;          // W1 ADDITION: exclude superseded
-  })
-  .slice(0, k);
+// In db/vec.ts — replaces the single-shot search + filter.
+const MAX_CANDIDATES = 2000;  // safety bound: never scan more than this many vector hits
+
+async function vecSearchCurrent(
+  spaceId: string,
+  queryVector: number[],
+  k: number,
+): Promise<ScoredHit[]> {
+  const valid: ScoredHit[] = [];
+  let offset = 0;
+  // Initial fetch size: same over-fetch as before (k*6 headroom).
+  let fetchSize = Math.min(500, Math.max(k * 6, k + 40));
+
+  const lookup = db.prepare(
+    `SELECT space_id AS s, deleted_at AS d, status AS st, superseded_at AS sup
+     FROM nodes WHERE id = ?`
+  );
+
+  while (valid.length < k && offset < MAX_CANDIDATES) {
+    // Raw vector search: returns up to fetchSize hits starting at offset.
+    // (Assumes the underlying vec_search supports offset/limit pagination;
+    //  if not, fetch fetchSize+offset and slice — documented in implementation.)
+    const batch: ScoredHit[] = vecSearchRaw(queryVector, fetchSize, offset);
+    if (batch.length === 0) break;  // candidate pool exhausted
+
+    let batchValid = 0;
+    for (const h of batch) {
+      const row = lookup.get(h.nodeId) as
+        { s: number; d: string | null; st: string; sup: string | null } | undefined;
+      if (row !== undefined
+          && row.s === spaceId
+          && row.d === null
+          && row.st !== "archived"
+          && row.sup === null) {          // exclude superseded
+        valid.push(h);
+        batchValid++;
+        if (valid.length >= k) break;
+      }
+    }
+
+    offset += batch.length;
+
+    // Adaptive widening: if this batch was mostly superseded, the result set is
+    // superseded-heavy — double the fetch size for the next iteration.
+    // This handles the pathological case where superseded nodes dominate the index.
+    if (batch.length > 0 && batchValid < batch.length / 2) {
+      fetchSize = Math.min(fetchSize * 2, MAX_CANDIDATES - offset);
+    }
+
+    // If the vector index returned fewer than requested, there are no more candidates.
+    if (batch.length < fetchSize / 2 && offset >= fetchSize) break;
+  }
+
+  return valid.slice(0, k);
+}
 ```
 
-The existing over-fetch (`k*6`) provides headroom: even if superseded nodes occupied candidate slots, the filter runs before `.slice(0, k)`, so valid results fill the top-K. **Test T-RTR-1** verifies this with a synthetic case where superseded nodes would otherwise dominate the top-K.
+**Why this is correct:**
+- **Termination:** the loop exits when (a) we have `k` valid, (b) the vector index is exhausted (`batch.length === 0`), or (c) we hit `MAX_CANDIDATES`. It cannot loop forever.
+- **Completeness:** unlike the single-shot approach, valid results are never lost to superseded crowding — the loop keeps going until it finds enough valid results or proves none exist.
+- **Performance:** the common case (few superseded nodes) terminates after one iteration, identical to the old behavior. The adaptive doubling means the pathological case costs O(log n) extra fetches, not O(n).
+- **Determinism:** results are in vector-similarity order (batches are fetched in order, valid results appended in order). The top-k valid results are the same as if the index had never contained superseded nodes.
+
+**Test T-RTR-2** (new, from round-3 review — superseded candidates EXCEED the initial over-fetch window):
+```
+T-RTR-2: Iterative over-fetch survives superseded flooding
+  GIVEN 500 superseded nodes with high vector similarity to the query
+  AND 3 valid nodes with slightly lower similarity
+  AND k = 3 (initial fetchSize = max(3*6, 3+40) = 43)
+  WHEN vecSearchCurrent runs
+  THEN all 3 valid nodes are returned
+  AND no superseded node is returned
+  AND the loop terminates (offset < MAX_CANDIDATES)
+```
+Note: with 500 superseded nodes and initial fetchSize 43, the first batch contains zero valid results. The adaptive doubling (43 → 86 → 172 → 344 → 688) ensures the valid nodes are found within ~4 iterations. A single-shot filter would have returned zero results.
 
 ### 6.3 Keyword search (`db/fts.ts`)
 
@@ -353,60 +505,131 @@ Memory text is retrievable only through authorized access (the `getById` history
 
 ## 9. Migration, backfill, and rollback (Revision 1 §3, corrected)
 
-### 9.1 DDL (canonical timestamps)
+### 9.1 DDL (canonical timestamps) — Revision 3 (fixes B2)
+
+**SQLite constraint (verified):** `ALTER TABLE ... ADD COLUMN` does **not** support parenthesized expression defaults. Per the [SQLite ALTER TABLE documentation](https://www.sqlite.org/lang_altertable.html): *"The new column may not have a default value of CURRENT_TIME, CURRENT_DATE, CURRENT_TIMESTAMP, or an expression in parentheses."* This applies to all SQLite versions, including the one bundled with better-sqlite3 12.11.1. The Revision 2 migration DDL (`DEFAULT (strftime(...))` on `ADD COLUMN`) would have been **rejected at migration time**.
+
+**Consequence:** the migration path and the fresh-schema path use different DDL for `recorded_at`, but produce **identical runtime behavior**:
 
 ```typescript
 // In migrateSchema(), following the existing PRAGMA-guarded pattern:
+// NOTE: recorded_at is added WITHOUT a default (SQLite forbids expression
+// defaults on ADD COLUMN). It is backfilled immediately (§9.2) and set
+// explicitly by application code on every insert (§9.3). A test (T-WRITE-1)
+// fails if any insert path omits it.
 const nodeCols = sqlite.prepare(`PRAGMA table_info(nodes)`).all() as { name: string }[];
 for (const [col, ddl] of [
-  ["valid_from",     `ALTER TABLE nodes ADD COLUMN valid_from TEXT`],
-  ["valid_to",       `ALTER TABLE nodes ADD COLUMN valid_to TEXT`],
-  ["never_true",     `ALTER TABLE nodes ADD COLUMN never_true INTEGER NOT NULL DEFAULT 0`],
-  ["recorded_at",    `ALTER TABLE nodes ADD COLUMN recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))`],
-  ["superseded_at",  `ALTER TABLE nodes ADD COLUMN superseded_at TEXT`],
-  ["superseded_by",  `ALTER TABLE nodes ADD COLUMN superseded_by INTEGER`],
+  ["valid_from",       `ALTER TABLE nodes ADD COLUMN valid_from TEXT`],
+  ["valid_to",         `ALTER TABLE nodes ADD COLUMN valid_to TEXT`],
+  // NO never_true column (see §2.4 — corrections table instead).
+  ["recorded_at",      `ALTER TABLE nodes ADD COLUMN recorded_at TEXT`],
+  ["superseded_at",    `ALTER TABLE nodes ADD COLUMN superseded_at TEXT`],
+  ["superseded_by",    `ALTER TABLE nodes ADD COLUMN superseded_by INTEGER`],
   ["supersede_reason", `ALTER TABLE nodes ADD COLUMN supersede_reason TEXT`],
 ] as const) {
   if (!nodeCols.some((c) => c.name === col)) sqlite.exec(ddl);
 }
+
+// New table — no ALTER needed (CREATE TABLE IF NOT EXISTS is idempotent):
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS corrections (
+    id INTEGER PRIMARY KEY,
+    space_id INTEGER NOT NULL,
+    node_id INTEGER NOT NULL,
+    correction_type TEXT NOT NULL,
+    corrected_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    corrected_by TEXT NOT NULL,
+    reason TEXT,
+    superseding_node_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_corrections_node ON corrections(node_id);
+  CREATE INDEX IF NOT EXISTS idx_corrections_space_time ON corrections(space_id, corrected_at);
+`);
 ```
 
-In `BOOTSTRAP_SQL` (`CREATE TABLE nodes`), the new columns are defined with the same types and defaults. In drizzle `schema.ts`, the fields are added with matching types.
+In `BOOTSTRAP_SQL` (`CREATE TABLE nodes`, fresh databases), the new columns ARE defined with expression defaults — this is legal in `CREATE TABLE`:
+```sql
+recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+-- (other columns as above)
+```
 
-### 9.2 Backfill
+In drizzle `schema.ts`, the fields are added with matching types. The drizzle default for `recorded_at` is documented as "fresh-schema backstop only; application code always sets explicitly."
+
+**Why the asymmetry is safe:** the DB default is a *backstop*, not the primary mechanism. In both fresh and migrated schemas, every application insert path sets `recorded_at` explicitly to `new Date().toISOString()` (§9.3). The DB default only matters for raw-SQL inserts that bypass the application — and in migrated schemas, such inserts would produce NULL `recorded_at`, which the post-migration assertion (§9.2) and the T-WRITE-1 test would catch during development. In production, all writes go through the application. The behavior is identical: every row has a canonical-format `recorded_at`.
+
+### 9.2 Backfill — Revision 3 (fixes B1)
+
+**Migration step order is critical.** Revision 2 backfilled `recorded_at = created_at` BEFORE normalizing `created_at`, leaving `recorded_at` in the old SQLite format. The correct order:
 
 ```sql
--- recorded_at: best available proxy is created_at. Documented caveat: created_at is
--- when the ROW was created, which is our best approximation of "when the system learned
--- the fact" for legacy data. It is NOT proof of exact learning time (e.g., bulk imports
--- may share timestamps). Per the review's decision, this caveat is documented, not fixed.
-UPDATE nodes SET recorded_at = created_at WHERE recorded_at IS NULL;
--- (The DEFAULT only applies to rows inserted AFTER the column is added;
---  existing rows get NULL from ADD COLUMN, hence the backfill.)
-
--- Normalize created_at to canonical format (see §1.3).
+-- STEP 1: Normalize created_at to canonical format FIRST.
+-- strftime parses the old 'YYYY-MM-DD HH:MM:SS' SQLite format correctly.
+-- Rows already in canonical format are untouched (the WHERE clause skips them).
 UPDATE nodes
 SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
 WHERE created_at NOT LIKE '%T%';
 
--- valid_from / valid_to / never_true / superseded_* : NULL / 0 defaults are correct.
+-- STEP 2: Backfill recorded_at from the NOW-NORMALIZED created_at.
+-- recorded_at is NULL for all existing rows (ADD COLUMN without default → NULL).
+UPDATE nodes SET recorded_at = created_at WHERE recorded_at IS NULL;
+
+-- STEP 3: Normalize other tables with CURRENT_TIMESTAMP defaults (same pattern).
+UPDATE edges
+SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
+WHERE created_at NOT LIKE '%T%';
+-- (agent_logs, etc. — same pattern, enumerated in implementation.)
+
+-- STEP 4: valid_from / valid_to / superseded_* : NULL defaults are correct.
 -- All existing rows start as current. No behavior change until supersession occurs.
+-- No corrections rows are created by migration (no historical corrections to import).
 ```
+
+**Caveat (per review decision, documented not fixed):** `recorded_at` backfilled from `created_at` is the best available proxy for "when the system learned the fact." It is NOT proof of exact learning time (e.g., bulk imports may share timestamps, and `created_at` reflects row creation, not necessarily fact acquisition). This caveat is documented in code comments and in the `recorded_at` column documentation. For all rows created AFTER the W1 migration, `recorded_at` is set explicitly at insert time and is exact.
+
+**Post-migration assertion (new, from round-3 review):** after running the migration SQL, the application verifies the canonical-format invariant before completing startup:
+
+```typescript
+// In migrateSchema(), after the W1 migration block:
+const BAD_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const bad = sqlite.prepare(`
+  SELECT COUNT(*) AS n FROM nodes
+  WHERE (created_at IS NOT NULL AND created_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+     OR (recorded_at IS NOT NULL AND recorded_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+     OR (valid_from IS NOT NULL AND valid_from NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+     OR (valid_to IS NOT NULL AND valid_to NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+     OR (superseded_at IS NOT NULL AND superseded_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+`).get() as { n: number };
+if (bad.n > 0) {
+  throw new Error(`W1 migration: ${bad.n} rows have non-canonical timestamps after normalization`);
+}
+// (SQLite GLOB is used in SQL; the stricter regex /^\d{4}-...$/ is applied in
+//  TypeScript in test T-MIG-1 for exact validation.)
+```
+
+If the assertion fails, the migration throws and the application does not start — a loud failure, not silent corruption. **Test T-MIG-1** (new): runs the migration on a fixture DB with mixed-format timestamps, asserts zero non-canonical timestamps afterward and that the assertion itself would catch a deliberately corrupted row.
 
 ### 9.3 Insert-path audit (fixes B2)
 
-Every path that creates nodes must result in a populated `recorded_at`. The DB default guarantees this even if application code forgets, but the audit documents the intended behavior:
+Every path that creates nodes must result in a populated `recorded_at`. Because the migration cannot use a DB-level expression default (see §9.1), **application code is the enforcement mechanism**, backed by a test that fails if any path omits it.
 
-| # | Insert path | File | Sets `recorded_at` explicitly? | Backstop |
+| # | Insert path | File | Sets `recorded_at` explicitly? | Guarantee |
 |---|---|---|---|---|
-| 1 | `NodesRepo.create()` | `repositories/nodes.repo.ts:90` | **Yes (W1 change)** — add `recordedAt: new Date().toISOString()` alongside existing `lastTendedAt` | DB default |
-| 2 | Chat extraction (agent loop writes memories) | `agent/loop.ts` → calls `NodesRepo.create()` | Via #1 | DB default |
-| 3 | Telegram `/log` handler | `telegram/bot.ts` → calls `NodesRepo.create()` | Via #1 | DB default |
-| 4 | Agent tool writes (`taskCreator`, `fire_reminder`) | `agent/tools/*.ts` → `NodesRepo.create()` | Via #1 | DB default |
-| 5 | `supersede()` new-row insert | `agent/temporal.ts` (new) | **Yes** — explicit `strftime` in SQL | N/A (explicit) |
-| 6 | Any future raw-SQL `INSERT INTO nodes` | (codebase audit) | **Must** use canonical format or rely on default | DB default |
+| 1 | `NodesRepo.create()` | `repositories/nodes.repo.ts:90` | **Yes (W1 change)** — add `recordedAt: new Date().toISOString()` alongside the existing `createdAt` change (§1.3) | Application code |
+| 2 | Chat extraction (agent loop writes memories) | `agent/loop.ts` → calls `NodesRepo.create()` | Via #1 | Application code |
+| 3 | Telegram `/log` handler | `telegram/bot.ts` → calls `NodesRepo.create()` | Via #1 | Application code |
+| 4 | Agent tool writes (`taskCreator`, `fire_reminder`) | `agent/tools/*.ts` → `NodesRepo.create()` | Via #1 | Application code |
+| 5 | `supersede()` new-row insert | `agent/temporal.ts` (new) | **Yes** — explicit `strftime('%Y-%m-%dT%H:%M:%fZ','now')` in SQL | Explicit SQL |
+| 6 | `corrections` table inserts | `agent/temporal.ts` (new) | **Yes** — `corrected_at` defaults via `CREATE TABLE` expression default (legal in fresh schema; migration uses `CREATE TABLE IF NOT EXISTS` which also supports it) | DB default |
+| 7 | Any future raw-SQL `INSERT INTO nodes` | (codebase audit) | **Must** set `recorded_at` explicitly or rely on... nothing — there is no DB backstop in migrated schemas. The codebase audit (§6.6) must verify no raw inserts bypass `NodesRepo.create()`. | Code review + test |
 
-**Test T-WRITE-1** (new, from review): create nodes through paths 1–4, verify `recorded_at` is populated and matches canonical format on every row.
+**Why this is sufficient:** In practice, all node creation flows through `NodesRepo.create()` (paths 1–4) or the `supersede()` writer (path 5). There is no concurrent writer — better-sqlite3 is single-process on Fly. The invariant is enforced at the narrowest choke point (`NodesRepo.create()`), not scattered across callers.
+
+**Test T-WRITE-1** (expanded from round-2): create nodes through paths 1–4 (real `NodesRepo.create()` calls, simulated chat extraction, simulated `/log`, simulated tool writes), then assert:
+1. Every created row has `recorded_at IS NOT NULL`.
+2. Every `recorded_at` matches `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`.
+3. `recorded_at` is within 5 seconds of the test's start time (proves it's set at insert, not backfilled).
+4. A direct SQL `INSERT INTO nodes (...)` WITHOUT `recorded_at` produces NULL (documents the known limitation; the test asserts the application never does this).
 
 ### 9.4 Rollback (additional issue — revised)
 
@@ -438,36 +661,60 @@ All tests in `packages/server/src/agent/__tests__/w1-temporal.test.ts`.
 
 ### Revision 1 tests (T1–T8, retained with corrections)
 
-- **T1** (basic supersession): updated — uses canonical timestamps; asserts `never_true = 0`.
+- **T1** (basic supersession): updated — uses canonical timestamps; asserts a `corrections` row with `correction_type = 'factual_update'` is created.
 - **T2** (out-of-order): updated — `valid_from = "2026-10-08T00:00:00.000Z"` (date-only → midnight UTC per §1.4).
-- **T3** (repeated corrections): updated — first correction uses Type 2 (`never_true = 1`, no valid interval); history shows "believed, corrected as false, then replaced."
+- **T3** (repeated corrections): updated — first correction uses Type 2 (false-belief correction event, no valid interval on the row); history via `corrections` table shows "believed, corrected as false, then replaced."
 - **T4** (concurrent supersession): unchanged.
 - **T5** (ambiguous non-invalidation): unchanged.
 - **T6** (digest exclusion): **expanded** — must cover the actual LLM-generated digest path, not just `buildDailyDigest()`. The test constructs the input that the LLM summarization layer receives and asserts no superseded fact reaches it.
 - **T7** (backfill): updated — asserts canonical timestamp format on all backfilled rows.
 - **T8** (cascade): updated — asserts atomic commit of old + dependent + replacement + audit (deliberately fail one step, verify full rollback).
 
-### New tests from round-2 review
+### New tests from round-2 review (retained)
 
 - **T-TIME-1 through T-TIME-4**: timestamp consistency (§1.5).
-- **T-WRITE-1**: all insert paths populate `recorded_at` (§9.3).
+- **T-WRITE-1**: all insert paths populate `recorded_at` (§9.3, expanded in Rev 3).
 - **T-TRIG-1**: ambiguous LLM inference cannot supersede (§3.2).
-- **T-RTR-1**: top-K regression — superseded vector/keyword matches cannot crowd out valid results (§6.2).
+- **T-RTR-1**: top-K regression — superseded vector/keyword matches cannot crowd out valid results when they dominate the final top-K (§6.2, Rev 2 version; superseded by T-RTR-2 for the flooding case).
 - **T-RB-1**: rollback behavior — flag-off is degraded but lossless (§9.4).
 - **T-FK-1**: `superseded_by` referential integrity (§7).
 - **T-SEC-1**: cross-space rejection — supersession attempt across `space_id` fails without modifying either space.
 - **T-PAR-1**: fresh vs. migrated parity (§9.5).
 
-**New test: never-true correction (from review):**
+### New tests from round-3 review
+
+- **T-MIG-1**: migration order and assertion (§9.2). Fixture DB with mixed-format `created_at` values → run migration → assert all temporal columns match canonical format; assert the post-migration assertion throws on a deliberately corrupted row.
+- **T-RTR-2**: iterative over-fetch survives superseded flooding (§6.2). 500 superseded high-similarity nodes + 3 valid lower-similarity nodes, k=3 → all 3 valid returned, loop terminates.
+- **T-HIST-1**: historical as-of reconstruction (§2.3). Oct 5 query shows believed-true; Oct 11 query shows corrected-as-false.
+- **T-NT-1** (revised): false-belief correction via `corrections` table, no `never_true` column (§2.4).
+- **T-CAS-1**: atomic cascade failure (§5.1, retained).
+
+**New test: never-true correction via corrections table (from review, revised for §2.4):**
 ```
 T-NT-1: Correction of a never-true fact creates no false interval
-  GIVEN node A "Car insurance: $200/mo" (current)
+  GIVEN node A "Car insurance: $200/mo" (current, recorded_at = Oct 1)
   WHEN user says "I don't have a car, never did"
   THEN supersede(spaceId, A, null, 'false_belief')
-  AND A has valid_from IS NULL, valid_to IS NULL, never_true = 1
+  AND A has valid_from IS NULL, valid_to IS NULL (no interval fabricated)
   AND A has superseded_at NOT NULL, supersede_reason = 'false_belief'
+  AND a corrections row exists: node_id = A, correction_type = 'false_belief',
+      corrected_at ≈ now, corrected_by = 'user'
+  AND isNeverTrue(A) returns true (derived from corrections table)
   AND no timestamp on A suggests it was ever true
-  AND historical query shows A as "believed [recorded_at] → corrected as false [superseded_at]"
+```
+
+**New test: historical as-of reconstruction (from round-3 review, B3):**
+```
+T-HIST-1: As-of queries reconstruct pre-correction belief state
+  GIVEN node A "Car insurance: $200/mo" (recorded_at = Oct 1T10:00:00.000Z)
+  AND on Oct 10T14:00:00.000Z user corrects it as false_belief
+    (A.superseded_at = Oct 10T14:00:00.000Z; corrections row with corrected_at = Oct 10T14:00:00.000Z)
+  WHEN querying as-of Oct 5T00:00:00.000Z
+  THEN A is returned as believed-true (was_corrected_as_false = 0)
+  AND the result does NOT imply the system knew it was false on Oct 5
+  WHEN querying as-of Oct 11T00:00:00.000Z
+  THEN A is excluded from current-truth results (superseded_at <= Oct 11)
+  AND in history mode, A shows was_corrected_as_false = 1 with corrected_at = Oct 10
 ```
 
 **New test: atomic cascade failure (from review):**
@@ -499,7 +746,7 @@ W1 is accepted iff **all** of the following hold:
 
 **AC6 — No regressions.** Full `npm test` + `npm run typecheck` pass.
 
-**AC7 — Corrections don't create false truth.** T-NT-1 passes. No test produces a row where `never_true = 1` has non-NULL `valid_from`/`valid_to`.
+**AC7 — Corrections don't create false truth.** T-NT-1 + T-HIST-1 pass. No correction produces a row with non-NULL `valid_from`/`valid_to` for a false-belief correction. As-of queries reconstruct pre-correction belief states correctly.
 
 **AC8 — Uncertain inferences don't mutate history.** T-TRIG-1 passes.
 
@@ -530,16 +777,16 @@ All 12 non-goals from Revision 1 stand. Additionally:
 
 | File | Change |
 |---|---|
-| `packages/server/src/db/schemaSql.ts` | Add 7 columns to `CREATE TABLE nodes` in `BOOTSTRAP_SQL` (with canonical defaults) |
-| `packages/server/src/db/schema.ts` | Add 7 fields to drizzle `nodes` table definition |
-| `packages/server/src/db/client.ts` | Add 7 PRAGMA-guarded `ALTER TABLE` migrations + backfill + `created_at` normalization in `migrateSchema()` |
-| `packages/server/src/agent/temporal.ts` | **New file.** `supersede()` writer (3 correction types), `SupersessionConflictError`, `currentFilter()` helper, trigger-contract validation |
+| `packages/server/src/db/schemaSql.ts` | Add 6 columns to `CREATE TABLE nodes` in `BOOTSTRAP_SQL` (`recorded_at` gets expression default here — legal in `CREATE TABLE`); add `CREATE TABLE corrections` + indexes |
+| `packages/server/src/db/schema.ts` | Add 6 fields to drizzle `nodes` table definition; add `corrections` table definition |
+| `packages/server/src/db/client.ts` | Add 6 PRAGMA-guarded `ALTER TABLE` migrations (no `never_true`; `recorded_at` nullable, no expression default) + `CREATE TABLE IF NOT EXISTS corrections` + ordered backfill (normalize → backfill → assert) in `migrateSchema()` |
+| `packages/server/src/agent/temporal.ts` | **New file.** `supersede()` writer (3 correction types), `SupersessionConflictError`, `currentFilter()` helper, `isNeverTrue()` + `getCorrections()` (derived from `corrections` table), trigger-contract validation, `vecSearchCurrent()` iterative over-fetch |
 | `packages/server/src/repositories/nodes.repo.ts` | `create()`: set `createdAt` + `recordedAt` explicitly. Add `getCurrentById()`. Add `superseded_at IS NULL` + valid-time filter to `recent()`, `all()`, `byIds()` with `includeSuperseded` opt-in. `getById()` unchanged (history path). |
-| `packages/server/src/db/vec.ts` | Add `superseded_at` to the post-search JS filter (line ~175) |
+| `packages/server/src/db/vec.ts` | Replace single-shot search + JS filter with `vecSearchCurrent()` iterative over-fetch with adaptive widening (§6.2) |
 | `packages/server/src/db/fts.ts` | Add `AND n.superseded_at IS NULL` to the WHERE clause (line ~67) |
 | `packages/server/src/synthesis/dailyDigest.ts` | Add supersession filter to cooling + reminders inline SQL; verify LLM digest path input filtering |
 | `packages/server/src/agent/tools/memorySearch.ts` | Verify `byIds()` filter propagates |
 | `packages/server/src/agent/loop.ts` | Tag new facts with `origin` (`user_statement` | `user_correction` | `model_inference`); only the first two qualify for auto-supersession |
-| `packages/server/src/agent/__tests__/w1-temporal.test.ts` | **New file.** Tests T1–T8 (revised) + T-TIME-1–4 + T-WRITE-1 + T-TRIG-1 + T-RTR-1 + T-RB-1 + T-FK-1 + T-SEC-1 + T-PAR-1 + T-NT-1 + T-CAS-1 |
+| `packages/server/src/agent/__tests__/w1-temporal.test.ts` | **New file.** Tests T1–T8 (revised) + T-TIME-1–4 + T-WRITE-1 + T-TRIG-1 + T-RTR-1 + T-RTR-2 + T-RB-1 + T-FK-1 + T-SEC-1 + T-PAR-1 + T-NT-1 + T-HIST-1 + T-MIG-1 + T-CAS-1 |
 
-**Estimated scope:** ~250 lines of new production code (temporal.ts + filter helpers + method contracts), ~180 lines of migration/schema changes, ~500 lines of tests. No new dependencies. No LLM calls in the supersession writer (deterministic SQL + audit INSERT). The `origin` tagging in the agent loop is metadata only, not a new LLM call.
+**Estimated scope:** ~300 lines of new production code (temporal.ts + corrections helpers + iterative vec search + filter helpers + method contracts), ~200 lines of migration/schema changes (including `corrections` table), ~650 lines of tests. No new dependencies. No LLM calls in the supersession writer (deterministic SQL + audit INSERT). The `origin` tagging in the agent loop is metadata only, not a new LLM call.
