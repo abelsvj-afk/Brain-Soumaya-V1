@@ -1,5 +1,5 @@
 import type { ExtractionResult, ClarificationInterpretation } from "@brain/shared";
-import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, DegradeReason, LinkCandidate, LinkValidation, LlmProvider } from "./adapter.js";
+import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, DegradeReason, LinkCandidate, LinkValidation, LlmProvider, LlmToolCallInput, LlmToolResult } from "./adapter.js";
 import { HeuristicProvider } from "./heuristic.js";
 
 /**
@@ -312,5 +312,10 @@ export class ResilientLlmProvider implements LlmProvider {
   async route(briefing: string, candidates: { tool: string; reason: string }[]): Promise<number[]> {
     if (this.blocked || !this.primary.route) throw new Error("route unavailable");
     return await withTimeout(this.primary.route(briefing, candidates), this.timeoutMs, "route");
+  }
+
+  async callWithTools(input: LlmToolCallInput): Promise<LlmToolResult> {
+    if (this.blocked || !this.primary.callWithTools) throw new Error("callWithTools unavailable");
+    return await withTimeout(this.primary.callWithTools(input), this.timeoutMs, "callWithTools");
   }
 }

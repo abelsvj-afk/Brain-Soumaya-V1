@@ -1,14 +1,22 @@
 # Soumaya's Tools — an agentic tool-router she can call on her own
 
-Status: **BUILT (v1 complete)** · Owner: Claude · Branch: `claude/soumaya-second-brain-v1-m4z4hc`
+Status: **BUILT (v1 complete) + Phase 1 agent loop (in progress)** · Owner: Claude · Branch: `phase-1-agent-loop`
 
-> **Done (2026-07-10).** All six tools + the agentic router are shipped on `master`, gate-green:
-> `fire_reminder` · `create_task` · `surface_orphan` · `review_nudge` · `check_in` · `web_lookup`
-> (Gemini grounding, gated). The router is two-phase — every tool DETECTS deterministic candidates
-> (offline-safe), and when Research Mode is on + a working `llm.route` exists, Soumaya CURATES which
-> candidates to execute (she can only pick from validated candidates, never invent one). Runs on the
-> 60s interval; delivery → Telegram if linked, always logged to `agent_logs`. **Needs a `fly deploy`
-> to go live.**
+> **Done (2026-07-10).** The original six tools + the agentic router shipped: `fire_reminder` ·
+> `create_task` · `surface_orphan` · `review_nudge` · `check_in` · `web_lookup` (Gemini grounding,
+> gated). The registry has since grown to 12 tools (see below). The router is two-phase — every
+> tool DETECTS deterministic candidates (offline-safe), and when Research Mode is on + a working
+> `llm.route` exists, Soumaya CURATES which candidates to execute. Runs on the 60s interval;
+> delivery → Telegram if linked, always logged to `agent_logs`.
+>
+> **Phase 1 agent loop (2026-10-19, branch `phase-1-agent-loop`, NOT merged).** A conversational
+> function-calling loop (`agent/loop.ts`) lets Soumaya call tools mid-conversation via the new
+> `LlmProvider.callWithTools()`. The registry owns all tool definitions; providers translate them
+> (never define them). Five tools exposed: `memory_search` (new), `web_lookup`, `check_in` (reads,
+> auto) + `fire_reminder`, `create_task` (writes, require explicit user approval). Approvals use a
+> crash-safe lifecycle (`tool_approvals`: pending→confirmed→executing→executed/failed, approval-id
+> idempotency keys, effectively-once). `agent_logs` is append-only (BEFORE UPDATE/DELETE triggers).
+> See "Phase 1 agent loop" section below.
 
 ## Why
 
@@ -112,3 +120,35 @@ the LLM/web are gated by Research Mode + USD budget (+ Fuel for expansion), same
   memories never fire.
 - Offline path proven (no key, no Telegram → still marks fired + logs).
 - Additive migration proven (existing volume upgrades in place).
+
+
+---
+
+## Phase 1 agent loop (2026-10-19 — branch `phase-1-agent-loop`, NOT merged/deployed)
+
+A second way for Soumaya to use tools, alongside the deterministic router:
+
+| | Deterministic router (existing) | Agent loop (Phase 1) |
+|---|---|---|
+| Trigger | 60s tick, `detect()` finds opportunities | User message in chat / Telegram |
+| Choice | LLM curates from deterministic candidates | LLM proposes tool calls from schemas |
+| Tools | All 12 in registry | 5: `memory_search`, `web_lookup`, `check_in`, `fire_reminder`, `create_task` |
+| Writes | N/A (router tools are self-contained) | Require explicit user approval |
+
+**Key files:**
+- `agent/loop.ts` — the loop (6 iterations, 4 calls/response, 12 executions/turn, strict in-order batches)
+- `agent/approvals.ts` — approval state machine + crash recovery + 7-day pruning
+- `agent/tools/validation.ts` — ajv (draft 2020-12) arg validation, single trusted point
+- `agent/tools/memorySearch.ts` — new read-only tool (space-isolated hybrid retrieval)
+- `llm/adapter.ts` — `callWithTools()` on `LlmProvider`; implemented by Gemini, OpenAI, heuristic (offline → text only), forwarded by resilient wrapper
+- `api/routes/chat.ts` — `POST /api/chat/agent` (existing `POST /` untouched)
+- `telegram/bot.ts` — free-text path uses the loop, falls back to `chat()` on error
+
+**Safety invariants (acceptance-tested in `agent/__tests__/phase1.test.ts`):**
+1. Registry owns tool definitions, schemas, validation, authorization, execution. Adapters translate only.
+2. Write tools never execute without an explicit user confirmation bound to the exact args (sha256).
+3. Approval id = idempotency key; `UNIQUE(space_id, idempotency_key)` on nodes + atomic `fired_by_approval` UPDATE give effectively-once execution across crash-retries.
+4. `agent_logs` is append-only (triggers); `tool_approvals.args_json` (operational, may contain user text) is pruned after 7 days and never copied to the log.
+5. `memorySearch` takes spaceId from the server context only — cross-space retrieval is impossible by construction.
+
+**Not in Phase 1:** OAuth integrations (Gmail/Calendar/Drive), destructive tools, PWA, native wrapper. Merge and deploy both require separate approval after passing tests + security review.

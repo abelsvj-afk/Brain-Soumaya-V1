@@ -19,7 +19,8 @@
     "drizzle-orm": "0.45.2",
     "express": "^5.2.1",
     "sqlite-vec": "0.1.9",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "ajv": "^8.17.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

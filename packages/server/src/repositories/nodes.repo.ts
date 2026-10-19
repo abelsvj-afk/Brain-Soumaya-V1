@@ -23,6 +23,8 @@ export interface NewNode {
   occurredAt?: string;
   remindAt?: string;
   tags?: string[];
+  /** Phase 1 agent loop: idempotency key (the approval id). */
+  idempotencyKey?: string;
 }
 
 function toGraphNode(row: NodeRow): GraphNode {
@@ -106,6 +108,7 @@ export class NodesRepo {
           occurredAt: input.occurredAt ?? null,
           remindAt: input.remindAt ?? null,
           tags: input.tags && input.tags.length > 0 ? JSON.stringify(input.tags) : null,
+          idempotencyKey: input.idempotencyKey ?? null,
           lastTendedAt: new Date().toISOString(), // freshly tended on creation
         })
         .returning()

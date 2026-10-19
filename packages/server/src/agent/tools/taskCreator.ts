@@ -1,6 +1,5 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
-import { EdgesRepo } from "../../repositories/edges.repo.js";
 
 /**
  * Autonomous task creation — Soumaya turns a commitment you voiced ("I need to call
@@ -84,19 +83,50 @@ export const taskCreatorTool: Tool = {
     const nodeId = Number(args.nodeId);
     const label = String(args.label ?? "").trim();
     if (!label) return { ok: false, summary: "empty task label" };
+    // Phase 1 agent loop: the approval id is the idempotency key. A crash-retry
+    // of the same approval must not create a second task node.
+    const approvalId = typeof args._approvalId === "number" ? args._approvalId : null;
+    const idemKey = approvalId !== null ? `approval:${approvalId}` : null;
     const s = tc.ctx.handle.sqlite;
     const src = s.prepare(`SELECT content FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`).get(nodeId, tc.spaceId) as
       | { content: string }
       | undefined;
     if (!src) return { ok: false, summary: `source memory ${nodeId} gone` };
 
+    // Fast path: this approval already created its task (crash retry).
+    if (idemKey) {
+      const existing = s.prepare(
+        `SELECT id, label FROM nodes WHERE space_id = ? AND idempotency_key = ? AND deleted_at IS NULL`
+      ).get(tc.spaceId, idemKey) as { id: number; label: string } | undefined;
+      if (existing) {
+        ensureRelatesEdge(s, tc.spaceId, existing.id, nodeId);
+        return { ok: true, summary: `action "${existing.label}" already created (deduped)` };
+      }
+    }
+
     const expiresAt = new Date(tc.now + 3 * 24 * 3_600_000).toISOString(); // a 3-day soft window
     const vec = await tc.ctx.embeddings.embed(label);
-    const action = new NodesRepo(tc.ctx.handle, tc.spaceId).create(
-      { label, type: "daily", content: label, importance: 0.12, kind: "action", expiresAt, origin: "agent", agent: "soumaya" } as never,
-      vec,
-    );
-    new EdgesRepo(tc.ctx.handle, tc.spaceId).create({ source: action.id, target: nodeId, relationship: "relates_to", weight: 0.6 });
+    let action: { id: number };
+    try {
+      action = new NodesRepo(tc.ctx.handle, tc.spaceId).create(
+        { label, type: "daily", content: label, importance: 0.12, kind: "action", expiresAt, origin: "agent", agent: "soumaya", idempotencyKey: idemKey ?? undefined },
+        vec,
+      );
+    } catch (err) {
+      // Race lost: another execution of the same approval won the INSERT.
+      // The UNIQUE(space_id, idempotency_key) constraint is the atomic backstop.
+      if (idemKey && /UNIQUE constraint failed/i.test((err as Error).message)) {
+        const existing = s.prepare(
+          `SELECT id, label FROM nodes WHERE space_id = ? AND idempotency_key = ? AND deleted_at IS NULL`
+        ).get(tc.spaceId, idemKey) as { id: number; label: string } | undefined;
+        if (existing) {
+          ensureRelatesEdge(s, tc.spaceId, existing.id, nodeId);
+          return { ok: true, summary: `action "${existing.label}" already created (deduped)` };
+        }
+      }
+      throw err;
+    }
+    ensureRelatesEdge(s, tc.spaceId, action.id, nodeId);
 
     const msg = `✅ I made you an action: "${label}"`;
     let delivered = false;
@@ -109,3 +139,18 @@ export const taskCreatorTool: Tool = {
     return { ok: true, summary: `created action "${label}" from memory ${nodeId}`, delivered, message: msg };
   },
 };
+
+/**
+ * Ensure the relates_to edge exists (idempotent — edges have no unique
+ * constraint, so check-then-insert; safe because the node side is deduped).
+ */
+function ensureRelatesEdge(s: { prepare: (sql: string) => { get: (...p: unknown[]) => unknown; run: (...p: unknown[]) => unknown } }, spaceId: string, actionId: number, nodeId: number): void {
+  const existing = s.prepare(
+    `SELECT 1 FROM edges WHERE space_id = ? AND source = ? AND target = ? AND relationship = 'relates_to'`
+  ).get(spaceId, actionId, nodeId);
+  if (!existing) {
+    s.prepare(
+      `INSERT INTO edges (space_id, source, target, relationship, weight) VALUES (?, ?, ?, 'relates_to', 0.6)`
+    ).run(spaceId, actionId, nodeId);
+  }
+}

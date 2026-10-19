@@ -236,6 +236,69 @@ function migrateSchema(sqlite: RawDb): void {
   }
   // (Table creation lives ONLY in bootstrapSchema, which always runs first —
   // a second CREATE block here once drifted out of sync and shipped wrong shapes.)
+
+  // Phase 1 agent loop: approval lifecycle + crash-safe execution.
+  // tool_approvals is the operational state machine (mutable by design):
+  //   pending -> confirmed -> executing -> executed | failed
+  //   pending -> denied | expired
+  // Every transition also appends to agent_logs (the immutable audit trail).
+  // args_json holds the exact args to execute (operational necessity — may contain
+  // user text; NEVER copied into agent_logs). Terminal rows are pruned after 7d
+  // by maintenance; the audit trail in agent_logs is permanent.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS tool_approvals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      principal TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      args_json TEXT NOT NULL,
+      args_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      decided_at TEXT,
+      execution_attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      execution_log_id INTEGER
+    )
+  `);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_space_idx ON tool_approvals(space_id, status)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_principal_idx ON tool_approvals(principal, status)`);
+
+  // Append-only enforcement for the audit trail. No UPDATE or DELETE against
+  // agent_logs exists in the codebase (verified); these triggers make that
+  // structural instead of conventional. Operational state lives in
+  // tool_approvals (mutable by design) — the audit rows here are immutable.
+  sqlite.exec(`
+    CREATE TRIGGER IF NOT EXISTS agent_logs_no_update
+    BEFORE UPDATE ON agent_logs
+    BEGIN
+      SELECT RAISE(ABORT, 'agent_logs is append-only');
+    END
+  `);
+  sqlite.exec(`
+    CREATE TRIGGER IF NOT EXISTS agent_logs_no_delete
+    BEFORE DELETE ON agent_logs
+    BEGIN
+      SELECT RAISE(ABORT, 'agent_logs is append-only');
+    END
+  `);
+
+  // Phase 1 agent loop: idempotency support on nodes.
+  // - idempotency_key: set by write tools to the approval id. UNIQUE(space_id,
+  //   idempotency_key) so a crash-retry of the same approval can never create a
+  //   duplicate row. NULL keys (all existing rows) never conflict in SQLite.
+  // - fired_by_approval: which approval fired a reminder (fire_reminder's side
+  //   effect is an UPDATE, not an INSERT). Set atomically in the same UPDATE as
+  //   reminder_fired_at so a retry can distinguish "I fired this" from
+  //   "someone else fired this".
+  if (!cols.some((c) => c.name === "idempotency_key")) {
+    sqlite.exec(`ALTER TABLE nodes ADD COLUMN idempotency_key TEXT`);
+  }
+  if (!cols.some((c) => c.name === "fired_by_approval")) {
+    sqlite.exec(`ALTER TABLE nodes ADD COLUMN fired_by_approval INTEGER`);
+  }
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS nodes_idem_idx ON nodes(space_id, idempotency_key)`);
 }
 
 /**
