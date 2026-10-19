@@ -3,6 +3,14 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+> ## 2026-10-19 — Phase 1 agent loop (branch `phase-1-agent-loop`, NOT merged/deployed)
+> Final sign-off received to BUILD on a dedicated branch. Conversational function-calling loop
+> (`agent/loop.ts`) with 5 tools, crash-safe approval lifecycle (`tool_approvals`), append-only
+> `agent_logs`, strict batch semantics, and full acceptance tests (`agent/__tests__/phase1.test.ts`).
+> Scope: web `POST /api/chat/agent` + Telegram loop swap. No OAuth, no destructive tools.
+> **Not approved: merge or deploy** — those require passing tests, security review, and acceptance
+> evidence. Previous note: this file's historical sections below remain stale (see banner).
+
 > **⚠️ STALE (flagged 2026-08-25):** this snapshot is dated 2026-06-30 and predates roughly two
 > months of active commits (feature-growth work, Vision 2.0/Journeys, and a full-project review/fix
 > pass). Treat the "Current Sprint" and "Completed" sections below as historical, not current status.
