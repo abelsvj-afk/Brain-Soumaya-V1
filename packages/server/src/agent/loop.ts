@@ -193,6 +193,11 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
     const processable = proposed.slice(0, MAX_CALLS_PER_RESPONSE);
     let stoppedForApproval = false;
 
+    // Record the assistant's tool_calls message BEFORE any tool results.
+    // OpenAI (and strict providers) reject "tool" messages that aren't
+    // preceded by the assistant message containing the matching tool_calls.
+    messages.push({ role: "model", text: null, toolCalls: processable });
+
     for (const call of processable) {
       if (stoppedForApproval) {
         outcomes.push({

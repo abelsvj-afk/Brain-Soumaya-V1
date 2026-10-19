@@ -220,7 +220,11 @@ export interface LlmToolCall {
 /** A message in the agent-loop conversation (provider-neutral). */
 export type LlmLoopMessage =
   | { role: "user"; text: string }
-  | { role: "model"; text: string }
+  // "model" messages may carry toolCalls when the assistant requested tool
+  // execution. Providers like OpenAI REQUIRE the assistant tool_calls message
+  // to precede the corresponding "tool" messages — a "tool" role message
+  // without it is a 400 error. Always push this before tool results.
+  | { role: "model"; text: string | null; toolCalls?: LlmToolCall[] }
   | { role: "tool"; toolCallId: string; name: string; result: string };
 
 /** Result of one callWithTools invocation: final text OR requested calls. */

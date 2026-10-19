@@ -513,6 +513,15 @@ export class GeminiProvider implements LlmProvider {
           parts: [{ functionResponse: { name: m.name, response: { result: m.result } } }],
         };
       }
+      if (m.role === "model" && m.toolCalls && m.toolCalls.length > 0) {
+        // Assistant function calls — include text if present.
+        const parts: Record<string, unknown>[] = [];
+        if (m.text) parts.push({ text: m.text });
+        for (const tc of m.toolCalls) {
+          parts.push({ functionCall: { name: tc.name, args: tc.args } });
+        }
+        return { role: "model", parts };
+      }
       return { role: m.role, parts: [{ text: m.text }] };
     });
     const res = await this.ai.models.generateContent({
