@@ -112,3 +112,66 @@ the LLM/web are gated by Research Mode + USD budget (+ Fuel for expansion), same
   memories never fire.
 - Offline path proven (no key, no Telegram → still marks fired + logs).
 - Additive migration proven (existing volume upgrades in place).
+
+
+---
+
+## Phase 2: Notification Policy (branch `phase-2-notification-policy`)
+
+**Status: BUILT, awaiting tests.** Design signed off 2026-10-19 after 4 review rounds.
+
+### Problem
+Six tools could push to Telegram via `tc.notify()` with no shared policy: no quiet
+hours, no rate coordination, no user preferences. A 3am reminder went straight
+to the user's phone.
+
+### Architecture
+A **single policy boundary** wraps the router tick's notify closure (`index.ts`).
+Tools pass identity + occurrence hints; the policy decides send-now / queue /
+drop. Deferred messages wait in `notification_outbox`, delivered by a sweeper.
+
+### Preferences (`space_meta`, per-space)
+| Setting | Default | Set via |
+|---|---|---|
+| `timezone` | `America/New_York` | `/tz <IANA>` (validated, invalid rejected) |
+| `quiet_start` / `quiet_end` | `21:00` / `04:30` | `/quiet <HH:MM> <HH:MM>` |
+| `digest_time` | `06:00` | `/digest <HH:MM>` |
+| `daily_proactive_cap` | `5` | `/cap <n>` |
+`/settings` shows current values. Web UI deferred.
+
+### Priority vs urgency
+- **Urgent** (bypasses quiet hours + cap, reason logged): `fire_reminder` due
+  within 60 min; `billRisk` due within 6h (first alert per bill per day only).
+- **Normal**: checkins, nudges, reviews, tasks, stale reminders, ordinary bill warnings.
+- **Low**: reserved.
+`is_urgent` is the bypass authority, persisted per outbox row; queued bill alerts
+are re-evaluated at delivery time (atomic upgrade, one winner).
+
+### Outbox lifecycle
+`queued → sending → sent | failed | dropped | ambiguous`
+- `notif_key = sha256(space_id|tool|occurrence_id)` — UNIQUE dedup. Occurrence
+  IDs per tool: `node:{id}:at:{remindAt}`, `action:{id}`, `day:{localDay}`,
+  `week:{isoWeek}`, `bill:{id}:day:{localDay}`.
+- **Atomic cap claim**: single UPDATE with cap check — one winner per slot.
+  Cap derived from outbox rows (`status IN ('sending','sent')` with `cap_day`);
+  no separate counter. Failed/dropped release the slot automatically.
+- **Crash recovery** (lease 5 min): `send_started_at IS NULL` → definite
+  non-delivery → requeue, slot released. `send_started_at` set → **ambiguous**:
+  terminal, cap retained, never auto-retried (Telegram has no idempotency key;
+  a retry risks a duplicate send).
+- **Trade-off (documented)**: on ambiguous outcome we retain the cap slot and
+  don't retry — the cap contract takes precedence over delivery completeness.
+
+### Digest
+Fires at `digest_time` in the space's timezone (not midnight UTC);
+`last_digest_date` is the local date. Doesn't count toward the cap.
+
+### Audit
+Every decision → `agent_logs` (`notify:sent|queued|dropped|failed|ambiguous|deduped|retry`),
+content-free. Outbox `message` holds user-facing text (operational, pruned with the row).
+
+### Tests
+`packages/server/src/agent/notify/__tests__/phase2.test.ts` — 30+ cases:
+quiet-hour boundaries, cap races, urgent bypass, crash-before/after-send,
+ambiguous cap retention, DST, timezone validation, per-tool staleness,
+bill-upgrade atomicity, digest timing, audit hygiene.
