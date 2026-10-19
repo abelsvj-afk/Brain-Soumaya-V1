@@ -37,6 +37,8 @@ function withWantIds(sqlite: DbHandle["sqlite"], ids: number[], fn: () => EdgePa
     sqlite.exec("DROP TABLE want_ids");
   }
 }
+
+export interface NewEdge {
   source: number;
   target: number;
   relationship: RelationshipType;
