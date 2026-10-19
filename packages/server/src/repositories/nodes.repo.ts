@@ -260,7 +260,15 @@ export class NodesRepo {
       .map(toGraphNode);
   }
 
-  /** Archived memories (for the Browse "Archived" lens). */
+  /**
+   * Archived memories (for the Browse "Archived" lens).
+   *
+   * W1: this is a HISTORY/BROWSE view — archival status is orthogonal to
+   * temporal truth. Archived rows MAY include superseded nodes; hiding them
+   * would conflate "user put this away" with "this is no longer true".
+   * Callers that need only currently-true archived facts should filter
+   * `superseded_at IS NULL` themselves.
+   */
   archived(): GraphNode[] {
     return this.h.db
       .select()
@@ -290,6 +298,14 @@ export class NodesRepo {
       .map(toGraphNode);
   }
 
+  /**
+   * Total non-deleted records in this space.
+   *
+   * W1: this counts ALL non-deleted rows INCLUDING superseded ones — it is a
+   * storage total, not a count of currently-believed facts. If a feature
+   * needs the current-truth count, add a separately named method (e.g.
+   * `countCurrent()`) with explicit semantics rather than changing this one.
+   */
   count(): number {
     const r = this.h.sqlite
       .prepare(`SELECT COUNT(*) AS c FROM nodes WHERE deleted_at IS NULL AND space_id = ?`)

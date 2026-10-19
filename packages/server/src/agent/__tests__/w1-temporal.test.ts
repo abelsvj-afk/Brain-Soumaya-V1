@@ -801,3 +801,218 @@ describe("T-RTR-1: keyword search", () => {
     expect(ids).not.toContain(old.id);
   });
 });
+
+// ---------------------------------------------------------------------------
+// T-IDX-1/2: replacement-node search indexing (Item 1)
+// ---------------------------------------------------------------------------
+
+describe("T-IDX: replacement-node search indexing", () => {
+  it("replacement WITH embedding is findable via FTS and vector paths; old node in neither", () => {
+    const oldId = seedNode("Morning routine");
+    const result = supersede(handle, SPACE, {
+      oldNodeId: oldId,
+      newNode: {
+        label: "Evening routine uniqueword123",
+        type: "memory",
+        content: "switched to evening workouts uniqueword123",
+        embedding: EMB,
+      },
+      correctionType: "factual_update",
+      correctedBy: "user",
+      origin: "user_statement",
+    });
+    const newId = result.newNodeId!;
+
+    // FTS path (real keyword search)
+    const ftsHits = keywordSearch(handle.sqlite, SPACE, "uniqueword123", 10);
+    const ftsIds = ftsHits.map((h) => h.nodeId);
+    expect(ftsIds).toContain(newId);
+    expect(ftsIds).not.toContain(oldId);
+
+    // Vector path: the embedding must have been stored via upsertEmbedding
+    // (the same path supersede() uses). Defensive: skip if vec0 isn't loaded.
+    let vecAvailable = false;
+    try {
+      handle.sqlite.prepare(`SELECT 1 FROM vec_nodes LIMIT 1`).get();
+      vecAvailable = true;
+    } catch {
+      /* vec extension not loaded in this environment */
+    }
+    if (vecAvailable) {
+      const vecRow = handle.sqlite
+        .prepare(`SELECT node_id FROM vec_nodes WHERE node_id = ?`)
+        .get(BigInt(newId));
+      expect(vecRow).toBeDefined();
+    }
+
+    // vecSearchCurrent W1 filter: candidate pages containing BOTH the old
+    // (superseded) and new (current) node IDs must return only the new one.
+    const fakeFetchPage = () => [
+      { nodeId: oldId, distance: 0.05 },
+      { nodeId: newId, distance: 0.1 },
+    ];
+    const vecHits = vecSearchCurrent(handle.sqlite, SPACE, EMB, 5, undefined, fakeFetchPage);
+    const vecIds = vecHits.map((h) => h.nodeId);
+    expect(vecIds).toContain(newId);
+    expect(vecIds).not.toContain(oldId);
+  });
+
+  it("replacement WITHOUT embedding still gets FTS indexing (graceful degradation)", () => {
+    const oldId = seedNode("Old preference");
+    const result = supersede(handle, SPACE, {
+      oldNodeId: oldId,
+      newNode: {
+        label: "New preference ftsfallback456",
+        type: "memory",
+        content: "changed my mind ftsfallback456",
+        // No embedding — FTS must still work, no crash
+      },
+      correctionType: "factual_update",
+      correctedBy: "user",
+      origin: "user_statement",
+    });
+    const newId = result.newNodeId!;
+    const ftsHits = keywordSearch(handle.sqlite, SPACE, "ftsfallback456", 10);
+    const ftsIds = ftsHits.map((h) => h.nodeId);
+    expect(ftsIds).toContain(newId);
+    expect(ftsIds).not.toContain(oldId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-PO-1/2/3/4: Type 3 preference-override endsValidity flag (Item 2)
+// ---------------------------------------------------------------------------
+
+describe("T-PO: preference-override endsValidity flag", () => {
+  it("T-PO-1: silence mode (endsValidity false/undefined) preserves old valid_to", () => {
+    const a = seedNode("Prefers morning reminders", SPACE, {
+      valid_from: "2026-09-01T00:00:00.000Z",
+      valid_to: null,
+    });
+    const result = supersede(handle, SPACE, {
+      oldNodeId: a,
+      newNode: {
+        label: "Prefers evening reminders",
+        type: "memory",
+        content: "evenings work better now",
+        // endsValidity omitted → silence mode
+      },
+      correctionType: "preference_override",
+      correctedBy: "user",
+      origin: "user_statement",
+    });
+    // Old row superseded, but valid_to NOT touched (no end date invented)
+    const oldRow = getNode(a);
+    expect(oldRow.superseded_at).not.toBeNull();
+    expect(oldRow.valid_to).toBeNull();
+    expect(oldRow.supersede_reason).toBe("user_override");
+    // Replacement inserted and correction recorded
+    expect(result.newNodeId).not.toBeNull();
+    expect(getCorrections(handle.sqlite, a)).toHaveLength(1);
+    expect(getCorrections(handle.sqlite, a)[0].correction_type).toBe("preference_override");
+  });
+
+  it("T-PO-2: validity-ending mode with known validFrom closes valid_to", () => {
+    const a = seedNode("Prefers morning reminders", SPACE, {
+      valid_from: "2026-09-01T00:00:00.000Z",
+    });
+    const result = supersede(handle, SPACE, {
+      oldNodeId: a,
+      newNode: {
+        label: "Prefers evening reminders",
+        type: "memory",
+        content: "evenings work better now",
+        validFrom: "2026-10-15T00:00:00.000Z",
+        endsValidity: true,
+      },
+      correctionType: "preference_override",
+      correctedBy: "user",
+      origin: "user_statement",
+    });
+    const oldRow = getNode(a);
+    expect(oldRow.superseded_at).not.toBeNull();
+    // valid_to closed with the replacement's known validFrom
+    expect(oldRow.valid_to).toBe("2026-10-15T00:00:00.000Z");
+    expect(oldRow.supersede_reason).toBe("user_override");
+    expect(result.newNodeId).not.toBeNull();
+  });
+
+  it("T-PO-3: validity-ending mode WITHOUT known validFrom leaves valid_to NULL (never fabricated)", () => {
+    const a = seedNode("Prefers morning reminders", SPACE, {
+      valid_from: "2026-09-01T00:00:00.000Z",
+    });
+    supersede(handle, SPACE, {
+      oldNodeId: a,
+      newNode: {
+        label: "Prefers evening reminders",
+        type: "memory",
+        content: "evenings work better now",
+        // validFrom unknown, but endsValidity true
+        endsValidity: true,
+      },
+      correctionType: "preference_override",
+      correctedBy: "user",
+      origin: "user_statement",
+    });
+    const oldRow = getNode(a);
+    expect(oldRow.superseded_at).not.toBeNull();
+    // Ended at an unknown time — honest NULL, not a fabricated date
+    expect(oldRow.valid_to).toBeNull();
+    expect(oldRow.supersede_reason).toBe("user_override");
+  });
+
+  it("T-PO-4: preference_override with null newNode is a no-op (pure silence)", () => {
+    const a = seedNode("Trucking interest");
+    expect(() =>
+      supersede(handle, SPACE, {
+        oldNodeId: a,
+        newNode: null,
+        correctionType: "preference_override",
+        correctedBy: "user",
+        reason: "stop_bringing_up",
+        origin: "user_statement",
+      }),
+    ).toThrow(SupersessionConflictError);
+    // Nothing changed: still current, no correction event
+    expect(getNode(a).superseded_at).toBeNull();
+    expect(getCorrections(handle.sqlite, a)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-SEM-1/2: archived()/count() semantics (Item 3)
+// ---------------------------------------------------------------------------
+
+describe("T-SEM: archived() and count() semantics", () => {
+  it("T-SEM-1: archived() returns superseded archived nodes (history view)", () => {
+    const a = seedNode("Old archived fact");
+    repo.setStatus(a, "archived");
+    // Supersede it (false-belief, no replacement)
+    supersede(handle, SPACE, {
+      oldNodeId: a,
+      newNode: null,
+      correctionType: "false_belief",
+      correctedBy: "user",
+      origin: "user_correction",
+    });
+    // archived() is a history/browse view — the superseded archived node
+    // is still returned (archival status is orthogonal to temporal truth)
+    const archived = repo.archived();
+    expect(archived.map((n) => n.id)).toContain(a);
+  });
+
+  it("T-SEM-2: count() includes superseded nodes (storage total)", () => {
+    const before = repo.count();
+    const a = seedNode("Soon superseded");
+    expect(repo.count()).toBe(before + 1);
+    supersede(handle, SPACE, {
+      oldNodeId: a,
+      newNode: { label: "Replacement", type: "memory", content: "new" },
+      correctionType: "factual_update",
+      correctedBy: "user",
+      origin: "user_statement",
+    });
+    // count() is a storage total: old (superseded) + new (current) = +2
+    expect(repo.count()).toBe(before + 2);
+  });
+});

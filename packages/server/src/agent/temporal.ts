@@ -49,6 +49,16 @@ export interface SupersedeInput {
     /** Embedding for vector search indexing (optional but recommended — without it
      * the replacement node is invisible to memorySearch). */
     embedding?: Float32Array;
+    /**
+     * Type 3 (preference_override) only. Distinguishes the two meanings:
+     * - false/undefined (default): "stop bringing this up" — silence. The old
+     *   fact's validity interval is preserved; valid_to is NOT touched.
+     * - true: "I no longer prefer X; I prefer Y" — the old preference's
+     *   validity explicitly ends. valid_to closes with validFrom if known,
+     *   else stays NULL (never fabricated).
+     * Ignored for other correction types.
+     */
+    endsValidity?: boolean;
   } | null;
   /** Which kind of correction this is. */
   correctionType: CorrectionType;
@@ -124,11 +134,12 @@ export function supersede(
     );
   }
 
-  // Type 3 (preference override) that is NOT asserting the fact is untrue:
-  // do not touch temporal columns at all. The caller must distinguish
-  // "stop bringing up X" (silence — no supersession) from "X is no longer
-  // true" (factual update). We treat a bare preference_override with no
-  // replacement as a no-op that is logged, not a supersession.
+  // Type 3 (preference override) with NO replacement: pure silence request
+  // ("stop bringing up X" with no new fact). No supersession occurs — the
+  // writer logs and exits. Callers that DO have a replacement set
+  // newNode.endsValidity to declare whether the old preference's validity
+  // ends (true) or the old fact's interval is preserved (false/undefined).
+  // See design §2.2.
   if (input.correctionType === "preference_override" && input.newNode === null) {
     h.sqlite
       .prepare(
@@ -199,12 +210,20 @@ export function supersede(
     }
 
     // 3. Supersede the old row (optimistic guard: superseded_at IS NULL).
-    // valid_to is set ONLY for Type 1 (factual update). For Type 2
-    // (false-belief), valid_from/valid_to stay NULL — no interval is fabricated.
+    // valid_to closing rules (design §2.2):
+    // - Type 1 (factual_update): close with newNode.validFrom (null = unknown end).
+    // - Type 3 (preference_override) with endsValidity === true: the old
+    //   preference's validity explicitly ends — close with newNode.validFrom
+    //   if known, else leave NULL. NEVER fabricate a date.
+    // - Type 3 with endsValidity false/undefined: silence — do NOT touch valid_to.
+    // - Type 2 (false-belief): valid_from/valid_to stay NULL — no interval fabricated.
     const validTo =
-      input.correctionType === "factual_update" && input.newNode?.validFrom
-        ? input.newNode.validFrom
-        : null;
+      input.correctionType === "factual_update"
+        ? (input.newNode?.validFrom || null)
+        : input.correctionType === "preference_override" &&
+            input.newNode?.endsValidity === true
+          ? (input.newNode.validFrom || null)
+          : null;
     const reason: SupersedeReason =
       input.correctionType === "false_belief"
         ? "false_belief"
