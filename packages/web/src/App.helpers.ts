@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { GraphData, GraphNode } from "@brain/shared";
+import type { GraphData, GraphEdge, GraphNode } from "@brain/shared";
 
 /**
  * Pure presentational helpers extracted from the large App.tsx (Post-MVP D4 refactor):
@@ -45,21 +45,91 @@ import type { GraphData, GraphNode } from "@brain/shared";
  * (`x`/`y`/`z`/`fx`/`fy`/`fz`/`vx`/`vy`/`vz`) `orbits.ts` maintains are never present on a
  * freshly-fetched `GraphNode` (confirmed: not part of the shared `GraphNode` type), so
  * merging server fields onto an existing node object can never clobber them.
+ *
+ * --- Populate-path repair, D1/D5 (docs/repairs/galaxy-populate-render-stall.md) ---
+ * Links ARE now merged too — but by edge DATABASE ID, never by endpoint pair, and with
+ * scalar fields only. Rationale: the client's `linkKey` helper is UNDIRECTED
+ * (`a<b ? "a-b" : "b-a"`) while `EdgesRepo.exists()` is DIRECTED, so reversed pairs
+ * (A→B and B→A) can legally coexist; endpoint-pair keying would merge two distinct
+ * relationships. Id-keying kills the parallel/reversed question entirely.
+ *
+ * Criterion 5 (state correctness) governs both merges: only objects included in the
+ * returned (new) state may be mutated, and only with fields from the shared server
+ * contract types (`GraphNode`/`GraphEdge`) via the explicit allowlists below. Client-only
+ * fields (d3-resolved `source`/`target`, position/velocity/simulation fields) are never
+ * written; unknown/extra fields on a fresh payload are never copied; objects dropped
+ * from the new state are never touched.
  */
+
+// Server-contract fields a refresh may merge onto an existing node. `id` is the merge
+// key and never changes. Deliberately excludes every client-only field
+// (`x`/`y`/`z`/`fx`/`fy`/`fz`/`vx`/`vy`/`vz`, `__threeObj`, d3 internals, …).
+const GRAPH_NODE_SERVER_FIELDS: (keyof GraphNode)[] = [
+  "label", "celestialTitle", "type", "content", "emotionalWeight", "color",
+  "origin", "agent", "importance", "degree", "mass", "celestial", "val",
+  "kind", "status", "progress", "aliases", "memberCount", "reviewStrength",
+  "expiresAt", "lastTendedAt", "entropy", "occurredAt", "remindAt", "tags",
+  "researchQuestions", "researchAnswers", "createdAt",
+];
+
+// GraphEdge scalar fields safe to merge. NEVER `source`/`target` (d3-force resolves
+// those into node object references in place). NEVER `id` (it is the merge key).
+const GRAPH_EDGE_SCALAR_FIELDS: (keyof GraphEdge)[] = [
+  "relationship", "weight", "createdAt",
+];
+
+/**
+ * Copy allowlisted own-fields from source onto target — explicit field assignment,
+ * never `Object.assign` (which would also copy client-only and unknown fields).
+ * A field absent from the fresh payload keeps its existing value.
+ */
+function copyAllowlistedFields<T extends object>(
+  target: T,
+  source: Partial<T>,
+  fields: readonly (keyof T)[],
+): void {
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(source, field)) {
+      (target as Record<keyof T, unknown>)[field] = source[field];
+    }
+  }
+}
+
 export function mergeGraphNodes(prevNodes: GraphNode[], freshNodes: GraphNode[]): GraphNode[] {
   const prevById = new Map(prevNodes.map((n) => [n.id, n]));
   return freshNodes.map((fresh) => {
     const existing = prevById.get(fresh.id);
     if (!existing) return fresh; // genuinely new node — a fresh object is correct
-    Object.assign(existing, fresh);
+    copyAllowlistedFields(existing, fresh, GRAPH_NODE_SERVER_FIELDS);
     return existing;
   });
 }
 
-/** Applies {@link mergeGraphNodes} to a full refresh payload — `links` pass through
- *  unchanged (see that function's doc comment for why links are deliberately excluded). */
+/**
+ * Merge freshly-fetched link data BY EDGE ID, preserving each existing link's OBJECT
+ * REFERENCE for any id that still exists — the link half of the render-stall fix
+ * (three-forcegraph's digest keys links by raw object identity, exactly like nodes).
+ * Scalar fields (`relationship`, `weight`, `createdAt`) merge onto the existing object;
+ * `source`/`target` are never touched so d3-force's in-place node-object resolution
+ * survives every refresh. A genuinely new id gets its fresh object (correct one-time
+ * build); a vanished id is dropped (the digest removes its mesh).
+ */
+export function mergeGraphLinks(prevLinks: GraphEdge[], freshLinks: GraphEdge[]): GraphEdge[] {
+  const prevById = new Map(prevLinks.map((l) => [l.id, l]));
+  return freshLinks.map((fresh) => {
+    const existing = prevById.get(fresh.id);
+    if (!existing) return fresh; // genuinely new link — a fresh object is correct
+    copyAllowlistedFields(existing, fresh, GRAPH_EDGE_SCALAR_FIELDS);
+    return existing;
+  });
+}
+
+/** Applies {@link mergeGraphNodes} and {@link mergeGraphLinks} to a full refresh payload. */
 export function mergeGraphData(prev: GraphData, fresh: GraphData): GraphData {
-  return { nodes: mergeGraphNodes(prev.nodes, fresh.nodes), links: fresh.links };
+  return {
+    nodes: mergeGraphNodes(prev.nodes, fresh.nodes),
+    links: mergeGraphLinks(prev.links, fresh.links),
+  };
 }
 
 /** Pop-up offset for an item in the focus cluster (stacks upward when open). */
