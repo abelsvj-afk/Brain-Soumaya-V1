@@ -423,6 +423,12 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // every render, well before React actually RUNS any effect after that render commits.
   const recomputeDetailedLinksRef = useRef<() => void>(() => {});
   const [hoverId, setHoverId] = useState<number | null>(null);
+  // Populate-path repair D2 (docs/repairs/galaxy-populate-render-stall.md): bumping this
+  // state re-renders Graph3D so the unmemoized `linkColor` accessor re-fires through
+  // three-forcegraph's cheap per-render digest — the replacement for the old
+  // `fg.refresh()` call in `fireLink`, which set `_flushObjects` and tore down +
+  // rebuilt the entire galaxy on every link pulse.
+  const [, setPulseTick] = useState(0);
   // When set, only these node ids (a memory + its orbiting system) are shown.
   const [cluster, setCluster] = useState<Set<number> | null>(null);
   // Mirror the cluster into a ref so the render loop can scope Soumaya + the fleet to the
@@ -1627,7 +1633,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // it flares bright, then eases back to its resting colour over time.
       linkHealthRef.current.set(key, Date.now());
       noteRefreshInvoked(); // diagnostic-only — see galaxyStateSnapshot.ts
-      f?.refresh?.(); // apply the fresh brightness immediately
+      // D2: no `f.refresh()` here — it sets three-forcegraph's `_flushObjects`, which
+      // unconditionally clears AND disposes every tracked node AND link Object3D (a full
+      // galaxy rebuild on every pulse). Bumping pulseTick re-renders Graph3D instead, so
+      // the unmemoized `linkColor` accessor re-fires through the cheap per-render digest
+      // and picks up the fresh activity above. On-device visual confirmation is the gate
+      // (see the repair doc); fallback is a refresh scoped to first-seen link keys only.
+      setPulseTick((t) => t + 1);
       if (!f?.emitParticle) return;
       const l = (dataRef.current.links as any[]).find((x) => linkKey(x) === key);
       if (!l) return;
