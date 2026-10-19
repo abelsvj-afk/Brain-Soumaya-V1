@@ -3,6 +3,34 @@ import { type GraphNode, classify, deriveMass, SECTOR_MASS } from "@brain/shared
 import { bodyColor } from "./theme.js";
 import { makeStarMaterial, makePlanetMaterial, type ShaderTier } from "./shaders.js";
 
+// --- Sector-title threshold (far-zoom labels) ---
+// Effective mass threshold for awarding a far-zoom sector title. Defaults to
+// SECTOR_MASS; Graph3D may lower it (never raise it) via
+// setSectorTitleMassThreshold so that at least a minimum number of hubs carry
+// titles even in a young/sparse galaxy where few reach SECTOR_MASS alone.
+let sectorTitleMassThreshold = SECTOR_MASS;
+export function setSectorTitleMassThreshold(t: number): void {
+  sectorTitleMassThreshold = t;
+}
+/** Mass signal for a node (server-precomputed or derived): single source of truth. */
+export function nodeMass(node: GraphNode): number {
+  return (
+    node.mass ??
+    deriveMass({
+      importance: node.importance,
+      degree: node.degree,
+      emotionalWeight: node.emotionalWeight,
+    })
+  );
+}
+/** Effective sector-title threshold for a node set: SECTOR_MASS, lowered just
+ * enough to guarantee at least minHubs titled hubs (never raised). */
+export function sectorTitleThresholdFor(nodes: GraphNode[], minHubs = 8): number {
+  const masses = nodes.map(nodeMass).sort((a, b) => b - a);
+  const nth = masses[Math.min(minHubs - 1, masses.length - 1)] ?? 0;
+  return Math.min(SECTOR_MASS, nth);
+}
+
 const FONT_SIZE = 44;
 const PADDING = 14;
 const WORLD_SCALE = 0.11; // canvas px -> world units
@@ -404,7 +432,10 @@ function bucketEntropy(raw: number | null | undefined): number {
  * before this fix.
  */
 export function nodeVisualCacheKey(node: GraphNode): string {
-  return `${node.label}_${node.importance}_${node.degree}_${bucketEntropy(node.entropy)}_${node.color || ""}_${node.kind}`;
+  // The sector-title decision changes the built label set, so it belongs in
+  // the key per the contract above (a threshold change rebuilds affected nodes).
+  const titled = nodeMass(node) >= sectorTitleMassThreshold ? 1 : 0;
+  return `${node.label}_${node.importance}_${node.degree}_${bucketEntropy(node.entropy)}_${node.color || ""}_${node.kind}_${titled}`;
 }
 
 /**
@@ -465,13 +496,7 @@ export function makeNodeObject(node: GraphNode, tier: ShaderTier = "quality"): T
     return g;
   }
 
-  const mass =
-    node.mass ??
-    deriveMass({
-      importance: node.importance,
-      degree: node.degree,
-      emotionalWeight: node.emotionalWeight,
-    });
+  const mass = nodeMass(node);
   const cls = node.celestial ?? classify(mass);
   const group = new THREE.Group();
 
@@ -701,7 +726,7 @@ export function makeNodeObject(node: GraphNode, tier: ShaderTier = "quality"): T
   const macro = makeMacroBody(color, size, isStarLike);
 
   // 3. Sector Title — every hub gets a name at macro/zoomed-out view
-  const hasSectorTitle = mass >= SECTOR_MASS;
+  const hasSectorTitle = mass >= sectorTitleMassThreshold;
   if (hasSectorTitle) {
     const sectorLabel = makeLabel((node.celestialTitle ?? node.label).toUpperCase());
     sectorLabel.scale.multiplyScalar(2.5); // Giant sector name

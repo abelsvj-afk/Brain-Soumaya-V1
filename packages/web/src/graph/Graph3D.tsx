@@ -40,7 +40,7 @@ import {
 import { selectDetailedLinks, isBoundedLinksEnabled, getDetailedLinkBudget, type LinkSelectionInput } from "./renderModel.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { GraphData, GraphNode } from "@brain/shared";
-import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures } from "./nodeObject.js";
+import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleMassThreshold, sectorTitleThresholdFor } from "./nodeObject.js";
 import { makeStarfield, makeGalaxies, makeMilkyWay } from "./starfield.js";
 import { makeConstellations } from "./skybox.js";
 import { makeDeepSpace, makeBackdropBakeSources, DEEP_SPACE_BASE } from "./deepSpace.js";
@@ -2349,10 +2349,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               mat.opacity = 0.92;
               // Grow the label with camera distance so it holds a readable on-screen size
               // as you pull further out (world-scale sprites otherwise shrink to specks),
-              // with an extra bump on small screens. Clamped so it never balloons up close.
+              // with an extra bump on small screens. No upper cap: the old 3.4× cap
+              // froze title growth past ~4100 units, so titles shrank into specks in
+              // the recentered whole-galaxy view. Uncapped, a title holds constant
+              // on-screen size at any zoom (map-label behavior).
               const base = child.userData.baseScale;
               if (base) {
-                const k = Math.min(3.4, Math.max(1, dist / MACRO_DIST)) * SECTOR_LABEL_BOOST;
+                const k = Math.max(1, dist / MACRO_DIST) * SECTOR_LABEL_BOOST;
                 child.scale.set(base.x * k, base.y * k, 1);
               }
               const mq = child.userData.marquee;
@@ -3668,6 +3671,16 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link)),
     [linkWidthCb],
   );
+
+  // Far-zoom labels: guarantee the recentered whole-galaxy view is never empty.
+  // The threshold is memoized on the node array and applied during render (not
+  // in an effect) so it is current before three-forcegraph's digest calls
+  // nodeThreeObject/nodeVisualCacheKey for this data.
+  const sectorTitleThreshold = useMemo(
+    () => sectorTitleThresholdFor(data.nodes as any[]),
+    [data.nodes],
+  );
+  setSectorTitleMassThreshold(sectorTitleThreshold);
 
   return (
     <ForceGraph3D
