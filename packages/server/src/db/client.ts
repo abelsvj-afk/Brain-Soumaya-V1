@@ -403,20 +403,24 @@ function migrateSchema(sqlite: RawDb): void {
   `);
   // W1 backfill — ORDER MATTERS (see design §9.2):
   // STEP 1: normalize created_at to canonical ISO 8601 UTC FIRST.
-  // STEP 2: backfill recorded_at from the NOW-NORMALIZED created_at.
+  //   This runs UNCONDITIONALLY — even on fresh databases where recorded_at
+  //   never needs backfilling, created_at may still carry SQLite's legacy
+  //   CURRENT_TIMESTAMP format from its column default. Skipping normalization
+  //   here would trip the canonical-format assertion below on next startup.
+  // STEP 2: backfill recorded_at from the NOW-NORMALIZED created_at (only where NULL).
   // Reversing this order leaves recorded_at in the old SQLite format.
+  sqlite.exec(`
+    UPDATE nodes
+    SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
+    WHERE created_at NOT LIKE '%T%';
+    UPDATE edges
+    SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
+    WHERE created_at NOT LIKE '%T%';
+  `);
   const needsBackfill = sqlite
     .prepare(`SELECT COUNT(*) AS n FROM nodes WHERE recorded_at IS NULL`)
     .get() as { n: number };
   if (needsBackfill.n > 0) {
-    sqlite.exec(`
-      UPDATE nodes
-      SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
-      WHERE created_at NOT LIKE '%T%';
-      UPDATE edges
-      SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
-      WHERE created_at NOT LIKE '%T%';
-    `);
     sqlite.exec(`UPDATE nodes SET recorded_at = created_at WHERE recorded_at IS NULL`);
   }
   // Post-migration assertion: every non-null temporal timestamp must match the

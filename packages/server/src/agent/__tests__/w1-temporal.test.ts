@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { unlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { createDb, type DbHandle } from "../../db/client.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import {
@@ -344,6 +347,57 @@ describe("T-WRITE-1: insert paths", () => {
     // Fresh :memory: DBs have the bootstrap default, so this documents the
     // BEHAVIORAL difference: app code always sets it explicitly.
     expect(row.recorded_at).toBeDefined();
+  });
+
+  it("T-MIG-2: raw insert + restart normalizes legacy created_at", () => {
+    // Regression test for the fresh-DB startup edge case: a raw SQL insert
+    // relies on column defaults — recorded_at gets the canonical default but
+    // created_at gets SQLite's legacy CURRENT_TIMESTAMP format. On the NEXT
+    // startup, the migration must normalize created_at BEFORE the canonical
+    // assertion runs, or startup throws.
+    const tmpPath = join(tmpdir(), `w1-mig2-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    try {
+      // First boot: fresh DB, bootstrap + migration run.
+      const h1 = createDb(tmpPath);
+      // Raw insert using only column defaults (no explicit timestamps).
+      // Simulate the legacy default by forcing created_at into old format —
+      // this is what CURRENT_TIMESTAMP produces on fresh-schema inserts
+      // that bypass application code.
+      const r = h1.sqlite
+        .prepare(`INSERT INTO nodes (space_id, label, type, content, created_at) VALUES (?, ?, ?, ?, datetime('now'))`)
+        .run(SPACE, "RawRestart", "memory", "y");
+      const rowId = Number(r.lastInsertRowid);
+      const before = h1.sqlite
+        .prepare(`SELECT created_at, recorded_at FROM nodes WHERE id = ?`)
+        .get(rowId) as { created_at: string; recorded_at: string };
+      // recorded_at got the canonical bootstrap default; created_at is legacy.
+      expect(before.recorded_at).toMatch(CANONICAL_TS);
+      expect(before.created_at).not.toMatch(CANONICAL_TS);
+      h1.sqlite.close();
+
+      // Second boot (restart): migration reruns. Must NOT throw.
+      let h2: DbHandle | undefined;
+      expect(() => {
+        h2 = createDb(tmpPath);
+      }).not.toThrow();
+      try {
+        const after = h2!.sqlite
+          .prepare(`SELECT created_at, recorded_at FROM nodes WHERE id = ?`)
+          .get(rowId) as { created_at: string; recorded_at: string };
+        // Both timestamps are now canonical.
+        expect(after.created_at).toMatch(CANONICAL_TS);
+        expect(after.recorded_at).toMatch(CANONICAL_TS);
+      } finally {
+        h2!.sqlite.close();
+      }
+    } finally {
+      // Cleanup temp file (best-effort).
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
+    }
   });
 });
 
