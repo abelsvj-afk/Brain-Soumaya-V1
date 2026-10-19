@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { GraphNode } from "@brain/shared";
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphNodes, mergeGraphData } from "./App.helpers.js";
+import type { GraphEdge, GraphNode } from "@brain/shared";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphNodes, mergeGraphLinks, mergeGraphData } from "./App.helpers.js";
 
 /** Locks the pure presentational helpers extracted from App.tsx (D4), so a future
  *  refactor that touches them fails loudly instead of silently. */
@@ -31,16 +31,28 @@ describe("App.helpers", () => {
   });
 });
 
-/** Galaxy render-stall root-cause fix (2026-09-10): three-forcegraph's node object cache
- *  keys nodes by raw object identity, not `.id` — a freshly-fetched node array must reuse
- *  existing object references by id or every node's Object3D gets disposed/rebuilt on
- *  every refresh. See mergeGraphNodes's doc comment for the full confirmed mechanism. */
-describe("mergeGraphNodes / mergeGraphData", () => {
+/** Galaxy render-stall root-cause fix (2026-09-10), extended by the populate-path
+ *  repair D1/D5 (docs/repairs/galaxy-populate-render-stall.md): three-forcegraph's
+ *  node AND link object caches key entries by raw object identity, not `.id` — a
+ *  freshly-fetched graph must reuse existing object references by id or every
+ *  Object3D gets disposed/rebuilt on every refresh. See the merge doc comments
+ *  for the full confirmed mechanism. */
+describe("mergeGraphNodes / mergeGraphLinks / mergeGraphData", () => {
   const node = (overrides: Partial<GraphNode>): GraphNode => ({
     id: 1,
     label: "n",
     type: "memory" as GraphNode["type"],
     content: "",
+    createdAt: "2026-01-01T00:00:00Z",
+    ...overrides,
+  });
+
+  const link = (overrides: Partial<GraphEdge>): GraphEdge => ({
+    id: 1,
+    source: 1,
+    target: 2,
+    relationship: "relates_to",
+    weight: 0.5,
     createdAt: "2026-01-01T00:00:00Z",
     ...overrides,
   });
@@ -79,13 +91,105 @@ describe("mergeGraphNodes / mergeGraphData", () => {
     expect(merged.map((n) => n.id)).toEqual([1]);
   });
 
-  it("mergeGraphData merges nodes but passes links through untouched by reference", () => {
-    const prevLink = { id: 1, source: 1, target: 2, relationship: "relates_to" as const, weight: 0.5, createdAt: "" };
-    const freshLinks = [{ id: 2, source: 1, target: 2, relationship: "relates_to" as const, weight: 0.7, createdAt: "" }];
+  it("mergeGraphNodes does not copy unknown fields from the fresh payload (criterion 5)", () => {
+    const existing = node({ id: 1, label: "old" });
+    const fresh = { ...node({ id: 1, label: "new" }), __injected: "evil" } as GraphNode;
+    const merged = mergeGraphNodes([existing], [fresh])[0]!;
+
+    expect(merged).toBe(existing);
+    expect(merged.label).toBe("new"); // allowlisted server field DID update
+    expect((merged as unknown as Record<string, unknown>).__injected).toBeUndefined();
+  });
+
+  it("mergeGraphData merges nodes and links by id, preserving both references", () => {
     const prevNode = node({ id: 1 });
-    const merged = mergeGraphData({ nodes: [prevNode], links: [prevLink] }, { nodes: [node({ id: 1, label: "x" })], links: freshLinks });
+    const prevLink = link({ id: 1, weight: 0.5 });
+    const merged = mergeGraphData(
+      { nodes: [prevNode], links: [prevLink] },
+      { nodes: [node({ id: 1, label: "x" })], links: [link({ id: 1, weight: 0.7 })] },
+    );
 
     expect(merged.nodes[0]).toBe(prevNode);
-    expect(merged.links).toBe(freshLinks); // links are NOT merged/mutated — passed through as-is
+    expect(merged.links[0]).toBe(prevLink); // same link object — no longer passed through fresh
+    expect(merged.links[0]!.weight).toBe(0.7); // …but its scalar fields updated
+  });
+});
+
+describe("mergeGraphLinks", () => {
+  const link = (overrides: Partial<GraphEdge>): GraphEdge => ({
+    id: 1,
+    source: 1,
+    target: 2,
+    relationship: "relates_to",
+    weight: 0.5,
+    createdAt: "2026-01-01T00:00:00Z",
+    ...overrides,
+  });
+
+  it("reuses the SAME link object for a matching edge id and updates scalar fields", () => {
+    const existing = link({ id: 7, weight: 0.5, relationship: "relates_to" });
+    const fresh = link({ id: 7, weight: 0.9, relationship: "builds_on" });
+
+    const merged = mergeGraphLinks([existing], [fresh])[0]!;
+
+    expect(merged).toBe(existing); // same reference — the digest keeps its Object3D
+    expect(merged.weight).toBe(0.9);
+    expect(merged.relationship).toBe("builds_on");
+  });
+
+  it("gives a genuinely new edge id a fresh object, not a stale reference", () => {
+    const existing = link({ id: 1 });
+    const freshNew = link({ id: 2, weight: 0.8 });
+
+    const merged = mergeGraphLinks([existing], [link({ id: 1 }), freshNew]);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toBe(existing);
+    expect(merged[1]).toBe(freshNew); // no prior object for id 2 — the fresh one is used as-is
+  });
+
+  it("drops a link no longer present without mutating the dropped object", () => {
+    const dropped = link({ id: 9, weight: 0.1 });
+
+    const merged = mergeGraphLinks([link({ id: 1 }), dropped], [link({ id: 1 })]);
+
+    expect(merged.map((l) => l.id)).toEqual([1]);
+    expect(dropped.weight).toBe(0.1); // dropped objects are never touched
+  });
+
+  it("keeps reversed pairs A→B and B→A distinct (id-keyed, never endpoint-keyed)", () => {
+    const ab = link({ id: 1, source: 1, target: 2, weight: 0.5 });
+    const ba = link({ id: 2, source: 2, target: 1, weight: 0.3 });
+
+    const merged = mergeGraphLinks([ab, ba], [
+      link({ id: 1, source: 1, target: 2, weight: 0.8 }),
+      link({ id: 2, source: 2, target: 1, weight: 0.4 }),
+    ]);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toBe(ab);
+    expect(merged[1]).toBe(ba);
+    expect(ab.weight).toBe(0.8); // each merged by its own id…
+    expect(ba.weight).toBe(0.4); // …not collapsed by endpoint pair
+  });
+
+  it("never clobbers d3-resolved source/target and never copies unknown fields (criterion 5)", () => {
+    const nodeA = { id: 1 };
+    const nodeB = { id: 2 };
+    // Simulate d3-force having resolved source/target into node object references.
+    const existing = {
+      ...link({ id: 1, weight: 0.5 }),
+      source: nodeA as unknown as number,
+      target: nodeB as unknown as number,
+    };
+    const fresh = { ...link({ id: 1, source: 1, target: 2, weight: 0.9 }), __injected: true } as GraphEdge;
+
+    const merged = mergeGraphLinks([existing], [fresh])[0]!;
+
+    expect(merged).toBe(existing);
+    expect(merged.source).toBe(nodeA); // resolved reference preserved, not clobbered to raw id
+    expect(merged.target).toBe(nodeB);
+    expect(merged.weight).toBe(0.9); // allowlisted scalar DID update
+    expect((merged as unknown as Record<string, unknown>).__injected).toBeUndefined();
   });
 });

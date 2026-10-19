@@ -230,6 +230,10 @@ export class GeminiProvider implements LlmProvider {
     // Chat runs HOT so her phrasing varies turn to turn (low temp made every
     // reply the same shape). Structured jobs (extraction/linking) stay cold.
     temperature = 0.2,
+    // D4: aborts the actual SDK request. `GenerateContentConfig.abortSignal`
+    // is honored by @google/genai's transport — aborting tears down the
+    // underlying fetch socket; the service is still charged for the call.
+    abortSignal?: AbortSignal,
   ): Promise<T> {
     const res = await this.ai.models.generateContent({
       model: MODEL,
@@ -239,6 +243,7 @@ export class GeminiProvider implements LlmProvider {
         responseMimeType: "application/json",
         responseSchema: schema,
         temperature,
+        abortSignal,
       },
     });
     // Feed the budget meter — without this the deployment's USD cap never trips.
@@ -268,11 +273,14 @@ export class GeminiProvider implements LlmProvider {
     source: LinkCandidate,
     target: LinkCandidate,
     similarity: number,
+    opts?: { signal?: AbortSignal },
   ): Promise<LinkValidation> {
     const raw = await this.json<LinkValidation>(
       LINK_SYSTEM,
       buildLinkPrompt(source, target, similarity),
       linkSchema,
+      0.2,
+      opts?.signal,
     );
     return {
       linked: Boolean(raw.linked),

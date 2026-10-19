@@ -1,4 +1,4 @@
-import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, DormantItem, EmotionalTrajectory, EvolutionLink, Fuel, GraphData, GraphNode, Insight, LifeAreaCount, LoreEntry, LoreSubjectType, SelfReviewItem, Streak } from "@brain/shared";
+import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, DormantItem, EmotionalTrajectory, EvolutionLink, Fuel, GraphData, GraphEdge, GraphNode, Insight, LifeAreaCount, LoreEntry, LoreSubjectType, SelfReviewItem, Streak } from "@brain/shared";
 import { useState, useEffect } from "react";
 // Transport primitives live in http.ts (Post-MVP D4 split); re-export the public ones
 // so existing `import { getSpaceId, BOOT_TIMEOUT_MS } from "../api/client"` keep working.
@@ -126,21 +126,116 @@ export function describeLlmStatus(health: Health | null): { icon: string; tone: 
   return { icon: "✅", tone: "ok", text: `Connected — ${provider ?? model} (${model}).` };
 }
 
-export async function getGraph(limit = 300): Promise<GraphData> {
+export async function getGraph(
+  limit = 300,
+  includeIds?: number[],
+): Promise<GraphData & { nextEdgeCursor?: number | null }> {
   // Boot-critical: a short timeout so a stalled server can't freeze the loading sun.
-  const res = await afetch(`${API}/graph?limit=${limit}`, {}, BOOT_TIMEOUT_MS);
+  const params = new URLSearchParams({ limit: String(limit) });
+  // D3: explicit ids to force into the overview (union with top-`limit`).
+  if (includeIds && includeIds.length > 0) params.set("includeIds", includeIds.join(","));
+  const res = await afetch(`${API}/graph?${params.toString()}`, {}, BOOT_TIMEOUT_MS);
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Couldn't load your galaxy (${res.status})`);
   }
-  const d = (await res.json().catch(() => null)) as Partial<GraphData> | null;
+  const d = (await res.json().catch(() => null)) as
+    | (Partial<GraphData> & { nextEdgeCursor?: number | null })
+    | null;
   if (!d || !Array.isArray(d.nodes) || !Array.isArray(d.links)) {
     throw new Error("The galaxy response was invalid. Please try again.");
   }
   return {
     nodes: d.nodes,
     links: d.links,
+    nextEdgeCursor: d.nextEdgeCursor ?? null,
   };
+}
+
+export interface GraphEdgesPage {
+  edges: GraphEdge[];
+  nextCursor: number | null;
+}
+
+/** D3: one cursor page of space-scoped edges incident to any of `ids`. */
+export async function getIncidentEdges(
+  ids: number[],
+  cursor?: number | null,
+): Promise<GraphEdgesPage> {
+  const q = cursor != null ? `?cursor=${cursor}` : "";
+  const res = await afetch(
+    `${API}/graph/edges${q}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    },
+    BOOT_TIMEOUT_MS,
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Couldn't load graph edges (${res.status})`);
+  }
+  const d = (await res.json().catch(() => null)) as Partial<GraphEdgesPage> | null;
+  if (!d || !Array.isArray(d.edges)) {
+    throw new Error("The edges response was invalid. Please try again.");
+  }
+  return { edges: d.edges, nextCursor: d.nextCursor ?? null };
+}
+
+/**
+ * Server per-request caps (D3) — must match `INCLUDE_IDS_CAP` /
+ * `MAX_UNION_IDS` in `packages/server/src/graph/service.ts`.
+ */
+const INCLUDE_IDS_CHUNK = 200;
+const MAX_UNION_IDS_CLIENT = 50000;
+
+/**
+ * D3: refresh that guarantees explicitly-requested ids appear. Chunks the
+ * id list at the server's per-request cap and unions the node sets, then
+ * runs edge completion: a SINGLE id-ordered cursor stream over the fixed
+ * union id set U (no per-chunk sweep, so the rev-5 race has nowhere to
+ * live), keeping edges with both endpoints in U and deduping by edge id
+ * against overview's own links. The stream is self-completing under
+ * concurrent writes (edge ids are monotonic): when it terminates at a null
+ * cursor it has returned every incident edge present at the final page's
+ * read instant.
+ */
+export async function getGraphWithCompletion(newIds: number[], limit = 300): Promise<GraphData> {
+  const deduped = [...new Set(newIds.filter((n) => Number.isFinite(n)))];
+  const chunks: number[][] = [];
+  for (let i = 0; i < deduped.length; i += INCLUDE_IDS_CHUNK) {
+    chunks.push(deduped.slice(i, i + INCLUDE_IDS_CHUNK));
+  }
+  if (chunks.length === 0) chunks.push([]);
+
+  const nodeById = new Map<number, GraphNode>();
+  const linkById = new Map<number, GraphEdge>();
+  for (const c of chunks) {
+    const page = await getGraph(limit, c);
+    for (const n of page.nodes) nodeById.set(n.id, n);
+    for (const l of page.links) linkById.set(l.id, l);
+    // page.nextEdgeCursor is subsumed by the completion stream below, which
+    // is provably complete for both-endpoints-in-U edges — no silent truncation.
+  }
+
+  const U = new Set(nodeById.keys());
+  const Uarr = [...U];
+  // Defensive: U can only exceed the server's union cap after a pathological
+  // bulk sync; each slice still runs one self-completing stream, and the
+  // union of complete streams is complete.
+  for (let i = 0; i < Uarr.length; i += MAX_UNION_IDS_CLIENT) {
+    const slice = Uarr.slice(i, i + MAX_UNION_IDS_CLIENT);
+    let cursor: number | null = null;
+    do {
+      const { edges, nextCursor } = await getIncidentEdges(slice, cursor);
+      for (const e of edges) {
+        if (U.has(e.source) && U.has(e.target)) linkById.set(e.id, e);
+      }
+      cursor = nextCursor;
+    } while (cursor != null);
+  }
+  return { nodes: [...nodeById.values()], links: [...linkById.values()] };
 }
 
 type IngestOpts = {

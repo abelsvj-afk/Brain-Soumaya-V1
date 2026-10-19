@@ -1,4 +1,4 @@
-import { type GraphData, type GraphNode, deriveMass, classify, entropyFrom, DURABLE_COGNITIVE_KINDS } from "@brain/shared";
+import { type GraphData, type GraphEdge, type GraphNode, deriveMass, classify, entropyFrom, DURABLE_COGNITIVE_KINDS } from "@brain/shared";
 import { memoryStrength } from "../analysis/review.js";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
@@ -13,6 +13,16 @@ import { EdgesRepo } from "../repositories/edges.repo.js";
 export interface SearchHit extends GraphNode {
   similarity: number;
 }
+
+/**
+ * Populate-path repair D3 (docs/repairs/galaxy-populate-render-stall.md):
+ * per-request caps for the id-set APIs. Over-cap requests get an explicit
+ * 400 — never silent truncation.
+ */
+/** Max `includeIds` accepted by one overview request. */
+export const INCLUDE_IDS_CAP = 200;
+/** Max union ids accepted by one `POST /api/graph/edges` request body. */
+export const MAX_UNION_IDS = 50000;
 
 /**
  * Read-side graph queries. Designed for heavy dumping: the default view is
@@ -122,9 +132,15 @@ export class GraphService {
   /**
    * Bounded overview: the `limit` highest-degree hubs (ties broken by recency),
    * plus all edges among them. Keeps the galaxy legible as the brain grows.
+   *
+   * D3: honors explicit `includeIds` — the union of (a) top-`limit` by degree
+   * and (b) `byIds(includeIds)`, which is space-scoped and skips unknown ids,
+   * so missing ids are skipped, duplicates deduped, and cross-space ids can
+   * never leak in. The internal edge fetch uses the temp-table strategy
+   * (see edges.repo.ts) and is cursor-bounded at MAX_EDGES_PER_RESPONSE;
+   * `nextEdgeCursor` is the additive "more to fetch" signal (null = complete).
    */
-  overview(limit = 300): GraphData {
-    if (this.nodes.count() <= limit) return this.full();
+  overview(limit = 300, includeIds: number[] = []): GraphData & { nextEdgeCursor: number | null } {
     const rows = this.h.sqlite
       .prepare(
         `SELECT n.id AS id
@@ -141,8 +157,23 @@ export class GraphService {
          LIMIT ?`,
       )
       .all(this.spaceId, this.spaceId, this.spaceId, limit) as { id: number }[];
-    const ids = rows.map((r) => r.id);
-    return { nodes: this.enrich(this.nodes.byIds(ids)), links: this.edges.within(ids) };
+    const unionIds = [...new Set([...rows.map((r) => r.id), ...includeIds])];
+    const nodes = this.enrich(this.nodes.byIds(unionIds));
+    const { edges, nextCursor } = this.edges.withinIdsPaged(unionIds, null);
+    return { nodes, links: edges, nextEdgeCursor: nextCursor };
+  }
+
+  /**
+   * D3: space-scoped edges incident to any of the given node ids, as an
+   * id-ordered cursor page. Backs `POST /api/graph/edges`. Ids outside this
+   * space simply match no edges (edges are space-scoped), so cross-space ids
+   * can never leak edges.
+   */
+  incidentEdges(
+    ids: number[],
+    cursor: number | null,
+  ): { edges: GraphEdge[]; nextCursor: number | null } {
+    return this.edges.incidentToIdsPaged(ids, cursor);
   }
 
   /** Multi-hop neighborhood subgraph around a node (lazy expansion). */

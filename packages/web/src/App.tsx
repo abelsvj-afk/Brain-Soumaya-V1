@@ -54,6 +54,7 @@ import { ActionRail } from "./components/ActionRail.js";
 import {
   currentSpace,
   getGraph,
+  getGraphWithCompletion,
   getHealth,
   getFuel,
   getStreak,
@@ -564,7 +565,11 @@ export default function App() {
     const sequence = ++graphRefreshSequenceRef.current;
     try {
       console.info("[BOOT] loading graph");
-      const g = await getGraph();
+      // D3: when ingest returns new ids, fetch them explicitly (chunked at the
+      // server's per-request cap) and complete the edge set with a single
+      // id-ordered cursor stream — new memories and their links always appear.
+      // Default boot path is unchanged.
+      const g = newIds && newIds.length > 0 ? await getGraphWithCompletion(newIds) : await getGraph();
       if (sequence !== graphRefreshSequenceRef.current) return;
       console.info(`[BOOT] graph received (${g.nodes.length} nodes)`);
       // Merge by node id instead of replacing wholesale (Galaxy render-stall root-cause

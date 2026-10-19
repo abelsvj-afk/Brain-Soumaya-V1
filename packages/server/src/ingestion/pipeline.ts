@@ -8,6 +8,7 @@ import { EdgesRepo } from "../repositories/edges.repo.js";
 import { linkCognitiveAnchor } from "../analysis/cognitive.js";
 import {
   associativeLink,
+  mapWithConcurrency,
   DEFAULT_LINK_OPTIONS,
   type AssociativeLinkOptions,
 } from "./associativeLink.js";
@@ -115,19 +116,24 @@ async function ingestCore(
     extractedEdges.push(edgesRepo.create({ source, target, relationship: e.relationship }));
   }
 
-  // 4b. Autonomous associative linking against existing memory.
-  const associativeEdges: GraphEdge[] = [];
-  for (let i = 0; i < createdNodes.length; i++) {
-    const links = await associativeLink(
-      h,
-      { nodes: nodesRepo, edges: edgesRepo, llm: deps.llm },
-      createdNodes[i]!,
-      vectors[i]!,
-      deps.linkOptions ?? DEFAULT_LINK_OPTIONS,
-      spaceId,
-    );
-    associativeEdges.push(...links);
-  }
+  // 4b. Autonomous associative linking against existing memory. D4: at most 2
+  // concurrent per-node jobs — with each job's max 3 concurrent validations,
+  // the aggregate in-flight bound is 2 × 3 = 6 (structural, not timing-based).
+  // Per-node results are collected by index so output order stays deterministic.
+  const perNodeLinks = await mapWithConcurrency(
+    createdNodes,
+    2,
+    (node, i) =>
+      associativeLink(
+        h,
+        { nodes: nodesRepo, edges: edgesRepo, llm: deps.llm },
+        node,
+        vectors[i]!,
+        deps.linkOptions ?? DEFAULT_LINK_OPTIONS,
+        spaceId,
+      ),
+  );
+  const associativeEdges: GraphEdge[] = perNodeLinks.flat();
 
   // 4c. Auto-link mentions of already-tracked people (Mind tab CRM). Checked per
   // CREATED NODE's own content, not the whole raw dump — a multi-node capture
