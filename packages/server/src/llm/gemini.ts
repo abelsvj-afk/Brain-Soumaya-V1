@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { EXTRACTABLE_NODE_TYPES, RELATIONSHIP_TYPES, ExtractionResultSchema, type ExtractionResult, type ClarificationInterpretation, type GalaxyNavigationKind } from "@brain/shared";
-import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, LinkCandidate, LinkValidation, LlmProvider } from "./adapter.js";
+import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, LinkCandidate, LinkValidation, LlmProvider, LlmToolCallInput, LlmToolDefinition, LlmToolResult } from "./adapter.js";
 import {
   EXTRACTION_SYSTEM,
   LINK_SYSTEM,
@@ -211,6 +211,66 @@ const consolidateSchema = {
   required: ["belief", "confidence"],
 };
 
+
+/**
+ * Translate a JSON-Schema-ish parameter definition (the registry's
+ * `parameters` shape) into a Gemini FunctionDeclaration parameter schema.
+ * Gemini supports a subset of JSON Schema: object/string/number/integer/
+ * boolean/array with properties/items/required/enum/description. Anything
+ * else throws, and the caller EXCLUDES the tool (never mis-translates it).
+ */
+function toGeminiSchema(schema: unknown): Record<string, unknown> {
+  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) {
+    throw new Error("schema must be an object");
+  }
+  const s = schema as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  const t = s.type;
+  const toType = (tt: unknown): unknown => {
+    switch (tt) {
+      case "object": return Type.OBJECT;
+      case "string": return Type.STRING;
+      case "number": return Type.NUMBER;
+      case "integer": return Type.INTEGER;
+      case "boolean": return Type.BOOLEAN;
+      case "array": return Type.ARRAY;
+      default: throw new Error(`unsupported type: ${JSON.stringify(tt)}`);
+    }
+  };
+  if (t !== undefined) out.type = toType(t);
+  if (s.description !== undefined) {
+    if (typeof s.description !== "string") throw new Error("description must be a string");
+    out.description = s.description;
+  }
+  if (s.enum !== undefined) {
+    if (!Array.isArray(s.enum)) throw new Error("enum must be an array");
+    out.enum = s.enum;
+  }
+  if (s.properties !== undefined) {
+    if (typeof s.properties !== "object" || s.properties === null || Array.isArray(s.properties)) {
+      throw new Error("properties must be an object");
+    }
+    const props: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(s.properties as Record<string, unknown>)) {
+      props[k] = toGeminiSchema(v);
+    }
+    out.properties = props;
+  }
+  if (s.items !== undefined) out.items = toGeminiSchema(s.items);
+  if (s.required !== undefined) {
+    if (!Array.isArray(s.required) || !s.required.every((r) => typeof r === "string")) {
+      throw new Error("required must be a string array");
+    }
+    out.required = s.required;
+  }
+  // Closed by default: reject unknown keywords rather than silently dropping them.
+  const known = new Set(["type", "description", "enum", "properties", "items", "required"]);
+  for (const k of Object.keys(s)) {
+    if (!known.has(k)) throw new Error(`unsupported schema keyword: ${k}`);
+  }
+  return out;
+}
+
 export class GeminiProvider implements LlmProvider {
   readonly available = true;
   readonly model = MODEL;
@@ -406,8 +466,7 @@ export class GeminiProvider implements LlmProvider {
   }
 
   /** Agentic router: pick which deterministic candidate actions are worth doing now. */
-  async route(briefing: string, candidates: { tool: string; reason: string }[]): Promise<number[]> {
-    const list = candidates.map((c, i) => `${i}. [${c.tool}] ${c.reason}`).join("\n");
+  async route(briefing: string, candidates: { tool: string; reason: string }[]): Promise<number[]> {    const list = candidates.map((c, i) => `${i}. [${c.tool}] ${c.reason}`).join("\n");
     const schema = {
       type: Type.OBJECT,
       properties: { choose: { type: Type.ARRAY, items: { type: Type.NUMBER } } },
@@ -423,6 +482,57 @@ export class GeminiProvider implements LlmProvider {
     } catch {
       return candidates.map((_, i) => i); // on failure, don't suppress anything
     }
+  }
+
+  /**
+   * Phase 1 agent loop: function-calling. Translates the provider-neutral tool
+   * definitions into Gemini FunctionDeclarations. A tool whose schema uses
+   * constructs Gemini cannot express is EXCLUDED (logged), never mis-translated.
+   */
+  async callWithTools(input: LlmToolCallInput): Promise<LlmToolResult> {
+    const declarations: Record<string, unknown>[] = [];
+    for (const t of input.tools) {
+      try {
+        declarations.push({
+          name: t.name,
+          description: t.description,
+          parameters: toGeminiSchema(t.parameters),
+        });
+      } catch (err) {
+        console.warn(`[gemini] tool "${t.name}" excluded: ${(err as Error).message}`);
+      }
+    }
+    const contents = input.messages.map((m) => {
+      if (m.role === "tool") {
+        return {
+          role: "user",
+          parts: [{ functionResponse: { name: m.name, response: { result: m.result } } }],
+        };
+      }
+      return { role: m.role, parts: [{ text: m.text }] };
+    });
+    const res = await this.ai.models.generateContent({
+      model: MODEL,
+      contents: contents as never,
+      config: {
+        systemInstruction: input.systemInstruction,
+        // Chat runs HOT so her phrasing varies turn to turn.
+        temperature: 0.7,
+        ...(declarations.length > 0 ? { tools: [{ functionDeclarations: declarations }] } : {}),
+        abortSignal: input.signal,
+      },
+    });
+    const meta = res.usageMetadata;
+    if (meta) {
+      this.recordUsage?.(MODEL, meta.promptTokenCount ?? 0, meta.candidatesTokenCount ?? 0);
+    }
+    const calls = (res.functionCalls ?? []).map((fc, i) => ({
+      id: typeof fc.id === "string" && fc.id ? fc.id : `call_${i}`,
+      name: fc.name ?? "",
+      args: (fc.args ?? {}) as Record<string, unknown>,
+    }));
+    if (calls.length > 0) return { text: null, calls };
+    return { text: res.text ?? "", calls: [] };
   }
 
   async summarizeSector(nodes: LinkCandidate[]): Promise<string> {

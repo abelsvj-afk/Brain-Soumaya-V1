@@ -163,6 +163,14 @@ export interface LlmProvider {
    *  actually execute (curate for value + avoid noise). Returns the chosen indices.
    *  Absent → the router runs every candidate (the always-available deterministic path). */
   route?(briefing: string, candidates: { tool: string; reason: string }[]): Promise<number[]>;
+  /** Optional: function-calling for the agent loop (Phase 1). Given the
+   *  conversation and provider-neutral tool definitions, returns either final
+   *  text or the tool calls the model wants. The provider translates the
+   *  definitions into its native format; a tool whose schema the provider
+   *  cannot express is EXCLUDED (with a log line), never silently mis-translated.
+   *  Implemented on Gemini + OpenAI; the heuristic provider answers from text
+   *  with no calls (offline). Absent → the caller falls back to plain chat. */
+  callWithTools?(input: LlmToolCallInput): Promise<LlmToolResult>;
   /** Optional: read a financial screenshot/PDF (pay stub, earnings, bank txns) and extract
    *  DRAFT income/expense candidates (Financial OS Stage 1c). Absent on the heuristic/offline
    *  provider and returns null on any failure → the ingest route degrades to manual entry, so
@@ -186,6 +194,49 @@ export interface LlmProvider {
 export interface WebLookupResult {
   text: string;
   sources: string[];
+}
+
+/**
+ * Phase 1 agent loop: provider-neutral tool definition. The registry owns the
+ * definitions; providers translate them into their native function-calling
+ * format. Providers NEVER define tools.
+ */
+export interface LlmToolDefinition {
+  name: string;
+  description: string;
+  /** JSON Schema (draft 2020-12) for the arguments object. */
+  parameters: Record<string, unknown>;
+}
+
+/** One function call the model requested. */
+export interface LlmToolCall {
+  /** Opaque id for correlating this call with its result. */
+  id: string;
+  name: string;
+  /** Already-parsed arguments object. */
+  args: Record<string, unknown>;
+}
+
+/** A message in the agent-loop conversation (provider-neutral). */
+export type LlmLoopMessage =
+  | { role: "user"; text: string }
+  | { role: "model"; text: string }
+  | { role: "tool"; toolCallId: string; name: string; result: string };
+
+/** Result of one callWithTools invocation: final text OR requested calls. */
+export interface LlmToolResult {
+  /** Set when the model answered directly (calls is empty). */
+  text: string | null;
+  /** Requested tool calls (empty when text is set). */
+  calls: LlmToolCall[];
+}
+
+/** Input for one callWithTools invocation. */
+export interface LlmToolCallInput {
+  systemInstruction: string;
+  messages: LlmLoopMessage[];
+  tools: LlmToolDefinition[];
+  signal?: AbortSignal;
 }
 
 export type LlmProviderKind = "gemini" | "openai" | "heuristic";

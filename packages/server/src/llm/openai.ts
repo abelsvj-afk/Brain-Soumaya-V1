@@ -1,5 +1,5 @@
 import { EXTRACTABLE_NODE_TYPES, RELATIONSHIP_TYPES, ExtractionResultSchema, type ExtractionResult, type FinExtractionResult, type PaystubExtractionResult, type ClarificationInterpretation, type GalaxyNavigationKind } from "@brain/shared";
-import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, LinkCandidate, LinkValidation, LlmProvider } from "./adapter.js";
+import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, LinkCandidate, LinkValidation, LlmProvider, LlmToolCallInput, LlmToolResult } from "./adapter.js";
 import {
   EXTRACTION_SYSTEM,
   LINK_SYSTEM,
@@ -149,6 +149,25 @@ function paystubSchema(): object {
  * Drop-in alternate provider using OpenAI's JSON-schema structured output.
  * Implemented via fetch to avoid an extra SDK dependency.
  */
+
+/**
+ * Light shape-check for a tool parameter schema before passing it to OpenAI.
+ * OpenAI accepts full JSON Schema, so this only rejects non-objects and
+ * unknown top-level keywords (closed by default — never silently dropped).
+ */
+function checkedSchema(toolName: string, schema: unknown): Record<string, unknown> {
+  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) {
+    throw new Error(`tool "${toolName}": parameters must be an object`);
+  }
+  const s = schema as Record<string, unknown>;
+  const known = new Set(["type", "description", "properties", "required", "items", "enum", "additionalProperties"]);
+  for (const k of Object.keys(s)) {
+    if (!known.has(k)) throw new Error(`tool "${toolName}": unsupported schema keyword "${k}"`);
+  }
+  if (s.type !== "object") throw new Error(`tool "${toolName}": top-level type must be "object"`);
+  return s;
+}
+
 export class OpenAiProvider implements LlmProvider {
   readonly available = true;
   readonly model = MODEL;
@@ -194,6 +213,84 @@ export class OpenAiProvider implements LlmProvider {
     const content = body.choices?.[0]?.message?.content;
     if (!content) throw new Error("OpenAI returned no content (refusal or empty response).");
     return JSON.parse(content) as T;
+  }
+
+
+  /**
+   * Phase 1 agent loop: function-calling via chat/completions `tools`.
+   * OpenAI accepts standard JSON Schema, so the registry definitions pass
+   * through with a light shape check (closed by default: unknown top-level
+   * keywords exclude the tool rather than being silently dropped).
+   */
+  async callWithTools(input: LlmToolCallInput): Promise<LlmToolResult> {
+    const tools: Record<string, unknown>[] = [];
+    for (const t of input.tools) {
+      try {
+        tools.push({
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: checkedSchema(t.name, t.parameters),
+          },
+        });
+      } catch (err) {
+        console.warn(`[openai] tool "${t.name}" excluded: ${(err as Error).message}`);
+      }
+    }
+    const messages: Record<string, unknown>[] = [
+      { role: "system", content: input.systemInstruction },
+    ];
+    for (const m of input.messages) {
+      if (m.role === "tool") {
+        messages.push({ role: "tool", tool_call_id: m.toolCallId, content: m.result });
+      } else {
+        messages.push({ role: m.role === "model" ? "assistant" : "user", content: m.text });
+      }
+    }
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      signal: input.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.7,
+        messages,
+        ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
+    const body = (await res.json()) as {
+      choices?: {
+        message?: {
+          content?: string | null;
+          tool_calls?: { id?: string; function?: { name?: string; arguments?: string } }[];
+        };
+      }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    if (this.recordUsage && body.usage) {
+      this.recordUsage(MODEL, body.usage.prompt_tokens ?? 0, body.usage.completion_tokens ?? 0);
+    }
+    const msg = body.choices?.[0]?.message;
+    const calls = (msg?.tool_calls ?? []).map((tc, i) => {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(tc.function?.arguments ?? "{}") as Record<string, unknown>;
+      } catch {
+        // Malformed JSON from the model → empty args; validateArgs will reject.
+      }
+      return {
+        id: tc.id ?? `call_${i}`,
+        name: tc.function?.name ?? "",
+        args,
+      };
+    });
+    if (calls.length > 0) return { text: null, calls };
+    return { text: msg?.content ?? "", calls: [] };
   }
 
   /**
