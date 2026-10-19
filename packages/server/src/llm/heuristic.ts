@@ -1,5 +1,5 @@
 import { type ExtractionResult, type NodeType, type RelationshipType, type ClarificationInterpretation, analyzeSentiment } from "@brain/shared";
-import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, LinkCandidate, LinkValidation, LlmProvider, LlmToolCallInput, LlmToolResult } from "./adapter.js";
+import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, LinkCandidate, LinkValidation, LlmProvider, LlmLoopMessage, LlmToolCallInput, LlmToolResult } from "./adapter.js";
 
 /** Lexical reversal/negation cues used by the offline contradiction heuristic. */
 const NEGATIONS = ["not", "never", "no longer", "don't", "won't", "can't", "stopped", "quit", "gave up", "used to", "anymore"];
@@ -292,7 +292,9 @@ export class HeuristicProvider implements LlmProvider {
    * final text with zero calls — the loop degrades to plain chat, never breaks.
    */
   async callWithTools(input: LlmToolCallInput): Promise<LlmToolResult> {
-    const lastUser = [...input.messages].reverse().find((m) => m.role === "user");
+    const lastUser = [...input.messages]
+      .reverse()
+      .find((m): m is Extract<LlmLoopMessage, { role: "user" }> => m.role === "user");
     const answer = await this.answer(lastUser?.text ?? "", [], {});
     return { text: answer.answer, calls: [] };
   }

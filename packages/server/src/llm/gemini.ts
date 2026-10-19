@@ -263,8 +263,12 @@ function toGeminiSchema(schema: unknown): Record<string, unknown> {
     }
     out.required = s.required;
   }
+  if (s.additionalProperties !== undefined) {
+    if (typeof s.additionalProperties !== "boolean") throw new Error("additionalProperties must be a boolean");
+    out.additionalProperties = s.additionalProperties;
+  }
   // Closed by default: reject unknown keywords rather than silently dropping them.
-  const known = new Set(["type", "description", "enum", "properties", "items", "required"]);
+  const known = new Set(["type", "description", "enum", "properties", "items", "required", "additionalProperties"]);
   for (const k of Object.keys(s)) {
     if (!known.has(k)) throw new Error(`unsupported schema keyword: ${k}`);
   }

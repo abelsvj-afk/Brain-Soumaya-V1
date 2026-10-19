@@ -1,5 +1,5 @@
 import type { AppContext } from "../context.js";
-import type { LlmLoopMessage, LlmToolDefinition } from "../llm/adapter.js";
+import type { LlmLoopMessage, LlmToolDefinition, LlmToolResult } from "../llm/adapter.js";
 import { composeSystem } from "../llm/prompts.js";
 import { soulTextFor } from "../identity.js";
 import type { Tool, ToolContext } from "./tools/types.js";
@@ -11,7 +11,6 @@ import {
   denyApproval,
   executeApproval,
   findPendingApproval,
-  type ApprovalRow,
 } from "./approvals.js";
 
 /**
@@ -131,8 +130,8 @@ export async function maybeConfirmPending(
   if (!pending) return null;
 
   if (isDeny) {
-    denyApproval(ctx, spaceId, principal, pending.id, tc.now);
-    return "Got it — I won't do that.";
+    const d = denyApproval(ctx, spaceId, principal, pending.id, tc.now);
+    return d.ok ? "Got it — I won't do that." : `I couldn't cancel that (${d.error}).`;
   }
   const c = confirmApproval(ctx, spaceId, principal, pending.id, tc.now);
   if (!c.ok || !c.approval) {
@@ -149,7 +148,7 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   const { ctx, spaceId, principal, now } = input;
   const tc: ToolContext = { ctx, spaceId, now, notify: input.notify };
 
-  const soul = soulTextFor(ctx.handle, spaceId);
+  const soul = soulTextFor(ctx.handle.sqlite, spaceId);
   const systemInstruction = composeSystem({
     soul: soul ?? undefined,
     systemExtra: buildSystemExtra(),
@@ -172,7 +171,7 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
       // (All three providers implement it; this is a safety net.)
       break;
     }
-    let res;
+    let res: LlmToolResult;
     try {
       res = await ctx.llm.callWithTools({
         systemInstruction,
@@ -222,6 +221,12 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
 
       if (entry.isWrite) {
         // WRITE: never execute directly. Create the approval and stop the batch.
+        // One pending approval at a time: a second write proposal while one is
+        // pending would brick confirmation (findPendingApproval needs exactly one).
+        if (pendingApprovalId !== undefined) {
+          outcomes.push({ status: "rejected", callId: call.id, name: call.name, reason: `approval #${pendingApprovalId} is already pending; confirm or deny it first` });
+          continue;
+        }
         const req = requestApproval(tc, tool, call.args, principal);
         if (!req.ok) {
           outcomes.push({ status: "rejected", callId: call.id, name: call.name, reason: req.error ?? "approval failed" });
@@ -271,16 +276,12 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
       });
     }
 
-    // Feed the non-executed outcomes back as a summary (executed ones were
-    // already appended as tool messages above).
-    const pending = outcomes.filter((o) => o.status !== "executed");
-    if (pending.length > 0) {
-      messages.push({
-        role: "tool",
-        toolCallId: "batch",
-        name: "batch",
-        result: pending.map(outcomeText).join("\n"),
-      });
+    // Feed non-executed outcomes back, one tool message per call with its
+    // REAL call id (a fake id breaks OpenAI's tool_call_id matching).
+    // Executed ones were already appended above.
+    for (const o of outcomes) {
+      if (o.status === "executed") continue;
+      messages.push({ role: "tool", toolCallId: o.callId, name: o.name, result: outcomeText(o) });
     }
 
     if (stoppedForApproval) {

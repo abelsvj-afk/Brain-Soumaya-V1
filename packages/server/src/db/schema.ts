@@ -49,6 +49,12 @@ export const nodes = sqliteTable("nodes", {
   // Cognitive layer: JSON array of aliases so vague memories ("my girlfriend") link
   // to a named Mind entry without the exact name.
   aliases: text("aliases"),
+  // Phase 1 agent loop: idempotency key for write tools (the approval id).
+  // UNIQUE(space_id, idempotency_key) — NULL keys never conflict.
+  idempotencyKey: text("idempotency_key"),
+  // Phase 1 agent loop: which approval fired this reminder (fire_reminder's
+  // side effect is an UPDATE). Set atomically with reminder_fired_at.
+  firedByApproval: integer("fired_by_approval"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
