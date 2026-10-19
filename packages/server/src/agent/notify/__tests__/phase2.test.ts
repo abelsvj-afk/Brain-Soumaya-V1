@@ -67,6 +67,7 @@ function testDb() {
       attempts INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       deliver_after TEXT NOT NULL,
+      bill_due_at TEXT,
       cap_day TEXT,
       send_started_at TEXT,
       claimed_by TEXT,

@@ -259,6 +259,7 @@ function migrateSchema(sqlite: RawDb): void {
       attempts INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       deliver_after TEXT NOT NULL,
+      bill_due_at TEXT,
       cap_day TEXT,
       send_started_at TEXT,
       claimed_by TEXT,
@@ -271,6 +272,10 @@ function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS notification_outbox_space_idx
       ON notification_outbox(space_id, cap_day, status);
   `);
+  const outboxCols = sqlite.prepare(`PRAGMA table_info(notification_outbox)`).all() as { name: string }[];
+  if (outboxCols.length > 0 && !outboxCols.some((c) => c.name === "bill_due_at")) {
+    sqlite.exec(`ALTER TABLE notification_outbox ADD COLUMN bill_due_at TEXT`);
+  }
   // Life Vision (docs/specs/life-vision.md): optional one-to-many link from a Financial
   // Goal to the Life Vision node it helps fund. Nullable, no SQL FK (matches bucket_id's
   // own style in this table) — validated at the application layer only. `tcols.length > 0`

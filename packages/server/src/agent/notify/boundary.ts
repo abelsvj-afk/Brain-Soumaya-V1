@@ -18,6 +18,8 @@ import {
   buildOccurrenceId,
   deliverAfterCapReached,
   localDay,
+  stalenessLimitMs,
+  URGENT_BILL_HOURS,
   type NotifyMeta,
   type PolicyDecision,
 } from "./policy.js";
@@ -181,16 +183,33 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
     const prefs = getPreferences(sqlite, row.spaceId);
     const day = localDay(now, prefs.timezone);
 
-    // Re-evaluate urgency for billRisk (may have entered the 6h window).
-    if (row.tool === "billRisk" && !row.isUrgent) {
-      // The billDueAt isn't stored; skip upgrade if we can't evaluate.
-      // (Upgrade path is exercised at enqueue time via classifyUrgency.)
+    // Staleness at delivery time: drop if the underlying event is too old.
+    // (decidePolicy checks this at enqueue; the sweeper re-checks for rows
+    // that waited a long time, e.g. through an outage.)
+    const limit = stalenessLimitMs(row.tool);
+    if (limit !== null) {
+      const age = now.getTime() - new Date(row.createdAt).getTime();
+      if (age > limit) {
+        markDropped(sqlite, row.id, `stale at delivery (${Math.round(age / 3600000)}h old)`);
+        deps.audit(row.spaceId, "notify:dropped", `${row.tool} stale at delivery`);
+        continue;
+      }
     }
 
-    // Staleness check at delivery time.
-    // (Per-tool limits are in policy.ts; the row's created_at is the reference.)
+    // Re-evaluate urgency for queued billRisk rows: the bill may have entered
+    // the 6h window while waiting. Atomic upgrade — exactly one winner.
+    let isUrgent = row.isUrgent === 1;
+    if (row.tool === "billRisk" && !isUrgent && row.billDueAt) {
+      const dueIn = new Date(row.billDueAt).getTime() - now.getTime();
+      if (dueIn >= 0 && dueIn <= URGENT_BILL_HOURS * 3600 * 1000) {
+        if (tryUpgradeToUrgent(sqlite, row.id, `bill due in ${Math.round(dueIn / 3600000)}h`)) {
+          isUrgent = true;
+          deps.audit(row.spaceId, "notify:urgent", `billRisk upgraded at delivery`);
+        }
+      }
+    }
 
-    const claimed = row.isUrgent
+    const claimed = isUrgent
       ? claimUrgentForSend(sqlite, row.id, deps.workerId, nowIso(now))
       : claimForSend(sqlite, row.id, row.spaceId, day, prefs.dailyProactiveCap, deps.workerId, nowIso(now));
     if (!claimed) {

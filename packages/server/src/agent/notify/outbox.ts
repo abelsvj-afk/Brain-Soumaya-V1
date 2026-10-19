@@ -16,7 +16,7 @@
  */
 
 import type { RawDb } from "../db/vec.js";
-import { notifKey, localDay, type NotifyMeta, type Urgency } from "./policy.js";
+import { notifKey, type NotifyMeta, type Urgency } from "./policy.js";
 
 /** Lease duration: a 'sending' row older than this is considered crashed. */
 export const LEASE_MS = 5 * 60 * 1000;
@@ -37,15 +37,19 @@ export interface OutboxRow {
   attempts: number;
   lastError: string | null;
   deliverAfter: string;
+  billDueAt: string | null;
   capDay: string | null;
   sendStartedAt: string | null;
   claimedBy: string | null;
   claimedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EnqueueInput {
   spaceId: string;
-  meta: NotifyMeta;
+  /** occurrenceId must be set (use buildOccurrenceId). Prevents false dedup. */
+  meta: NotifyMeta & { occurrenceId: string };
   message: string;
   urgency: Urgency;
   deliverAfter: string; // ISO UTC
@@ -63,8 +67,8 @@ export function enqueue(sqlite: RawDb, input: EnqueueInput): { id: number; dedup
   const r = sqlite
     .prepare(
       `INSERT INTO notification_outbox
-       (notif_key, space_id, tool, occurrence_id, message, priority, is_urgent, urgent_reason, status, deliver_after)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`
+       (notif_key, space_id, tool, occurrence_id, message, priority, is_urgent, urgent_reason, status, deliver_after, bill_due_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
     )
     .run(
       key,
@@ -75,7 +79,8 @@ export function enqueue(sqlite: RawDb, input: EnqueueInput): { id: number; dedup
       "normal",
       input.urgency.isUrgent ? 1 : 0,
       input.urgency.reason ?? null,
-      input.deliverAfter
+      input.deliverAfter,
+      input.meta.billDueAt ?? null
     );
   return { id: Number(r.lastInsertRowid), deduped: false };
 }

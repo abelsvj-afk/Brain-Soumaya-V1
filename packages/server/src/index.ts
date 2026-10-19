@@ -5,7 +5,6 @@ import { setTelegramWebhook, sendDailyDigests, tgSend } from "./telegram/bot.js"
 import { TelegramLinksRepo } from "./telegram/links.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
-import { getPreferences, localDay, localTime } from "./agent/notify/policy.js";
 import { selectJob, executeJob, researchEnabled } from "./maintenance/agent.js";
 import { nextAutonomyBatch } from "./maintenance/autonomyBatch.js";
 import { evolveLore } from "./lore/engine.js";

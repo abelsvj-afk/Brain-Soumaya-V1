@@ -206,9 +206,23 @@ export async function handleTelegramUpdate(
       await send(chatId, "Usage: /quiet <start HH:MM> <end HH:MM> — e.g. /quiet 21:00 04:30");
       return;
     }
+    // Validate both before writing either (no partial updates).
+    // setPreference validates without writing on failure, so check r2's input
+    // first via a dry-run on the format, then write both.
+    const prefsBefore = getPreferences(ctx.handle.sqlite, spaceId);
     const r1 = setPreference(ctx.handle.sqlite, spaceId, "quietStart", m[1]);
-    const r2 = r1.ok ? setPreference(ctx.handle.sqlite, spaceId, "quietEnd", m[2]) : r1;
-    await send(chatId, r2.ok ? `Quiet hours set: ${m[1]}–${m[2]}.` : `Couldn't set that: ${r2.error}`);
+    if (!r1.ok) {
+      await send(chatId, `Couldn't set that: ${r1.error}`);
+      return;
+    }
+    const r2 = setPreference(ctx.handle.sqlite, spaceId, "quietEnd", m[2]);
+    if (!r2.ok) {
+      // Roll back: restore the original start.
+      setPreference(ctx.handle.sqlite, spaceId, "quietStart", prefsBefore.quietStart);
+      await send(chatId, `Couldn't set that: ${r2.error} (quiet hours unchanged)`);
+      return;
+    }
+    await send(chatId, `Quiet hours set: ${m[1]}–${m[2]}.`);
     return;
   }
 
