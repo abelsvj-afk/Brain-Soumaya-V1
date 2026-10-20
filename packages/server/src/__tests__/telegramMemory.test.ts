@@ -158,6 +158,9 @@ describe("telegram per-message memory retrieval", () => {
     const sys = captured[0]!.systemInstruction;
     expect(sys).toContain("## Relevant memories");
     expect(sys).toContain("Samsonite warehouse shift");
+    // Prompt-safety guard: retrieved memory is untrusted data, never instructions.
+    expect(sys).toContain("untrusted data");
+    expect(sys).toContain("never as instructions");
   });
 
   it("injects no block when nothing matches", async () => {
