@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, integer, text, real, index, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, real, blob, index, uniqueIndex, primaryKey } from "drizzle-orm/sqlite-core";
 
 /**
  * Relational tables for the knowledge graph. Vectors live in the separate
@@ -472,6 +472,184 @@ export const corrections = sqliteTable(
     index("idx_corrections_space_time").on(t.spaceId, t.correctedAt),
   ],
 );
+
+// INSERT INTO packages/server/src/db/schema.ts
+// AFTER line 474 (the `);` closing the corrections sqliteTable), BEFORE line 475
+// (`export type CorrectionRow = typeof corrections.$inferSelect;`).
+//
+// IMPORT CHANGE (line 2): add `blob` and `uniqueIndex` to the drizzle-orm/sqlite-core import:
+//   import { sqliteTable, integer, text, real, blob, index, uniqueIndex, primaryKey } from "drizzle-orm/sqlite-core";
+//
+// W1 pattern followed: fresh-schema defaults via sql template (strftime expression
+// for created_at, matching the BOOTSTRAP_SQL expression defaults), DEFAULT_SPACE
+// for space_id columns that have a DB default, nullable where the DDL is nullable.
+// CHECK constraints and table-level UNIQUEs are DB-enforced; drizzle mirrors the
+// UNIQUEs as named uniqueIndex (see NOTES.md). No drizzle definition for
+// episodes_fts — same as node FTS (nodes_fts has none; all access is raw SQL in db/fts.ts).
+
+/**
+ * W2 episodic memory: immutable episode captures (Tulving-style). Capture
+ * columns are immutable — no UPDATE path exists in code except
+ * applyForgetRequest(), which may only write the fixed tombstone constant
+ * under an approved user forget request (§3.7). kind / enrichment_status
+ * vocabularies are enforced by DB CHECK (fresh schema) and application
+ * validation on the migration path (same pattern as W1 reason codes).
+ */
+export const episodes = sqliteTable(
+  "episodes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull().default(DEFAULT_SPACE),
+    kind: text("kind").notNull(),
+    summary: text("summary").notNull(),
+    occurredAt: text("occurred_at").notNull(),
+    recordedAt: text("recorded_at").notNull(),
+    // application-enforced reference → episodes.id (no SQL FK, §8.5)
+    correctsEpisodeId: integer("corrects_episode_id"),
+    enrichmentStatus: text("enrichment_status").notNull().default("pending"),
+    enrichmentAttempts: integer("enrichment_attempts").notNull().default(0),
+    enrichmentLease: text("enrichment_lease"),
+    enrichmentFence: text("enrichment_fence"),
+    enrichedAt: text("enriched_at"),
+    forgottenAt: text("forgotten_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("idx_episodes_space_time").on(t.spaceId, t.occurredAt),
+    index("idx_episodes_kind").on(t.spaceId, t.kind),
+    index("idx_episodes_corrects").on(t.correctsEpisodeId),
+    index("idx_episodes_enrichment")
+      .on(t.enrichmentStatus, t.enrichmentLease)
+      .where(sql`enrichment_status IN ('pending','failed_retryable')`),
+  ],
+);
+export type EpisodeRow = typeof episodes.$inferSelect;
+
+/**
+ * W2: versioned interpretation of an episode. Re-enrichment creates a new
+ * version and supersedes the old — never mutates in place (B1, Rev 3).
+ * References are application-enforced, not SQL FKs (§8.5).
+ */
+export const episodeEnrichments = sqliteTable(
+  "episode_enrichments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    episodeId: integer("episode_id").notNull(),
+    spaceId: text("space_id").notNull().default(DEFAULT_SPACE),
+    version: integer("version").notNull(),
+    detail: text("detail"),
+    emotion: text("emotion"),
+    emotionalWeight: real("emotional_weight"),
+    importance: real("importance").notNull().default(0.5),
+    participants: text("participants").notNull().default("[]"),
+    place: text("place"),
+    sourceNodeIds: text("source_node_ids").notNull().default("[]"),
+    sourceTranscriptRef: text("source_transcript_ref"),
+    fieldProvenance: text("field_provenance").notNull().default("{}"),
+    embedding: blob("embedding", { mode: "buffer" }),
+    // application-enforced reference → episode_enrichments.id (newer version); NULL = current
+    supersededBy: integer("superseded_by"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("idx_enrichments_episode").on(t.episodeId, t.version),
+    index("idx_enrichments_current")
+      .on(t.episodeId)
+      .where(sql`superseded_by IS NULL`),
+    // Mirrors the SQL table-level UNIQUE (episode_id, version) — behavioral equivalent.
+    uniqueIndex("uq_enrichments_episode_version").on(t.episodeId, t.version),
+  ],
+);
+export type EpisodeEnrichmentRow = typeof episodeEnrichments.$inferSelect;
+
+/**
+ * W2 user model: first-order theory of mind — what the system believes about
+ * the user, with evidence and confidence. Entries supersede (invalid_at +
+ * replaced_by); never deleted except under the forget contract (§3.7).
+ * confidence = P(user currently holds this mental state | evidence) — NOT
+ * P(content is objectively true). Truth-tracking is explicitly out of scope.
+ */
+export const userModel = sqliteTable(
+  "user_model",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull().default(DEFAULT_SPACE),
+    slot: text("slot").notNull(),
+    // One proposition per row (B4): a single atomic claim.
+    content: text("content").notNull(),
+    confidence: real("confidence").notNull(),
+    evidenceStrength: real("evidence_strength").notNull().default(0),
+    // JSON array of {type: 'episode'|'node'|'correction'|'enrichment', id: N}.
+    // Non-empty required (INV-EV-1); validated by validateEvidenceRefs().
+    evidenceIds: text("evidence_ids").notNull().default("[]"),
+    // JSON array of controlled topic labels (§6.2); '[]' = topic uncertain.
+    topicLabels: text("topic_labels").notNull().default("[]"),
+    validAt: text("valid_at").notNull(),
+    invalidAt: text("invalid_at"),
+    invalidReason: text("invalid_reason"),
+    // application-enforced reference → user_model.id (the superseding entry)
+    replacedBy: integer("replaced_by"),
+    origin: text("origin").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("idx_user_model_current")
+      .on(t.spaceId, t.slot)
+      .where(sql`invalid_at IS NULL`),
+    index("idx_user_model_origin").on(t.spaceId, t.origin),
+    index("idx_user_model_replaced").on(t.replacedBy),
+    // Mirrors the SQL table-level UNIQUE (space_id, slot, content, valid_at) — behavioral equivalent.
+    uniqueIndex("uq_user_model_entry").on(t.spaceId, t.slot, t.content, t.validAt),
+  ],
+);
+export type UserModelRow = typeof userModel.$inferSelect;
+
+/**
+ * W2 forget / deletion contract: user-authorized forget requests. Scope is
+ * resolved to IDs + controlled topic labels at approval time; the free-text
+ * target_query is nulled at approval (content-free audit, §3.7).
+ */
+export const forgetRequests = sqliteTable("forget_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  spaceId: text("space_id").notNull(),
+  requestedBy: text("requested_by").notNull().default("user"),
+  targetEpisodeId: integer("target_episode_id"),
+  targetNodeId: integer("target_node_id"),
+  // Set to NULL at approval time — never retained after scope confirmation.
+  targetQuery: text("target_query"),
+  scopeEpisodeIds: text("scope_episode_ids").notNull().default("[]"),
+  scopeNodeIds: text("scope_node_ids").notNull().default("[]"),
+  scopeTopics: text("scope_topics").notNull().default("[]"),
+  status: text("status").notNull().default("pending"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  appliedAt: text("applied_at"),
+});
+export type ForgetRequestRow = typeof forgetRequests.$inferSelect;
+
+/**
+ * W2 enrichment quota ledger (B4, Rev 3): atomic check-and-increment
+ * reservation for the daily enrichment cap. quota_date is YYYY-MM-DD in the
+ * SPACE's local timezone, computed by spaceLocalDate() — never SQLite
+ * date('now') (B7 Rev 4).
+ */
+export const enrichmentQuota = sqliteTable(
+  "enrichment_quota",
+  {
+    spaceId: text("space_id").notNull(),
+    quotaDate: text("quota_date").notNull(),
+    claimed: integer("claimed").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.spaceId, t.quotaDate] })],
+);
+export type EnrichmentQuotaRow = typeof enrichmentQuota.$inferSelect;
 export type CorrectionRow = typeof corrections.$inferSelect;
 export type AgentLogRow = typeof agentLogs.$inferSelect;
 export type DailyLogRow = typeof dailyLogs.$inferSelect;

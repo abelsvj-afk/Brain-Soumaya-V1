@@ -440,6 +440,171 @@ function migrateSchema(sqlite: RawDb): void {
   if (bad.n > 0) {
     throw new Error(`W1 migration: ${bad.n} rows have non-canonical timestamps after normalization`);
   }
+// INSERT INTO packages/server/src/db/client.ts migrateSchema()
+// AFTER line 442 (the closing `}` of the W1 `if (bad.n > 0)` block), BEFORE line 443
+// (the closing `}` of migrateSchema).
+//
+// NOTE: the existing comment above the tool_approvals block — "(Table creation
+// lives ONLY in bootstrapSchema...)" — is outdated: Phase 1 (tool_approvals),
+// W1 (corrections), and now W2 all create new tables here. IF NOT EXISTS makes
+// this a safe no-op on fresh databases (bootstrapSchema always runs first).
+
+  // W2 episodes + user model (wisdom layer): immutable episode captures,
+  // versioned enrichments, structured user model, forget requests, and the
+  // enrichment quota ledger. Design: docs/wisdom/w2-design-canonical.md
+  // (canonical design, §§3.2, 3.3, 3.5, 3.7, 4.2, 8.1, 8.5).
+  //
+  // New tables via CREATE TABLE IF NOT EXISTS — the same column set as
+  // BOOTSTRAP_SQL in db/schemaSql.ts (T-M1/T-M2 pin equivalence). No ALTERs
+  // needed: W2 creates NEW tables, never modifies existing ones, so the W1
+  // expression-default-on-ALTER asymmetry does not arise here — both paths
+  // declare identical DDL including the strftime expression defaults.
+  // References are application-enforced (§8.5) — no SQL REFERENCES clauses.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS episodes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      kind TEXT NOT NULL CHECK (kind IN (
+        'conversation','agent_action','job_run','digest_sent',
+        'proactive_msg','correction','milestone','session'
+      )),
+      summary TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      recorded_at TEXT NOT NULL,
+      corrects_episode_id INTEGER,
+      enrichment_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (enrichment_status IN ('pending','processing','completed','failed_retryable','failed_permanent')),
+      enrichment_attempts INTEGER NOT NULL DEFAULT 0,
+      enrichment_lease TEXT,
+      enrichment_fence TEXT,
+      enriched_at TEXT,
+      forgotten_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_episodes_space_time ON episodes(space_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_episodes_kind ON episodes(space_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_episodes_corrects ON episodes(corrects_episode_id);
+    CREATE INDEX IF NOT EXISTS idx_episodes_enrichment ON episodes(enrichment_status, enrichment_lease)
+      WHERE enrichment_status IN ('pending','failed_retryable');
+
+    CREATE TABLE IF NOT EXISTS episode_enrichments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode_id INTEGER NOT NULL,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      version INTEGER NOT NULL,
+      detail TEXT,
+      emotion TEXT CHECK (emotion IN (
+        'anxious','relieved','proud','frustrated','hopeful','overwhelmed',
+        'grateful','lonely','determined','ashamed','content','angry',
+        'sad','excited','neutral'
+      )),
+      emotional_weight REAL CHECK (emotional_weight IS NULL OR (emotional_weight >= -1 AND emotional_weight <= 1)),
+      importance REAL NOT NULL DEFAULT 0.5 CHECK (importance >= 0 AND importance <= 1),
+      participants TEXT NOT NULL DEFAULT '[]',
+      place TEXT,
+      source_node_ids TEXT NOT NULL DEFAULT '[]',
+      source_transcript_ref TEXT,
+      field_provenance TEXT NOT NULL DEFAULT '{}',
+      embedding BLOB,
+      superseded_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (episode_id, version)
+    );
+    CREATE INDEX IF NOT EXISTS idx_enrichments_episode ON episode_enrichments(episode_id, version);
+    CREATE INDEX IF NOT EXISTS idx_enrichments_current ON episode_enrichments(episode_id) WHERE superseded_by IS NULL;
+
+    CREATE TABLE IF NOT EXISTS user_model (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      slot TEXT NOT NULL CHECK (slot IN (
+        'belief','desire','intention','emotion_state','knowledge','constraint'
+      )),
+      content TEXT NOT NULL,
+      confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+      evidence_strength REAL NOT NULL DEFAULT 0 CHECK (evidence_strength >= 0 AND evidence_strength <= 1),
+      evidence_ids TEXT NOT NULL DEFAULT '[]',
+      topic_labels TEXT NOT NULL DEFAULT '[]',
+      valid_at TEXT NOT NULL,
+      invalid_at TEXT,
+      invalid_reason TEXT CHECK (invalid_reason IN (
+        'superseded','corrected_false_belief','evidence_withdrawn','expired','user_override'
+      )),
+      replaced_by INTEGER,
+      origin TEXT NOT NULL CHECK (origin IN ('stated','inferred','consolidated')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (space_id, slot, content, valid_at)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_model_current ON user_model(space_id, slot) WHERE invalid_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_user_model_origin ON user_model(space_id, origin);
+    CREATE INDEX IF NOT EXISTS idx_user_model_replaced ON user_model(replaced_by);
+
+    CREATE TABLE IF NOT EXISTS forget_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      requested_by TEXT NOT NULL DEFAULT 'user' CHECK (requested_by = 'user'),
+      target_episode_id INTEGER,
+      target_node_id INTEGER,
+      target_query TEXT,
+      scope_episode_ids TEXT NOT NULL DEFAULT '[]',
+      scope_node_ids TEXT NOT NULL DEFAULT '[]',
+      scope_topics TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','approved','applied','rejected')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      applied_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS enrichment_quota (
+      space_id TEXT NOT NULL,
+      quota_date TEXT NOT NULL,
+      claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed >= 0),
+      PRIMARY KEY (space_id, quota_date)
+    );
+
+    -- Episode keyword search (same pattern as node FTS): FTS5 over capture
+    -- summary + current enrichment detail, rowid = episode id. Sync is
+    -- EXPLICIT (manual upsert/delete from the episode write path, no triggers).
+    CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(summary, detail);
+  `);
+
+  // W2 post-migration assertion: all six W2 tables exist with the expected
+  // columns. Loud failure (throw) on mismatch — same pattern as the W1
+  // timestamp assertion above. Runs on every boot, covering both fresh
+  // (bootstrap) and migrated volumes (T-M1).
+  const w2Tables: Record<string, string[]> = {
+    episodes: [
+      "id", "space_id", "kind", "summary", "occurred_at", "recorded_at",
+      "corrects_episode_id", "enrichment_status", "enrichment_attempts",
+      "enrichment_lease", "enrichment_fence", "enriched_at", "forgotten_at",
+      "created_at",
+    ],
+    episode_enrichments: [
+      "id", "episode_id", "space_id", "version", "detail", "emotion",
+      "emotional_weight", "importance", "participants", "place",
+      "source_node_ids", "source_transcript_ref", "field_provenance",
+      "embedding", "superseded_by", "created_at",
+    ],
+    user_model: [
+      "id", "space_id", "slot", "content", "confidence", "evidence_strength",
+      "evidence_ids", "topic_labels", "valid_at", "invalid_at",
+      "invalid_reason", "replaced_by", "origin", "created_at",
+    ],
+    forget_requests: [
+      "id", "space_id", "requested_by", "target_episode_id", "target_node_id",
+      "target_query", "scope_episode_ids", "scope_node_ids", "scope_topics",
+      "status", "created_at", "applied_at",
+    ],
+    enrichment_quota: ["space_id", "quota_date", "claimed"],
+    // FTS5 virtual table: rowid is implicit (not listed by PRAGMA table_info).
+    episodes_fts: ["summary", "detail"],
+  };
+  for (const [table, expected] of Object.entries(w2Tables)) {
+    const w2Cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    const missing = expected.filter((c) => !w2Cols.some((col) => col.name === c));
+    if (missing.length > 0) {
+      throw new Error(`W2 migration: table ${table} missing columns: ${missing.join(", ")}`);
+    }
+  }
 }
 
 /**
