@@ -3060,8 +3060,10 @@ describe("T-VEC-1: vec_episodes exists via production createDb() (P0, impl revie
       });
       expect(res).not.toBeNull();
       const claimed = claimEnrichment(h, SPACE);
-      if (claimed) {
-        const result = await enrichEpisode(h, SPACE, claimed.episodeId, claimed.fence, {
+      // Strict: the episode must be claimable. A silent skip here would let
+      // the embedding-write assertion pass vacuously.
+      expect(claimed).not.toBeNull();
+      const result = await enrichEpisode(h, SPACE, claimed!.episodeId, claimed!.fence, {
           enricher: async () => ({
             detail: null,
             emotion: "neutral",
