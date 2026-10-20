@@ -1,10 +1,10 @@
-# W3 Design: Sleep / Consolidation — Revision 10
+# W3 Design: Sleep / Consolidation — Revision 11
 
-**Status:** Revision 11 — addresses the W3 architecture gauntlet round-9 review (1 narrow P1: the `stated_set_version` counter's write contract did not name the authorized forget flow, so a partial pair-level marker could be treated as valid after a forget-driven change to the current stated-belief set). Not approved. No implementation authorized.
+**Status:** Revision 11 — wording consistency fix (INV-C-2 now names the forget path alongside user-statement and correction, referencing the §6.1 definition and §8.6 contract). Builds on Revision 10, which closed the round-9 P1 (forget flow named in the `stated_set_version` write contract). Not approved. No implementation authorized.
 **Branch:** `w3-design` · **Baseline:** deploy branch `claude/soumaya-second-brain-v1-m4z4hc` (see §1.1 — hard gate, satisfied)
 **Author:** King (Muse) · **Date:** 2026-10-19
 
-**What changed in Revision 10 (summary):**
+**What changed in Revision 11 (summary):** wording consistency fix in §6.2 INV-C-2 (see §15 changelog). **What changed in Revision 10 (summary, carried):**
 - **P1 (round 9) — the forget flow is named in the `stated_set_version` write contract:** the counter now has a single canonical write contract (§8.6) enumerating every path that can mutate the current stated-belief set — `recordStated()`, `correctUserModel()`, `applyForgetRequest()` (authorized forget flow, including tombstones that invalidate stated rows), `updateUserModel()` (any stated-row write it performs), and the boundary's `SetReviewFlag` (review-flag writes on stated rows bump the counter conservatively; no-op flag sets perform no write and do not bump). Non-writers are named explicitly: W1 `supersede()` (nodes domain only — never touches `user_model`), W3 Phase A sweeps (stated rows are flag-only, §6.3), and reads (never write). The rule is absolute: **no stated-row write without a same-transaction version increment**; the §8.1 column comment and the §5.6 marker paragraph reference the single contract. New test T-C81 (partial marker + mid-pass forget → marker discarded, belief re-examined from its first pair, forgotten row never examined under the stale marker; filings deduped).
 
 **What changed in Revision 9 (summary):**
