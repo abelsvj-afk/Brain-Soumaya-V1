@@ -255,9 +255,9 @@ async function enrichTarget(
   throw new Error(`enrichTarget: episode ${targetId} was never claimed`);
 }
 
-function ensureSpaceMetaColumn(col: string, decl: string): void {
+function ensureSpaceMetaColumn(col: string, decl: string, h: DbHandle = handle): void {
   try {
-    handle.sqlite.exec(`ALTER TABLE space_meta ADD COLUMN ${col} ${decl}`);
+    h.sqlite.exec(`ALTER TABLE space_meta ADD COLUMN ${col} ${decl}`);
   } catch {
     // Column already exists (repo schema patch) — ignore.
   }
@@ -677,17 +677,17 @@ describe("T-E5: episodeSearch", () => {
     // Similar finds: query ~ E1's embedding.
     const hits = episodeSearch(handle, SPACE, unitVec(0), 3);
     expect(hits.length).toBeGreaterThan(0);
-    expect(hits[0].episodeId).toBe(E1);
+    expect(hits[0]!.episodeId).toBe(E1);
     // Canonical scorer: identical similarity, recent outranks 60-day-old.
     const e3Hit = hits.find((h) => h.episodeId === E3)!;
-    expect(hits[0].score).toBeGreaterThan(e3Hit.score);
+    expect(hits[0]!.score).toBeGreaterThan(e3Hit.score);
     // Unrelated (orthogonal embedding) does not surface in top-1.
     const top1 = episodeSearch(handle, SPACE, unitVec(0), 1);
     expect(top1).toHaveLength(1);
-    expect(top1[0].episodeId).toBe(E1);
+    expect(top1[0]!.episodeId).toBe(E1);
     // Orthogonal query finds E2 first.
     const ortho = episodeSearch(handle, SPACE, unitVec(1), 1);
-    expect(ortho[0].episodeId).toBe(E2);
+    expect(ortho[0]!.episodeId).toBe(E2);
   });
 });
 
@@ -851,6 +851,9 @@ describe("T-E9b: concurrent cap (B4, Rev 3)", () => {
     const { h1, h2, close } = fileDbPair();
     try {
       // Bootstrap ran on h1's connection; h2 shares the file. Cap = 2.
+      // (Same column-ensure step setDailyCap performs for the shared handle:
+      // the cap column is a test-added tunable, not part of the base schema.)
+      ensureSpaceMetaColumn("episode_enrich_daily_cap", "INTEGER", h1);
       h1.sqlite
         .prepare(
           `INSERT INTO space_meta (space_id, episode_enrich_daily_cap) VALUES (?, ?)
@@ -921,8 +924,8 @@ describe("T-E9c: quota timezone boundary (B7, Rev 4)", () => {
         .prepare(`SELECT quota_date, claimed FROM enrichment_quota WHERE space_id = ?`)
         .all(SPACE) as { quota_date: string; claimed: number }[];
       expect(q1).toHaveLength(1);
-      expect(q1[0].quota_date).toBe("2026-10-19");
-      expect(q1[0].claimed).toBe(1);
+      expect(q1[0]!.quota_date).toBe("2026-10-19");
+      expect(q1[0]!.claimed).toBe(1);
 
       // Complete E1 so it is not reclaimable after the clock moves.
       await enrichEpisode(handle, SPACE, E1, c1!.fence, {
@@ -1673,9 +1676,9 @@ describe("T-U1: recordStated writes at 0.95", () => {
 
     const entries = getUserModel(handle, SPACE);
     expect(entries).toHaveLength(1);
-    expect(entries[0].content).toBe("works at Samsonite");
-    expect(entries[0].evidence).toHaveLength(1);
-    expect(entries[0].evidence[0].status).toBe("ok");
+    expect(entries[0]!.content).toBe("works at Samsonite");
+    expect(entries[0]!.evidence).toHaveLength(1);
+    expect(entries[0]!.evidence[0]!.status).toBe("ok");
   });
 });
 
@@ -1708,8 +1711,8 @@ describe("T-U2: stated beats inferred (INV-ST-1)", () => {
     // History shows both: the superseded entry and its replacement.
     const history = getUserModelHistory(handle, SPACE, res.id);
     expect(history.map((e) => e.id)).toEqual([inferred.id, res.id]);
-    expect(history[0].invalidAt).not.toBeNull();
-    expect(history[1].invalidAt).toBeNull();
+    expect(history[0]!.invalidAt).not.toBeNull();
+    expect(history[1]!.invalidAt).toBeNull();
   });
 });
 
@@ -1902,14 +1905,26 @@ describe("T-U8: emotion expiry", () => {
     const before = getUserModel(handle, SPACE, { slot: "emotion_state" });
     expect(before.map((e) => e.content)).toEqual(["proud about the job"]);
 
-    // The sweep only reclaims rows (sets invalid_at/invalid_reason='expired').
+    // W3 Rev 11 §6.3 superseded the sweep-expiry half of this test: a STATED
+    // emotion is never expired by the sweep — it is flagged for review and
+    // stays current (the read filter above remains the correctness path).
+    // (Inferred/observed stale emotions still expire — see the W3 sweep
+    // matrix tests.)
     const swept = await sweepStaleEmotions(handle, SPACE);
-    expect(swept.expiredCount).toBe(1);
+    expect(swept.expiredCount).toBe(0);
+    expect(swept.flaggedStatedCount).toBe(1);
     const stale = handle.sqlite
-      .prepare(`SELECT invalid_at, invalid_reason FROM user_model WHERE content = 'stressed about the fee'`)
-      .get() as { invalid_at: string | null; invalid_reason: string | null };
-    expect(stale.invalid_at).not.toBeNull();
-    expect(stale.invalid_reason).toBe("expired");
+      .prepare(`SELECT invalid_at, invalid_reason, review_flag, review_flagged_at FROM user_model WHERE content = 'stressed about the fee'`)
+      .get() as {
+        invalid_at: string | null;
+        invalid_reason: string | null;
+        review_flag: string | null;
+        review_flagged_at: string | null;
+      };
+    expect(stale.invalid_at).toBeNull();
+    expect(stale.invalid_reason).toBeNull();
+    expect(stale.review_flag).toBe("stale_emotion");
+    expect(stale.review_flagged_at).not.toBeNull();
   });
 });
 
@@ -2208,8 +2223,8 @@ describe("T-K1: 0.95 stated belief contradiction", () => {
     expect(res.verdict).toBe("contradicts_belief");
     expect(res.suggestedAction).toBe("suppress");
     expect(res.conflictingEntries).toHaveLength(1);
-    expect(res.conflictingEntries[0].confidence).toBe(0.95);
-    expect(res.conflictingEntries[0].evidence).toHaveLength(1);
+    expect(res.conflictingEntries[0]!.confidence).toBe(0.95);
+    expect(res.conflictingEntries[0]!.evidence).toHaveLength(1);
   });
 });
 
@@ -2288,7 +2303,7 @@ describe("T-K6: adversarial recall (B3)", () => {
     // Low surface similarity — recall comes from the employment topic
     // mapping + the employed/unemployed state incompatibility rule.
     expect(res.verdict).toBe("contradicts_belief");
-    expect(res.conflictingEntries[0].content).toBe("started working at Samsonite");
+    expect(res.conflictingEntries[0]!.content).toBe("started working at Samsonite");
   });
 });
 
@@ -2456,7 +2471,7 @@ describe("T-K17: genuine negation, same entity (B3, Rev 4)", () => {
     );
     expect(res.verdict).toBe("contradicts_belief");
     expect(res.suggestedAction).toBe("suppress");
-    expect(res.conflictingEntries[0].content).toBe("works at Samsonite");
+    expect(res.conflictingEntries[0]!.content).toBe("works at Samsonite");
     // Judgment only: byte-identical user_model.
     expect(snapshotUserModel()).toBe(before);
   });
@@ -2505,7 +2520,7 @@ describe("T-K18b: explicit transition as proposed assistant content (INV-KC-1, R
     // Deterministic explicit-transition rule — no LLM needed.
     expect(res.verdict).toBe("contradicts_belief");
     expect(res.suggestedAction).toBe("suppress");
-    expect(res.conflictingEntries[0].content).toBe("works at Samsonite");
+    expect(res.conflictingEntries[0]!.content).toBe("works at Samsonite");
 
     // INV-KC-1: user_model is byte-identical — no invalidation, no new entry.
     // The check judges; it does not write.
@@ -2651,11 +2666,11 @@ describe("T-V3: stale evidence annotated, not deleted", () => {
 
     const entries = getUserModel(handle, SPACE);
     expect(entries).toHaveLength(1);
-    const nodeRef = entries[0].evidence.find((e) => e.type === "node")!;
+    const nodeRef = entries[0]!.evidence.find((e) => e.type === "node")!;
     expect(nodeRef.status).toBe("stale");
-    expect(entries[0].evidence.find((e) => e.type === "episode")!.status).toBe("ok");
+    expect(entries[0]!.evidence.find((e) => e.type === "episode")!.status).toBe("ok");
     // The entry itself survives — annotation, not deletion.
-    expect(entries[0].invalidAt).toBeNull();
+    expect(entries[0]!.invalidAt).toBeNull();
   });
 });
 
@@ -2947,6 +2962,23 @@ export function assertSchemaEquivalent(
 
 function freshW2Db(episodicDdl?: string): DbHandle {
   const h = createDb(":memory:");
+  if (episodicDdl !== undefined) {
+    // A caller-supplied DDL must be authoritative. createDb's bootstrap has
+    // already created these tables and w2Ddl() uses IF NOT EXISTS, so
+    // without dropping first, the custom DDL would silently never apply
+    // (this is why T-M2's rogue-CHECK case used to compare two identical
+    // production tables and never throw).
+    for (const t of [
+      "episodes",
+      "episode_enrichments",
+      "enrichment_quota",
+      "forget_requests",
+      "episodes_fts",
+      "vec_episodes",
+    ]) {
+      h.sqlite.exec(`DROP TABLE IF EXISTS ${t}`);
+    }
+  }
   h.sqlite.exec(episodicDdl ?? Episodic.w2Ddl());
   h.sqlite.exec(USER_MODEL_DDL);
   return h;
@@ -3071,7 +3103,18 @@ describe("T-VEC-1: vec_episodes exists via production createDb() (P0, impl revie
             importance: 0.7,
             participants: [],
             place: null,
-            fieldProvenance: { emotion: "inferred" },
+            // INV-ENRICH-4 completeness: once any interpretive field is
+            // populated, EVERY interpretive field needs a label (NULL fields
+            // take 'not_reported'). The full map is what the production
+            // enricher contract requires — an emotion-only map is rejected.
+            fieldProvenance: {
+              detail: "not_reported",
+              emotion: "inferred",
+              emotional_weight: "inferred",
+              importance: "inferred",
+              participants: "not_reported",
+              place: "not_reported",
+            },
           }),
           embed: async () => new Float32Array(384).fill(0.1),
         });

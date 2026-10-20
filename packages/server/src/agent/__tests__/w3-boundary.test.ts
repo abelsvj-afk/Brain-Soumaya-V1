@@ -467,10 +467,10 @@ describe("T-C58: integrity incident — freeze and alert, no silent restore", ()
       )
       .all(SPACE) as { description: string; targets: string }[];
     expect(alerts.length).toBe(1);
-    expect(alerts[0].targets).toContain("42");
-    expect(alerts[0].targets).toContain(snap.hash);
-    expect(alerts[0].description).not.toContain("Samsonite");
-    expect(alerts[0].targets).not.toContain("Samsonite");
+    expect(alerts[0]!.targets).toContain("42");
+    expect(alerts[0]!.targets).toContain(snap.hash);
+    expect(alerts[0]!.description).not.toContain("Samsonite");
+    expect(alerts[0]!.targets).not.toContain("Samsonite");
 
     // No silent restore: committed work stands; the tamper stands for a
     // human to review.
@@ -661,8 +661,8 @@ describe("T-C67: Tier 2 semantic judgment catches a cross-slot contradiction", (
     expect(res.status).toBe("rejected");
     expect(res.error).toBe("stated_contradiction_detected");
     expect(seen.length).toBe(1);
-    expect(seen[0].candidate).toBe(candidate);
-    expect(seen[0].entryContent).toBe("I want to keep working at Samsonite");
+    expect(seen[0]!.candidate).toBe(candidate);
+    expect(seen[0]!.entryContent).toBe("I want to keep working at Samsonite");
     expect(consolidatedCount(candidate)).toBe(0);
   });
 

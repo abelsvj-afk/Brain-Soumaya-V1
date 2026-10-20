@@ -76,10 +76,14 @@ export function buildRows(chapters: TimelineChapter[]): Row[] {
   let prevPeriodEnd: string | null = null;
   chapters.forEach((ch, index) => {
     const d = normalizeDate(ch.periodEnd);
-    const monthKey = d.getFullYear() * 12 + d.getMonth();
+    // Month bucketing must use UTC, like normalizeDate itself: local getters
+    // shift a UTC-midnight periodEnd into the previous month for UTC-negative
+    // viewers, so a new month's chapter lands under the old month's header
+    // (or gets no header at all).
+    const monthKey = d.getUTCFullYear() * 12 + d.getUTCMonth();
     const gap = prevPeriodEnd ? gapFor(daysBetween(prevPeriodEnd, ch.periodEnd)) : 0;
     if (monthKey !== prevMonthKey) {
-      const label = d.toLocaleString(undefined, { month: "long", year: "numeric" });
+      const label = d.toLocaleString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
       rows.push({ type: "header", key: `h-${monthKey}`, label, gapBefore: prevMonthKey === null ? 0 : gap });
       rows.push({ type: "chapter", key: String(ch.id), chapter: ch, index, gapBefore: MIN_GAP });
     } else {
@@ -221,7 +225,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
                 <span className="tl-node-body">
                   <span className="tl-node-title">{row.chapter.title}</span>
                   <span className="tl-node-when">
-                    {normalizeDate(row.chapter.periodStart).toLocaleDateString()} – {normalizeDate(row.chapter.periodEnd).toLocaleDateString()}
+                    {normalizeDate(row.chapter.periodStart).toLocaleDateString(undefined, { timeZone: "UTC" })} – {normalizeDate(row.chapter.periodEnd).toLocaleDateString(undefined, { timeZone: "UTC" })}
                   </span>
                   {row.chapter.summary && <span className="tl-node-summary">{row.chapter.summary}</span>}
                 </span>
@@ -255,7 +259,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
           <div className="tl-card-trend" style={{ color: TREND_COLOR[sel.trend] }}>{TREND_LABEL[sel.trend]}</div>
           <h3>{sel.title}</h3>
           <div className="tl-card-when">
-            {normalizeDate(sel.periodStart).toLocaleDateString()} → {normalizeDate(sel.periodEnd).toLocaleDateString()}
+            {normalizeDate(sel.periodStart).toLocaleDateString(undefined, { timeZone: "UTC" })} → {normalizeDate(sel.periodEnd).toLocaleDateString(undefined, { timeZone: "UTC" })}
             {sel.origin === "user" && <span className="tl-origin"> · you marked this</span>}
           </div>
           <p className="tl-card-summary">{sel.summary}</p>

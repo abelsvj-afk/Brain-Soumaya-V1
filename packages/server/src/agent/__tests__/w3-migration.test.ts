@@ -119,8 +119,8 @@ describe("Amendment 1 §2: invalid_reason CHECK migration", () => {
     db.prepare(
       `UPDATE user_model SET invalid_at = '2026-10-05T00:00:00.000Z', invalid_reason = 'evidence_forgotten' WHERE id = 3`,
     ).run();
-    expect(allRows(db)[0].invalid_reason).toBe("stated_conflict");
-    expect(allRows(db)[2].invalid_reason).toBe("evidence_forgotten");
+    expect(allRows(db)[0]!.invalid_reason).toBe("stated_conflict");
+    expect(allRows(db)[2]!.invalid_reason).toBe("evidence_forgotten");
   });
 
   it("double-run is a no-op", () => {
@@ -179,7 +179,7 @@ describe("Amendment 1 §2: invalid_reason CHECK migration", () => {
     expect(db.inTransaction).toBe(false);
     expect(checkSet(db)).toHaveLength(5);
     expect(allRows(db)).toHaveLength(3);
-    expect(allRows(db)[0].content).toBe("works at Samsonite warehouse");
+    expect(allRows(db)[0]!.content).toBe("works at Samsonite warehouse");
   });
 
   it("indexes, UNIQUE and sqlite_sequence survive the rebuild", () => {
@@ -252,7 +252,7 @@ describe("Amendment 1 §2: invalid_reason CHECK migration", () => {
       expect(checkSet(h.sqlite as Raw)).toHaveLength(7);
       const rows = allRows(h.sqlite as Raw);
       expect(rows).toHaveLength(3);
-      expect(rows[0].content).toBe("works at Samsonite warehouse");
+      expect(rows[0]!.content).toBe("works at Samsonite warehouse");
       // And the cell-7 reason is writable on the booted DB.
       h.sqlite
         .prepare(`UPDATE user_model SET invalid_at = '2026-10-05T00:00:00.000Z', invalid_reason = 'stated_conflict' WHERE id = 1`)

@@ -654,8 +654,8 @@ export function detectUserModelCandidates(sqlite: RawDb, spaceId: string): numbe
   for (const list of bySlot.values()) {
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
-        const a = list[i];
-        const b = list[j];
+        const a = list[i]!;
+        const b = list[j]!;
         if (!topicsOverlap(parseJsonArray(a.topic_labels), parseJsonArray(b.topic_labels))) continue;
         if (openRecordForPair(sqlite, spaceId, "user_model", a.id, b.id)) continue;
         const verdict = detectContradiction(b.content, { content: a.content, slot: a.slot as never });
@@ -699,8 +699,8 @@ export function detectNodeCandidates(sqlite: RawDb, spaceId: string, cap = 200):
   outer: for (let i = 0; i < rows.length; i++) {
     for (let j = i + 1; j < rows.length; j++) {
       if (examined >= cap) break outer;
-      const a = rows[i];
-      const b = rows[j];
+      const a = rows[i]!;
+      const b = rows[j]!;
       const aText = `${a.label} ${a.content}`;
       const bText = `${b.label} ${b.content}`;
       const jaccard = tokenJaccard(aText, bText);

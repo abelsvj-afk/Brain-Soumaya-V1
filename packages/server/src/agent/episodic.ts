@@ -435,6 +435,10 @@ export function isSignificant(s: InteractionSignals = {}): boolean {
 
 export interface CaptureInput {
   kind: EpisodeKind;
+  /** Caller-provided one-line summary. When set, it is stored verbatim
+   *  (unless a forget scope tombstones the capture); when absent, the
+   *  summary is built from the template vocabulary (templateSummary). */
+  summary?: string;
   /** When the event happened (canonical ISO UTC). Defaults to now. */
   occurredAt?: string;
   /** First user message, truncated by the caller (content — stored only when
@@ -707,7 +711,7 @@ function captureEpisodeInner(
       );
     }
   } else {
-    summary = templateSummary(input);
+    summary = input.summary ?? templateSummary(input);
   }
 
   // --- Application-enforced reference: corrects_episode_id (design §8.5) ---
@@ -1248,7 +1252,7 @@ export function validateProvenance(
       throw new ValidationError("field_provenance", "missing_provenance", `Populated field '${field}' has no provenance label`);
     }
     const allowed = ALLOWED_PROVENANCE[field];
-    if (!allowed.has(label as ProvenanceLabel)) {
+    if (!allowed?.has(label as ProvenanceLabel)) {
       throw new ValidationError(
         "field_provenance",
         "invalid_provenance_label",
@@ -1358,7 +1362,7 @@ export function evidenceSafeFields(
     if (!isPopulated) continue;
     const label = fp[field];
     const allowed = ALLOWED_PROVENANCE[field];
-    if (label == null || !allowed.has(label as ProvenanceLabel)) {
+    if (label == null || !allowed?.has(label as ProvenanceLabel)) {
       malformed(field); // missing or unknown label -> excluded
       continue;
     }
@@ -2166,8 +2170,9 @@ export function episodeSearch(
     const rows = sqlite
       .prepare(`SELECT ${EPISODE_JOIN_SELECT} WHERE e.id = ? AND e.space_id = ?`)
       .all(c.episodeId, spaceId) as Record<string, unknown>[];
-    if (rows.length === 0) continue;
-    const { episode, enrichment } = parseEpisodeJoin(rows[0]);
+    const row0 = rows[0];
+    if (!row0) continue;
+    const { episode, enrichment } = parseEpisodeJoin(row0);
     if (episode.forgotten_at != null) continue; // defense in depth
     const score = scoreEpisode({
       relevance: c.similarity,

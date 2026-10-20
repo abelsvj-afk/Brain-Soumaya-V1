@@ -10,6 +10,7 @@ import { validateArgs } from "../tools/validation.js";
 import { reminderTool } from "../tools/reminder.js";
 import { taskCreatorTool } from "../tools/taskCreator.js";
 import { memorySearchTool } from "../tools/memorySearch.js";
+import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { AGENT_TOOLS } from "../tools/registry.js";
 import {
   requestApproval,
@@ -54,7 +55,10 @@ function scriptedLlm(script: LlmToolResult[]): LlmProvider {
   return {
     ...base,
     callWithTools: async (_input: LlmToolCallInput): Promise<LlmToolResult> => {
-      if (i < script.length) return script[i++];
+      if (i < script.length) {
+        const next = script[i++];
+        if (next) return next;
+      }
       return { text: "done.", calls: [] };
     },
   } as LlmProvider;
@@ -286,7 +290,7 @@ describe("agent loop batch semantics", () => {
       {
         text: null,
         calls: [
-          { id: "c1", name: "taskCreator", args: { nodeId, label: "call dentist" } },
+          { id: "c1", name: "create_task", args: { nodeId, label: "call dentist" } },
           { id: "c2", name: "memory_search", args: { query: "dentist" } },
         ],
       },
@@ -308,7 +312,7 @@ describe("agent loop batch semantics", () => {
         text: null,
         calls: [
           { id: "c1", name: "memory_search", args: { query: "dentist" } },
-          { id: "c2", name: "taskCreator", args: { nodeId, label: "call dentist" } },
+          { id: "c2", name: "create_task", args: { nodeId, label: "call dentist" } },
           { id: "c3", name: "memory_search", args: { query: "teeth" } },
         ],
       },
@@ -365,11 +369,22 @@ describe("agent loop batch semantics", () => {
 
 describe("space isolation", () => {
   it("memorySearch never returns another space's nodes", async () => {
-    seedNode("my secret", SPACE);
-    seedNode("my secret", "other-space");
+    // Seed through the production write path: NodesRepo.create populates the
+    // vec + FTS indexes that memory_search reads. A raw INSERT into nodes is
+    // invisible to both search channels, so it cannot exercise isolation.
+    const emb = await ctx.embeddings.embed("content of my secret");
+    const mine = new NodesRepo(handle, SPACE).create(
+      { label: "my secret", type: "other", content: "content of my secret" },
+      emb,
+    );
+    new NodesRepo(handle, "other-space").create(
+      { label: "my secret", type: "other", content: "content of my secret" },
+      emb,
+    );
     const r = await memorySearchTool.run({ ...tc, spaceId: SPACE }, { query: "secret" });
     expect(r.ok).toBe(true);
     expect(r.targets?.length).toBe(1);
+    expect(r.targets![0]).toBe(mine.id);
     const node = handle.sqlite.prepare(`SELECT space_id FROM nodes WHERE id = ?`).get(r.targets![0]) as { space_id: string };
     expect(node.space_id).toBe(SPACE);
   });
@@ -387,6 +402,9 @@ describe("agent_logs append-only", () => {
     ).toThrow(/append-only/);
   });
   it("DELETE on agent_logs is blocked by trigger", () => {
+    // The append-only trigger is BEFORE DELETE per row: it only fires when a
+    // row actually matches, so seed one first (as the UPDATE test does).
+    handle.sqlite.prepare(`INSERT INTO agent_logs (space_id, action, description, targets) VALUES (?, 't', 'd', '[]')`).run(SPACE);
     expect(() =>
       handle.sqlite.prepare(`DELETE FROM agent_logs WHERE space_id = ?`).run(SPACE)
     ).toThrow(/append-only/);
@@ -417,11 +435,11 @@ describe("agent_logs append-only", () => {
 describe("agent tool set", () => {
   it("AGENT_TOOLS is exactly the 5 approved tools", () => {
     const names = AGENT_TOOLS.map((e) => e.tool.name).sort();
-    expect(names).toEqual(["checkin", "fire_reminder", "memory_search", "taskCreator", "webLookup"].sort());
+    expect(names).toEqual(["check_in", "create_task", "fire_reminder", "memory_search", "web_lookup"].sort());
   });
-  it("write tools are exactly fire_reminder + taskCreator", () => {
+  it("write tools are exactly fire_reminder + create_task", () => {
     const writes = AGENT_TOOLS.filter((e) => e.isWrite).map((e) => e.tool.name).sort();
-    expect(writes).toEqual(["fire_reminder", "taskCreator"]);
+    expect(writes).toEqual(["create_task", "fire_reminder"]);
   });
   it("argsHash is stable and order-independent", () => {
     expect(argsHash({ b: 2, a: 1 })).toBe(argsHash({ a: 1, b: 2 }));
@@ -439,12 +457,13 @@ describe("agent loop LLM-error path", () => {
     // WITHOUT calling captureTurnEpisode() or setting episodeCaptured, unlike
     // every other return path. The user's turn was substantive (they asked,
     // they saw a reply) — it must be captured like any other turn.
-    const throwingLlm = {
-      ...new HeuristicProvider(),
+    // Object.assign (not object spread): spread drops the provider's
+    // prototype methods, leaving an object that is not a full LlmProvider.
+    const throwingLlm: LlmProvider = Object.assign(new HeuristicProvider(), {
       callWithTools: async (): Promise<LlmToolResult> => {
         throw new Error("OpenAI 400: tool messages must follow tool_calls");
       },
-    } as LlmProvider;
+    });
     ctx.llm = throwingLlm;
 
     const r = await agentLoop({
@@ -454,6 +473,7 @@ describe("agent loop LLM-error path", () => {
       userMessage: "do you know where i work",
       history: [],
       now: NOW,
+      notify: async () => {},
     });
 
     expect(r.text).toContain("I hit a snag");
@@ -469,12 +489,11 @@ describe("agent loop LLM-error path", () => {
   });
 
   it("does not double-capture when the stated trigger already captured", async () => {
-    const throwingLlm = {
-      ...new HeuristicProvider(),
+    const throwingLlm: LlmProvider = Object.assign(new HeuristicProvider(), {
       callWithTools: async (): Promise<LlmToolResult> => {
         throw new Error("boom");
       },
-    } as LlmProvider;
+    });
     ctx.llm = throwingLlm;
 
     // "I started..." matches the stated-statement trigger, which captures
@@ -486,6 +505,7 @@ describe("agent loop LLM-error path", () => {
       userMessage: "I started the Samsonite job today",
       history: [],
       now: NOW,
+      notify: async () => {},
     });
     expect(r.episodeCaptured).toBe(true);
     await new Promise((res) => setTimeout(res, 50));

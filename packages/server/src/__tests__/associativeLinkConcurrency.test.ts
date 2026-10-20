@@ -124,7 +124,7 @@ function setupDb(nodeCount: number): { handle: DbHandle; newNode: GraphNode; ids
       .prepare("INSERT INTO nodes (space_id, label, type, content) VALUES ('test-space', 'new', 'memory', 'new memory')")
       .run().lastInsertRowid,
   );
-  const newNode: GraphNode = { id: newId, label: "new", type: "memory", content: "new memory" };
+  const newNode: GraphNode = { id: newId, label: "new", type: "other", content: "new memory", createdAt: "2026-01-01T00:00:00.000Z" };
   return { handle, newNode, ids };
 }
 
@@ -288,7 +288,7 @@ describe("D4 failure semantics", () => {
           .prepare("INSERT INTO nodes (space_id, label, type, content) VALUES ('test-space', 'new2', 'memory', 'c')")
           .run().lastInsertRowid,
       );
-      const newNode2: GraphNode = { id: newId2, label: "new2", type: "memory", content: "c" };
+      const newNode2: GraphNode = { id: newId2, label: "new2", type: "other", content: "c", createdAt: "2026-01-01T00:00:00.000Z" };
       const r2 = await associativeLink(handle, deps(handle, succeeding), newNode2, new Float32Array(8), baseOpts);
       expect(r2).toHaveLength(3);
     } finally {

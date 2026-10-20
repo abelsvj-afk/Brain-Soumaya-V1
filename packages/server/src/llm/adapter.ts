@@ -1,5 +1,9 @@
 import type { ExtractionResult, RelationshipType, FinExtractionResult, PaystubExtractionResult, ClarificationInterpretation, GalaxyNavigationKind, GalaxyNavigationCandidate, InteractionPreferenceSignal } from "@brain/shared";
 
+// Re-exported so consumers can name these contract types via the adapter
+// module (the LlmProvider methods below return them).
+export type { ExtractionResult, ClarificationInterpretation } from "@brain/shared";
+
 /** A previously-stored node passed to the LLM as context for extraction. */
 export interface ContextNode {
   id: number;

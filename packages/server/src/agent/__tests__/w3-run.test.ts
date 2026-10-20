@@ -329,8 +329,8 @@ describe("T-C9/T-C10/T-C13: happy path, idempotence, counters", () => {
       .prepare(`SELECT * FROM consolidation_episodes WHERE space_id = ? ORDER BY episode_id`)
       .all(SPACE) as Record<string, unknown>[];
     expect(book).toHaveLength(2);
-    expect(book[0].outcome).toBe("consolidated");
-    expect(JSON.parse(book[0].evidence_group_set as string)).toEqual(["conv:a", "conv:b"]);
+    expect(book[0]!.outcome).toBe("consolidated");
+    expect(JSON.parse(book[0]!.evidence_group_set as string)).toEqual(["conv:a", "conv:b"]);
     // Counters exact.
     expect(out.consolidationsWritten).toBe(1);
     expect(out.llmCalls).toBe(1);
@@ -583,7 +583,7 @@ describe("T-C28: legacy potential_contradiction rows retire, never retro-file", 
       .prepare(`SELECT * FROM agent_logs WHERE space_id = ? AND action = 'w3_legacy_retired'`)
       .all(SPACE) as Record<string, unknown>[];
     expect(markers).toHaveLength(1);
-    expect(markers[0].result).toBe("legacy_moot");
+    expect(markers[0]!.result).toBe("legacy_moot");
     const originals = handle.sqlite
       .prepare(`SELECT COUNT(*) AS n FROM agent_logs WHERE space_id = ? AND result = 'pending_w3'`)
       .get(SPACE) as { n: number };
@@ -604,7 +604,7 @@ describe("T-C29: lineage backfill is wired into the run", () => {
     const before = handle.sqlite
       .prepare(`SELECT lineage_key FROM episodes WHERE id IN (?, ?) ORDER BY id`)
       .all(recoverable, stuck) as { lineage_key: string | null }[];
-    expect(before[0].lineage_key).toBeNull();
+    expect(before[0]!.lineage_key).toBeNull();
     handle.sqlite
       .prepare(
         `INSERT INTO episode_enrichments (episode_id, space_id, version, detail, source_transcript_ref)
@@ -618,8 +618,8 @@ describe("T-C29: lineage backfill is wired into the run", () => {
       .all(recoverable, stuck) as { id: number; lineage_key: string | null; lineage_basis: string | null }[];
     // Backfill stores the full per-turn ref — the same key shape
     // capture-time derivation mints (conv:<session>:turn:<turn>).
-    expect(rows[0].lineage_key).toBe("conv:sess-backfill:turn:3");
-    expect(rows[1].lineage_key).toBeNull();
+    expect(rows[0]!.lineage_key).toBe("conv:sess-backfill:turn:3");
+    expect(rows[1]!.lineage_key).toBeNull();
   });
 });
 
@@ -679,7 +679,7 @@ describe("T-C36: cell 3 — nodes, older strictly stronger", () => {
       .prepare(`SELECT * FROM agent_logs WHERE space_id = ? AND action = 'w3_flagged_for_review'`)
       .all(SPACE) as Record<string, unknown>[];
     expect(flags).toHaveLength(1);
-    expect(JSON.parse(flags[0].targets as string).node_id).toBe(older);
+    expect(JSON.parse(flags[0]!.targets as string).node_id).toBe(older);
   });
 });
 
@@ -699,8 +699,8 @@ describe("T-C37/T-C30: cell 6 — stated older, consolidated newer; inquiry idem
     expect(umRow(stated).review_flag).toBeNull();
     const inqs = inquiriesFor(id);
     expect(inqs).toHaveLength(1);
-    expect(inqs[0].status).toBe("open");
-    expect(inqs[0].kind).toBe("contradiction");
+    expect(inqs[0]!.status).toBe("open");
+    expect(inqs[0]!.kind).toBe("contradiction");
     // A second adjudication pass creates no second inquiry (record is
     // resolved; the pair is never re-filed while the first stands).
     await adjudicateOnce();
@@ -1028,8 +1028,8 @@ describe("T-C51: world-routed propositions go to the world writer, not user_mode
       .prepare(`SELECT outcome, resulting_entry_id FROM consolidation_episodes WHERE space_id = ?`)
       .all(SPACE) as { outcome: string; resulting_entry_id: number }[];
     expect(book).toHaveLength(2);
-    expect(book[0].outcome).toBe("consolidated");
-    expect(book[0].resulting_entry_id).toBe(777);
+    expect(book[0]!.outcome).toBe("consolidated");
+    expect(book[0]!.resulting_entry_id).toBe(777);
     const n = handle.sqlite
       .prepare(`SELECT COUNT(*) AS n FROM user_model WHERE space_id = ?`)
       .get(SPACE) as { n: number };

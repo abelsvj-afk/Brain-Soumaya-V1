@@ -167,7 +167,7 @@ export class EdgesRepo {
     let page = rows;
     if (rows.length > MAX_EDGES_PER_RESPONSE) {
       page = rows.slice(0, MAX_EDGES_PER_RESPONSE);
-      nextCursor = page[page.length - 1].id;
+      nextCursor = page.at(-1)?.id ?? null;
     }
     return {
       edges: page.map((r) => ({

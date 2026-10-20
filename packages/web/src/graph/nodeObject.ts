@@ -15,6 +15,11 @@ let sectorTitleIds: Set<string | number> = new Set();
 export function setSectorTitleIds(ids: Set<string | number>): void {
   sectorTitleIds = ids;
 }
+/** react-force-graph writes layout positions onto nodes at runtime; the
+ * shared GraphNode type models the server payload, so positions are a
+ * web-runtime extension of it. */
+type GraphNodeWithPosition = GraphNode & { x?: number; y?: number; z?: number };
+
 /** Mass signal for a node (server-precomputed or derived): single source of truth. */
 export function nodeMass(node: GraphNode): number {
   return (
@@ -28,7 +33,7 @@ export function nodeMass(node: GraphNode): number {
 }
 /** Effective sector-title threshold for a node set: SECTOR_MASS, lowered just
  * enough to guarantee at least minHubs titled hubs (never raised). */
-export function pickSectorHubIds(nodes: GraphNode[], maxSectors = 5): Set<string | number> {
+export function pickSectorHubIds(nodes: GraphNodeWithPosition[], maxSectors = 5): Set<string | number> {
   // Sort by mass descending; greedily take the most massive hub that is far
   // enough from every already-picked hub. Separation is relative to galaxy
   // scale (1/4 of the max node radius) so it adapts to small and large brains.
@@ -44,8 +49,8 @@ export function pickSectorHubIds(nodes: GraphNode[], maxSectors = 5): Set<string
   }
   const minSep = maxR / 4;
   const minSep2 = minSep * minSep;
-  const picked: GraphNode[] = [];
-  const noPos: GraphNode[] = [];
+  const picked: GraphNodeWithPosition[] = [];
+  const noPos: GraphNodeWithPosition[] = [];
   for (const n of sorted) {
     if (picked.length >= maxSectors) break;
     if (n.x == null || n.y == null || isNaN(n.x) || isNaN(n.y)) {

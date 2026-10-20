@@ -640,7 +640,7 @@ async function evaluateTier2(
     return { ...base, verdict: "deferred", detail: "llm_budget_exhausted" };
   }
 
-  const top = selected[0];
+  const top = selected[0]!;
   if (ctx.llmBudget) ctx.llmBudget.remaining -= 1;
   let judgment: string;
   try {

@@ -947,11 +947,15 @@ export function extractEntities(text: string): string[] {
   for (const m of text.matchAll(
     /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g,
   )) {
-    const t = m[1].toLowerCase();
+    const g = m[1];
+    if (g === undefined) continue;
+    const t = g.toLowerCase();
     if (t.length > 2 && !STOPWORDS.has(t)) found.add(t);
   }
   for (const m of text.matchAll(/[""]([^""]{2,40})[""]/g)) {
-    found.add(m[1].toLowerCase().trim());
+    const g = m[1];
+    if (g === undefined) continue;
+    found.add(g.toLowerCase().trim());
   }
   for (const m of text.matchAll(/\$\s?[\d,]+(?:\.\d{1,2})?/g)) {
     found.add(m[0].toLowerCase().replace(/[\s,]+$/g, ""));
@@ -1152,11 +1156,19 @@ export function independentSourceCount(metas: EvidenceMeta[]): number {
   const n = metas.length;
   if (n === 0) return 0;
   const parent = metas.map((_, i) => i);
-  const find = (x: number): number =>
-    parent[x] === x ? x : (parent[x] = find(parent[x]));
+  const find = (x: number): number => {
+    const px = parent[x];
+    if (px === undefined || px === x) return x;
+    const root = find(px);
+    parent[x] = root;
+    return root;
+  };
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      if (!assessIndependence(metas[i], metas[j])) {
+      const mi = metas[i];
+      const mj = metas[j];
+      if (!mi || !mj) continue;
+      if (!assessIndependence(mi, mj)) {
         parent[find(i)] = find(j);
       }
     }
@@ -2474,7 +2486,7 @@ function entryRecencyFactor(validAt: string, nowMs: number): number {
 
 function formatBlockDate(iso: string): string {
   const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso);
-  return m ? m[1] : iso;
+  return m?.[1] ?? iso;
 }
 
 /**

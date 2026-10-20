@@ -87,7 +87,7 @@ const USER_MODEL_INDEX_DDL: Record<string, string> = {
 export function parseInvalidReasonCheckSet(ddl: string): string[] | null {
   const m = /invalid_reason\s+TEXT\s+CHECK\s*\(\s*invalid_reason\s+IN\s*\(([^)]*)\)\s*\)/i.exec(ddl);
   if (!m) return null;
-  return [...m[1].matchAll(/'([^']*)'/g)].map((x) => x[1]);
+  return [...m[1]!.matchAll(/'([^']*)'/g)].map((x) => x[1]!);
 }
 
 function sameValueSet(a: readonly string[], b: readonly string[]): boolean {
@@ -205,7 +205,10 @@ export function migrateUserModelInvalidReasonCheck(sqlite: RawDb): { migrated: b
   const norm = (s: string) => s.replace(/\s+/g, " ").trim();
   if (
     indexRows.length !== 3 ||
-    !indexRows.every((r) => USER_MODEL_INDEX_DDL[r.name] && norm(r.sql) === norm(USER_MODEL_INDEX_DDL[r.name]))
+    !indexRows.every((r) => {
+      const expected = USER_MODEL_INDEX_DDL[r.name];
+      return !!expected && norm(r.sql) === norm(expected);
+    })
   ) {
     throw new Error(
       `W3 Amendment 1 migration: rebuilt index inventory mismatch (found: ${indexRows.map((r) => r.name).join(", ") || "none"}).`,

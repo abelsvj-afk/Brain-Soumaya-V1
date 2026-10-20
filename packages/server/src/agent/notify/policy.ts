@@ -11,7 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { RawDb } from "../db/vec.js";
+import type { RawDb } from "../../db/vec.js";
 
 /** Per-space notification preferences (stored in space_meta). */
 export interface NotifyPreferences {
@@ -194,7 +194,7 @@ export function isQuietHours(now: Date, prefs: NotifyPreferences): boolean {
  * Used for deliver_after computation.
  */
 export function nextLocalTime(from: Date, hhmm: string, tz: string): Date {
-  const [h, m] = hhmm.split(":").map(Number);
+  const [h = 0, m = 0] = hhmm.split(":").map(Number);
   // Start from `from`, then walk forward day by day until the local time matches.
   // Compute the candidate in UTC by offsetting.
   for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
@@ -205,7 +205,7 @@ export function nextLocalTime(from: Date, hhmm: string, tz: string): Date {
     let guess = new Date(`${dayStr}T12:00:00Z`);
     for (let i = 0; i < 4; i++) {
       const lt = localTime(guess, tz);
-      const [gh, gm] = lt.split(":").map(Number);
+      const [gh = 0, gm = 0] = lt.split(":").map(Number);
       const diffMin = (h * 60 + m) - (gh * 60 + gm);
       guess = new Date(guess.getTime() + diffMin * 60000);
     }

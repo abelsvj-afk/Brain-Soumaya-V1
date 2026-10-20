@@ -424,11 +424,38 @@ export function isNeverTrue(sqlite: RawDb, nodeId: number): boolean {
   return row !== undefined;
 }
 
+/** Raw corrections row as better-sqlite3 returns it (snake_case). */
+interface RawCorrectionRow {
+  id: number;
+  space_id: string;
+  node_id: number;
+  correction_type: string;
+  corrected_at: string;
+  corrected_by: string;
+  reason: string | null;
+  superseding_node_id: number | null;
+  created_at: string;
+}
+
 /** Full correction history for a node (for audit / history views). */
 export function getCorrections(sqlite: RawDb, nodeId: number): CorrectionRow[] {
-  return sqlite
+  const rows = sqlite
     .prepare(`SELECT * FROM corrections WHERE node_id = ? ORDER BY corrected_at ASC, id ASC`)
-    .all(nodeId) as CorrectionRow[];
+    .all(nodeId) as RawCorrectionRow[];
+  // Map explicitly: a bare cast would leave snake_case keys on an object
+  // typed with the Drizzle (camelCase) row shape — the keys would not match
+  // the declared contract at runtime.
+  return rows.map((r) => ({
+    id: r.id,
+    spaceId: r.space_id,
+    nodeId: r.node_id,
+    correctionType: r.correction_type,
+    correctedAt: r.corrected_at,
+    correctedBy: r.corrected_by,
+    reason: r.reason,
+    supersedingNodeId: r.superseding_node_id,
+    createdAt: r.created_at,
+  }));
 }
 
 /**

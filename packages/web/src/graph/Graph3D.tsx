@@ -3732,7 +3732,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // for recreated link objects entirely (returning "handled" for nonexistent
   // geometry → invisible links). Falls back to always-update for links without
   // a usable object identity (defensive; shouldn't happen).
-  const lastTubePosRef = useRef(new WeakMap<object, number[]>());
+  // Value is always the 6-element [start.xyz, end.xyz] snapshot set below.
+  const lastTubePosRef = useRef(
+    new WeakMap<object, [number, number, number, number, number, number]>(),
+  );
   const linkPositionUpdateCb = useCallback(
     (obj: any, pos: LinkPositions, link: any) => {
       const linkId = link?.id;
