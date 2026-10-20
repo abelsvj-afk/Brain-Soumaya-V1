@@ -320,7 +320,7 @@ describe("T-C81 (partial): forget invalidating a stated entry bumps V → V+1", 
 // ---------------------------------------------------------------------------
 
 describe("sweepStaleEmotions: stated rows flagged, never expired (§6.3)", () => {
-  it("expires stale inferred emotions but flags stale stated emotions", () => {
+  it("expires stale inferred emotions but flags stale stated emotions", async () => {
     const E = seedEpisode();
     const statedRow = recordStated(handle, SPACE, "emotion_state", "stressed about the fee", ev(E));
     const inferredRow = updateUserModel(handle, SPACE, "inferred", {
@@ -335,7 +335,7 @@ describe("sweepStaleEmotions: stated rows flagged, never expired (§6.3)", () =>
       .run(SPACE);
     const v = statedVersion();
 
-    const swept = sweepStaleEmotions(handle, SPACE);
+    const swept = await sweepStaleEmotions(handle, SPACE);
     expect(swept.expiredCount).toBe(1);
     expect(swept.flaggedStatedCount).toBe(1);
 
@@ -351,7 +351,7 @@ describe("sweepStaleEmotions: stated rows flagged, never expired (§6.3)", () =>
     expect(statedVersion()).toBe(v + 1);
 
     // Set-once: a second sweep performs no write and no bump.
-    const again = sweepStaleEmotions(handle, SPACE);
+    const again = await sweepStaleEmotions(handle, SPACE);
     expect(again.flaggedStatedCount).toBe(0);
     expect(statedVersion()).toBe(v + 1);
   });

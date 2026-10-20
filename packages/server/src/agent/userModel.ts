@@ -25,6 +25,10 @@
 import type { DbHandle } from "../db/client.js";
 import type { RawDb } from "../db/vec.js";
 import { captureEpisode } from "./episodic.js";
+import {
+  applyConsolidationMutation,
+  type ConsolidationRunContext,
+} from "./consolidation/boundary.js";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -2541,135 +2545,175 @@ export function composeUserModelBlock(
  * invalid_reason='expired'; replaced_by stays NULL (nothing replaces an
  * expired emotion). W3 §6.3: stated rows are exempt from expiry — they are
  * flagged for review ('stale_emotion') instead of invalidated.
+ *
+ * W3 Milestone 2 (Phase F): every write goes through the guarded boundary
+ * (InvalidateEntry for non-stated expiry, SetReviewFlag for stated rows) —
+ * no direct user_model SQL remains in this function. The function is async
+ * because the boundary is async (its insert path may await an LLM judge);
+ * there are no production callers yet (the W3 scheduler is Milestone 3),
+ * only tests. Eligibility is re-verified inside the boundary's transaction
+ * against each row's CURRENT state, so a correction that lands first wins.
  */
-export function sweepStaleEmotions(
+export async function sweepStaleEmotions(
   h: DbHandle,
   spaceId: string,
-): { expiredCount: number; flaggedStatedCount: number } {
-  const now = nowIso();
+): Promise<{ expiredCount: number; flaggedStatedCount: number }> {
   const sqlite = h.sqlite;
-  return sqlite.transaction(() => {
-    // Non-stated rows expire (pre-W3 behavior, now origin-scoped).
-    const info = sqlite
-      .prepare(
-        `UPDATE user_model
-         SET invalid_at = ?, invalid_reason = 'expired'
-         WHERE space_id = ?
-           AND slot = 'emotion_state'
-           AND origin != 'stated'
-           AND invalid_at IS NULL
-           AND datetime(valid_at) <= datetime('now', '-7 days')`,
-      )
-      .run(now, spaceId);
-    const expiredCount = Number(info.changes);
-
-    // W3 §1.2/§6.3 hardening: stated emotion_state rows are NEVER expired by
-    // maintenance — the user's stated emotion stands until the user corrects
-    // it. They receive a review flag instead (SetReviewFlag semantics;
-    // direct SQL here until Milestone 2 routes this sweep through the
-    // guarded boundary). Set-once: a row already carrying a flag is left
-    // untouched — no write, and per §8.6 no version bump for a no-op set.
-    const flagged = sqlite
-      .prepare(
-        `UPDATE user_model
-         SET review_flag = 'stale_emotion', review_flagged_at = ?
-         WHERE space_id = ?
-           AND slot = 'emotion_state'
-           AND origin = 'stated'
-           AND invalid_at IS NULL
-           AND review_flag IS NULL
-           AND datetime(valid_at) <= datetime('now', '-7 days')`,
-      )
-      .run(now, spaceId);
-    const flaggedStatedCount = Number(flagged.changes);
-    // §8.6: a review-flag write on a stated row is a stated-row write —
-    // bump conservatively, same transaction.
-    bumpStatedSetVersion(sqlite, spaceId, flaggedStatedCount);
-
-    if (expiredCount > 0) {
-      auditLog(
-        sqlite,
-        spaceId,
-        "emotions_swept",
-        `emotions_swept count=${expiredCount}`,
-        { count: expiredCount },
-        "ok",
-      );
+  const ctx: ConsolidationRunContext = { spaceId };
+  const candidates = sqlite
+    .prepare(
+      `SELECT id, origin FROM user_model
+       WHERE space_id = ?
+         AND slot = 'emotion_state'
+         AND invalid_at IS NULL
+         AND datetime(valid_at) <= datetime('now', '-7 days')`,
+    )
+    .all(spaceId) as { id: number; origin: string }[];
+  let expiredCount = 0;
+  let flaggedStatedCount = 0;
+  for (const row of candidates) {
+    if (row.origin === "stated") {
+      const res = await applyConsolidationMutation(sqlite, ctx, {
+        kind: "SetReviewFlag",
+        entryId: row.id,
+        flag: "stale_emotion",
+      });
+      if (res.status === "applied") flaggedStatedCount++;
+    } else {
+      const res = await applyConsolidationMutation(sqlite, ctx, {
+        kind: "InvalidateEntry",
+        entryId: row.id,
+        reason: "expired",
+      });
+      if (res.status === "applied") expiredCount++;
     }
-    if (flaggedStatedCount > 0) {
-      auditLog(
-        sqlite,
-        spaceId,
-        "stale_emotions_flagged",
-        `stale_emotions_flagged count=${flaggedStatedCount}`,
-        { count: flaggedStatedCount },
-        "ok",
-      );
-    }
-    return { expiredCount, flaggedStatedCount };
-  })();
+  }
+  if (expiredCount > 0) {
+    auditLog(
+      sqlite,
+      spaceId,
+      "emotions_swept",
+      `emotions_swept count=${expiredCount}`,
+      { count: expiredCount },
+      "ok",
+    );
+  }
+  if (flaggedStatedCount > 0) {
+    auditLog(
+      sqlite,
+      spaceId,
+      "stale_emotions_flagged",
+      `stale_emotions_flagged count=${flaggedStatedCount}`,
+      { count: flaggedStatedCount },
+      "ok",
+    );
+  }
+  return { expiredCount, flaggedStatedCount };
 }
 
 /**
- * §3.8 withdrawn-evidence handling. For current inferred/consolidated entries
- * whose evidence is ENTIRELY withdrawn: auto-invalidate (invalid_at = now,
- * invalid_reason='evidence_withdrawn') — they have no standing without their
- * evidence. Stated entries are only flagged (returned, not invalidated).
+ * §3.8 withdrawn-evidence handling, per the W3 §6.3 sweep matrix. For
+ * current inferred/consolidated entries whose evidence is ENTIRELY
+ * withdrawn: auto-invalidate (invalid_at = now,
+ * invalid_reason='evidence_withdrawn') — they have no standing without
+ * their evidence. Stated entries are only flagged (returned, not
+ * invalidated). PARTIAL withdrawal on a non-stated entry withdraws the
+ * dead episode evidence through the boundary, which recomputes
+ * evidence_strength over the survivors (new in W3 — W2 ignored partial
+ * withdrawal); partial withdrawal on a stated entry does nothing (§6.3).
  *
  * DESIGN-GAP: §3.8 describes this as "auto-invalidated" in the read-time
  * annotation context, but executing writes inside getUserModel() would make
  * knowledgeCheck()'s read path mutate user_model and break INV-KC-1's
  * byte-identical guarantee. The invalidation therefore lives in this explicit
  * maintenance function (W3-scheduled), never on the read path.
+ *
+ * W3 Milestone 2 (Phase F): every write goes through the guarded boundary —
+ * no direct user_model SQL remains in this function — and each row's
+ * eligibility is re-derived from a FRESH read + annotation at mutation
+ * time (and re-verified inside the boundary's own transaction), so a user
+ * correction that lands first is seen and respected (§6.3, T-C52). Async
+ * because the boundary is async; no production callers exist yet.
  */
-export function sweepWithdrawnEvidence(
+export async function sweepWithdrawnEvidence(
   h: DbHandle,
   spaceId: string,
-): { invalidatedIds: number[]; flaggedStatedIds: number[] } {
-  const now = nowIso();
-  const rows = h.sqlite
+): Promise<{ invalidatedIds: number[]; flaggedStatedIds: number[] }> {
+  const sqlite = h.sqlite;
+  const ctx: ConsolidationRunContext = { spaceId };
+  const candidateIds = sqlite
     .prepare(
-      `SELECT * FROM user_model
+      `SELECT id FROM user_model
        WHERE space_id = ? AND invalid_at IS NULL
          AND origin IN ('inferred', 'consolidated', 'stated')`,
     )
-    .all(spaceId) as UserModelRow[];
+    .all(spaceId) as { id: number }[];
   const invalidatedIds: number[] = [];
   const flaggedStatedIds: number[] = [];
 
-  h.sqlite.transaction(() => {
-    const invalidate = h.sqlite.prepare(
-      `UPDATE user_model
-       SET invalid_at = ?, invalid_reason = 'evidence_withdrawn', replaced_by = NULL
-       WHERE id = ? AND invalid_at IS NULL`,
-    );
-    for (const row of rows) {
-      const refs = parseJsonArray<EvidenceRef>(row.evidence_ids, []);
-      if (refs.length === 0) continue;
-      const annotated = annotateEvidence(h, spaceId, refs);
-      const allWithdrawn = annotated.every((a) => a.status === "withdrawn");
-      if (!allWithdrawn) continue;
-      if (row.origin === "stated") {
-        flaggedStatedIds.push(row.id);
-      } else {
-        invalidate.run(now, row.id);
-        invalidatedIds.push(row.id);
+  for (const { id } of candidateIds) {
+    const row = sqlite
+      .prepare(`SELECT * FROM user_model WHERE id = ?`)
+      .get(id) as UserModelRow | undefined;
+    if (!row || row.invalid_at !== null) continue;
+    const refs = parseJsonArray<EvidenceRef>(row.evidence_ids, []);
+    if (refs.length === 0) continue;
+    const annotated = annotateEvidence(h, spaceId, refs);
+    const withdrawn = annotated.filter((a) => a.status === "withdrawn");
+    if (withdrawn.length === 0) continue;
+
+    if (row.origin === "stated") {
+      // Stated rows: flag only, and only when ALL evidence is withdrawn
+      // (§6.3). The flag write itself goes through the boundary — the
+      // one stated-row operation it permits — and is set-once there.
+      if (withdrawn.length === refs.length) {
+        const res = await applyConsolidationMutation(sqlite, ctx, {
+          kind: "SetReviewFlag",
+          entryId: row.id,
+          flag: "evidence_withdrawn",
+        });
+        if (res.status === "applied") flaggedStatedIds.push(row.id);
+      }
+      continue;
+    }
+    if (withdrawn.length === refs.length) {
+      const res = await applyConsolidationMutation(sqlite, ctx, {
+        kind: "InvalidateEntry",
+        entryId: row.id,
+        reason: "evidence_withdrawn",
+      });
+      if (res.status === "applied") invalidatedIds.push(row.id);
+    } else {
+      // §6.3 partial-withdrawal cell: withdraw the dead EPISODE evidence;
+      // the boundary recomputes strength over the survivors atomically.
+      // Withdrawn non-episode refs (missing nodes/enrichments) cannot be
+      // named in a WithdrawEvidence payload (§6.1 step 4 is episode-
+      // keyed) and remain in the evidence set.
+      const episodeIds = withdrawn
+        .filter((a) => a.type === "episode")
+        .map((a) => a.id);
+      if (episodeIds.length > 0) {
+        await applyConsolidationMutation(sqlite, ctx, {
+          kind: "WithdrawEvidence",
+          entryId: row.id,
+          episodeIds,
+        });
       }
     }
-    if (invalidatedIds.length > 0 || flaggedStatedIds.length > 0) {
-      auditLog(
-        h.sqlite,
-        spaceId,
-        "withdrawn_evidence_sweep",
-        `withdrawn_evidence_sweep invalidated=${invalidatedIds.length} flagged_stated=${flaggedStatedIds.length}`,
-        {
-          invalidated_ids: invalidatedIds,
-          flagged_stated_ids: flaggedStatedIds,
-        },
-        "ok",
-      );
-    }
-  })();
+  }
+  if (invalidatedIds.length > 0 || flaggedStatedIds.length > 0) {
+    auditLog(
+      sqlite,
+      spaceId,
+      "withdrawn_evidence_sweep",
+      `withdrawn_evidence_sweep invalidated=${invalidatedIds.length} flagged_stated=${flaggedStatedIds.length}`,
+      {
+        invalidated_ids: invalidatedIds,
+        flagged_stated_ids: flaggedStatedIds,
+      },
+      "ok",
+    );
+  }
 
   return { invalidatedIds, flaggedStatedIds };
 }
