@@ -324,12 +324,12 @@ export async function handleTelegramUpdate(
       return;
     }
     const prefsBefore = getPreferences(ctx.handle.sqlite, spaceId);
-    const r1 = setPreference(ctx.handle.sqlite, spaceId, "quietStart", m[1]);
+    const r1 = setPreference(ctx.handle.sqlite, spaceId, "quietStart", m[1]!);
     if (!r1.ok) {
       await send(chatId, `Couldn't set that: ${r1.error}`);
       return;
     }
-    const r2 = setPreference(ctx.handle.sqlite, spaceId, "quietEnd", m[2]);
+    const r2 = setPreference(ctx.handle.sqlite, spaceId, "quietEnd", m[2]!);
     if (!r2.ok) {
       setPreference(ctx.handle.sqlite, spaceId, "quietStart", prefsBefore.quietStart);
       await send(chatId, `Couldn't set that: ${r2.error} (quiet hours unchanged)`);
@@ -345,7 +345,7 @@ export async function handleTelegramUpdate(
       await send(chatId, "Usage: /cap <number> — e.g. /cap 5 (max proactive pings per day)");
       return;
     }
-    const r = setPreference(ctx.handle.sqlite, spaceId, "dailyProactiveCap", m[1]);
+    const r = setPreference(ctx.handle.sqlite, spaceId, "dailyProactiveCap", m[1]!);
     await send(chatId, r.ok ? `Daily cap set to ${m[1]}.` : `Couldn't set that: ${r.error}`);
     return;
   }
@@ -356,7 +356,7 @@ export async function handleTelegramUpdate(
       await send(chatId, "Usage: /tz <IANA timezone> — e.g. /tz America/Chicago");
       return;
     }
-    const r = setPreference(ctx.handle.sqlite, spaceId, "timezone", m[1]);
+    const r = setPreference(ctx.handle.sqlite, spaceId, "timezone", m[1]!);
     await send(chatId, r.ok ? `Timezone set to ${m[1]}.` : `Couldn't set that: ${r.error}`);
     return;
   }
