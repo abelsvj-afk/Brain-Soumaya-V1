@@ -1,20 +1,19 @@
-# W3 Design: Sleep / Consolidation — Revision 2
+# W3 Design: Sleep / Consolidation — Revision 3
 
-**Status:** Revision 2 — addresses the W3 architecture gauntlet review (3 P0, 6 P1, 3 P2 findings on Draft v1). Not approved. No implementation authorized.
+**Status:** Revision 3 — addresses the W3 architecture gauntlet round-2 review (1 P0 with 3 sub-problems + 5 P1 findings). Not approved. No implementation authorized.
 **Branch:** `w3-design` · **Baseline:** deploy branch `claude/soumaya-second-brain-v1-m4z4hc` (see §1.1 — hard gate, satisfied)
 **Author:** King (Muse) · **Date:** 2026-10-19
 
-**What changed in Revision 2 (summary):**
-- **P0-1:** "Stated is sacred" is now enforced by a single guarded write boundary (§6.1) plus a run-level integrity check, not by code-review convention. Two concrete W2 conflicts are named as hardening prerequisites (§1.2).
-- **P0-2:** The contradiction backlog moves from free-form `agent_logs` rows to a typed `contradictions` table with explicit two-sided identity, a formal state machine, and separate node-graph vs user-model domains (§5).
-- **P0-3:** The deployment baseline is stated exactly, with merged commit SHAs (§1.1).
-- **P1-1:** Evidence independence is defined by a durable lineage key, not episode IDs (§4.3).
-- **P1-2:** Contradiction adjudication is a complete deterministic decision table (§5.3).
-- **P1-3:** Run claiming is atomic via `UNIQUE(space_id, local_date)` + fencing (§3.1, §9).
-- **P1-4:** Idempotency is defined at the logical work-item level across run IDs (§9.2).
-- **P1-5:** No `last_accessed_at` on `episodes`. Access telemetry lives in a separate append-only table (§7.2, §8.5).
-- **P1-6:** A full sweep eligibility matrix replaces prose sweep descriptions (§3.2, §6.3).
-- **P2-1/2/3:** Semantic routing with fail-closed abstention (§4.1); an exact `evidence_strength` formula (§4.4); a durable inquiry lifecycle (§5.5).
+**What changed in Revision 3 (summary):**
+- **P0-A:** The stated-integrity snapshot now hashes the *complete* protected state (`id, slot, content, evidence_ids, confidence, valid_at, invalid_at, invalidated_by, replaced_by, updated_at`) — a content change that leaves `updated_at` untouched can no longer evade it (§6.1).
+- **P0-B:** Stated protection is a *precondition of every mutation*, enforced inside the same transaction as the write. The hash backstop is explicitly defense-in-depth: a mismatch does **not** restore safety — it triggers a defined incident procedure (alert + freeze W3 runs + manual review) (§6.1, §9.4 new).
+- **P0-C:** Both W2 sweep functions are required code changes: their SQL writers are refactored to route through `applyConsolidationMutation()`. The design no longer treats "the boundary" and "the sweeps" as separate things (§1.2 rewritten as a required change, §6.1).
+- **P0-D:** `SetReviewFlag` is now explicitly the *sole* permitted stated-row operation in the closed mutation contract — limited to the `review_flag` / `review_flagged_at` columns only, never content/evidence/confidence (§6.1).
+- **P1-1:** Unknown-lineage episodes are **ineligible** to establish independence — NULL lineage can never count as an evidence group. Exact lineage grain defined per capture type (§4.3).
+- **P1-2:** Decision table completed: symmetric stated-challenger cell, no delegation to unspecified "W2 rules" (outcomes defined inline), tie-breakers explicitly cannot convert `unresolved` to a winner, node-vs-episode action contract (§5.3).
+- **P1-3:** Evidence state is now a stored SET (canonical JSON array) plus fingerprint hash; terminal vs retryable outcomes defined (§8.3).
+- **P1-4:** `WithdrawEvidence` added to the closed mutation union — forgetting propagation is expressible inside the boundary (§6.1, §7.3).
+- **P1-5:** `report_ref` dedup defined: same `(pair, report_ref)` = duplicate (ignored); new `report_ref` for the same pair = new event linked via `reopens_id` (§5.1).
 
 ---
 
@@ -42,12 +41,13 @@ W3 extends exactly this baseline, and no other:
 
 **Hard gate:** W3 implementation may not begin until W2 is merged to the deploy branch. That gate is **satisfied** by the commits above. Deployment itself remains a manual Fly action by the user and is still pending — W3 design does not depend on deployment having occurred, only on the merged code/schema baseline, because W3 ships through the same manual deploy path.
 
-### 1.2 W2 hardening prerequisites (from P0-1)
+### 1.2 W2 hardening — required code changes (from P0-1, tightened in Rev 3)
 
-The gauntlet found two places where existing W2 code violates the invariant W3 depends on. These are **prerequisites** — small, separately-reviewed fixes to W2 code that must land before (or with) W3 implementation, because W3's sweeps phase calls these functions:
+The gauntlet found two places where existing W2 code violates the invariant W3 depends on, plus a third structural gap found in round 2: the W3 sweeps must not call W2's sweep functions as black boxes while the boundary claims to be the single write path. These are **required code changes**, not design notes — they must land before (or with) W3 implementation:
 
 1. **`updateUserModel()` contradiction logic must exclude `stated` unconditionally.** Today it searches contradicted entries across `inferred`/`consolidated`/`stated` and filters out stated only when `confidence >= 0.95`. A stated entry at 0.90 can therefore be invalidated by a consolidated write. Required: stated rows are never candidates for contradiction-driven invalidation, at any confidence. (Stated-vs-stated conflicts surface as `conflictingStatedIds` for the correction path — existing behavior, unchanged.)
 2. **`sweepStaleEmotions()` must skip `origin='stated'` rows.** Today it expires `emotion_state` rows without an origin filter. Required: stated emotion rows are never expired by the sweep; they receive a review flag instead (§6.3).
+3. **Both sweep functions' SQL writers must route through `applyConsolidationMutation()` (P0-C, round 2).** It is not enough for W3's *new* code to use the boundary while W2's existing sweep functions perform direct `UPDATE user_model` statements that W3's Phase A invokes. Required: the W2 sweep functions are refactored so their write operations are issued through the guarded boundary (§6.1) — the boundary is the single write path for *all* W3-triggered `user_model` writes, including code that originated in W2. The code-review gate is mechanical: no `UPDATE user_model` / `INSERT INTO user_model` string may appear anywhere in the W3 module *or* in the W2 functions W3 invokes, outside `applyConsolidationMutation()`.
 
 W3's own boundary (§6.1) is defense-in-depth on top of these fixes, not a substitute for them.
 
@@ -86,6 +86,7 @@ W3 runs in the same autonomy tick (`AUTONOMY_MS`, default 5 min) as the dream cy
   ```
 
   `consolidation_runs` carries `UNIQUE (space_id, window_date)` (§8.2). If the insert returns no row, another tick already owns this window — the tick moves on. There is no read-then-write race: two concurrent ticks cannot both own a run.
+- **Freeze precondition (Rev 3):** the claim statement is preceded by a check: `SELECT w3_frozen FROM space_meta WHERE space_id = ?` — if `1`, the tick does not attempt the claim at all. The freeze check and the claim are not in the same transaction (the flag changes only via explicit operator action, so there is no race to guard against), but the flag is re-checked inside `run_consolidation` before Phase A begins, so a freeze landing between tick and run start still stops the run before any work.
 - **Fencing:** each claim generates a fresh random `fence` token stored on the run row. Every finalize/commit write for the run checks `WHERE id = ? AND fence = ? AND status = 'running'`. A worker whose lease expired and whose run was reclaimed cannot finalize — its writes match 0 rows and abort. (Same pattern as W2's enrichment fencing.)
 - **Lease:** a run's lease is 6 hours from `started_at`. A `running` row past lease expiry is reclaimable: the next tick marks it `'failed'` (`error='lease_expired'`) — but note the `UNIQUE (space_id, window_date)` constraint means the dead run still occupies that window's slot. Reclaim therefore **reuses the same row**: an atomic `UPDATE ... SET fence = ?, started_at = ?, status = 'running' WHERE id = ? AND status = 'failed' AND error = 'lease_expired'` transfers ownership. One row per space per window, ever; ownership changes, identity doesn't.
 - **`last_consolidation_date`:** written to `space_meta` only when a run reaches `completed` (or `aborted_budget` — a budget-aborted run did its bounded work for the day). It is a reporting convenience for `/settings`-style surfaces, **not** the scheduling mechanism. Scheduling authority is the claim insert above. This removes Draft v1's ambiguity about when the date is written.
@@ -141,15 +142,22 @@ Before writing any consolidated entry, the job checks for an existing covering p
 
 All three checks and the resulting write happen inside one `BEGIN IMMEDIATE` transaction through the boundary (§6.1), so a user correction landing concurrently is seen, not raced.
 
-### 4.3 Evidence independence (revised — P1-1: lineage, not IDs)
+### 4.3 Evidence independence (revised — P1-1: lineage, not IDs; tightened in Rev 3: unknown lineage is ineligible)
 
 "Two episodes" is not "two observations." Independence is defined by **source lineage**:
 
-- Every episode carries a **lineage key** assigned at capture: the identifier of the originating interaction (conversation/session + turn, job run, digest, or correction event). W2's capture triggers already know this context; Revision 2 requires the key to be persisted on the episode row (`lineage_key`, §8.6) — episodes captured before W3 have it backfilled from their capture metadata where available, else each forms a singleton lineage (conservative: unknown lineage never merges two episodes into one source by accident, and never splits one source into two).
+- Every episode carries a **lineage key** assigned at capture: the identifier of the originating interaction. **Exact lineage grain, per capture type** (this is the contract — "conversation/session + turn" is not one rule; each trigger type defines its own):
+  - `conversation` (chat/Telegram turn): `conv:<session_id>:turn:<turn_id>` — the session and the turn that produced the episode. Two triggers firing on the same turn produce the *same* key.
+  - `agent_action` (tool execution inside a turn): inherits the turn's key — `conv:<session_id>:turn:<turn_id>` — an agent action inside a turn is part of that turn's source, not a separate observation.
+  - `job_run`: `job:<job_name>:<run_id>` — one job execution is one source.
+  - `digest_sent` / `proactive_msg`: inherit the lineage of the content they summarize (the episode/node lineage that generated them); if the digest content came from N sources, the digest episode itself takes the run's key `digest:<run_id>` and can never corroborate those N sources (it is derived from them — see derived-artifact rule below).
+  - `correction`: `corr:<correction_id>` — a user correction is its own source, distinct from the conversation it occurred in.
+  - `milestone` / `session`: `mill:<milestone_id>` / `sess:<session_id>` — the milestone event or session as a whole.
+- **Unknown lineage (round 2 P1-1 fix):** episodes captured before the lineage key existed, or whose capture metadata cannot reconstruct it, are **lineage-unknown**, not "singleton lineages." An episode with `lineage_key IS NULL` is **ineligible to establish independence**: it cannot count as a distinct evidence group, and two unknown-lineage episodes can never together satisfy the §4.5 threshold. This is the conservative rule — independence must be *proven*, not assumed from missing metadata. Unknown-lineage episodes may still be *read* (retrieval, decay scoring) and may be *appended as corroboration to an already-established belief* only if they don't change the group count used to justify the belief's existence; they may not be the sole or threshold-crossing evidence for a new consolidated entry. (Rev 2's singleton rule is withdrawn: assigned singletons could manufacture independence from missing metadata — exactly the failure round 2 identified.)
 - **Grouping rule:** episodes sharing a `lineage_key` are **one observation**, regardless of count. Two capture triggers firing on the same turn, a capture plus its enrichment-derived copy, a digest episode quoting a conversation episode — all one source.
-- **Derived artifacts inherit lineage.** A `nodes` row created from an episode (extraction, `summarizes` edge, enrichment link) carries that episode's lineage. A node therefore **cannot corroborate its own source episode**: the "1 episode + 1 corroborating node" path (§4.5) requires the node's lineage to differ from the episode's.
+- **Derived artifacts inherit lineage.** A `nodes` row created from an episode (extraction, `summarizes` edge, enrichment link) carries that episode's `lineage_key`. A node therefore **cannot corroborate its own source episode**: the "1 episode + 1 corroborating node" path (§4.5) requires the node's lineage key to differ from the episode's, and both to be non-NULL.
 - **Duplicate captures** (same turn captured twice under any trigger combination) are detected by lineage key at consolidation time and counted once. Capture-time dedup remains best-effort; consolidation-time grouping is the guarantee.
-- The ≥2 threshold in §4.5 is **≥2 distinct lineage groups**, full stop.
+- The ≥2 threshold in §4.5 is **≥2 distinct, known lineage groups**, full stop.
 
 ### 4.4 Evidence strength — exact formula (revised — P2-2)
 
@@ -177,7 +185,7 @@ evidence_strength = 1 − ∏_{g ∈ G} (1 − c(g))
 W2's confidence semantics (Rev 5): confidence = belief-report confidence, capped by origin.
 
 - `consolidated` entries: **capped at 0.69** (same ceiling as `inferred`), via the §4.4 mapping.
-- Consolidation requires **≥2 independent lineage groups** (§4.3) OR **1 episode + 1 corroborating node of a different lineage**. Single-source "insights" are not consolidated; they're left for a future run with more evidence.
+- Consolidation requires **≥2 independent lineage groups** (§4.3) OR **1 episode + 1 corroborating node of a different lineage**. Both groups (or the episode's and the node's lineages) must be **known** (non-NULL) — unknown-lineage evidence can never satisfy or contribute to the threshold count. Single-source "insights" are not consolidated; they're left for a future run with more evidence.
 - Every consolidated row stores its `evidence_ids` (the episode/node IDs across all groups) and its computed `evidence_strength`. Recomputation on strengthening uses the same formula over the enlarged set — strengthening is therefore also idempotent: re-adding an already-present episode ID changes nothing (set semantics, §9.2).
 
 ### 4.6 What does NOT get distilled
@@ -215,6 +223,7 @@ CREATE TABLE IF NOT EXISTS contradictions (
   reported_by TEXT NOT NULL CHECK (reported_by IN ('temporal_propose','knowledge_check','consolidation','sweep','user')),
   report_ref TEXT,          -- durable reference to the originating operation (supersession proposal id,
                             -- knowledgeCheck verdict id, sweep run id, or correction id) — never free text
+  reopens_id INTEGER,       -- prior contradictions.id this report reopens (NULL for first reports; see report_ref dedup below)
   state TEXT NOT NULL DEFAULT 'pending'
     CHECK (state IN ('pending','claimed','resolved','unresolved','moot','stated_conflict')),
   attempts INTEGER NOT NULL DEFAULT 0,
@@ -229,6 +238,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_contradictions_pair
   ON contradictions(space_id, domain, old_kind, old_id, new_kind, new_id)
   WHERE state IN ('pending','claimed');
 ```
+
+**`report_ref` dedup (round 2 P1-5):** the pair-uniqueness index above covers active records only — after a record goes terminal, a later report for the same pair could create a duplicate inquiry chain. The dedup contract is:
+
+- **Same `(pair, report_ref)` → duplicate, ignored.** Filing a contradiction for an identical pair with an identical `report_ref` is a no-op: the existing record (in any state) is returned, and no new record or inquiry is created. `report_ref` must therefore be stable for a given originating event (e.g. `supersession-proposal:<id>`, `knowledgeCheck:<verdict_id>`, `correction:<id>`, `sweep:<run_id>:<item>`).
+- **New `report_ref` for the same pair → new event.** A genuinely new report about the same pair (e.g. a *second* user correction restating the conflict, a new knowledgeCheck verdict from fresh content) creates a new contradiction record with `reopens_id = <prior contradiction id>`. The new record goes through the full state machine; its inquiry is linked (`inquiries` row references the new contradiction, with the prior inquiry's outcome visible as context).
+- **Uniqueness:** `UNIQUE(space_id, domain, old_kind, old_id, new_kind, new_id, report_ref)` — enforced at the database level. This subsumes the active-state index (same pair + same ref can never double-file, even across terminal states), while same pair + different ref is permitted by design.
+- **Legacy rows** (`agent_logs` `result='pending_w3'`) have no `report_ref`; they are retired as `legacy_moot` (§5.1 above) and never enter this scheme.
 
 **W1 call-site amendment (required):** W1's `logPotentialContradiction()` is changed to populate this table at report time — it already knows the old node and the proposed replacement (it was *proposing* a supersession that got deferred). The amendment is: record `old_kind='node', old_id=<the node>, new_kind=<node|episode>, new_id=<the proposed replacement>`. No text parsing, ever. Where the proposal source is an LLM judgment (not a concrete replacement record), the reporting site must either point at the concrete proposed record or not file — "the model thought these two things conflict" without identified records is an inquiry candidate (§5.5), not a contradiction record.
 
@@ -256,14 +272,17 @@ All inputs are computed from the two sides' records — no LLM is consulted for 
 | 1 | nodes | any | any, same proposition | **compatible** | Both stand. | None. (e.g. "works in a warehouse" vs "works at Samsonite" — compatible, not contradictory. Compatibility is a first-class outcome, not a failed contradiction.) |
 | 2 | nodes | system-derived | system-derived, newer, contradicting | **superseded_by_newer** | Newer wins. | W1 `supersede()` on old node, `supersede_reason='update'`, `correctedBy='system'`. |
 | 3 | nodes | system-derived, evidence strictly stronger | system-derived, newer, contradicting | **older_retained** | Older wins on strength. | None — old node stays current; record notes `rule='strength_beats_recency'`. (Resolves the Draft v1 ambiguity: "newer wins UNLESS older has strictly greater evidence strength" — the table makes it exact: strictly greater strength defeats recency; equal or lesser does not.) |
-| 4 | nodes | system-derived | system-derived, contradicting, equal strength, no user statement | **unresolved** | Both stand. | None. Inquiry candidate (§5.5). |
+| 4 | nodes | system-derived | system-derived, contradicting, equal strength, no user statement | **unresolved** | Both stand. | None. Inquiry candidate (§5.5). **The tie-breakers below never convert this cell into a winner** — equal strength with no authority or recency differentiator is genuinely unresolved, not a tie to be broken. |
 | 5 | nodes | any | any, one side user-stated (or `user_override` correction exists) | **stated_conflict** | Stated side wins by authority. | If the *old* node is the stated one: no mutation; record the conflict as evidence the user may want to resolve. If the *new* side is a user statement/correction contradicting an old system node: the correction path (not W3) performs the supersession via the authorized user path; W3 records the outcome as observed. **W3 never calls `supersede()` against a user-stated proposition.** |
-| 6 | user_model | consolidated/inferred | consolidated/inferred, contradicting | **adjudicated** | Apply W2's existing contradiction rules via the guarded boundary (§6.1): the losing entry is invalidated (never deleted), the winning entry keeps/extends evidence. | Boundary-gated `invalid_at` set on loser only. |
+| 5b | nodes | system-derived | **user-stated** (new side stated, old side not) | **stated_conflict** | Stated wins by authority (symmetric with cell 5). | The old system node is superseded — but **not by W3**: the user-statement ingestion path performs the supersession via the authorized user path (the statement *is* the correction). W3 observes and records. If the statement arrived through a channel W3 can't attribute, W3 marks `unresolved` with `note='stated_challenger_unattributed'` and queues an inquiry rather than mutating. |
+| 6 | user_model | consolidated/inferred | consolidated/inferred, contradicting | **adjudicated** | Winner determined inline (no delegation): compare `evidence_strength` first — strictly greater strength wins. If strengths are equal within floating-point tolerance (difference < 1e-9): the entry with the *newer* `valid_at` wins. If both strength and `valid_at` tie: `unresolved` (not a coin flip). | Boundary-gated `invalid_at` set on loser only (never delete). Winner's `evidence_ids` may absorb the loser's non-duplicate evidence via `AppendEvidence` if it strengthens the winner (same transaction). |
 | 7 | user_model | stated (any confidence) | any | **stated_conflict** | Stated wins, unconditionally. | **None.** The boundary (§6.1) rejects every mutation to the stated row. The challenger, if consolidated, is invalidated as incorrect (it disagreed with the user). If the challenger is another stated row, both stand — stated-vs-stated conflicts surface through `conflictingStatedIds` on the correction path, never through W3. |
-| 8 | user_model | consolidated/inferred | episode evidence (new lineage) | **evidence_update** | Newer evidence may strengthen or revise the consolidated entry. | Boundary-gated: strengthen or invalidate-then-replace (replacement is a new row; the old row is invalidated, not edited). |
+| 7b | user_model | consolidated/inferred | **stated** (new challenger stated) | **stated_conflict** | Stated wins by authority (symmetric with cell 7). | **None by W3.** The stated challenger was written by the authorized user-statement path, which performs its own contradiction handling (`correctUserModel()`). W3 observes the resulting state: if the correction path already invalidated the incumbent, W3 records `resolved` with `actor='user'`. If the incumbent is somehow still current (race), W3 invalidates it via the boundary — this is the *only* case where a W3 boundary call touches a row that conflicts with a stated row, and the row being invalidated is the *non-stated* incumbent, never the stated challenger. |
+| 8 | user_model | consolidated/inferred | episode evidence (new lineage) | **evidence_update** | Outcome determined inline: if the episode's lineage group is already in the entry's evidence set → no-op (duplicate). If the episode contradicts the entry's proposition → treat as cell 6 with the episode as a virtual challenger: compute the entry's strength *with* the new evidence; if the contradicted proposition's support collapses below the consolidation threshold (§4.5) → invalidate the entry and, if the new evidence independently meets the threshold, insert a replacement row (new row, old row invalidated — never edited). Otherwise → strengthen via `AppendEvidence`. | Boundary-gated: `AppendEvidence`, `InvalidateEntry`, or `InsertConsolidated` — per the inline rules above, never by external reference. |
 | 9 | any | — | stale/missing/cross-space targets | **moot** | No action. | None. |
+| 10 | nodes | any | **episode** (new side is an episode, not a node) | **evidence_only** | An episode is *evidence*, never a supersession target or source. | None on the node. The episode may be *cited* in the node's `supersede_reason` if a later cell-2/3/5 decision supersedes the node, but cell 10 itself performs no mutation. **Node-vs-episode action contract:** `supersede()` requires both sides to be nodes. An episode can *trigger* a contradiction record (as `new_kind='episode'`) and can *inform* adjudication, but the only mutations available in the nodes domain act on nodes. If the episode's content warrants a new node (extraction), that is a separate `InsertConsolidated`-analogous node-creation step, not part of adjudication. |
 
-**Tie-breaking within a cell** is by `evidence_strength` (§4.4, deterministic), then by `recorded_at` (older first — deterministic), then by `id` (deterministic). No cell contains "decide by judgment."
+**Tie-breaking within a cell** is by `evidence_strength` (§4.4, deterministic), then by `recorded_at` (older first — deterministic), then by `id` (deterministic). No cell contains "decide by judgment." **Tie-breakers select among winners only — they never promote a case to a winner.** Cells designated `unresolved` (notably cell 4) remain unresolved regardless of tie-break values; the tie-break order applies only within cells whose outcome is a decision (2, 3, 6, 8).
 
 **Resolution audit:** terminal transitions write `resolution = {outcome, rule_applied: '#<cell>', winner: {kind,id}, loser: {kind,id}, actor: 'w3'}` plus an `agent_logs` row — content-free, IDs + reason codes only.
 
@@ -289,9 +308,9 @@ Unresolved contradictions need a lifecycle so they don't spawn a fresh inquiry e
 
 ## 6. Safety invariants and the guarded write boundary
 
-### 6.1 The guarded write boundary (revised — P0-1: enforced, not conventional)
+### 6.1 The guarded write boundary (revised — P0-1: enforced, not conventional; tightened in Rev 3)
 
-Draft v1 protected stated rows by "code review + a test." The gauntlet correctly identified this as unenforceable — and found two live W2 paths that already violate it. Revision 2 replaces convention with structure.
+Draft v1 protected stated rows by "code review + a test." The gauntlet correctly identified this as unenforceable — and found two live W2 paths that already violate it. Revision 2 replaced convention with structure. Revision 3 closes the three remaining gaps round 2 found: the hash projection was incomplete (P0-A), detection was post-hoc rather than preventive (P0-B), and the `SetReviewFlag` exception contradicted the closed-union claim (P0-D).
 
 **The boundary:** exactly one function in the W3 module is permitted to issue `INSERT`/`UPDATE` statements against `user_model`:
 
@@ -299,17 +318,49 @@ Draft v1 protected stated rows by "code review + a test." The gauntlet correctly
 applyConsolidationMutation(sqlite, runCtx, mutation: ConsolidationMutation): MutationResult
 ```
 
-where `ConsolidationMutation` is a closed union: `InsertConsolidated | InvalidateEntry | AppendEvidence | SetReviewFlag`. Every W3 write path — distillation inserts, dedup strengthening, contradiction adjudication (cells 6/8), sweeps — constructs a `Mutation` and calls this function. Nothing else in the W3 module touches `user_model` writes; the module's code-review gate is "no `INSERT INTO user_model` / `UPDATE user_model` string appears outside this function."
+where `ConsolidationMutation` is a closed union:
+
+```ts
+type ConsolidationMutation =
+  | InsertConsolidated      // new consolidated-origin row (evidence_ids non-empty, INV-C-4)
+  | InvalidateEntry         // set invalid_at on a consolidated/inferred row (never stated)
+  | AppendEvidence          // set-union episode IDs into evidence_ids, recompute strength (same transaction)
+  | WithdrawEvidence        // (Rev 3, P1-4) remove specific episode IDs from evidence_ids,
+                            // recompute strength atomically; invalidate the entry if the set becomes empty
+  | SetReviewFlag;          // the SOLE stated-row operation permitted (see below)
+```
+
+**The stated-row exception, made explicit (P0-D):** `SetReviewFlag` is the *only* mutation in the union that may target a `stated`-origin row, and it is narrowly scoped by construction: it may write **only** the `review_flag` and `review_flagged_at` columns, and only to the values enumerated in §6.4. The boundary validates this structurally — a `SetReviewFlag` mutation naming any other column, or targeting a stated row with any other mutation kind, is rejected with `stated_protected` before the transaction begins. There is no path from "flag a stated row" to "change a stated row's content": the flag columns are disjoint from the protected columns, and the mutation type carries no content payload.
 
 **What the boundary does, in order, inside one transaction:**
 1. Loads the target row(s) by id with `FOR`-style re-read inside the transaction (all W3 writes use `BEGIN IMMEDIATE` — a user correction landing concurrently is seen, not raced).
-2. **The stated check:** if any target row has `origin = 'stated'` → the mutation is **rejected** with `error='stated_protected'`, the transaction rolls back, the work item is marked `failed` with that reason, and an `agent_logs` row records the attempted violation (`w3_stated_write_blocked`, IDs + mutation kind — this is a canary: in a correct implementation it should never fire).
-3. If the mutation is an insert: verifies `origin='consolidated'` on the new row and non-empty `evidence_ids` (INV-C-1, INV-C-4) — write-time rejection, same pattern as W2's `validateProvenance()`.
-4. Applies the mutation, commits.
+2. **The stated check (precondition, not detector — P0-B):** if the mutation kind is anything other than `SetReviewFlag` and any target row has `origin = 'stated'` → the mutation is **rejected** with `error='stated_protected'`, the transaction rolls back, the work item is marked `failed` with that reason, and an `agent_logs` row records the attempted violation (`w3_stated_write_blocked`, IDs + mutation kind — this is a canary: in a correct implementation it should never fire). **The protection is enforced before any write occurs, inside the same transaction as the would-be mutation.** There is no window in which a stated row is mutated and "detected later" — the mutation never happens.
+3. If the mutation is an insert: verifies `origin='consolidated'` on the new row and non-empty `evidence_ids` (INV-C-1, INV-C-4) — write-time rejection, same pattern as W2's `validateProvenance()`. Inserts additionally verify every evidence ID's lineage is known (non-NULL) per §4.3 — unknown-lineage evidence cannot be the basis of a new consolidated row.
+4. If the mutation is `WithdrawEvidence`: validates the named episode IDs are a subset of the entry's current `evidence_ids`; computes the surviving set; recomputes `evidence_strength` over survivors via §4.4; if the surviving set is empty → the mutation escalates to `InvalidateEntry` with `reason='evidence_withdrawn'` in the same transaction. All three steps (withdraw, recompute, conditional invalidate) are atomic — a crash cannot leave a row with withdrawn evidence still counted in its strength.
+5. Applies the mutation, commits.
 
 **There is no confidence-threshold exception.** Draft v1's inherited W2 behavior (stated filtered only at `confidence >= 0.95`) is explicitly withdrawn for W3-initiated writes: a stated row at 0.90, 0.50, or 0.10 is equally untouchable. The only operations that may alter a stated row are `recordStated()` (hot path), `correctUserModel()` (explicit correction path), and the user's own forget flow — none of which W3 calls.
 
-**The run-level integrity check (backstop):** at run start, W3 snapshots `SELECT id, updated_at, invalid_at FROM user_model WHERE space_id=? AND origin='stated'` (a hash of the projection). At run finalize, before marking `completed`, it recomputes the projection and compares. Any difference → the run is marked `failed` with `error='stated_integrity_violation'`, and an alert-grade `agent_logs` row fires. This is the proof the reviewer asked for: even if a future code path bypasses the boundary function, the violation is detected and the run is not recorded as successful. T-C50 tests this by simulating a bypass.
+**The run-level integrity check (defense-in-depth — P0-A, P0-B):** at run start, W3 snapshots the *complete* protected state of every stated row:
+
+```sql
+SELECT id, slot, content, evidence_ids, confidence,
+       valid_at, invalid_at, invalidated_by, replaced_by, updated_at
+FROM user_model
+WHERE space_id = ? AND origin = 'stated'
+ORDER BY id;
+```
+
+— hashed (SHA-256 over the canonical row serialization) and stored on the run row. At run finalize, before marking `completed`, it recomputes and compares. **Round 2's P0-A is closed by construction: every column that must remain unchanged is in the projection.** A content change that leaves `updated_at` untouched, a silent `evidence_ids` edit, a confidence nudge — all change the hash.
+
+**What a mismatch means (P0-B — explicit):** the hash check is a *detector*, not a restorer. If it fires, the run is marked `failed` with `error='stated_integrity_violation'` — but the design is explicit that **this does not restore safety**. The stated row may already be mutated; conflicting consolidated beliefs may already be committed. A mismatch triggers the **incident procedure** (§9.4, new in Rev 3):
+
+1. **Alert:** an alert-grade `agent_logs` row (`w3_stated_integrity_violation`) with the run ID, the mismatching row IDs, and the before/after hashes — content-free, IDs only.
+2. **Freeze:** W3 sets `space_meta.w3_frozen = 1` for the affected space. No further W3 run may claim a window while frozen — the claim transaction checks the flag first. (The hot path, reads, and user-statement writes are unaffected; only consolidation stops.)
+3. **Manual review required:** unfreezing requires a human (the operator) to inspect the diff, determine the cause (boundary bypass, W2 regression, concurrent-write bug), repair the stated row through the authorized correction path if needed, and clear the flag explicitly. There is no automatic unfreeze.
+4. **Audit:** the freeze, the review, and the unfreeze are all `agent_logs` rows. An integrity violation is never silently absorbed.
+
+T-C50 tests the detector (simulated bypass → mismatch → `failed` + frozen). T-C58 (new in Rev 3) tests the full incident: a bypassed write after earlier committed work items → run fails, `w3_frozen` set, subsequent claim refused, and the design's claim is verified — the earlier work items are *not* rolled back (each committed independently), which is exactly why the freeze exists.
 
 **Relationship to the §1.2 prerequisites:** the hardening fixes make W2's own functions consistent with the invariant; the boundary makes W3's use of them (and any future W3 path) structurally unable to violate it. Belt and suspenders, on purpose — this is the system's core safety promise.
 
@@ -354,7 +405,7 @@ Draft v1 described sweeps in prose. The matrix is the contract — every cell is
 ### 6.4 Review flags (persistence and clearing)
 
 - Flags live on the row: `review_flag TEXT` (nullable; values: `'evidence_withdrawn'`, `'stale_emotion'`, `'contradiction_pending'`) and `review_flagged_at TEXT` (nullable). Added to `user_model` by the W3 migration (§8.6); existing rows get NULL.
-- **Set by:** sweeps and contradiction adjudication only (via the boundary — setting a flag on a stated row is explicitly permitted; it is not a content mutation).
+- **Set by:** sweeps and contradiction adjudication only (via the boundary — `SetReviewFlag` is the sole stated-row operation permitted by the closed mutation contract, §6.1; it writes only the two flag columns, never content).
 - **Cleared by:** the user correction path (`correctUserModel()` clears the flag when the user addresses the underlying issue) or an explicit user dismissal. **Sweeps never clear flags.** A flag set in run N is still set in run N+1 unless the user acted — this is what prevents flag churn and gives the review queue stable semantics.
 - Read paths (`getUserModel()`) may surface flagged rows with their flag; flagging never changes retrieval eligibility by itself (a flagged-but-valid row still reads normally — the flag is a nudge, not a demotion).
 
@@ -401,7 +452,7 @@ CREATE TABLE IF NOT EXISTS access_stats (
 
 - **W1 supersession is binary; decay is graded.** They compose: `superseded_at IS NOT NULL` → excluded entirely (W1's filter runs first). Surviving rows are then decay-weighted. A superseded row never "decays back" into relevance.
 - **W2's `sweepStaleEmotions`** is the hard-expiry backstop for `emotion_state` (7 days, then `invalid_at` set) under the §6.3 matrix. Decay handles the graded fade before that cliff.
-- **Derived-belief withdrawal (forgetting propagation):** when `applyForgetRequest()` tombstones an episode, W3's next run withdraws it from every consolidated entry's `evidence_ids` (recompute strength via §4.4) — and if a consolidated entry's evidence set becomes empty, the entry is **invalidated** (via the boundary, §6.1 — it's consolidated-origin, so this is permitted) with `reason='evidence_forgotten'`. The verifiable completion condition: after the run, no `user_model` row with `origin='consolidated'` references the forgotten episode's ID in `evidence_ids`, and no `vec_episodes` row exists for it (W2's forget flow already deletes embeddings). T-C51 asserts this end-to-end. (This answers pressure point 8: a forgotten episode cannot reappear through a consolidated belief or cached evidence.)
+- **Derived-belief withdrawal (forgetting propagation):** when `applyForgetRequest()` tombstones an episode, W3's next run issues a `WithdrawEvidence` mutation (§6.1) for every consolidated entry whose `evidence_ids` reference it: surviving evidence is preserved, strength is recomputed via §4.4, and entries left with an empty evidence set are invalidated with `reason='evidence_forgotten'` — all in one atomic transaction per entry. The verifiable completion condition: after the run, no `user_model` row with `origin='consolidated'` references the forgotten episode's ID in `evidence_ids`, and no `vec_episodes` row exists for it (W2's forget flow already deletes embeddings). Withdrawn evidence cannot reappear through retries: evidence appends are set-semantic, and a re-run sees the withdrawal already recorded in the entry's mutation history (the `WithdrawEvidence` ledger row), so re-withdrawal is a no-op. T-C51 asserts this end-to-end. (This answers pressure point 8: a forgotten episode cannot reappear through a consolidated belief or cached evidence.)
 
 ---
 
@@ -416,6 +467,7 @@ ALTER TABLE space_meta ADD COLUMN last_consolidation_date TEXT;  -- YYYY-MM-DD, 
 ALTER TABLE space_meta ADD COLUMN w3_enabled INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE space_meta ADD COLUMN w3_llm_budget INTEGER NOT NULL DEFAULT 5;   -- max LLM calls per run
 ALTER TABLE space_meta ADD COLUMN w3_max_items INTEGER NOT NULL DEFAULT 50;  -- max work items per run
+ALTER TABLE space_meta ADD COLUMN w3_frozen INTEGER NOT NULL DEFAULT 0;       -- Rev 3: incident freeze (§6.1/§9.4). Set on stated-integrity violation; cleared only by explicit operator action.
 ```
 
 ### 8.2 `consolidation_runs` (revised — P1-3: atomic claim + fencing)
@@ -453,9 +505,13 @@ CREATE TABLE IF NOT EXISTS consolidation_episodes (
   space_id TEXT NOT NULL,
   episode_id INTEGER NOT NULL,
   outcome TEXT NOT NULL
-    CHECK (outcome IN ('consolidated','strengthened','skipped_covered','skipped_low_importance','abstained','failed')),
+    CHECK (outcome IN ('consolidated','strengthened','skipped_covered','skipped_low_importance','abstained',
+                       'failed_terminal','failed_retryable')),
   resulting_entry_id INTEGER,   -- user_model.id or nodes.id, when written/strengthened
-  evidence_group_key TEXT,       -- lineage_key of the evidence group this decision was based on (§4.3)
+  evidence_group_set TEXT NOT NULL,  -- canonical JSON array of lineage keys (sorted, deduped)
+                                     -- representing the FULL evidence state this decision was based on
+  evidence_fingerprint TEXT NOT NULL,-- SHA-256 over the canonical evidence_group_set + the
+                                     -- evidence_ids snapshot; the durable identity of "this evidence state"
   last_run_id INTEGER NOT NULL,  -- most recent run that touched this item (for audit, not identity)
   updated_at TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -463,13 +519,16 @@ CREATE TABLE IF NOT EXISTS consolidation_episodes (
 );
 ```
 
-- An episode's consolidation outcome is decided **once** per distinct evidence state. A retry of the same episode with the same `evidence_group_key` and no new evidence is a no-op — the row already exists with a terminal outcome. New evidence (a new episode in the same lineage group, or a new lineage group) legitimately re-opens the item: the run compares the current evidence set against the recorded `evidence_group_key` set and only re-processes on difference.
+- An episode's consolidation outcome is decided **once** per distinct evidence state. A retry of the same episode with the same `evidence_fingerprint` is a no-op — the row already exists with a terminal outcome. New evidence (a new lineage group, or a changed evidence set) produces a *different* fingerprint, which legitimately re-opens the item: the run compares the current evidence-set fingerprint against the recorded one and only re-processes on difference. (Round 2 P1-3: the singular `evidence_group_key TEXT` could not represent the set being compared. The set *is* the stored value now — a canonical JSON array of lineage keys, sorted and deduped — plus a fingerprint hash that makes the comparison unambiguous.)
+- **Terminal vs retryable (round 2 P1-3):** the outcome enum now distinguishes them explicitly:
+  - `failed_terminal` — deterministic rejection: write-time validation failed (no evidence, invalid lineage, abstention rule). Retrying the same evidence state will fail identically; the item is closed for this evidence state. A *new* evidence state (new fingerprint) re-opens it.
+  - `failed_retryable` — transient failure: LLM call threw, embedding failed, DB contention after one retry. The next run retries the same evidence state (with backoff: attempts recorded, `failed_retryable` → retried at most 3 times per evidence state, then escalated to `failed_terminal` with `reason='retry_exhausted'`).
 - **Belief mutation and ledger write are atomic:** the `UPDATE/INSERT` on the target `user_model` row and the upsert of the `consolidation_episodes` row happen in the **same transaction**. Crash between them is impossible by construction — there is no "mutation committed, ledger lost" state (T-C42).
 - **Evidence appends are set-semantic:** strengthening appends episode IDs via set union, not list append. Re-processing an already-recorded episode ID changes nothing — `evidence_ids` is a set, and `evidence_strength` recomputed over the same set is identical (T-C42, T-C47).
 
-### 8.4 `contradictions` (new — P0-2)
+### 8.4 `contradictions` (new — P0-2; dedup tightened in Rev 3)
 
-The typed two-sided record from §5.1, with the `UNIQUE(space_id, domain, old_kind, old_id, new_kind, new_id) WHERE state IN ('pending','claimed')` index. Lives in `BOOTSTRAP_SQL` + migration path identically.
+The typed two-sided record from §5.1, with `reopens_id INTEGER` added in Rev 3, the `UNIQUE(space_id, domain, old_kind, old_id, new_kind, new_id, report_ref)` dedup index, and the active-state partial index `UNIQUE(...) WHERE state IN ('pending','claimed')`. Lives in `BOOTSTRAP_SQL` + migration path identically.
 
 ### 8.5 `access_stats` (new — P1-5)
 
@@ -477,7 +536,7 @@ The append-only-in-practice telemetry table from §7.2. No columns are added to 
 
 ### 8.6 Other additions
 
-- `episodes.lineage_key TEXT` — the durable source-lineage key (§4.3). Nullable in migration; backfilled from capture metadata where available, else each episode forms a singleton lineage. New captures always set it (capture-trigger contract amendment — small, included in W3 implementation scope).
+- `episodes.lineage_key TEXT` — the durable source-lineage key (§4.3). Nullable in migration; backfilled from capture metadata where available, else **NULL (unknown)** — never a synthetic singleton. New captures always set it (capture-trigger contract amendment — small, included in W3 implementation scope). W3 implementation must also add the `w3_frozen` flag to `space_meta` (§6.1 incident procedure) and the `space_meta` columns from §8.1.
 - `user_model.review_flag TEXT` + `user_model.review_flagged_at TEXT` — nullable review flags (§6.4). Existing rows get NULL.
 - `inquiries.contradiction_id INTEGER` nullable + `UNIQUE(space_id, contradiction_id)` — inquiry dedup (§5.5).
 
@@ -518,6 +577,21 @@ run_consolidation(spaceId, run):
 - Every LLM call decrements the budget; when exhausted, the run sets `status='aborted_budget'` (not `'failed'` — this is a normal outcome, retried tomorrow).
 - Sweeps (Phase A) never consume LLM budget — they're pure SQL.
 
+### 9.4 Incident procedure: stated-integrity violation (new — P0-B, Rev 3)
+
+The §6.1 hash check is a detector, not a restorer. When it fires, the system must not pretend the failure is contained — a stated row may already be mutated and conflicting consolidated beliefs may already be committed. The incident procedure is:
+
+1. **Mark and alert.** The run is marked `failed` with `error='stated_integrity_violation'`. An alert-grade `agent_logs` row fires: `w3_stated_integrity_violation`, with `targets` = `{run_id, space_id, mismatching_row_ids, hash_before, hash_after}` — content-free (IDs and hashes only, never the row contents, which may be sensitive).
+2. **Freeze.** In the same finalize step, W3 sets `space_meta.w3_frozen = 1` for the space. The run-claim transaction (§3.1) checks `w3_frozen = 0` as a precondition — while frozen, no W3 run may claim a window. The hot path (chat, `maybeRecordStated`, reads, user corrections, forget flow) is **unaffected**: only consolidation stops. Freezing is fail-safe: a frozen space loses nightly consolidation, not the ability to talk to the user.
+3. **Manual review (operator).** Unfreezing is a deliberate human action, not a timeout:
+   - Inspect the mismatching rows: which columns changed, and what code path could have changed them (boundary bypass, W2 regression, concurrent-write bug, direct DB access).
+   - Repair the stated row(s) through the authorized correction path (`correctUserModel()`), restoring the user's stated content. Never hand-edit the row outside the authorized path — the repair itself must be auditable.
+   - Review any consolidated beliefs committed by the failed run for contamination (beliefs derived from or contradicting the corrupted stated row); invalidate as needed through the boundary.
+   - Clear the freeze explicitly: `UPDATE space_meta SET w3_frozen = 0` + an `agent_logs` row (`w3_unfrozen`, with reviewer note). There is no automatic unfreeze, no TTL, no "freeze expires after N days."
+4. **Audit trail.** The violation, the freeze, the review findings, and the unfreeze are all `agent_logs` rows. An integrity violation is never silently absorbed, and a freeze is never silently lifted.
+
+**Design note:** the freeze exists precisely because per-item transactions commit independently (§9.2) — the failed run's earlier work items are *not* rolled back, by design. Rolling back a night's legitimate consolidation because of one integrity failure would destroy more than it saves. The freeze stops *future* damage while a human assesses *past* damage. T-C58 tests this end-to-end: bypassed write after committed items → `failed` + `w3_frozen=1` + subsequent claim refused + earlier items verifiably intact (not rolled back).
+
 ---
 
 ## 10. Cost bounds
@@ -538,20 +612,20 @@ Worst case per space per day: 5 LLM calls + 50 items. At current model pricing, 
 
 | Failure | Behavior |
 |---|---|
-| LLM call throws | Caught per-item; `consolidation_episodes` records `failed` (terminal for this evidence state); run continues. Never aborts the run. |
+| LLM call throws | Caught per-item; `consolidation_episodes` records `failed_retryable` (transient) — retried next run with backoff, up to 3 attempts per evidence state, then escalated to `failed_terminal`. A deterministic validation failure records `failed_terminal` immediately. Never aborts the run. |
 | Budget exhausted mid-run | `status='aborted_budget'`; remaining items wait for tomorrow. Not an error. |
 | Process crash mid-run | Lease expiry (6h) → ownership transfer on the same run row (§3.1). Work-item idempotency (§9.2) prevents duplicate effects. |
 | DB locked / contention | All writes in short `BEGIN IMMEDIATE` transactions; run yields between phases. Transaction failure → retry once → item `failed`. |
 | Contradiction adjudication throws | Claim lease expires → row returns to `pending` with `attempts+1`; after 3 attempts → `unresolved` + inquiry. A poison row can't block the backlog. |
 | Distillation produces no evidence | Write-time rejection at the boundary (INV-C-4); item marked `abstained`. |
 | Space deleted mid-run | Run checks space existence per phase; aborts quietly if gone. |
-| Stated-integrity mismatch at finalize | Run marked `failed`, `error='stated_integrity_violation'`, alert-grade audit row. The day's work is rolled back per-item (each item's transaction already committed — the failure is recorded, not silently accepted; see §6.1). |
+| Stated-integrity mismatch at finalize | Run marked `failed`, `error='stated_integrity_violation'`, alert-grade audit row. **This does not restore safety** — it triggers the incident procedure (§9.4): freeze W3 for the space (`w3_frozen=1`), manual operator review, explicit unfreeze. Earlier committed work items are not rolled back. |
 | Legacy contradiction backlog | Marked `legacy_moot` on first run, never adjudicated (§5.1). |
 
 ---
 ## 12. Test plan (expanded — covers every gauntlet finding)
 
-Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded tests are marked. New tests are grouped by the finding they close. Every test that touches the database uses real SQLite through `createDb()` — no mocked outcomes for transactional behavior (the user's standing guardrail from the W2 reviews).
+Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded tests are marked. New tests are grouped by the finding they close. Every test that touches the database uses real SQLite through `createDb()` — no mocked outcomes for transactional behavior (the user's standing guardrail from the W2 reviews). Rev 3 adds T-C57–T-C63 (~62 tests total).
 
 **Sweep tests (§6.3 matrix):**
 - T-C1: `sweepStaleEmotions` expires an 8-day-old inferred `emotion_state` row, leaves a 6-day-old row.
@@ -567,6 +641,13 @@ Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded te
 - T-C25: the authorized correction path still mutates stated rows (the boundary doesn't break legitimate writes).
 - T-C26: concurrent correction + W3 run → the stated row reflects the correction only; run completes or fails loudly, never silently overwrites.
 - T-C50: **stated-integrity backstop** — simulate a bypass of the boundary function (direct SQL update of a stated row mid-run); finalize detects the hash mismatch and marks the run `failed` with `stated_integrity_violation`.
+- T-C57: **(Rev 3, P0-A)** stated content change *without* `updated_at` changing (direct SQL `UPDATE user_model SET content=... WHERE origin='stated'`, leaving `updated_at` untouched) → the finalize hash detects the mismatch. This is the exact evasion round 2 named.
+- T-C58: **(Rev 3, P0-B)** full incident — bypassed stated write after earlier work items committed → run `failed`, `w3_frozen=1` set, subsequent run claim refused, earlier items verifiably intact (asserted *not* rolled back), alert-grade audit row present with IDs + hashes only.
+- T-C59: **(Rev 3, P1-1)** unknown-lineage ineligible — two episodes with `lineage_key IS NULL` on the same topic → threshold NOT met, no consolidated entry; then two episodes with distinct known lineages → threshold met. Also: one known + one unknown → not met.
+- T-C60: **(Rev 3, P1-2)** symmetric stated challenger — new stated challenger vs consolidated incumbent (cell 7b) → incumbent invalidated via boundary, stated challenger untouched; and new stated node vs old system node (cell 5b) → observed, not mutated by W3.
+- T-C61: **(Rev 3, P1-4)** `WithdrawEvidence` — consolidated entry with 3 evidence groups, forget one episode → single atomic mutation: surviving evidence preserved, strength recomputed, entry valid; forget all three → entry invalidated with `reason='evidence_forgotten'`. Assert no intermediate state visible (read inside the transaction).
+- T-C62: **(Rev 3, P1-5)** `report_ref` dedup — file contradiction with `report_ref='kc:v1'` → one record; re-file same pair + same ref → no new record; file same pair with `report_ref='kc:v2'` → new record with `reopens_id` pointing at the first; inquiries: exactly one inquiry per contradiction record.
+- T-C63: **(Rev 3, P1-3)** evidence-state ledger — same fingerprint retry is a no-op (no duplicate work); new lineage group changes the fingerprint and re-opens the item; transient failure records `failed_retryable` and retries; deterministic validation failure records `failed_terminal` and does not retry on the same evidence state.
 
 **Contradiction tests (P0-2, P1-2):**
 - T-C4: user-statement-wins — deterministic, no LLM (now decision-table cell 5).
@@ -615,7 +696,7 @@ Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded te
 
 **Schema/migration tests:**
 - T-C55: fresh-bootstrap vs migrated DB produce identical W3 schemas (columns, indexes, CHECKs, UNIQUEs) — the W2 `assertSchemaEquivalent` pattern applied to all §8 tables.
-- T-C56: `lineage_key` backfill — pre-W3 episodes get singleton lineages; new captures always set the key (capture-trigger contract test).
+- T-C56: `lineage_key` backfill — pre-W3 episodes get lineage keys from capture metadata where available, else **NULL (unknown)**; new captures always set the key (capture-trigger contract test). Assert no synthetic singleton keys are assigned.
 
 ---
 
@@ -644,5 +725,6 @@ Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded te
 
 ## 15. Changelog
 
+- **Revision 3 (2026-10-19):** Addresses the gauntlet round-2 review (1 P0 with 3 sub-problems + 5 P1). **P0-A:** stated-integrity snapshot hashes the complete protected column set (`id, slot, content, evidence_ids, confidence, valid_at, invalid_at, invalidated_by, replaced_by, updated_at`) — content changes without `updated_at` movement are detected (§6.1; T-C57). **P0-B:** stated protection is a per-mutation precondition inside the write transaction; the hash backstop is explicitly defense-in-depth, and a mismatch triggers a defined incident procedure (alert + `w3_frozen` + manual review + explicit unfreeze, new §9.4; T-C58). **P0-C:** W2 sweep SQL writers must route through `applyConsolidationMutation()` — required code change, not a design note (§1.2). **P0-D:** `SetReviewFlag` is explicitly the sole stated-row operation in the closed mutation union, scoped to the two flag columns only (§6.1, §6.4). **P1-1:** unknown-lineage episodes are ineligible to establish independence; exact lineage grain per capture type (§4.3, §4.5; T-C59). **P1-2:** decision table completed — symmetric stated-challenger cells (5b, 7b), inline outcomes for cells 6/8 (no delegation), tie-breakers explicitly cannot promote `unresolved`, node-vs-episode action contract (cell 10) (§5.3; T-C60). **P1-3:** evidence state stored as canonical JSON set + fingerprint hash; terminal vs retryable outcomes (§8.3; T-C63). **P1-4:** `WithdrawEvidence` added to the closed mutation union; forget propagation is atomic (§6.1, §7.3; T-C61). **P1-5:** `report_ref` dedup — same ref ignored, new ref creates `reopens_id`-linked record; uniqueness on (pair, report_ref) (§5.1; T-C62). Schema: `contradictions.reopens_id`, `space_meta.w3_frozen`, updated uniqueness indexes; `lineage_key` backfill is NULL-not-singleton (§8).
 - **Revision 2 (2026-10-19):** Addresses the W3 architecture gauntlet (3 P0, 6 P1, 3 P2). P0-1: single guarded write boundary (§6.1) + run-level stated-integrity check + W2 hardening prerequisites (§1.2); P0-2: typed `contradictions` table with two-sided identity, formal state machine, domain separation (§5); P0-3: exact deployment baseline with commit SHAs (§1.1). P1-1: lineage-key evidence independence (§4.3); P1-2: complete decision table (§5.3); P1-3: atomic `UNIQUE(space_id, window_date)` claim + fencing + DST semantics (§3.1); P1-4: work-item idempotency across run IDs, mutation+ledger atomicity (§8.3, §9.2); P1-5: `access_stats` table replaces `last_accessed_at` columns (§7.2, §8.5); P1-6: sweep eligibility matrix + review-flag lifecycle (§6.3, §6.4). P2-1: semantic routing with fail-closed abstention (§4.1); P2-2: exact `evidence_strength` formula (§4.4); P2-3: inquiry lifecycle (§5.5). Test plan expanded to ~55 tests. Legacy contradiction backlog retired as `legacy_moot`.
 - **Draft v1 (2026-10-19):** Initial design. Grounded in: `index.ts` autonomy tick (5-min, paid ceiling, dream cycle), `dreamCycle.ts` (existing consolidation — W3 is a sibling, not a replacement), `temporal.ts` `logPotentialContradiction()` (`result='pending_w3'`), `userModel.ts` `sweepStaleEmotions()`/`sweepWithdrawnEvidence()` (explicitly W3-scheduled), `space_meta` (quiet hours, timezone, `last_dream_date` pattern), W2's confidence ceilings and evidence rules.
