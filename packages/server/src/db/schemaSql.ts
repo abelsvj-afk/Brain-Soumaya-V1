@@ -631,4 +631,187 @@ export const BOOTSTRAP_SQL = `
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE UNIQUE INDEX IF NOT EXISTS interaction_preferences_unique ON interaction_preferences(space_id, signal);
+-- INSERT INTO packages/server/src/db/schemaSql.ts BOOTSTRAP_SQL
+-- AFTER line 633 (the interaction_preferences_unique index), BEFORE line 634 (the closing `;`).
+--
+-- W2 episodic memory + user model (wisdom layer). Design doc §3.2, §3.3, §3.7, §3.5, §4.2.
+-- Columns, CHECK constraints, defaults, and indexes copied from the design DDL;
+-- IF NOT EXISTS added per repo convention (design §8.1 uses it for the migration path).
+
+    -- W2 episodic memory (wisdom layer): immutable episode captures (Tulving-style).
+    -- Capture columns are immutable — no UPDATE path exists in code except
+    -- applyForgetRequest() (§3.7), which may only write the fixed tombstone
+    -- constant under an approved user forget request.
+    CREATE TABLE IF NOT EXISTS episodes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+
+      -- What happened (template-generated at capture, NEVER modified after)
+      kind TEXT NOT NULL CHECK (kind IN (
+        'conversation','agent_action','job_run','digest_sent',
+        'proactive_msg','correction','milestone','session'
+      )),
+      summary TEXT NOT NULL,           -- 1-2 sentence template narrative, first-person as the user
+
+      -- Time (W1 temporal conventions: canonical ISO 8601 UTC)
+      occurred_at TEXT NOT NULL,       -- when it happened in the world
+      recorded_at TEXT NOT NULL,       -- when the system recorded it (immutable, cf. W1)
+
+      -- Correction linkage (append-only pattern, cf. W1 corrections table)
+      corrects_episode_id INTEGER,     -- NULL normally; set when this episode corrects a misrecorded one
+
+      -- Enrichment lifecycle pointer (B6, B2 Rev 3)
+      enrichment_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (enrichment_status IN ('pending','processing','completed','failed_retryable','failed_permanent')),
+      enrichment_attempts INTEGER NOT NULL DEFAULT 0,
+      enrichment_lease TEXT,           -- ISO timestamp: worker claim expiry (NULL = unclaimed)
+      enrichment_fence TEXT,           -- fencing token (random hex per claim); stale workers
+                                       -- cannot commit after reclaim (B2, Rev 3)
+      enriched_at TEXT,                -- when enrichment completed (NULL until completed)
+
+      -- Forget handling (B2, §3.7)
+      forgotten_at TEXT,               -- NULL normally; set when a user forget request redacts this episode
+
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_episodes_space_time ON episodes(space_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_episodes_kind ON episodes(space_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_episodes_corrects ON episodes(corrects_episode_id);
+    CREATE INDEX IF NOT EXISTS idx_episodes_enrichment ON episodes(enrichment_status, enrichment_lease)
+      WHERE enrichment_status IN ('pending','failed_retryable');
+
+    -- W2: versioned interpretation of an episode. Re-enrichment creates a new
+    -- version and supersedes the old — never mutates in place (B1, Rev 3).
+    -- References are application-enforced, not SQL FKs (§8.5).
+    CREATE TABLE IF NOT EXISTS episode_enrichments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode_id INTEGER NOT NULL,     -- application-enforced reference → episodes.id (§8.5)
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      version INTEGER NOT NULL,        -- 1, 2, 3... (re-enrichment creates a new version)
+
+      -- Interpretive content (ALL of this is interpretation, not capture)
+      detail TEXT,                     -- 2-4 sentences of texture; NULL = not_reported
+      emotion TEXT CHECK (emotion IN (
+        'anxious','relieved','proud','frustrated','hopeful','overwhelmed',
+        'grateful','lonely','determined','ashamed','content','angry',
+        'sad','excited','neutral'
+      )),                              -- NULL = not_reported (valid, never forced)
+      emotional_weight REAL CHECK (emotional_weight IS NULL OR (emotional_weight >= -1 AND emotional_weight <= 1)),
+      importance REAL NOT NULL DEFAULT 0.5 CHECK (importance >= 0 AND importance <= 1),
+
+      -- Structured extraction
+      participants TEXT NOT NULL DEFAULT '[]',  -- JSON array, validated shape (§3.8)
+      place TEXT,                      -- free text; NULL = not_reported
+
+      -- Provenance: which source records this interpretation was distilled from
+      source_node_ids TEXT NOT NULL DEFAULT '[]',  -- JSON array of node ids, validated (§3.8)
+      source_transcript_ref TEXT,      -- opaque pointer; NULL if unavailable
+
+      -- Field-level provenance labels (B5, B7 Rev 3) — JSON object mapping field → label.
+      -- Labels: 'direct_quote' | 'explicit' | 'inferred' | 'generated' | 'not_reported'.
+      field_provenance TEXT NOT NULL DEFAULT '{}',
+
+      -- Retrieval
+      embedding BLOB,                  -- sqlite-vec embedding of summary + detail (NULL until computed)
+
+      -- Version lifecycle
+      superseded_by INTEGER,           -- application-enforced reference → episode_enrichments.id (newer version); NULL = current (§8.5)
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+
+      UNIQUE (episode_id, version)
+    );
+    CREATE INDEX IF NOT EXISTS idx_enrichments_episode ON episode_enrichments(episode_id, version);
+    CREATE INDEX IF NOT EXISTS idx_enrichments_current ON episode_enrichments(episode_id) WHERE superseded_by IS NULL;
+
+    -- W2 user model: first-order theory of mind — what the system believes about
+    -- the user, with evidence and confidence. Entries supersede (invalid_at +
+    -- replaced_by); they are never deleted except under the forget contract (§3.7).
+    -- confidence = P(user currently holds this mental state | evidence) — NOT
+    -- P(content is objectively true). Truth-tracking is explicitly out of scope.
+    CREATE TABLE IF NOT EXISTS user_model (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,  -- stable identity (B4)
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      slot TEXT NOT NULL CHECK (slot IN (
+        'belief','desire','intention','emotion_state','knowledge','constraint'
+      )),
+      -- One proposition per row (B4, gap 12). Content is a single atomic claim.
+      content TEXT NOT NULL,
+
+      -- Confidence semantics (B8): P(user currently holds this mental state | evidence).
+      confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+
+      -- Evidence quality (B8): computed 0..1 from evidence count, independence, recency.
+      evidence_strength REAL NOT NULL DEFAULT 0 CHECK (evidence_strength >= 0 AND evidence_strength <= 1),
+
+      -- JSON array of {type: 'episode'|'node'|'correction'|'enrichment', id: N}.
+      -- Validated by validateEvidenceRefs() (§3.8). Non-empty required (INV-EV-1).
+      evidence_ids TEXT NOT NULL DEFAULT '[]',
+
+      -- Topic labels (B2, Rev 4): JSON array of controlled topic labels from the
+      -- §6.2 vocabulary. '[]' = topic uncertain (read widens rather than narrows).
+      topic_labels TEXT NOT NULL DEFAULT '[]',
+
+      valid_at TEXT NOT NULL,          -- when this entry became the model's belief (canonical ISO UTC)
+      invalid_at TEXT,                 -- when superseded (NULL = current). Cf. W1 bi-temporal pattern.
+      invalid_reason TEXT CHECK (invalid_reason IN (
+        'superseded','corrected_false_belief','evidence_withdrawn','expired','user_override'
+      )),
+      replaced_by INTEGER,             -- application-enforced reference → user_model.id (the superseding entry); NULL if none (B4, B6 Rev 3; §8.5)
+
+      origin TEXT NOT NULL CHECK (origin IN ('stated','inferred','consolidated')),
+
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+
+      UNIQUE (space_id, slot, content, valid_at)  -- same belief held at different times = distinct rows
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_model_current ON user_model(space_id, slot) WHERE invalid_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_user_model_origin ON user_model(space_id, origin);
+    CREATE INDEX IF NOT EXISTS idx_user_model_replaced ON user_model(replaced_by);
+
+    -- W2 forget / deletion contract (B2): user-authorized forget requests. An
+    -- explicit user request overrides the append-only default; no model-driven
+    -- deletion exists anywhere else (INV-DEL-1).
+    CREATE TABLE IF NOT EXISTS forget_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      requested_by TEXT NOT NULL DEFAULT 'user' CHECK (requested_by = 'user'),
+      -- What to forget: one of these selectors must be set at creation
+      target_episode_id INTEGER,       -- specific episode
+      target_node_id INTEGER,          -- specific node (propagates to derived records)
+      target_query TEXT,               -- free-text description; B4 Rev 4: set to NULL
+                                       -- at approval time. Never retained after scope
+                                       -- confirmation (content-free audit).
+      -- Durable scope representation (B5 Rev 3, B4 Rev 4): resolved at approval time.
+      -- Capture-time matching uses these, never re-interprets target_query.
+      scope_episode_ids TEXT NOT NULL DEFAULT '[]',  -- JSON array of episode ids in scope
+      scope_node_ids TEXT NOT NULL DEFAULT '[]',     -- JSON array of node ids in scope
+      -- B4 Rev 4: scope_topics replaces scope_keywords. Controlled topic labels
+      -- (same vocabulary as §6.2) — coarse enough to be content-free, specific
+      -- enough for capture-time matching.
+      scope_topics TEXT NOT NULL DEFAULT '[]',       -- JSON array of controlled topic labels
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','approved','applied','rejected')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      applied_at TEXT
+    );
+
+    -- W2 enrichment quota ledger (B4, Rev 3): atomic check-and-increment
+    -- reservation for the daily enrichment cap. quota_date is YYYY-MM-DD in the
+    -- SPACE's local timezone, computed by spaceLocalDate() — never SQLite
+    -- date('now') (B7 Rev 4). space_meta.episode_enrich_daily_cap (default 20)
+    -- is the tunable; this ledger is the enforcement mechanism and source of truth.
+    CREATE TABLE IF NOT EXISTS enrichment_quota (
+      space_id TEXT NOT NULL,
+      quota_date TEXT NOT NULL,       -- YYYY-MM-DD in the SPACE's local timezone (B7 Rev 4)
+      claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed >= 0),
+      PRIMARY KEY (space_id, quota_date)
+    );
+
+    -- W2 episode keyword search: separate FTS5 table over the capture summary +
+    -- the current enrichment's detail (same pattern as node FTS). rowid = episode id.
+    -- Sync is EXPLICIT (manual upsert/delete from the episode write path —
+    -- helpers belong in db/fts.ts mirroring ftsUpsert/ftsDelete; NO triggers,
+    -- keeps WAL behavior simple). Redacted (forgotten) episodes are removed
+    -- from FTS (§3.7).
+    CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(summary, detail);
 `;
