@@ -1,7 +1,7 @@
 # W3 Design Amendment 1 — Fingerprint Columns & Invalidation Reasons
 
 **Amends:** `docs/wisdom/w3-design.md` Revision 11 (owner-approved design)
-**Status:** Draft for review. **No migration or implementation is authorized by this document.** Milestone 3 remains unauthorized until this amendment is reviewed and approved.
+**Status:** Draft Revision 2 — revised per architecture review 2026-10-20 (three migration clarifications incorporated in §2). **No migration or implementation is authorized by this document.** Milestone 3 remains unauthorized until this amendment is reviewed and approved.
 **Origin:** Milestone 2 implementation finding (Flag #1), confirmed against deploy HEAD `a6b60e8f` (schema verified 2026-10-20 from `packages/server/src/db/schemaSql.ts` at that commit).
 
 ---
@@ -68,13 +68,35 @@ Milestone 2's boundary works within the current constraint (withdrawal escalatio
 
 ### Migration specification (for Milestone 3; not authorized by this amendment)
 
-SQLite cannot alter a CHECK constraint in place, so the migration is a **table rebuild**, executed inside `migrateSchema()` (additive-migration rules; never in `BOOTSTRAP_SQL` — fresh bootstraps get the seven-value CHECK directly in the `user_model` DDL):
+SQLite cannot alter a CHECK constraint in place, so the migration is a **table rebuild**, executed inside `migrateSchema()` (additive-migration rules; never in `BOOTSTRAP_SQL` — fresh bootstraps get the seven-value CHECK directly in the `user_model` DDL). The specification below incorporates the three clarifications required by the architecture review.
 
-1. **Idempotence guard:** read the current `user_model` DDL from `sqlite_master`; if it already contains `'stated_conflict'`, skip. (Same detect-then-act pattern as the existing PRAGMA-guarded migrations.)
-2. `PRAGMA foreign_keys=OFF` for the duration; single transaction.
-3. `CREATE TABLE user_model_new` with the **complete** current shape — including the Milestone 1 migrate-only columns (`review_flag`, `review_flagged_at`) and the seven-value CHECK — then `INSERT INTO user_model_new SELECT` with an explicit column list, `DROP TABLE user_model`, `ALTER TABLE user_model_new RENAME TO user_model`.
-4. Recreate all indexes exactly as at HEAD: `idx_user_model_current` (partial), `idx_user_model_origin`, `idx_user_model_replaced`.
-5. Post-migration assertion (the W2/W3 pattern): verify the new CHECK text and row-count parity; throw on mismatch so a failed rebuild fails the boot loudly rather than silently.
+**Verified schema-object inventory for `user_model` at HEAD `a6b60e8f`** (inspected 2026-10-20 in `schemaSql.ts` + `client.ts`; the rebuild must preserve all of it):
+
+- **No triggers** exist on `user_model` (the only triggers in the schema are on `agent_logs`).
+- **No foreign key in any table references `user_model`** — every `REFERENCES` in the schema targets `nodes` or `knowledge_docs`; `replaced_by` is explicitly application-enforced, not an FK.
+- **Exactly three indexes:** `idx_user_model_current` (partial, `WHERE invalid_at IS NULL`), `idx_user_model_origin`, `idx_user_model_replaced`.
+- **Table constraints:** `slot` CHECK (6 values), `confidence` range CHECK, `evidence_strength` range CHECK, `origin` CHECK (3 values), `UNIQUE (space_id, slot, content, valid_at)`, `id INTEGER PRIMARY KEY AUTOINCREMENT`.
+- The connection runs with `PRAGMA foreign_keys = ON` (set in `createDb()`), and `migrateSchema()` is **not** executed inside an enclosing transaction.
+
+**Procedure:**
+
+1. **Idempotence guard — full-contract verification, fail closed.** Parse the `invalid_reason` value set out of the current `user_model` DDL in `sqlite_master` and compare it as a *set*:
+   - Set equals the original five values → run the rebuild.
+   - Set equals the complete expected seven values → skip (already migrated).
+   - **Anything else** — a partial extension (e.g. contains `'stated_conflict'` but not `'evidence_forgotten'`), extra values, or an unparseable DDL → **throw**, naming the set actually found. An unexpected intermediate schema must fail the boot loudly, never silently pass.
+2. **Foreign-key pragma ordering.** SQLite ignores `PRAGMA foreign_keys` toggles issued inside an active transaction, so ordering is contractual:
+   - On entry, assert `sqlite.inTransaction === false`. If a transaction is already active, **throw** (fail closed) — proceeding would silently run the rebuild with FK enforcement in its unknown current state.
+   - Record the current `PRAGMA foreign_keys` value; set `foreign_keys = OFF` **before** `BEGIN IMMEDIATE`.
+   - Run the entire rebuild inside that one transaction (step 3).
+   - Before `COMMIT`, run `PRAGMA foreign_key_check` — it must return zero rows (defense-in-depth: verified above that nothing references `user_model` today, but the check is cheap and catches future schema drift).
+   - In a `finally` path — on success **and** on failure/rollback — restore the recorded `foreign_keys` value and verify the restore by reading the pragma back; a failed restore throws.
+3. **Rebuild.** `CREATE TABLE user_model_new` reproducing the complete verified shape above — every column (including the Milestone 1 migrate-only `review_flag`, `review_flagged_at`), every constraint verbatim **except** the extended seven-value `invalid_reason` CHECK — then `INSERT INTO user_model_new SELECT` with an explicit column list, `DROP TABLE user_model`, `ALTER TABLE user_model_new RENAME TO user_model`, and recreate the three indexes exactly.
+4. **Post-migration assertions** (throw on any mismatch, per the W2/W3 pattern):
+   - Row-count parity between pre- and post-rebuild `user_model`.
+   - The new DDL's `invalid_reason` set equals the expected seven values.
+   - `PRAGMA index_list(user_model)` shows exactly the three expected indexes, and their DDL in `sqlite_master` matches the HEAD definitions.
+   - `PRAGMA integrity_check` returns `ok`.
+   - AUTOINCREMENT continuity: `sqlite_sequence` for `user_model` is at least `max(id)`, so no future insert can reuse an id.
 
 ### Compatibility
 
@@ -84,6 +106,9 @@ SQLite cannot alter a CHECK constraint in place, so the migration is a **table r
 ### Test expectations (Milestone 3)
 
 - Migration test: a database built with the five-value CHECK migrates to seven values with **zero row loss and zero value changes**; running the migration twice is a no-op.
+- Guard tests: a hand-built schema whose CHECK contains `'stated_conflict'` but **not** `'evidence_forgotten'` makes the migration throw (fail-closed partial state); invoking the migration helper with an already-open transaction throws.
+- FK-restore test: after a successful migration **and** after a forced mid-rebuild failure, `PRAGMA foreign_keys` reads back its pre-migration value.
+- Preservation test: index inventory + index DDLs, all table constraints, and `sqlite_sequence` continuity are asserted post-rebuild against the pre-rebuild snapshot.
 - T-C55 extension: bootstrap-vs-migration equivalence now includes the extended CHECK.
 - Adjudication tests (T-C34–T-C38 family): cell 7 invalidations persist `invalid_reason='stated_conflict'`; §7.3 forget propagation persists `'evidence_forgotten'` — asserted against real SQLite through `createDb()`, per the standing no-mocked-transactions rule.
 
