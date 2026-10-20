@@ -1,6 +1,6 @@
 # W3 Design: Sleep / Consolidation — Revision 11
 
-**Status:** Revision 11 — wording consistency fix (INV-C-2 now names the forget path alongside user-statement and correction, referencing the §6.1 definition and §8.6 contract). Builds on Revision 10, which closed the round-9 P1 (forget flow named in the `stated_set_version` write contract). Not approved. No implementation authorized.
+**Status:** Revision 11 — wording consistency fix (INV-C-2 now names the forget path alongside user-statement and correction, referencing the §6.1 definition and §8.6 contract). Builds on Revision 10, which closed the round-9 P1 (forget flow named in the `stated_set_version` write contract). **DESIGN APPROVED (owner sign-off 2026-10-19). Implementation NOT authorized. Merge NOT authorized. Deployment NOT authorized.**
 **Branch:** `w3-design` · **Baseline:** deploy branch `claude/soumaya-second-brain-v1-m4z4hc` (see §1.1 — hard gate, satisfied)
 **Author:** King (Muse) · **Date:** 2026-10-19
 
