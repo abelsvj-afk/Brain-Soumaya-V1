@@ -8,7 +8,7 @@
  * Lifecycle (§9.1): claim the (space, window) row → stated-integrity
  * snapshot → Phase A (lineage backfill, §7.3 forget propagation, the
  * two §6.3 sweeps) → Phase B (adjudication) → Phase C (distillation) →
- * [Phase D reconciliation = Milestone 4, NOT here] → integrity verify →
+ * Phase D (reconciliation, §5.6) → integrity verify →
  * finalize. Any phase throwing aborts the run: status 'failed', error
  * class recorded, last_consolidation_date NOT advanced, and the claim
  * is reclaimable next window with a bumped fencing token.
@@ -42,6 +42,11 @@ import { backfillEpisodeLineage } from "../episodic.js";
 import { runAdjudication, type AdjudicationSummary } from "./adjudicate.js";
 import { runDistillation, type DistillationSummary, type ThemeExtractor, type WorldWriter } from "./distill.js";
 import {
+  runReconciliationPhase,
+  type ReconciliationSummary,
+  type ReconSimilarityScorer,
+} from "./reconciliation.js";
+import {
   getPreferences,
   isQuietHours,
   localDay,
@@ -62,6 +67,9 @@ export interface ConsolidationRunOptions {
   /** Injectable Phase C theme extractor. Null/absent → §14 template path. */
   extractor?: ThemeExtractor | null;
   worldWriter?: WorldWriter | null;
+  /** Injectable Phase D deterministic similarity scorer (tests count
+   * pair examinations through it — T-C74/T-C80). */
+  reconScorer?: ReconSimilarityScorer;
   /** Skip the quiet-window check (manual/test invocation). */
   force?: boolean;
 }
@@ -72,6 +80,7 @@ export interface RunPhaseSummaries {
   sweeps: { staleEmotions: number; withdrawnEvidence: number; flagged: number };
   adjudication: AdjudicationSummary | null;
   distillation: DistillationSummary | null;
+  reconciliation: ReconciliationSummary | null;
 }
 
 export type ConsolidationRunOutcome =
@@ -346,6 +355,7 @@ export async function runConsolidation(
     sweeps: { staleEmotions: 0, withdrawnEvidence: 0, flagged: 0 },
     adjudication: null,
     distillation: null,
+    reconciliation: null,
   };
   let llmCallsAtStart = budget.remaining;
 
@@ -405,7 +415,11 @@ export async function runConsolidation(
       maxItems: config.w3_max_items,
     });
 
-    // ---- Phase D: reconciliation — MILESTONE 4. Not implemented. ----
+    // ---- Phase D: reconciliation (§5.6 — discovery only; records it
+    // files enter NEXT run's Phase B, never this run's) ----
+    phases.reconciliation = await runReconciliationPhase(h, ctx, {
+      scorer: opts.reconScorer,
+    });
 
     // Budget exhaustion (§9.3): the ledger is empty AND LLM-dependent
     // work was left undone — the extractor never got to run despite
@@ -440,7 +454,9 @@ export async function runConsolidation(
       phases.sweeps.staleEmotions +
       phases.sweeps.withdrawnEvidence +
       (phases.adjudication?.claimed ?? 0) +
-      (phases.distillation?.candidates ?? 0);
+      (phases.distillation?.candidates ?? 0) +
+      (phases.reconciliation?.pairsExamined ?? 0) +
+      (phases.reconciliation?.semanticJudged ?? 0);
     // One shared ledger: the extractor debit and every boundary Tier 2
     // debit land on the same object, so spend = start − remaining.
     const llmCalls = llmCallsAtStart - budget.remaining;

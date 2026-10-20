@@ -3,6 +3,32 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-20 — W3 sleep/consolidation (wisdom layer)
+
+**Status:** DESIGN APPROVED (Rev 11 + Amendment 1 Rev 2) → IMPLEMENTED (Milestones 1–5).
+Milestones 1–3 + the gate remediation MERGED to deploy branch (PR #71 → deploy HEAD
+`0d642bd`; Telegram memory fix PR #72 → `d83b924`). Milestone 4 (Phase E reconciliation)
+and Milestone 5 (Phase G acceptance) are implemented and gate-verified on local branches
+(`w3-milestone-4`, `w3-milestone-5`) — **NOT merged. Not approved: deploy** (Fly redeploy
+is the user's manual action; bot still down pending redeploy).
+
+- Nightly quiet-hours consolidation, sibling to the dream cycle: Phase A sweeps +
+  §7.3 forget propagation, Phase B typed contradiction adjudication (deterministic
+  10-cell decision table — no LLM in decisions), Phase C distillation (lineage-group
+  independence, consolidated confidence capped at 0.69), Phase D reconciliation
+  (bounded re-comparison, durable cursor + semantic queue, shared LLM budget).
+- Stated beliefs are structurally protected: every W3 write goes through the single
+  guarded boundary (`applyConsolidationMutation` in `agent/consolidation/boundary.ts`);
+  stated-set integrity hash with freeze-on-mismatch (§9.4); two-tier insertion guard.
+- Official repo gate (first full run, 2026-10-20): the pre-W3 baseline (`a6b60e8f`)
+  carried 21 test failures / 117 typecheck errors, all pre-existing. After remediation
+  and Milestones 4–5 the tree is **typecheck exit 0 · tests exit 0** (server 1,405 ·
+  web 591 at Phase G close; all 78 W3 T-C test IDs verified present and passing).
+- **Documented limitation (permanent):** semantic contradictions below
+  `w3_recon_sim_threshold` (0.75) escape Phase D/E detection; operator-tunable.
+- Acceptance records: `w3-milestone-1`…`w3-milestone-5` + `integrated-gate-record-2026-10-20`
+  (wisdom-layer record set, kept with the review trail).
+
 ## 2026-10-19 — W2 episodes + user model (wisdom layer)
 
 **Status:** DESIGN APPROVED (5 review rounds) → IMPLEMENTED → MERGED to deploy branch
