@@ -42,6 +42,7 @@ import {
   isVectorEnabled,
   type RawDb,
 } from "../db/vec.js";
+import { recordAccess } from "./consolidation/retrievals.js";
 
 // ---------------------------------------------------------------------------
 // Vocabularies & constants
@@ -2178,7 +2179,12 @@ export function episodeSearch(
     hits.push({ episodeId: c.episodeId, similarity: c.similarity, score, episode, enrichment });
   }
   hits.sort((a, b) => b.score - a.score);
-  return hits.slice(0, k);
+  const served = hits.slice(0, k);
+  // W3 §8.5 access telemetry: episodeSearch is a retrieval-SERVING read —
+  // served hits record access (feeds decay refresh). Telemetry writes
+  // access_stats only, never episode rows (T-C44).
+  for (const hit of served) recordAccess(h.sqlite, "episode", hit.episodeId);
+  return served;
 }
 
 /** Episodes for a node — "what experiences led to this fact?" (design §3.6).

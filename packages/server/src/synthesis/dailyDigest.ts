@@ -4,6 +4,7 @@ import { DEFAULT_SPACE } from "../db/schema.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { InsightsRepo } from "../repositories/insights.repo.js";
 import { buildCommunicationContext } from "../communication/context.js";
+import { consolidationDigestLine } from "../agent/consolidation/run.js";
 
 /** YYYY-MM-DD prefix of a stored timestamp (CURRENT_TIMESTAMP or ISO). */
 const day = (ts: string | undefined): string => (ts ?? "").slice(0, 10);
@@ -191,6 +192,11 @@ export function buildDailyDigest(h: DbHandle, spaceId: string = DEFAULT_SPACE): 
   const greeting = buildGreeting(newCount, preferConcise, leadGently);
 
   const bits: string[] = [];
+  // W3 (§7.6/§10): the quiet factual consolidation line — present ONLY
+  // when the latest consolidation run changed something; zero-change
+  // runs (and spaces with no run) emit no line.
+  const w3Line = consolidationDigestLine(h.sqlite, spaceId);
+  if (w3Line) bits.push(w3Line);
   if (connections.length > 0)
     bits.push(`I also traced ${connections.length} faint link${connections.length === 1 ? "" : "s"} between distant sectors`);
   if (expiredActions.length > 0)

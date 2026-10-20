@@ -12,6 +12,8 @@ import { evolveLore } from "./lore/engine.js";
 import { refreshPersona } from "./persona/derive.js";
 import { reconcileConstellations } from "./analysis/constellationReconcile.js";
 import { runDreamCycle } from "./analysis/dreamCycle.js";
+import { runConsolidation } from "./agent/consolidation/run.js";
+import type { LlmJudge } from "./agent/userModel.js";
 import { stepUndertaking } from "./analysis/undertakings.js";
 import { applyCognitiveGravity } from "./analysis/cognitive.js";
 import { sweepDuplicates } from "./analysis/dedup.js";
@@ -304,6 +306,57 @@ if (process.env.AUTONOMY !== "off") {
           }
         } catch (e) {
           console.error("[autonomy] dream cycle failed:", e);
+        }
+        // W3 consolidation (sibling to the dream cycle — a SEPARATE job
+        // with its own claim/window/state in consolidation_runs; the two
+        // are never merged: dream = world/nodes → belief nodes, W3 =
+        // user/episodes → user_model). Quiet-hours + once-per-window
+        // gating lives inside runConsolidation (space-local window from
+        // the Phase 2 policy); skip outcomes are silent. LLM work is
+        // bounded by the run's own per-space ledger
+        // (space_meta.w3_llm_budget); with Research Mode/budget off the
+        // adapters are withheld and Phases A+B + template C still run
+        // (§14). A+B never depend on the LLM.
+        try {
+          const canPayW3 =
+            researchEnabled(ctx, spaceId) && !ctx.usage.overBudget() && paidThisTick < MAX_PAID_PER_TICK;
+          const w3Judge: LlmJudge = async (input) => {
+            const r = await ctx.llm.detectContradiction(
+              { label: input.candidate.slice(0, 80), content: input.candidate },
+              { label: input.entry.content.slice(0, 80), content: input.entry.content },
+              0,
+            );
+            return r.conflict ? "contradiction" : "compatible";
+          };
+          const w3Outcome = await runConsolidation(ctx.handle, spaceId, {
+            llmJudge: canPayW3 ? w3Judge : null,
+            extractor:
+              canPayW3 && ctx.llm.consolidate
+                ? async (cands) => {
+                    const out = await ctx.llm.consolidate!(
+                      cands.map((c) => ({
+                        label: c.summary.slice(0, 80),
+                        content: `${c.summary} ${c.detail ?? ""}`,
+                      })),
+                    );
+                    return [
+                      {
+                        content: out.belief,
+                        slot: "belief",
+                        topicLabels: [],
+                        route: "self" as const,
+                        episodeIds: cands.map((c) => c.episodeId),
+                      },
+                    ];
+                  }
+                : null,
+          });
+          if (w3Outcome.status !== "skipped") {
+            if (canPayW3) paidThisTick++;
+            console.log(`[autonomy] ${spaceId.slice(0, 8)}: w3 consolidation ${w3Outcome.status}`);
+          }
+        } catch (e) {
+          console.error("[autonomy] w3 consolidation failed:", e);
         }
         // Cognitive gravity (free, offline): pull memories toward the goals /
         // identity / skills they support, so the galaxy models what you're working

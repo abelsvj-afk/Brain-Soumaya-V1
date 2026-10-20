@@ -754,7 +754,8 @@ export const BOOTSTRAP_SQL = `
       valid_at TEXT NOT NULL,          -- when this entry became the model's belief (canonical ISO UTC)
       invalid_at TEXT,                 -- when superseded (NULL = current). Cf. W1 bi-temporal pattern.
       invalid_reason TEXT CHECK (invalid_reason IN (
-        'superseded','corrected_false_belief','evidence_withdrawn','expired','user_override'
+        'superseded','corrected_false_belief','evidence_withdrawn','expired','user_override',
+        'stated_conflict','evidence_forgotten'
       )),
       replaced_by INTEGER,             -- application-enforced reference → user_model.id (the superseding entry); NULL if none (B4, B6 Rev 3; §8.5)
 

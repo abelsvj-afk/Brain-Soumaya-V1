@@ -29,6 +29,209 @@ export function bootstrapSchema(sqlite: RawDb): void {
 }
 
 /**
+ * W3 Design Amendment 1 §2 (owner-approved): extend the
+ * user_model.invalid_reason CHECK from five values to seven, adding
+ * 'stated_conflict' (decision-table cell 7) and 'evidence_forgotten'
+ * (§7.3 forget propagation). SQLite cannot alter a CHECK in place, so an
+ * existing five-value table is rebuilt. Fresh bootstraps already carry
+ * the seven-value CHECK (schemaSql.ts) and this helper no-ops for them.
+ *
+ * Tightened spec (Amendment 1 Rev 2):
+ * - Idempotence guard parses the current CHECK value SET from
+ *   sqlite_master: == original five -> rebuild; == full seven -> skip;
+ *   anything else -> throw, naming the found set (fail closed).
+ * - Entry asserts no enclosing transaction. PRAGMA foreign_keys is
+ *   recorded, set OFF BEFORE BEGIN IMMEDIATE, the rebuild runs in one
+ *   transaction, PRAGMA foreign_key_check must return zero rows before
+ *   COMMIT, and the recorded FK value is restored in a finally path on
+ *   success AND failure, verified by read-back.
+ * - The rebuilt table reproduces the complete verified shape (all
+ *   columns incl. migrate-only review_flag/review_flagged_at; the slot,
+ *   confidence, evidence_strength and origin CHECKs; the
+ *   UNIQUE(space_id, slot, content, valid_at); AUTOINCREMENT) and
+ *   exactly the three indexes HEAD defines.
+ * - Post-assertions throw on mismatch: row-count parity; new CHECK set
+ *   == seven; index list + DDL match; integrity_check ok;
+ *   sqlite_sequence >= max(id).
+ */
+export const USER_MODEL_INVALID_REASONS_V1 = [
+  "superseded",
+  "corrected_false_belief",
+  "evidence_withdrawn",
+  "expired",
+  "user_override",
+] as const;
+export const USER_MODEL_INVALID_REASONS_V2 = [
+  ...USER_MODEL_INVALID_REASONS_V1,
+  "stated_conflict",
+  "evidence_forgotten",
+] as const;
+
+const USER_MODEL_COLUMNS = [
+  "id", "space_id", "slot", "content", "confidence", "evidence_strength",
+  "evidence_ids", "topic_labels", "valid_at", "invalid_at",
+  "invalid_reason", "replaced_by", "origin", "created_at",
+  "review_flag", "review_flagged_at",
+] as const;
+
+const USER_MODEL_INDEX_DDL: Record<string, string> = {
+  idx_user_model_current:
+    "CREATE INDEX idx_user_model_current ON user_model(space_id, slot) WHERE invalid_at IS NULL",
+  idx_user_model_origin:
+    "CREATE INDEX idx_user_model_origin ON user_model(space_id, origin)",
+  idx_user_model_replaced:
+    "CREATE INDEX idx_user_model_replaced ON user_model(replaced_by)",
+};
+
+/** Parse the invalid_reason CHECK value set out of a user_model DDL string. */
+export function parseInvalidReasonCheckSet(ddl: string): string[] | null {
+  const m = /invalid_reason\s+TEXT\s+CHECK\s*\(\s*invalid_reason\s+IN\s*\(([^)]*)\)\s*\)/i.exec(ddl);
+  if (!m) return null;
+  return [...m[1].matchAll(/'([^']*)'/g)].map((x) => x[1]);
+}
+
+function sameValueSet(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v) => b.includes(v));
+}
+
+export function migrateUserModelInvalidReasonCheck(sqlite: RawDb): { migrated: boolean } {
+  const tableRow = sqlite
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_model'`)
+    .get() as { sql: string | null } | undefined;
+  if (!tableRow?.sql) return { migrated: false }; // table created later in migrateSchema
+  const found = parseInvalidReasonCheckSet(tableRow.sql);
+  if (found && sameValueSet(found, USER_MODEL_INVALID_REASONS_V2)) {
+    return { migrated: false }; // already seven — idempotent no-op
+  }
+  if (!found || !sameValueSet(found, USER_MODEL_INVALID_REASONS_V1)) {
+    throw new Error(
+      `W3 Amendment 1 migration: unexpected user_model invalid_reason CHECK set ` +
+        `[${found ? found.join(", ") : "unparseable DDL"}] — expected the original five ` +
+        `[${USER_MODEL_INVALID_REASONS_V1.join(", ")}] or the full seven; failing closed.`,
+    );
+  }
+  if (sqlite.inTransaction) {
+    throw new Error(
+      "W3 Amendment 1 migration: user_model rebuild requires no enclosing transaction " +
+        "(sqlite.inTransaction is true) — failing closed.",
+    );
+  }
+
+  const sourceCols = (
+    sqlite.prepare(`PRAGMA table_info(user_model)`).all() as { name: string }[]
+  ).map((c) => c.name);
+  const copyCols = USER_MODEL_COLUMNS.filter((c) => sourceCols.includes(c));
+  const beforeCount = (
+    sqlite.prepare(`SELECT COUNT(*) AS n FROM user_model`).get() as { n: number }
+  ).n;
+
+  const prevFk = Number(sqlite.pragma("foreign_keys", { simple: true })) === 1;
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    sqlite.exec("BEGIN IMMEDIATE");
+    try {
+      sqlite.exec(`
+        CREATE TABLE user_model_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          space_id TEXT NOT NULL DEFAULT 'legacy',
+          slot TEXT NOT NULL CHECK (slot IN (
+            'belief','desire','intention','emotion_state','knowledge','constraint'
+          )),
+          content TEXT NOT NULL,
+          confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+          evidence_strength REAL NOT NULL DEFAULT 0
+            CHECK (evidence_strength >= 0 AND evidence_strength <= 1),
+          evidence_ids TEXT NOT NULL DEFAULT '[]',
+          topic_labels TEXT NOT NULL DEFAULT '[]',
+          valid_at TEXT NOT NULL,
+          invalid_at TEXT,
+          invalid_reason TEXT CHECK (invalid_reason IN (
+            'superseded','corrected_false_belief','evidence_withdrawn','expired','user_override',
+            'stated_conflict','evidence_forgotten'
+          )),
+          replaced_by INTEGER,
+          origin TEXT NOT NULL CHECK (origin IN ('stated','inferred','consolidated')),
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          review_flag TEXT,
+          review_flagged_at TEXT,
+          UNIQUE (space_id, slot, content, valid_at)
+        );
+      `);
+      const cols = copyCols.join(", ");
+      sqlite.exec(`INSERT INTO user_model_new (${cols}) SELECT ${cols} FROM user_model`);
+      sqlite.exec(`DROP TABLE user_model`);
+      sqlite.exec(`ALTER TABLE user_model_new RENAME TO user_model`);
+      for (const ddl of Object.values(USER_MODEL_INDEX_DDL)) sqlite.exec(ddl);
+      const fkViolations = sqlite.pragma("foreign_key_check") as unknown[];
+      if (fkViolations.length > 0) {
+        throw new Error(
+          `W3 Amendment 1 migration: foreign_key_check returned ${fkViolations.length} row(s) after rebuild — rolling back.`,
+        );
+      }
+      sqlite.exec("COMMIT");
+    } catch (err) {
+      if (sqlite.inTransaction) sqlite.exec("ROLLBACK");
+      throw err;
+    }
+  } finally {
+    sqlite.pragma(`foreign_keys = ${prevFk ? "ON" : "OFF"}`);
+    const restored = Number(sqlite.pragma("foreign_keys", { simple: true })) === 1;
+    if (restored !== prevFk) {
+      throw new Error("W3 Amendment 1 migration: failed to restore PRAGMA foreign_keys to its recorded value.");
+    }
+  }
+
+  // Post-assertions (throw on mismatch).
+  const afterCount = (
+    sqlite.prepare(`SELECT COUNT(*) AS n FROM user_model`).get() as { n: number }
+  ).n;
+  if (afterCount !== beforeCount) {
+    throw new Error(
+      `W3 Amendment 1 migration: row-count mismatch after rebuild (before=${beforeCount}, after=${afterCount}).`,
+    );
+  }
+  const newDdl = (
+    sqlite
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_model'`)
+      .get() as { sql: string }
+  ).sql;
+  const newSet = parseInvalidReasonCheckSet(newDdl);
+  if (!newSet || !sameValueSet(newSet, USER_MODEL_INVALID_REASONS_V2)) {
+    throw new Error("W3 Amendment 1 migration: rebuilt CHECK set is not the full seven values.");
+  }
+  const indexRows = sqlite
+    .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'user_model' AND sql IS NOT NULL`)
+    .all() as { name: string; sql: string }[];
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+  if (
+    indexRows.length !== 3 ||
+    !indexRows.every((r) => USER_MODEL_INDEX_DDL[r.name] && norm(r.sql) === norm(USER_MODEL_INDEX_DDL[r.name]))
+  ) {
+    throw new Error(
+      `W3 Amendment 1 migration: rebuilt index inventory mismatch (found: ${indexRows.map((r) => r.name).join(", ") || "none"}).`,
+    );
+  }
+  const integrity = sqlite.pragma("integrity_check") as { integrity_check: string }[];
+  if (!integrity.every((r) => r.integrity_check === "ok")) {
+    throw new Error("W3 Amendment 1 migration: integrity_check failed after rebuild.");
+  }
+  const maxId = (
+    sqlite.prepare(`SELECT COALESCE(MAX(id), 0) AS m FROM user_model`).get() as { m: number }
+  ).m;
+  if (maxId > 0) {
+    const seqRow = sqlite
+      .prepare(`SELECT seq FROM sqlite_sequence WHERE name = 'user_model'`)
+      .get() as { seq: number } | undefined;
+    if (!seqRow || seqRow.seq < maxId) {
+      throw new Error(
+        `W3 Amendment 1 migration: sqlite_sequence (${seqRow?.seq ?? "missing"}) < max(id) (${maxId}) after rebuild.`,
+      );
+    }
+  }
+  return { migrated: true };
+}
+
+/**
  * Lightweight additive migrations for databases created before a column existed
  * (e.g. an existing volume on Fly). CREATE TABLE IF NOT EXISTS won't add new
  * columns, so we patch them in idempotently.
@@ -738,6 +941,14 @@ function migrateSchema(sqlite: RawDb): void {
   // §5.5 inquiry dedup. SQLite UNIQUE treats NULLs as distinct, so the many
   // inquiries with contradiction_id NULL never collide.
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_inquiries_contradiction ON inquiries(space_id, contradiction_id)`);
+
+  // W3 Amendment 1 §2 (Milestone 3): extend the user_model.invalid_reason
+  // CHECK to seven values via table rebuild when the live table still has
+  // the original five. Runs AFTER the review_flag ALTERs above so the
+  // rebuild copies the complete column inventory. No-op on fresh
+  // bootstraps (seven-value CHECK already) — see the helper for the
+  // guard/FK/post-assertion contract.
+  migrateUserModelInvalidReasonCheck(sqlite);
 
   // W2 post-migration assertion: all six W2 tables exist with the expected
   // columns. Loud failure (throw) on mismatch — same pattern as the W1

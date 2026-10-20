@@ -312,6 +312,87 @@ export function supersede(
   return tx();
 }
 
+/**
+ * W3 decision-table cell 2 (design §5.3): system-derived vs system-derived
+ * node contradiction where the newer side wins. W3's adjudicator has
+ * ALREADY made the deterministic decision (both sides current, same space,
+ * neither side user-stated); this writer performs the same temporal
+ * writes supersede() performs — close the old row with
+ * supersede_reason='update', point superseded_by at the (already
+ * existing) newer node, append a corrections event with
+ * corrected_by='system' — without routing through the W1 trigger
+ * contract, which exists to gate UNREVIEWED proposals (LLM/user hot
+ * path) and hard-blocks non-user origins by design. The nodes-domain
+ * mutation stays inside this W1 module (§5.4: the only permitted
+ * state-changing action on nodes is the W1 supersession writer); W3
+ * never writes nodes directly.
+ *
+ * Both nodes must already exist and be current. valid_to closes with
+ * the newer node's valid_from when known (Type 1 rule: never fabricate).
+ * Returns the corrections row id, or null when either side is missing /
+ * not current / user-stated (caller re-checks; a concurrent change makes
+ * this a no-op rather than a partial write).
+ */
+export function supersedeSystemDerived(
+  h: DbHandle,
+  spaceId: string,
+  input: { oldNodeId: number; newNodeId: number },
+): { correctionId: number; opTime: string } | null {
+  const opTime = new Date().toISOString();
+  const tx = h.sqlite.transaction((): { correctionId: number; opTime: string } | null => {
+    const rows = h.sqlite
+      .prepare(
+        `SELECT id, superseded_at, valid_from FROM nodes WHERE space_id = ? AND id IN (?, ?)`,
+      )
+      .all(spaceId, input.oldNodeId, input.newNodeId) as {
+      id: number;
+      superseded_at: string | null;
+      valid_from: string | null;
+    }[];
+    const oldRow = rows.find((r) => r.id === input.oldNodeId);
+    const newRow = rows.find((r) => r.id === input.newNodeId);
+    if (!oldRow || !newRow) return null;
+    if (oldRow.superseded_at !== null || newRow.superseded_at !== null) return null;
+    // User-stated guard (defense in depth — the adjudicator checks too):
+    // a node created by a user correction is never system-superseded.
+    const stated = h.sqlite
+      .prepare(
+        `SELECT 1 FROM corrections
+         WHERE corrected_by = 'user' AND (node_id IN (?, ?) OR superseding_node_id IN (?, ?))
+         LIMIT 1`,
+      )
+      .get(input.oldNodeId, input.newNodeId, input.oldNodeId, input.newNodeId);
+    if (stated) return null;
+    const upd = h.sqlite
+      .prepare(
+        `UPDATE nodes
+         SET valid_to = ?, superseded_at = ?, superseded_by = ?, supersede_reason = 'update'
+         WHERE id = ? AND space_id = ? AND superseded_at IS NULL`,
+      )
+      .run(newRow.valid_from ?? null, opTime, input.newNodeId, input.oldNodeId, spaceId);
+    if (upd.changes !== 1) return null;
+    const cr = h.sqlite
+      .prepare(
+        `INSERT INTO corrections
+           (space_id, node_id, correction_type, corrected_at, corrected_by, reason, superseding_node_id)
+         VALUES (?, ?, 'factual_update', ?, 'system', 'w3_adjudication_cell_2', ?)`,
+      )
+      .run(spaceId, input.oldNodeId, opTime, input.newNodeId);
+    h.sqlite
+      .prepare(
+        `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
+         VALUES (?, 'soumaya', 'supersede', ?, ?, 'ok')`,
+      )
+      .run(
+        spaceId,
+        `supersede node_id=${input.oldNodeId} reason=update new_id=${input.newNodeId} actor=system via=w3_cell_2`,
+        JSON.stringify({ old_id: input.oldNodeId, new_id: input.newNodeId, reason: "update", actor: "system" }),
+      );
+    return { correctionId: Number(cr.lastInsertRowid), opTime };
+  });
+  return tx();
+}
+
 function logPotentialContradiction(
   h: DbHandle,
   spaceId: string,

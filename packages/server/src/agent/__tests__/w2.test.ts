@@ -1880,7 +1880,7 @@ describe("T-U7: no inferred constraint from a correction", () => {
 });
 
 describe("T-U8: emotion expiry", () => {
-  it("the read filter excludes 8-day-old emotions; the sweep is hygiene", () => {
+  it("the read filter excludes 8-day-old emotions; the sweep is hygiene", async () => {
     const E = seedEpisode({});
     // 8-day-old emotion_state row (inserted directly to control valid_at).
     handle.sqlite
@@ -1903,7 +1903,7 @@ describe("T-U8: emotion expiry", () => {
     expect(before.map((e) => e.content)).toEqual(["proud about the job"]);
 
     // The sweep only reclaims rows (sets invalid_at/invalid_reason='expired').
-    const swept = sweepStaleEmotions(handle, SPACE);
+    const swept = await sweepStaleEmotions(handle, SPACE);
     expect(swept.expiredCount).toBe(1);
     const stale = handle.sqlite
       .prepare(`SELECT invalid_at, invalid_reason FROM user_model WHERE content = 'stressed about the fee'`)
@@ -2660,7 +2660,7 @@ describe("T-V3: stale evidence annotated, not deleted", () => {
 });
 
 describe("T-V4: withdrawn evidence", () => {
-  it("fully-withdrawn evidence auto-invalidates inferred entries, flags stated ones", () => {
+  it("fully-withdrawn evidence auto-invalidates inferred entries, flags stated ones", async () => {
     const E = seedEpisode({ excerpt: "forgotten soon" });
     const inferred = updateUserModel(handle, SPACE, "inferred", {
       slot: "belief",
@@ -2677,7 +2677,7 @@ describe("T-V4: withdrawn evidence", () => {
       .prepare(`UPDATE episodes SET forgotten_at = ? WHERE id = ?`)
       .run(new Date().toISOString(), E);
 
-    const swept = sweepWithdrawnEvidence(handle, SPACE);
+    const swept = await sweepWithdrawnEvidence(handle, SPACE);
     expect(swept.invalidatedIds).toEqual([inferred.id]);
     expect(swept.flaggedStatedIds).toEqual([stated.id]);
 
