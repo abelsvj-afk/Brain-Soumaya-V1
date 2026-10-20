@@ -203,7 +203,15 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
         signal: input.signal,
       });
     } catch (err) {
-      return { text: `I hit a snag reaching my tools (${(err as Error).message.slice(0, 120)}). Try again in a moment.` };
+      const text = `I hit a snag reaching my tools (${(err as Error).message.slice(0, 120)}). Try again in a moment.`;
+      // Capture even on LLM failure — the user saw a reply, so the turn was
+      // substantive. Matches every other return path (no silent gaps).
+      captureTurnEpisode(ctx, spaceId, input.userMessage, text, {
+        toolExecutions: executions,
+        approvalPending: pendingApprovalId !== undefined,
+        alreadyCapturedId: statedEpisodeId,
+      });
+      return { text, episodeCaptured: true };
     }
 
     if (res.text !== null || res.calls.length === 0) {

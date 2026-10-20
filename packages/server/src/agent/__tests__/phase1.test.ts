@@ -428,3 +428,70 @@ describe("agent tool set", () => {
     expect(argsHash({ a: 1 })).not.toBe(argsHash({ a: 2 }));
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8. W2 integration: episode capture covers the LLM-error return path
+// ---------------------------------------------------------------------------
+
+describe("agent loop LLM-error path", () => {
+  it("captures an episode when callWithTools throws (regression: review finding)", async () => {
+    // Regression: the catch branch in agentLoop returned the "snag" message
+    // WITHOUT calling captureTurnEpisode() or setting episodeCaptured, unlike
+    // every other return path. The user's turn was substantive (they asked,
+    // they saw a reply) — it must be captured like any other turn.
+    const throwingLlm = {
+      ...new HeuristicProvider(),
+      callWithTools: async (): Promise<LlmToolResult> => {
+        throw new Error("OpenAI 400: tool messages must follow tool_calls");
+      },
+    } as LlmProvider;
+    ctx.llm = throwingLlm;
+
+    const r = await agentLoop({
+      ctx,
+      spaceId: SPACE,
+      principal: "web:test",
+      userMessage: "do you know where i work",
+      history: [],
+      now: NOW,
+    });
+
+    expect(r.text).toContain("I hit a snag");
+    expect(r.episodeCaptured).toBe(true);
+
+    // Capture is fire-and-forget (never awaited) — flush microtasks/timers.
+    await new Promise((res) => setTimeout(res, 50));
+
+    const count = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS c FROM episodes WHERE space_id = ?`)
+      .get(SPACE) as { c: number };
+    expect(count.c).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not double-capture when the stated trigger already captured", async () => {
+    const throwingLlm = {
+      ...new HeuristicProvider(),
+      callWithTools: async (): Promise<LlmToolResult> => {
+        throw new Error("boom");
+      },
+    } as LlmProvider;
+    ctx.llm = throwingLlm;
+
+    // "I started..." matches the stated-statement trigger, which captures
+    // synchronously. The error-path capture must skip (alreadyCapturedId set).
+    const r = await agentLoop({
+      ctx,
+      spaceId: SPACE,
+      principal: "web:test",
+      userMessage: "I started the Samsonite job today",
+      history: [],
+      now: NOW,
+    });
+    expect(r.episodeCaptured).toBe(true);
+    await new Promise((res) => setTimeout(res, 50));
+    const count = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS c FROM episodes WHERE space_id = ?`)
+      .get(SPACE) as { c: number };
+    expect(count.c).toBe(1);
+  });
+});
