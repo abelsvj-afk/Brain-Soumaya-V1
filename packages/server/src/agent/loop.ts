@@ -5,6 +5,9 @@ import { soulTextFor } from "../identity.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 import { AGENT_TOOLS } from "./tools/registry.js";
 import { validateArgs } from "./tools/validation.js";
+import { composeUserModelBlock } from "./userModel.js"; // W2: user-model context block (§7.2)
+import { maybeRecordStated } from "./userModel.js"; // W2: stated-write trigger (§4.8)
+import { captureEpisode } from "./episodic.js"; // W2: episode capture triggers (§5.1)
 import {
   requestApproval,
   confirmApproval,
@@ -58,6 +61,9 @@ export interface AgentLoopResult {
   text: string;
   /** Set when the turn ended asking the user to confirm a write. */
   pendingApprovalId?: number;
+  /** W2 §5.1: set when the loop's return path already captured this turn's
+      episode — callers that would otherwise capture must skip (no doubles). */
+  episodeCaptured?: boolean;
 }
 
 type CallOutcome =
@@ -148,10 +154,27 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   const { ctx, spaceId, principal, now } = input;
   const tc: ToolContext = { ctx, spaceId, now, notify: input.notify };
 
+  // W2 §4.8: conservative stated-write trigger. Evaluated on the user's raw
+  // message at turn start — the assertion is HIS, independent of whatever the
+  // loop later replies. maybeRecordStated() never throws and never blocks.
+  // When it fires, it captures an episode synchronously (for INV-EV-1
+  // evidence); we remember that ID so the return-path capture skips (no
+  // double-capture, §5.1).
+  let statedEpisodeId: number | null = null;
+  try {
+    statedEpisodeId = maybeRecordStated(ctx.handle, spaceId, input.userMessage);
+  } catch {
+    statedEpisodeId = null;
+  }
+
   const soul = soulTextFor(ctx.handle.sqlite, spaceId);
+  // W2 §7.2 / §6.4: the user-model block is additive, best-effort conversational
+  // context. composeUserModelBlock() fails OPEN by contract: it returns "" when
+  // the user model is unavailable or any read fails, and it never throws.
+  const userModelBlock = composeUserModelBlock(ctx.handle, spaceId);
   const systemInstruction = composeSystem({
     soul: soul ?? undefined,
-    systemExtra: buildSystemExtra(),
+    systemExtra: buildSystemExtra() + (userModelBlock ? `\n\n${userModelBlock}` : ""),
   });
 
   const toolDefs = toToolDefinitions();
@@ -184,7 +207,13 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
     }
 
     if (res.text !== null || res.calls.length === 0) {
-      return { text: res.text ?? "I don't have a good answer for that yet.", pendingApprovalId };
+      const text = res.text ?? "I don't have a good answer for that yet.";
+      captureTurnEpisode(ctx, spaceId, input.userMessage, text, {
+        toolExecutions: executions,
+        approvalPending: pendingApprovalId !== undefined,
+        alreadyCapturedId: statedEpisodeId,
+      });
+      return { text, pendingApprovalId, episodeCaptured: true };
     }
 
     // --- Process the proposed calls: strict in-order, bounded. ---
@@ -300,16 +329,63 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   const lastModel = [...messages].reverse().find((m) => m.role === "model");
   if (pendingApprovalId !== undefined) {
     // We stopped for an approval but the model never asked. Ask directly.
-    return {
-      text: `I have something ready that needs your go-ahead (approval #${pendingApprovalId}). Say "yes" to confirm or "no" to skip it.`,
-      pendingApprovalId,
-    };
+    const text = `I have something ready that needs your go-ahead (approval #${pendingApprovalId}). Say "yes" to confirm or "no" to skip it.`;
+    captureTurnEpisode(ctx, spaceId, input.userMessage, text, {
+      toolExecutions: executions,
+      approvalPending: true,
+      alreadyCapturedId: statedEpisodeId,
+    });
+    return { text, pendingApprovalId, episodeCaptured: true };
   }
-  if (lastModel) return { text: lastModel.text, pendingApprovalId };
-  return {
-    text: "I started on that but ran out of steps — try asking in a smaller piece and I'll pick it up.",
-    pendingApprovalId,
-  };
+  if (lastModel) {
+    captureTurnEpisode(ctx, spaceId, input.userMessage, lastModel.text ?? "", {
+      toolExecutions: executions,
+      approvalPending: pendingApprovalId !== undefined,
+      alreadyCapturedId: statedEpisodeId,
+    });
+    return { text: lastModel.text, pendingApprovalId, episodeCaptured: true };
+  }
+  const text =
+    "I started on that but ran out of steps — try asking in a smaller piece and I'll pick it up.";
+  captureTurnEpisode(ctx, spaceId, input.userMessage, text, {
+    toolExecutions: executions,
+    approvalPending: pendingApprovalId !== undefined,
+    alreadyCapturedId: statedEpisodeId,
+  });
+  return { text, pendingApprovalId, episodeCaptured: true };
+}
+
+/**
+ * W2 §5.1: fire-and-forget episode capture for a completed loop turn.
+ * "Substantive exchange" = the turn did real work: ≥1 tool execution OR a
+ * non-empty final reply. Skipped for pure no-op turns (§5.3: nothing to record).
+ * The returned promise is never awaited — the caller delivers the reply while
+ * capture runs. Never throws.
+ */
+function captureTurnEpisode(
+  ctx: AppContext,
+  spaceId: string,
+  userMessage: string,
+  resultText: string,
+  opts: { toolExecutions: number; approvalPending: boolean; alreadyCapturedId?: number | null },
+): void {
+  // The stated-write trigger (§4.8) may have already captured this turn's
+  // episode synchronously — never double-capture (§5.1).
+  if (opts.alreadyCapturedId) return;
+  const substantive =
+    opts.toolExecutions > 0 || opts.approvalPending || resultText.trim().length > 0;
+  if (!substantive) return;
+  void Promise.resolve()
+    .then(() =>
+      captureEpisode(ctx.handle, spaceId, {
+        kind: "conversation",
+        summary:
+          `Conversation turn: user said ${JSON.stringify(userMessage.slice(0, 200))}; ` +
+          `assistant replied ${JSON.stringify(resultText.slice(0, 200))}` +
+          (opts.toolExecutions > 0 ? ` (${opts.toolExecutions} tool execution(s))` : ""),
+      }),
+    )
+    .catch(() => {});
 }
 
 /** Templated audit row for a loop tool execution. Content-free by design. */

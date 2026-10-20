@@ -11,6 +11,7 @@ import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
 import { SpacesRepo } from "../auth/spaces.js";
 import { TelegramLinksRepo } from "./links.js";
 import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
+import { captureEpisode } from "../agent/episodic.js"; // W2: episode capture triggers (§5.1)
 
 /**
  * Talk to your Soumaya brain from Telegram. This deployment hosts many private
@@ -198,6 +199,15 @@ export async function handleTelegramUpdate(
     }
     const digest = buildDailyDigest(ctx.handle, spaceId);
     await send(chatId, formatDigest(digest, link.spaceName));
+    // W2 §5.1: on-demand digest delivery is also a digest_sent episode.
+    void Promise.resolve()
+      .then(() =>
+        captureEpisode(ctx.handle, spaceId, {
+          kind: "digest_sent",
+          summary: "On-demand digest sent via /digest command",
+        }),
+      )
+      .catch(() => {});
     return;
   }
 
@@ -324,6 +334,16 @@ export async function handleTelegramUpdate(
       reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
     }
     await send(chatId, reply);
+    // W2 §5.1: the loop never ran, so Trigger 1 did not fire — capture the
+    // fallback exchange here (best-effort, after delivery, never throws).
+    void Promise.resolve()
+      .then(() =>
+        captureEpisode(ctx.handle, spaceId, {
+          kind: "conversation",
+          summary: `Telegram fallback exchange (agent loop unavailable): user asked ${JSON.stringify(text.slice(0, 200))}`,
+        }),
+      )
+      .catch(() => {});
   }
 }
 
@@ -355,6 +375,18 @@ export async function sendDailyDigests(ctx: AppContext, send: Send): Promise<num
         msg += `\n\n🪞 One thing I want to understand better:\n${contact.question.text}\n(Reply with /log — it becomes a memory and answers me.)`;
       }
       await send(link.chatId, msg);
+      // W2 §5.1: digest delivered — capture after delivery, best-effort.
+      void Promise.resolve()
+        .then(() =>
+          captureEpisode(ctx.handle, link.spaceId, {
+            kind: "digest_sent",
+            summary:
+              `Daily digest sent to Telegram chat (local day ${today}): ${msg.length} chars, ` +
+              `fresh=${digest.fresh.length} connections=${digest.connections.length} ` +
+              `cooling=${digest.cooling.length} reminders=${digest.reminders?.length ?? 0}`,
+          }),
+        )
+        .catch(() => {});
       links.markDigestSent(link.chatId, today);
       sent++;
     } catch (err) {

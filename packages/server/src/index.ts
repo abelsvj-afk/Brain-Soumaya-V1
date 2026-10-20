@@ -5,6 +5,7 @@ import { setTelegramWebhook, sendDailyDigests, tgSend } from "./telegram/bot.js"
 import { TelegramLinksRepo } from "./telegram/links.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
+import { captureEpisode } from "./agent/episodic.js"; // W2: job_run capture (§5.1)
 import { selectJob, executeJob, researchEnabled } from "./maintenance/agent.js";
 import { nextAutonomyBatch } from "./maintenance/autonomyBatch.js";
 import { evolveLore } from "./lore/engine.js";
@@ -160,6 +161,7 @@ setInterval(() => {
         : async (_spaceId: string, _text: string) => {};
       const policyNotify = createPolicyNotify({
         sqlite: ctx.handle.sqlite,
+        handle: ctx.handle, // W2: DbHandle for episode capture
         send: rawSend,
         audit: (spaceId, action, detail) => {
           // Content-free audit via agent_logs. Columns: action, description, targets.
@@ -175,13 +177,27 @@ setInterval(() => {
       for (const spaceId of spaceIds) {
         const results = await runToolRouter(ctx, spaceId, { notify });
         const acted = results.filter((r) => r.ok).length;
-        if (acted > 0) console.log(`[tools] ${spaceId.slice(0, 8)}: ${acted} tool action(s)`);
+        if (acted > 0) {
+          console.log(`[tools] ${spaceId.slice(0, 8)}: ${acted} tool action(s)`);
+          // W2 §5.1: router tick WITH findings — capture after the tick.
+          // Ticks with no findings are not captured (§5.3). Best-effort,
+          // never throws, never blocks the sweep.
+          void Promise.resolve()
+            .then(() =>
+              captureEpisode(ctx.handle, spaceId, {
+                kind: "job_run",
+                summary: `Background tool-router tick fired ${acted} tool action(s)`,
+              }),
+            )
+            .catch(() => {});
+        }
       }
       // Phase 2: deliver queued notifications + recover crashed leases.
       if (tgToken) {
         const sweep = await sweepNotifications(
           {
             sqlite: ctx.handle.sqlite,
+            handle: ctx.handle, // W2: DbHandle for episode capture
             send: rawSend,
             audit: (spaceId, action, detail) => {
               try {
