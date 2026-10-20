@@ -345,8 +345,11 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
     });
     return { text, pendingApprovalId, episodeCaptured: true };
   }
-  if (lastModel) {
-    captureTurnEpisode(ctx, spaceId, input.userMessage, lastModel.text ?? "", {
+  if (lastModel?.text) {
+    // Only a model message carrying actual text is a final answer. A
+    // tool-call-only message (text: null) means the iteration cap was hit
+    // mid-work — fall through to the ran-out-of-steps reply below.
+    captureTurnEpisode(ctx, spaceId, input.userMessage, lastModel.text, {
       toolExecutions: executions,
       approvalPending: pendingApprovalId !== undefined,
       alreadyCapturedId: statedEpisodeId,

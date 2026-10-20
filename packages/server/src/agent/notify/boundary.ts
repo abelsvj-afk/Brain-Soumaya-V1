@@ -69,7 +69,7 @@ export function createPolicyNotify(deps: BoundaryDeps) {
     // Occurrence ID is time-based so it won't dedup unrelated sends.
     const m: NotifyMeta = meta ?? { tool: "generic", occurrenceId: `at:${nowIso(now)}` };
     const occurrenceId = buildOccurrenceId(sqlite, spaceId, m, now);
-    const fullMeta: NotifyMeta = { ...m, occurrenceId };
+    const fullMeta: NotifyMeta & { occurrenceId: string } = { ...m, occurrenceId };
 
     const urgency = classifyUrgency(sqlite, spaceId, fullMeta, now);
     const decision: PolicyDecision = decidePolicy(sqlite, spaceId, fullMeta, urgency, now);
@@ -103,7 +103,7 @@ async function deliverNow(
   deps: BoundaryDeps,
   spaceId: string,
   text: string,
-  meta: NotifyMeta,
+  meta: NotifyMeta & { occurrenceId: string },
   urgency: { isUrgent: boolean; reason?: string },
   now: Date
 ): Promise<void> {

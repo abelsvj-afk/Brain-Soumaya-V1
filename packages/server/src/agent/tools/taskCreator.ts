@@ -1,5 +1,6 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
+import type { RawDb } from "../../db/vec.js";
 
 /**
  * Autonomous task creation — Soumaya turns a commitment you voiced ("I need to call
@@ -109,7 +110,7 @@ export const taskCreatorTool: Tool = {
     let action: { id: number };
     try {
       action = new NodesRepo(tc.ctx.handle, tc.spaceId).create(
-        { label, type: "daily", content: label, importance: 0.12, kind: "action", expiresAt, origin: "agent", agent: "soumaya", idempotencyKey: idemKey ?? undefined },
+        { label, type: "daily", content: label, importance: 0.12, kind: "action", expiresAt, origin: "agent", idempotencyKey: idemKey ?? undefined },
         vec,
       );
     } catch (err) {
@@ -147,7 +148,7 @@ export const taskCreatorTool: Tool = {
  * Ensure the relates_to edge exists (idempotent — edges have no unique
  * constraint, so check-then-insert; safe because the node side is deduped).
  */
-function ensureRelatesEdge(s: { prepare: (sql: string) => { get: (...p: unknown[]) => unknown; run: (...p: unknown[]) => unknown } }, spaceId: string, actionId: number, nodeId: number): void {
+function ensureRelatesEdge(s: RawDb, spaceId: string, actionId: number, nodeId: number): void {
   const existing = s.prepare(
     `SELECT 1 FROM edges WHERE space_id = ? AND source = ? AND target = ? AND relationship = 'relates_to'`
   ).get(spaceId, actionId, nodeId);

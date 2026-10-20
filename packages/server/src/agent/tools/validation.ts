@@ -1,4 +1,4 @@
-import Ajv from "ajv";
+import { Ajv, type ErrorObject } from "ajv";
 import type { Tool } from "./types.js";
 
 /**
@@ -43,7 +43,7 @@ export function validateArgs(tool: Tool | undefined, args: unknown): ArgsValidat
   const valid = validate(args);
   if (!valid) {
     const detail = (validate.errors ?? [])
-      .map((e) => `${e.instancePath || "/"} ${e.message ?? "invalid"}`)
+      .map((e: ErrorObject) => `${e.instancePath || "/"} ${e.message ?? "invalid"}`)
       .join("; ");
     return { ok: false, error: `args for "${tool.name}" failed validation: ${detail}` };
   }

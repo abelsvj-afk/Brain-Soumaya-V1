@@ -85,8 +85,8 @@ describe("T1: basic supersession", () => {
     // Correction event created with type factual_update
     const corrections = getCorrections(handle.sqlite, a);
     expect(corrections).toHaveLength(1);
-    expect(corrections[0].correction_type).toBe("factual_update");
-    expect(corrections[0].corrected_by).toBe("user");
+    expect(corrections[0]!.correctionType).toBe("factual_update");
+    expect(corrections[0]!.correctedBy).toBe("user");
   });
 });
 
@@ -181,7 +181,7 @@ describe("T5: ambiguous non-invalidation", () => {
 describe("T6: digest exclusion", () => {
   it("superseded facts do not appear in the digest", () => {
     const a = repo.create(
-      { label: "Between jobs", type: "memory", content: "unemployed" },
+      { label: "Between jobs", type: "other", content: "unemployed" },
       EMB,
     );
     supersede(handle, SPACE, {
@@ -203,7 +203,7 @@ describe("T6: digest exclusion", () => {
   it("superseded facts do not reach the LLM digest input path", () => {
     // The bad digest came through an LLM path, not buildDailyDigest().
     // Verify the repo-level filter that feeds LLM context.
-    const a = repo.create({ label: "Car insurance", type: "memory", content: "have car" }, EMB);
+    const a = repo.create({ label: "Car insurance", type: "other", content: "have car" }, EMB);
     supersede(handle, SPACE, {
       oldNodeId: a.id,
       newNode: null,
@@ -318,7 +318,7 @@ describe("T-TIME-5: shared operation timestamp", () => {
 describe("T-WRITE-1: insert paths", () => {
   it("NodesRepo.create populates recorded_at in canonical format", () => {
     const before = new Date().toISOString();
-    const n = repo.create({ label: "Test", type: "memory", content: "x" }, EMB);
+    const n = repo.create({ label: "Test", type: "other", content: "x" }, EMB);
     const row = getNode(n.id);
     expect(row.recorded_at).toMatch(CANONICAL_TS);
     expect((row.recorded_at as string) >= before).toBe(true);
@@ -500,7 +500,7 @@ describe("T-RTR-2: iterative over-fetch survives superseded flooding", () => {
       [...validIds].sort((a, b) => a - b),
     );
     // And the repo-level filter agrees
-    const byIds = repo.byIds([...validIds, supIds[0]]);
+    const byIds = repo.byIds([...validIds, supIds[0]!]);
     expect(byIds.map((r) => r.id).sort()).toEqual([...validIds].sort((a, b) => a - b));
   });
 });
@@ -542,10 +542,10 @@ describe("T-RTR-3: safety bound", () => {
     );
     // Truncation diagnostic emitted exactly once, with honest counts
     expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0].event).toBe("vecSearchTruncated");
-    expect(diagnostics[0].data["wanted"]).toBe(3);
-    expect(diagnostics[0].data["found"]).toBe(2);
-    expect(diagnostics[0].data["space_id"]).toBe(SPACE);
+    expect(diagnostics[0]!.event).toBe("vecSearchTruncated");
+    expect(diagnostics[0]!.data["wanted"]).toBe(3);
+    expect(diagnostics[0]!.data["found"]).toBe(2);
+    expect(diagnostics[0]!.data["space_id"]).toBe(SPACE);
   });
 });
 
@@ -618,7 +618,7 @@ describe("T-SEC-1: cross-space isolation", () => {
 describe("T-PAR-1: behavioral parity", () => {
   it("both schemas populate recorded_at on every insert", () => {
     // :memory: DBs use bootstrap (fresh schema). Verify behavior.
-    const n = repo.create({ label: "Parity", type: "memory", content: "x" }, EMB);
+    const n = repo.create({ label: "Parity", type: "other", content: "x" }, EMB);
     const row = getNode(n.id);
     expect(row.recorded_at).toMatch(CANONICAL_TS);
   });
@@ -728,7 +728,7 @@ describe("T-HIST-1b: correction-history query", () => {
     expect(history!.correctionHistory).toHaveLength(2);
     // Ordered deterministically (corrected_at ASC, id ASC)
     const times = history!.correctionHistory.map((c) => c.at);
-    expect(times[0] <= times[1]).toBe(true);
+    expect(times[0]! <= times[1]!).toBe(true);
   });
 });
 
@@ -781,11 +781,11 @@ describe("T-CAS-1: atomicity", () => {
 describe("T-RTR-1: keyword search", () => {
   it("superseded nodes do not appear in keyword results", () => {
     const valid = repo.create(
-      { label: "Samsonite job", type: "memory", content: "warehouse work" },
+      { label: "Samsonite job", type: "other", content: "warehouse work" },
       EMB,
     );
     const old = repo.create(
-      { label: "Job search", type: "memory", content: "looking for warehouse work" },
+      { label: "Job search", type: "other", content: "looking for warehouse work" },
       EMB,
     );
     supersede(handle, SPACE, {
@@ -909,7 +909,7 @@ describe("T-PO: preference-override endsValidity flag", () => {
     // Replacement inserted and correction recorded
     expect(result.newNodeId).not.toBeNull();
     expect(getCorrections(handle.sqlite, a)).toHaveLength(1);
-    expect(getCorrections(handle.sqlite, a)[0].correction_type).toBe("preference_override");
+    expect(getCorrections(handle.sqlite, a)[0]!.correctionType).toBe("preference_override");
   });
 
   it("T-PO-2: validity-ending mode with known validFrom closes valid_to", () => {

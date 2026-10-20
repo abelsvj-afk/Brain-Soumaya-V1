@@ -154,9 +154,14 @@ describe("clarificationAskedRecently — cooldown", () => {
       .run(twoDaysAgo);
     expect(clarificationAskedRecently(handle, "s1", now)).toBe(true);
 
+    // Expired case: agent_logs is append-only (the UPDATE this test used to
+    // do is blocked by trigger by design), so the aged row is inserted
+    // directly with its old created_at, in its own space.
     const tenDaysAgo = new Date(now - 10 * 86_400_000).toISOString().slice(0, 19).replace("T", " ");
-    handle.sqlite.prepare(`UPDATE agent_logs SET created_at = ? WHERE space_id = 's1'`).run(tenDaysAgo);
-    expect(clarificationAskedRecently(handle, "s1", now)).toBe(false);
+    handle.sqlite
+      .prepare(`INSERT INTO agent_logs (space_id, action, description, targets, created_at) VALUES ('s2', 'intelligence:clarification', 'x', '[]', ?)`)
+      .run(tenDaysAgo);
+    expect(clarificationAskedRecently(handle, "s2", now)).toBe(false);
   });
 });
 

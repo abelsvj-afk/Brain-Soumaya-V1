@@ -7,7 +7,8 @@
  * Key safety properties (all signed off):
  * - notif_key UNIQUE: same logical notification never queued twice.
  * - Atomic claim: UPDATE ... WHERE status='queued' AND cap-check. One winner.
- * - Cap derived from outbox rows (status IN ('sending','sent') with cap_day).
+ * - Cap derived from outbox rows (status IN ('sending','sent','ambiguous')
+ *   with cap_day — ambiguous rows retain their slot, see markAmbiguous).
  *   No separate counter; crash recovery self-corrects.
  * - send_started_at distinguishes definite non-delivery (NULL on recovery)
  *   from ambiguous outcome (set on recovery) — see recoverExpiredLeases.
@@ -15,7 +16,7 @@
  *   idempotency key, so a retry after an ambiguous send risks a duplicate.
  */
 
-import type { RawDb } from "../db/vec.js";
+import type { RawDb } from "../../db/vec.js";
 import { notifKey, type NotifyMeta, type Urgency } from "./policy.js";
 
 /** Lease duration: a 'sending' row older than this is considered crashed. */
@@ -44,6 +45,56 @@ export interface OutboxRow {
   claimedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Raw notification_outbox row as better-sqlite3 returns it (snake_case). */
+interface RawOutboxRow {
+  id: number;
+  notif_key: string;
+  space_id: string;
+  tool: string;
+  occurrence_id: string;
+  message: string;
+  priority: string;
+  is_urgent: number;
+  urgent_reason: string | null;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  deliver_after: string;
+  bill_due_at: string | null;
+  cap_day: string | null;
+  send_started_at: string | null;
+  claimed_by: string | null;
+  claimed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Map a raw snake_case row to the camelCase OutboxRow contract. */
+function mapRow(r: RawOutboxRow): OutboxRow {
+  return {
+    id: r.id,
+    notifKey: r.notif_key,
+    spaceId: r.space_id,
+    tool: r.tool,
+    occurrenceId: r.occurrence_id,
+    message: r.message,
+    priority: r.priority,
+    isUrgent: r.is_urgent,
+    urgentReason: r.urgent_reason,
+    status: r.status,
+    attempts: r.attempts,
+    lastError: r.last_error,
+    deliverAfter: r.deliver_after,
+    billDueAt: r.bill_due_at,
+    capDay: r.cap_day,
+    sendStartedAt: r.send_started_at,
+    claimedBy: r.claimed_by,
+    claimedAt: r.claimed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
 }
 
 export interface EnqueueInput {
@@ -105,7 +156,7 @@ export function claimForSend(
        SET status = 'sending', cap_day = ?, claimed_by = ?, claimed_at = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND status = 'queued'
          AND (SELECT COUNT(*) FROM notification_outbox
-              WHERE space_id = ? AND cap_day = ? AND status IN ('sending', 'sent')) < ?`
+              WHERE space_id = ? AND cap_day = ? AND status IN ('sending', 'sent', 'ambiguous')) < ?`
     )
     .run(capDay, workerId, nowIso, id, spaceId, capDay, cap);
   return r.changes === 1;
@@ -231,17 +282,19 @@ export function recoverExpiredLeases(sqlite: RawDb, now: Date): RecoveryStats {
 
 /** Rows due for delivery, urgent first then oldest. */
 export function dueRows(sqlite: RawDb, nowIso: string, limit = 20): OutboxRow[] {
-  return sqlite
+  const rows = sqlite
     .prepare(
       `SELECT * FROM notification_outbox
        WHERE status = 'queued' AND deliver_after <= ?
        ORDER BY is_urgent DESC, deliver_after ASC LIMIT ?`
     )
-    .all(nowIso, limit) as OutboxRow[];
+    .all(nowIso, limit) as RawOutboxRow[];
+  return rows.map(mapRow);
 }
 
 export function getRow(sqlite: RawDb, id: number): OutboxRow | undefined {
-  return sqlite.prepare(`SELECT * FROM notification_outbox WHERE id = ?`).get(id) as OutboxRow | undefined;
+  const row = sqlite.prepare(`SELECT * FROM notification_outbox WHERE id = ?`).get(id) as RawOutboxRow | undefined;
+  return row ? mapRow(row) : undefined;
 }
 
 /** Backoff for retries: 2^attempts minutes, capped at 60. */

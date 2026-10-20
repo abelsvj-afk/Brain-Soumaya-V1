@@ -38,7 +38,8 @@ import {
   LEASE_MS,
   MAX_ATTEMPTS,
 } from "../outbox.js";
-import { createPolicyNotify, sweepNotifications } from "../boundary.js";
+import { createPolicyNotify, sweepNotifications, type BoundaryDeps } from "../boundary.js";
+import { createDb, type DbHandle } from "../../../db/client.js";
 
 // Minimal in-memory DB with just the tables Phase 2 needs.
 function testDb() {
@@ -89,16 +90,19 @@ function testDb() {
 }
 
 const auditLog: string[] = [];
-function makeDeps(sqlite: any, sent: string[], shouldFail = false) {
+function makeDeps(sqlite: any, sent: string[], shouldFail = false, handle: DbHandle): BoundaryDeps {
   return {
     sqlite,
+    // BoundaryDeps.handle feeds episode capture (W2 §5.1) — callers pass a
+    // real createDb handle so capture runs against the production schema.
+    handle,
     send: async (spaceId: string, text: string) => {
       if (shouldFail) throw new Error("telegram down");
       sent.push(`${spaceId}:${text}`);
     },
     audit: (spaceId: string, action: string, detail: string) => {
       auditLog.push(`${action}:${detail}`);
-      sqlite.prepare(`INSERT INTO agent_logs (space_id, action, description) VALUES (?, ?, ?)`).run(spaceId, action, detail);
+      sqlite.prepare(`INSERT INTO agent_logs (space_id, action, description, targets) VALUES (?, ?, ?, '[]')`).run(spaceId, action, detail);
     },
     workerId: "test-worker",
   };
@@ -375,9 +379,13 @@ describe("crash recovery: two cases", () => {
 
 describe("boundary: end-to-end", () => {
   it("normal in quiet hours → queued; sweep delivers after quiet end", async () => {
-    const sqlite = testDb();
+    // Boundary tests run on a production-bootstrapped DB (createDb): the
+    // boundary needs a real DbHandle for episode capture, and the production
+    // schema is the faithful fixture for the sweep path.
+    const h = createDb(":memory:");
+    const sqlite = h.sqlite;
     const sent: string[] = [];
-    const deps = makeDeps(sqlite, sent);
+    const deps = makeDeps(sqlite, sent, false, h);
     const notify = createPolicyNotify(deps);
     // 22:00 ET = quiet.
     const quietNow = new Date("2026-10-20T02:00:00Z");
@@ -403,9 +411,10 @@ describe("boundary: end-to-end", () => {
   });
 
   it("urgent at 3am bypasses quiet hours and cap", async () => {
-    const sqlite = testDb();
+    const h = createDb(":memory:");
+    const sqlite = h.sqlite;
     const sent: string[] = [];
-    const deps = makeDeps(sqlite, sent);
+    const deps = makeDeps(sqlite, sent, false, h);
     // Fill the cap with 5 sent normals.
     for (let i = 0; i < 5; i++) {
       sqlite.prepare(`INSERT INTO notification_outbox (notif_key, space_id, tool, occurrence_id, message, status, deliver_after, cap_day) VALUES (?,?,?,?,?,'sent',?,?)`).run(`k${i}`, "s1", "checkin", `d${i}`, "x", new Date().toISOString(), "2026-10-19");
@@ -415,7 +424,10 @@ describe("boundary: end-to-end", () => {
       meta: { tool: "fire_reminder", occurrenceId: "node:1:at:x" },
       message: "urgent!",
       urgency: { isUrgent: true, reason: "fresh reminder" },
-      deliverAfter: new Date().toISOString(),
+      // Due at the sweep instant below. (Wall-clock "now" made this test a
+      // time bomb: once real time passed the fixed sweep date, the row was
+      // never due.)
+      deliverAfter: "2026-10-20T07:00:00.000Z",
       queueReason: "t",
     });
     const stats = await sweepNotifications(deps, new Date("2026-10-20T07:00:00Z")); // 03:00 ET
@@ -424,9 +436,10 @@ describe("boundary: end-to-end", () => {
   });
 
   it("send failure retries, then goes terminal after MAX_ATTEMPTS", async () => {
-    const sqlite = testDb();
+    const h = createDb(":memory:");
+    const sqlite = h.sqlite;
     const sent: string[] = [];
-    const deps = makeDeps(sqlite, sent, true); // always fail
+    const deps = makeDeps(sqlite, sent, true, h); // always fail
     const { id } = enqueue(sqlite, {
       spaceId: "s1", meta: { tool: "checkin", occurrenceId: "d1" }, message: "x",
       urgency: { isUrgent: false }, deliverAfter: new Date().toISOString(), queueReason: "t",
@@ -444,12 +457,15 @@ describe("boundary: end-to-end", () => {
   });
 
   it("audit log is content-free", async () => {
-    const sqlite = testDb();
+    const h = createDb(":memory:");
+    const sqlite = h.sqlite;
     const sent: string[] = [];
-    const deps = makeDeps(sqlite, sent);
+    const deps = makeDeps(sqlite, sent, false, h);
     const { id } = enqueue(sqlite, {
       spaceId: "s1", meta: { tool: "checkin", occurrenceId: "d1" }, message: "SECRET MESSAGE TEXT",
-      urgency: { isUrgent: false }, deliverAfter: new Date().toISOString(), queueReason: "t",
+      // Due at the sweep instant below (wall-clock "now" outran the fixed
+      // sweep date and the row silently stopped being due).
+      urgency: { isUrgent: false }, deliverAfter: "2026-10-19T15:00:00.000Z", queueReason: "t",
     });
     await sweepNotifications(deps, new Date("2026-10-19T15:00:00Z"));
     const logs = sqlite.prepare(`SELECT action, description FROM agent_logs`).all() as { action: string; description: string }[];

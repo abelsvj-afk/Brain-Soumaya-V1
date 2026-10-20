@@ -294,9 +294,9 @@ describe("D3 graph routes", () => {
     const { status, body } = await get(`/api/graph?limit=300&includeIds=${wanted}`);
     expect(status).toBe(200);
     const got = new Set((body.nodes as { id: number }[]).map((n) => n.id));
-    expect(got.has(ids[0])).toBe(true);
-    expect(got.has(ids[1])).toBe(true);
-    expect(got.has(ids[2])).toBe(true);
+    expect(got.has(ids[0]!)).toBe(true);
+    expect(got.has(ids[1]!)).toBe(true);
+    expect(got.has(ids[2]!)).toBe(true);
     expect(body.nodes.length).toBe(303);
     expect(body.nextEdgeCursor).toBeNull();
   });
