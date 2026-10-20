@@ -12,6 +12,7 @@ import { SpacesRepo } from "../auth/spaces.js";
 import { TelegramLinksRepo } from "./links.js";
 import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
 import { captureEpisode } from "../agent/episodic.js"; // W2: episode capture triggers (§5.1)
+import { memorySearchTool } from "../agent/tools/memorySearch.js";
 
 /**
  * Talk to your Soumaya brain from Telegram. This deployment hosts many private
@@ -86,6 +87,107 @@ const HELP =
   "• /help — show this again.";
 
 const LINK_RE = /^\/link\s+(\S+)\s+(\S.*)$/;
+
+// ---------------------------------------------------------------------------
+// Per-chat conversation context (Telegram memory-connection fix)
+//
+// Diagnosis: the agent loop only sees what callers pass it, and this handler
+// used to pass `history: []` — every Telegram message started an amnesiac
+// one-shot, and memories were only connected when the model happened to
+// elect a memory_search call. Two restorations:
+//
+// 1. HISTORY: a bounded in-memory store of the recent turns of THIS chat's
+//    conversation, passed to the loop on every turn. There is no faithful
+//    durable store to read back: episodes capture only truncated summaries
+//    (200 chars/side, fire-and-forget), not raw turns in order — so history
+//    is intentionally memory-only and is LOST ON SERVER RESTART. The brain's
+//    long-term memory (nodes/episodes) is unaffected; only the short-term
+//    thread resets. Keyed by (spaceId, chatId) so chats and brains can
+//    never bleed into each other.
+//
+// 2. AUTO-RETRIEVAL: before the loop runs, the user's message is searched
+//    against the brain with the SAME hybrid retrieval the memory_search
+//    tool uses (memorySearchTool.run — vector KNN current-truth + BM25,
+//    RRF-fused, episodes in parallel), and the results ride into the loop
+//    as a "Relevant memories" system-context block. Fail-open by contract:
+//    a retrieval error or zero hits adds no block and never breaks a turn.
+// ---------------------------------------------------------------------------
+
+/** One stored conversational turn, in the agent loop's history shape. */
+export interface TelegramHistoryTurn {
+  role: "you" | "soumaya";
+  text: string;
+}
+
+/** Completed exchanges (user + assistant) retained per chat. */
+export const TELEGRAM_HISTORY_TURNS = 10;
+/** Per-message cap so one huge paste can't bloat every later prompt. */
+const TELEGRAM_HISTORY_TEXT_CAP = 1000;
+
+const telegramHistory = new Map<string, TelegramHistoryTurn[]>();
+
+function telegramHistoryKey(spaceId: string, chatId: number): string {
+  return `${spaceId} ${chatId}`;
+}
+
+/** Recent turns for this chat, oldest → newest. Returns a copy. */
+export function getTelegramHistory(spaceId: string, chatId: number): TelegramHistoryTurn[] {
+  return [...(telegramHistory.get(telegramHistoryKey(spaceId, chatId)) ?? [])];
+}
+
+/** Record one completed exchange (what the user said, what was sent back). */
+export function appendTelegramTurn(
+  spaceId: string,
+  chatId: number,
+  userText: string,
+  assistantText: string,
+): void {
+  const key = telegramHistoryKey(spaceId, chatId);
+  const turns = telegramHistory.get(key) ?? [];
+  turns.push(
+    { role: "you", text: userText.slice(0, TELEGRAM_HISTORY_TEXT_CAP) },
+    { role: "soumaya", text: assistantText.slice(0, TELEGRAM_HISTORY_TEXT_CAP) },
+  );
+  while (turns.length > TELEGRAM_HISTORY_TURNS * 2) turns.shift();
+  telegramHistory.set(key, turns);
+}
+
+/** Drop stored history — one chat (all its brains), or everything. */
+export function clearTelegramHistory(chatId?: number): void {
+  if (chatId == null) {
+    telegramHistory.clear();
+    return;
+  }
+  const suffix = ` ${chatId}`;
+  for (const key of [...telegramHistory.keys()]) {
+    if (key.endsWith(suffix)) telegramHistory.delete(key);
+  }
+}
+
+/**
+ * Build the "Relevant memories" context block for one incoming message by
+ * running the memory_search tool's own retrieval. Returns undefined when
+ * there is nothing worth injecting (no hits) or when retrieval fails —
+ * this NEVER throws into the turn path.
+ */
+export async function buildTelegramMemoryContext(
+  tc: ToolContext,
+  userText: string,
+): Promise<string | undefined> {
+  try {
+    const res = await memorySearchTool.run(tc, { query: userText, limit: 5 });
+    if (!res.ok || !res.message) return undefined;
+    return (
+      "## Relevant memories\n" +
+      "Automatically retrieved for the user's message below — background " +
+      "context from their brain, not a tool result. Use what is relevant, " +
+      "ignore what is not, and don't mention this block itself.\n\n" +
+      res.message
+    );
+  } catch {
+    return undefined;
+  }
+}
 
 /** Render a daily digest as a compact Telegram message in Soumaya's voice. */
 export function formatDigest(digest: DailyDigest, spaceName: string): string {
@@ -177,6 +279,7 @@ export async function handleTelegramUpdate(
 
   if (text === "/unlink") {
     const had = links.unlink(chatId);
+    clearTelegramHistory(chatId); // the thread belongs to the link; drop it with it
     await send(chatId, had ? "Unlinked. /link <name> <passcode> to reconnect." : "This chat wasn't linked.");
     return;
   }
@@ -321,11 +424,17 @@ export async function handleTelegramUpdate(
       spaceId,
       principal,
       userMessage: text,
-      history: [],
+      // This chat's recent turns (see the history store above) — the loop
+      // used to get [] here, so every message started cold.
+      history: getTelegramHistory(spaceId, chatId),
+      // Per-message auto-retrieval, fail-open: undefined = no block.
+      contextExtra: await buildTelegramMemoryContext(tc, text),
       now: Date.now(),
       notify: (msg) => send(chatId, msg),
     });
-    await send(chatId, result.text || "I don't have anything on that yet — add a memory with /log.");
+    const sentText = result.text || "I don't have anything on that yet — add a memory with /log.";
+    await send(chatId, sentText);
+    appendTelegramTurn(spaceId, chatId, text, sentText);
   } catch (err) {
     console.error("[telegram] agent loop failed, falling back to chat:", err);
     const answer = await chat(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, text, undefined, spaceId);
@@ -334,6 +443,7 @@ export async function handleTelegramUpdate(
       reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
     }
     await send(chatId, reply);
+    appendTelegramTurn(spaceId, chatId, text, reply);
     // W2 §5.1: the loop never ran, so Trigger 1 did not fire — capture the
     // fallback exchange here (best-effort, after delivery, never throws).
     void Promise.resolve()

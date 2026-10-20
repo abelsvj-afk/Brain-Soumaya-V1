@@ -52,6 +52,13 @@ export interface AgentLoopInput {
   principal: string;
   userMessage: string;
   history: { role: "you" | "soumaya"; text: string }[];
+  /**
+   * Optional caller-supplied context appended to the system instruction,
+   * after the user-model block (e.g. Telegram's per-message auto-retrieved
+   * memories). Additive only: callers that omit it (the web routes) get a
+   * byte-identical system instruction to before this field existed.
+   */
+  contextExtra?: string;
   now: number;
   notify: (text: string) => Promise<void>;
   signal?: AbortSignal;
@@ -174,7 +181,10 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   const userModelBlock = composeUserModelBlock(ctx.handle, spaceId);
   const systemInstruction = composeSystem({
     soul: soul ?? undefined,
-    systemExtra: buildSystemExtra() + (userModelBlock ? `\n\n${userModelBlock}` : ""),
+    systemExtra:
+      buildSystemExtra() +
+      (userModelBlock ? `\n\n${userModelBlock}` : "") +
+      (input.contextExtra ? `\n\n${input.contextExtra}` : ""),
   });
 
   const toolDefs = toToolDefinitions();
