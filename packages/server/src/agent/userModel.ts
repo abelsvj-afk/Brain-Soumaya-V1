@@ -219,6 +219,29 @@ export function tokenJaccard(a: string, b: string): number {
   return inter / (sa.size + sb.size - inter);
 }
 
+/**
+ * W3 §8.6 stated_set_version write contract (canonical — design Rev 11):
+ * `stated_set_version` increments in the SAME transaction as every write to
+ * any user_model row with origin='stated' — every verb, every caller, no
+ * exceptions. The writers in this module are recordStated(), correctUserModel(),
+ * and updateUserModel(); agent/episodic.ts applyForgetRequest() carries its
+ * own copy (no cross-import: this module imports episodic). The counter is
+ * what makes the W3 reconciliation pair-level marker exact: any stated write
+ * a marker didn't see invalidates the marker. `by` is the number of stated
+ * rows written (per-row semantics); a no-op write performs no bump.
+ */
+function bumpStatedSetVersion(sqlite: RawDb, spaceId: string, by = 1): void {
+  if (by <= 0) return;
+  sqlite
+    .prepare(
+      `INSERT INTO space_meta (space_id, stated_set_version)
+       VALUES (?, ?)
+       ON CONFLICT (space_id) DO UPDATE
+       SET stated_set_version = stated_set_version + excluded.stated_set_version`,
+    )
+    .run(spaceId, by);
+}
+
 /** Content-free audit helper: IDs and action names only, never user text. */
 function auditLog(
   sqlite: RawDb,
@@ -1333,6 +1356,11 @@ export function recordStated(
       invalidatedIds.push(row.id);
     }
 
+    // W3 §8.6: one stated row written (the insert above) — bump in this
+    // same transaction. The invalidations here target inferred/consolidated
+    // rows only (see the finder origins above), so the count is exactly 1.
+    bumpStatedSetVersion(sqlite, spaceId, 1);
+
     auditLog(
       sqlite,
       spaceId,
@@ -1487,11 +1515,14 @@ export function updateUserModel(
     entry.content,
     validAt,
     ["inferred", "consolidated", "stated"],
-  ).filter((r) => r.origin !== "stated" || r.confidence < 0.95);
-  // DESIGN-GAP: a consolidated entry never invalidates a 0.95 stated entry
-  // (stated is the user's own word — only the correction path or a newer
-  // statement touches it). It may supersede weaker stated/conflicting rows;
-  // conflicts with 0.95 stated entries are logged for correction-path review.
+  ).filter((r) => r.origin !== "stated");
+  // W3 §1.2 hardening (was a DESIGN-GAP): stated entries are excluded
+  // UNCONDITIONALLY — at ANY confidence. A stated row is the user's own
+  // word; only the correction path (correctUserModel) or a newer statement
+  // (recordStated) may touch it. The earlier 0.95 carve-out let a
+  // consolidated/inferred write invalidate a stated entry at 0.90 (T-C23).
+  // Stated-vs-stated conflicts still surface via recordStated's
+  // conflictingStatedIds for the correction path.
 
   return sqlite.transaction((): UpdateUserModelResult => {
     const info = sqlite
@@ -1520,10 +1551,16 @@ export function updateUserModel(
        WHERE id = ? AND invalid_at IS NULL`,
     );
     const invalidatedIds: number[] = [];
+    let statedRowsWritten = 0;
     for (const row of contradicted) {
       invalidate.run(now, newId, row.id);
       invalidatedIds.push(row.id);
+      if (row.origin === "stated") statedRowsWritten++;
     }
+    // W3 §8.6: bump for any stated-row write this call performs, same
+    // transaction. Post-hardening the count is always 0 (stated rows are
+    // excluded above); the wiring stays so the contract holds in any form.
+    bumpStatedSetVersion(sqlite, spaceId, statedRowsWritten);
 
     auditLog(
       sqlite,
@@ -1892,10 +1929,24 @@ export function correctUserModel(
     sqlite
       .prepare(
         `UPDATE user_model
-         SET invalid_at = ?, invalid_reason = ?, replaced_by = ?
+         SET invalid_at = ?, invalid_reason = ?, replaced_by = ?,
+             review_flag = NULL, review_flagged_at = NULL
          WHERE id = ? AND invalid_at IS NULL`,
       )
       .run(now, invalidReason, newEntryId, target.id);
+    // (W3 §6.4: the correction path clears the row's review flag — the user
+    // has addressed the underlying issue. Clearing rides the invalidation
+    // UPDATE above; the review_flag columns are migration-only, §8.6.)
+
+    // W3 §8.6: bump once per stated row written in this transaction, same
+    // transaction — the stated replacement insert, the explicit stated
+    // constraint insert, and the target invalidation when the target is a
+    // stated row.
+    let statedRowsWritten = 0;
+    if (newEntryId != null) statedRowsWritten++;
+    if (constraintEntryId != null) statedRowsWritten++;
+    if (target.origin === "stated") statedRowsWritten++;
+    bumpStatedSetVersion(sqlite, spaceId, statedRowsWritten);
 
     auditLog(
       sqlite,
@@ -2488,35 +2539,75 @@ export function composeUserModelBlock(
  * Cleanup hygiene for emotion_state (W3 schedules). Correctness lives in the
  * read filter (CURRENT_FILTER) — this only reclaims rows. Sets invalid_at /
  * invalid_reason='expired'; replaced_by stays NULL (nothing replaces an
- * expired emotion).
+ * expired emotion). W3 §6.3: stated rows are exempt from expiry — they are
+ * flagged for review ('stale_emotion') instead of invalidated.
  */
 export function sweepStaleEmotions(
   h: DbHandle,
   spaceId: string,
-): { expiredCount: number } {
+): { expiredCount: number; flaggedStatedCount: number } {
   const now = nowIso();
-  const info = h.sqlite
-    .prepare(
-      `UPDATE user_model
-       SET invalid_at = ?, invalid_reason = 'expired'
-       WHERE space_id = ?
-         AND slot = 'emotion_state'
-         AND invalid_at IS NULL
-         AND datetime(valid_at) <= datetime('now', '-7 days')`,
-    )
-    .run(now, spaceId);
-  const expiredCount = Number(info.changes);
-  if (expiredCount > 0) {
-    auditLog(
-      h.sqlite,
-      spaceId,
-      "emotions_swept",
-      `emotions_swept count=${expiredCount}`,
-      { count: expiredCount },
-      "ok",
-    );
-  }
-  return { expiredCount };
+  const sqlite = h.sqlite;
+  return sqlite.transaction(() => {
+    // Non-stated rows expire (pre-W3 behavior, now origin-scoped).
+    const info = sqlite
+      .prepare(
+        `UPDATE user_model
+         SET invalid_at = ?, invalid_reason = 'expired'
+         WHERE space_id = ?
+           AND slot = 'emotion_state'
+           AND origin != 'stated'
+           AND invalid_at IS NULL
+           AND datetime(valid_at) <= datetime('now', '-7 days')`,
+      )
+      .run(now, spaceId);
+    const expiredCount = Number(info.changes);
+
+    // W3 §1.2/§6.3 hardening: stated emotion_state rows are NEVER expired by
+    // maintenance — the user's stated emotion stands until the user corrects
+    // it. They receive a review flag instead (SetReviewFlag semantics;
+    // direct SQL here until Milestone 2 routes this sweep through the
+    // guarded boundary). Set-once: a row already carrying a flag is left
+    // untouched — no write, and per §8.6 no version bump for a no-op set.
+    const flagged = sqlite
+      .prepare(
+        `UPDATE user_model
+         SET review_flag = 'stale_emotion', review_flagged_at = ?
+         WHERE space_id = ?
+           AND slot = 'emotion_state'
+           AND origin = 'stated'
+           AND invalid_at IS NULL
+           AND review_flag IS NULL
+           AND datetime(valid_at) <= datetime('now', '-7 days')`,
+      )
+      .run(now, spaceId);
+    const flaggedStatedCount = Number(flagged.changes);
+    // §8.6: a review-flag write on a stated row is a stated-row write —
+    // bump conservatively, same transaction.
+    bumpStatedSetVersion(sqlite, spaceId, flaggedStatedCount);
+
+    if (expiredCount > 0) {
+      auditLog(
+        sqlite,
+        spaceId,
+        "emotions_swept",
+        `emotions_swept count=${expiredCount}`,
+        { count: expiredCount },
+        "ok",
+      );
+    }
+    if (flaggedStatedCount > 0) {
+      auditLog(
+        sqlite,
+        spaceId,
+        "stale_emotions_flagged",
+        `stale_emotions_flagged count=${flaggedStatedCount}`,
+        { count: flaggedStatedCount },
+        "ok",
+      );
+    }
+    return { expiredCount, flaggedStatedCount };
+  })();
 }
 
 /**

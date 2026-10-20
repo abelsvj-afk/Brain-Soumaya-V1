@@ -245,6 +245,40 @@ function migrateSchema(sqlite: RawDb): void {
     if (!metaCols.some((c) => c.name === "w1_cascade_enabled")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w1_cascade_enabled INTEGER NOT NULL DEFAULT 0`);
     }
+    // W3 consolidation (wisdom layer, design Rev 11 §8.1): per-space knobs for
+    // the nightly consolidation job + the stated_set_version counter (§8.6
+    // write contract: bumped in the same transaction as EVERY stated-row
+    // write — see agent/userModel.ts bumpStatedSetVersion).
+    if (!metaCols.some((c) => c.name === "last_consolidation_date")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN last_consolidation_date TEXT`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_enabled")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_enabled INTEGER NOT NULL DEFAULT 1`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_llm_budget")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_llm_budget INTEGER NOT NULL DEFAULT 15`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_max_items")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_max_items INTEGER NOT NULL DEFAULT 50`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_frozen")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_frozen INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_recon_batch")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_recon_batch INTEGER NOT NULL DEFAULT 200`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_recon_semantic_budget")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_recon_semantic_budget INTEGER NOT NULL DEFAULT 10`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_recon_sim_threshold")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_recon_sim_threshold REAL NOT NULL DEFAULT 0.75`);
+    }
+    if (!metaCols.some((c) => c.name === "w3_recon_pairs_budget")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN w3_recon_pairs_budget INTEGER NOT NULL DEFAULT 2000`);
+    }
+    if (!metaCols.some((c) => c.name === "stated_set_version")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN stated_set_version INTEGER NOT NULL DEFAULT 0`);
+    }
   }
   // Phase 2: outbox for deferred proactive notifications. The policy layer queues
   // here instead of dropping when quiet hours or the daily cap block a send.
@@ -567,6 +601,144 @@ function migrateSchema(sqlite: RawDb): void {
     CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(summary, detail);
   `);
 
+  // W3 consolidation (wisdom layer, design Rev 11 §8): nightly consolidation
+  // job state — run claims, the work-item ledger, the typed contradiction
+  // backlog, access telemetry, and the reconciliation sweep's durable cursor
+  // + semantic queue. New tables via CREATE TABLE IF NOT EXISTS with the same
+  // column set as BOOTSTRAP_SQL in db/schemaSql.ts (T-C55 pins equivalence).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS consolidation_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      window_date TEXT NOT NULL,
+      fence TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      status TEXT NOT NULL DEFAULT 'running'
+        CHECK (status IN ('running','completed','failed','aborted_budget')),
+      lease_expires_at TEXT NOT NULL,
+      items_processed INTEGER NOT NULL DEFAULT 0,
+      llm_calls INTEGER NOT NULL DEFAULT 0,
+      contradictions_resolved INTEGER NOT NULL DEFAULT 0,
+      consolidations_written INTEGER NOT NULL DEFAULT 0,
+      stated_integrity_hash TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (space_id, window_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_consolidation_runs_space
+      ON consolidation_runs(space_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS consolidation_episodes (
+      space_id TEXT NOT NULL,
+      episode_id INTEGER NOT NULL,
+      outcome TEXT NOT NULL
+        CHECK (outcome IN ('consolidated','strengthened','skipped_covered','skipped_low_importance','abstained',
+                           'failed_terminal','failed_retryable')),
+      resulting_entry_id INTEGER,
+      evidence_group_set TEXT NOT NULL,
+      evidence_fingerprint TEXT NOT NULL,
+      last_run_id INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, episode_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS contradictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      domain TEXT NOT NULL CHECK (domain IN ('nodes','user_model')),
+      old_kind TEXT NOT NULL CHECK (old_kind IN ('node','user_model_entry')),
+      old_id INTEGER NOT NULL,
+      new_kind TEXT NOT NULL CHECK (new_kind IN ('node','user_model_entry','episode')),
+      new_id INTEGER NOT NULL,
+      category TEXT NOT NULL
+        CHECK (category IN ('factual_update','false_belief','preference_change','state_transition','duplicate_claim')),
+      reported_by TEXT NOT NULL CHECK (reported_by IN ('temporal_propose','knowledge_check','consolidation','sweep','user','reconciliation')),
+      report_ref TEXT,
+      reopens_id INTEGER,
+      state TEXT NOT NULL DEFAULT 'pending'
+        CHECK (state IN ('pending','claimed','resolved','unresolved','moot','stated_conflict')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      claimed_by_run INTEGER,
+      claim_fence TEXT,
+      lease_expires_at TEXT,
+      resolution TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      resolved_at TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_contradictions_pair
+      ON contradictions(space_id, domain, old_kind, old_id, new_kind, new_id)
+      WHERE state IN ('pending','claimed');
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_contradictions_pair_ref
+      ON contradictions(space_id, domain, old_kind, old_id, new_kind, new_id, report_ref);
+
+    CREATE TABLE IF NOT EXISTS access_stats (
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('episode','user_model_entry','node')),
+      entity_id INTEGER NOT NULL,
+      last_accessed_at TEXT NOT NULL,
+      access_count INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (entity_type, entity_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS w3_recon_progress (
+      space_id TEXT PRIMARY KEY,
+      cursor_valid_at TEXT,
+      cursor_id INTEGER,
+      partial_valid_at TEXT,
+      partial_id INTEGER,
+      partial_stated_overlap REAL,
+      partial_stated_id INTEGER,
+      partial_stated_version INTEGER,
+      last_pass_completed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS w3_recon_semantic_queue (
+      space_id TEXT NOT NULL,
+      consolidated_id INTEGER NOT NULL,
+      stated_id INTEGER NOT NULL,
+      similarity REAL NOT NULL,
+      queued_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, consolidated_id, stated_id)
+    );
+  `);
+  // W3 columns on EXISTING tables — migrateSchema ONLY (PRAGMA-guarded
+  // ALTERs). These must never appear in BOOTSTRAP_SQL (the v252 precedent:
+  // bootstrap runs before migrateSchema, so a bootstrap reference to a
+  // migration-only column crashes fresh-volume boot).
+  const episodeColsW3 = sqlite.prepare(`PRAGMA table_info(episodes)`).all() as { name: string }[];
+  if (episodeColsW3.length > 0) {
+    // §4.3/§8.6: durable source-lineage key. Nullable — pre-W3 rows stay NULL
+    // (unknown lineage) unless backfill can recover a key from capture
+    // metadata; never a synthetic singleton.
+    if (!episodeColsW3.some((c) => c.name === "lineage_key")) {
+      sqlite.exec(`ALTER TABLE episodes ADD COLUMN lineage_key TEXT`);
+    }
+    if (!episodeColsW3.some((c) => c.name === "lineage_basis")) {
+      sqlite.exec(`ALTER TABLE episodes ADD COLUMN lineage_basis TEXT`);
+    }
+  }
+  const userModelColsW3 = sqlite.prepare(`PRAGMA table_info(user_model)`).all() as { name: string }[];
+  if (userModelColsW3.length > 0) {
+    // §6.4: review flags — the ONLY columns maintenance may write on stated
+    // rows (via the SetReviewFlag operation). Existing rows get NULL.
+    if (!userModelColsW3.some((c) => c.name === "review_flag")) {
+      sqlite.exec(`ALTER TABLE user_model ADD COLUMN review_flag TEXT`);
+    }
+    if (!userModelColsW3.some((c) => c.name === "review_flagged_at")) {
+      sqlite.exec(`ALTER TABLE user_model ADD COLUMN review_flagged_at TEXT`);
+    }
+  }
+  const inquiryColsW3 = sqlite.prepare(`PRAGMA table_info(inquiries)`).all() as { name: string }[];
+  if (inquiryColsW3.length > 0 && !inquiryColsW3.some((c) => c.name === "contradiction_id")) {
+    sqlite.exec(`ALTER TABLE inquiries ADD COLUMN contradiction_id INTEGER`);
+  }
+  // §5.5 inquiry dedup. SQLite UNIQUE treats NULLs as distinct, so the many
+  // inquiries with contradiction_id NULL never collide.
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_inquiries_contradiction ON inquiries(space_id, contradiction_id)`);
+
   // W2 post-migration assertion: all six W2 tables exist with the expected
   // columns. Loud failure (throw) on mismatch — same pattern as the W1
   // timestamp assertion above. Runs on every boot, covering both fresh
@@ -603,6 +775,62 @@ function migrateSchema(sqlite: RawDb): void {
     const missing = expected.filter((c) => !w2Cols.some((col) => col.name === c));
     if (missing.length > 0) {
       throw new Error(`W2 migration: table ${table} missing columns: ${missing.join(", ")}`);
+    }
+  }
+
+  // W3 post-migration assertion: all W3 tables + migrated columns exist.
+  // Same loud-failure pattern; runs on every boot (T-C55).
+  const w3Tables: Record<string, string[]> = {
+    consolidation_runs: [
+      "id", "space_id", "window_date", "fence", "started_at", "completed_at",
+      "status", "lease_expires_at", "items_processed", "llm_calls",
+      "contradictions_resolved", "consolidations_written",
+      "stated_integrity_hash", "error", "created_at",
+    ],
+    consolidation_episodes: [
+      "space_id", "episode_id", "outcome", "resulting_entry_id",
+      "evidence_group_set", "evidence_fingerprint", "last_run_id",
+      "updated_at", "created_at",
+    ],
+    contradictions: [
+      "id", "space_id", "domain", "old_kind", "old_id", "new_kind", "new_id",
+      "category", "reported_by", "report_ref", "reopens_id", "state",
+      "attempts", "claimed_by_run", "claim_fence", "lease_expires_at",
+      "resolution", "created_at", "resolved_at",
+    ],
+    access_stats: ["entity_type", "entity_id", "last_accessed_at", "access_count"],
+    w3_recon_progress: [
+      "space_id", "cursor_valid_at", "cursor_id", "partial_valid_at",
+      "partial_id", "partial_stated_overlap", "partial_stated_id",
+      "partial_stated_version", "last_pass_completed_at", "updated_at",
+    ],
+    w3_recon_semantic_queue: [
+      "space_id", "consolidated_id", "stated_id", "similarity", "queued_at",
+      "attempts",
+    ],
+  };
+  for (const [table, expected] of Object.entries(w3Tables)) {
+    const w3Cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    const missing = expected.filter((c) => !w3Cols.some((col) => col.name === c));
+    if (missing.length > 0) {
+      throw new Error(`W3 migration: table ${table} missing columns: ${missing.join(", ")}`);
+    }
+  }
+  const w3ColumnChecks: Record<string, string[]> = {
+    space_meta: [
+      "last_consolidation_date", "w3_enabled", "w3_llm_budget", "w3_max_items",
+      "w3_frozen", "w3_recon_batch", "w3_recon_semantic_budget",
+      "w3_recon_sim_threshold", "w3_recon_pairs_budget", "stated_set_version",
+    ],
+    episodes: ["lineage_key", "lineage_basis"],
+    user_model: ["review_flag", "review_flagged_at"],
+    inquiries: ["contradiction_id"],
+  };
+  for (const [table, expected] of Object.entries(w3ColumnChecks)) {
+    const tCols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    const missing = expected.filter((c) => !tCols.some((col) => col.name === c));
+    if (missing.length > 0) {
+      throw new Error(`W3 migration: table ${table} missing columns: ${missing.join(", ")}`);
     }
   }
 }

@@ -414,6 +414,10 @@ export const inquiries = sqliteTable(
     nodeIds: text("node_ids").notNull().default("[]"), // JSON array of involved ids
     signature: text("signature").notNull(), // dedupe key (so a dismissed one never re-asks)
     status: text("status").notNull().default("open"), // open | answered | dismissed
+    // W3 §5.5 (migration-only column): the typed contradiction this inquiry
+    // asks about; NULL for pre-W3 / non-contradiction inquiries. Deduped by
+    // idx_inquiries_contradiction UNIQUE(space_id, contradiction_id).
+    contradictionId: integer("contradiction_id"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [index("inquiries_space_idx").on(t.spaceId, t.status)],
@@ -512,6 +516,12 @@ export const episodes = sqliteTable(
     enrichmentFence: text("enrichment_fence"),
     enrichedAt: text("enriched_at"),
     forgottenAt: text("forgotten_at"),
+    // W3 §4.3/§8.6 (migration-only column): durable source-lineage key.
+    // NULL = lineage unknown (pre-W3 rows; never a synthetic singleton).
+    lineageKey: text("lineage_key"),
+    // Which lineage rule fired for corrections: 'inherited' | 'new_subject' |
+    // 'new_slot'; NULL for non-corrections and unknown-lineage rows.
+    lineageBasis: text("lineage_basis"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
@@ -594,6 +604,11 @@ export const userModel = sqliteTable(
     // application-enforced reference → user_model.id (the superseding entry)
     replacedBy: integer("replaced_by"),
     origin: text("origin").notNull(),
+    // W3 §6.4 (migration-only columns): review flags — the only fields
+    // maintenance may write on a stated row (SetReviewFlag). Values:
+    // 'evidence_withdrawn' | 'stale_emotion' | 'contradiction_pending'.
+    reviewFlag: text("review_flag"),
+    reviewFlaggedAt: text("review_flagged_at"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
@@ -650,6 +665,174 @@ export const enrichmentQuota = sqliteTable(
   (t) => [primaryKey({ columns: [t.spaceId, t.quotaDate] })],
 );
 export type EnrichmentQuotaRow = typeof enrichmentQuota.$inferSelect;
+
+/**
+ * W3 consolidation run (design Rev 11 §8.2): one row per space per quiet
+ * window, claimed atomically via UNIQUE(space_id, window_date). The fence
+ * token guards finalization; stated_integrity_hash is the run-start snapshot
+ * of the protected stated state (§6.1), compared at finalize.
+ */
+export const consolidationRuns = sqliteTable(
+  "consolidation_runs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull(),
+    windowDate: text("window_date").notNull(),
+    fence: text("fence").notNull(),
+    startedAt: text("started_at").notNull(),
+    completedAt: text("completed_at"),
+    status: text("status").notNull().default("running"),
+    leaseExpiresAt: text("lease_expires_at").notNull(),
+    itemsProcessed: integer("items_processed").notNull().default(0),
+    llmCalls: integer("llm_calls").notNull().default(0),
+    contradictionsResolved: integer("contradictions_resolved").notNull().default(0),
+    consolidationsWritten: integer("consolidations_written").notNull().default(0),
+    statedIntegrityHash: text("stated_integrity_hash"),
+    error: text("error"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("idx_consolidation_runs_space").on(t.spaceId, t.startedAt),
+    // Mirrors the SQL table-level UNIQUE (space_id, window_date).
+    uniqueIndex("uq_consolidation_runs_window").on(t.spaceId, t.windowDate),
+  ],
+);
+export type ConsolidationRunRow = typeof consolidationRuns.$inferSelect;
+
+/**
+ * W3 work-item ledger (§8.3): one row per (space, episode) — the durable
+ * identity of an episode's consolidation decision per evidence state.
+ * evidence_group_set is the canonical JSON array of lineage keys the
+ * decision was based on; evidence_fingerprint is its SHA-256 identity.
+ */
+export const consolidationEpisodes = sqliteTable(
+  "consolidation_episodes",
+  {
+    spaceId: text("space_id").notNull(),
+    episodeId: integer("episode_id").notNull(),
+    outcome: text("outcome").notNull(),
+    resultingEntryId: integer("resulting_entry_id"),
+    evidenceGroupSet: text("evidence_group_set").notNull(),
+    evidenceFingerprint: text("evidence_fingerprint").notNull(),
+    lastRunId: integer("last_run_id").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [primaryKey({ columns: [t.spaceId, t.episodeId] })],
+);
+export type ConsolidationEpisodeRow = typeof consolidationEpisodes.$inferSelect;
+
+/**
+ * W3 typed contradiction record (§5.1/§8.4): two-sided identity (old/new
+ * kind+id), claim/fencing state machine, and report_ref dedup. Replaces the
+ * W1-era free-form potential_contradiction log rows as the adjudication
+ * backlog. References are application-enforced (no SQL FKs, §8.5 pattern).
+ */
+export const contradictions = sqliteTable(
+  "contradictions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull(),
+    domain: text("domain").notNull(), // 'nodes' | 'user_model'
+    oldKind: text("old_kind").notNull(),
+    oldId: integer("old_id").notNull(),
+    newKind: text("new_kind").notNull(),
+    newId: integer("new_id").notNull(),
+    category: text("category").notNull(),
+    reportedBy: text("reported_by").notNull(),
+    reportRef: text("report_ref"),
+    // application-enforced reference → contradictions.id (the record this
+    // one reopens after a terminal state); NULL for first reports.
+    reopensId: integer("reopens_id"),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    claimedByRun: integer("claimed_by_run"),
+    claimFence: text("claim_fence"),
+    leaseExpiresAt: text("lease_expires_at"),
+    resolution: text("resolution"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    resolvedAt: text("resolved_at"),
+  },
+  (t) => [
+    // Mirror of the SQL partial unique index (active pair uniqueness).
+    uniqueIndex("idx_contradictions_pair")
+      .on(t.spaceId, t.domain, t.oldKind, t.oldId, t.newKind, t.newId)
+      .where(sql`state IN ('pending','claimed')`),
+    uniqueIndex("idx_contradictions_pair_ref").on(
+      t.spaceId,
+      t.domain,
+      t.oldKind,
+      t.oldId,
+      t.newKind,
+      t.newId,
+      t.reportRef,
+    ),
+  ],
+);
+export type ContradictionRow = typeof contradictions.$inferSelect;
+
+/**
+ * W3 access telemetry (§7.2/§8.5): read-serving access counts in a SEPARATE
+ * table so retrieval reads never write the episodes/user_model rows
+ * themselves (capture-field immutability, W2 INV-EP-1).
+ */
+export const accessStats = sqliteTable(
+  "access_stats",
+  {
+    entityType: text("entity_type").notNull(), // 'episode' | 'user_model_entry' | 'node'
+    entityId: integer("entity_id").notNull(),
+    lastAccessedAt: text("last_accessed_at").notNull(),
+    accessCount: integer("access_count").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.entityType, t.entityId] })],
+);
+export type AccessStatRow = typeof accessStats.$inferSelect;
+
+/**
+ * W3 reconciliation durable progress (§5.6/§8.6): one row per space. The
+ * cursor is the exclusive (valid_at, id) bound of the last FULLY processed
+ * consolidated belief; partial_* is the pair-level marker for a belief whose
+ * examination was cut short by the pairs budget, validated against
+ * space_meta.stated_set_version (partial_stated_version).
+ */
+export const w3ReconProgress = sqliteTable("w3_recon_progress", {
+  spaceId: text("space_id").primaryKey(),
+  cursorValidAt: text("cursor_valid_at"),
+  cursorId: integer("cursor_id"),
+  partialValidAt: text("partial_valid_at"),
+  partialId: integer("partial_id"),
+  partialStatedOverlap: real("partial_stated_overlap"),
+  partialStatedId: integer("partial_stated_id"),
+  partialStatedVersion: integer("partial_stated_version"),
+  lastPassCompletedAt: text("last_pass_completed_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+export type W3ReconProgressRow = typeof w3ReconProgress.$inferSelect;
+
+/**
+ * W3 reconciliation semantic queue (§5.6/§8.6): durable ambiguous-pair work
+ * items for the bounded LLM pass. Rows are deleted on resolution (judged,
+ * filed, either side no longer current, or attempts exhausted).
+ */
+export const w3ReconSemanticQueue = sqliteTable(
+  "w3_recon_semantic_queue",
+  {
+    spaceId: text("space_id").notNull(),
+    consolidatedId: integer("consolidated_id").notNull(),
+    statedId: integer("stated_id").notNull(),
+    similarity: real("similarity").notNull(),
+    queuedAt: text("queued_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.spaceId, t.consolidatedId, t.statedId] })],
+);
+export type W3ReconSemanticQueueRow = typeof w3ReconSemanticQueue.$inferSelect;
 export type CorrectionRow = typeof corrections.$inferSelect;
 export type AgentLogRow = typeof agentLogs.$inferSelect;
 export type DailyLogRow = typeof dailyLogs.$inferSelect;

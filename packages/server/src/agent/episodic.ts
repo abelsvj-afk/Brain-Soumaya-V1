@@ -192,6 +192,10 @@ export interface EpisodeRow {
   enrichment_fence: string | null;
   enriched_at: string | null;
   forgotten_at: string | null;
+  /** W3 §4.3: durable source-lineage key; NULL = lineage unknown. */
+  lineage_key: string | null;
+  /** W3 §4.3: 'inherited' | 'new_subject' | 'new_slot' for corrections. */
+  lineage_basis: string | null;
   created_at: string;
 }
 
@@ -256,6 +260,8 @@ CREATE TABLE IF NOT EXISTS episodes (
   enrichment_fence TEXT,
   enriched_at TEXT,
   forgotten_at TEXT,
+  lineage_key TEXT,
+  lineage_basis TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_episodes_space_time ON episodes(space_id, occurred_at);
@@ -448,6 +454,41 @@ export interface CaptureInput {
   /** True when the topic mapping was uncertain (drives the ambiguous-match
    *  bias: tombstone anyway, log for review). */
   topicUncertain?: boolean;
+  /* --- W3 §4.3 source lineage (capture-trigger contract amendment, §8.6) ---
+   * New captures always assign a lineage key from these fields per the
+   * per-kind grain in computeLineage(). Anything unrecoverable stays NULL
+   * (lineage unknown) — never a synthetic singleton. */
+  /** Conversation session identifier (conversation / agent_action /
+   *  correction captures): the session that produced the turn. */
+  sessionId?: string;
+  /** Turn identifier within the session. conversation/agent_action lineage
+   *  is conv:<sessionId>:turn:<turnId>; corrections inherit it by default. */
+  turnId?: string;
+  /** job_run captures: the job's name (lineage job:<jobName>:<runId>). */
+  jobName?: string;
+  /** job_run captures: the run identifier. */
+  runId?: string | number;
+  /** digest_sent / proactive_msg captures: the lineage key of the content
+   *  being summarized. The digest inherits it and can therefore never
+   *  corroborate its own sources (§4.3 derived-artifact rule). */
+  sourceLineageKey?: string | null;
+  /** digest_sent / proactive_msg captures whose content came from multiple
+   *  sources: the digest run's own identifier (lineage digest:<id>) — such a
+   *  digest corroborates nothing it summarized. */
+  digestRunId?: string | number;
+  /** milestone captures: the milestone event's identifier (mill:<id>). */
+  milestoneId?: string | number;
+  /** correction captures ONLY: positive evidence that the correction
+   *  introduces a proposition about a different subject ('new_subject') or a
+   *  different slot ('new_slot') than the enclosing turn — the ONLY way a
+   *  correction earns an independent corr:<correctionId> lineage. Absent =
+   *  inherit the enclosing turn (conservative default, §4.3). */
+  correctionBasis?: "new_subject" | "new_slot";
+  /** correction captures: the correction's own identifier, required to mint
+   *  corr:<correctionId> when correctionBasis is set. */
+  correctionId?: string | number;
+  /** Explicit lineage key — overrides every computed rule when provided. */
+  lineageKey?: string;
 }
 
 export interface CaptureResult {
@@ -455,6 +496,77 @@ export interface CaptureResult {
   /** True when the summary is a tombstone (forget-scope match). */
   tombstoned: boolean;
   significant: boolean;
+  /** W3 §4.3: the lineage key assigned at capture (NULL = unknown). */
+  lineageKey: string | null;
+}
+
+export type LineageBasis = "inherited" | "new_subject" | "new_slot";
+
+/**
+ * W3 §4.3 lineage grain — the capture-trigger contract. Independence is
+ * defined by source lineage, not by episode count: episodes sharing a key
+ * are ONE observation. Exact grain per capture kind:
+ * - conversation / agent_action: conv:<sessionId>:turn:<turnId> (an agent
+ *   action inside a turn is part of that turn's source). With a session but
+ *   no turn id, the session as a whole: sess:<sessionId>.
+ * - job_run: job:<jobName>:<runId> — one job execution is one source.
+ * - digest_sent / proactive_msg: inherit the summarized content's lineage;
+ *   multi-source digests take their own digest:<runId> key and can never
+ *   corroborate the sources they summarize.
+ * - correction: inherits the enclosing turn's key BY DEFAULT (basis
+ *   'inherited'); earns corr:<correctionId> ONLY on positive evidence of a
+ *   new subject or new slot (correctionBasis + correctionId supplied).
+ * - milestone: mill:<milestoneId>. session: sess:<sessionId>.
+ * Anything unrecoverable returns a NULL key (lineage unknown) — unknown
+ * lineage is ineligible to establish independence (§4.3); a synthetic
+ * singleton is never minted.
+ */
+export function computeLineage(input: CaptureInput): {
+  key: string | null;
+  basis: LineageBasis | null;
+} {
+  if (input.lineageKey) return { key: input.lineageKey, basis: null };
+  const turnKey =
+    input.sessionId && input.turnId
+      ? `conv:${input.sessionId}:turn:${input.turnId}`
+      : input.sessionId
+        ? `sess:${input.sessionId}`
+        : null;
+  switch (input.kind) {
+    case "conversation":
+    case "agent_action":
+      return { key: turnKey, basis: null };
+    case "job_run":
+      if (input.jobName != null && input.runId != null) {
+        return { key: `job:${input.jobName}:${input.runId}`, basis: null };
+      }
+      if (input.runId != null) return { key: `job:run:${input.runId}`, basis: null };
+      return { key: null, basis: null };
+    case "digest_sent":
+    case "proactive_msg":
+      if (input.sourceLineageKey) return { key: input.sourceLineageKey, basis: null };
+      if (input.digestRunId != null) return { key: `digest:${input.digestRunId}`, basis: null };
+      if (input.runId != null) return { key: `digest:${input.runId}`, basis: null };
+      return { key: null, basis: null };
+    case "correction":
+      if (input.correctionBasis && input.correctionId != null) {
+        return { key: `corr:${input.correctionId}`, basis: input.correctionBasis };
+      }
+      // Conservative default: inherit the enclosing turn (a correction
+      // usually re-describes the same observation). The basis records that
+      // the inherit rule fired even when no turn key is recoverable.
+      return { key: turnKey, basis: "inherited" };
+    case "milestone":
+      return {
+        key: input.milestoneId != null ? `mill:${input.milestoneId}` : null,
+        basis: null,
+      };
+    case "session":
+      return {
+        key: input.sessionId ? `sess:${input.sessionId}` : null,
+        basis: null,
+      };
+  }
 }
 
 /** Template summary builders — deterministic, zero LLM (design §3.5). */
@@ -617,22 +729,55 @@ function captureEpisodeInner(
     }
   }
 
-  const row = sqlite
-    .prepare(
-      `INSERT INTO episodes
-         (space_id, kind, summary, occurred_at, recorded_at, corrects_episode_id, forgotten_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       RETURNING id`,
-    )
-    .get(
-      spaceId,
-      input.kind,
-      summary,
-      occurredAt,
-      now,
-      correctsEpisodeId,
-      forgottenAt,
-    ) as { id: number };
+  // W3 §4.3: assign the source-lineage key at capture (contract amendment,
+  // §8.6). New captures always run the grain rules; unrecoverable lineage
+  // stays NULL (unknown), never a synthetic singleton.
+  const lineage = computeLineage(input);
+
+  let row: { id: number };
+  try {
+    row = sqlite
+      .prepare(
+        `INSERT INTO episodes
+           (space_id, kind, summary, occurred_at, recorded_at, corrects_episode_id, forgotten_at, lineage_key, lineage_basis)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING id`,
+      )
+      .get(
+        spaceId,
+        input.kind,
+        summary,
+        occurredAt,
+        now,
+        correctsEpisodeId,
+        forgottenAt,
+        lineage.key,
+        lineage.basis,
+      ) as { id: number };
+  } catch (err) {
+    // Pre-W3 volume opened without migrateSchema (exotic test setups only —
+    // createDb always migrates first): the lineage columns don't exist yet.
+    // Capture must never break the hot path, so fall back to the legacy
+    // column set; the row's lineage stays unknown (NULL by absence).
+    if (!/lineage/i.test(err instanceof Error ? err.message : "")) throw err;
+    row = sqlite
+      .prepare(
+        `INSERT INTO episodes
+           (space_id, kind, summary, occurred_at, recorded_at, corrects_episode_id, forgotten_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         RETURNING id`,
+      )
+      .get(
+        spaceId,
+        input.kind,
+        summary,
+        occurredAt,
+        now,
+        correctsEpisodeId,
+        forgottenAt,
+      ) as { id: number };
+    return { episodeId: row.id, tombstoned, significant, lineageKey: null };
+  }
 
   logAgent(
     h,
@@ -642,7 +787,7 @@ function captureEpisodeInner(
     { episode_id: row.id, kind: input.kind, significant, tombstoned },
     "ok",
   );
-  return { episodeId: row.id, tombstoned, significant };
+  return { episodeId: row.id, tombstoned, significant, lineageKey: lineage.key };
 }
 
 // ---------------------------------------------------------------------------
@@ -2116,6 +2261,24 @@ interface EvidenceRef {
  * §3.8's stated-entry flagging is a read-time evidence_status annotation in
  * getUserModel() (userModel.ts), which is out of scope for this module.
  */
+/**
+ * W3 §8.6 stated_set_version write contract — local copy of the helper in
+ * agent/userModel.ts (NO cross-import: userModel.ts imports this module's
+ * captureEpisode, so importing back would be circular). Increments by the
+ * number of stated rows written, in the caller's transaction.
+ */
+function bumpStatedSetVersion(sqlite: RawDb, spaceId: string, by: number): void {
+  if (by <= 0) return;
+  sqlite
+    .prepare(
+      `INSERT INTO space_meta (space_id, stated_set_version)
+       VALUES (?, ?)
+       ON CONFLICT (space_id) DO UPDATE
+       SET stated_set_version = stated_set_version + excluded.stated_set_version`,
+    )
+    .run(spaceId, by);
+}
+
 export function applyForgetRequest(h: DbHandle, requestId: number): ForgetApplyResult {
   const sqlite = h.sqlite;
   const req = sqlite
@@ -2198,9 +2361,14 @@ export function applyForgetRequest(h: DbHandle, requestId: number): ForgetApplyR
     // 5. User-model evidence propagation.
     const invalidated: number[] = [];
     const pruned: number[] = [];
+    // W3 §8.6: origin is selected so stated-row writes are counted for the
+    // stated_set_version bump below (the forget flow is an authorized
+    // stated-row writer — tombstoning that invalidates a stated row, or
+    // prunes its evidence, bumps exactly like any other stated write).
+    let statedRowsWritten = 0;
     const umRows = sqlite
-      .prepare(`SELECT id, evidence_ids FROM user_model WHERE space_id = ? AND invalid_at IS NULL`)
-      .all(spaceId) as { id: number; evidence_ids: string }[];
+      .prepare(`SELECT id, evidence_ids, origin FROM user_model WHERE space_id = ? AND invalid_at IS NULL`)
+      .all(spaceId) as { id: number; evidence_ids: string; origin: string }[];
     const isForgottenRef = (ref: EvidenceRef): boolean =>
       (ref.type === "episode" && forgottenEpisodeSet.has(ref.id)) ||
       (ref.type === "enrichment" && forgottenEnrichmentSet.has(ref.id)) ||
@@ -2226,14 +2394,20 @@ export function applyForgetRequest(h: DbHandle, requestId: number): ForgetApplyR
           )
           .run(now, um.id);
         invalidated.push(um.id);
+        if (um.origin === "stated") statedRowsWritten++;
       } else if (remaining.length < evidence.length) {
         // Independent remaining evidence: the claim survives on its other legs.
         sqlite
           .prepare(`UPDATE user_model SET evidence_ids = ? WHERE id = ?`)
           .run(JSON.stringify(remaining), um.id);
         pruned.push(um.id);
+        if (um.origin === "stated") statedRowsWritten++;
       }
     }
+    // W3 §8.6: one bump per stated row invalidated or pruned above, inside
+    // this same transaction (T-C81 pins the forget path: V → V+1 for a
+    // single stated row leaving the current set).
+    bumpStatedSetVersion(sqlite, spaceId, statedRowsWritten);
 
     // 6. Mark the request applied; ensure target_query is NULL (B4 Rev 4 —
     //    the free-text query may itself contain the sensitive content and is
@@ -2289,4 +2463,60 @@ export function applyForgetRequest(h: DbHandle, requestId: number): ForgetApplyR
   });
 
   return tx();
+}
+
+// ---------------------------------------------------------------------------
+// W3 lineage backfill (§8.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Backfill `lineage_key` for pre-W3 episodes from capture metadata WHERE
+ * AVAILABLE — else the row stays NULL (lineage unknown). The only metadata
+ * in the current capture set that can carry a recoverable lineage is an
+ * enrichment's `source_transcript_ref` when the caller stored a
+ * conversation-turn reference there in the canonical grain
+ * (conv:<session>:turn:<turn>). Everything else — the overwhelming majority
+ * of pre-W3 rows — has no recoverable lineage and remains NULL: unknown
+ * lineage is ineligible to establish independence (§4.3), and minting a
+ * synthetic singleton would manufacture evidence. This function NEVER
+ * invents a key. Idempotent; safe to re-run (only NULL rows are touched).
+ * Startup wiring is an integration step; T-C56 exercises this function
+ * directly.
+ */
+export function backfillEpisodeLineage(
+  h: DbHandle,
+  spaceId?: string,
+): { updated: number; leftUnknown: number } {
+  const sqlite = h.sqlite;
+  const CONV_REF = /^conv:[^:\s]+:turn:[^:\s]+$/;
+  return sqlite.transaction(() => {
+    const rows = sqlite
+      .prepare(
+        `SELECT e.id AS id,
+                (SELECT en.source_transcript_ref
+                   FROM episode_enrichments en
+                  WHERE en.episode_id = e.id AND en.superseded_by IS NULL
+                  ORDER BY en.version DESC
+                  LIMIT 1) AS transcript_ref
+           FROM episodes e
+          WHERE e.lineage_key IS NULL
+            ${spaceId ? "AND e.space_id = ?" : ""}`,
+      )
+      .all(...(spaceId ? [spaceId] : [])) as {
+      id: number;
+      transcript_ref: string | null;
+    }[];
+    const update = sqlite.prepare(
+      `UPDATE episodes SET lineage_key = ? WHERE id = ? AND lineage_key IS NULL`,
+    );
+    let updated = 0;
+    for (const row of rows) {
+      const ref = (row.transcript_ref ?? "").trim();
+      if (CONV_REF.test(ref)) {
+        update.run(ref, row.id);
+        updated++;
+      }
+    }
+    return { updated, leftUnknown: rows.length - updated };
+  })();
 }
