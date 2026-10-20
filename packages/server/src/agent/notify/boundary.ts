@@ -10,7 +10,9 @@
  * (tool, occurrence_id, decision, reason — never message text).
  */
 
-import type { RawDb } from "../db/vec.js";
+import type { RawDb } from "../../db/vec.js";
+import type { DbHandle } from "../../db/client.js";
+import { captureEpisode } from "../episodic.js"; // W2: proactive_msg capture (§5.1)
 import {
   getPreferences,
   decidePolicy,
@@ -47,6 +49,8 @@ export interface BoundaryDeps {
   audit: (spaceId: string, action: string, detail: string) => void;
   /** Unique ID for this worker (for claim attribution). */
   workerId: string;
+  /** W2: DbHandle for episode capture (captureEpisode takes a handle, not raw sqlite). */
+  handle: DbHandle;
 }
 
 function nowIso(d: Date): string {
@@ -160,6 +164,17 @@ async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text
   }
   markSent(sqlite, id);
   deps.audit(spaceId, "notify:sent", `${getRow(sqlite, id)?.tool ?? "?"} delivered`);
+  // W2 §5.1: proactive message delivered — capture after delivery,
+  // best-effort, never throws. `executeSend` is the single choke point for
+  // both immediate and sweeper-deferred sends, so this covers every path.
+  void Promise.resolve()
+    .then(() =>
+      captureEpisode(deps.handle, spaceId, {
+        kind: "proactive_msg",
+        summary: `Proactive message delivered via outbox (row ${id}, tool ${getRow(sqlite, id)?.tool ?? "?"})`,
+      }),
+    )
+    .catch(() => {});
 }
 
 /**

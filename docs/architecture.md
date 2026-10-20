@@ -81,11 +81,14 @@ return JSON. No business logic in routes.
 - **Relational schema**: `db/schema.ts` (drizzle). Tables: `nodes`, `edges`,
   `insights`, `agent_logs`, `settings` (global), `lore`, `instruction_profiles`,
   `knowledge_docs`, `knowledge_chunks`, `user_persona`, `visitor_stats`,
-  `daily_logs`, `space_meta` (fuel + streak), `spaces` (auth). `telegram_links` is
-  bootstrapped in raw SQL.
+  `daily_logs`, `space_meta` (fuel + streak), `spaces` (auth),
+  plus W1/W2 wisdom tables: `corrections`, `episodes`, `episode_enrichments`,
+  `enrichment_quota`, `forget_requests`, `user_model`, `episodes_fts`.
+  `telegram_links` is bootstrapped in raw SQL.
 - **Vectors** live in separate vec0 virtual tables (`db/vec.ts`): `vec_nodes`
   (memory embeddings), `vec_docs` (knowledge-doc chunks), `vec_profiles`
-  (instruction-profile vectors for intent routing). Joined to relational rows on
+  (instruction-profile vectors for intent routing), `vec_journeys`, `vec_episodes`
+  (W2 episode embeddings). Joined to relational rows on
   id. `EMBED_DIM = 384` (MiniLM) is locked to the vec0 column width — changing the
   embedding model requires recreating the table and re-embedding. vec0 doesn't
   honour `INSERT OR REPLACE`, so upserts are delete-then-insert in a transaction.
@@ -174,6 +177,67 @@ via `vec_docs`, stacked/intent-routed instruction profiles via `vec_profiles`, t
 auto-derived user persona, the soul text) and a live **telemetry block** so the
 chat is aware of app state (fuel, budget, sectors, agenda, insights). The response
 carries an emotional `tone` (`dramatize.ts`) used to shape spoken delivery.
+
+## Wisdom layer — W1 temporal truth + W2 episodes/user model
+
+**Problem it solves:** retrieval was topic-similarity over a flat index with no
+notion of "currently true" and no structured model of the user. A real Telegram
+conversation proved it: the bot surfaced stale employment (Gopuff over the current
+Samsonite job), treated the user's girlfriend as a stranger, and answered "where
+do I work" inconsistently across turns.
+
+**W1 — temporal truth** (`agent/temporal.ts`): bitemporal columns on `nodes`
+(`valid_from`/`valid_to`/`recorded_at`/`superseded_at`/`superseded_by`/
+`supersede_reason`) + append-only `corrections` table. Three correction types:
+factual update closes `valid_to`; false-belief leaves temporal columns NULL and
+derives "never true" from the corrections table; preference override via an
+explicit `endsValidity` flag. Retrieval contracts: current-truth filter
+`superseded_at IS NULL` on every read path; `vecSearchCurrent()` iterative
+over-fetch with honest truncation diagnostics; `getCurrentById()` for truth
+queries while `getById()` stays unfiltered for history/detail views.
+
+**W2 — episodes + user model** (`agent/episodic.ts`, `agent/userModel.ts`):
+- `episodes`: **immutable** capture (8 closed-vocabulary kinds, controlled emotion
+  labels, importance, `occurred_at`/`recorded_at`). `episode_enrichments`:
+  versioned interpretations with `superseded_by` chaining — re-enrichment creates
+  a new version, never mutates. Field-level provenance labels
+  (`direct_quote`/`explicit`/`inferred`/`generated`/`not_reported`);
+  `evidenceSafeFields()` fails closed on missing/malformed provenance.
+- `user_model`: one row per proposition; slots
+  belief/desire/intention/emotion_state/knowledge/constraint; bi-temporal
+  `valid_at`/`invalid_at`; origin stated/inferred/consolidated with confidence
+  ceilings (inferred ≤ 0.69; stated ≥ 0.95); `emotion_state` auto-expires (7d,
+  enforced on reads); `topic_labels` persisted per entry for recall-first
+  contradiction checks.
+- `knowledgeCheck()`: **read-only judgment** (INV-KC-1) — returns contradiction /
+  state-transition verdicts + recommended actions, never mutates `user_model`.
+  Only `recordStated()` (explicit user statements), the correction path, or W3
+  consolidation may write.
+- Enrichment worker: atomic claim (`INSERT … ON CONFLICT … WHERE claimed < cap`
+  quota ledger), fencing tokens with lease expiry + reclaim, forget revokes
+  claims atomically (`forgotten_at IS NULL` in the commit predicate).
+  `applyForgetRequest()`: single-transaction propagation, content-free audit
+  (`target_query` nulled at approval), canonical tombstone
+  `[redacted per forget request #N]`; tombstoned episodes are excluded from
+  enrichment and search.
+- Vectors: `vec_episodes` created in production `bootstrapVec()` (episode
+  embeddings); `episodes_fts` for keyword search. Episodes are a **parallel
+  namespace** — surfaced in their own section, never merged into node-fact ranking.
+
+**Conversational integration** (branch `w2-integration`, not yet merged):
+`memorySearch` seeds from `vecSearchCurrent()` (W1's filter now on the chat path,
+not just digests); `composeUserModelBlock()` injects ≥0.40-confidence claims into
+the agent loop's system prompt; `maybeRecordStated()` detects explicit
+first-person assertions at turn start (conservative patterns — never launders a
+non-statement into a belief); episode capture on all loop return paths (including
+LLM-error), the Telegram fallback branch, digests/proactive sends, approval
+denials, and router job ticks — with double-capture protection via the
+`episodeCaptured` flag on `AgentLoopResult`.
+
+**Status (2026-10-19):** W2 design approved (5 review rounds), implementation
+merged to the deploy branch with verification gates open (`npm run typecheck` +
+`npm test` never ran on the real repo; no CI). Integration branch unmerged,
+undeployed.
 
 ## Synthesis / maintenance agent loop — `maintenance/agent.ts`
 
@@ -269,7 +333,7 @@ flowchart TD
 
   subgraph Data["SQLite + sqlite-vec"]
     Rel[(relational<br/>nodes/edges/...)]
-    Vec[(vec_nodes / vec_docs / vec_profiles)]
+    Vec[(vec_nodes / vec_docs / vec_profiles / vec_episodes)]
   end
 
   Ingest -->|POST /api/ingest| Guard

@@ -24,6 +24,7 @@
 
 import type { DbHandle } from "../db/client.js";
 import type { RawDb } from "../db/vec.js";
+import { captureEpisode } from "./episodic.js";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -2580,4 +2581,140 @@ export function sweepWithdrawnEvidence(
   })();
 
   return { invalidatedIds, flaggedStatedIds };
+}
+
+/* ------------------------------------------------------------------ */
+/* maybeRecordStated — W2 §4.8 stated-write trigger (integration)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * W2 §4.8: the stated-write trigger. Called by the agent loop on the user's
+ * raw message at turn start. Conservative by design: false negatives (missed
+ * statement, catchable by W3 consolidation) beat false positives (laundering
+ * a non-statement into 0.95-confidence authority).
+ *
+ * Fires ONLY on clear first-person assertions about his own mental state or
+ * life. Does NOT fire on: questions, hypotheticals ("what if"), quotations
+ * of others, jokes/sarcasm, third-person statements, higher-order ToM.
+ *
+ * When it fires, it captures an episode synchronously (for INV-EV-1 evidence)
+ * and calls recordStated(). Returns the episode ID so the caller can avoid
+ * double-capture, or null when it abstains.
+ *
+ * Never throws — all failures are swallowed (the loop must never break).
+ */
+export function maybeRecordStated(
+  h: DbHandle,
+  spaceId: string,
+  userMessage: string,
+): number | null {
+  try {
+    return maybeRecordStatedInner(h, spaceId, userMessage);
+  } catch {
+    return null;
+  }
+}
+
+interface StatedMatch {
+  slot: Slot;
+  content: string;
+}
+
+// Positive patterns: clear first-person assertions. Each maps to a slot.
+// Ordered by specificity — first match wins.
+const STATED_PATTERNS: { pattern: RegExp; slot: Slot }[] = [
+  // Desires: "I want...", "I need...", "I wish..."
+  { pattern: /\bi\s+(want|need|wish)\b/i, slot: "desire" },
+  // Intentions: "I will...", "I'm going to...", "my plan is...", "I intend..."
+  { pattern: /\bi\s+(will|intend)\b|\bi'm\s+going\s+to\b|\bmy\s+plan\s+is\b/i, slot: "intention" },
+  // Beliefs: "I believe...", "I think (that)..."
+  { pattern: /\bi\s+(believe|think)\s+(that\b)?/i, slot: "belief" },
+  // Knowledge: "I know..."
+  { pattern: /\bi\s+know\b/i, slot: "knowledge" },
+  // Constraints: "don't ever...", "never..." (directed at the bot about preferences)
+  { pattern: /\bdon't\s+ever\b|\bnever\s+(mention|bring\s+up|talk\s+about)\b/i, slot: "constraint" },
+  // Factual life claims: "I started...", "I work at...", "I live..."
+  { pattern: /\bi\s+(started|work\s+at|live\s+in|live\s+at)\b/i, slot: "belief" },
+  // Emotion states: "I'm feeling...", "I feel...", "I'm [emotion]"
+  { pattern: /\bi('m|\s+am)\s+feeling\b|\bi\s+feel\b/i, slot: "emotion_state" },
+];
+
+// Rejection patterns: things that look like assertions but aren't.
+const STATED_REJECTIONS: RegExp[] = [
+  /\?$/, // questions
+  /\bwhat\s+if\b/i, // hypotheticals
+  /\bif\s+i\s+(were|was|quit|left)\b/i, // hypotheticals
+  /\b(she|he|they)\s+said\b/i, // quotations of others
+  /\bmy\s+(brother|sister|mom|dad|friend)\s+(thinks|believes|says)\b/i, // third-person
+  /\b(jk|lol|lmao)\b/i, // jokes/sarcasm markers
+];
+
+function maybeRecordStatedInner(
+  h: DbHandle,
+  spaceId: string,
+  userMessage: string,
+): number | null {
+  const text = userMessage.trim();
+  if (text.length < 10 || text.length > 500) return null; // too short/long for a clean assertion
+
+  // Rejections first: abstain on anything ambiguous.
+  for (const pattern of STATED_REJECTIONS) {
+    if (pattern.test(text)) return null;
+  }
+
+  // Higher-order ToM check (INV-TOM-1).
+  try {
+    checkFirstOrderOnly(text);
+  } catch {
+    return null;
+  }
+
+  // Trigger boundary check (hypotheticals, quotes, etc.).
+  try {
+    checkStatedTrigger(text);
+  } catch {
+    return null;
+  }
+
+  // Positive match: must be a clear first-person assertion.
+  let matchedSlot: Slot | null = null;
+  for (const { pattern, slot } of STATED_PATTERNS) {
+    if (pattern.test(text)) {
+      matchedSlot = slot;
+      break;
+    }
+  }
+  if (!matchedSlot) return null;
+
+  // One-proposition rule: reject multi-claim content.
+  try {
+    validateOneProposition(text, matchedSlot);
+  } catch {
+    return null;
+  }
+
+  // Capture an episode synchronously for INV-EV-1 evidence.
+  let episodeId: number | null = null;
+  try {
+    const captured = captureEpisode(h, spaceId, {
+      kind: "conversation",
+      userExcerpt: text.slice(0, 200),
+      outcome: "stated_trigger",
+    });
+    episodeId = captured?.episodeId ?? null;
+  } catch {
+    return null; // No episode = no evidence = abstain (INV-EV-1).
+  }
+  if (!episodeId) return null;
+
+  // Write the stated entry.
+  try {
+    recordStated(h, spaceId, matchedSlot, text, [
+      { type: "episode", id: episodeId, isUserStatement: true },
+    ]);
+  } catch {
+    return null; // recordStated re-validates; any rejection = abstain.
+  }
+
+  return episodeId;
 }

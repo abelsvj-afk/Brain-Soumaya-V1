@@ -3,7 +3,54 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
-## 2026-10-19 — W1 temporal truth (branch `w1-implementation`)
+## 2026-10-19 — W2 episodes + user model (wisdom layer)
+
+**Status:** DESIGN APPROVED (5 review rounds) → IMPLEMENTED → MERGED to deploy branch
+(PR #67, per explicit user instruction, with verification gates open). Integration on
+branch `w2-integration` (pushed, NOT merged).
+**Not approved:** deploy. **`npm run typecheck` + `npm test` NEVER RAN on the real repo**
+(sandbox limitation; user's 8pm WiFi run pending). No CI.
+
+Wisdom layer phase 2: episodic memory + structured user model. Motivated by a real
+Telegram conversation where the bot surfaced stale employment (Gopuff over Samsonite),
+treated the user's girlfriend as a stranger, and answered "where do I work"
+inconsistently across turns — retrieval had no notion of "currently true" and no
+structured model of the user.
+
+- `agent/episodic.ts`: `captureEpisode()` (hot-path, never throws, forget-list check
+  first), `claimEnrichment()` (atomic quota reservation + fencing tokens), `enrichEpisode()`
+  (background worker, injectable enricher, template fallback — no cloud dependency),
+  `applyForgetRequest()` (single-transaction propagation, content-free audit,
+  canonical tombstone `[redacted per forget request #N]`), `validateProvenance()` +
+  `evidenceSafeFields()` (fail-closed).
+- `agent/userModel.ts`: `recordStated()` (0.95, one-proposition rule, conservative
+  trigger boundary), `correctUserModel()` (abstain-on-ambiguity), `knowledgeCheck()`
+  (**READ-ONLY** per INV-KC-1 — judgment only, never mutates `user_model`),
+  `composeUserModelBlock()` (prompt injection of ≥0.40-confidence claims), topic mapper
+  (12 controlled topics), `evidence_strength` formula.
+- Schema: `episodes` (immutable capture) + `episode_enrichments` (versioned,
+  `superseded_by` chaining) + `enrichment_quota` + `forget_requests` + `user_model`
+  (`topic_labels`, `replaced_by`, typed evidence refs) + `episodes_fts` +
+  `vec_episodes` (production `bootstrapVec` — P0 review fix; was test-helper-only).
+- 86+ tests in `agent/__tests__/w2.test.ts` (all passing in a local real-SQLite harness;
+  the real repo suite is UNVERIFIED). T-VEC-1 regression exercises `vec_episodes`
+  through production `createDb()`, no test helper.
+
+**Integration (branch `w2-integration`, NOT merged):**
+- `memorySearch`: episodes as a parallel namespace (never merged with node facts);
+  **W1 temporal wiring** — raw `knn()` → `vecSearchCurrent()`, so superseded facts
+  are filtered at seed time on the conversational path (the exact gap evaluators found).
+- `agent/loop.ts`: `composeUserModelBlock()` in the system prompt; `maybeRecordStated()`
+  at turn start; `captureTurnEpisode()` on ALL return paths including LLM-error
+  (review fix); `episodeCaptured` flag on `AgentLoopResult`.
+- 6 capture triggers: loop turns, Telegram fallback, digests/proactive, approval
+  denials, router job ticks — with double-capture protection.
+- Review: ChatGPT closed the LLM-error finding; full verification + docs gates open.
+
+**Blocked:** automated verification — work WiFi bars GitHub on the test device.
+**Deploy:** user deploys manually via Fly; bot still down pending redeploy.
+
+## 2026-10-19 — W1 temporal truth (merged to deploy branch)
 
 **Status:** BUILT, awaiting `npm run typecheck` + `npm test`. Design signed off after 6 review revisions.
 **Not approved:** merge, deploy.

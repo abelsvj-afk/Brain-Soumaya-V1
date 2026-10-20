@@ -3,6 +3,7 @@ import type { AppContext } from "../context.js";
 import type { Tool, ToolContext, ToolResult } from "./tools/types.js";
 import { TOOLS } from "./tools/registry.js";
 import { validateArgs } from "./tools/validation.js";
+import { captureEpisode } from "./episodic.js"; // W2: correction capture (§5.1)
 
 /**
  * Phase 1 agent loop: write-approval lifecycle.
@@ -184,6 +185,17 @@ export function denyApproval(
     approvalId,
     tool: a.tool,
   });
+  // W2 §5.1: an approval denial is an explicit correction signal ("no",
+  // "wrong") — the highest-value capture kind for the user model. Best-effort,
+  // non-blocking, never throws.
+  void Promise.resolve()
+    .then(() =>
+      captureEpisode(ctx.handle, spaceId, {
+        kind: "correction",
+        summary: `User denied approval #${approvalId} for tool "${a.tool}" — rejected the proposed action`,
+      }),
+    )
+    .catch(() => {});
   return { ok: true };
 }
 
