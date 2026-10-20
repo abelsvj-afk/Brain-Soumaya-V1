@@ -1207,3 +1207,67 @@ describe("T-C40: a stated-row mutation bypassing every writer freezes the space 
     expect(next).toEqual({ status: "frozen", reason: "w3_frozen" });
   });
 });
+
+describe("T-C26 (D completion): concurrent correction + full run", () => {
+  // Design T-C26: "the stated row reflects the correction only; run
+  // completes or fails loudly, never silently overwrites." This
+  // interleave deterministically takes the loud branch: §9.4's
+  // integrity hash covers the whole stated set and cannot distinguish
+  // an authorized mid-run correction from a bypass, so finalize
+  // freezes the space for operator review — while the correction
+  // itself stands, untouched by anything the run does afterwards.
+  it("a correction landing mid-run stands alone in the stated row; the run fails loudly (integrity freeze), never silently overwrites", async () => {
+    const E = seedEpisode("conv:c26");
+    const stated = recordStated(handle, SPACE, "belief", "works at Gopuff", ev(E));
+    const e1 = seedEpisode("conv:c26a");
+    const e2 = seedEpisode("conv:c26b");
+    let correction: { status: string; newEntryId: number | null } | undefined;
+    const out = await runConsolidation(handle, SPACE, {
+      force: true,
+      extractor: async () => {
+        // The user corrects the stated row while the run is in flight
+        // (authorized path — correctUserModel, mid-run). The utterance
+        // names the old employer so §4.6 targeting scores the explicit
+        // target as the unique winner (entity match), as in production.
+        correction = correctUserModel(handle, SPACE, stated.id, {
+          text: "no — I don't work at Gopuff anymore, I work at Samsonite",
+          type: "factual_update",
+          newContent: "works at Samsonite warehouse",
+          evidence: ev(E),
+        });
+        // The extractor, working from pre-correction captures, proposes
+        // the OLD proposition as a consolidated belief.
+        return [
+          { content: "works at Gopuff", slot: "belief", topicLabels: ["work"], route: "self" as const, episodeIds: [e1, e2] },
+        ];
+      },
+    });
+    // The interleave really happened (no silent abstention), and the
+    // run fails loudly: integrity freeze, date not advanced.
+    expect(correction?.status).toBe("applied");
+    expect(out.status).toBe("frozen");
+    if (out.status === "frozen") expect(out.reason).toBe("stated_integrity_violation");
+    expect(meta().w3_frozen).toBe(1);
+    expect(meta().last_consolidation_date).toBeNull();
+    // The current stated set reflects the correction only: exactly one
+    // current stated row, and it is the correction's own replacement.
+    const current = handle.sqlite
+      .prepare(
+        `SELECT id, content FROM user_model
+         WHERE space_id = ? AND origin = 'stated' AND invalid_at IS NULL ORDER BY id`,
+      )
+      .all(SPACE) as { id: number; content: string }[];
+    expect(current).toEqual([{ id: correction?.newEntryId, content: "works at Samsonite warehouse" }]);
+    // Never silently overwritten: the original row's invalidation is
+    // the correction's own doing (superseded, replaced_by → the
+    // correction's replacement) — no W3 write touched a stated row.
+    const original = umRow(stated.id);
+    expect(original.invalid_reason).toBe("superseded");
+    expect(original.replaced_by).toBe(correction?.newEntryId);
+    // Scope note: the extractor's stale proposition may still land as
+    // a NEW consolidated row (the boundary rejects stated-COVERS
+    // duplicates; a contradicting insert the deterministic detector
+    // cannot see is Phase B/E's remit — the documented detection
+    // envelope). T-C26's contract is about the stated row, above.
+  });
+});
