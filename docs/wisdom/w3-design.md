@@ -1,8 +1,11 @@
-# W3 Design: Sleep / Consolidation — Revision 6
+# W3 Design: Sleep / Consolidation — Revision 7
 
-**Status:** Revision 6 — addresses the W3 architecture gauntlet round-5 review (1 remaining P1: Tier 2 LLM call must not hold the SQLite write lock). Not approved. No implementation authorized.
+**Status:** Revision 7 — addresses the W3 architecture gauntlet round-6 review (1 remaining P1: the tail-safety fallback had no guaranteed discovery path). Not approved. No implementation authorized.
 **Branch:** `w3-design` · **Baseline:** deploy branch `claude/soumaya-second-brain-v1-m4z4hc` (see §1.1 — hard gate, satisfied)
 **Author:** King (Muse) · **Date:** 2026-10-19
+
+**What changed in Revision 7 (summary):**
+- **P1 (round 6):** the round-5 review named a gap in the tail-safety story: the design claimed the post-hoc contradiction backlog would catch semantic false negatives from the bounded insertion guard, but no documented path *guaranteed* such a pair ever becomes a contradiction record. Revision 7 adds **Phase D — reconciliation** (new §5.6): a bounded, LLM-free nightly sweep that re-compares up to 200 current consolidated beliefs per run (newest first, cursor-bounded) against the current stated set using the deterministic contradiction rules, filing typed `contradictions` records (`reported_by='reconciliation'`, stable `report_ref='recon:<entry_id>'`) for any detected pair — **discovery only, never mutating beliefs**; adjudication happens in the next run's Phase B (cell 7: stated wins). Durable progress via `w3_recon_progress` cursor; crash mid-slice re-runs safely under the existing `(pair, report_ref)` dedup. Residual limitation stated honestly: **bounded eventual detection** — a false negative is discovered within K = ceil(C/200) nights (C = consolidated-belief count), not instantly. New tests T-C71–T-C75 (~74 tests total). §3.2 (Phase D), §3.3, §5.1 (`reported_by` CHECK), §6.1 (tail paragraph now points at the guaranteed sweep), §8.1 (`w3_recon_batch`), §8.6 (`w3_recon_progress`), §9.1 (run structure), §10 (cost bounds), §11 (failure modes) updated.
 
 **What changed in Revision 6 (summary):**
 - **P1 (round 5):** Tier 2 no longer holds the SQLite write lock across the LLM call. The insertion guard is now **optimistic-concurrency**: a snapshot phase (no write lock) reads the current stated-belief set with a fingerprint; Tier 2 semantic evaluation runs against that snapshot; then a commit phase enters `BEGIN IMMEDIATE`, re-verifies the fingerprint, and commits only if nothing changed — otherwise the stale verdict is void and the evaluation retries against a fresh snapshot (max 2 retries, then fail-closed reject). Tier 1 (deterministic, no I/O) stays inside the transaction. Tier 2 evaluation input is hard-bounded: top-50 stated beliefs by topic relevance, 8K token cap, with a defined safety story for the unevaluated tail. New tests T-C68 (correction during Tier 2 evaluation → stale verdict voided), T-C69 (retry exhaustion → fail-closed), T-C70 (input bounds behavior). §6.1 step 3 rewritten; §4.2/§10/§11 updated.
@@ -96,12 +99,14 @@ W3 runs in the same autonomy tick (`AUTONOMY_MS`, default 5 min) as the dream cy
    Both run through the guarded write boundary (§6.1) — after the §1.2 hardening, their own origin filters and the boundary agree.
 2. **Contradiction phase (LLM-optional, budgeted):** `contradictions` rows in state `pending` (§5), oldest first.
 3. **Distillation phase (LLM-optional, budgeted):** unconsolidated episodes — `episodes` rows with no terminal row in `consolidation_episodes` (§8.3), `forgotten_at IS NULL`, `occurred_at` older than 24h (never consolidate today's raw experience — let it settle), ordered by `importance DESC, occurred_at ASC`. See §4.
+4. **Reconciliation phase (no LLM, bounded):** current `origin='consolidated'` beliefs re-compared against the current `origin='stated'` set — guaranteed eventual discovery of contradictions the insertion guard may have missed (§5.6). **Discovery only:** files typed contradiction records, never mutates beliefs.
 
 ### 3.3 What it writes
 
 - `user_model` rows with `origin='consolidated'` only, and only through the guarded write boundary (§6.1). Never `stated`, never `inferred` (INV-C-1).
 - `nodes` rows (world-knowledge only, per §4.1 routing) — rare; most runs write zero nodes.
 - `contradictions` state transitions (§5.2) and `agent_logs` audit rows for every action — content-free, IDs + reason codes only (W1/W2 audit convention).
+- `contradictions` records with `reported_by='reconciliation'` filed by the Phase D sweep (§5.6) — discovery records only; adjudication happens in the next run's Phase B.
 - `consolidation_runs` + `consolidation_episodes` bookkeeping (§8).
 
 ### 3.4 What it never writes
@@ -213,7 +218,7 @@ CREATE TABLE IF NOT EXISTS contradictions (
   category TEXT NOT NULL
     CHECK (category IN ('factual_update','false_belief','preference_change','state_transition','duplicate_claim')),
   -- provenance of the report: who proposed this contradiction
-  reported_by TEXT NOT NULL CHECK (reported_by IN ('temporal_propose','knowledge_check','consolidation','sweep','user')),
+  reported_by TEXT NOT NULL CHECK (reported_by IN ('temporal_propose','knowledge_check','consolidation','sweep','user','reconciliation')),
   report_ref TEXT,          -- durable reference to the originating operation (supersession proposal id,
                             -- knowledgeCheck verdict id, sweep run id, or correction id) — never free text
   reopens_id INTEGER,       -- prior contradictions.id this report reopens (NULL for first reports; see report_ref dedup below)
@@ -299,6 +304,42 @@ Unresolved contradictions need a lifecycle so they don't spawn a fresh inquiry e
 
 ---
 
+### 5.6 Reconciliation sweep: guaranteed eventual discovery (new — round-6 P1)
+
+The two-tier insertion guard (§6.1 step 3) is fail-closed, but it is not infallible: a semantic false negative in Tier 2 — a genuinely contradictory insert the detector fails to recognize — admits a consolidated belief that contradicts a current stated belief. The design previously claimed §5's backlog would catch this "tail," but the round-6 review correctly found no documented path *guarantees* such a pair ever becomes a contradiction record. **The backlog cannot adjudicate what it never receives.** Revision 7 adds the missing path: a reconciliation phase that systematically discovers unreported stated-vs-consolidated contradictions.
+
+**Phase placement.** Reconciliation is **Phase D** of the nightly run — after sweeps (A), contradiction adjudication (B), and distillation (C), before finalize (§9.1). Records it files enter adjudication in the *next* run's Phase B — never the same run. Phases stay single-purpose and bounded; discovery and adjudication are separate nights' work.
+
+**What it compares.** Each run, the sweep takes a bounded slice of **current** `origin='consolidated'`, `invalid_at IS NULL` beliefs in the space and checks each against the current stated-belief set using the **deterministic contradiction rules only** — the Tier 1 coverage predicate (same slot + topic-label overlap + temporal overlap) and Tier 2's deterministic similarity pass, in §5's rule priority. **No LLM in the sweep itself** — this is a cheap SQL pass, not a judgment call. Any detected contradiction files a typed `contradictions` record (§5.1):
+
+- `domain='user_model'`, `old_kind='user_model_entry'`, `old_id=<stated belief id>`, `new_kind='user_model_entry'`, `new_id=<consolidated belief id>`, `category` from the §5.1 vocabulary,
+- `reported_by='reconciliation'`, `report_ref='recon:<consolidated_entry_id>'` (stable per entry — re-scans of the same entry produce the same ref),
+- `state='pending'`, entering the normal claim/state machine (§5.2). The next run's Phase B adjudicates it — where cell 7 (stated wins) applies to the stated-vs-consolidated pair.
+
+**Bounded work.** At most **200 consolidated beliefs per run** (`w3_recon_batch` in `space_meta`, default 200, tunable like `w3_llm_budget`). Ordering: **newest first** (`ORDER BY valid_at DESC, id DESC`) — a recently admitted false negative is the most likely to be wrong and the most urgent to catch. The per-belief check is indexed SQL over the stated set; the bound is on beliefs scanned, not on LLM calls (there are none).
+
+**Durable progress.** The sweep keeps a cursor in `w3_recon_progress` (§8.6): `(cursor_valid_at, cursor_id)`, the exclusive lower bound of the last processed belief in the ordering. Each run's slice:
+
+```sql
+SELECT id, valid_at FROM user_model
+WHERE space_id = ? AND origin = 'consolidated' AND invalid_at IS NULL
+  AND (valid_at, id) < (?, ?)          -- cursor: strictly below the last processed row
+ORDER BY valid_at DESC, id DESC
+LIMIT 200;                              -- w3_recon_batch
+```
+
+The cursor advances **at slice end**. A crash mid-slice re-runs the slice next window — safe, because filing is deduped by `(pair, report_ref)` (§5.1): re-scanning never creates a second record for the same pair. When a slice returns fewer than 200 rows, the pass is complete — the cursor resets to NULL and the next window starts a fresh pass from the newest. A space with no current consolidated beliefs never opens a cursor row.
+
+**Idempotency / no duplicates.** Before filing, the sweep checks for any existing contradiction record for the `(space_id, domain, old_id, new_id)` pair:
+- A record in `pending`/`claimed`/`unresolved`/`resolved`/`stated_conflict` → **skip**. The pair is known or already adjudicated.
+- Only `moot` records exist → the prior adjudication found stale targets; re-filing is a genuinely new event: `report_ref='recon:<entry_id>:r<k>'` where `k` = number of prior moot filings for the pair + 1. (Rare path; the ref stays stable in the common case.)
+- No record → file with `report_ref='recon:<entry_id>'`. The `UNIQUE(space_id, domain, old_kind, old_id, new_kind, new_id, report_ref)` index (§5.1) makes even a raced double-file a no-op.
+
+**Discovery only — no direct mutation.** The sweep's *only* write is contradiction-record filing. It never calls the mutation union, never touches `user_model` protected columns, never invalidates. Adjudication — including cell 7's invalidation of the non-stated challenger — happens in Phase B of the *next* run, through the guarded boundary. The closed mutation union (§6.1) is untouched: filing a discovery record is not a belief mutation, so no new union member is needed. T-C75 asserts the `user_model` table is byte-identical after a reconciliation run that filed records.
+
+**Residual limitation, stated honestly.** Reconciliation is **eventual, not immediate**. A false negative admitted tonight is discovered within **K nights**, where **K = ceil(C / 200)** and C = the space's current consolidated-belief count. The documented guarantee is *bounded eventual detection*: every current consolidated belief is re-compared against the current stated set at least once per K nights. The design does **not** claim instant tail safety — a contradiction admitted tonight may live for up to K nights before reconciliation files it (though in practice C is expected to number in the tens, making K = 1 the common case). The honest boundary: the insertion guard is the *preventive* control (fail-closed, immediate); reconciliation is the *detective* control (bounded, eventual). Together they close the round-6 gap; neither alone claims perfection.
+
+---
 ## 6. Safety invariants and the guarded write boundary
 
 ### 6.1 The guarded write boundary (revised — P0-1: enforced, not conventional; tightened in Rev 3; invariant defined once in Rev 4 — P1-4)
@@ -343,7 +384,7 @@ type ConsolidationMutation =
    - **Tier 2 input bounds (Rev 6):** the one-LLM-call-per-attempt cap bounds call *count*, not input *size*; Rev 6 bounds both:
      - At most **50 stated beliefs** enter the LLM judge's input per attempt, selected by topic relevance to the candidate: topic-label overlap count (desc), then `valid_at` recency (desc), then `id` (asc) — a deterministic order.
      - At most **8K tokens** of stated-belief content in total per judgment (candidate proposition + selected rows, counted with the repo's tokenizer estimator); selection proceeds in relevance order and stops before the cap would be exceeded. A row is included whole or not at all — never truncated mid-content (a truncated belief could read as its own negation).
-     - **The unevaluated tail — safety story:** the bound applies *only* to the LLM judge's input. Tier 1's coverage check runs against **all** current stated beliefs (indexed SQL, no token cost), and Tier 2's deterministic similarity pass likewise runs over the **whole snapshot**. The tail is therefore exactly the set of beliefs that (a) share no slot+topic+temporal coverage with the candidate (Tier 1 clean), (b) produced no deterministic similarity hit (Tier 2 deterministic clean), and (c) ranked below 50 more-relevant beliefs for the one semantic judgment. A contradiction hiding there would have to be semantically real yet invisible to both deterministic passes *and* less related than 50 other beliefs — and if one ever slips through, it is not lost: §5's contradiction backlog adjudicates consolidated-vs-stated conflicts after the fact (cell 7: stated wins, challenger invalidated), while the run-level integrity check still guards the stated rows themselves. In practice, stated sets per space are expected to number in the tens, so the cap is a safety valve against pathological growth, not the common path.
+     - **The unevaluated tail — safety story:** the bound applies *only* to the LLM judge's input. Tier 1's coverage check runs against **all** current stated beliefs (indexed SQL, no token cost), and Tier 2's deterministic similarity pass likewise runs over the **whole snapshot**. The tail is therefore exactly the set of beliefs that (a) share no slot+topic+temporal coverage with the candidate (Tier 1 clean), (b) produced no deterministic similarity hit (Tier 2 deterministic clean), and (c) ranked below 50 more-relevant beliefs for the one semantic judgment. A contradiction hiding there would have to be semantically real yet invisible to both deterministic passes *and* less related than 50 other beliefs — and if one ever slips through, it is not lost: the Phase D reconciliation sweep (§5.6) systematically re-compares every current consolidated belief against the current stated set and files any detected contradiction for §5 adjudication (cell 7: stated wins, challenger invalidated) — bounded eventual discovery within K nights, K = ceil(consolidated beliefs / 200). The run-level integrity check still guards the stated rows themselves. In practice, stated sets per space are expected to number in the tens, so the cap is a safety valve against pathological growth, not the common path.
      - Each attempt's LLM judgment counts against the run's `w3_llm_budget` (§10); if a retry would exceed the budget, the insert is deferred (`failed_retryable`, reason `stated_state_changed`) rather than evaluated unboundedly.
    - Both tiers remain mandatory with no caller discretion — Tier 2 against the snapshot, Tier 1 inside the commit transaction, commit only on fingerprint match. The distillation logic in §4.2 performs its own stated-coverage check (rule 2), but the boundary does not trust it — a caller that skips or mis-implements the check is stopped here. The invariant is not "stated rows are never touched" alone — it is "no W3 belief contradicts a current stated belief." **Tier 1 is the fast path; Tier 2 is the safety net: a contradictory insert cannot bypass stated-wins merely because classification differs** — different topic labels, different slots, or any other labeling artifact that defeats the Tier 1 predicate is caught semantically by Tier 2. The only stated beliefs that escape Tier 2 are those the contradiction detector itself fails to recognize — and that failure mode is identical to the one the §5 backlog adjudication already accepts, with the same fail-closed rule: ambiguous detector output does *not* become an admission; an ambiguous-but-contradiction-likely verdict rejects, and only a clean `compatible`/`no_contradiction` verdict admits. The asymmetry is deliberate: a false rejection costs one night's belief; a false admission violates the system's core safety promise.
 4. If the mutation is `WithdrawEvidence`: validates the named episode IDs are a subset of the entry's current `evidence_ids`; computes the surviving set; recomputes `evidence_strength` over survivors via §4.4; if the surviving set is empty → the mutation escalates to `InvalidateEntry` with `reason='evidence_withdrawn'` in the same transaction. All three steps (withdraw, recompute, conditional invalidate) are atomic — a crash cannot leave a row with withdrawn evidence still counted in its strength.
@@ -478,6 +519,7 @@ ALTER TABLE space_meta ADD COLUMN w3_enabled INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE space_meta ADD COLUMN w3_llm_budget INTEGER NOT NULL DEFAULT 5;   -- max LLM calls per run
 ALTER TABLE space_meta ADD COLUMN w3_max_items INTEGER NOT NULL DEFAULT 50;  -- max work items per run
 ALTER TABLE space_meta ADD COLUMN w3_frozen INTEGER NOT NULL DEFAULT 0;       -- Rev 3: incident freeze (§6.1/§9.4). Set on stated-integrity violation; cleared only by explicit operator action.
+ALTER TABLE space_meta ADD COLUMN w3_recon_batch INTEGER NOT NULL DEFAULT 200; -- Rev 7: max consolidated beliefs scanned per reconciliation phase (§5.6).
 ```
 
 ### 8.2 `consolidation_runs` (revised — P1-3: atomic claim + fencing)
@@ -549,6 +591,17 @@ The append-only-in-practice telemetry table from §7.2. No columns are added to 
 - `episodes.lineage_key TEXT` — the durable source-lineage key (§4.3). Nullable in migration; backfilled from capture metadata where available, else **NULL (unknown)** — never a synthetic singleton. New captures always set it (capture-trigger contract amendment — small, included in W3 implementation scope). W3 implementation must also add the `w3_frozen` flag to `space_meta` (§6.1 incident procedure) and the `space_meta` columns from §8.1.
 - `user_model.review_flag TEXT` + `user_model.review_flagged_at TEXT` — nullable review flags (§6.4). Existing rows get NULL.
 - `inquiries.contradiction_id INTEGER` nullable + `UNIQUE(space_id, contradiction_id)` — inquiry dedup (§5.5).
+- `w3_recon_progress` — the reconciliation sweep's durable cursor (§5.6). One row per space; absent = no pass started:
+
+```sql
+CREATE TABLE IF NOT EXISTS w3_recon_progress (
+  space_id TEXT PRIMARY KEY,
+  cursor_valid_at TEXT,      -- exclusive bound: strictly-below the last processed (valid_at, id)
+  cursor_id INTEGER,         -- NULL cursor_* = start a fresh pass from the newest belief
+  last_pass_completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+```
 
 ### 8.7 Withdrawn from Draft v1
 
@@ -569,7 +622,8 @@ run_consolidation(spaceId, run):
   2. Phase A (sweeps): sweepStaleEmotions + sweepWithdrawnEvidence — no LLM, no budget, via boundary
   3. Phase B (contradictions): claim + adjudicate per §5.2/§5.3 until budget exhausted
   4. Phase C (distillation): process unconsolidated episodes per §4 until budget exhausted
-  5. Finalize: recompute stated-integrity hash; compare (§6.1)
+  5. Phase D (reconciliation): bounded re-comparison of current consolidated beliefs vs current stated set; files typed contradiction records (§5.6) — discovery only, no LLM, no belief mutations
+  6. Finalize: recompute stated-integrity hash; compare (§6.1)
      → match: mark 'completed' (fence-checked UPDATE), write last_consolidation_date
      → mismatch: mark 'failed', error='stated_integrity_violation'
 ```
@@ -614,6 +668,7 @@ The §6.1 hash check is a detector, not a restorer. When it fires, the system mu
 | Work items per run | `w3_max_items` (default 50) | Loop bound |
 | Wall-clock per run | 10 minutes | Timeout wrapper; run marked `failed` with `error='timeout'` |
 | Runs per day per space | 1 | Atomic `UNIQUE(space_id, window_date)` claim (§3.1) |
+| Reconciliation sweep | ≤200 beliefs per run, 0 LLM calls | Deterministic SQL-only pass; cursor-bounded slice (§5.6) |
 | Paid LLM per tick (global) | `AUTONOMY_MAX_PAID_PER_TICK` (existing) | Shared with dream cycle |
 
 Worst case per space per day: 5 LLM calls + 50 items. At current model pricing, negligible. The global per-tick paid ceiling provides backstop against multi-space bursts.
@@ -634,11 +689,13 @@ Worst case per space per day: 5 LLM calls + 50 items. At current model pricing, 
 | Stated-integrity mismatch at finalize | Run marked `failed`, `error='stated_integrity_violation'`, alert-grade audit row. **This does not restore safety** — it triggers the incident procedure (§9.4): freeze W3 for the space (`w3_frozen=1`), manual operator review, explicit unfreeze. Earlier committed work items are not rolled back. |
 | Stated state changes during Tier 2 evaluation | Snapshot fingerprint mismatch at commit → verdict void, retry with fresh snapshot (≤2 retries). Exhaustion → insert rejected `stated_state_changed`, item `failed_retryable`. Never commits on a stale verdict. |
 | Legacy contradiction backlog | Marked `legacy_moot` on first run, never adjudicated (§5.1). |
+| Reconciliation crash mid-slice | Slice re-runs next window; record filing is deduped by `(pair, report_ref)` — no duplicates. Cursor only advances at slice end. |
+| Reconciliation cursor lost or corrupt | Cursor resets to NULL → fresh full pass from the newest belief. At most one extra full pass of work; correctness unaffected (dedup holds). |
 
 ---
 ## 12. Test plan (expanded — covers every gauntlet finding)
 
-Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded tests are marked. New tests are grouped by the finding they close. Every test that touches the database uses real SQLite through `createDb()` — no mocked outcomes for transactional behavior (the user's standing guardrail from the W2 reviews). Rev 4 adds T-C64–T-C65 (~64 tests total). Rev 5 adds T-C66–T-C67 (~66 tests total). Rev 6 adds T-C68–T-C70 (~69 tests total).
+Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded tests are marked. New tests are grouped by the finding they close. Every test that touches the database uses real SQLite through `createDb()` — no mocked outcomes for transactional behavior (the user's standing guardrail from the W2 reviews). Rev 4 adds T-C64–T-C65 (~64 tests total). Rev 5 adds T-C66–T-C67 (~66 tests total). Rev 6 adds T-C68–T-C70 (~69 tests total). Rev 7 adds T-C71–T-C75 (~74 tests total).
 
 **Sweep tests (§6.3 matrix):**
 - T-C1: `sweepStaleEmotions` expires an 8-day-old inferred `emotion_state` row, leaves a 6-day-old row.
@@ -711,6 +768,13 @@ Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded te
 - T-C42: **crash after mutation** — impossible by construction (mutation + ledger in one transaction); test asserts the transaction boundary by killing the connection mid-transaction and verifying either both or neither persisted.
 - T-C43: **crash after claim before mutation** — no ledger row exists; retry processes the item normally; exactly one outcome recorded.
 
+**Reconciliation tests (round-6 P1):**
+- T-C71: **tail contradiction discovered** — plant a consolidated belief that contradicts a current stated belief, with topic labels engineered so the insertion guard's deterministic passes would miss it, and the Tier 2 judge stubbed to return `compatible` at insert time (simulating the false negative). Run the reconciliation phase. Assert a `contradictions` record exists with `reported_by='reconciliation'`, `domain='user_model'`, both sides correctly identified, `state='pending'`, and `report_ref='recon:<entry_id>'`. Assert the consolidated belief itself is untouched (discovery only).
+- T-C72: **cursor progress across runs** — seed 450 current consolidated beliefs with staggered `valid_at`; run the reconciliation phase twice. Assert run 1 processed exactly 200 (cursor advanced to the 200th row's `(valid_at, id)`), run 2 processed the next 200 with no overlap (assert disjoint processed-id sets), and a third run processes the final 50 and resets the cursor to NULL (full pass complete).
+- T-C73: **no duplicates on re-scan** — run reconciliation over a slice containing a known tail contradiction, then re-run the same slice without advancing the cursor (simulating a crash between slice end and cursor advance). Assert exactly one contradiction record exists for the pair — the `(pair, report_ref)` dedup holds.
+- T-C74: **bounded work** — seed 1000 current consolidated beliefs; run one reconciliation phase; assert at most 200 beliefs were examined (cursor advanced exactly 200 rows from NULL) and the phase completed without consuming LLM budget.
+- T-C75: **discovery-only, no mutation** — hash the full `user_model` table (all rows, all columns) before a reconciliation run that files ≥1 contradiction record; assert the hash is byte-identical afterward. The sweep's only writes are to `contradictions` and `w3_recon_progress`.
+
 **Inquiry tests (P2-3):**
 - T-C48: repeated `unresolved` runs → exactly one inquiry row per contradiction; user response via the stated path resolves it; contradiction transitions to `resolved` with `actor='user'`.
 
@@ -744,6 +808,8 @@ Draft v1's T-C1–T-C22 are retained where still valid; revised or superseded te
 ---
 
 ## 15. Changelog
+
+- **Revision 7 (2026-10-19):** Addresses the gauntlet round-6 review (1 remaining P1: the tail-safety fallback had no guaranteed discovery path). Adds **Phase D — reconciliation** (new §5.6): a bounded, LLM-free nightly sweep that re-compares up to 200 current consolidated beliefs per run (newest first, cursor-bounded via `w3_recon_progress`) against the current stated set using the deterministic contradiction rules, filing typed `contradictions` records (`reported_by='reconciliation'`, stable `report_ref='recon:<entry_id>'`) for any detected pair — discovery only, never mutating beliefs; adjudication happens in the next run's Phase B (cell 7: stated wins). Crash mid-slice re-runs safely under the existing `(pair, report_ref)` dedup; cursor resets on full pass. Residual limitation stated honestly: **bounded eventual detection** — a false negative is discovered within K = ceil(C/200) nights, not instantly; the insertion guard is the immediate preventive control, reconciliation the eventual detective control. Schema: `w3_recon_progress` table (§8.6), `w3_recon_batch` in `space_meta` (§8.1), `'reconciliation'` added to `contradictions.reported_by` CHECK (§5.1). New tests T-C71–T-C75 (~74 tests total). §3.2 (Phase D), §3.3, §5.1, §6.1 (tail paragraph now points at the guaranteed sweep), §9.1 (run structure), §10 (cost bounds), §11 (failure modes) updated.
 
 - **Revision 6 (2026-10-19):** Addresses the gauntlet round-5 review (1 remaining P1: the semantic check must not hold a database write transaction open across an LLM call). The insertion guard is now **optimistic-concurrency** (§6.1 step 3): **Phase A** reads the current stated set with a snapshot fingerprint (SHA-256 over the complete protected state of all current stated rows) and runs Tier 2 semantic evaluation against that snapshot with **no write lock held**; **Phase B** enters `BEGIN IMMEDIATE`, recomputes the fingerprint, and commits only on match — a mismatch (a correction landing during evaluation) voids the verdict and retries against a fresh snapshot, at most **2 retries**, then rejects fail-closed with `stated_state_changed` (work item `failed_retryable`). **Tier 1 (deterministic, SQL-only) stays inside the commit transaction** — the write transaction never spans a network call. Tier 2 evaluation input is now hard-bounded: at most **50 stated beliefs** per judgment (relevance-ordered: topic overlap → `valid_at` recency → id) and at most **8K tokens** of stated-belief content; rows are included whole or not at all. The unevaluated tail is covered by Tier 1 + Tier 2's deterministic pass (both unbounded, run over all stated beliefs) plus §5's post-hoc backlog adjudication. New tests T-C68 (correction during Tier 2 evaluation → stale verdict voided, conflicting row absent, correction itself proves no write lock was held), T-C69 (retry exhaustion → fail-closed, zero rows, next run resolves), T-C70 (input bounds: ≤50 beliefs / ≤8K tokens observed at the stub, Tier 1 unbounded, tail contradiction caught deterministically). §4.2's single-transaction claim, §6.2 (INV-C-2 enforcement reference), §10 (cost-bounds rows), §11 (failure-mode row), and test-plan count updated.
 
