@@ -3080,7 +3080,6 @@ describe("T-VEC-1: vec_episodes exists via production createDb() (P0, impl revie
           .prepare(`SELECT episode_id FROM vec_episodes WHERE episode_id = ?`)
           .get(res!.episodeId) as { episode_id?: number } | undefined;
         expect(vecRow?.episode_id).toBe(res!.episodeId);
-      }
     } finally {
       (h.sqlite as unknown as { close(): void }).close();
     }
