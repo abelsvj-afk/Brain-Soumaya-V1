@@ -814,4 +814,107 @@ export const BOOTSTRAP_SQL = `
     -- keeps WAL behavior simple). Redacted (forgotten) episodes are removed
     -- from FTS (§3.7).
     CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(summary, detail);
+
+    -- W3 consolidation (wisdom layer): nightly sleep/consolidation job state.
+    -- Design: docs/wisdom/w3-design.md (Revision 11, §§5.1, 7.2, 8.2–8.6).
+    -- Identical DDL runs in db/client.ts migrateSchema() (the W2 pattern:
+    -- T-C55 pins bootstrap-vs-migration equivalence). New COLUMNS on existing
+    -- tables (space_meta W3 knobs, episodes.lineage_key, user_model.review_flag,
+    -- inquiries.contradiction_id) are migrateSchema-only — never added here.
+    CREATE TABLE IF NOT EXISTS consolidation_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      window_date TEXT NOT NULL,
+      fence TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      status TEXT NOT NULL DEFAULT 'running'
+        CHECK (status IN ('running','completed','failed','aborted_budget')),
+      lease_expires_at TEXT NOT NULL,
+      items_processed INTEGER NOT NULL DEFAULT 0,
+      llm_calls INTEGER NOT NULL DEFAULT 0,
+      contradictions_resolved INTEGER NOT NULL DEFAULT 0,
+      consolidations_written INTEGER NOT NULL DEFAULT 0,
+      stated_integrity_hash TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (space_id, window_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_consolidation_runs_space
+      ON consolidation_runs(space_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS consolidation_episodes (
+      space_id TEXT NOT NULL,
+      episode_id INTEGER NOT NULL,
+      outcome TEXT NOT NULL
+        CHECK (outcome IN ('consolidated','strengthened','skipped_covered','skipped_low_importance','abstained',
+                           'failed_terminal','failed_retryable')),
+      resulting_entry_id INTEGER,
+      evidence_group_set TEXT NOT NULL,
+      evidence_fingerprint TEXT NOT NULL,
+      last_run_id INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, episode_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS contradictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      domain TEXT NOT NULL CHECK (domain IN ('nodes','user_model')),
+      old_kind TEXT NOT NULL CHECK (old_kind IN ('node','user_model_entry')),
+      old_id INTEGER NOT NULL,
+      new_kind TEXT NOT NULL CHECK (new_kind IN ('node','user_model_entry','episode')),
+      new_id INTEGER NOT NULL,
+      category TEXT NOT NULL
+        CHECK (category IN ('factual_update','false_belief','preference_change','state_transition','duplicate_claim')),
+      reported_by TEXT NOT NULL CHECK (reported_by IN ('temporal_propose','knowledge_check','consolidation','sweep','user','reconciliation')),
+      report_ref TEXT,
+      reopens_id INTEGER,
+      state TEXT NOT NULL DEFAULT 'pending'
+        CHECK (state IN ('pending','claimed','resolved','unresolved','moot','stated_conflict')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      claimed_by_run INTEGER,
+      claim_fence TEXT,
+      lease_expires_at TEXT,
+      resolution TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      resolved_at TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_contradictions_pair
+      ON contradictions(space_id, domain, old_kind, old_id, new_kind, new_id)
+      WHERE state IN ('pending','claimed');
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_contradictions_pair_ref
+      ON contradictions(space_id, domain, old_kind, old_id, new_kind, new_id, report_ref);
+
+    CREATE TABLE IF NOT EXISTS access_stats (
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('episode','user_model_entry','node')),
+      entity_id INTEGER NOT NULL,
+      last_accessed_at TEXT NOT NULL,
+      access_count INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (entity_type, entity_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS w3_recon_progress (
+      space_id TEXT PRIMARY KEY,
+      cursor_valid_at TEXT,
+      cursor_id INTEGER,
+      partial_valid_at TEXT,
+      partial_id INTEGER,
+      partial_stated_overlap REAL,
+      partial_stated_id INTEGER,
+      partial_stated_version INTEGER,
+      last_pass_completed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS w3_recon_semantic_queue (
+      space_id TEXT NOT NULL,
+      consolidated_id INTEGER NOT NULL,
+      stated_id INTEGER NOT NULL,
+      similarity REAL NOT NULL,
+      queued_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, consolidated_id, stated_id)
+    );
 `;
