@@ -63,6 +63,16 @@ export function bootstrapVec(db: RawDb): void {
       embedding float[${EMBED_DIM}] distance_metric=cosine
     );`,
   );
+  // W2 Wisdom Layer: episode summary/detail embeddings power episodeSearch().
+  // Same vec0 shape/rules as the tables above. Created here (not in the W2
+  // migration) because vec0 virtual tables cannot be added via ALTER TABLE —
+  // bootstrapVec runs on every startup, so existing databases get it too.
+  db.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_episodes USING vec0(
+      episode_id INTEGER PRIMARY KEY,
+      embedding float[${EMBED_DIM}] distance_metric=cosine
+    );`,
+  );
 }
 
 /** Serialize a Float32Array as the raw little-endian byte BLOB sqlite-vec expects. */

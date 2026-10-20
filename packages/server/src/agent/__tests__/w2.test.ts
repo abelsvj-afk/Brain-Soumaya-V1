@@ -3018,3 +3018,69 @@ describe("T-M3: migration assertion", () => {
     }
   });
 });
+
+describe("T-VEC-1: vec_episodes exists via production createDb() (P0, impl review)", () => {
+  it("production bootstrapVec creates vec_episodes — no test-only helper", () => {
+    // Regression: episodic.ts writes episode embeddings to vec_episodes, but
+    // the production schema path (db/vec.ts bootstrapVec) did not create it —
+    // only the test helper bootstrapEpisodicTables() did. This test goes
+    // through the REAL createDb() with NO test bootstrap and asserts the
+    // table exists, so enrichment can't fail on a production database.
+    const h = createDb(":memory:");
+    try {
+      const row = h.sqlite
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='vec_episodes'`,
+        )
+        .get() as { name?: string } | undefined;
+      expect(row?.name).toBe("vec_episodes");
+      // And the shape matches what episodic.ts expects: episode_id PK + embedding.
+      const cols = h.sqlite
+        .prepare(`PRAGMA table_info(vec_episodes)`)
+        .all() as { name: string }[];
+      const names = cols.map((c) => c.name);
+      expect(names).toContain("episode_id");
+      expect(names).toContain("embedding");
+    } finally {
+      (h.sqlite as unknown as { close(): void }).close();
+    }
+  });
+
+  it("episode embedding write works on a production-bootstrapped DB", async () => {
+    // End-to-end: capture an episode, claim it, and run enrichEpisode (which
+    // writes the embedding) using ONLY createDb() — no test helper. Fails
+    // before the bootstrapVec fix with "no such table: vec_episodes".
+    const h = createDb(":memory:");
+    try {
+      const res = captureEpisode(h, SPACE, {
+        kind: "conversation",
+        userExcerpt: "asked about the Samsonite job",
+        toolNames: ["memorySearch"],
+        outcome: "job_update",
+      });
+      expect(res).not.toBeNull();
+      const claimed = claimEnrichment(h, SPACE);
+      if (claimed) {
+        const result = await enrichEpisode(h, SPACE, claimed.episodeId, claimed.fence, {
+          enricher: async () => ({
+            detail: null,
+            emotion: "neutral",
+            emotionalWeight: 0.5,
+            importance: 0.7,
+            participants: [],
+            place: null,
+            fieldProvenance: { emotion: "inferred" },
+          }),
+          embed: async () => new Float32Array(384).fill(0.1),
+        });
+        expect(["completed", "already_completed"]).toContain(result.status);
+        const vecRow = h.sqlite
+          .prepare(`SELECT episode_id FROM vec_episodes WHERE episode_id = ?`)
+          .get(res!.episodeId) as { episode_id?: number } | undefined;
+        expect(vecRow?.episode_id).toBe(res!.episodeId);
+      }
+    } finally {
+      (h.sqlite as unknown as { close(): void }).close();
+    }
+  });
+});
