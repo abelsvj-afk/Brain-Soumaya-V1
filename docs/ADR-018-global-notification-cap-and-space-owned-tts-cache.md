@@ -93,9 +93,9 @@ Do not rename or reorganize unrelated modules just for this increment. Confirm e
 
 ### Global notification cap
 
-1. With cap = 1 and both channels eligible, concurrent Telegram and push workers produce at most one send accepted for a given space-local day.
+1. With cap = 1 and both channels eligible, concurrent Telegram and push workers produce at most one **non-exempt** send accepted for a given space-local day; independently qualifying urgent deliveries are explicitly exempt under Option A.
 2. Repeated concurrent claims for the same outbox occurrence cannot reserve multiple slots.
-3. With cap = 5, any mix of Telegram and push has no more than five accepted/reserved/ambiguous deliveries for that space-local day. The cap is not five per channel.
+3. With cap = 5, any mix of Telegram and push has no more than five accepted/reserved/ambiguous **non-exempt** deliveries for that space-local day. The cap is not five per channel; fresh qualifying urgent exempt deliveries are tracked but excluded from the count.
 4. Two local calendar days that share a UTC date boundary are accounted as distinct days in the configured space timezone; day changes are not based on `toISOString().slice(0, 10)`.
 5. Deferred items consume no cap slot until claimed for delivery; cap exhaustion defers rather than drops.
 6. Definite send failure releases the slot exactly once; retry can reclaim once when policy allows.
@@ -161,7 +161,7 @@ CREATE TABLE notification_cap_claims (
   cap_exempt INTEGER NOT NULL DEFAULT 0 CHECK (cap_exempt IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  PRIMARY KEY (channel, delivery_key, local_day)
+  PRIMARY KEY (space_id, channel, delivery_key, local_day)
 );
 CREATE INDEX notification_cap_claims_count_idx
   ON notification_cap_claims(space_id, local_day, state, cap_exempt);
