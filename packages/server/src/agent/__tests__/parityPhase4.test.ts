@@ -91,7 +91,7 @@ function insertNode(o: {
 // ---------------------------------------------------------------------------
 
 describe("bill_risk (conversational)", () => {
-  const JAN = Date.parse("2026-01-10T00:00:00Z");
+  const JAN = Date.parse("2026-01-10T16:00:00.000Z"); // noon in America/New_York — genuinely Jan 10 in the space zone
   it("reports the exact reserved bills + shortfall, without notifying", async () => {
     new FinAccountRepo(handle, SPACE).setBalance(10000);
     const inc = new FinIncomeRepo(handle, SPACE);
