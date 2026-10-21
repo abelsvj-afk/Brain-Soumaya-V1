@@ -124,12 +124,30 @@ export function mergeGraphLinks(prevLinks: GraphEdge[], freshLinks: GraphEdge[])
   });
 }
 
-/** Applies {@link mergeGraphNodes} and {@link mergeGraphLinks} to a full refresh payload. */
+/**
+ * A link endpoint is a raw node id on a fresh payload, but d3-force resolves
+ * it into the node OBJECT in place once the link has been rendered — accept
+ * both shapes when reading an endpoint's id.
+ */
+function endpointId(endpoint: GraphEdge["source"]): number {
+  return typeof endpoint === "number" ? endpoint : (endpoint as unknown as GraphNode).id;
+}
+
+/**
+ * Applies {@link mergeGraphNodes} and {@link mergeGraphLinks} to a full refresh
+ * payload, then enforces the payload invariant the renderer depends on: every
+ * link's endpoints must be in the merged node set. A dangling link makes
+ * d3-force throw `node not found: <id>` and takes down the whole galaxy, so
+ * links pointing outside the shipped nodes are dropped here — the final
+ * choke point before graph state (the server also prunes at the source).
+ */
 export function mergeGraphData(prev: GraphData, fresh: GraphData): GraphData {
-  return {
-    nodes: mergeGraphNodes(prev.nodes, fresh.nodes),
-    links: mergeGraphLinks(prev.links, fresh.links),
-  };
+  const nodes = mergeGraphNodes(prev.nodes, fresh.nodes);
+  const ids = new Set(nodes.map((n) => n.id));
+  const links = mergeGraphLinks(prev.links, fresh.links).filter(
+    (l) => ids.has(endpointId(l.source)) && ids.has(endpointId(l.target)),
+  );
+  return { nodes, links };
 }
 
 /** Pop-up offset for an item in the focus cluster (stacks upward when open). */

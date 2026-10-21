@@ -105,13 +105,53 @@ describe("mergeGraphNodes / mergeGraphLinks / mergeGraphData", () => {
     const prevNode = node({ id: 1 });
     const prevLink = link({ id: 1, weight: 0.5 });
     const merged = mergeGraphData(
-      { nodes: [prevNode], links: [prevLink] },
-      { nodes: [node({ id: 1, label: "x" })], links: [link({ id: 1, weight: 0.7 })] },
+      { nodes: [prevNode, node({ id: 2 })], links: [prevLink] },
+      {
+        nodes: [node({ id: 1, label: "x" }), node({ id: 2 })],
+        links: [link({ id: 1, weight: 0.7 })],
+      },
     );
 
     expect(merged.nodes[0]).toBe(prevNode);
     expect(merged.links[0]).toBe(prevLink); // same link object — no longer passed through fresh
     expect(merged.links[0]!.weight).toBe(0.7); // …but its scalar fields updated
+  });
+
+  it("mergeGraphData drops a fresh link whose endpoint is outside the merged node set", () => {
+    // Regression: `node not found: 150` — a payload link pointing at a node the
+    // payload itself omits (superseded/merged-away) must never reach the
+    // renderer, which throws on the dangling endpoint.
+    const merged = mergeGraphData(
+      { nodes: [], links: [] },
+      {
+        nodes: [node({ id: 1 }), node({ id: 2 })],
+        links: [
+          link({ id: 10, source: 1, target: 2 }),
+          link({ id: 11, source: 1, target: 150 }),
+        ],
+      },
+    );
+    expect(merged.links.map((l) => l.id)).toEqual([10]);
+  });
+
+  it("mergeGraphData keeps a surviving link whose endpoints d3 already resolved to node objects", () => {
+    const prevNode = node({ id: 1 });
+    const prevNode2 = node({ id: 2 });
+    const resolved = link({ id: 5, source: 1, target: 2 });
+    // d3-force resolves endpoints into node object references in place once a
+    // link has rendered — the guard must read the id through the object, not
+    // mistake a healthy rendered link for a dangling one.
+    (resolved as unknown as { source: unknown }).source = prevNode;
+    (resolved as unknown as { target: unknown }).target = prevNode2;
+    const merged = mergeGraphData(
+      { nodes: [prevNode, prevNode2], links: [resolved] },
+      {
+        nodes: [node({ id: 1 }), node({ id: 2 })],
+        links: [link({ id: 5, source: 1, target: 2 })],
+      },
+    );
+    expect(merged.links.map((l) => l.id)).toEqual([5]);
+    expect(merged.links[0]).toBe(resolved);
   });
 });
 
