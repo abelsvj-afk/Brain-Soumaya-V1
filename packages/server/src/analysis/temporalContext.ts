@@ -23,6 +23,8 @@ import {
   RECENT_WINDOW_DAYS,
 } from "./temporal.js";
 import { incomeChange, netWorthChange, goalAllocationChange } from "./temporalChange.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
+import { localDateOfStored } from "../lib/time.js";
 
 /**
  * Cross-domain temporal context assembly (docs/specs/temporal-contextual-reasoning.md). This is
@@ -163,7 +165,11 @@ const fmtDelta = (c: ChangeResult): string | null => {
   return `${c.label} ${c.direction} by ${d(c.deltaCents)}${pct} vs. the prior period`;
 };
 
-const fmtFact = (f: TemporalFact): string => `${f.label}${f.detail ? ` — ${f.detail}` : ""} (${f.date.slice(0, 10)})`;
+/** A fact's date as the user would say it: bare stored dates stay themselves;
+ *  stored instants render as their SPACE-local calendar date (owner rule
+ *  2026-10-21 — the model must never be handed a UTC date as "the date"). */
+const fmtFact = (f: TemporalFact, tz: string): string =>
+  `${f.label}${f.detail ? ` — ${f.detail}` : ""} (${localDateOfStored(f.date, tz) ?? f.date.slice(0, 10)})`;
 
 /**
  * Chat-facing renderer — same null-when-empty, `(handle, spaceId, now?)` contract as
@@ -174,15 +180,17 @@ const fmtFact = (f: TemporalFact): string => `${f.label}${f.detail ? ` — ${f.d
  */
 export function temporalSnapshotText(handle: DbHandle, spaceId: string = DEFAULT_SPACE, now: Date = new Date()): string | null {
   const t = buildTemporalContext(handle, spaceId, now);
+  const tz = spaceTimezone(handle.sqlite, spaceId);
+  const fact = (f: TemporalFact) => fmtFact(f, tz);
   const changeLine = t.recentChanges.map(fmtDelta).filter((s): s is string => !!s);
   if (t.overdueFacts.length === 0 && t.upcomingFacts.length === 0 && t.staleFacts.length === 0 && t.recentFacts.length === 0 && changeLine.length === 0) {
     return null;
   }
-  const lines = ["TEMPORAL CONTEXT (deterministic, as of " + t.now.slice(0, 10) + " — reason about timing from THIS, never invent or assume a date):"];
-  if (t.overdueFacts.length) lines.push(`- Overdue: ${t.overdueFacts.map(fmtFact).join("; ")}.`);
-  if (t.upcomingFacts.length) lines.push(`- Upcoming: ${t.upcomingFacts.map(fmtFact).join("; ")}.`);
-  if (t.staleFacts.length) lines.push(`- Stale (hasn't been updated in a while): ${t.staleFacts.map(fmtFact).join("; ")}.`);
-  if (t.recentFacts.length) lines.push(`- Recently changed: ${t.recentFacts.map(fmtFact).join("; ")}.`);
+  const lines = ["TEMPORAL CONTEXT (deterministic, as of " + localDay(now, tz) + " — reason about timing from THIS, never invent or assume a date):"];
+  if (t.overdueFacts.length) lines.push(`- Overdue: ${t.overdueFacts.map(fact).join("; ")}.`);
+  if (t.upcomingFacts.length) lines.push(`- Upcoming: ${t.upcomingFacts.map(fact).join("; ")}.`);
+  if (t.staleFacts.length) lines.push(`- Stale (hasn't been updated in a while): ${t.staleFacts.map(fact).join("; ")}.`);
+  if (t.recentFacts.length) lines.push(`- Recently changed: ${t.recentFacts.map(fact).join("; ")}.`);
   if (changeLine.length) lines.push(`- Trends: ${changeLine.join("; ")}.`);
   return lines.join("\n");
 }

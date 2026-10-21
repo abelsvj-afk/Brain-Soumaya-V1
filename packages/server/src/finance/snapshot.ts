@@ -6,7 +6,8 @@ import { FinIncomeRepo } from "../repositories/finIncome.repo.js";
 import { FinGoalRepo } from "../repositories/finGoal.repo.js";
 import { FinAllocationRepo } from "../repositories/finAllocation.repo.js";
 import { weekStart } from "./budget.js";
-import { toDay } from "./bills.js";
+import { toDay, parseDay } from "./bills.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
 import { weeklyBillLoadCents, weeklySurplusCents } from "./forecast.js";
 
 /**
@@ -45,8 +46,10 @@ export function financialSnapshotText(handle: DbHandle, spaceId: string = DEFAUL
     bills.length > 0
       ? bills.map((bl) => `${bl.name} ${d(bl.amountCents)}/${bl.frequency}${bl.autopay ? " (autopay)" : ""}`).join(", ")
       : "none";
-  const monthAgo = toDay(new Date(now.getTime() - 30 * 86_400_000));
-  const today = toDay(now);
+  // Day boundaries on the SPACE's local calendar (owner rule 2026-10-21).
+  const tz = spaceTimezone(handle.sqlite, spaceId);
+  const today = localDay(now, tz);
+  const monthAgo = toDay(new Date(parseDay(today).getTime() - 30 * 86_400_000));
   const categoryRows = handle.sqlite
     .prepare(
       `SELECT category, SUM(amount_cents) AS total FROM fin_expense
@@ -76,7 +79,7 @@ export function financialSnapshotText(handle: DbHandle, spaceId: string = DEFAUL
     `- Balance: ${d(b.balanceCents)}; Buffer kept aside: ${d(b.bufferCents)}.`,
     `- Reserved for bills before next expected income (${b.nextIncomeDate}): ${d(b.reservedCents)} — ${reserved}.`,
     `- Safe to spend now: ${d(b.safeToSpendCents)}${b.shortfallCents > 0 ? `; SHORTFALL of ${d(b.shortfallCents)} (bills exceed balance)` : ""}.`,
-    `- Earned this week (since ${weekStart(now)}): ${d(weekEarned)}; ~4-week average weekly income: ${d(avgWeekly)}.`,
+    `- Earned this week (since ${weekStart(now, tz)}): ${d(weekEarned)}; ~4-week average weekly income: ${d(avgWeekly)}.`,
     `- Weekly bill load: ${d(weeklyBills)}; weekly surplus at current pace: ${d(surplus)}${surplus <= 0 ? " (not saving — earning barely covers bills)" : ""}.`,
     `- All recurring bills: ${allBills}.`,
     `- Top spending categories (last 30 days): ${categories}.`,

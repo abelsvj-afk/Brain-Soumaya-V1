@@ -8,6 +8,10 @@ import { NodesRepo } from "../repositories/nodes.repo.js";
 import { buildEvolutionLinks, buildEvolutionLinksAmong } from "./temporalChains.js";
 import { possibleDownstreamEffects } from "./causal.js";
 import { resolveSupersession, type SupersessionKind } from "./supersession.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+/** The space's timezone for user-facing date labels (owner rule 2026-10-21). */
+const spaceTz = (handle: DbHandle, spaceId: string): string => spaceTimezone(handle.sqlite, spaceId);
+
 
 /**
  * Maya Intelligence — deterministic claim formation and clarification gating
@@ -135,7 +139,7 @@ export function supersessionClaims(
     const a = nodesRepo.getById(refA.id);
     const b = nodesRepo.getById(refB.id);
     if (!a || !b) return;
-    const result = resolveSupersession(a, b, kind);
+    const result = resolveSupersession(a, b, kind, spaceTz(handle, spaceId));
     if (!result) return;
     out.push({
       id: `supersession:${result.superseded.id}:${result.current.id}`,

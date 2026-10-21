@@ -5,6 +5,10 @@ import { NodesRepo } from "../repositories/nodes.repo.js";
 import { parseTolerantMs } from "../lib/time.js";
 import { buildEvolutionLinksAmong, DEFAULT_TEMPORAL } from "./temporalChains.js";
 import { resolveSupersession, type SupersessionKind } from "./supersession.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+/** The space's timezone for user-facing date labels (owner rule 2026-10-21). */
+const spaceTz = (handle: DbHandle, spaceId: string): string => spaceTimezone(handle.sqlite, spaceId);
+
 
 /**
  * Maya Longitudinal Intelligence, Phase C (docs/specs/maya-longitudinal-intelligence.md,
@@ -184,7 +188,7 @@ export function reconstructEntityTimeline(
     const a = nodeMap.get(pair.a);
     const b = nodeMap.get(pair.b);
     if (!a || !b) continue; // one side fell outside the bounded/hydrated set — skip, don't guess
-    const result = resolveSupersession(a, b, pair.kind);
+    const result = resolveSupersession(a, b, pair.kind, spaceTz(handle, spaceId));
     if (!result) continue; // insufficient evidence — baseline status stands, never promoted
     upgradeStatus(statusOverride, result.superseded.id, result.status);
   }

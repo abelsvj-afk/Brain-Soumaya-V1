@@ -22,23 +22,12 @@ const DAILY_CAP = 15; // enough for a day; the rest keep for tomorrow
  * `toISOString().slice(0,10)` resets at UTC midnight, so an evening user in
  * the Americas was capped/uncapped against the wrong day).
  *
- * Same algorithm as the server's `localDay()` (agent/notify/policy.ts, the
- * helper the streak fix uses): en-CA formatToParts in the target timezone.
- * The web has no space_meta access, so the timezone is the one this device
- * reports — the user's own local zone, which is what the space timezone is
- * set from (server default America/New_York).
+ * The helper itself now lives in utils/localDay.ts — the one canonical web
+ * home every panel shares (owner rule 2026-10-21) — and is re-exported here
+ * so existing imports keep working.
  */
-export function spaceLocalDay(d: Date = new Date(), timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone): string {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
-    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-    return `${get("year")}-${get("month")}-${get("day")}`;
-  } catch {
-    // Unknown/invalid zone — fall back to the runtime's own local calendar day.
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }
-}
+import { spaceLocalDay } from "../utils/localDay.js";
+export { spaceLocalDay };
 const todayKey = () => `review.doneToday.${spaceLocalDay()}`;
 const doneToday = (): number => {
   try { return parseInt(localStorage.getItem(todayKey()) || "0", 10) || 0; } catch { return 0; }

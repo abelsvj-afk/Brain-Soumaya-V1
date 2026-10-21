@@ -136,8 +136,11 @@ describe("computeBudget — Safe to Spend", () => {
 });
 
 describe("weekStart", () => {
-  it("anchors to Monday (UTC)", () => {
-    expect(weekStart(new Date("2026-01-10T00:00:00Z"))).toBe("2026-01-05"); // Sat 10th → Mon 5th
-    expect(weekStart(new Date("2026-01-05T00:00:00Z"))).toBe("2026-01-05"); // Monday maps to itself
+  it("anchors to the Monday of the given zone's local week", () => {
+    // The zone is now an explicit input (owner rule 2026-10-21: the budget
+    // week follows the user's own calendar). Passing "UTC" reproduces the
+    // original pins exactly.
+    expect(weekStart(new Date("2026-01-10T00:00:00Z"), "UTC")).toBe("2026-01-05"); // Sat 10th → Mon 5th
+    expect(weekStart(new Date("2026-01-05T00:00:00Z"), "UTC")).toBe("2026-01-05"); // Monday maps to itself
   });
 });

@@ -16,7 +16,10 @@ import { FinIncomeRepo } from "../repositories/finIncome.repo.js";
 let handle: DbHandle;
 let ctx: AppContext;
 const embeddings = new HashEmbeddingProvider(EMBED_DIM);
-const NOW = Date.parse("2026-01-10T00:00:00Z");
+// Midday UTC: the same calendar day (Sat 2026-01-10) in the space's own
+// timezone (America/New_York) — midnight UTC is still Jan 9 in Florida, and
+// day-boundary logic follows the space's local day (owner rule 2026-10-21).
+const NOW = Date.parse("2026-01-10T12:00:00Z");
 
 beforeEach(() => {
   handle = createDb(":memory:");
@@ -82,7 +85,7 @@ describe("bill_risk detect()", () => {
     new FinBillRepo(handle, "s1").create({ name: "Rent", amountCents: 25000, frequency: "monthly", anchorDate: "2026-01-18" });
     expect(billRiskTool.detect(tc())).toHaveLength(1);
     // Simulate the router having logged today's run (created_at on tc.now's day).
-    handle.sqlite.prepare(`INSERT INTO agent_logs (space_id, action, description, targets, created_at) VALUES ('s1', 'tool:bill_risk', 'x', '[]', '2026-01-10 00:00:00')`).run();
+    handle.sqlite.prepare(`INSERT INTO agent_logs (space_id, action, description, targets, created_at) VALUES ('s1', 'tool:bill_risk', 'x', '[]', '2026-01-10 12:00:00')`).run();
     expect(billRiskTool.detect(tc())).toHaveLength(0);
   });
 

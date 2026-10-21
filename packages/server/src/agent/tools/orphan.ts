@@ -1,5 +1,5 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
-import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
+import { buildCommunicationContext, recentActionCount, actionFiredToday } from "../../communication/context.js";
 
 /**
  * Orphan-star surfacing (NEURO_ALIGNMENT.md #4). An unlinked memory is a star adrift —
@@ -78,12 +78,10 @@ export const orphanTool: Tool = {
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
-    const today = new Date(tc.now).toISOString().slice(0, 10);
-    // Once per day: if we already surfaced an orphan today, hold off.
-    const didToday = tc.ctx.handle.sqlite
-      .prepare(`SELECT 1 FROM agent_logs WHERE space_id = ? AND action = 'tool:surface_orphan' AND substr(created_at,1,10) = ?`)
-      .get(tc.spaceId, today);
-    if (didToday) return [];
+    // Once per SPACE-local day: if we already surfaced an orphan today, hold
+    // off (owner rule 2026-10-21 — the guard follows the user's own day,
+    // never the UTC day of the stored timestamp).
+    if (actionFiredToday(tc.ctx.handle, tc.spaceId, "tool:surface_orphan", new Date(tc.now))) return [];
 
     const cutoff = new Date(tc.now - MIN_AGE_MS).toISOString();
     const row = tc.ctx.handle.sqlite

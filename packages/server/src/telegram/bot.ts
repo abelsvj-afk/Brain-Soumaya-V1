@@ -418,12 +418,16 @@ export async function handleTelegramUpdate(
     // A /log while her daily question is pending counts as answering it —
     // otherwise the same question rode every digest forever for Telegram-first
     // users. (Best-effort: the reply is very likely responsive to the ask.)
+    // The daily_contact row is keyed by the SPACE's local day (see
+    // analysis/dailyContact.ts) — look it up on that same basis, never
+    // SQLite's UTC date('now').
+    const contactDay = localDay(new Date(), getPreferences(ctx.handle.sqlite, spaceId).timezone);
     ctx.handle.sqlite
       .prepare(
         `UPDATE daily_contact SET answered = 1
-         WHERE space_id = ? AND date = date('now') AND answered = 0`,
+         WHERE space_id = ? AND date = ? AND answered = 0`,
       )
-      .run(spaceId);
+      .run(spaceId, contactDay);
     // Same reward path as the app's ingest route: fuel + the daily streak
     // (logging from Telegram is tending too — the streak is channel-agnostic).
     const { streak, advanced } = new StreakRepo(ctx.handle, spaceId).touch();
