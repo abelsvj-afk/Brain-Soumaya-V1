@@ -95,8 +95,19 @@ function findDiscovery(tc: ToolContext): Candidate | null {
 export const chartDiscoveryTool: Tool = {
   name: "chart_discovery",
   description:
-    "Notice a genuinely notable structure in the galaxy (a dense constellation, a brilliantly-connected memory, a landmark sector) and record it as a Codex field note. At most one per day.",
-  parameters: { type: "object", properties: {}, required: [] },
+    "Report the Codex field notes (galaxy discoveries) recorded so far, plus any notable structure that is ready to be charted. Call with NO arguments in conversation (\"what discoveries are in my Codex?\") — read-only: it lists what exists and never records a new entry. (The router's detector-shaped call, carrying a candidate key/title/lore, still records a discovery exactly as before.)",
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Router-internal candidate key; omit in conversation." },
+      title: { type: "string", description: "Router-internal; omit in conversation." },
+      lore: { type: "string", description: "Router-internal; omit in conversation." },
+      icon: { type: "string", description: "Router-internal; omit in conversation." },
+      focusId: { type: "number", description: "Router-internal; omit in conversation." },
+    },
+    required: [],
+    additionalProperties: false,
+  },
 
   detect(tc: ToolContext): ToolInvocation[] {
     const today = new Date(tc.now).toISOString().slice(0, 10);
@@ -111,7 +122,29 @@ export const chartDiscoveryTool: Tool = {
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
     const key = String(args.key ?? "");
-    if (!key) return { ok: false, summary: "nothing to chart" };
+    // Telegram Parity Phase 4 — conversational path: no candidate key means
+    // the model is ASKING about the Codex, not charting. Read-only: list
+    // what is recorded (+ any uncharted candidate findDiscovery() sees,
+    // reported as pending — never written from conversation). The router
+    // path below (key present) records the discovery exactly as before.
+    if (!key) {
+      const existing = new CodexDiscoveriesRepo(tc.ctx.handle, tc.spaceId).list();
+      const lines = [
+        `CODEX DISCOVERIES (exact, from the Codex — ${existing.length} field note(s) recorded):`,
+        ...existing.slice(0, 20).map((d) => `  - ${d.icon} ${d.title} (charted ${d.createdAt.slice(0, 10)}): ${d.lore}`),
+        ...(existing.length > 20 ? [`  … and ${existing.length - 20} more (list truncated at 20).`] : []),
+      ];
+      if (existing.length === 0) lines.push("  (none yet — the Codex fills as the galaxy grows.)");
+      const pending = findDiscovery(tc);
+      if (pending) {
+        lines.push(`Not yet charted: a new discovery is ready — "${pending.title}" (${pending.reason}). It will be recorded on the next maintenance pass; do NOT claim it is already in the Codex.`);
+      }
+      return {
+        ok: true,
+        summary: `chart_discovery (conversational): ${existing.length} recorded${pending ? ", 1 pending" : ""}`,
+        message: lines.join("\n"),
+      };
+    }
     const added = new CodexDiscoveriesRepo(tc.ctx.handle, tc.spaceId).add({
       key,
       title: String(args.title ?? "A discovery"),

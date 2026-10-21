@@ -13,6 +13,15 @@ import type { NotifyMeta } from "../notify/policy.js";
 export interface ToolContext {
   ctx: AppContext;
   spaceId: string;
+  /**
+   * Phase 5-B: the server-provided requester identity ("telegram:<chatId>"
+   * or "web:<userId>"), set by agentLoop from its own input — the model
+   * never supplies it. Optional because deterministic-router and legacy
+   * call sites have no conversational principal; multi-turn session tools
+   * (gameSessions.ts) key their state by (spaceId, principal) and treat a
+   * missing principal as one shared "unknown-principal" bucket per space.
+   */
+  principal?: string;
   /** "Now" in ms — injected so tests are deterministic. */
   now: number;
   /** Deliver a message to the user's real channel (Telegram today). Best-effort.

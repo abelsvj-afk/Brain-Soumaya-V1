@@ -309,6 +309,9 @@ export function suggestPeople(ctx: AppContext, spaceId: string): PersonSuggestio
  *  cross-domain context, docs/specs/temporal-contextual-reasoning.md) can reuse the exact same
  *  query instead of re-deriving it, matching this feature's own "one query, not N+1" discipline. */
 export interface RecentPersonSummary {
+  /** Node id of the person_entity (additive — lets consumers chain into a
+   *  per-entity lookup without re-resolving the label). */
+  id: number;
   label: string;
   interactionCount: number;
   /** ISO timestamp of the most recent interaction, or null if never interacted with. */
@@ -316,12 +319,16 @@ export interface RecentPersonSummary {
   tone: ReturnType<typeof deriveTone>;
 }
 
-/** The 20 most recently-interacted-with tracked people (by last interaction), one query. Same
- *  cap/ordering `peopleSnapshotText` has always used. */
-export function recentPeopleSummaries(handle: DbHandle, spaceId: string): RecentPersonSummary[] {
+/** The most recently-interacted-with tracked people (by last interaction), one query.
+ *  Default cap 20 — the cap/ordering `peopleSnapshotText` has always used. Telegram
+ *  Parity Phase 1 (`people_lookup`) passes a larger `limit` so the conversational
+ *  roster is not silently truncated at 20; the default keeps every existing caller
+ *  byte-identical. */
+export function recentPeopleSummaries(handle: DbHandle, spaceId: string, limit = 20): RecentPersonSummary[] {
   const rows = handle.sqlite
     .prepare(
-      `SELECT n.label AS label,
+      `SELECT n.id AS id,
+              n.label AS label,
               COUNT(e.source) AS cnt,
               MAX(m.created_at) AS lastAt,
               SUM(CASE WHEN m.emotional_weight > 0.2 THEN 1 ELSE 0 END) AS pos,
@@ -332,10 +339,10 @@ export function recentPeopleSummaries(handle: DbHandle, spaceId: string): Recent
        WHERE n.space_id = ? AND n.deleted_at IS NULL AND n.kind = 'person_entity'
        GROUP BY n.id
        ORDER BY lastAt DESC
-       LIMIT 20`,
+       LIMIT ?`,
     )
-    .all(spaceId) as { label: string; cnt: number; lastAt: string | null; pos: number; neg: number }[];
-  return rows.map((r) => ({ label: r.label, interactionCount: r.cnt, lastAt: r.lastAt, tone: deriveTone(r.pos, r.neg) }));
+    .all(spaceId, limit) as { id: number; label: string; cnt: number; lastAt: string | null; pos: number; neg: number }[];
+  return rows.map((r) => ({ id: r.id, label: r.label, interactionCount: r.cnt, lastAt: r.lastAt, tone: deriveTone(r.pos, r.neg) }));
 }
 
 export function peopleSnapshotText(handle: DbHandle, spaceId: string): string | null {

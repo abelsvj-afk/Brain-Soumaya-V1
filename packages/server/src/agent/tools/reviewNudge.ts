@@ -43,8 +43,13 @@ function buildReviewNudgeMessage(input: { label: string; strength: number; impor
 export const reviewNudgeTool: Tool = {
   name: "review_nudge",
   description:
-    "When a memory has decayed to its spaced-repetition review point, prompt the user to actively recall it (retrieval practice). At most one per day.",
-  parameters: { type: "object", properties: { nodeId: { type: "number" } }, required: ["nodeId"] },
+    "List the memories that are due for spaced-repetition recall (their memory strength has decayed to the review point). Call with NO arguments in conversation (\"what should I review?\") — the due list is computed fresh and nothing is snoozed or sent. Optionally pass nodeId to nudge recall of one specific memory. (The router's detector-shaped call, with nodeId, still works exactly as before.)",
+  parameters: {
+    type: "object",
+    properties: { nodeId: { type: "number", description: "Optional: a specific memory id to nudge. Omit in conversation to list what is due." } },
+    required: [],
+    additionalProperties: false,
+  },
 
   detect(tc: ToolContext): ToolInvocation[] {
     const today = new Date(tc.now).toISOString().slice(0, 10);
@@ -59,6 +64,31 @@ export const reviewNudgeTool: Tool = {
   },
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+    // Telegram Parity Phase 4 — conversational path: no nodeId means the
+    // model is asking what is due for review — answer from dueForReview()
+    // (the same ranking detect() uses), read-only: NO snooze and NO notify
+    // (snoozing is the proactive path's job, below, unchanged).
+    if (typeof args.nodeId !== "number" || !Number.isFinite(args.nodeId)) {
+      const due = dueForReview(tc.ctx, tc.spaceId, tc.now, 5);
+      if (due.length === 0) {
+        return {
+          ok: true,
+          summary: "review_nudge (conversational): nothing due",
+          message: "REVIEW CHECK (exact, from the spaced-repetition schedule): nothing is due for recall right now. Say so honestly — do not invent a review item.",
+        };
+      }
+      const lines = [
+        `REVIEW CHECK (exact, from the spaced-repetition schedule): ${due.length} memor${due.length === 1 ? "y is" : "ies are"} due for recall, most significant + weakest first:`,
+        ...due.map((m) => `  - #${m.id} "${m.label}" (memory strength ${memoryStrength(m, tc.now).toFixed(2)}, reviewed ${m.review_count ?? 0} time(s))`),
+        "Prompt the user to recall the first one from memory before opening it — retrieval practice is the point.",
+      ];
+      return {
+        ok: true,
+        summary: `review_nudge (conversational): ${due.length} due`,
+        targets: due.map((m) => m.id),
+        message: lines.join("\n"),
+      };
+    }
     const nodeId = Number(args.nodeId);
     const row = tc.ctx.handle.sqlite
       .prepare(

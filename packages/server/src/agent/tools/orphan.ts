@@ -69,8 +69,13 @@ function buildOrphanMessage(input: { label: string; ageDays: number; importance:
 export const orphanTool: Tool = {
   name: "surface_orphan",
   description:
-    "Surface a memory that has drifted with no connections, inviting the user to link it into the graph. At most one per day.",
-  parameters: { type: "object", properties: { nodeId: { type: "number" } }, required: ["nodeId"] },
+    "Find a memory that has drifted with no connections (an orphan) so the user can link it into their galaxy. Call with NO arguments in conversation (\"do I have any unconnected memories?\") — the most significant long-drifting orphan is selected fresh. Optionally pass nodeId for a specific memory. (The router's detector-shaped call, with nodeId, still works exactly as before.)",
+  parameters: {
+    type: "object",
+    properties: { nodeId: { type: "number", description: "Optional: a specific memory id. Omit in conversation to select the top orphan fresh." } },
+    required: [],
+    additionalProperties: false,
+  },
 
   detect(tc: ToolContext): ToolInvocation[] {
     const today = new Date(tc.now).toISOString().slice(0, 10);
@@ -96,6 +101,56 @@ export const orphanTool: Tool = {
   },
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+    // Telegram Parity Phase 4 — conversational path: no nodeId means the
+    // model is asking about orphaned memories — select with detect()'s
+    // EXACT ranking (most significant, longest-drifting, past the MIN_AGE
+    // grace) but WITHOUT the once-a-day gate and WITHOUT notify: the user
+    // asked explicitly, and the answer returns to the model, not as a
+    // separate proactive ping. Router path below is unchanged.
+    if (typeof args.nodeId !== "number" || !Number.isFinite(args.nodeId)) {
+      const s = tc.ctx.handle.sqlite;
+      const total = (
+        s
+          .prepare(
+            `SELECT COUNT(*) AS c FROM nodes n
+             WHERE n.space_id = ? AND n.deleted_at IS NULL AND (n.kind IS NULL OR n.kind = 'memory')
+               AND NOT EXISTS (SELECT 1 FROM edges e WHERE e.space_id = n.space_id AND (e.source = n.id OR e.target = n.id))`,
+          )
+          .get(tc.spaceId) as { c: number }
+      ).c;
+      if (total === 0) {
+        return {
+          ok: true,
+          summary: "surface_orphan (conversational): no orphans",
+          message: "ORPHAN CHECK (exact, from the graph): every live memory has at least one connection — there are no orphaned (unconnected) memories. Say so honestly.",
+        };
+      }
+      const cutoff = new Date(tc.now - MIN_AGE_MS).toISOString();
+      const row = s
+        .prepare(
+          `SELECT n.id, n.label, n.created_at FROM nodes n
+           WHERE n.space_id = ? AND n.deleted_at IS NULL AND (n.kind IS NULL OR n.kind = 'memory')
+             AND n.created_at <= ?
+             AND NOT EXISTS (SELECT 1 FROM edges e WHERE e.space_id = n.space_id AND (e.source = n.id OR e.target = n.id))
+           ORDER BY COALESCE(n.importance, 0) DESC, n.created_at ASC
+           LIMIT 1`,
+        )
+        .get(tc.spaceId, cutoff) as { id: number; label: string; created_at: string } | undefined;
+      if (!row) {
+        return {
+          ok: true,
+          summary: `surface_orphan (conversational): ${total} unlinked, all recent`,
+          message: `ORPHAN CHECK (exact, from the graph): ${total} live memor${total === 1 ? "y is" : "ies are"} unconnected, but all are still within the grace period for forming links — none has drifted long enough to call an orphan yet.`,
+        };
+      }
+      const ageDays = Math.max(0, Math.floor((tc.now - toMs(row.created_at)) / 86_400_000));
+      return {
+        ok: true,
+        summary: `surface_orphan (conversational): top orphan "${row.label}"`,
+        targets: [row.id],
+        message: `ORPHAN CHECK (exact, from the graph): ${total} live memor${total === 1 ? "y is" : "ies are"} unconnected. The most significant long-drifting one is #${row.id} "${row.label}" — created ${row.created_at.slice(0, 10)}, drifting for ${ageDays} day(s) with no connections. Invite the user to link it into their galaxy.`,
+      };
+    }
     const nodeId = Number(args.nodeId);
     const row = tc.ctx.handle.sqlite
       .prepare(`SELECT label, importance, created_at FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
