@@ -1,6 +1,6 @@
 ## 2026-10-21 — ADR-018 Phase A design closure
 
-**Current phase:** Phase A design contract closed for owner review; closure amendment (blocker B1 + questions Q1–Q5) applied after independent review — independent verification of the amendment is the next gate; implementation not started.  
+**Current phase:** Phase A design contract closed for owner review; closure amendment (blocker B1 + questions Q1–Q5) applied and independently verified — the verification's single discrepancy (D-1, legacy reminder staleness) is resolved by the owner's drop-as-unverifiable rule, now stated in the ADR; verifier confirmation of that single item is the next gate, then the owner's design-gate decision; implementation not started.  
 **Branch:** `design/global-notify-cap-space-tts-cache`  
 **Design record:** [ADR-018](./docs/ADR-018-global-notification-cap-and-space-owned-tts-cache.md)  
 **Design-only commit:** `9d34dfec9def3f81590d28c705408724335b7b3b` (an earlier closure commit on this branch — not the branch tip) updated architecture policy; ADR Phase A closure is recorded in the design branch.  
@@ -15,16 +15,17 @@
 **Phase A design closure**
 - Source-grounded transaction-boundary map covers Telegram outbox, push outbox, schema/migration definitions, TTS cache service, and space deletion.
 - ADR-018 now specifies the proposed shared notification_cap_claims DDL and states, atomic claim/release transitions, cap-exempt urgent claims, retry-time reminder/bill urgency and staleness revalidation, cache table rebuild, legacy-row purge, and deletion rollback requirements.
-- Closure amendment (2026-10-21, after the independent Phase A design review): resolves blocker B1 (Telegram `notification_outbox` gains `remind_at`; the sweep reclassification gains the downgrade direction) and closure questions Q1–Q5 (migration transition rule, criterion-13 interleaved harness, migrateSchema-only column placement, corrected file map naming `agent/notify/boundary.ts`, table-level legacy-fixture pattern) in the ADR's normative text. Includes the owner's fail-closed legacy-row rule: no recoverable original due time ⇒ no urgency exemption — no invented timestamp, no trusted persisted flag, ordinary cap + quiet-hours enforcement.
+- Closure amendment (2026-10-21, after the independent Phase A design review): resolves blocker B1 (Telegram `notification_outbox` gains `remind_at`; the sweep reclassification gains the downgrade direction) and closure questions Q1–Q5 (migration transition rule, criterion-13 interleaved harness, migrateSchema-only column placement, corrected file map naming `agent/notify/boundary.ts`, table-level legacy-fixture pattern) in the ADR's normative text. Includes the owner's fail-closed legacy-row rule: no recoverable original due time ⇒ no urgency exemption — no invented timestamp, no trusted persisted flag, ordinary cap + quiet-hours enforcement. Independent verification of the amendment then verified every item except one (D-1: the staleness input for legacy reminders was unspecified); the owner resolved D-1 fail-closed — a pre-migration Telegram reminder with `remind_at IS NULL` is dropped as unverifiable and must not be sent — and that sentence is now in the ADR (§2.4, A2b, criterion 10). The D-1 rule is reminder-specific: legacy bills carry `bill_due_at` and keep their verified handling.
 - Resolved by the closure amendment: shared claim-service placement verified against the real import graph (review gate G1) and migration/fixture conventions specified (G2). Still mandatory before code (per ADR A4): verify the repository migration harness and test fixtures against the implementation as built. Any incompatibility returns to design review.
 
 **Verification status**
 - Read-only source inspection only. No production code changed; no tests/build/typecheck were run by this Phase A documentation pass.
 - The closure amendment is documentation-only on the design branch; no production code changed and no tests were run for it.
+- The amendment's independent verification verified all items except D-1; the D-1 closure sentence is now added (documentation only, same branch) and awaits the verifier's single-item confirmation.
 - No PR opened, no merge, no secrets changed, no feature armed, no deployment.
 
 **Next tasks**
-1. Independent verification of the closure amendment against the source and acceptance criteria.
+1. Verifier confirmation of the single D-1 closure (legacy reminder staleness sentence) against the amended ADR; all other amendment items are already verified.
 2. Owner design-gate decision on the amended Phase A design contract.
 3. Only after separate implementation authorization: implement shared global cap and retry freshness.
 4. Implement per-space TTS ownership, migration, and transactional deletion.
