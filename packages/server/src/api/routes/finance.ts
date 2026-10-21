@@ -253,7 +253,12 @@ export function financeRoutes(ctx: AppContext): Router {
   r.get("/expense", (_req, res) => res.json(new FinExpenseRepo(ctx.handle, spaceOf(res)).list()));
 
   // ---- Edit / delete recorded transactions (balance-aware, per D3) ----
-  const IncomePatch = z.object({ date: isoDate.optional(), netCents: posCents.optional(), platform: z.string().trim().max(60).nullable().optional() }).strict();
+  const IncomePatch = z.object({
+    date: isoDate.optional(), netCents: posCents.optional(), platform: z.string().trim().max(60).nullable().optional(),
+    // IM-82: same optional detail fields IncomeBody accepts at creation — editable after the fact.
+    grossCents: posCents.nullable().optional(), taxCents: posCents.nullable().optional(),
+    hours: z.number().nonnegative().max(1000).nullable().optional(),
+  }).strict();
   const ExpensePatch = z.object({
     date: isoDate.optional(), amountCents: posCents.optional(), merchant: z.string().trim().max(80).nullable().optional(),
     category: z.string().trim().min(1).max(40).optional(), direction: z.enum(["out", "in"]).optional(),

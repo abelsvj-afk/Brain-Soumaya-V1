@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type GraphData, type GraphNode, type CognitiveKind, CELESTIAL_ICON, CELESTIAL_LABEL, CELESTIAL_CLASSES, NODE_TYPE_LABEL, normalizeNodeType, FUEL_JOB_COST, COGNITIVE_META, skillTier } from "@brain/shared";
-import { deleteNode, archiveNode, setImportance, synthesizeNode, answerResearch, requestMaintenance, ingestText } from "../api/client.js";
+import { type GraphData, type GraphEdge, type GraphNode, type CognitiveKind, CELESTIAL_ICON, CELESTIAL_LABEL, CELESTIAL_CLASSES, NODE_TYPE_LABEL, normalizeNodeType, FUEL_JOB_COST, COGNITIVE_META, skillTier } from "@brain/shared";
+import { deleteNode, archiveNode, setImportance, synthesizeNode, answerResearch, requestMaintenance, ingestText, updateNodeDetails, getNeighbors } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
 import { colorForType } from "../graph/theme.js";
@@ -9,6 +9,8 @@ import { MarkdownView } from "./MarkdownView.js";
 import { Chronicle } from "./Chronicle.js";
 import { MemoryAttachments } from "./MemoryAttachments.js";
 import { JourneyChips } from "./JourneyChips.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
+import { DeepDive } from "./DeepDive.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
 
 interface Props {
@@ -27,10 +29,12 @@ interface Props {
 const end = (v: number | { id: number }): number => (typeof v === "object" ? v.id : v);
 const NEIGHBORS_SHOWN_CAP = 40;
 
-/** Friendly absolute date + relative hint, tolerant of SQLite "YYYY-MM-DD HH:MM:SS". */
-function fmtWhen(raw: string): string {
+/** Friendly absolute date + relative hint, tolerant of SQLite "YYYY-MM-DD HH:MM:SS".
+ *  An unparseable stored value falls back to a human placeholder (IM-33) —
+ *  the raw storage format must never leak into the UI. */
+export function fmtWhen(raw: string): string {
   const t = parseTolerantMs(raw);
-  if (Number.isNaN(t)) return raw;
+  if (Number.isNaN(t)) return "date unavailable";
   const abs = new Date(t).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -87,12 +91,57 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
   const [researchSubmitting, setResearchSubmitting] = useState(false);
   const [researchError, setResearchError] = useState("");
 
+  // IM-32: synthesis failure gets its OWN error surface — it must never be
+  // written into the insight body, where it would read as Soumaya's voice.
+  const [synthError, setSynthError] = useState("");
+
+  // IM-26: inline edit of label + body (mirrors the Mind tab's inline edit),
+  // persisted through the node PATCH route.
+  const [editing, setEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  // IM-30: neighbour overflow is expandable, not a dead-end "+N more" line.
+  const [showAllNeighbors, setShowAllNeighbors] = useState(false);
+  // IM-28: edge semantics from GET /nodes/:id/neighbors (relationship + weight
+  // for this node's direct links); null until it answers — the in-memory graph
+  // already carries the same fields, so the list renders either way and the
+  // endpoint's answer replaces/merges when it lands.
+  const [endpointLinks, setEndpointLinks] = useState<GraphEdge[] | null>(null);
+
+  // IM-34: node delete confirms through the app dialog, not window.confirm.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   // Clear any shown insight when switching memories.
   useEffect(() => {
     setInsight("");
+    setSynthError("");
     setAnswers({});
     setResearchError("");
     setRequested(false);
+    setEditing(false);
+    setEditError("");
+    setShowAllNeighbors(false);
+    setEndpointLinks(null);
+    setConfirmingDelete(false);
+  }, [node?.id]);
+
+  // IM-28: actually call the neighbors endpoint this tab used to ignore.
+  useEffect(() => {
+    if (!node) return;
+    let alive = true;
+    getNeighbors(node.id, 1)
+      .then((d) => {
+        if (alive) setEndpointLinks(d.links);
+      })
+      .catch(() => {
+        /* getNeighbors is fail-soft; the graph-derived edges below still render */
+      });
+    return () => {
+      alive = false;
+    };
   }, [node?.id]);
 
   // A memory visibly leveling up (moon → planet → ... → supergiant) is the core
@@ -116,6 +165,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
     if (!node) return;
     setSynthBusy(true);
     setInsight("");
+    setSynthError("");
     setInsightSaved(false);
     synthesizeNode(node.id)
       .then((r) => {
@@ -128,8 +178,38 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
         // didn't even declare, and the node was never told to refresh.
         onChanged?.(node.id);
       })
-      .catch((e) => setInsight(`(couldn't synthesize: ${(e as Error).message})`))
+      // IM-32: failures go to the error surface beside the button, NOT into
+      // the insight body (previously the raw server error rendered as if it
+      // were the insight itself, in Soumaya's voice).
+      .catch((e) => setSynthError((e as Error).message || "Synthesis failed — try again."))
       .finally(() => setSynthBusy(false));
+  };
+
+  // IM-26: inline edit, mirroring MindPanel's startEdit/saveEdit shape.
+  const startEdit = () => {
+    if (!node) return;
+    setEditLabel(node.label);
+    setEditContent(node.content ?? "");
+    setEditError("");
+    setEditing(true);
+  };
+  const saveEdit = async () => {
+    if (!node || editBusy || !editLabel.trim()) return;
+    setEditBusy(true);
+    setEditError("");
+    try {
+      await updateNodeDetails(node.id, { label: editLabel.trim(), content: editContent });
+      setEditing(false);
+      playSfx("tap");
+      pushToast("Saved ✎", "✏️", 3000);
+      onChanged?.(node.id);
+    } catch (e) {
+      // Honour the save result: stay in the editor with the error visible —
+      // never close as if it saved.
+      setEditError((e as Error).message || "Couldn't save that edit — try again.");
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   async function saveInsightAsMemory() {
@@ -183,19 +263,51 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
     if (saveTimer.current) clearTimeout(saveTimer.current);
   }, []);
 
-  // Direct connections, computed from the in-memory graph (no API round-trip).
-  // Fixes "N links but 0 connections".
-  const neighbors = useMemo(() => {
+  // Direct connections WITH their edge semantics (IM-28): every neighbour
+  // carries the link's relationship + weight, so a `contradicts` connection
+  // never looks like a `builds_on` one. Seed from the in-memory graph (which
+  // already carries GraphEdge fields), then merge the GET /nodes/:id/neighbors
+  // answer when it lands (endpoint links win per neighbour id).
+  const neighborEntries = useMemo(() => {
     if (!node) return [];
-    const ids = new Set<number>();
-    for (const l of graph.links) {
-      const s = end(l.source as never);
-      const t = end(l.target as never);
-      if (s === node.id) ids.add(t);
-      else if (t === node.id) ids.add(s);
-    }
-    return graph.nodes.filter((n) => ids.has(n.id));
-  }, [node, graph]);
+    const byId = new Map<number, { node: GraphNode; relationship: string; weight: number; outgoing: boolean }>();
+    const consider = (links: GraphEdge[]) => {
+      for (const l of links) {
+        const s = end(l.source as never);
+        const t = end(l.target as never);
+        let other: number | null = null;
+        let outgoing = false;
+        if (s === node.id) {
+          other = t;
+          outgoing = true;
+        } else if (t === node.id) {
+          other = s;
+        }
+        if (other === null || other === node.id) continue;
+        const found = graph.nodes.find((n) => n.id === other);
+        if (found) {
+          byId.set(other, { node: found, relationship: l.relationship, weight: l.weight ?? 0, outgoing });
+        }
+      }
+    };
+    consider(graph.links);
+    // The endpoint's links win per neighbour (it is the dedicated source for
+    // this node's neighbourhood), and can add neighbours the in-memory
+    // graph's link list didn't carry.
+    if (endpointLinks) consider(endpointLinks);
+    // Strongest connections first — order used to be raw graph-array order.
+    return [...byId.values()].sort((a, b) => b.weight - a.weight);
+  }, [node, graph, endpointLinks]);
+
+  const neighbors = neighborEntries.map((e) => e.node);
+
+  // IM-29: `summarizes` edges OUT of this node are its drill-in set — a hub's
+  // members, or a belief's evidence. The count header prefers the server's
+  // memberCount when present; the list is the members themselves.
+  const summarized = useMemo(
+    () => neighborEntries.filter((e) => e.outgoing && e.relationship === "summarizes"),
+    [neighborEntries],
+  );
 
   if (!node) {
     return <p className="empty">Click a star to inspect a memory and its connections.</p>;
@@ -253,18 +365,60 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           </span>
         </>
       )}
-      <h2>{node.label}</h2>
-      {node.celestialTitle && (
-        <p className="celestial-title" style={{ fontStyle: "italic", opacity: 0.8, marginTop: "-0.5rem", marginBottom: "1rem" }}>
-          "{node.celestialTitle}"
-        </p>
+      {editing ? (
+        <div className="node-edit">
+          <label className="node-edit-label">
+            Title
+            <input
+              className="node-edit-input"
+              value={editLabel}
+              onChange={(e) => setEditLabel(e.target.value)}
+              placeholder="Give it a title"
+            />
+          </label>
+          <label className="node-edit-label">
+            Body
+            <textarea
+              className="node-edit-body"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={8}
+              placeholder="What should this say?"
+            />
+          </label>
+          {editError && (
+            <p className="node-edit-error" role="alert">
+              {editError}
+            </p>
+          )}
+          <div className="node-edit-actions">
+            <button className="mini" onClick={() => void saveEdit()} disabled={editBusy || !editLabel.trim()}>
+              {editBusy ? "Saving…" : "Save"}
+            </button>
+            <button className="mini ghost" onClick={() => setEditing(false)} disabled={editBusy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <h2>{node.label}</h2>
+          {node.celestialTitle && (
+            <p className="celestial-title" style={{ fontStyle: "italic", opacity: 0.8, marginTop: "-0.5rem", marginBottom: "1rem" }}>
+              "{node.celestialTitle}"
+            </p>
+          )}
+          {(() => {
+            // Structured content (Soumaya's research reports) gets the report card treatment;
+            // a plain short memory just renders as clean text.
+            const isReport = /(^|\n)#{1,4}\s|(^|\n)\s*[-*]\s|(^|\n)\s*\d+\.\s/.test(node.content || "");
+            return <MarkdownView text={node.content} className={`content md${isReport ? " md-report" : ""}`} />;
+          })()}
+          <button className="mini node-edit-btn" onClick={startEdit} title="Edit this memory's title and body">
+            ✎ Edit
+          </button>
+        </>
       )}
-      {(() => {
-        // Structured content (Soumaya's research reports) gets the report card treatment;
-        // a plain short memory just renders as clean text.
-        const isReport = /(^|\n)#{1,4}\s|(^|\n)\s*[-*]\s|(^|\n)\s*\d+\.\s/.test(node.content || "");
-        return <MarkdownView text={node.content} className={`content md${isReport ? " md-report" : ""}`} />;
-      })()}
 
       {node.researchQuestions && node.researchQuestions.length > 0 && (
         <details
@@ -360,6 +514,21 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
         </details>
       )}
 
+      {/* IM-29: answered research questions used to vanish the moment
+          researchQuestions cleared server-side — the answers the user gave
+          (researchAnswers) are re-shown here so the exchange stays readable. */}
+      {node.researchAnswers && Object.keys(node.researchAnswers).length > 0 && (
+        <div className="dock-section research-answers">
+          <h3>🛸 Your earlier answers</h3>
+          {Object.entries(node.researchAnswers).map(([q, a]) => (
+            <div key={q} className="research-answer">
+              <p className="research-answer-q">{q}</p>
+              <p className="research-answer-a">{a}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {(node.tags?.length || node.occurredAt || node.remindAt) && (
         <div className="node-meta">
           {node.tags && node.tags.length > 0 && (
@@ -395,6 +564,48 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
         </div>
       )}
 
+      {/* IM-27: the object's own dates/state — previously only NodeList showed
+          any of this; Details showed none of createdAt/lastTendedAt/entropy/
+          reviewStrength for the very object it inspects. Local time via fmtWhen. */}
+      <div className="node-facts">
+        <p className="node-when">📥 Logged {fmtWhen(node.createdAt)}</p>
+        {node.lastTendedAt && <p className="node-when">🌱 Last tended {fmtWhen(node.lastTendedAt)}</p>}
+        {typeof node.entropy === "number" && (
+          <p className="node-when">
+            {node.entropy >= 0.66 ? "❄️ Cooling" : node.entropy >= 0.33 ? "🌗 Fading" : "🔥 Warm"} · entropy {Math.round(node.entropy * 100)}%
+          </p>
+        )}
+        {typeof node.reviewStrength === "number" && (
+          <p className="node-when">🧠 Review strength {Math.round(node.reviewStrength * 100)}%</p>
+        )}
+        {node.kind === "moc" && typeof node.memberCount === "number" && (
+          <p className="node-when">🌌 {node.memberCount} member{node.memberCount === 1 ? "" : "s"} in this constellation</p>
+        )}
+      </div>
+
+      {/* IM-29: hub members / belief evidence drill-in — the `summarizes`
+          edges out of this node, listed and fly-to-able instead of a bare
+          count (or, for beliefs, nothing at all). */}
+      {(node.kind === "moc" || node.kind === "belief") && summarized.length > 0 && (
+        <div className="node-members">
+          <h3>
+            {node.kind === "moc"
+              ? `🌌 Members (${node.memberCount ?? summarized.length})`
+              : `🖤 Evidence she drew on (${summarized.length})`}
+          </h3>
+          <ul className="neighbors">
+            {summarized.map((e) => (
+              <li key={e.node.id}>
+                <button onClick={() => onFocus(e.node.id)}>
+                  <span className="dot" style={{ background: colorForType(e.node.type) }} title={NODE_TYPE_LABEL[normalizeNodeType(e.node.type)]} />
+                  {e.node.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <JourneyChips kind="node" refId={node.id} />
 
       {node.kind === "action" ? (
@@ -415,6 +626,8 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
             <button
               className="mini"
               onClick={() => {
+                // IM-140a: completed task becomes a satellite (before the delete).
+                window.dispatchEvent(new CustomEvent("brain-task-completed", { detail: { id: node.id } }));
                 deleteNode(node.id)
                   .then(() => onDeleted())
                   .catch(() => pushToast("Couldn't clear that — try again.", "⚠️", 3500));
@@ -442,6 +655,16 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           <summary>📎 Attachments</summary>
           <div style={{ padding: "10px" }}>
             <MemoryAttachments nodeId={node.id} />
+          </div>
+        </details>
+      )}
+
+      {/* IM-37: the Investigator's face — a cited deep-dive over this memory. */}
+      {node.kind !== "action" && (
+        <details className="dock-section" open={!isMobile}>
+          <summary>🔍 Deep-dive</summary>
+          <div style={{ padding: "10px" }}>
+            <DeepDive nodeId={node.id} nodeLabel={node.label} onFocus={onFocus} />
           </div>
         </details>
       )}
@@ -505,23 +728,37 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
       )}
 
       {onDeleted && (
-        <button
-          className="delete-btn"
-          onClick={() => {
-            if (!confirm(`Delete "${node.label}"? This can't be undone.`)) return;
+        <button className="delete-btn" onClick={() => setConfirmingDelete(true)}>
+          🗑 Delete memory
+        </button>
+      )}
+      {confirmingDelete && onDeleted && (
+        <ConfirmDialog
+          title="Delete this memory?"
+          message={`"${node.label}" will be permanently deleted. This can't be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => {
+            setConfirmingDelete(false);
             playSfx("delete");
             deleteNode(node.id)
               .then(() => onDeleted())
               .catch(() => pushToast("Couldn't delete that — try again.", "⚠️", 3500));
           }}
-        >
-          🗑 Delete memory
-        </button>
+          onCancel={() => setConfirmingDelete(false)}
+        />
       )}
 
       <button className="synth-btn" onClick={runSynthesis} disabled={synthBusy}>
         {synthBusy ? "Connecting…" : "✨ Connect the dots"}
       </button>
+      {synthError && (
+        <div className="synth-error" role="alert">
+          <p>Couldn’t connect the dots just now. {synthError}</p>
+          <button className="mini" onClick={runSynthesis} disabled={synthBusy}>
+            Retry
+          </button>
+        </div>
+      )}
       {insight && (
         <>
           <p className="insight-text">{insight}</p>
@@ -559,19 +796,31 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
 
       <h3>Connected ({neighbors.length})</h3>
       <ul className="neighbors">
-        {/* A richly-connected hub can carry dozens/hundreds of direct links — this
-            used to render every single one into the DOM regardless. */}
-        {neighbors.slice(0, NEIGHBORS_SHOWN_CAP).map((n) => (
-          <li key={n.id}>
-            <button onClick={() => onFocus(n.id)}>
-              <span className="dot" style={{ background: colorForType(n.type) }} title={NODE_TYPE_LABEL[normalizeNodeType(n.type)]} />
-              {n.label}
+        {/* A richly-connected hub can carry dozens/hundreds of direct links —
+            the first screen caps at NEIGHBORS_SHOWN_CAP, but the overflow is
+            EXPANDABLE (IM-30): everything past the cap stays reachable here,
+            not stranded behind a plain "+N more" line. Each row shows its
+            edge's relationship + weight (IM-28). */}
+        {(showAllNeighbors ? neighborEntries : neighborEntries.slice(0, NEIGHBORS_SHOWN_CAP)).map((e) => (
+          <li key={e.node.id}>
+            <button onClick={() => onFocus(e.node.id)}>
+              <span className="dot" style={{ background: colorForType(e.node.type) }} title={NODE_TYPE_LABEL[normalizeNodeType(e.node.type)]} />
+              <span className="neighbor-label">{e.node.label}</span>
+              <span className="neighbor-rel" title={`Link strength ${Math.round(e.weight * 100)}%`}>
+                {e.relationship.replace(/_/g, " ")} · {Math.round(e.weight * 100)}%
+              </span>
             </button>
           </li>
         ))}
         {neighbors.length === 0 && <li className="empty">No connections yet.</li>}
         {neighbors.length > NEIGHBORS_SHOWN_CAP && (
-          <li className="empty small">+{neighbors.length - NEIGHBORS_SHOWN_CAP} more</li>
+          <li>
+            <button className="chronicle-toggle neighbors-more" onClick={() => setShowAllNeighbors((v) => !v)}>
+              {showAllNeighbors
+                ? "Show fewer connections"
+                : `+${neighbors.length - NEIGHBORS_SHOWN_CAP} more — show all ${neighbors.length}`}
+            </button>
+          </li>
         )}
       </ul>
     </div>

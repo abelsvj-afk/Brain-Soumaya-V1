@@ -36,6 +36,9 @@ export function fieldNoteEntries(discoveries: AgentDiscovery[]): CodexEntry[] {
     maxLevel: 1,
     levelLabel: "Charted by Soumaya",
     focusId: d.focusId ?? undefined,
+    // IM-91: keep the charting date — field notes are a chronology, and
+    // dropping createdAt here erased it before the panel ever saw it.
+    createdAt: d.createdAt,
   }));
 }
 
@@ -54,6 +57,14 @@ export interface CodexEntry {
   progressToNext?: { cur: number; target: number };
   /** A memory id to fly to, when the entry maps to a specific body. */
   focusId?: number;
+  /** When the entry was charted (field notes carry the server's date). */
+  createdAt?: string;
+  /**
+   * IM-95: a locked entry whose unlock lives in another dock tab carries a
+   * go-there action, instead of only naming that tab's vocabulary in prose.
+   * `tab` is a RightDock DockTab id.
+   */
+  goTo?: { tab: string; label: string };
 }
 
 export interface CodexCtx {
@@ -180,6 +191,7 @@ function constellationEntries(ctx: CodexCtx): CodexEntry[] {
         lockedHint: "In the Insights tab, group related memories with “✦ Save as constellation”.",
         lore: "A constellation is a named hub that summarizes a whole body of work — a front door to a region of your mind. You haven't charted one yet.",
         discovered: false,
+        goTo: { tab: "insights", label: "Open Insights →" },
         level: 0,
         maxLevel: 1,
         levelLabel: "Uncharted",
@@ -231,6 +243,7 @@ function mindEntries(ctx: CodexCtx): CodexEntry[] {
       lockedHint: d.hint,
       lore: d.lore,
       discovered: count >= 1,
+      goTo: { tab: "mind", label: "Open the Mind tab →" },
       level: Math.max(0, level),
       maxLevel: 3,
       levelLabel: count >= 1 ? `${count} in your mind` : "Unformed",

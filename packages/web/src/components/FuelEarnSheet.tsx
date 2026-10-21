@@ -7,7 +7,7 @@ import type { Fuel } from "@brain/shared";
  * mirror the server economy (economy.ts) — keep them in sync.
  */
 
-export type EarnKind = "memory" | "mind" | "thought" | "action";
+export type EarnKind = "memory" | "mind" | "thought" | "action" | "recall" | "codex";
 
 interface Row {
   kind?: EarnKind; // present = actionable button; absent = passive/info row
@@ -22,9 +22,9 @@ const ROWS: Row[] = [
   { kind: "mind", icon: "🧠", label: "Add to your Mind", amount: "+6", hint: "A goal, person, skill, identity or idea — building your mind pays." },
   { kind: "action", icon: "✅", label: "Clear an action item", amount: "+3", hint: "Tick off a day-to-day to-do in the Agenda (one you didn't just create — real follow-through pays)." },
   { kind: "thought", icon: "💭", label: "Capture a thought", amount: "+2", hint: "Drop a fleeting thought into the mind space." },
-  { icon: "🧠", label: "Recall a fading memory", amount: "+3", hint: "Do a recall in the 🧠 Recall session — it also keeps your streak alive." },
+  { kind: "recall", icon: "🧠", label: "Recall a fading memory", amount: "+3", hint: "Do a recall in the 🧠 Recall session — it also keeps your streak alive." },
   { icon: "🔥", label: "Daily streak", amount: "+2", hint: "Automatic the first time you feed your brain each day." },
-  { icon: "🔦", label: "Codex discoveries", amount: "+4", hint: "Soumaya finds lore as she explores — one-time per entry." },
+  { kind: "codex", icon: "🔦", label: "Codex discoveries", amount: "+4", hint: "Soumaya finds lore as she explores — one-time per entry." },
   { icon: "🛰️", label: "Slow auto-refuel", amount: "+3.5/hr", hint: "The tank trickles back up on its own while you're away." },
 ];
 
@@ -38,7 +38,8 @@ export function FuelEarnSheet({ fuel, onAction, onClose }: Props) {
   const pct = fuel ? Math.round((fuel.fuel / fuel.capacity) * 100) : 0;
   return (
     <div className="fuel-ways-backdrop" onClick={onClose}>
-      <div className="fuel-ways" onClick={(e) => e.stopPropagation()}>
+      {/* IM-11: entrance animation consistent with the other overlays (toast-in / obs-rise family). */}
+      <div className="fuel-ways fuel-ways-enter" onClick={(e) => e.stopPropagation()}>
         <button className="fw-x" onClick={onClose} aria-label="Close">×</button>
         <div className="fw-head">
           <span className="fw-glyph">⛽</span>
@@ -47,6 +48,8 @@ export function FuelEarnSheet({ fuel, onAction, onClose }: Props) {
             {fuel && (
               <div className="fw-now">
                 {Math.round(fuel.fuel)}/{fuel.capacity} · {pct}% — Soumaya spends it on deep-dive research & sector charting.
+                {/* IM-11: the spend side, as a number — each autonomous job costs this much. */}
+                <span className="fw-cost"> Each deep job costs {fuel.jobCost} Fuel.</span>
               </div>
             )}
           </div>

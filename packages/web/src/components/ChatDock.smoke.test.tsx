@@ -182,18 +182,28 @@ describe("ChatDock — Maya Chat → Galaxy Navigation", () => {
 });
 
 describe("ChatDock — clearing a conversation is destructive and needs confirmation", () => {
-  it("keeps the conversation on cancel, clears it once confirmed", async () => {
+  it("keeps the conversation on cancel, clears it once confirmed — via the app dialog, never window.confirm (IM-108)", async () => {
     localStorage.setItem(CHAT_KEY, JSON.stringify([{ role: "you", text: "Keep me" }]));
-    const confirmMock = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-    (window as unknown as { confirm: typeof confirmMock }).confirm = confirmMock;
+    const confirmSpy = vi.fn();
+    (window as unknown as { confirm: typeof confirmSpy }).confirm = confirmSpy;
     render(<ChatDock onClose={() => {}} onFocus={() => {}} />);
     await screen.findByText("Keep me");
 
     const clearBtn = screen.getByTitle("Clear conversation");
     act(() => clearBtn.click());
+    // The shared ConfirmDialog appears; the conversation survives until confirmed.
+    const dialog = await screen.findByRole("dialog", { name: "Clear this conversation?" });
+    expect(dialog).toBeTruthy();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.getByText("Keep me")).toBeTruthy();
+
+    act(() => screen.getByText("Cancel").click());
+    expect(screen.queryByRole("dialog", { name: "Clear this conversation?" })).toBeNull();
     expect(screen.getByText("Keep me")).toBeTruthy();
 
     act(() => clearBtn.click());
+    await screen.findByRole("dialog", { name: "Clear this conversation?" });
+    act(() => screen.getByText("Clear").click());
     expect(screen.queryByText("Keep me")).toBeNull();
   });
 });
@@ -210,7 +220,7 @@ describe("ChatDock — Journey-scoped Chat handoff", () => {
     const box = screen.getByRole("textbox") as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "how's it going?" } });
     fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
-    await waitFor(() => expect(askChat).toHaveBeenCalledWith("how's it going?", expect.anything(), 42, undefined));
+    await waitFor(() => expect(askChat).toHaveBeenCalledWith("how's it going?", expect.anything(), 42, undefined, undefined, expect.any(AbortSignal)));
     expect(onConsumeJourneyContext).toHaveBeenCalledTimes(1);
   });
 
@@ -221,7 +231,7 @@ describe("ChatDock — Journey-scoped Chat handoff", () => {
     const box = screen.getByRole("textbox") as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "just a normal question" } });
     fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
-    await waitFor(() => expect(askChat).toHaveBeenCalledWith("just a normal question", expect.anything(), undefined, undefined));
+    await waitFor(() => expect(askChat).toHaveBeenCalledWith("just a normal question", expect.anything(), undefined, undefined, undefined, expect.any(AbortSignal)));
     expect(onConsumeJourneyContext).not.toHaveBeenCalled();
   });
 });
@@ -236,7 +246,7 @@ describe("ChatDock — mobile input", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("line one\nline two");
     const sendBtn = container.querySelector(".chatdock-send")! as HTMLButtonElement;
     await act(async () => { sendBtn.click(); });
-    await waitFor(() => expect(askChat).toHaveBeenCalledWith("line one\nline two", expect.anything(), undefined, undefined));
+    await waitFor(() => expect(askChat).toHaveBeenCalledWith("line one\nline two", expect.anything(), undefined, undefined, undefined, expect.any(AbortSignal)));
     expect((textarea as HTMLTextAreaElement).value).toBe("");
   });
 

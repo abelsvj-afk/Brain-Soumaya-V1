@@ -14,7 +14,7 @@ export interface JobRationale {
 }
 
 export interface MaintenanceJob {
-  type: "synthesis" | "calibration" | "patrol";
+  type: "synthesis" | "calibration" | "patrol" | "pruning" | "harmonization" | "research" | "merging" | "sector_vibe" | "daily_log" | "replay";
   targets: number[];
   description: string;
   rationale?: JobRationale;
@@ -59,6 +59,19 @@ export async function getAgentLogs(): Promise<AgentLog[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * IM-66: same feed as getAgentLogs but failures THROW instead of collapsing to
+ * [] — the Soumaya tab must distinguish "couldn't load" from a legitimately
+ * empty brain. (App.tsx's away-digest callers keep the fail-soft variant.)
+ */
+export async function getAgentLogsStrict(): Promise<AgentLog[]> {
+  const res = await afetch(`${API}/maintenance/logs`);
+  if (!res.ok) throw new Error(`logs request failed (${res.status})`);
+  const d = await res.json().catch(() => null);
+  if (!Array.isArray(d)) throw new Error("logs response was not a list");
+  return d as AgentLog[];
 }
 
 export interface ToolHealth {

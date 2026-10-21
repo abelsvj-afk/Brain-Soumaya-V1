@@ -43,7 +43,10 @@ export function reviewRoutes(ctx: AppContext): Router {
     const { advanced } = new StreakRepo(ctx.handle, spaceId).touch();
     const fuelEarned = EARN_REVIEW + (advanced ? STREAK_DAY_BONUS : 0);
     new EconomyRepo(ctx.handle, spaceId).add(fuelEarned);
-    res.json({ ok: true, nextReviewAt: next, fuelEarned, streakAdvanced: advanced });
+    // IM-114 (additive): the interval until that next review, in whole days, so
+    // the client can say "next review in ~N days" without re-deriving SM-2.
+    const nextIntervalDays = Math.max(0, Math.round((Date.parse(next) - Date.now()) / 86_400_000));
+    res.json({ ok: true, nextReviewAt: next, nextIntervalDays, fuelEarned, streakAdvanced: advanced });
   });
 
   return r;

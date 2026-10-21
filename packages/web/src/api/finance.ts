@@ -107,7 +107,7 @@ export const addExpense = (e: ExpenseInput) => send<{ expense: FinExpense; dupli
 // ---- History: list + edit + delete recorded transactions ----
 export const listIncome = () => getJson<FinIncome[]>("/income");
 export const listExpense = () => getJson<FinExpense[]>("/expense");
-export const editIncome = (id: number, patch: { date?: string; netCents?: number; platform?: string | null }) => send<{ ok: boolean; budget: BudgetSummary }>(`/income/${id}`, "PATCH", patch);
+export const editIncome = (id: number, patch: { date?: string; netCents?: number; platform?: string | null; grossCents?: number | null; taxCents?: number | null; hours?: number | null }) => send<{ ok: boolean; budget: BudgetSummary }>(`/income/${id}`, "PATCH", patch);
 export const deleteIncome = (id: number) => send<{ ok: boolean; budget: BudgetSummary }>(`/income/${id}`, "DELETE");
 export const editExpense = (id: number, patch: { date?: string; amountCents?: number; merchant?: string | null; category?: string; direction?: ExpenseDirection }) => send<{ ok: boolean; budget: BudgetSummary }>(`/expense/${id}`, "PATCH", patch);
 export const deleteExpense = (id: number) => send<{ ok: boolean; budget: BudgetSummary }>(`/expense/${id}`, "DELETE");

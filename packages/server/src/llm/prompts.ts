@@ -271,6 +271,7 @@ export function buildAnswerPrompt(
   history?: string,
   justAsked?: boolean,
   galaxyCandidates?: { kind: string; id: number; label: string }[],
+  attachments?: string,
 ): string {
   const memories =
     context.length > 0
@@ -282,6 +283,12 @@ export function buildAnswerPrompt(
           .join("\n")
       : "(no relevant memories found)";
   const kb = knowledge ? `\n\nKNOWLEDGE DOCUMENTS (the user's reference library):\n${knowledge}` : "";
+  // In-chat attachment (IM-106): text the user shared with THIS message — not
+  // part of the library above and not a memory; label it so she treats it as
+  // something she's been shown just now, not something she already knew.
+  const att = attachments
+    ? `\n\nATTACHED TO THIS MESSAGE (the user is showing you this right now — use it to answer, but don't treat it as one of their stored memories):\n${attachments}`
+    : "";
   const convo = history
     ? `\n\nCONVERSATION SO FAR (oldest first — continue this thread):\n${history}`
     : "";
@@ -299,7 +306,7 @@ export function buildAnswerPrompt(
           .map((g) => `[${g.kind}:${g.id}] ${g.label}`)
           .join("\n")}`
       : "";
-  return `MEMORIES:\n${memories}${kb}${convo}${galaxy}${noAsk}\n\nQUESTION: ${question}`;
+  return `MEMORIES:\n${memories}${kb}${att}${convo}${galaxy}${noAsk}\n\nQUESTION: ${question}`;
 }
 
 /**

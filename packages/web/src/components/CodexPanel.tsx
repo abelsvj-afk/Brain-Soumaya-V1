@@ -15,17 +15,37 @@ export function CodexPanel({
   onFocus,
   spaceId = "",
   onReward,
+  onNavigate,
 }: {
   graph: GraphData;
   onFocus: (id: number) => void;
   spaceId?: string;
   onReward?: () => void;
+  /** IM-95: jump to another dock tab (locked entries whose unlock lives elsewhere). */
+  onNavigate?: (tab: string) => void;
 }) {
   // Soumaya's autonomously-charted field notes (server), merged into the atlas.
+  // IM-91: a fetch failure is VISIBLE (banner + retry) — before, the catch
+  // swallowed it and the Field Notes category showing 0 was indistinguishable
+  // from "she has charted nothing".
   const [discoveries, setDiscoveries] = useState<AgentDiscovery[]>([]);
+  const [notesError, setNotesError] = useState(false);
+  const [notesRetry, setNotesRetry] = useState(0);
   useEffect(() => {
-    getCodexDiscoveries().then(setDiscoveries).catch(() => {});
-  }, [spaceId]);
+    let cancelled = false;
+    getCodexDiscoveries()
+      .then((d) => {
+        if (cancelled) return;
+        setDiscoveries(d);
+        setNotesError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setNotesError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId, notesRetry]);
 
   const entries = useMemo(() => {
     const nodes = graph.nodes as GraphNode[];
@@ -42,6 +62,19 @@ export function CodexPanel({
   const [tab, setTab] = useState<CodexCategory>("sectors");
   const seenRef = useRef<Set<string>>(new Set());
 
+  // IM-91 "recently discovered": when each entry was first seen on this
+  // device, recorded going forward (same honesty rule as IM-92 — entries seen
+  // before this was tracked have no date and sort last, never an invented one).
+  const [seenAt, setSeenAt] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!spaceId) return;
+    try {
+      setSeenAt(JSON.parse(localStorage.getItem(`codex.seenAt.${spaceId}`) || "{}"));
+    } catch {
+      setSeenAt({});
+    }
+  }, [spaceId]);
+
   const claimingRef = useRef<Set<string>>(new Set());
 
   // Fire a discovery toast + claim the reward once per newly-discovered entry.
@@ -52,6 +85,7 @@ export function CodexPanel({
   useEffect(() => {
     if (!spaceId) return;
     const key = `codex.seen.${spaceId}`;
+    const atKey = `codex.seenAt.${spaceId}`;
     let seen: Set<string>;
     try {
       seen = new Set(JSON.parse(localStorage.getItem(key) || "[]"));
@@ -68,6 +102,8 @@ export function CodexPanel({
     let cancelled = false;
     void (async () => {
       let failed = 0;
+      const nowIso = new Date().toISOString();
+      const newTimes: Record<string, string> = {};
       for (const e of fresh) {
         try {
           const r = await claimCodexReward(e.id);
@@ -75,6 +111,7 @@ export function CodexPanel({
             failed++;
           } else {
             seen.add(e.id);
+            newTimes[e.id] = nowIso;
             // `claimCodexReward` is async, so the chime has to fire from inside
             // this callback — checking a flag synchronously after the loop (as
             // before) always read it as false.
@@ -91,6 +128,18 @@ export function CodexPanel({
       }
       try {
         localStorage.setItem(key, JSON.stringify([...seen]));
+        if (Object.keys(newTimes).length > 0) {
+          setSeenAt((prev) => {
+            const merged = { ...prev };
+            for (const [id, at] of Object.entries(newTimes)) if (!merged[id]) merged[id] = at;
+            try {
+              localStorage.setItem(atKey, JSON.stringify(merged));
+            } catch {
+              /* ignore */
+            }
+            return merged;
+          });
+        }
       } catch {
         /* ignore */
       }
@@ -109,7 +158,33 @@ export function CodexPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, spaceId]);
 
-  const shown = entries.filter((e) => e.category === tab);
+  // IM-91: search across the whole atlas + a "recently discovered" view.
+  const [query, setQuery] = useState("");
+  const [recentView, setRecentView] = useState(false);
+  const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
+
+  const shown = useMemo(() => {
+    if (searching) {
+      return entries.filter(
+        (e) =>
+          e.title.toLowerCase().includes(q) ||
+          e.lore.toLowerCase().includes(q) ||
+          e.lockedHint.toLowerCase().includes(q),
+      );
+    }
+    if (recentView) {
+      // Dated discoveries first, newest first; undated ones (seen before
+      // tracking, or computed entries never claimed here) follow in catalog
+      // order — no date is ever invented for them.
+      return entries
+        .filter((e) => e.discovered)
+        .map((e, i) => ({ e, i, at: seenAt[e.id] ?? e.createdAt ?? "" }))
+        .sort((a, b) => (a.at === b.at ? a.i - b.i : a.at < b.at ? 1 : -1))
+        .map((x) => x.e);
+    }
+    return entries.filter((e) => e.category === tab);
+  }, [entries, searching, q, recentView, tab, seenAt]);
 
   return (
     <div className="dock-body" style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
@@ -123,16 +198,53 @@ export function CodexPanel({
         <div style={{ height: "100%", width: `${progress.pct}%`, background: "linear-gradient(90deg,#7af9ff,#c9a0ff)" }} />
       </div>
 
+      {notesError && (
+        <div className="codex-notes-error" role="alert">
+          <span>⚠️ Soumaya&apos;s field notes couldn&apos;t be loaded — her charted discoveries may be missing.</span>
+          <button className="mini" onClick={() => setNotesRetry((n) => n + 1)}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* IM-91: search the whole atlas (40+ entries) from one box. */}
+      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.6rem" }}>
+        <input
+          type="search"
+          aria-label="Search the Codex"
+          placeholder="Search the Codex…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button
+          className="mini"
+          aria-pressed={recentView}
+          onClick={() => setRecentView((v) => !v)}
+          style={{
+            borderColor: recentView ? "var(--accent)" : "rgba(255,255,255,0.14)",
+            background: recentView ? "rgba(122,249,255,0.12)" : "transparent",
+            fontSize: "0.74rem",
+          }}
+          title="Show discovered entries, newest first"
+        >
+          🕒 Recent
+        </button>
+      </div>
+
       {/* Category chips */}
       <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.9rem" }}>
         {CODEX_CATEGORIES.map((c) => {
           const p = progress.byCategory[c.id];
-          const on = tab === c.id;
+          const on = tab === c.id && !recentView && !searching;
           return (
             <button
               key={c.id}
               className="mini"
-              onClick={() => setTab(c.id)}
+              onClick={() => {
+                setTab(c.id);
+                setRecentView(false);
+              }}
               style={{
                 borderColor: on ? "var(--accent)" : "rgba(255,255,255,0.14)",
                 background: on ? "rgba(122,249,255,0.12)" : "transparent",
@@ -146,33 +258,79 @@ export function CodexPanel({
       </div>
 
       <p style={{ fontSize: "0.76rem", opacity: 0.65, margin: "0 0 0.8rem 0" }}>
-        {CODEX_CATEGORIES.find((c) => c.id === tab)?.blurb}
+        {searching
+          ? `${shown.length} ${shown.length === 1 ? "entry" : "entries"} matching “${query.trim()}”`
+          : recentView
+            ? "Everything you've discovered, newest first."
+            : CODEX_CATEGORIES.find((c) => c.id === tab)?.blurb}
       </p>
 
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.6rem" }}>
         {shown.map((e) => (
-          <CodexRow key={e.id} entry={e} onFocus={onFocus} isNew={e.discovered && !seenRef.current.has(e.id)} />
+          <CodexRow
+            key={e.id}
+            entry={e}
+            onFocus={onFocus}
+            onNavigate={onNavigate}
+            isNew={e.discovered && !seenRef.current.has(e.id)}
+            seenAt={seenAt[e.id]}
+          />
         ))}
+        {shown.length === 0 && (
+          <li style={{ fontSize: "0.8rem", opacity: 0.65 }}>
+            {searching
+              ? "Nothing in the atlas matches that yet."
+              : recentView
+                ? "Nothing discovered yet — your first discovery will appear here."
+                : tab === "fieldnotes" && notesError
+                  ? "Field notes failed to load — use Retry above."
+                  : "Nothing charted here yet."}
+          </li>
+        )}
       </ul>
     </div>
   );
 }
 
-function CodexRow({ entry: e, onFocus, isNew }: { entry: CodexEntry; onFocus: (id: number) => void; isNew: boolean }) {
+function CodexRow({
+  entry: e,
+  onFocus,
+  onNavigate,
+  isNew,
+  seenAt,
+}: {
+  entry: CodexEntry;
+  onFocus: (id: number) => void;
+  onNavigate?: (tab: string) => void;
+  isNew: boolean;
+  seenAt?: string;
+}) {
   const locked = !e.discovered;
+  // IM-92 (Codex half): detail drill-in — the collapsed card is a summary;
+  // expanding shows the category, level fraction and charting/discovery date.
+  const [open, setOpen] = useState(false);
+  const category = CODEX_CATEGORIES.find((c) => c.id === e.category);
   return (
     <li
+      className={`codex-row ${locked ? "locked" : "discovered"}`}
       style={{
         border: "1px solid " + (locked ? "rgba(255,255,255,0.06)" : "rgba(122,200,255,0.2)"),
         borderRadius: 10,
         padding: "0.7rem 0.8rem",
-        opacity: locked ? 0.55 : 1,
         background: locked ? "rgba(255,255,255,0.015)" : "rgba(122,249,255,0.04)",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <span style={{ fontSize: "1.1rem", filter: locked ? "grayscale(1)" : "none" }}>{locked ? "🔒" : e.icon}</span>
-        <span style={{ fontWeight: 600, fontSize: "0.9rem", flex: 1 }}>{locked ? "??? — undiscovered" : e.title}</span>
+        <span className="codex-ic" style={{ fontSize: "1.1rem" }}>{locked ? "🔒" : e.icon}</span>
+        <button
+          type="button"
+          className="codex-title-btn"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          title={open ? "Hide details" : "See details"}
+        >
+          {locked ? "??? — undiscovered" : e.title} <span className="codex-caret">{open ? "▾" : "▸"}</span>
+        </button>
         {isNew && !locked && (
           <span style={{ fontSize: "0.6rem", fontWeight: 700, background: "#ff7af9", color: "#fff", padding: "1px 5px", borderRadius: 4 }}>NEW</span>
         )}
@@ -185,6 +343,18 @@ function CodexRow({ entry: e, onFocus, isNew }: { entry: CodexEntry; onFocus: (i
       <p style={{ fontSize: "0.78rem", opacity: 0.85, margin: "0.4rem 0 0.35rem 0", lineHeight: 1.4 }}>
         {locked ? e.lockedHint : e.lore}
       </p>
+      {/* IM-95: a locked entry whose unlock lives in another tab gets a button
+          that GOES there, not just prose naming that tab's vocabulary. */}
+      {locked && e.goTo && onNavigate && (
+        <button className="mini codex-goto" onClick={() => onNavigate(e.goTo!.tab)}>
+          {e.goTo.label}
+        </button>
+      )}
+      {/* IM-91: field notes render their charting date — Soumaya's charting
+          has a chronology again. */}
+      {!locked && e.createdAt && (
+        <div style={{ fontSize: "0.7rem", opacity: 0.6 }}>Charted {formatDay(e.createdAt)}</div>
+      )}
       {!locked && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {e.maxLevel > 1 && (
@@ -202,6 +372,23 @@ function CodexRow({ entry: e, onFocus, isNew }: { entry: CodexEntry; onFocus: (i
           )}
         </div>
       )}
+      {open && (
+        <div className="codex-detail">
+          <span>
+            {category?.icon} {category?.title}
+            {!locked && e.maxLevel > 1 ? ` · Level ${e.level} of ${e.maxLevel}` : ""}
+            {!locked && e.progressToNext ? ` · ${e.progressToNext.cur}/${e.progressToNext.target} toward the next level` : ""}
+          </span>
+          {!locked && seenAt && <span> · Discovered {formatDay(seenAt)}</span>}
+          {locked && <span> · Locked — {e.lockedHint}</span>}
+        </div>
+      )}
     </li>
   );
+}
+
+function formatDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }

@@ -9,6 +9,9 @@ const downloadAttachment = vi.fn();
 const attachmentObjectUrl = vi.fn();
 vi.mock("../api/client.js", () => ({
   listAttachments: (...a: unknown[]) => listAttachments(...a),
+  // CL-2 (IM-29): the panel now loads through the strict variant; it shares
+  // this mock's behaviour (resolve = loaded, reject = load error).
+  listAttachmentsStrict: (...a: unknown[]) => listAttachments(...a),
   addAttachment: (...a: unknown[]) => addAttachment(...a),
   deleteAttachment: (...a: unknown[]) => deleteAttachment(...a),
   downloadAttachment: (...a: unknown[]) => downloadAttachment(...a),

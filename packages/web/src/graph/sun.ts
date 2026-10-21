@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { gltfLoader } from "./gltf.js";
+import { gltfLoader, noteModelFallback } from "./gltf.js";
 
 /**
  * The Sun — the gigantic star at the center of the galaxy that every cluster
@@ -118,7 +118,10 @@ export function makeSun(): THREE.Object3D {
       applyRadius();
     },
     undefined,
-    (err) => console.warn("[sun] model failed to load; using glowing fallback", err),
+    (err) => {
+      console.warn("[sun] model failed to load; using glowing fallback", err);
+      noteModelFallback("The Sun model");
+    },
   );
 
   const applyRadius = () => {

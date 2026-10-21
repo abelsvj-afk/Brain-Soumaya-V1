@@ -68,3 +68,66 @@ describe("SectorView — a newly-formed sector is celebrated, not silently liste
     expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Fresh hub"), "🌌", expect.any(Number));
   });
 });
+
+describe("SectorView — IM-39: hub cards expand to list orbiting members with fly-to", () => {
+  it("lists members on expand and flies to the clicked member", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const onFocus = vi.fn();
+    const graph: GraphData = {
+      nodes: [
+        node({ id: 1, label: "Hub", mass: 0.9, createdAt: "2026-01-01" }),
+        node({ id: 2, label: "Orbiter one", mass: 0.2, createdAt: "2026-01-02" }),
+        node({ id: 3, label: "Orbiter two", mass: 0.2, createdAt: "2026-01-03" }),
+      ],
+      links: [
+        { source: 1, target: 2 },
+        { source: 1, target: 3 },
+      ],
+    } as unknown as GraphData;
+    render(<SectorView graph={graph} onFocus={onFocus} onIsolate={() => {}} />);
+    // Members are announced as a count but not listed until expanded.
+    expect(screen.queryByText("Orbiter one")).toBeNull();
+    fireEvent.click(screen.getByText(/Show 2 orbiting memories/));
+    const member = await screen.findByText(/Orbiter one/);
+    fireEvent.click(member.closest("button")!);
+    expect(onFocus).toHaveBeenCalledWith(2);
+  });
+});
+
+describe("SectorView — IM-41: hub search + local dates", () => {
+  it("shows the hub's own local date and the members' absolute span dates", () => {
+    const graph: GraphData = {
+      nodes: [
+        node({ id: 1, label: "Hub", mass: 0.9, createdAt: "2026-01-15T12:00:00.000Z" }),
+        node({ id: 2, label: "Orbiter", mass: 0.2, createdAt: "2026-03-15T12:00:00.000Z" }),
+      ],
+      links: [{ source: 1, target: 2 }],
+    } as unknown as GraphData;
+    render(<SectorView graph={graph} onFocus={() => {}} onIsolate={() => {}} />);
+    const human = (iso: string) =>
+      new Date(Date.parse(iso)).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    expect(screen.getByText(new RegExp(`since ${human("2026-01-15T12:00:00.000Z")}`))).toBeTruthy();
+    expect(screen.getByText(new RegExp(human("2026-03-15T12:00:00.000Z")))).toBeTruthy();
+  });
+
+  it("search finds a hub by an orbiting member's label and can be cleared", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const graph: GraphData = {
+      nodes: [
+        node({ id: 1, label: "Alpha hub", mass: 0.9 }),
+        node({ id: 2, label: "Beta hub", mass: 0.85 }),
+        node({ id: 3, label: "Needle memory", mass: 0.2 }),
+      ],
+      links: [{ source: 2, target: 3 }],
+    } as unknown as GraphData;
+    render(<SectorView graph={graph} onFocus={() => {}} onIsolate={() => {}} />);
+    const search = screen.getByLabelText("Search hubs");
+    fireEvent.change(search, { target: { value: "needle" } });
+    expect(screen.queryByText("Alpha hub")).toBeNull();
+    expect(screen.getByText("Beta hub")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "zzz-no-match" } });
+    const clear = await screen.findByText("Clear search");
+    fireEvent.click(clear);
+    expect(screen.getByText("Alpha hub")).toBeTruthy();
+  });
+});

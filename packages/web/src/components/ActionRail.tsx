@@ -16,7 +16,7 @@ export interface ActionRailProps {
 export function ActionRail(p: ActionRailProps) {
   return (
     <>
-      <button className="fab fab-ingest" onClick={p.onIngest} aria-label="Add a memory">
+      <button className="fab fab-ingest" onClick={p.onIngest} aria-label="Add a memory" title="Add a memory (or press C anywhere — ⌘K opens the command palette)">
         📝
       </button>
       <button className="fab fab-observatory" onClick={p.onObservatory} aria-label="Open the Observatory home" title="Observatory — your home view">

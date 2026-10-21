@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Attachment } from "@brain/shared";
-import { listAttachments, addAttachment, deleteAttachment, downloadAttachment, attachmentObjectUrl } from "../api/client.js";
+import { listAttachmentsStrict, addAttachment, deleteAttachment, downloadAttachment, attachmentObjectUrl } from "../api/client.js";
 import { prepareUpload, isImageMime } from "../lib/image.js";
 import { pushToast } from "./Toasts.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
+import { parseTolerantMs } from "../utils/dueReminders.js";
 
 /**
  * Attachments on any node (memory OR a Mind object like a person). Images are shown as
@@ -11,6 +13,14 @@ import { pushToast } from "./Toasts.js";
  * phone pictures fit. Non-image files keep a download pill.
  */
 const fmtSize = (b: number) => (b < 1024 ? `${b} B` : b < 1e6 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1e6).toFixed(1)} MB`);
+
+/** Local date an attachment was added; unparseable stored values become a
+ *  human placeholder, never the raw storage string (IM-33/IM-36). */
+export const fmtAttWhen = (raw: string): string => {
+  const t = parseTolerantMs(raw);
+  if (Number.isNaN(t)) return "date unavailable";
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+};
 
 export function MemoryAttachments({
   nodeId,
@@ -22,13 +32,34 @@ export function MemoryAttachments({
 }) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
+  // Loading / failure are their own states (IM-29): a slow or failed load must
+  // not render as "no photos or files yet".
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  // Attachment delete is irreversible — it confirms through the same app
+  // dialog as node delete (IM-34) instead of firing instantly.
+  const [confirming, setConfirming] = useState<Attachment | null>(null);
   const [urls, setUrls] = useState<Record<number, string>>({}); // attId → objectURL (images)
   const [viewer, setViewer] = useState<number | null>(null); // index into images being viewed
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const load = useCallback(() => {
+    setLoading(true);
+    setLoadError(false);
+    return listAttachmentsStrict(nodeId)
+      .then((a) => setItems(a))
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }, [nodeId]);
+
   useEffect(() => {
     let alive = true;
-    listAttachments(nodeId).then((a) => alive && setItems(a)).catch(() => {});
+    setLoading(true);
+    setLoadError(false);
+    listAttachmentsStrict(nodeId)
+      .then((a) => alive && setItems(a))
+      .catch(() => alive && setLoadError(true))
+      .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
@@ -76,7 +107,12 @@ export function MemoryAttachments({
   };
 
   const onRemove = async (att: Attachment) => {
-    if (!(await deleteAttachment(nodeId, att.id))) return;
+    setConfirming(null);
+    if (!(await deleteAttachment(nodeId, att.id))) {
+      pushToast("Couldn't remove that — try again.", "⚠️", 3500);
+      return;
+    }
+    setViewer(null);
     setItems((prev) => prev.filter((a) => a.id !== att.id));
     if (urls[att.id]) {
       URL.revokeObjectURL(urls[att.id]!);
@@ -107,31 +143,57 @@ export function MemoryAttachments({
         />
       </div>
 
-      {images.length > 0 && (
+      {loading && (
+        <div className="att-skeleton" role="status" aria-label="Loading attachments">
+          <span className="skeleton-line" />
+          <span className="skeleton-line short" />
+        </div>
+      )}
+
+      {!loading && loadError && (
+        <div className="att-error" role="alert">
+          <p style={{ fontSize: "0.74rem", margin: "0 0 0.35rem" }}>Couldn’t load attachments — they may still be there.</p>
+          <button className="mini" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && !loadError && images.length > 0 && (
         <div className="att-gallery">
           {images.map((a, i) => (
-            <button key={a.id} className="att-thumb" onClick={() => setViewer(i)} title="View">
-              {urls[a.id] ? <img src={urls[a.id]} alt={a.filename} /> : <span className="att-thumb-load">…</span>}
-            </button>
+            <figure key={a.id} className="att-cell">
+              <button className="att-thumb" onClick={() => setViewer(i)} title="View">
+                {urls[a.id] ? <img src={urls[a.id]} alt={a.filename} /> : <span className="att-thumb-load">…</span>}
+              </button>
+              <figcaption className="att-meta">
+                <span className="att-name" title={a.filename}>{a.filename}</span>
+                <span className="att-sub">
+                  {fmtSize(a.size)} · {fmtAttWhen(a.createdAt)}
+                </span>
+              </figcaption>
+            </figure>
           ))}
         </div>
       )}
 
-      {files.length > 0 && (
+      {!loading && !loadError && files.length > 0 && (
         <ul style={{ listStyle: "none", padding: 0, margin: "0.4rem 0 0", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
           {files.map((a) => (
             <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem" }}>
               <button className="pill" style={{ flex: 1, textAlign: "left" }} onClick={() => downloadAttachment(a).catch(() => pushToast("Download failed", "⚠️", 3500))} title="Download">
                 ⬇ {a.filename}
               </button>
-              <span style={{ opacity: 0.5, fontSize: "0.68rem" }}>{fmtSize(a.size)}</span>
-              <button className="mini" style={{ padding: "0.1rem 0.4rem" }} onClick={() => void onRemove(a)} title="Remove">✕</button>
+              <span style={{ opacity: 0.5, fontSize: "0.68rem" }}>
+                {fmtSize(a.size)} · {fmtAttWhen(a.createdAt)}
+              </span>
+              <button className="mini" style={{ padding: "0.1rem 0.4rem" }} onClick={() => setConfirming(a)} title="Remove">✕</button>
             </li>
           ))}
         </ul>
       )}
 
-      {items.length === 0 && (
+      {!loading && !loadError && items.length === 0 && (
         <p style={{ fontSize: "0.74rem", opacity: 0.6, margin: 0 }}>No photos or files yet — add one and it lives right here.</p>
       )}
 
@@ -156,10 +218,23 @@ export function MemoryAttachments({
           )}
           <div className="att-lb-actions" onClick={(e) => e.stopPropagation()}>
             <span>{viewer + 1} / {images.length}</span>
+            <span className="att-lb-meta">
+              {images[viewer]!.filename} · {fmtSize(images[viewer]!.size)} · {fmtAttWhen(images[viewer]!.createdAt)}
+            </span>
             <button className="mini" onClick={() => downloadAttachment(images[viewer]!).catch(() => pushToast("Download failed", "⚠️", 3500))}>⬇ Download</button>
-            <button className="mini ghost" onClick={() => void onRemove(images[viewer]!)}>✕ Remove</button>
+            <button className="mini ghost" onClick={() => setConfirming(images[viewer]!)}>✕ Remove</button>
           </div>
         </div>
+      )}
+
+      {confirming && (
+        <ConfirmDialog
+          title="Remove this attachment?"
+          message={`"${confirming.filename}" will be permanently removed. This can't be undone.`}
+          confirmLabel="Remove"
+          onConfirm={() => void onRemove(confirming)}
+          onCancel={() => setConfirming(null)}
+        />
       )}
     </div>
   );

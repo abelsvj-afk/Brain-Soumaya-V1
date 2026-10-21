@@ -5,39 +5,61 @@ import type { BudgetSummary, WealthSummary } from "@brain/shared";
 const getFinanceSummary = vi.fn();
 const getWealthSummary = vi.fn();
 const listPaystubs = vi.fn();
+const getPaystub = vi.fn();
 const extractPaystubText = vi.fn();
 const confirmPaystub = vi.fn();
 const listAssets = vi.fn();
+const listAssetSnapshots = vi.fn();
+const patchAsset = vi.fn();
 const getIncomeTrend = vi.fn();
 const getNetWorthTrend = vi.fn();
 const listBills = vi.fn();
+const createBill = vi.fn();
+const patchBill = vi.fn();
+const deleteBill = vi.fn();
 const setBuffer = vi.fn();
+const getAfford = vi.fn();
+const addIncome = vi.fn();
+const listIncome = vi.fn();
+const listExpense = vi.fn();
+const editIncome = vi.fn();
+const deleteIncome = vi.fn();
+const deleteExpense = vi.fn();
 vi.mock("../api/finance.js", () => ({
   getFinanceSummary: (...a: unknown[]) => getFinanceSummary(...a),
   getWealthSummary: (...a: unknown[]) => getWealthSummary(...a),
   setBuffer: (...a: unknown[]) => setBuffer(...a),
-  setBalance: vi.fn(), addIncome: vi.fn(), addExpense: vi.fn(), createBill: vi.fn(), deleteBill: vi.fn(),
+  setBalance: vi.fn(),
+  addIncome: (...a: unknown[]) => addIncome(...a), addExpense: vi.fn(),
+  createBill: (...a: unknown[]) => createBill(...a),
+  patchBill: (...a: unknown[]) => patchBill(...a),
+  deleteBill: (...a: unknown[]) => deleteBill(...a),
   listBills: (...a: unknown[]) => listBills(...a),
   markOccurrencePaid: vi.fn(), ingestPaste: vi.fn(), ingestImage: vi.fn(), confirmIngest: vi.fn(),
-  listIncome: vi.fn().mockResolvedValue([]), listExpense: vi.fn().mockResolvedValue([]),
-  editIncome: vi.fn(), deleteIncome: vi.fn(), editExpense: vi.fn(), deleteExpense: vi.fn(),
-  getAfford: vi.fn(),
+  listIncome: (...a: unknown[]) => listIncome(...a), listExpense: (...a: unknown[]) => listExpense(...a),
+  editIncome: (...a: unknown[]) => editIncome(...a),
+  deleteIncome: (...a: unknown[]) => deleteIncome(...a),
+  editExpense: vi.fn(), deleteExpense: (...a: unknown[]) => deleteExpense(...a),
+  getAfford: (...a: unknown[]) => getAfford(...a),
   createBucket: vi.fn(), patchBucket: vi.fn(), archiveBucket: vi.fn(),
-  createGoal: vi.fn(), archiveGoal: vi.fn(), listAllocations: vi.fn(), allocate: vi.fn(),
+  createGoal: vi.fn(), patchGoal: vi.fn(), archiveGoal: vi.fn(), listAllocations: vi.fn(), allocate: vi.fn(),
   // docs/specs/paystub-ingestion.md
   extractPaystubText: (...a: unknown[]) => extractPaystubText(...a),
   extractPaystubImage: vi.fn(),
   confirmPaystub: (...a: unknown[]) => confirmPaystub(...a),
   listPaystubs: (...a: unknown[]) => listPaystubs(...a),
+  getPaystub: (...a: unknown[]) => getPaystub(...a),
   deletePaystub: vi.fn(),
   paystubSourceObjectUrl: vi.fn(),
   // docs/specs/income-net-worth-trend.md
   listAssets: (...a: unknown[]) => listAssets(...a),
-  createAsset: vi.fn(), archiveAsset: vi.fn(),
-  listAssetSnapshots: vi.fn().mockResolvedValue([]), addAssetSnapshot: vi.fn(),
+  createAsset: vi.fn(), patchAsset: (...a: unknown[]) => patchAsset(...a), archiveAsset: vi.fn(),
+  listAssetSnapshots: (...a: unknown[]) => listAssetSnapshots(...a), addAssetSnapshot: vi.fn(),
   getIncomeTrend: (...a: unknown[]) => getIncomeTrend(...a),
   getNetWorthTrend: (...a: unknown[]) => getNetWorthTrend(...a),
 }));
+const getCognitiveMind = vi.fn();
+vi.mock("../api/mind.js", () => ({ getCognitive: (...a: unknown[]) => getCognitiveMind(...a) }));
 vi.mock("../api/journeys.js", () => ({
   getJourneys: vi.fn().mockResolvedValue([]),
   journeysFor: vi.fn().mockResolvedValue([]),
@@ -64,10 +86,17 @@ beforeEach(() => {
   getFinanceSummary.mockResolvedValue({ budget: budget({}), account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" }, upcoming: [] });
   getWealthSummary.mockResolvedValue(wealth({}));
   listPaystubs.mockResolvedValue([]);
+  getPaystub.mockResolvedValue(null);
   listAssets.mockResolvedValue([]);
+  listAssetSnapshots.mockResolvedValue([]);
   getIncomeTrend.mockResolvedValue([]);
   getNetWorthTrend.mockResolvedValue([]);
   listBills.mockResolvedValue([]);
+  listIncome.mockResolvedValue([]);
+  listExpense.mockResolvedValue([]);
+  getAfford.mockResolvedValue(null);
+  getCognitiveMind.mockResolvedValue([]);
+  addIncome.mockResolvedValue({ income: {}, duplicate: false, budget: budget({}) });
 });
 afterEach(() => cleanup());
 
@@ -369,5 +398,246 @@ describe("FinancePanel — Growth section (docs/specs/income-net-worth-trend.md)
     await waitFor(() => expect(getNetWorthTrend).toHaveBeenCalled());
     fireEvent.click(screen.getByText("Net Worth"));
     await screen.findByText(/Dashed = projected/);
+  });
+});
+
+describe("FinancePanel — hero freshness + avg weekly income (IM-81)", () => {
+  it("renders account name/currency/updatedAt and avgWeeklyIncomeCents", async () => {
+    getFinanceSummary.mockResolvedValue({
+      budget: budget({ avgWeeklyIncomeCents: 42000 }),
+      account: { id: 1, name: "Everyday Checking", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "2026-10-18T09:30:00" },
+      upcoming: [],
+    });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    expect(screen.getByText(/Everyday Checking · USD/)).toBeTruthy();
+    expect(screen.getByText(/Updated Oct 18, 2026/)).toBeTruthy();
+    expect(screen.getByText("Avg weekly income")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("$420")).toBeTruthy());
+  });
+
+  it("upcoming bills render a localized, relativized date — not the bare ISO string (IM-83)", async () => {
+    getFinanceSummary.mockResolvedValue({
+      budget: budget({}),
+      account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" },
+      upcoming: [{ id: 9, billId: 3, name: "Rent", dueDate: "2027-01-05", amountCents: 120000, status: "upcoming" }],
+    });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    // 2027-01-05 is a Tuesday.
+    expect(screen.getByText(/Tue, Jan 5/)).toBeTruthy();
+    expect(screen.queryByText("2027-01-05")).toBeNull();
+  });
+});
+
+describe("FinancePanel — afford calculator explanation (IM-81)", () => {
+  it("renders surplus + weekly bill load behind the weeks answer", async () => {
+    getAfford.mockResolvedValue({ weeks: 3, surplusCents: 20000, weeklyBillLoadCents: 15000 });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText(/What can I afford/));
+    fireEvent.change(screen.getByLabelText("Target amount in dollars"), { target: { value: "400" } });
+    await act(async () => { screen.getByText("Check").click(); });
+    await screen.findByText(/~3 weeks/);
+    expect(screen.getByText(/\$200\.00\/week of surplus after \$150\.00\/week of bills/)).toBeTruthy();
+  });
+});
+
+describe("FinancePanel — BillManager full schema + edit (IM-80)", () => {
+  const openBills = async () => {
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("Manage recurring bills"));
+    await waitFor(() => expect(listBills).toHaveBeenCalled());
+  };
+
+  it("creates a custom bill WITH its interval and the rest of the schema", async () => {
+    createBill.mockResolvedValue({});
+    await openBills();
+    fireEvent.change(screen.getByLabelText("Bill name"), { target: { value: "Gym" } });
+    fireEvent.change(screen.getByLabelText("Bill amount in dollars"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("Frequency"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Every how many days"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Bill category"), { target: { value: "health" } });
+    fireEvent.change(screen.getByLabelText("Payee"), { target: { value: "GymCo" } });
+    fireEvent.click(screen.getByLabelText("Autopay"));
+    await act(async () => { screen.getByText("Add bill").click(); });
+    expect(createBill).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Gym", amountCents: 3000, frequency: "custom", everyDays: 10,
+      category: "health", payee: "GymCo", autopay: true,
+    }));
+  });
+
+  it("a custom bill with NO interval is not submitted (the interval defines it)", async () => {
+    await openBills();
+    fireEvent.change(screen.getByLabelText("Bill name"), { target: { value: "Gym" } });
+    fireEvent.change(screen.getByLabelText("Bill amount in dollars"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("Frequency"), { target: { value: "custom" } });
+    await act(async () => { screen.getByText("Add bill").click(); });
+    expect(createBill).not.toHaveBeenCalled();
+  });
+
+  it("edits an existing bill via patchBill and shows its stored fields on the row", async () => {
+    listBills.mockResolvedValue([{
+      id: 5, name: "Internet", amountCents: 8000, frequency: "monthly", anchorDate: "2026-01-15",
+      autopay: true, category: "utilities", payee: "ISP Inc", graceDays: 5, lateFeeCents: 1000, accountLast4: "4321", active: true,
+    }]);
+    patchBill.mockResolvedValue({});
+    await openBills();
+    await screen.findByText("Internet");
+    expect(screen.getByText(/autopay/)).toBeTruthy();
+    expect(screen.getByText(/ISP Inc/)).toBeTruthy();
+    expect(screen.getByText(/••4321/)).toBeTruthy();
+
+    await act(async () => { screen.getByText("Edit").click(); });
+    // The edit form lives inside the bill's <li>, BEFORE the create form in DOM order.
+    const nameInputs = screen.getAllByLabelText("Bill name");
+    fireEvent.change(nameInputs[0]!, { target: { value: "Fiber Internet" } });
+    await act(async () => { screen.getByText("Save bill").click(); });
+    expect(patchBill).toHaveBeenCalledWith(5, expect.objectContaining({ name: "Fiber Internet", amountCents: 8000 }));
+  });
+});
+
+describe("FinancePanel — AssetManager snapshot history + edit (IM-79/IM-82)", () => {
+  const openAssets = async () => {
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("📈 Growth"));
+    fireEvent.click(await screen.findByText(/Manage accounts/));
+  };
+
+  it("shows the current balance from the newest snapshot and the full history on demand", async () => {
+    listAssets.mockResolvedValue([{ id: 7, kind: "savings", label: "Emergency fund", archived: false, createdAt: "x" }]);
+    listAssetSnapshots.mockResolvedValue([
+      { id: 2, assetId: 7, amountCents: 150000, asOf: "2026-10-01", createdAt: "x" },
+      { id: 1, assetId: 7, amountCents: 100000, asOf: "2026-09-01", createdAt: "x" },
+    ]);
+    await openAssets();
+    await screen.findByText(/Current balance/);
+    expect(screen.getByText(/\$1,500\.00/)).toBeTruthy();
+    expect(listAssetSnapshots).toHaveBeenCalledWith(7);
+
+    await act(async () => { screen.getByText("History").click(); });
+    expect(screen.getByText(/\$1,000\.00/)).toBeTruthy(); // the older snapshot is listed too
+  });
+
+  it("edits an asset's label/kind via patchAsset", async () => {
+    listAssets.mockResolvedValue([{ id: 7, kind: "savings", label: "Emergency fund", archived: false, createdAt: "x" }]);
+    patchAsset.mockResolvedValue({});
+    await openAssets();
+    await screen.findByText("Emergency fund");
+    await act(async () => { screen.getByLabelText("Edit Emergency fund").click(); });
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Rainy day fund" } });
+    await act(async () => { screen.getByText("Save account").click(); });
+    expect(patchAsset).toHaveBeenCalledWith(7, { label: "Rainy day fund", kind: "savings" });
+  });
+});
+
+describe("FinancePanel — History search/filter/totals + income detail (IM-82)", () => {
+  const openHistory = async () => {
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText(/View \/ edit history/));
+    await waitFor(() => expect(listIncome).toHaveBeenCalled());
+  };
+
+  it("shows monthly totals and filters rows by search", async () => {
+    listIncome.mockResolvedValue([
+      { id: 1, date: "2026-10-02", netCents: 90000, platform: "Acme", createdAt: "x" },
+      { id: 2, date: "2026-09-01", netCents: 90000, platform: "Acme", createdAt: "x" },
+    ]);
+    listExpense.mockResolvedValue([
+      { id: 3, date: "2026-10-03", amountCents: 12000, merchant: "Store", category: "food", direction: "out", createdAt: "x" },
+    ]);
+    await openHistory();
+    await screen.findByText("Oct 2026");
+    expect(screen.getByText(/net \$780\.00/)).toBeTruthy();
+    expect(screen.getByText("Sep 2026")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Search history"), { target: { value: "store" } });
+    expect(screen.queryByText("Oct 2026")).toBeTruthy(); // October still has the Store row
+    expect(screen.queryByText("Sep 2026")).toBeNull(); // September filtered out entirely
+    fireEvent.change(screen.getByLabelText("Search history"), { target: { value: "zzz" } });
+    await screen.findByText(/No transactions match those filters/);
+  });
+
+  it("captures gross/tax/hours when adding income manually", async () => {
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("＋ Income"));
+    fireEvent.change(screen.getByLabelText("Amount in dollars"), { target: { value: "900" } });
+    fireEvent.change(screen.getByLabelText("Gross pay"), { target: { value: "1200" } });
+    fireEvent.change(screen.getByLabelText("Tax"), { target: { value: "300" } });
+    fireEvent.change(screen.getByLabelText("Hours"), { target: { value: "40" } });
+    await act(async () => { screen.getByText("Save").click(); });
+    expect(addIncome).toHaveBeenCalledWith(expect.objectContaining({ netCents: 90000, grossCents: 120000, taxCents: 30000, hours: 40 }));
+  });
+
+  it("edits an income row's gross/tax/hours via editIncome", async () => {
+    listIncome.mockResolvedValue([{ id: 1, date: "2026-10-02", netCents: 90000, platform: "Acme", createdAt: "x" }]);
+    editIncome.mockResolvedValue({});
+    await openHistory();
+    await screen.findByText("Acme");
+    await act(async () => { screen.getByLabelText("Edit").click(); });
+    fireEvent.change(screen.getByLabelText("Gross pay"), { target: { value: "1200" } });
+    fireEvent.change(screen.getByLabelText("Hours"), { target: { value: "38" } });
+    await act(async () => { screen.getByLabelText("Save").click(); });
+    expect(editIncome).toHaveBeenCalledWith(1, expect.objectContaining({ grossCents: 120000, hours: 38 }));
+  });
+});
+
+describe("FinancePanel — paystub detail via getPaystub (IM-82)", () => {
+  it("opens the detail from the single-stub endpoint, not just the list row", async () => {
+    listPaystubs.mockResolvedValue([{ id: 4, netCents: 90000, employer: "Acme", payDate: "2026-03-01", earnings: [], deductions: [], hasSource: false, createdAt: "x" }]);
+    getPaystub.mockResolvedValue({ id: 4, netCents: 90000, grossCents: 120000, employer: "Acme Fresh", payDate: "2026-03-01", periodStart: "2026-02-16", periodEnd: "2026-02-28", earnings: [], deductions: [], hasSource: false, createdAt: "x" });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("📄 Pay Stubs"));
+    const row = await screen.findByText(/Acme/);
+    await act(async () => { row.click(); });
+    await waitFor(() => expect(getPaystub).toHaveBeenCalledWith(4));
+    await screen.findByText("Acme Fresh"); // the fresh single-stub read, not the stale list row
+  });
+});
+
+describe("FinancePanel — load retry + confirmed deletes (IM-84)", () => {
+  it("the load-error state has a Retry button that recovers the panel", async () => {
+    getFinanceSummary
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ budget: budget({}), account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" }, upcoming: [] });
+    render(<FinancePanel />);
+    await screen.findByText(/Couldn't reach the budget/);
+    await act(async () => { screen.getByText("Retry").click(); });
+    await screen.findByText("Safe to Spend");
+  });
+
+  it("History delete asks first — deleteIncome fires only after confirming", async () => {
+    listIncome.mockResolvedValue([{ id: 1, date: "2026-10-02", netCents: 90000, platform: "Acme", createdAt: "x" }]);
+    deleteIncome.mockResolvedValue({});
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText(/View \/ edit history/));
+    await screen.findByText("Acme");
+    await act(async () => { screen.getByLabelText("Delete").click(); });
+    await screen.findByText("Delete this transaction?");
+    expect(deleteIncome).not.toHaveBeenCalled();
+    await act(async () => { screen.getByText("Delete").click(); });
+    expect(deleteIncome).toHaveBeenCalledWith(1);
+  });
+
+  it("BillManager remove asks first — deleteBill fires only after confirming", async () => {
+    listBills.mockResolvedValue([{ id: 5, name: "Internet", amountCents: 8000, frequency: "monthly", anchorDate: "2026-01-15", autopay: false, category: "utilities", active: true }]);
+    deleteBill.mockResolvedValue({});
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("Manage recurring bills"));
+    await screen.findByText("Internet");
+    await act(async () => { screen.getByText("Remove").click(); });
+    await screen.findByText("Remove this bill?");
+    expect(deleteBill).not.toHaveBeenCalled();
+    // The dialog's confirm button is also labelled "Remove" — it's the last one in the DOM.
+    const removes = screen.getAllByText("Remove");
+    await act(async () => { removes[removes.length - 1]!.click(); });
+    expect(deleteBill).toHaveBeenCalledWith(5);
   });
 });

@@ -17,7 +17,10 @@ const expenseSign = (amountCents: number, dir: ExpenseDirection): number =>
 
 export function editIncome(
   handle: DbHandle, spaceId: string = DEFAULT_SPACE, id: number,
-  patch: { date?: string; netCents?: number; platform?: string | null },
+  patch: {
+    date?: string; netCents?: number; platform?: string | null;
+    grossCents?: number | null; taxCents?: number | null; hours?: number | null;
+  },
 ): BudgetSummary | null {
   const repo = new FinIncomeRepo(handle, spaceId);
   const old = repo.get(id);

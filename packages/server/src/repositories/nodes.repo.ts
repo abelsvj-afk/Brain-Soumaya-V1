@@ -179,6 +179,28 @@ export class NodesRepo {
     return info.changes > 0;
   }
 
+  /**
+   * Edit a node's label and/or body text (IM-26: the Details tab's edit flow).
+   * Only the fields present in `patch` are touched; soft-deleted rows are not
+   * editable. Embedding/FTS refresh is the route's job (it owns the providers).
+   */
+  updateDetails(
+    id: number,
+    patch: { label?: string; content?: string },
+  ): GraphNode | undefined {
+    const set: { label?: string; content?: string } = {};
+    if (patch.label !== undefined) set.label = patch.label;
+    if (patch.content !== undefined) set.content = patch.content;
+    if (Object.keys(set).length === 0) return this.getById(id);
+    const row = this.h.db
+      .update(nodes)
+      .set(set)
+      .where(and(eq(nodes.id, id), eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)))
+      .returning()
+      .get();
+    return row ? toGraphNode(row) : undefined;
+  }
+
   /** Manually override (or, with null, clear) a node's importance weight. */
   updateImportance(id: number, importance: number | null): GraphNode | undefined {
     const row = this.h.db
@@ -216,6 +238,40 @@ export class NodesRepo {
       .prepare(`UPDATE nodes SET last_tended_at = ? WHERE id = ? AND space_id = ?`)
       .run(new Date().toISOString(), id, this.spaceId);
     return info.changes > 0;
+  }
+
+  /**
+   * Agenda edit/reschedule/snooze (IM-51): update a node's label/content and/or
+   * its agenda timestamps. `remindAt`/`expiresAt` accept null to clear. Only the
+   * fields present in `patch` are touched. Returns the updated node, or
+   * undefined when the node isn't in this space. Keeps FTS in sync when the
+   * label/content change, and tends the node (editing = visiting it).
+   */
+  updateAgenda(
+    id: number,
+    patch: { label?: string; content?: string; remindAt?: string | null; expiresAt?: string | null },
+  ): GraphNode | undefined {
+    const existing = this.getById(id);
+    if (!existing) return undefined;
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (patch.label !== undefined) { sets.push("label = ?"); vals.push(patch.label); }
+    if (patch.content !== undefined) { sets.push("content = ?"); vals.push(patch.content); }
+    if (patch.remindAt !== undefined) { sets.push("remind_at = ?"); vals.push(patch.remindAt); }
+    if (patch.expiresAt !== undefined) { sets.push("expires_at = ?"); vals.push(patch.expiresAt); }
+    if (sets.length === 0) return existing;
+    sets.push("last_tended_at = ?");
+    vals.push(new Date().toISOString());
+    vals.push(id, this.spaceId);
+    const info = this.h.sqlite
+      .prepare(`UPDATE nodes SET ${sets.join(", ")} WHERE id = ? AND space_id = ?`)
+      .run(...(vals as never[]));
+    if (info.changes === 0) return undefined;
+    const updated = this.getById(id);
+    if (updated && (patch.label !== undefined || patch.content !== undefined)) {
+      ftsUpsert(this.h.sqlite, id, updated.label, updated.content);
+    }
+    return updated;
   }
 
   /** Attribute which autonomous agent last worked this node (e.g. after research). */

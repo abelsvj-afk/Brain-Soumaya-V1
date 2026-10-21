@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GraphData, GraphNode, NodeType } from "@brain/shared";
-import { NODE_TYPE_LABEL, normalizeNodeType } from "@brain/shared";
+import { CELESTIAL_ICON, CELESTIAL_LABEL, NODE_TYPE_LABEL, normalizeNodeType } from "@brain/shared";
 import { colorForType } from "../graph/theme.js";
 import { getArchivedNodes, archiveNode } from "../api/client.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
+import {
+  BROWSE_EMOTION_DOT,
+  BROWSE_EMOTION_LABEL,
+  emotionBucketOf,
+  fmtBrowseDateWithRelative,
+} from "../utils/browseFormat.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
 
@@ -109,6 +115,23 @@ export function LibraryPanel({
   spaceName?: string;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  // IM-38: Folders used to be scroll-and-expand only while its sibling All
+  // view has a full discovery stack. Same stack here: text search over
+  // label+content, a kind filter, and sort — applied within the folders.
+  const [q, setQ] = useState("");
+  const [kindFilter, setKindFilter] = useState<string>("all");
+  const [sort, setSort] = useState<"recent" | "name" | "mass" | "links">("recent");
+  // IM-40: previews used to be CSS-clipped and clicking one left the tab,
+  // though the full content is already client-side. Clicking now expands
+  // the note in place; the label pill remains the fly-to control.
+  const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
+  const toggleNote = (id: number) =>
+    setExpandedNotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   // Archived (resting) memories — lazily fetched when the section is expanded.
   const [showArchived, setShowArchived] = useState(false);
   const [archived, setArchived] = useState<GraphNode[] | null>(null);
@@ -154,6 +177,42 @@ export function LibraryPanel({
 
   const total = folders.reduce((s, f) => s + f.items.length, 0);
 
+  // IM-38: the discovery-filtered view of the folders. Exports keep using the
+  // unfiltered `folders` above — filtering the display must never silently
+  // shrink an "Export all".
+  const filtering = q.trim() !== "" || kindFilter !== "all";
+  const visibleFolders = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return folders
+      .filter((f) => kindFilter === "all" || f.key === kindFilter)
+      .map((f) => {
+        const items = f.items.filter(
+          (n) =>
+            !needle ||
+            n.label.toLowerCase().includes(needle) ||
+            n.content.toLowerCase().includes(needle),
+        );
+        const sorted = [...items].sort((a, b) => {
+          switch (sort) {
+            case "name":
+              return a.label.localeCompare(b.label);
+            case "mass":
+              return (b.mass ?? 0) - (a.mass ?? 0);
+            case "links":
+              return (b.degree ?? 0) - (a.degree ?? 0);
+            default:
+              return (
+                (parseTolerantMs(b.occurredAt ?? b.createdAt) || 0) -
+                (parseTolerantMs(a.occurredAt ?? a.createdAt) || 0)
+              );
+          }
+        });
+        return { ...f, items: sorted };
+      })
+      .filter((f) => f.items.length > 0);
+  }, [folders, q, kindFilter, sort]);
+  const visibleTotal = visibleFolders.reduce((s, f) => s + f.items.length, 0);
+
   const exportFolder = (label: string, items: GraphNode[]) => {
     const body = `# ${label}\n\n_${items.length} ${items.length === 1 ? "memory" : "memories"} · exported from ${spaceName}_\n\n${items.map(memoryMarkdown).join("\n---\n\n")}`;
     if (download(`${slug(spaceName)}-${slug(label)}.md`, body)) {
@@ -194,9 +253,65 @@ export function LibraryPanel({
         {total} memories filed into {folders.length} folders. Open a folder to read, fly to, or export its notes.
       </p>
 
+      {/* IM-38: discovery stack, consistent with the All view. */}
+      <input
+        className="list-filter"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={`Search ${total} memories…`}
+        aria-label="Search folders"
+      />
+      <div className="discovery-filters">
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value)}
+          title="Memory kind"
+          aria-label="Filter folders by kind"
+        >
+          <option value="all">any kind</option>
+          {folders.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          title="Sort by"
+          aria-label="Sort memories in folders"
+        >
+          <option value="recent">most recent</option>
+          <option value="mass">heaviest</option>
+          <option value="links">most connected</option>
+          <option value="name">name A–Z</option>
+        </select>
+      </div>
+      {filtering && (
+        <p style={{ fontSize: "0.74rem", opacity: 0.7, margin: "0 0 0.6rem 0" }}>
+          Showing {visibleTotal} of {total} memories.
+        </p>
+      )}
+      {filtering && visibleTotal === 0 && (
+        <div className="empty" style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center", padding: "0.8rem" }}>
+          <span>No matches — loosen the search or filters.</span>
+          <button
+            className="mini"
+            onClick={() => {
+              setQ("");
+              setKindFilter("all");
+            }}
+          >
+            Clear search &amp; filters
+          </button>
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        {folders.map((f) => {
-          const isOpen = !!open[f.key];
+        {visibleFolders.map((f) => {
+          // While searching/filtering, matching folders open themselves —
+          // the matches are the point of the view.
+          const isOpen = !!open[f.key] || filtering;
           return (
             <div key={f.key} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", overflow: "hidden" }}>
               <div
@@ -233,7 +348,11 @@ export function LibraryPanel({
               </div>
               {isOpen && (
                 <ul style={{ listStyle: "none", margin: 0, padding: "0.3rem 0.5rem 0.5rem" }}>
-                  {f.items.map((n) => (
+                  {f.items.map((n) => {
+                    const expanded = expandedNotes.has(n.id);
+                    const emo = emotionBucketOf(n.emotionalWeight);
+                    const humanDate = fmtBrowseDateWithRelative(n.occurredAt ?? n.createdAt);
+                    return (
                     <li key={n.id} style={{ padding: "0.35rem 0.3rem", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                         <button
@@ -244,7 +363,10 @@ export function LibraryPanel({
                         >
                           {n.label}
                         </button>
-                        {dateOf(n) && <span style={{ fontSize: "0.68rem", opacity: 0.5 }}>{dateOf(n)}</span>}
+                        {/* IM-43: human local date, same format as the All view —
+                            the raw YYYY-MM-DD storage shape stays only in the
+                            Markdown export, where ISO is the right format. */}
+                        {humanDate && <span style={{ fontSize: "0.68rem", opacity: 0.5 }}>{humanDate}</span>}
                         <button
                           className="mini"
                           style={{ padding: "0.12rem 0.35rem", fontSize: "0.7rem" }}
@@ -254,25 +376,57 @@ export function LibraryPanel({
                           ⬇
                         </button>
                       </div>
+                      {/* IM-40: same row richness as All — tier, emotion, tags, links. */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", fontSize: "0.68rem", opacity: 0.75, marginTop: "0.2rem" }}>
+                        <span title="growth stage">
+                          {CELESTIAL_ICON[n.celestial ?? "moon"]} {CELESTIAL_LABEL[n.celestial ?? "moon"]}
+                        </span>
+                        <span title={`${emo} feeling`}>
+                          · <span className="nl-emodot" style={{ background: BROWSE_EMOTION_DOT[emo] }} /> {BROWSE_EMOTION_LABEL[emo]}
+                        </span>
+                        {(n.degree ?? 0) > 0 && (
+                          <span title="connections">· {n.degree} link{n.degree === 1 ? "" : "s"}</span>
+                        )}
+                        {n.tags && n.tags.length > 0 && <span>{n.tags.slice(0, 4).map((t) => `#${t}`).join(" ")}</span>}
+                      </div>
                       {n.content && (
                         <p
                           role="button"
                           tabIndex={0}
-                          style={{ fontSize: "0.74rem", opacity: 0.75, margin: "0.25rem 0 0 0", whiteSpace: "pre-wrap", maxHeight: "4.5rem", overflow: "hidden", cursor: "pointer" }}
-                          onClick={() => onFocus(n.id)}
+                          aria-expanded={expanded}
+                          style={{
+                            fontSize: "0.74rem",
+                            opacity: 0.75,
+                            margin: "0.25rem 0 0 0",
+                            whiteSpace: "pre-wrap",
+                            cursor: "pointer",
+                            ...(expanded ? {} : { maxHeight: "4.5rem", overflow: "hidden" }),
+                          }}
+                          onClick={() => toggleNote(n.id)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              onFocus(n.id);
+                              toggleNote(n.id);
                             }
                           }}
-                          title={n.content.length > PREVIEW_CHARS ? "Truncated — click to read the full memory in Details" : "Click to open in Details"}
+                          title={expanded ? "Click to collapse" : "Click to read the full note here"}
                         >
-                          {previewOf(n.content)}
+                          {expanded ? n.content : previewOf(n.content)}
                         </p>
                       )}
+                      {n.content && (
+                        <button
+                          className="mini ghost"
+                          style={{ fontSize: "0.66rem", padding: "1px 6px", marginTop: "0.15rem" }}
+                          onClick={() => toggleNote(n.id)}
+                          aria-expanded={expanded}
+                        >
+                          {expanded ? "▴ Collapse" : "▾ Read here"}
+                        </button>
+                      )}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>

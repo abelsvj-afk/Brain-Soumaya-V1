@@ -12,6 +12,8 @@
  * the full Help manual (`onSeeHelp`) for anyone who wants more than this one-screen framing —
  * deliberately NOT expanded into a tour or manual itself.
  */
+import { SoumayaEye } from "./SoumayaEye.js";
+
 export function WelcomeIntro({
   companionName,
   onClose,
@@ -26,7 +28,15 @@ export function WelcomeIntro({
   return (
     <div className="welcome-overlay" role="dialog" aria-label="Welcome to Soumaya" onClick={onClose}>
       <div className="welcome-card" onClick={(e) => e.stopPropagation()}>
+        {/* IM-17: the card speaks galaxy visually too — a small star field,
+            each dot a memory-as-star, matching its own copy below. */}
+        <div className="welcome-stars" aria-hidden="true">
+          {["✦", "·", "✦", "⭐", "·", "✦", "·", "✦"].map((s, i) => (
+            <span key={i} className={`welcome-star ws-${i}`}>{s}</span>
+          ))}
+        </div>
         <h2>👋 Welcome</h2>
+        <div className="welcome-eye"><SoumayaEye state="idle" mood="thoughtful" size={40} /></div>
         <ul className="welcome-list">
           <li>
             <b>Soumaya</b> is your personal Life + Financial Operating System — your memories,
@@ -46,6 +56,10 @@ export function WelcomeIntro({
             <b>Money, Life Vision, and Journeys</b> are real tabs, not just words — track what you
             earn and owe, name what you're ultimately building toward, and group it all into the
             life chapters (journeys) it actually belongs to.
+          </li>
+          <li>
+            <b>Capture</b> is how a memory becomes a star: tap ＋, dump a thought, and it lands in
+            your galaxy, linked to what it relates to.
           </li>
         </ul>
         {onSeeHelp && (

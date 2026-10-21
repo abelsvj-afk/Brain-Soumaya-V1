@@ -74,6 +74,7 @@ import { makeCollisionBursts, makeLinkForming } from "./effects.js";
 import { shouldCalmMotion } from "./motion.js";
 import { makeSoumaya, type SoumayaHandle, type LinkTask, type RemovalTask } from "./soumaya.js";
 import { makeEngineAudio } from "./engineAudio.js";
+import { playSfxSpatial } from "./sfx.js";
 import { makeSpaceStation } from "./spaceStation.js";
 import { gltfLoader, ensureKtx2Support } from "./gltf.js";
 import { makeSun, SUN_RADIUS_MAX } from "./sun.js";
@@ -81,7 +82,9 @@ import { makeOrbitSystem } from "./orbits.js";
 import { makeVisitors, type VisitorSystem } from "./visitors.js";
 import { isNodeProcessing, logVisits } from "../api/client.js";
 import { makeSatellites, type SatelliteSystem } from "./satellites.js";
+import { makeTaskSatellites, type TaskSatellites } from "./taskSatellites.js";
 import { makeSubAgents, type SubAgentSystem, type SubAgentHazard } from "./subAgents.js";
+import type { SceneIdentity } from "./sceneIdentity.js";
 import { BG, colorForType, EMOTION_RGB, emotionKind } from "./theme.js";
 
 /** Live status of each fleet unit, read by the Fleet panel. */
@@ -130,10 +133,24 @@ export interface Graph3DHandle {
   fireRecall: (citationIds: number[]) => void;
   /** Soumaya flies into view and shows a short message (autonomous hail). */
   hailSoumaya: (message: string) => void;
+  /** Soumaya speaks a reaction in her in-world speech bubble (IM-139),
+   *  anchored above the ship — no camera move, unlike a hail. */
+  sayAsSoumaya: (message: string) => void;
+  /** Living Galaxy (IM-140a): a completed task becomes a satellite at its last
+   *  position, orbiting its nearest surviving memory before merging into it.
+   *  Call BEFORE the task node is deleted. False when it can't be placed. */
+  spawnTaskSatellite: (nodeId: number) => boolean;
   /** Night Replay: she re-enacts overnight agent-log events (visual only). */
   replayEvents: (items: { id: number; label: string }[]) => void;
   /** Live status of every fleet unit (ship/station/beacons/scout/defender). */
   getFleetStatus: () => FleetStatus;
+  /** IM-19: identity of the visitor / fleet craft the camera is currently
+   *  following (null when following anything else) — powers the shell's
+   *  in-scene identity card so the craft stops being anonymous. */
+  getSceneIdentity: () => SceneIdentity | null;
+  /** IM-19: every visitor currently in the sandbox, named, with the label of
+   *  the memory it's visiting (powers the shell's visitor chip). */
+  getActiveVisitors: () => { variantName: string; targetId: number | null; targetLabel: string | null }[];
   reorderTasks: (newOrder: { id: string; type: string }[]) => void;
   /** Frame the camera on a single Journey hub or Money-sky star (Maya Intelligence Part I3) —
    *  a one-shot, non-follow-locking fly (modeled on `isolateLayer`'s bounding-sphere framing,
@@ -869,6 +886,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   const PULSE_VISIT_CAP = 4;
   const FOLLOW_FLY_MS = 850; // cinematic fly-to duration when engaging a focus lock
   const satellitesRef = useRef<SatelliteSystem | null>(null);
+  const taskSatellitesRef = useRef<TaskSatellites | null>(null);
   // Tracks whether the previous tick frame had pending beacon dispatches,
   // so the beacon-deployed stat is recorded once per dispatch batch
   // (empty -> non-empty transition) instead of every frame while beacons
@@ -1202,8 +1220,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   let soumaya: SoumayaHandle | null = null;
   let engine: ReturnType<typeof makeEngineAudio> | null = null;
   let prevShipPos: THREE.Vector3 | null = null;
+  const shipPanScratch = new THREE.Vector3(); // IM-135: ship screen-x projection for engine stereo pan
   let visitors: VisitorSystem | null = null;
   let satellites: SatelliteSystem | null = null;
+  let taskSatellites: TaskSatellites | null = null; // IM-140a: completed-task satellites
   let subAgents: SubAgentSystem | null = null;
 
   // Adaptive graphics: the central config decides how heavy we render (Graph3D
@@ -1457,6 +1477,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       }
       scene.add(soumaya.object);
       scene.add(soumaya.taskLabel);
+      scene.add(soumaya.speechBubble); // IM-139: in-world reaction bubble, anchored to the ship
       scene.add(soumaya.cargo); // the discarded memory she drags into the Sun
       scene.add(soumaya.trail); // engine plume (world-space)
       soumaya.setTaskVisible(!!showShipTaskRef.current);
@@ -1483,6 +1504,9 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       satellites = makeSatellites();
       satellitesRef.current = satellites;
       scene.add(satellites.group);
+      taskSatellites = makeTaskSatellites();
+      taskSatellitesRef.current = taskSatellites;
+      scene.add(taskSatellites.group);
       subAgents = makeSubAgents();
       subAgentsRef.current = subAgents;
       scene.add(subAgents.group);
@@ -2039,6 +2063,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         ? soumayaPosScratch.copy(soumayaObjRef.current.position)
         : null;
       satellites?.update(dt, workNodes, stationWorld, soumayaPos);
+      taskSatellites?.update(dt); // IM-140a: completed-task satellites orbit + merge
       if (satellites && soumayaHandleRef.current) {
         const pending = satellites.getPendingDispatches();
         if (pending.length > 0) {
@@ -2059,6 +2084,18 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
             // counting actual refresh() invocations.
             const key = `stat.beacons_deployed.${spaceIdRef.current}`;
             localStorage.setItem(key, String(parseInt(localStorage.getItem(key) || "0", 10) + pending.length));
+            // IM-135: a beacon launch pings, stereo-panned by the target
+            // memory's projected on-screen x (transition-gated, once per batch).
+            try {
+              const cam2 = fgRef.current?.camera();
+              const targetNode = (dataRef.current.nodes as any[]).find((n: any) => n.id === pending[0]);
+              if (cam2 && targetNode && targetNode.x != null) {
+                shipPanScratch.set(targetNode.x ?? 0, targetNode.y ?? 0, targetNode.z ?? 0).project(cam2);
+                playSfxSpatial("notify", shipPanScratch.x);
+              }
+            } catch {
+              /* spatial beacon ping is non-critical */
+            }
           }
         }
         hadPendingBeaconsRef.current = pending.length > 0;
@@ -2678,7 +2715,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
             focus = Math.max(0, Math.min(0.85, 1 - (d - 350) / 1400)); // louder the closer you are
           }
           // focus drives the ignition; motion drives the thruster loop (silent when parked).
-          engine?.setLevel(focus, motion);
+          // IM-135: pan the engine by the ship's projected on-screen x.
+          let pan = 0;
+          if (cam) {
+            shipPanScratch.copy(shipPos).project(cam);
+            pan = Math.max(-1, Math.min(1, shipPanScratch.x));
+          }
+          engine?.setLevel(focus, motion, pan);
         } catch {
           /* engine audio is non-critical */
         }
@@ -3602,6 +3645,33 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       hailSoumaya: (message: string) => {
         soumayaHandleRef.current?.hail?.(message);
       },
+      sayAsSoumaya: (message: string) => {
+        soumayaHandleRef.current?.say?.(message);
+      },
+      spawnTaskSatellite: (nodeId: number) => {
+        const sys = taskSatellitesRef.current;
+        if (!sys) return false;
+        const nodes = dataRef.current.nodes as any[];
+        const task = nodes.find((n: any) => n.id === nodeId);
+        if (!task || task.x == null) return false;
+        // Its planet: the nearest surviving non-action memory (live object
+        // reference, so the satellite follows it as the galaxy moves).
+        let anchor: any = null;
+        let best = Infinity;
+        for (const n of nodes as any[]) {
+          if (n.id === nodeId || n.kind === "action" || n.x == null) continue;
+          const d = (n.x - task.x) ** 2 + (n.y - task.y) ** 2 + (n.z - task.z) ** 2;
+          if (d < best) {
+            best = d;
+            anchor = n;
+          }
+        }
+        sys.spawn(
+          { x: task.x ?? 0, y: task.y ?? 0, z: task.z ?? 0 },
+          anchor ?? { x: 0, y: 0, z: 0 }, // no other memory yet — orbit the Sun
+        );
+        return true;
+      },
       replayEvents: (items: { id: number; label: string }[]) => {
         soumayaHandleRef.current?.enqueueReplays?.(items);
       },
@@ -3709,9 +3779,18 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         const active = satellitesRef.current?.getActive() ?? [];
         const pending = satellitesRef.current?.getPendingDispatches() ?? [];
         const sub = subAgentsRef.current?.getStatus() ?? [];
+        // IM-69: ship status is DERIVED from her real task list (a "doing"
+        // task = on her rounds; none = docked/idle) — it used to be hard-coded
+        // active, so Fleet's "N of 6 active" could never fall below 2. The
+        // station is a fixed structure, not a unit that idles: it stays
+        // counted as operational and its detail says so honestly.
+        const shipTasks = soumayaHandleRef.current?.getTasks(dataRef.current.nodes as any[]) ?? [];
+        const doingTask = shipTasks.find((t) => t.status === "doing");
         const status: FleetStatus = {
-          ship: { active: true, detail: "On her rounds" },
-          station: { active: true, detail: "Holding orbit" },
+          ship: doingTask
+            ? { active: true, detail: doingTask.label }
+            : { active: false, detail: "Docked at the Waystation — between tasks" },
+          station: { active: true, detail: "Holding orbit — home base, always on" },
           beacon: {
             active: active.length > 0,
             detail:
@@ -3732,6 +3811,46 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           };
         }
         return status;
+      },
+      // IM-19 (CL-1b): in-scene identity for the followed visitor / fleet
+      // craft + the named visitor list for the shell chip. Read-only —
+      // resolves the followed Object3D back to its owning system.
+      getActiveVisitors: () => {
+        const labelOf = (nid: number) =>
+          (dataRef.current.nodes as any[]).find((n) => n.id === nid)?.label ?? null;
+        return (visitorsRef.current?.getActive() ?? []).map((a) => ({
+          variantName: a.variantName,
+          targetId: a.targetId,
+          targetLabel: a.targetId != null ? labelOf(a.targetId) : null,
+        }));
+      },
+      getSceneIdentity: (): SceneIdentity | null => {
+        const obj = followObjRef.current;
+        if (!obj) return null;
+        const labelOf = (nid: number) =>
+          (dataRef.current.nodes as any[]).find((n) => n.id === nid)?.label ?? null;
+        if (followKindRef.current === "visitor") {
+          const a = (visitorsRef.current?.getActive() ?? []).find((v) => v.object === obj);
+          if (!a) return null;
+          return {
+            kind: "visitor",
+            variantName: a.variantName,
+            targetId: a.targetId,
+            targetLabel: a.targetId != null ? labelOf(a.targetId) : null,
+          };
+        }
+        if (followKindRef.current === "fleet") {
+          const c = (subAgentsRef.current?.getCraft() ?? []).find((x) => x.object === obj);
+          if (!c) return null;
+          const st = (subAgentsRef.current?.getStatus() ?? []).find((s) => s.id === c.id);
+          return {
+            kind: "fleet",
+            unitId: c.id,
+            detail: st?.detail ?? "",
+            targetLabel: st?.targetLabel ?? null,
+          };
+        }
+        return null;
       },
     }),
     [data],

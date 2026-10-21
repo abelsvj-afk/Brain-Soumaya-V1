@@ -71,6 +71,12 @@ export interface CandidateView {
   score: number;
   origin: string;
   createdAt: string;
+  /** IM-120 (additive): each memory's own content + creation date, so the
+   *  triage panel can show a context preview without flying away per node. */
+  aContent: string;
+  bContent: string;
+  aCreatedAt: string;
+  bCreatedAt: string;
 }
 
 /** Pending candidates (strongest first), enriched with the two memory labels. */
@@ -96,9 +102,37 @@ export function listCandidates(h: DbHandle, spaceId: string = DEFAULT_SPACE, lim
       drop.run(r.id, spaceId); // an endpoint was deleted → the suggestion is moot
       continue;
     }
-    out.push({ ...r, aLabel: na.label, bLabel: nb.label });
+    out.push({ ...r, aLabel: na.label, bLabel: nb.label, aContent: na.content, bContent: nb.content, aCreatedAt: na.createdAt, bCreatedAt: nb.createdAt });
   }
   return out;
+}
+
+/**
+ * Undo a resolved candidate (IM-120): put it back to pending. For an ACCEPTED
+ * candidate this also removes the `relates_to` edge the accept created (the
+ * only edge accept creates); for a DISMISSED one it clears the recorded
+ * rejection so the pair can be suggested/decided again. Returns false when
+ * the candidate doesn't exist or is already pending.
+ */
+export function restoreCandidate(h: DbHandle, spaceId: string, id: number): boolean {
+  const row = h.sqlite
+    .prepare(`SELECT a, b, status FROM candidate_links WHERE id = ? AND space_id = ?`)
+    .get(id, spaceId) as { a: number; b: number; status: string } | undefined;
+  if (!row || row.status === "pending") return false;
+  if (row.status === "accepted") {
+    h.sqlite
+      .prepare(
+        `DELETE FROM edges WHERE space_id = ? AND relationship = 'relates_to'
+         AND ((source = ? AND target = ?) OR (source = ? AND target = ?))`,
+      )
+      .run(spaceId, row.a, row.b, row.b, row.a);
+  }
+  if (row.status === "dismissed") {
+    const [x, y] = pair(row.a, row.b);
+    h.sqlite.prepare(`DELETE FROM link_rejections WHERE space_id = ? AND a = ? AND b = ?`).run(spaceId, x, y);
+  }
+  h.sqlite.prepare(`UPDATE candidate_links SET status = 'pending' WHERE id = ? AND space_id = ?`).run(id, spaceId);
+  return true;
 }
 
 /** How many connections are waiting for review (drives the badge). */

@@ -3,6 +3,7 @@ import { type GraphNode, type Fuel } from "@brain/shared";
 import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
 import { isReminderDue } from "../utils/dueReminders.js";
+import { formatDueLocal } from "./cl1a.helpers.js";
 
 interface NotificationsBarProps {
   fuel: Fuel | null;
@@ -83,14 +84,18 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
   const nowMs = Date.now();
   const dueReminders = nodes.filter((n) => isReminderDue(n, nowMs));
   if (dueReminders.length > 0) {
+    // IM-06: the due time exists in the data (remindAt) — render it locally
+    // instead of dropping it, so "due" says WHEN it came due.
+    const earliest = dueReminders.map((n) => n.remindAt ?? "").filter(Boolean).sort()[0];
+    const dueWhen = earliest ? formatDueLocal(earliest) : "";
     alerts.push({
       id: "due-reminders",
       type: "info",
       icon: "🔔",
       text:
         dueReminders.length === 1
-          ? `Reminder due: "${dueReminders[0]!.label.slice(0, 40)}"`
-          : `${dueReminders.length} reminders due.`,
+          ? `Reminder due: "${dueReminders[0]!.label.slice(0, 40)}"${dueWhen ? ` · due ${dueWhen}` : ""}`
+          : `${dueReminders.length} reminders due${dueWhen ? ` · earliest ${dueWhen}` : ""}.`,
       actionText: "Agenda",
       onClick: () => {
         onOpenTab("actions");
@@ -106,11 +111,13 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
     return Date.parse(isoDate) <= now;
   });
   if (overdueActions.length > 0) {
+    const earliestExp = overdueActions.map((n) => n.expiresAt ?? "").filter(Boolean).sort()[0];
+    const expWhen = earliestExp ? formatDueLocal(earliestExp) : "";
     alerts.push({
       id: "overdue-actions",
       type: "warning",
       icon: "⏰",
-      text: `${overdueActions.length} action item${overdueActions.length === 1 ? "" : "s"} overdue.`,
+      text: `${overdueActions.length} action item${overdueActions.length === 1 ? "" : "s"} overdue${expWhen ? ` · since ${expWhen}` : ""}.`,
       actionText: "Agenda",
       onClick: () => {
         onOpenTab("actions");

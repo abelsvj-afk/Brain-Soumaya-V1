@@ -1,5 +1,6 @@
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
+import { NotificationsRepo } from "./notifications.repo.js";
 
 /**
  * Codex discoveries Soumaya charts on her own (her "field notes"). Each is keyed so a
@@ -34,13 +35,26 @@ export class CodexDiscoveriesRepo {
 
   /** Record a discovery (idempotent by key). Returns true if it was newly added. */
   add(d: { key: string; title: string; lore: string; icon?: string; focusId?: number | null }): boolean {
-    return (
+    const added =
       this.handle.sqlite
         .prepare(
           `INSERT OR IGNORE INTO codex_discoveries (space_id, key, title, lore, icon, focus_id)
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .run(this.spaceId, d.key, d.title, d.lore, d.icon ?? "✦", d.focusId ?? null).changes > 0
-    );
+        .run(this.spaceId, d.key, d.title, d.lore, d.icon ?? "✦", d.focusId ?? null).changes > 0;
+    if (added) {
+      // IM-74 producer: a newly charted discovery is a real away-event — mirror
+      // it into the server Inbox. Best-effort only; the Codex is the source of
+      // truth and must never fail because the Inbox did.
+      try {
+        new NotificationsRepo(this.handle, this.spaceId).record({
+          source: "discovery",
+          text: d.title,
+          icon: d.icon ?? "✦",
+          dedupeKey: `discovery:${d.key}`,
+        });
+      } catch { /* inbox is a mirror, never a gate */ }
+    }
+    return added;
   }
 }

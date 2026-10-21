@@ -92,3 +92,27 @@ describe("NodeList — emotion is never color-alone", () => {
     expect(label.closest("li")?.textContent).toContain("warm");
   });
 });
+
+describe("NodeList — IM-42: enrichment failures are surfaced, not silent", () => {
+  it("shows a retry notice when the visitor fetch fails, and clears it after a successful retry", async () => {
+    getVisitorActivity.mockRejectedValue(new Error("down"));
+    render(<NodeList nodes={[node({ id: 1 })]} onFocus={() => {}} />);
+    await screen.findByText(/Couldn't load visitor info/);
+    getVisitorActivity.mockResolvedValue([]);
+    fireEvent.click(screen.getByText("Retry"));
+    await waitFor(() => expect(screen.queryByText(/Couldn't load/)).toBeNull());
+  });
+
+  it("shows a retry notice when the constellation fetch fails", async () => {
+    getConstellations.mockRejectedValue(new Error("down"));
+    render(<NodeList nodes={[node({ id: 1 })]} onFocus={() => {}} />);
+    await screen.findByText(/Couldn't load constellation info/);
+  });
+
+  it("shows no failure notice when both enrichments succeed", async () => {
+    render(<NodeList nodes={[node({ id: 1 })]} onFocus={() => {}} />);
+    await waitFor(() => expect(getConstellations).toHaveBeenCalled());
+    await waitFor(() => expect(getVisitorActivity).toHaveBeenCalled());
+    expect(screen.queryByText(/Couldn't load/)).toBeNull();
+  });
+});

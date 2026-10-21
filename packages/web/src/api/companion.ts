@@ -31,6 +31,54 @@ export async function refreshPersona(): Promise<string> {
   }
 }
 
+/**
+ * Strict variants (IM-110, same pattern as listAttachmentsStrict IM-29/31):
+ * THROW on network/HTTP failure so the Companion sections can tell "load
+ * failed" apart from "genuinely empty". The fail-soft originals above keep
+ * their contract for any other caller.
+ */
+export async function getPersonaStrict(): Promise<string> {
+  const res = await afetch(`${API}/persona`);
+  if (!res.ok) throw new Error(`About Me failed (${res.status})`);
+  const d = (await res.json().catch(() => ({}))) as { body?: string };
+  return d.body ?? "";
+}
+
+export async function refreshPersonaStrict(): Promise<string> {
+  const res = await afetch(`${API}/persona/refresh`, { method: "POST" });
+  if (!res.ok) throw new Error(`About Me refresh failed (${res.status})`);
+  const d = (await res.json().catch(() => ({}))) as { body?: string };
+  return d.body ?? "";
+}
+
+export async function getInstructionsStrict(): Promise<InstructionProfile[]> {
+  const res = await afetch(`${API}/instructions`);
+  if (!res.ok) throw new Error(`Instructions failed (${res.status})`);
+  const d = await res.json().catch(() => []);
+  return Array.isArray(d) ? (d as InstructionProfile[]) : [];
+}
+
+export async function getDocumentsStrict(): Promise<KnowledgeDoc[]> {
+  const res = await afetch(`${API}/documents`);
+  if (!res.ok) throw new Error(`Knowledge failed (${res.status})`);
+  const d = await res.json().catch(() => []);
+  return Array.isArray(d) ? (d as KnowledgeDoc[]) : [];
+}
+
+export async function getSoulStrict(): Promise<string> {
+  const res = await afetch(`${API}/persona/soul`);
+  if (!res.ok) throw new Error(`Soul failed (${res.status})`);
+  const d = (await res.json().catch(() => ({}))) as { body?: string };
+  return d.body ?? "";
+}
+
+export async function getGroundedInsightStrict(): Promise<boolean> {
+  const res = await afetch(`${API}/persona/grounded-insight`);
+  if (!res.ok) throw new Error(`Grounded insight failed (${res.status})`);
+  const d = (await res.json().catch(() => ({}))) as { enabled?: boolean };
+  return d.enabled !== false; // default ON
+}
+
 export interface InstructionProfile {
   id: number;
   name: string;

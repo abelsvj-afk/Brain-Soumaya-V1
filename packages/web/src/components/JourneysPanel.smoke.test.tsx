@@ -3,16 +3,32 @@ import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
 import type { Journey } from "@brain/shared";
 
 const getJourneys = vi.fn();
+const getJourney = vi.fn();
 const createJourney = vi.fn();
 const patchJourney = vi.fn();
 const deleteJourney = vi.fn();
 const journeyLinks = vi.fn();
+const linkToJourney = vi.fn();
 vi.mock("../api/journeys.js", () => ({
   getJourneys: (...a: unknown[]) => getJourneys(...a),
+  getJourney: (...a: unknown[]) => getJourney(...a),
   createJourney: (...a: unknown[]) => createJourney(...a),
   patchJourney: (...a: unknown[]) => patchJourney(...a),
   deleteJourney: (...a: unknown[]) => deleteJourney(...a),
   journeyLinks: (...a: unknown[]) => journeyLinks(...a),
+  linkToJourney: (...a: unknown[]) => linkToJourney(...a),
+  unlinkFromJourney: vi.fn(),
+  journeysFor: vi.fn(),
+  suggestJourneys: vi.fn(),
+}));
+// CL-10: the in-card link picker (JourneyLinkPicker) imports these — mock them
+// inert so the smoke suite never touches the real API modules.
+vi.mock("../api/client.js", () => ({ getGraph: vi.fn().mockRejectedValue(new Error("offline")) }));
+vi.mock("../api/finance.js", () => ({
+  listIncome: vi.fn().mockResolvedValue(null),
+  listExpense: vi.fn().mockResolvedValue(null),
+  listBills: vi.fn().mockResolvedValue(null),
+  getWealthSummary: vi.fn().mockResolvedValue(null),
 }));
 const pushToast = vi.fn();
 vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) }));
@@ -32,6 +48,12 @@ beforeEach(() => {
   // Sane default so opening a card never crashes a test that isn't specifically
   // exercising the links-loading behavior.
   journeyLinks.mockResolvedValue(linksDetail([]));
+  // IM-89: opening a card now loads the journey's own record via getJourney.
+  getJourney.mockImplementation(async (id: number) => {
+    const list = (await getJourneys()) as Journey[] | null;
+    const found = list?.find((x) => x.id === id);
+    return found ? { ...found, links: [] } : null;
+  });
 });
 
 afterEach(() => {

@@ -13,6 +13,7 @@ import { TelegramLinksRepo } from "./links.js";
 import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
 import { captureEpisode } from "../agent/episodic.js"; // W2: episode capture triggers (§5.1)
 import { memorySearchTool } from "../agent/tools/memorySearch.js";
+import { NotificationsRepo } from "../repositories/notifications.repo.js";
 
 /**
  * Talk to your Soumaya brain from Telegram. This deployment hosts many private
@@ -500,6 +501,18 @@ export async function sendDailyDigests(ctx: AppContext, send: Send): Promise<num
         )
         .catch(() => {});
       links.markDigestSent(link.chatId, today);
+      // IM-74 producer: a digest was built and delivered for this space — the
+      // "digest ready" away-event. Recorded in the server Inbox (deduped per
+      // local day, the same key the sweep itself is idempotent on) so the web
+      // Inbox can report it too. Best-effort: delivery already happened.
+      try {
+        new NotificationsRepo(ctx.handle, link.spaceId).record({
+          source: "digest",
+          text: "Your daily digest is ready — fresh memories, new connections, and what's cooling, gathered while you were away.",
+          icon: "🌅",
+          dedupeKey: `digest:${today}`,
+        });
+      } catch { /* inbox is a mirror, never a gate */ }
       sent++;
     } catch (err) {
       console.error(`[telegram] digest push failed for chat ${link.chatId}:`, err);
