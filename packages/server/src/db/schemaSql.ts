@@ -157,6 +157,19 @@ export const BOOTSTRAP_SQL = `
       last_digest_date TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- Telegram TTS (Phase D): synthesized voice-note audio, cached by a hash of
+    -- (voice, model, prosody, normalized text) so an unchanged reply is NEVER
+    -- re-synthesized — replays are free even after a restart, and cached
+    -- replies still play when the provider quota is exhausted. Global (not
+    -- per-space): the key is content-derived and contains no user data beyond
+    -- the reply text itself, which is Soumaya's own output.
+    CREATE TABLE IF NOT EXISTS tts_audio_cache (
+      cache_key TEXT PRIMARY KEY,
+      audio BLOB NOT NULL,
+      content_type TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
     -- Telegram open-ended notes (parity Phase 3): the DURABLE draft behind the
     -- /note → append-verbatim → /done flow. One open draft per (space, chat);
     -- text is the accumulated verbatim note (parts joined by one newline),
@@ -979,4 +992,50 @@ export const BOOTSTRAP_SQL = `
       attempts INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (space_id, consolidated_id, stated_id)
     );
+
+    -- Web push (Immersion Round 3, CL3): one row per browser PushSubscription.
+    -- endpoint is globally UNIQUE (a subscription belongs to exactly one push
+    -- service endpoint); re-subscribing upserts keys + owning space. Dead
+    -- endpoints (send returns 404/410) are pruned by the send path. Identical
+    -- DDL runs in db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_subscriptions_space_idx ON push_subscriptions(space_id);
+
+    -- Web push policy deferral (Immersion Round 3 follow-up, owner decision
+    -- 2026-10-21): pushes the Phase-2 notification policy defers (quiet
+    -- hours / daily cap) wait here and are drained by the router tick —
+    -- deferred, never dropped. Lifecycle mirrors notification_outbox
+    -- (pending -> sending -> sent/failed/dropped/ambiguous) on its own rows
+    -- so the Telegram outbox and its accounting stay untouched. Identical
+    -- DDL runs in db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS push_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      push_key TEXT NOT NULL UNIQUE,
+      space_id TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      occurrence_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      url TEXT NOT NULL DEFAULT '/',
+      status TEXT NOT NULL DEFAULT 'pending',
+      is_urgent INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      deliver_after TEXT NOT NULL,
+      cap_day TEXT,
+      send_started_at TEXT,
+      claimed_by TEXT,
+      claimed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_outbox_pending_idx ON push_outbox(status, deliver_after);
 `;

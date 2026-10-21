@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { currentSpace, updateProfile } from "../api/client.js";
+import { AccountSettings } from "./AccountSettings.js";
 import { isVoiceEnabled, setVoiceEnabled, isVoiceSupported } from "../voice.js";
 import { sfxEnabled, setSfxEnabled } from "../graph/sfx.js";
 import { isColorblind, setColorblind } from "../graph/theme.js";
@@ -23,6 +24,7 @@ import {
   type Level,
 } from "../graph/graphicsConfig.js";
 import { perfHudEnabled, setPerfHudEnabled } from "./PerfHUD.js";
+import { PushToggle } from "./PushToggle.js";
 import { getModelFallbacks } from "../graph/gltf.js";
 import { ModelFallbackNote } from "./GalaxyHud.js";
 import {
@@ -133,11 +135,15 @@ function copyTextWithFeedback(text: string, successMessage: string): void {
 export function SettingsPanel({
   onClose,
   onProfileUpdated,
+  onBrainDeleted,
   focusAudio,
 }: {
   onClose: () => void;
   /** Push the new display name back to the app header. */
   onProfileUpdated?: (name: string) => void;
+  /** Called after this brain was deleted from the danger zone (and the local
+   *  credential cleared), so the app can return to the login screen. */
+  onBrainDeleted?: () => void;
   /** IM-21: opened from the shell's audio chip — scroll the audio
    *  (Preferences) section into view once mounted. */
   focusAudio?: boolean;
@@ -422,6 +428,11 @@ export function SettingsPanel({
           </div>
         </section>
 
+        {/* Account security (IM-129): passcode change + brain deletion. Self-
+            contained in AccountSettings; it confirms against the gamer tag
+            loaded above (the same value the server checks). */}
+        <AccountSettings gamerTag={gamerTag} onBrainDeleted={onBrainDeleted} />
+
         <section className="settings-section" id="settings-audio">
           <h3>Preferences</h3>
           {/* IM-128: Research Mode's toggle lives here too — the SAME
@@ -466,6 +477,11 @@ export function SettingsPanel({
             </button>
           </label>
         </section>
+
+        {/* Web push (CL3): self-contained — renders its own section only when
+            the browser supports push AND the server has VAPID configured;
+            otherwise it renders nothing at all. */}
+        <PushToggle />
 
         <section className="settings-section">
           <h3>♿ Accessibility</h3>

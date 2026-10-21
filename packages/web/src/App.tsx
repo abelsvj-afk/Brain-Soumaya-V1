@@ -2543,6 +2543,18 @@ export default function App() {
             setSettingsFocusAudio(false);
           }}
           onProfileUpdated={(name) => setSpace((s) => (s ? { ...s, name } : s))}
+          onBrainDeleted={() => {
+            // The brain is deleted server-side and AccountSettings already
+            // cleared the local credential via logoutSpace(); mirror the
+            // switch-brain handler above so the app returns to the login
+            // screen with no stale in-memory state.
+            logoutSpace();
+            setSpace(null);
+            setData({ nodes: [], links: [] });
+            setSelected(null);
+            setPanel(null);
+            setShowSettings(false);
+          }}
           focusAudio={settingsFocusAudio}
         />
       )}
@@ -2627,6 +2639,7 @@ export default function App() {
       {showObs && space && (
         <Observatory
           spaceName={space.name}
+          spaceId={space.id}
           memories={(data.nodes as GraphNode[]).filter((n) => n.kind !== "action")}
           actionCount={(data.nodes as GraphNode[]).filter((n) => n.kind === "action").length}
           streak={streak?.current ?? 0}
