@@ -13,6 +13,18 @@ import { TelegramLinksRepo } from "./links.js";
 import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
 import { captureEpisode } from "../agent/episodic.js"; // W2: episode capture triggers (§5.1)
 import { memorySearchTool } from "../agent/tools/memorySearch.js";
+import type { SynthesizedSpeech } from "./tts.js";
+// Phase D voice replies: ALL policy/delivery logic lives in voiceReply.ts
+// (+ tts.ts gate/seam, ttsCache.ts) — bot.ts carries only the call sites.
+import {
+  clearChatVoiceModes,
+  deliverReply,
+  handleVoiceCommand,
+  handleVoiceMessage,
+  isChatVoiceEnabled,
+  resolveReplyDeps,
+  type TelegramReplyDeps,
+} from "./voiceReply.js";
 import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand } from "./notes.js";
 import { chunkTelegramText } from "./chunking.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
@@ -34,6 +46,8 @@ export interface TelegramUpdate {
     chat?: { id?: number };
     text?: string;
     from?: { first_name?: string };
+    /** Present when the user sent a voice note instead of text. */
+    voice?: { file_id?: string; duration?: number };
   };
 }
 
@@ -50,6 +64,41 @@ export async function tgSend(token: string, chatId: number, text: string): Promi
     });
   } catch (err) {
     console.error("[telegram] send failed:", err);
+  }
+}
+
+/**
+ * Injected voice-note sender so tests run with no network. Returns true only
+ * when Telegram accepted the voice note; false means "fall back to text".
+ */
+export type SendVoice = (chatId: number, speech: SynthesizedSpeech) => Promise<boolean>;
+
+/** Send a voice note (real network). Best-effort — never throws. */
+export async function tgSendVoice(
+  token: string,
+  chatId: number,
+  speech: SynthesizedSpeech,
+): Promise<boolean> {
+  try {
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append(
+      "voice",
+      new Blob([speech.audio], { type: speech.contentType }),
+      speech.filename,
+    );
+    const res = await fetch(`${TG_API}/bot${token}/sendVoice`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      console.error(`[telegram] sendVoice failed: HTTP ${res.status}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[telegram] sendVoice failed:", err);
+    return false;
   }
 }
 
@@ -87,6 +136,7 @@ const HELP =
   "• /cap 5 — max proactive pings per day (urgent ones don't count).\n" +
   "• /tz America/Chicago — set your timezone for quiet hours + digest.\n" +
   "• /settings — show your current notification settings.\n" +
+  "• /voice on — hear my replies as voice notes (when voice is enabled on the server); /voice off — back to text.\n" +
   "• /unlink — disconnect this chat.\n" +
   "• /help — show this again.";
 
@@ -237,6 +287,7 @@ export async function handleTelegramUpdate(
   ctx: AppContext,
   update: TelegramUpdate,
   sendRaw: Send,
+  deps: TelegramReplyDeps = {},
 ): Promise<void> {
   // Phase 4: every outbound message goes through the chunker — long tool
   // answers (tab lists, weekly reviews) exceed Telegram's 4096-char limit
@@ -252,7 +303,11 @@ export async function handleTelegramUpdate(
   // trimmed copy all command parsing + the agent path have always used.
   const rawText = msg?.text ?? "";
   const text = rawText.trim();
-  if (chatId == null || !text) return;
+  const isVoiceMessage = msg?.voice != null;
+  if (chatId == null || (!text && !isVoiceMessage)) return;
+
+  // Phase D: resolve voice-reply deps (persistent audio cache by default).
+  const replyDeps = resolveReplyDeps(ctx.handle, deps);
 
   const links = new TelegramLinksRepo(ctx.handle);
 
@@ -297,6 +352,7 @@ export async function handleTelegramUpdate(
   if (text === "/unlink") {
     const had = links.unlink(chatId);
     clearTelegramHistory(chatId); // the thread belongs to the link; drop it with it
+    clearChatVoiceModes(chatId); // …and so does the voice opt-in
     await send(chatId, had ? "Unlinked. /link <name> <passcode> to reconnect." : "This chat wasn't linked.");
     return;
   }
@@ -315,6 +371,17 @@ export async function handleTelegramUpdate(
   const staleNote = expireStaleDraft(ctx.handle, spaceId, chatId, Date.now());
   if (staleNote) {
     await send(chatId, expiredDraftWarning(staleNote));
+  }
+
+  // Phase D call sites — the logic lives in voiceReply.ts.
+  if (isVoiceMessage) {
+    await handleVoiceMessage(send, replyDeps, chatId, spaceId);
+    return;
+  }
+
+  if (text === "/voice" || text.startsWith("/voice ")) {
+    await handleVoiceCommand(send, spaceId, chatId, text);
+    return;
   }
 
   // /digest — send now; /digest HH:MM — set the daily digest time.
@@ -481,7 +548,12 @@ export async function handleTelegramUpdate(
       notify: (msg) => send(chatId, msg),
     });
     const sentText = result.text || "I don't have anything on that yet — add a memory with /log.";
-    await send(chatId, sentText);
+    // Voice note when TTS is on + triggered (Phase D); text otherwise / on
+    // any failure. History records the reply TEXT either way — the thread is
+    // the words, not the medium they were delivered in.
+    await deliverReply(send, replyDeps, chatId, sentText, {
+      chatOptedIn: isChatVoiceEnabled(spaceId, chatId),
+    });
     appendTelegramTurn(spaceId, chatId, text, sentText);
   } catch (err) {
     console.error("[telegram] agent loop failed, falling back to chat:", err);
@@ -490,7 +562,9 @@ export async function handleTelegramUpdate(
     if (answer.citations.length > 0) {
       reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
     }
-    await send(chatId, reply);
+    await deliverReply(send, replyDeps, chatId, reply, {
+      chatOptedIn: isChatVoiceEnabled(spaceId, chatId),
+    });
     appendTelegramTurn(spaceId, chatId, text, reply);
     // W2 §5.1: the loop never ran, so Trigger 1 did not fire — capture the
     // fallback exchange here (best-effort, after delivery, never throws).

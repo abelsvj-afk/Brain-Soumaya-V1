@@ -1,5 +1,6 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
+import { dispatchPush } from "../../push/outbox.js";
 
 /**
  * Firing reminders — the first tool Soumaya calls on her own. `remind_at` used to be
@@ -134,6 +135,35 @@ export const reminderTool: Tool = {
       delivered = true;
     } catch {
       /* logged below regardless; the in-app bar still surfaces it */
+    }
+    // Web push (CL3, policy follow-up per owner decision 2026-10-21): an
+    // independent delivery channel dispatched HERE, at the real firing
+    // site, but it now obeys the same Phase-2 notification policy as
+    // Telegram — dispatchPush evaluates the shared preferences (quiet
+    // hours + daily cap) and either sends now or stores the push in the
+    // pending-push store, which the router tick drains when the policy
+    // allows (deferred, never dropped). It deliberately does NOT flow
+    // through tc.notify above: that boundary exists only when a Telegram
+    // token is configured (index.ts passes notify=undefined otherwise),
+    // and push-only brains must still receive their pushes. dispatchPush
+    // is a strict no-op when VAPID is unconfigured (zero sends, zero
+    // storage) and never throws, so this cannot change any existing
+    // behavior beyond the intended deferral.
+    try {
+      const push = await dispatchPush(
+        tc.ctx.handle,
+        tc.spaceId,
+        {
+          title: "⏰ Soumaya reminder",
+          body: msg,
+          url: "/",
+        },
+        { tool: "fire_reminder", nodeId, remindAt: row.remind_at },
+        { now: new Date(tc.now) },
+      );
+      if (push.sent > 0) delivered = true;
+    } catch {
+      /* push is best-effort — the firing itself already succeeded */
     }
     return { ok: true, summary: `fired reminder "${row.label}"`, delivered, message: msg };
   },

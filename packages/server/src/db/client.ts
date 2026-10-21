@@ -960,6 +960,16 @@ function migrateSchema(sqlite: RawDb): void {
       PRIMARY KEY (space_id, consolidated_id, stated_id)
     );
 
+    -- Telegram TTS (Phase D) — same column set as BOOTSTRAP_SQL in
+    -- db/schemaSql.ts. Cached voice-note audio keyed by content hash;
+    -- see telegram/ttsCache.ts.
+    CREATE TABLE IF NOT EXISTS tts_audio_cache (
+      cache_key TEXT PRIMARY KEY,
+      audio BLOB NOT NULL,
+      content_type TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
     -- Living Galaxy (IM-140): journey mission completions — identical DDL to
     -- BOOTSTRAP_SQL in db/schemaSql.ts (new table, both paths).
     CREATE TABLE IF NOT EXISTS journey_mission_completions (
@@ -1109,6 +1119,55 @@ function migrateSchema(sqlite: RawDb): void {
       throw new Error(`W3 migration: table ${table} missing columns: ${missing.join(", ")}`);
     }
   }
+
+  // Web push (Immersion Round 3, CL3): subscription storage for existing
+  // volumes. New table only — CREATE TABLE IF NOT EXISTS with DDL identical
+  // to BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have it; this is a
+  // no-op there). No columns are added to existing tables, so the
+  // bootstrap-references-migration-column crash pattern cannot arise.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_subscriptions_space_idx ON push_subscriptions(space_id);
+  `);
+
+  // Web push policy deferral (Immersion Round 3 follow-up, owner decision
+  // 2026-10-21): pending-push store for existing volumes. New table only —
+  // CREATE TABLE IF NOT EXISTS with DDL identical to BOOTSTRAP_SQL in
+  // db/schemaSql.ts (fresh DBs already have it; no-op there). No columns
+  // are added to existing tables, so the bootstrap-references-migration-
+  // column crash pattern cannot arise.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS push_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      push_key TEXT NOT NULL UNIQUE,
+      space_id TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      occurrence_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      url TEXT NOT NULL DEFAULT '/',
+      status TEXT NOT NULL DEFAULT 'pending',
+      is_urgent INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      deliver_after TEXT NOT NULL,
+      cap_day TEXT,
+      send_started_at TEXT,
+      claimed_by TEXT,
+      claimed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_outbox_pending_idx ON push_outbox(status, deliver_after);
+  `);
 }
 
 /**

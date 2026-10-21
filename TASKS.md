@@ -80,7 +80,7 @@ Last audited: 2026-06-20. Tracks all open work, each item tagged with its zone a
 
 ## Telegram
 
-- [ ] 🔴 **Phase D: Voice notes via cloud TTS** — OGG/MP3 replies reusing `dramatize.ts` prosody, gated behind `TELEGRAM_TTS_*` env var. Requires new provider seam extension + secrets wiring.
+- [x] 🔴 **Phase D: Voice notes via cloud TTS** — ✅ built behind the gate, **disabled by default** (owner Q3 → env switch OFF). `server/src/telegram/tts.ts`: `ttsConfig()` gate (`TELEGRAM_TTS_ENABLED` + `TELEGRAM_TTS_API_KEY` + `TELEGRAM_TTS_VOICE_ID`; provider `elevenlabs`), `SpeechSynthesizer` seam requesting OGG/Opus for `sendVoice`, `dramatize.ts` prosody → ElevenLabs `voice_settings` (rate→speed, intensity→stability). `bot.ts` `deliverReply` speaks conversational replies only; text is default + fallback (gate off, >1000-char cap, provider/sendVoice failure, quota HTTP 402 fail-soft). **Selective by default** (`TELEGRAM_TTS_MODE=selective`): spoken only for `/voice on` chats or replies to user voice messages; `=all` opts into every reply. Synthesized audio is cached in `tts_audio_cache` (hash of voice+model+prosody+text) — unchanged replies are never re-synthesized. Secrets documented in `plans/telegram-and-autonomy.md`; NOT set — enabling is the owner's separate call.
 
 ---
 
@@ -162,7 +162,10 @@ Last audited: 2026-06-20. Tracks all open work, each item tagged with its zone a
 - [x] 🟡 **Daily quests / tend list** — ✅ done (Wave 2, v1). `components/quests.ts` derives 1–3 live
   click-through nudges (feed today / warm a cooling memory / revisit a drifting one) from graph state,
   shown as a "Today's tending" card in the Observatory. (Deferred: per-day fuel reward on completion —
-  needs server-side daily counters.)
+  needs server-side daily counters.) Completed as a client-only system in Immersion Round 3 (owner
+  decision Q1): honest per-day completion with stable daily targets in `quests.ts`; the server Quest
+  Board in `plans/streaks-and-quests-spec.md` was NOT built, and the per-day fuel reward remains
+  unshipped — quests promise no fuel.
 - [x] 🟢 **Achievements** — ✅ done (Wave 2). 7 qualitative feats (First Light, Synapse, Connector, Nexus,
   Star Born, Gardener, Fully Fueled) in `components/achievements.ts`; unlock-detect effect in `App.tsx`
   persists per-brain in localStorage (`brain.achv.${space.id}`), seeds silently on first eval, toasts new
