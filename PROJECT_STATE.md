@@ -1,3 +1,29 @@
+## 2026-10-21 — ADR-018 approved: global cap + per-space TTS cache
+
+**Current phase:** Design approved; implementation not started.  
+**Branch:** `design/global-notify-cap-space-tts-cache`  
+**Design record:** [ADR-018](./docs/ADR-018-global-notification-cap-and-space-owned-tts-cache.md)  
+**Baseline reviewed:** `15be567a84ca985e93d03772c4f4b2385f91ea76`
+
+**Approved decisions**
+- Daily proactive cap is global across Telegram + push per space-local day; each channel delivery consumes one slot. Urgency bypasses quiet hours only, never the cap.
+- TTS audio cache is per-space owned and deleted with that space; legacy rows with unknown ownership are purged during migration.
+- Cache stays globally bounded to 500 rows; guarantee wording is “free while cached,” not lifetime exactly-once synthesis.
+
+**Architecture/documentation**
+- ADR-018 and the architecture summary are committed on this design branch.
+- Required schema, transaction boundaries, retries, privacy/deletion, acceptance criteria, and phased tasks are specified in ADR-018.
+- No production code changed. No tests were run. No PR opened, no merge, no secrets changed, no deploy.
+
+**Next tasks**
+1. Architect: inspect current Telegram cap transaction and exact push retry metadata; finalize ledger DDL/state transitions and cache migration.
+2. Builder (only after design closure): implement shared global cap and retry freshness.
+3. Builder: implement per-space cache ownership, migration, and transactional deletion.
+4. Reviewer: run full gate, schema-parity/migration checks, concurrency and deletion rollback tests, plus stash-and-fail test-falsification.
+5. Keep TTS/VAPID feature arming on hold until implementation is accepted and post-merge verification passes.
+
+---
+
 # PROJECT_STATE.md
 
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
