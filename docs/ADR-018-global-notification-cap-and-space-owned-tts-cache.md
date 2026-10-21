@@ -131,10 +131,10 @@ Do not rename or reorganize unrelated modules just for this increment. Confirm e
 ## 5. Scoped task plan (all tasks independently testable, target <4 hours)
 
 ### Phase A — finalize design contract (Architect; no production code)
-- [ ] **A1. Inspect current Telegram cap-claim transaction and push retry schema**; map exact call sites and transaction boundaries. Acceptance: concise sequence diagram and file list; no implementation.
-- [ ] **A2. Finalize global ledger DDL and status transitions** including idempotency key, local-day semantics, release rules, ambiguous outcome, and urgent behavior. Acceptance: DDL + state-transition table reviewed against both outboxes.
-- [ ] **A3. Finalize cache migration policy** including dropping unowned rows, index/uniqueness, global 500-row pruning, and delete rollback behavior. Acceptance: migration sequence and rollback consequences documented.
-- [ ] **A4. Review updated architecture and tests**. Acceptance: no unresolved decision that affects schema, user-visible delivery policy, or deletion semantics.
+- [x] **A1. Inspect current Telegram cap-claim transaction and push retry schema**; map exact call sites and transaction boundaries. Acceptance: source-grounded call-site and transaction-boundary map recorded in Phase A closure; no implementation.
+- [x] **A2. Finalize global ledger DDL and status transitions** including idempotency key, local-day semantics, release rules, ambiguous outcome, and urgent behavior. Acceptance: normative DDL and lifecycle invariants recorded in Phase A closure.
+- [x] **A3. Finalize cache migration policy** including dropping unowned rows, index/uniqueness, global 500-row pruning, and delete rollback behavior. Acceptance: migration and rollback contract recorded in Phase A closure.
+- [x] **A4. Review updated architecture and tests**. Acceptance: schema and user-visible policy decisions are closed; implementation-specific migration harness/test-fixture verification remains a mandatory pre-code check.
 
 ### Phase A — design closure (completed design-only, 2026-10-21)
 
@@ -225,7 +225,7 @@ Order: Phase A design closure → Phase B global cap → Phase C cache ownership
 
 ## 7. Risks and unresolved implementation details
 
-- The exact existing Telegram outbox path and whether it can share a transaction helper without creating import cycles must be verified in Phase A1.
+- Implementation must verify the chosen shared claim-service placement against the current import graph before coding; if the transaction contract cannot be implemented without an import cycle or non-atomic split, stop and return to design review.
 - The ledger's retention/cleanup policy must not erase claims for the current local day or ambiguous outcomes before they stop counting.
 - Day-boundary races must use the same resolved timezone and a single captured `now` per claim decision.
 - The cache's global 500-row bound preserves storage boundedness but means one busy space may evict another space's cache entries; it must never permit cross-space cache hits.
