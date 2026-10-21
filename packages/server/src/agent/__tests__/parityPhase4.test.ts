@@ -91,10 +91,7 @@ function insertNode(o: {
 // ---------------------------------------------------------------------------
 
 describe("bill_risk (conversational)", () => {
-  // Midday UTC: since PR #84 the budget runs on the SPACE-local day, and
-  // midnight UTC is still Jan 9 in America/New_York — noon keeps the
-  // fixture on Jan 10 in both calendars, as the scenario intends.
-  const JAN = Date.parse("2026-01-10T12:00:00Z");
+  const JAN = Date.parse("2026-01-10T16:00:00.000Z"); // noon in America/New_York — genuinely Jan 10 in the space zone
   it("reports the exact reserved bills + shortfall, without notifying", async () => {
     new FinAccountRepo(handle, SPACE).setBalance(10000);
     const inc = new FinIncomeRepo(handle, SPACE);
