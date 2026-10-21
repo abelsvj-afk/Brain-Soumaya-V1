@@ -1,26 +1,32 @@
-## 2026-10-21 — ADR-018 approved: global cap + per-space TTS cache
+## 2026-10-21 — ADR-018 Phase A design closure
 
-**Current phase:** Design approved; implementation not started.  
+**Current phase:** Phase A design contract closed for owner review; implementation not started.  
 **Branch:** `design/global-notify-cap-space-tts-cache`  
 **Design record:** [ADR-018](./docs/ADR-018-global-notification-cap-and-space-owned-tts-cache.md)  
-**Baseline reviewed:** `15be567a84ca985e93d03772c4f4b2385f91ea76`
+**Design-only commit:** `9d34dfec9def3f81590d28c705408724335b7b3b` updated architecture policy; ADR Phase A closure is recorded in the design branch.  
+**Baseline reviewed:** `15be567a84ca985e93d03772c4f4b2385f91ea76` plus the owner-supplied read-only verification trace.
 
 **Approved decisions**
-- Daily proactive cap is global across Telegram + push per space-local day; each channel delivery consumes one slot. Urgency bypasses quiet hours only, never the cap.
-- TTS audio cache is per-space owned and deleted with that space; legacy rows with unknown ownership are purged during migration.
-- Cache stays globally bounded to 500 rows; guarantee wording is “free while cached,” not lifetime exactly-once synthesis.
+- The daily proactive cap is global across Telegram + push per space-local day. Each channel delivery counts separately.
+- **Owner-approved Option A:** genuinely fresh qualifying urgent deliveries preserve the existing exception and may bypass both quiet hours and the cap. Every retry rechecks against original due-time metadata; expired urgency loses the exception. The stored urgent bit is not authority.
+- TTS audio cache is owned by one space and deleted with that space; legacy unowned cache rows are discarded rather than assigned to a tenant.
+- Cache remains globally bounded to 500 rows; the honest guarantee is “free while cached,” not lifetime exactly-once synthesis.
 
-**Architecture/documentation**
-- ADR-018 and the architecture summary are committed on this design branch.
-- Required schema, transaction boundaries, retries, privacy/deletion, acceptance criteria, and phased tasks are specified in ADR-018.
-- No production code changed. No tests were run. No PR opened, no merge, no secrets changed, no deploy.
+**Phase A design closure**
+- Source-grounded transaction-boundary map covers Telegram outbox, push outbox, schema/migration definitions, TTS cache service, and space deletion.
+- ADR-018 now specifies the proposed shared notification_cap_claims DDL and states, atomic claim/release transitions, cap-exempt urgent claims, retry-time reminder/bill urgency and staleness revalidation, cache table rebuild, legacy-row purge, and deletion rollback requirements.
+- Remaining pre-implementation checks: confirm shared-service placement against the real import graph; verify the repository's migration fixture harness and schema assertion conventions before writing code. Any incompatibility returns to design review.
+
+**Verification status**
+- Read-only source inspection only. No production code changed; no tests/build/typecheck were run by this Phase A documentation pass.
+- No PR opened, no merge, no secrets changed, no feature armed, no deployment.
 
 **Next tasks**
-1. Architect: inspect current Telegram cap transaction and exact push retry metadata; finalize ledger DDL/state transitions and cache migration.
-2. Builder (only after design closure): implement shared global cap and retry freshness.
-3. Builder: implement per-space cache ownership, migration, and transactional deletion.
-4. Reviewer: run full gate, schema-parity/migration checks, concurrency and deletion rollback tests, plus stash-and-fail test-falsification.
-5. Keep TTS/VAPID feature arming on hold until implementation is accepted and post-merge verification passes.
+1. Owner reviews/accepts the Phase A design contract.
+2. Only after separate implementation authorization: implement shared global cap and retry freshness.
+3. Implement per-space TTS ownership, migration, and transactional deletion.
+4. Run schema-parity/migration tests, full server/web/typecheck/build gate, concurrency and deletion rollback tests, and stash-and-fail falsification.
+5. Keep TTS and VAPID feature arming on hold until implementation is accepted and post-merge verification passes.
 
 ---
 
