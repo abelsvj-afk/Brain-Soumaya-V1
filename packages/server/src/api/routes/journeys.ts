@@ -131,12 +131,38 @@ export function journeysRoutes(ctx: AppContext): Router {
   });
 
   // Hydrated links for a journey's detail view (label + amount, not just kind/refId).
+  // The hydrated list is display-capped, but totals + counts are computed over ALL
+  // links (IM-87: a capped subset must never be presented as the journey's totals),
+  // and links that exist but can't be hydrated are counted per kind rather than
+  // silently dropped (IM-86: detail must never contradict the header's link count).
+  const LINKS_DISPLAY_LIMIT = 20;
   r.get("/:id/links", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return bad(res, "Invalid id");
     const spaceId = spaceOf(res);
-    if (!repo(res).get(id)) return res.status(404).json({ error: "Not found" });
-    res.json(hydrateJourneyLinks(ctx, spaceId, repo(res).links(id).slice(0, 20)));
+    const jr = repo(res);
+    if (!jr.get(id)) return res.status(404).json({ error: "Not found" });
+    const all = jr.links(id);
+    const windowLinks = all.slice(0, LINKS_DISPLAY_LIMIT);
+    const summaries = hydrateJourneyLinks(ctx, spaceId, windowLinks);
+    const unshownByKind: Partial<Record<(typeof LINK_KINDS)[number], number>> = {};
+    const shownPerKind = new Map<string, number>();
+    for (const s of summaries) shownPerKind.set(s.kind, (shownPerKind.get(s.kind) ?? 0) + 1);
+    const windowPerKind = new Map<string, number>();
+    for (const l of windowLinks) windowPerKind.set(l.kind, (windowPerKind.get(l.kind) ?? 0) + 1);
+    for (const [kind, n] of windowPerKind) {
+      const missing = n - (shownPerKind.get(kind) ?? 0);
+      if (missing > 0) unshownByKind[kind as (typeof LINK_KINDS)[number]] = missing;
+    }
+    const totals = jr.linkTotals(id);
+    res.json({
+      links: summaries,
+      totalCount: all.length,
+      earnedCents: totals.earnedCents,
+      spentCents: totals.spentCents,
+      displayLimit: LINKS_DISPLAY_LIMIT,
+      unshownByKind,
+    });
   });
 
   return r;

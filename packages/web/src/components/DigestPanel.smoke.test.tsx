@@ -143,6 +143,149 @@ describe("DigestPanel — 'Going cold' no longer hides the most urgent item", ()
   });
 });
 
+describe("DigestPanel — IM-61: a failed scan never toasts a successful empty result", () => {
+  it("contradiction scan failure toasts an error, NOT 'No contradictions found'", async () => {
+    runContradictions.mockRejectedValue(new Error("network down"));
+    render(<DigestPanel onFocus={() => {}} />);
+    const btn = await screen.findByText("⚡ Find contradictions");
+    await act(async () => { btn.click(); });
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Couldn't run the contradiction scan"), "⚠️", expect.any(Number)),
+    );
+    const messages = pushToast.mock.calls.map((c) => String(c[0]));
+    expect(messages.some((m) => m.includes("No contradictions found"))).toBe(false);
+    expect(messages.some((m) => m.includes("consistent"))).toBe(false);
+  });
+
+  it("contradiction scan that succeeds with nothing found still toasts the true-empty copy", async () => {
+    runContradictions.mockResolvedValue([]);
+    render(<DigestPanel onFocus={() => {}} />);
+    const btn = await screen.findByText("⚡ Find contradictions");
+    await act(async () => { btn.click(); });
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("No contradictions found"), "✓", expect.any(Number)),
+    );
+  });
+
+  it("connection scan failure toasts an error, NOT 'No new connections yet'", async () => {
+    runDigest.mockRejectedValue(new Error("network down"));
+    render(<DigestPanel onFocus={() => {}} />);
+    const btn = await screen.findByText("🔍 Find new links");
+    await act(async () => { btn.click(); });
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Couldn't run the connection scan"), "⚠️", expect.any(Number)),
+    );
+    const messages = pushToast.mock.calls.map((c) => String(c[0]));
+    expect(messages.some((m) => m.includes("No new connections yet"))).toBe(false);
+  });
+
+  it("connection scan that succeeds with nothing found still toasts the true-empty copy", async () => {
+    runDigest.mockResolvedValue([]);
+    render(<DigestPanel onFocus={() => {}} />);
+    const btn = await screen.findByText("🔍 Find new links");
+    await act(async () => { btn.click(); });
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("No new connections yet"), "🔍", expect.any(Number)),
+    );
+  });
+});
+
+describe("DigestPanel — IM-56: the daily digest renders its surfaced connections", () => {
+  it("shows the connection text and fly-to pills, even on a connections-only day", async () => {
+    const onFocus = vi.fn();
+    getDailyDigest.mockResolvedValue({
+      date: "2026-10-20",
+      greeting: "",
+      fresh: [],
+      connections: [
+        {
+          id: 5,
+          text: "Your marathon training and your night shifts are pulling the same thread.",
+          score: 0.7,
+          createdAt: "2026-10-20T12:00:00Z",
+          nodes: [
+            { id: 7, label: "Marathon plan", type: "goal" },
+            { id: 8, label: "Night shifts", type: "memory" },
+          ],
+        },
+      ],
+      expiredActions: [],
+      cooling: [],
+      reminders: [],
+      closing: "",
+    });
+    render(<DigestPanel onFocus={onFocus} />);
+    await screen.findByText("🔗 Connections she surfaced today");
+    expect(screen.getByText(/marathon training and your night shifts/)).toBeTruthy();
+    const pill = screen.getByText("Marathon plan");
+    act(() => pill.click());
+    expect(onFocus).toHaveBeenCalledWith(7);
+    const pill2 = screen.getByText("Night shifts");
+    act(() => pill2.click());
+    expect(onFocus).toHaveBeenCalledWith(8);
+  });
+
+  it("does not render the connections block when the digest has none", async () => {
+    getDailyDigest.mockResolvedValue({
+      date: "2026-10-20",
+      greeting: "Morning.",
+      fresh: [],
+      connections: [],
+      expiredActions: [],
+      cooling: [],
+      reminders: [],
+      closing: "",
+    });
+    render(<DigestPanel onFocus={() => {}} />);
+    await screen.findByText("Morning.");
+    expect(screen.queryByText("🔗 Connections she surfaced today")).toBeNull();
+  });
+});
+
+describe("DigestPanel — IM-57: insight rows show strength and local creation date", () => {
+  it("renders the score as a percentage strength indicator and createdAt as a local date", async () => {
+    const createdAt = "2026-10-20T02:30:00.000Z";
+    getDigest.mockResolvedValue([
+      {
+        id: 11,
+        text: "Sleep and spending move together in your notes.",
+        score: 0.82,
+        createdAt,
+        kind: "synthesis",
+        tier: 2,
+        nodes: [{ id: 3, label: "Sleep log", type: "memory" }],
+      },
+    ]);
+    render(<DigestPanel onFocus={() => {}} />);
+    await screen.findByText(/Sleep and spending move together/);
+    // Strength: percentage text + a bar filled to the same proportion.
+    expect(screen.getByText("82%")).toBeTruthy();
+    const strength = document.querySelector(".insight-strength");
+    expect(strength).toBeTruthy();
+    expect(strength!.textContent).toContain("82%");
+    // Local date: computed the same way the panel must (viewer-local), so
+    // this holds in any timezone the suite runs under.
+    const expectedDate = new Date(createdAt).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    expect(screen.getByText(expectedDate)).toBeTruthy();
+    // The raw stored timestamp must never leak as the visible date.
+    expect(screen.queryByText(createdAt)).toBeNull();
+  });
+
+  it("omits the strength/date elements gracefully when the fields are absent", async () => {
+    getDigest.mockResolvedValue([
+      { id: 12, text: "A bare insight.", nodes: [] },
+    ]);
+    render(<DigestPanel onFocus={() => {}} />);
+    await screen.findByText("A bare insight.");
+    expect(document.querySelector(".insight-strength")).toBeNull();
+    expect(document.querySelector(".insight-date")).toBeNull();
+  });
+});
+
 describe("DigestPanel — an emotional-weather pattern can be dismissed", () => {
   it("hides a pattern after 'Got it' and persists the dismissal", async () => {
     getEmotionalTrajectory.mockResolvedValue({

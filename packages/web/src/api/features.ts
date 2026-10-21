@@ -47,6 +47,8 @@ export async function deleteTimelineChapter(id: number): Promise<boolean> {
 export interface DueReview {
   id: number;
   label: string;
+  /** The memory's full content — shown by ReviewPanel only after Reveal (IM-111). */
+  content: string;
   strength: number;
   reviewCount: number;
 }

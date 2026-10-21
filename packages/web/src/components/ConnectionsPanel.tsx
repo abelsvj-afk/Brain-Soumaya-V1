@@ -32,23 +32,49 @@ export function ConnectionsPanel({
 }) {
   const [items, setItems] = useState<Candidate[]>([]);
   const [pruning, setPruning] = useState(false);
+  // IM-120 (honesty subset): loading / error / true-empty are distinct states.
+  // This used to be one `items` array + a swallowed catch, so "Nothing waiting"
+  // was simultaneously the loading state, the error state, and the empty state.
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
 
-  const refresh = () => getCandidates().then((d) => setItems(d.candidates)).catch(() => {});
+  const refresh = async () => {
+    try {
+      const d = await getCandidates();
+      setItems(d.candidates);
+      setLoadState("ready");
+    } catch {
+      setLoadState("error");
+    }
+  };
   useEffect(() => {
-    refresh();
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Put an optimistically-removed row back where it was after a failed action. */
+  const restore = (c: Candidate, idx: number) =>
+    setItems((xs) => (xs.some((x) => x.id === c.id) ? xs : [...xs.slice(0, Math.max(0, idx)), c, ...xs.slice(Math.max(0, idx))]));
+
   const accept = async (c: Candidate) => {
+    const idx = items.findIndex((x) => x.id === c.id);
     setItems((xs) => xs.filter((x) => x.id !== c.id));
     if (await acceptCandidate(c.id)) {
       playSfx("achievement");
       pushToast("Connected ✦", "🔗", 2500);
       onChanged?.();
+    } else {
+      // IM-120: a failed accept used to vanish exactly like a successful one.
+      restore(c, idx);
+      pushToast("Couldn't connect those — try again.", "⚠️", 3500);
     }
   };
   const dismiss = async (c: Candidate) => {
+    const idx = items.findIndex((x) => x.id === c.id);
     setItems((xs) => xs.filter((x) => x.id !== c.id));
-    await dismissCandidate(c.id);
+    if (!(await dismissCandidate(c.id))) {
+      restore(c, idx);
+      pushToast("Couldn't dismiss that — try again.", "⚠️", 3500);
+    }
   };
   const declutter = async () => {
     setPruning(true);
@@ -90,7 +116,14 @@ export function ConnectionsPanel({
           <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "2px 0 10px" }}>
             Links Soumaya wasn't sure about, or that you decluttered — connect the real ones, dismiss the rest.
           </p>
-          {items.length === 0 ? (
+          {items.length === 0 && loadState === "loading" ? (
+            <p className="settings-note" style={{ opacity: 0.6 }}>Loading suggestions…</p>
+          ) : items.length === 0 && loadState === "error" ? (
+            <p className="settings-note" role="alert" style={{ opacity: 0.85 }}>
+              Couldn't load suggestions — something went wrong reaching Soumaya.{" "}
+              <button className="mini ghost" onClick={() => { setLoadState("loading"); void refresh(); }}>Try again</button>
+            </p>
+          ) : items.length === 0 ? (
             <p className="settings-note" style={{ opacity: 0.6 }}>Nothing waiting. New suggestions show up as you add memories.</p>
           ) : (
             <ul className="cand-list">

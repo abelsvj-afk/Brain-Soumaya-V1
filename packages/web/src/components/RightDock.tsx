@@ -111,6 +111,37 @@ export function visibleTabIds(
   return allTabs.filter((t) => t.id === activeTab || gated[t.id] !== false).map((t) => t.id);
 }
 
+/**
+ * IM-02: the dock ambient strip's content, derived ONLY from real state the
+ * dock already receives (the graph's actual memory/link counts, the focused
+ * memory's label) plus the real local clock. Pure + exported so it is
+ * unit-testable. The previous strip FABRICATED telemetry — a sector number
+ * derived from a sine of the current time, cycling a hard-coded list of
+ * orbit names that correspond to nothing in the user's brain. No invented
+ * numbers or place names may return here: if there is no real state to
+ * show, say so honestly ("No memories yet").
+ */
+export function dockAmbientGreeting(now: Date): string {
+  const hours = now.getHours();
+  if (hours >= 5 && hours < 12) return "Good morning, traveller";
+  if (hours >= 12 && hours < 17) return "Good afternoon, traveller";
+  if (hours >= 17 && hours < 22) return "Good evening, traveller";
+  return "Good night, traveller";
+}
+
+export function dockAmbientDetail(
+  input: { memoryCount: number; linkCount: number; selectedLabel?: string | null },
+  now: Date,
+): string {
+  const timeStr = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (input.memoryCount <= 0) return `No memories yet · ${timeStr}`;
+  const counts =
+    `${input.memoryCount} ${input.memoryCount === 1 ? "memory" : "memories"} · ` +
+    `${input.linkCount} ${input.linkCount === 1 ? "link" : "links"}`;
+  const viewing = input.selectedLabel ? ` · Viewing “${input.selectedLabel}”` : "";
+  return `${counts}${viewing} · ${timeStr}`;
+}
+
 const TABS: { id: DockTab; label: string; name: string }[] = [
   { id: "details", label: "ⓘ", name: "Details" },
   { id: "list", label: "📚", name: "Browse" },
@@ -170,32 +201,26 @@ export function RightDock({
   const [progressView, setProgressView] = useState<ProgressView>("codex");
   const [fleetOpen, setFleetOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [ambientInfo, setAmbientInfo] = useState({ greeting: "", location: "" });
-
+  // IM-02: the ambient strip shows REAL state only (see dockAmbientDetail).
+  // The clock ticks so the greeting/time stay current; everything else is
+  // derived during render from the graph + selection props, so the strip
+  // updates the moment the brain changes — no fabricated telemetry.
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const updateAmbient = () => {
-      const hours = new Date().getHours();
-      let greeting = "Good evening";
-      if (hours >= 5 && hours < 12) greeting = "Good morning";
-      else if (hours >= 12 && hours < 17) greeting = "Good afternoon";
-      else if (hours >= 17 && hours < 22) greeting = "Good evening";
-      else greeting = "Good night";
-
-      const sector = Math.floor(Math.sin(Date.now() / 10000) * 4) + 5;
-      const sectors = ["Delta-V", "Lagrange-5", "Orion Outpost", "Alpha Quadrant", "E-45 Station"];
-      const orbit = sectors[Math.abs(hours) % sectors.length];
-      const timeStr = new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-
-      setAmbientInfo({
-        greeting: `${greeting}, traveller`,
-        location: `🛰️ Spaceport · ${orbit} (Sector ${sector}) · ${timeStr}`
-      });
-    };
-
-    updateAmbient();
-    const iv = setInterval(updateAmbient, 30000);
+    const iv = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(iv);
   }, []);
+  const ambientInfo = {
+    greeting: dockAmbientGreeting(now),
+    location: dockAmbientDetail(
+      {
+        memoryCount: graph.nodes.filter((n) => n.kind !== "action").length,
+        linkCount: graph.links.length,
+        selectedLabel: selected?.label ?? null,
+      },
+      now,
+    ),
+  };
 
   useEffect(() => {
     const updateCount = () => {
@@ -282,7 +307,7 @@ export function RightDock({
           </button>
         )}
       </div>
-      {/* Persistent Sci-Fi Ambient Status Strip */}
+      {/* Persistent ambient status strip — real graph state + local time only (IM-02) */}
       <div className="dock-ambient-strip" style={{
         padding: "6px 16px",
         background: "rgba(10, 12, 28, 0.4)",

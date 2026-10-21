@@ -1,4 +1,4 @@
-import type { GraphNode, CelestialClass } from "@brain/shared";
+import type { GraphNode, CelestialClass, CodexMindKind, CodexPhenomenon } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_ICON, CELESTIAL_LABEL, NODE_TYPE_LABEL } from "@brain/shared";
 import { statsSpaceId } from "./achievements.js";
 
@@ -206,7 +206,10 @@ function constellationEntries(ctx: CodexCtx): CodexEntry[] {
 }
 
 // ---- The Mind Layer: discover each cognitive kind as it first appears ----
-const MIND_DEFS: { kind: string; title: string; icon: string; lore: string; hint: string }[] = [
+// `kind` is typed against the shared catalog (CODEX_MIND_KINDS in @brain/shared):
+// an id outside the server's rewardable set is a compile error, and the catalog
+// sync test (codex.catalog.test.ts) proves the sets are exactly equal.
+const MIND_DEFS: { kind: CodexMindKind; title: string; icon: string; lore: string; hint: string }[] = [
   { kind: "goal", title: "The Ambition", icon: "🎯", hint: "Set a goal in the Mind tab to chart it.", lore: "A goal is a gravity well set in your future — a body your memories fall toward, pulling your galaxy in a direction rather than just a shape." },
   { kind: "skill", title: "The Craft", icon: "🛠️", hint: "Add a skill in the Mind tab.", lore: "A skill brightens with every memory that proves practice — a star you don't set by hand but earn, tier by tier, from what you actually do." },
   { kind: "person_entity", title: "The Kindred", icon: "👤", hint: "Add a person in the Mind tab.", lore: "A person is a named star others orbit. Every memory that mentions them drifts into their gravity, and their light warms or cools with how you've been." },
@@ -292,7 +295,7 @@ function phenomenaEntries(ctx: CodexCtx): CodexEntry[] {
   const cooling = ctx.memories.some((m) => (m.entropy ?? 0) >= 0.55);
   const tended = stat("memories_tended");
   const def = (
-    id: string,
+    id: CodexPhenomenon,
     icon: string,
     title: string,
     hint: string,

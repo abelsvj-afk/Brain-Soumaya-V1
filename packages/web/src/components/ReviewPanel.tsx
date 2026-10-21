@@ -16,7 +16,30 @@ import { useDialogA11y } from "../hooks/useDialogA11y.js";
 const SESSION_SIZE = 7; // one sitting
 const DAILY_CAP = 15; // enough for a day; the rest keep for tomorrow
 
-const todayKey = () => `review.doneToday.${new Date().toISOString().slice(0, 10)}`;
+/**
+ * IM-113: the daily cap keys on the LOCAL day, not the UTC day (PR #74 made
+ * streaks/daily-logs space-local; Recall's cap was the one surface missed —
+ * `toISOString().slice(0,10)` resets at UTC midnight, so an evening user in
+ * the Americas was capped/uncapped against the wrong day).
+ *
+ * Same algorithm as the server's `localDay()` (agent/notify/policy.ts, the
+ * helper the streak fix uses): en-CA formatToParts in the target timezone.
+ * The web has no space_meta access, so the timezone is the one this device
+ * reports — the user's own local zone, which is what the space timezone is
+ * set from (server default America/New_York).
+ */
+export function spaceLocalDay(d: Date = new Date(), timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  } catch {
+    // Unknown/invalid zone — fall back to the runtime's own local calendar day.
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+}
+const todayKey = () => `review.doneToday.${spaceLocalDay()}`;
 const doneToday = (): number => {
   try { return parseInt(localStorage.getItem(todayKey()) || "0", 10) || 0; } catch { return 0; }
 };
@@ -62,7 +85,15 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
     if (!current || grading) return; // rapid double-tap used to grade the same card twice
     setGrading(true);
     try {
-      await gradeReview(current.id, remembered);
+      // IM-112: gradeReview never throws for HTTP failures — it returns false.
+      // Honour that: a failed grade must NOT advance the session, bump the
+      // daily count, or earn the streak nudge. It gets the same toast + retry
+      // posture as a thrown error (previously unreachable for HTTP failures).
+      const saved = await gradeReview(current.id, remembered);
+      if (!saved) {
+        pushToast("Couldn't save that — try again.", "⚠️", 3500);
+        return;
+      }
       bumpToday();
       // A recall earns Fuel + keeps the streak alive — nudge the HUD to refresh.
       window.dispatchEvent(new Event("brain-memory-added"));
@@ -141,10 +172,15 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
             {!revealed ? (
               <button className="rv-btn reveal" onClick={() => setRevealed(true)}>Reveal &amp; rate my recall</button>
             ) : (
-              <div className="rv-grade">
-                <button className="rv-btn forgot" disabled={grading} onClick={() => void grade(false)}>Forgot</button>
-                <button className="rv-btn primary" disabled={grading} onClick={() => void grade(true)}>I remembered</button>
-              </div>
+              <>
+                {/* IM-111: Reveal must actually reveal — the memory's own content,
+                    so the grade below is a judgement about a shown memory. */}
+                {current.content && <div className="rv-content">{current.content}</div>}
+                <div className="rv-grade">
+                  <button className="rv-btn forgot" disabled={grading} onClick={() => void grade(false)}>Forgot</button>
+                  <button className="rv-btn primary" disabled={grading} onClick={() => void grade(true)}>I remembered</button>
+                </div>
+              </>
             )}
           </div>
         )}

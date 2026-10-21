@@ -2,8 +2,30 @@ import { useEffect, useMemo, useState } from "react";
 import type { Constellation, DailyDigest, DormantItem, EmotionalTrajectory, EvolutionLink, Insight, LifeAreaCount, SelfReviewItem } from "@brain/shared";
 import { getConstellations, getDailyDigest, getDailyLog, getDigest, getDormant, getEmotionalTrajectory, getEvolutionLinks, getLifeAreas, getSelfReview, getBeliefs, ingestText, getSpaceId, promoteConstellation, resolveInsight, runDigest, runContradictions, type DailyLog, type Belief } from "../api/client.js";
 import { colorForType } from "../graph/theme.js";
+import { parseTolerantMs } from "../utils/dueReminders.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
+
+/**
+ * A stored timestamp as the viewer's local calendar date ("Oct 20, 2026").
+ * Parsed via the shared tolerant parser (naive SQLite strings read as UTC,
+ * the same rule the other panels use) and rendered with toLocaleDateString,
+ * so an evening-ET insight shows its ET date, not the UTC one. Unparseable
+ * values render nothing — never the raw stored string.
+ */
+export function fmtLocalDate(raw?: string): string {
+  if (!raw) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+  if (dateOnly) {
+    const d = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    return Number.isNaN(d.getTime())
+      ? ""
+      : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  const t = parseTolerantMs(raw);
+  if (Number.isNaN(t)) return "";
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 
 /** Dependency-free valence sparkline (−1..1). Green above the midline, red below. */
 function MoodSparkline({ points }: { points: EmotionalTrajectory["points"] }) {
@@ -218,6 +240,10 @@ export function DigestPanel({
         found.length > 0 ? "✨" : "🔍",
         5000,
       );
+    } catch {
+      // IM-61: the scan itself failed — say so, distinctly from a successful
+      // scan that found nothing. Never toast the empty-result copy here.
+      pushToast("Couldn't run the connection scan — it didn't complete. Check your connection and try again.", "⚠️", 5000);
     } finally {
       setBusy(false);
     }
@@ -235,6 +261,10 @@ export function DigestPanel({
         found.length > 0 ? "⚡" : "✓",
         5000,
       );
+    } catch {
+      // IM-61: a failed scan must never read as "your memories are
+      // consistent" — the scan didn't run, so consistency is unknown.
+      pushToast("Couldn't run the contradiction scan — it didn't complete. Check your connection and try again.", "⚠️", 5000);
     } finally {
       setBusy(false);
     }
@@ -325,6 +355,7 @@ export function DigestPanel({
           would silently render nothing at all. */}
       {daily &&
         (daily.fresh.length > 0 ||
+          (daily.connections?.length ?? 0) > 0 ||
           daily.expiredActions.length > 0 ||
           daily.cooling.length > 0 ||
           (daily.reminders?.length ?? 0) > 0 ||
@@ -349,6 +380,36 @@ export function DigestPanel({
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* IM-56: the day's surfaced latent connections were fetched and
+              populated server-side but never rendered — the digest's own
+              connections were invisible in the digest. Rendered like the
+              sibling digest fields, with fly-to pills for the linked nodes. */}
+          {daily.connections && daily.connections.length > 0 && (
+            <div className="digest-connections">
+              <h4>🔗 Connections she surfaced today</h4>
+              <ul className="digest-entries">
+                {daily.connections.map((c) => (
+                  <li key={c.id}>
+                    <p className="digest-snippet">{c.text}</p>
+                    <div className="pills">
+                      {c.nodes.map((n) => (
+                        <button
+                          key={n.id}
+                          className="pill"
+                          style={{ borderColor: colorForType(n.type) }}
+                          onClick={() => onFocus(n.id)}
+                          title="Fly to this memory"
+                        >
+                          {n.label}
+                        </button>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {daily.expiredActions.length > 0 && (
@@ -639,6 +700,14 @@ export function DigestPanel({
       <ul className="insights">
         {shownInsights.map((it) => {
           const isConflict = it.kind === "contradiction";
+          // IM-57: the insight's own strength + age were fetched but never
+          // shown — a months-old weak hunch read identically to today's
+          // strongest connection.
+          const scorePct =
+            typeof it.score === "number" && Number.isFinite(it.score)
+              ? Math.round(Math.min(1, Math.max(0, it.score)) * 100)
+              : null;
+          const createdLabel = fmtLocalDate(it.createdAt);
           return (
             <li
               key={it.id}
@@ -675,6 +744,23 @@ export function DigestPanel({
                 >
                   {TIER_LABEL[it.tier ?? 3]}
                 </span>
+                {scorePct !== null && (
+                  <span
+                    className="insight-strength"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.66rem", opacity: 0.85 }}
+                    title={`Strength ${scorePct}% — how strong or surprising this connection is`}
+                  >
+                    <span style={{ width: "44px", height: "5px", background: "rgba(255,255,255,0.12)", borderRadius: "3px", overflow: "hidden", display: "inline-block" }}>
+                      <span style={{ display: "block", height: "100%", width: `${scorePct}%`, background: "#7af9ff" }} />
+                    </span>
+                    {scorePct}%
+                  </span>
+                )}
+                {createdLabel && (
+                  <span className="insight-date" style={{ fontSize: "0.66rem", opacity: 0.6 }}>
+                    {createdLabel}
+                  </span>
+                )}
               </div>
               <p className="insight-text">{it.text}</p>
               <div className="pills">

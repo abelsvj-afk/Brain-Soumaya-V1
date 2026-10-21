@@ -57,7 +57,10 @@ describe("journeys routes — Financial Goal <-> Journey linking", () => {
 
     const links = await get(`/api/journeys/${journey.id}/links`);
     expect(links.status).toBe(200);
-    expect(links.body).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "goal", refId: goal.id, label: "Down payment" })]));
+    // IM-87: /links now returns a detail object (display-capped `links` + true
+    // totals/counts over ALL links), not a bare array.
+    expect((links.body as { links: unknown[] }).links).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "goal", refId: goal.id, label: "Down payment" })]));
+    expect((links.body as { totalCount: number }).totalCount).toBe(1);
 
     const unlink = await post(`/api/journeys/${journey.id}/unlink`, { kind: "goal", refId: goal.id });
     expect(unlink.status).toBe(200);

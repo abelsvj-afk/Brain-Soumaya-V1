@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { EXTRACTABLE_NODE_TYPES, CELESTIAL_CLASSES } from "@brain/shared";
+import { CODEX_STATIC_KEYS } from "@brain/shared";
 import type { AppContext } from "../../context.js";
 import { EconomyRepo, EARN_CODEX_DISCOVERY } from "../../economy.js";
+import { CodexDiscoveriesRepo } from "../../repositories/codexDiscoveries.repo.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { StreakRepo } from "../../streak.js";
 import { agentLogs, dailyLogs } from "../../db/schema.js";
@@ -25,28 +26,25 @@ const SettingsWriteSchema = z.object({
   value: z.string().max(64),
 });
 
-// The rewardable Codex catalog, mirrored from the web client's entry ids
-// (packages/web/src/components/codex.ts — keep in sync when adding entries).
-// Everything static is enumerable here; constellation entries are dynamic and
-// verified against the space's real MOC hubs instead.
-const CODEX_STATIC_KEYS = new Set<string>([
-  ...EXTRACTABLE_NODE_TYPES.map((t) => `sector-${t}`),
-  ...CELESTIAL_CLASSES.map((c) => `body-${c}`),
-  "body-singularity",
-  "fleet-soumaya",
-  "fleet-station",
-  "fleet-beacon",
-  ...["firstlink", "star", "deep", "ancient", "cooling", "tender"].map((p) => `phenom-${p}`),
-]);
-
+// The rewardable Codex catalog lives in @brain/shared (CODEX_STATIC_KEYS) — the
+// single source of truth the web client's Codex is also built from, so the two
+// can no longer silently drift (IM-93: the old hand-mirrored copy here never
+// gained the mind-* entries, five phenomena, or any field notes, and their
+// claims were rejected 400). The two dynamic families are verified against the
+// space's real data instead: constellation entries against its MOC hubs, and
+// field notes against the discoveries Soumaya actually charted for it.
 function isClaimableCodexKey(ctx: AppContext, spaceId: string, key: string): boolean {
   if (CODEX_STATIC_KEYS.has(key)) return true;
   const m = /^constellation-(\d+)$/.exec(key);
-  if (!m) return false;
-  const hub = ctx.handle.sqlite
-    .prepare(`SELECT 1 FROM nodes WHERE id = ? AND space_id = ? AND kind = 'moc' AND deleted_at IS NULL`)
-    .get(Number(m[1]), spaceId);
-  return hub != null;
+  if (m) {
+    const hub = ctx.handle.sqlite
+      .prepare(`SELECT 1 FROM nodes WHERE id = ? AND space_id = ? AND kind = 'moc' AND deleted_at IS NULL`)
+      .get(Number(m[1]), spaceId);
+    return hub != null;
+  }
+  const fn = /^fieldnote-(.+)$/.exec(key);
+  if (fn) return new CodexDiscoveriesRepo(ctx.handle, spaceId).has(fn[1]!);
+  return false;
 }
 
 export function maintenanceRoutes(ctx: AppContext): Router {

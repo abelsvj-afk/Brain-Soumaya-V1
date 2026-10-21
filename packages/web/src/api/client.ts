@@ -621,32 +621,43 @@ export async function promoteConstellation(name: string, nodeIds: number[]): Pro
   }
 }
 
+/**
+ * Run the latent-connection scan. IM-61: a scan is an ACTION, not a read —
+ * unlike the fail-soft getters above it must NOT return [] on error, because
+ * the caller toasts "no connections found" for an empty result, and a failed
+ * scan masquerading as an empty one tells the user their brain was checked
+ * when it never was. Throws on network failure, non-OK status, or a
+ * non-array body; resolves (possibly []) only on a real, successful scan.
+ */
 export async function runDigest(): Promise<Insight[]> {
   return tracked(
     (async () => {
-      try {
-        const res = await afetch(`${API}/digest/run`, { method: "POST" });
-        const d = await res.json().catch(() => []);
-        return Array.isArray(d) ? d : [];
-      } catch {
-        return [];
-      }
+      const res = await afetch(`${API}/digest/run`, { method: "POST" });
+      if (!res.ok) throw new Error(`Connection scan failed (${res.status})`);
+      const d = await res.json().catch(() => null);
+      if (!Array.isArray(d)) throw new Error("Connection scan returned an unexpected result");
+      return d as Insight[];
     })(),
   );
 }
 
-/** Claim the one-time fuel reward for discovering a Codex entry (idempotent server-side). */
-export async function claimCodexReward(key: string): Promise<{ awarded: boolean; fuel?: number }> {
+/**
+ * Claim the one-time fuel reward for discovering a Codex entry (idempotent server-side).
+ * `failed` distinguishes a rejected/unreachable claim (IM-93: callers must NOT treat
+ * the entry as claimed — it stays eligible for a retry) from a successful claim that
+ * simply awarded nothing because it was already claimed.
+ */
+export async function claimCodexReward(key: string): Promise<{ awarded: boolean; fuel?: number; failed?: boolean }> {
   try {
     const res = await afetch(`${API}/maintenance/codex-claim`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key }),
     });
-    if (!res.ok) return { awarded: false };
+    if (!res.ok) return { awarded: false, failed: true };
     return (await res.json()) as { awarded: boolean; fuel?: number };
   } catch {
-    return { awarded: false };
+    return { awarded: false, failed: true };
   }
 }
 
@@ -742,17 +753,20 @@ export async function getDormant(): Promise<DormantItem[]> {
   }
 }
 
-/** Scan same-topic memories for contradictions (changed beliefs / reversed goals). */
+/**
+ * Scan same-topic memories for contradictions (changed beliefs / reversed goals).
+ * IM-61: same honesty contract as runDigest — throws on any failure so the
+ * panel can say "the scan didn't run" instead of the false reassurance
+ * "No contradictions found — your memories are consistent ✓".
+ */
 export async function runContradictions(): Promise<Insight[]> {
   return tracked(
     (async () => {
-      try {
-        const res = await afetch(`${API}/digest/contradictions`, { method: "POST" });
-        const d = await res.json().catch(() => []);
-        return Array.isArray(d) ? d : [];
-      } catch {
-        return [];
-      }
+      const res = await afetch(`${API}/digest/contradictions`, { method: "POST" });
+      if (!res.ok) throw new Error(`Contradiction scan failed (${res.status})`);
+      const d = await res.json().catch(() => null);
+      if (!Array.isArray(d)) throw new Error("Contradiction scan returned an unexpected result");
+      return d as Insight[];
     })(),
   );
 }

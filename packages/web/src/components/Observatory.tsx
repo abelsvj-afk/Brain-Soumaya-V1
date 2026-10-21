@@ -26,6 +26,34 @@ const CONTACT_ICON: Record<string, string> = {
   heavy: "🖤",
 };
 
+/**
+ * IM-124: truthful per-source load state for the Observatory's six fetches.
+ *
+ * State is modelled PER FETCH SOURCE, not per card: one source can feed
+ * several cards (the Daily Contact alone drives the question, answered,
+ * foresight and discovery cards), so per-card state would duplicate the
+ * same fetch's status — and its Retry — across siblings.
+ *
+ * A source is "error" when its fetch rejects, or — for the helpers whose
+ * contract is "null on ANY failure" (`getDailyContact`, `getFinanceSummary`,
+ * `getJourneys`; the same rule JourneysPanel applies to `getJourneys`) —
+ * when it resolves null. The server's success responses for those three are
+ * always an object/array, so null can only mean failure, never "empty".
+ * The array helpers (`getDigest`, `getConstellations`, `getDueReviews`)
+ * resolve [] for a genuine empty result; [] is therefore success-empty.
+ */
+type SourceKey = "digest" | "constellations" | "contact" | "finance" | "journeys" | "reviews";
+type SourceStatus = "loading" | "ok" | "error";
+
+const SOURCE_LABEL: Record<SourceKey, string> = {
+  digest: "her observations",
+  constellations: "your constellations",
+  contact: "her daily question",
+  finance: "your money glance",
+  journeys: "your journeys",
+  reviews: "your recall pick",
+};
+
 /** "13 hours" / "2 days" from an away duration. */
 function humanAway(ms: number): string {
   const h = Math.floor(ms / 3_600_000);
@@ -39,9 +67,11 @@ function humanAway(ms: number): string {
  * The Observatory — a calm home that fades in *after* the cinematic fly-in settles
  * (it never touches the intro). A handful of live, click-through cards orient the
  * owner in one glance instead of dropping them into the full galaxy. Progressive
- * disclosure: essentials here, detail one click deeper. Offline-safe — every card
- * degrades to nothing if its data isn't there; the galaxy is always reachable via
- * "Enter the galaxy".
+ * disclosure: essentials here, detail one click deeper. Every card degrades to
+ * nothing if its data genuinely isn't there — but since IM-124 a fetch that
+ * FAILED says so (error card + Retry) and one still in flight shows a skeleton,
+ * so "nothing to report" is never confused with "server down"; the galaxy is
+ * always reachable via "Enter the galaxy".
  *
  * This is the ONE arrival screen: the "while you were away" report renders as its
  * top card (a separate welcome-back overlay used to stack on top of this — two
@@ -94,20 +124,156 @@ export function Observatory({
   // you used to care about and stopped," the other "what's due for active recall."
   const [dueReview, setDueReview] = useState<DueReview | null>(null);
 
+  // IM-124: per-source status (see SourceKey note above). Every source starts
+  // "loading"; a card's absence now has three distinct meanings the UI keeps
+  // apart — still loading (skeleton), failed (error card + Retry), or loaded
+  // and genuinely empty (no card, exactly as designed).
+  const [sourceStatus, setSourceStatus] = useState<Record<SourceKey, SourceStatus>>({
+    digest: "loading",
+    constellations: "loading",
+    contact: "loading",
+    finance: "loading",
+    journeys: "loading",
+    reviews: "loading",
+  });
+  const markSource = (key: SourceKey, status: SourceStatus) =>
+    setSourceStatus((prev) => (prev[key] === status ? prev : { ...prev, [key]: status }));
+
+  const loadDigest = async () => {
+    markSource("digest", "loading");
+    try {
+      const items = await getDigest();
+      setInsights(items.slice(0, 3));
+      markSource("digest", "ok");
+    } catch {
+      markSource("digest", "error");
+    }
+  };
+  const loadConstellations = async () => {
+    markSource("constellations", "loading");
+    try {
+      const c = await getConstellations();
+      setConstellations(c.slice(0, 3));
+      markSource("constellations", "ok");
+    } catch {
+      markSource("constellations", "error");
+    }
+  };
+  const loadContact = async () => {
+    markSource("contact", "loading");
+    try {
+      const c = await getDailyContact();
+      // Null here is the helper's failure signal, not an empty day — the
+      // server always answers with a DailyContact object on success.
+      if (c === null) {
+        markSource("contact", "error");
+        return;
+      }
+      setContact(c);
+      markSource("contact", "ok");
+    } catch {
+      markSource("contact", "error");
+    }
+  };
+  const loadFinance = async () => {
+    markSource("finance", "loading");
+    try {
+      const f = await getFinanceSummary();
+      if (f === null) {
+        markSource("finance", "error");
+        return;
+      }
+      setFinance(f);
+      markSource("finance", "ok");
+    } catch {
+      markSource("finance", "error");
+    }
+  };
+  const loadJourneys = async () => {
+    markSource("journeys", "loading");
+    try {
+      const j = await getJourneys();
+      // Same null-means-failure contract JourneysPanel relies on.
+      if (j === null) {
+        markSource("journeys", "error");
+        return;
+      }
+      setJourneys(j.filter((x) => x.status === "active").slice(0, 3));
+      markSource("journeys", "ok");
+    } catch {
+      markSource("journeys", "error");
+    }
+  };
+  const loadReviews = async () => {
+    markSource("reviews", "loading");
+    try {
+      const d = await getDueReviews();
+      setDueReview(d[0] ?? null);
+      markSource("reviews", "ok");
+    } catch {
+      markSource("reviews", "error");
+    }
+  };
+
+  const LOADERS: Record<SourceKey, () => Promise<void>> = {
+    digest: loadDigest,
+    constellations: loadConstellations,
+    contact: loadContact,
+    finance: loadFinance,
+    journeys: loadJourneys,
+    reviews: loadReviews,
+  };
+
   useEffect(() => {
-    getDigest()
-      .then((items) => setInsights(items.slice(0, 3)))
-      .catch(() => {});
-    getConstellations()
-      .then((c) => setConstellations(c.slice(0, 3)))
-      .catch(() => {});
-    getDailyContact()
-      .then(setContact)
-      .catch(() => {});
-    getFinanceSummary().then((f) => setFinance(f)).catch(() => {});
-    getJourneys().then((j) => setJourneys((j ?? []).filter((x) => x.status === "active").slice(0, 3))).catch(() => {});
-    getDueReviews().then((d) => setDueReview(d[0] ?? null)).catch(() => {});
+    void loadDigest();
+    void loadConstellations();
+    void loadContact();
+    void loadFinance();
+    void loadJourneys();
+    void loadReviews();
+    // Mount-only: the loaders are stable setters + imported fetchers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const failedSources = (Object.keys(sourceStatus) as SourceKey[]).filter((k) => sourceStatus[k] === "error");
+  const anyLoading = (Object.keys(sourceStatus) as SourceKey[]).some((k) => sourceStatus[k] === "loading");
+  /** Re-run ONLY the fetches that failed — successful sections are untouched. */
+  const retryFailed = () => {
+    for (const k of failedSources) void LOADERS[k]();
+  };
+
+  // IM-124 loading treatment: a shimmer skeleton in the fetched-cards zone,
+  // following the app's DigestPanel skeleton idiom (`.loading-shimmer`).
+  const loadingCard = anyLoading ? (
+    <div className="obs-card obs-loading loading-shimmer" aria-live="polite" data-testid="observatory-loading">
+      <span className="obs-ic">🛰️</span>
+      <span className="obs-body skeleton-section">
+        <span className="obs-skel-bar" style={{ width: "55%" }} />
+        <span className="obs-skel-bar" style={{ width: "85%" }} />
+        <span className="obs-line">Gathering your arrival briefing…</span>
+      </span>
+    </div>
+  ) : null;
+
+  // IM-124 error treatment: a failed section is visibly NOT an empty one.
+  const errorCard =
+    failedSources.length > 0 ? (
+      <div className="obs-card obs-error" role="alert">
+        <span className="obs-ic">⚠️</span>
+        <span className="obs-body">
+          <span className="obs-title">Couldn't load everything</span>
+          <span className="obs-line">
+            {failedSources.map((k) => SOURCE_LABEL[k]).join(", ")} didn't answer — that's a loading problem, not an
+            empty galaxy.
+          </span>
+          <span>
+            <button className="obs-retry" onClick={retryFailed}>
+              Retry
+            </button>
+          </span>
+        </span>
+      </div>
+    ) : null;
   // The welcome-home motif used to play from the separate away card.
   useEffect(() => {
     if (away) playSfx("welcome");
@@ -146,19 +312,25 @@ export function Observatory({
   // in separately, since actions aren't part of `memories`.
   const dueReminders = memories.filter((n) => isReminderDue(n));
 
-  // New brain: a single calm hero, not an empty card grid.
+  // New brain: a single calm hero, not an empty card grid. (IM-124: if a fetch
+  // failed, the error treatment still shows — "server down" must never read
+  // as just the empty-galaxy hero. No skeleton here: the hero renders no
+  // fetched sections, so there is no fetched section to be "loading".)
   if (count === 0) {
     return (
       <div className="observatory" role="dialog" aria-label="Welcome">
-        <div className="obs-card obs-hero">
-          <h2>Welcome, {spaceName}.</h2>
-          <p>Your galaxy is empty. Drop your first thought and watch it become a star.</p>
-          <button className="obs-primary" onClick={onCapture}>
-            ✍️ Drop your first thought
-          </button>
-          <button className="obs-enter" onClick={onEnter}>
-            Enter the galaxy →
-          </button>
+        <div className="obs-stack">
+          <div className="obs-card obs-hero">
+            <h2>Welcome, {spaceName}.</h2>
+            <p>Your galaxy is empty. Drop your first thought and watch it become a star.</p>
+            <button className="obs-primary" onClick={onCapture}>
+              ✍️ Drop your first thought
+            </button>
+            <button className="obs-enter" onClick={onEnter}>
+              Enter the galaxy →
+            </button>
+          </div>
+          {errorCard}
         </div>
       </div>
     );
@@ -183,6 +355,12 @@ export function Observatory({
             ×
           </button>
         </header>
+
+        {/* IM-124: fetched sections announce themselves while loading / on
+            failure instead of silently never appearing. Prop-derived cards
+            (away, agenda, capture, quests, recent) render immediately. */}
+        {loadingCard}
+        {errorCard}
 
         {away && (
           <div className="obs-card obs-away">

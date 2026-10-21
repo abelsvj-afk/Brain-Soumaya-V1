@@ -1,5 +1,5 @@
 import { API, afetch } from "./http.js";
-import type { Journey, JourneyLink, JourneyLinkKind, JourneyLinkSummary, JourneySuggestions } from "@brain/shared";
+import type { Journey, JourneyLink, JourneyLinkKind, JourneyLinksDetail, JourneySuggestions } from "@brain/shared";
 
 /**
  * Journeys client (Vision 2.0). Thin wrappers over /api/journeys; space-scoped server-side.
@@ -30,4 +30,4 @@ export const linkToJourney = (id: number, kind: JourneyLinkKind, refId: number) 
 export const unlinkFromJourney = (id: number, kind: JourneyLinkKind, refId: number) => send<{ ok: boolean }>(`/${id}/unlink`, "POST", { kind, refId });
 export const journeysFor = (kind: JourneyLinkKind, refId: number) => getJson<Journey[]>(`/for/${kind}/${refId}`);
 export const suggestJourneys = (kind: JourneyLinkKind, refId: number) => getJson<JourneySuggestions>(`/suggest/${kind}/${refId}`);
-export const journeyLinks = (id: number) => getJson<JourneyLinkSummary[]>(`/${id}/links`);
+export const journeyLinks = (id: number) => getJson<JourneyLinksDetail>(`/${id}/links`);
