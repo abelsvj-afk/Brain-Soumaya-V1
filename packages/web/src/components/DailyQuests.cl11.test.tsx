@@ -29,13 +29,13 @@ const graph = {
 afterEach(() => cleanup());
 
 describe("IM-90 — DailyQuests in Progress", () => {
-  it("renders the log / warm / revisit quests", () => {
+  it("renders the log / warm / reconnect quests", () => {
     const { getByText } = render(
       <DailyQuests graph={graph} fedToday={false} onFocus={() => {}} onCapture={() => {}} />,
     );
     expect(getByText(/Log a memory today/)).toBeTruthy();
     expect(getByText(/Warm a cooling memory/)).toBeTruthy();
-    expect(getByText(/Revisit a drifting memory/)).toBeTruthy();
+    expect(getByText(/Reconnect a drifting memory/)).toBeTruthy();
   });
 
   it("wires the actions: capture opens ingest, warm flies to the memory", () => {

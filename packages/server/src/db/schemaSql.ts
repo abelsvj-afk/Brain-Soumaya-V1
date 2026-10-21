@@ -243,6 +243,14 @@ export const BOOTSTRAP_SQL = `
       ends_at TEXT
     );
     CREATE INDEX IF NOT EXISTS undertakings_space_idx ON undertakings(space_id, status);
+    -- Streak day history (IM-64): one row per space-local day the brain was tended,
+    -- recorded by StreakRepo.touch() so the Soumaya tab's consistency view can be
+    -- built on real streak data instead of the agent-log feed. Additive only.
+    CREATE TABLE IF NOT EXISTS streak_days (
+      space_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      PRIMARY KEY (space_id, day)
+    );
     -- The Daily Contact: her one question/discovery per brain per day, persisted
     -- so it stays stable across reloads; answered flips when the user replies.
     CREATE TABLE IF NOT EXISTS daily_contact (
@@ -377,6 +385,25 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS codex_disc_key ON codex_discoveries(space_id, key);
+
+    -- Server-backed Inbox notifications (IM-74). One row per real away-event
+    -- (digest delivered, insight created, discovery charted, bill-risk warning).
+    -- Retention (Q7 interim default): rows persist until the user clears them;
+    -- the repository drops only the oldest past a high disclosed cap.
+    CREATE TABLE IF NOT EXISTS inbox_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      source TEXT NOT NULL,
+      text TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT '🔔',
+      priority TEXT NOT NULL DEFAULT 'normal',
+      dedupe_key TEXT,
+      seen_at TEXT,
+      snoozed_until TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS inbox_notifications_space_idx ON inbox_notifications(space_id, id);
+    CREATE UNIQUE INDEX IF NOT EXISTS inbox_notifications_dedupe_idx ON inbox_notifications(space_id, dedupe_key);
 
     -- Financial OS (Stage 1a). Money is INTEGER cents. Every table space-scoped.
     CREATE TABLE IF NOT EXISTS fin_account (
@@ -606,6 +633,19 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS journey_link_space_idx ON journey_link(space_id, journey_id);
     CREATE UNIQUE INDEX IF NOT EXISTS journey_link_unique ON journey_link(space_id, journey_id, kind, ref_id);
+
+    -- Living Galaxy (IM-140): a durable record that a journey-linked mission
+    -- (an action node) was completed, so Journey progress can be auto-credited
+    -- from completed missions even after the action node itself is deleted.
+    CREATE TABLE IF NOT EXISTS journey_mission_completions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      journey_id INTEGER NOT NULL,
+      task_ref_id INTEGER NOT NULL,
+      completed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS journey_mission_completions_unique
+      ON journey_mission_completions(space_id, journey_id, task_ref_id);
 
     -- Maya Intelligence — clarification lifecycle (docs/specs/maya-intelligence-architecture.md,
     -- Part I2). The ONE piece of intelligence-originated persistence this feature introduces —

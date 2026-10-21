@@ -28,6 +28,7 @@ import { lensesRoutes } from "./routes/lenses.js";
 import { codexRoutes } from "./routes/codex.js";
 import { financeRoutes } from "./routes/finance.js";
 import { journeysRoutes } from "./routes/journeys.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { investigateRoutes } from "./routes/investigate.js";
 import { spaceRoutes } from "./routes/space.js";
 import { telegramRoutes } from "./routes/telegram.js";
@@ -121,6 +122,7 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/journeys", guard, journeysRoutes(ctx));
   app.use("/api/investigate", guard, investigateRoutes(ctx));
   app.use("/api/push", guard, pushRoutes(ctx));
+  app.use("/api/notifications", guard, notificationRoutes(ctx));
 
   // In production, serve the built web app (set WEB_DIR to packages/web/dist)
   // and fall back to index.html for client-side routes (non-API GETs).

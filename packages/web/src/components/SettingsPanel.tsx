@@ -25,6 +25,8 @@ import {
 } from "../graph/graphicsConfig.js";
 import { perfHudEnabled, setPerfHudEnabled } from "./PerfHUD.js";
 import { PushToggle } from "./PushToggle.js";
+import { getModelFallbacks } from "../graph/gltf.js";
+import { ModelFallbackNote } from "./GalaxyHud.js";
 import {
   isBoundedLinksEnabled,
   setBoundedLinksEnabled,
@@ -33,6 +35,8 @@ import {
   DEFAULT_DETAILED_LINK_BUDGET,
 } from "../graph/renderModel.js";
 import { pushToast } from "./Toasts.js";
+import { getUsage, getToolHealth, getSettings, updateSetting, type Usage, type ToolHealth } from "../api/ops.js";
+import { getSpacePreferences, updateSpacePreferences, getGraphExport, type SpacePreferences } from "../api/preferences.js";
 import { loadPersistedRung, RUNG_TABLE, ADAPTIVE_MODEL_VERSION } from "../graph/adaptiveController.js";
 import {
   startSweep,
@@ -58,6 +62,18 @@ import {
   formatFullSnapshotText,
   type GalaxyDiagSnapshot,
 } from "../graph/galaxyStateSnapshot.js";
+
+/** Common IANA zones for the IM-129 timezone picker; a space already set to
+ *  any other valid zone gets its own value prepended in the <select>. */
+const TZ_CHOICES = [
+  "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix",
+  "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu",
+  "America/Toronto", "America/Mexico_City", "America/Sao_Paulo",
+  "UTC", "Europe/London", "Europe/Paris", "Europe/Moscow",
+  "Africa/Lagos", "Africa/Johannesburg", "Asia/Dubai", "Asia/Karachi",
+  "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney",
+  "Pacific/Auckland",
+];
 
 /** Was defined INSIDE SettingsPanel's render body — a fresh function identity on
  *  every render, which React treats as a brand-new component type. This panel
@@ -107,13 +123,20 @@ function copyTextWithFeedback(text: string, successMessage: string): void {
 /**
  * Settings overlay (⚙️). Account (display name + unique gamer tag) plus app
  * preferences. Opened from a FAB; floats over the galaxy like the Observatory.
- * Soumaya-specific switches (Research Mode, ship-task label) live in HER tab —
- * this panel deliberately doesn't duplicate them.
+ * IM-128: Research Mode lives HERE too now — the same server setting the
+ * Soumaya tab flips (one store, two surfaces, no duplicate state) — alongside
+ * a usage/budget summary (incl. the token counts nothing used to display) and
+ * a tool-health summary with a deep-link to her tab's full views.
+ * IM-129: "Your time & notifications" writes the space's real timezone +
+ * proactive-notification preferences, and "Your data" downloads a graph-JSON
+ * export. IM-127: every render-diagnostics apparatus sits behind the
+ * Developer/Advanced disclosure at the bottom, closed by default.
  */
 export function SettingsPanel({
   onClose,
   onProfileUpdated,
   onBrainDeleted,
+  focusAudio,
 }: {
   onClose: () => void;
   /** Push the new display name back to the app header. */
@@ -121,6 +144,9 @@ export function SettingsPanel({
   /** Called after this brain was deleted from the danger zone (and the local
    *  credential cleared), so the app can return to the login screen. */
   onBrainDeleted?: () => void;
+  /** IM-21: opened from the shell's audio chip — scroll the audio
+   *  (Preferences) section into view once mounted. */
+  focusAudio?: boolean;
 }) {
   const [name, setName] = useState("");
   const [gamerTag, setGamerTag] = useState("");
@@ -140,6 +166,22 @@ export function SettingsPanel({
   const [colorblind, setCb] = useState(isColorblind());
   const [reduceMotion, setRm] = useState(prefersReducedMotion());
   const [diagnosticsOn, setDiagnosticsOn] = useState(isDiagnosticsEnabled());
+  // IM-24: glTF models that failed to load (procedural stand-ins are shown
+  // instead) — surfaced here in diagnostics instead of console-only.
+  const [modelFallbacks, setModelFallbacks] = useState<string[]>(() => getModelFallbacks());
+  useEffect(() => {
+    const sync = () => setModelFallbacks(getModelFallbacks());
+    window.addEventListener("brain-model-fallback", sync);
+    return () => window.removeEventListener("brain-model-fallback", sync);
+  }, []);
+  // IM-21 deep-link: bring the audio section into view when asked.
+  useEffect(() => {
+    if (!focusAudio) return;
+    const t = setTimeout(() => {
+      document.getElementById("settings-audio")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [focusAudio]);
   const [perfHudOn, setPerfHudOn] = useState(perfHudEnabled());
   // Phase 2.1 real-device A/B (soumaya-galaxy-bounded-render-architecture.md) — was
   // URL-param-only (?boundedLinks=1&linkBudget=NNN), which is unusable for anyone who
@@ -205,6 +247,95 @@ export function SettingsPanel({
     return () => cancelAnimationFrame(st.raf);
   }, []);
   const fpsClass = fps == null ? "" : fps >= 45 ? "good" : fps >= 25 ? "ok" : "bad";
+
+  // IM-127: the whole render-diagnostics apparatus (diagnostic recording,
+  // isolation sweep, composer bypass, automated diag, BAD/GOOD snapshots) is
+  // fenced behind this disclosure — closed by default, nothing deleted.
+  const [devOpen, setDevOpen] = useState(false);
+  // IM-128: ops data (usage incl. token counts, budget, tool health) +
+  // Research Mode — read from the same api/ops.ts store the Soumaya tab uses.
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [toolHealth, setToolHealth] = useState<ToolHealth[]>([]);
+  const [researchOn, setResearchOn] = useState(false);
+  // IM-129: space timezone + notification preferences (server store) and export.
+  const [prefs, setPrefs] = useState<SpacePreferences | null>(null);
+  const [prefsDirty, setPrefsDirty] = useState(false);
+  const [prefsBusy, setPrefsBusy] = useState(false);
+  const [prefsMsg, setPrefsMsg] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [u, th, st, p] = await Promise.all([
+        getUsage().catch(() => null),
+        getToolHealth().catch(() => [] as ToolHealth[]),
+        getSettings().catch(() => ({}) as Record<string, string>),
+        getSpacePreferences().catch(() => null),
+      ]);
+      if (cancelled) return;
+      if (u) setUsage(u);
+      setToolHealth(th);
+      setResearchOn(st.research_enabled === "true");
+      if (p) setPrefs(p);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Same write path + honesty contract as the Soumaya tab's toggle (CL-7):
+  // flip optimistically, roll back and toast if the server doesn't confirm.
+  const toggleResearch = async () => {
+    const prev = researchOn;
+    const next = !prev;
+    setResearchOn(next);
+    try {
+      const r = await updateSetting("research_enabled", String(next));
+      if (!r || r.ok !== true) throw new Error("setting rejected");
+    } catch {
+      setResearchOn(prev);
+      pushToast("Couldn't save Research Mode — it's still " + (prev ? "on." : "off."), "⚠️", 4000);
+    }
+  };
+
+  const openSoumayaTab = () => {
+    try { window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "tab", value: "soumaya" } })); } catch { /* no window */ }
+    onClose();
+  };
+
+  const savePrefs = async () => {
+    if (!prefs) return;
+    setPrefsBusy(true);
+    setPrefsMsg("");
+    try {
+      const saved = await updateSpacePreferences(prefs);
+      setPrefs(saved);
+      setPrefsDirty(false);
+      setPrefsMsg("Saved ✓");
+    } catch (err) {
+      setPrefsMsg((err as Error).message);
+    } finally {
+      setPrefsBusy(false);
+    }
+  };
+
+  const downloadExport = async () => {
+    setExporting(true);
+    try {
+      const data = await getGraphExport();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "brain-export.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      pushToast(`Exported ${data.nodes.length} memories and ${data.edges.length} connections.`, "💾", 4000);
+    } catch {
+      pushToast("Couldn't export — please try again.", "⚠️", 4000);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const pickMode = (m: GraphicsSettings["mode"]) => setGfx(setGraphicsMode(m));
   const setField = <K extends keyof GraphicsSettings>(k: K, v: GraphicsSettings[K]) => setGfx(setGraphicsField(k, v));
@@ -302,14 +433,21 @@ export function SettingsPanel({
             loaded above (the same value the server checks). */}
         <AccountSettings gamerTag={gamerTag} onBrainDeleted={onBrainDeleted} />
 
-        <section className="settings-section">
+        <section className="settings-section" id="settings-audio">
           <h3>Preferences</h3>
-          {/* Research Mode + the ship-task label live in the Soumaya tab (🛰️),
-              next to the fuel they relate to — two unsynced copies of the same
-              switch here kept drifting out of step. */}
-          <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "0 0 10px" }}>
-            Research Mode and her floating task label are in the <b>🛰️ Soumaya</b> tab.
-          </p>
+          {/* IM-128: Research Mode's toggle lives here too — the SAME
+              per-space server setting the Soumaya tab flips (api/ops.ts
+              updateSetting), so the two surfaces can never drift: each reads
+              and writes the one store. Her floating task label stays hers. */}
+          <label className="settings-toggle">
+            <span>
+              Research Mode
+              <em>She spends fuel to deep-dive memories and forge new links. Same switch as in the 🛰️ Soumaya tab — one setting, both places.</em>
+            </span>
+            <button className={`switch ${researchOn ? "on" : ""}`} onClick={() => void toggleResearch()} aria-pressed={researchOn}>
+              <span className="knob" />
+            </button>
+          </label>
           {voiceSupported && (
             <label className="settings-toggle">
               <span>
@@ -384,7 +522,106 @@ export function SettingsPanel({
         </section>
 
         <section className="settings-section">
+          <h3>🕐 Your time &amp; notifications</h3>
+          <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "0 0 10px" }}>
+            Your timezone drives her sense of "today" — the daily digest, streaks and reminders.
+            Quiet hours, the digest time and the daily cap are enforced by the server: they decide
+            when Soumaya may reach out proactively, and your Inbox still keeps everything she sends.
+          </p>
+          {prefs ? (
+            <>
+              <label className="settings-field">
+                <span>Timezone</span>
+                <select
+                  value={prefs.timezone}
+                  disabled={prefsBusy}
+                  onChange={(e) => { setPrefs({ ...prefs, timezone: e.target.value }); setPrefsDirty(true); }}
+                >
+                  {(TZ_CHOICES.includes(prefs.timezone) ? TZ_CHOICES : [prefs.timezone, ...TZ_CHOICES]).map((tz) => (
+                    <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="settings-field">
+                <span>Quiet hours start</span>
+                <input type="time" value={prefs.quietStart} disabled={prefsBusy}
+                  onChange={(e) => { setPrefs({ ...prefs, quietStart: e.target.value }); setPrefsDirty(true); }} />
+              </label>
+              <label className="settings-field">
+                <span>Quiet hours end</span>
+                <input type="time" value={prefs.quietEnd} disabled={prefsBusy}
+                  onChange={(e) => { setPrefs({ ...prefs, quietEnd: e.target.value }); setPrefsDirty(true); }} />
+              </label>
+              <label className="settings-field">
+                <span>Daily digest time</span>
+                <input type="time" value={prefs.digestTime} disabled={prefsBusy}
+                  onChange={(e) => { setPrefs({ ...prefs, digestTime: e.target.value }); setPrefsDirty(true); }} />
+              </label>
+              <label className="settings-field">
+                <span>Max proactive messages per day</span>
+                <input type="number" min={0} max={100} value={prefs.dailyProactiveCap} disabled={prefsBusy}
+                  onChange={(e) => { setPrefs({ ...prefs, dailyProactiveCap: Number(e.target.value) }); setPrefsDirty(true); }} />
+              </label>
+              <div className="row">
+                <button onClick={() => void savePrefs()} disabled={!prefsDirty || prefsBusy}>
+                  {prefsBusy ? "Saving…" : "Save time & notifications"}
+                </button>
+                <span className="msg">{prefsMsg}</span>
+              </div>
+            </>
+          ) : (
+            <p className="settings-note" style={{ fontSize: "12px", opacity: 0.6 }}>Couldn't load these settings — reopen Settings to retry.</p>
+          )}
+        </section>
+
+        <section className="settings-section">
+          <h3>📊 Usage &amp; operations</h3>
+          {usage ? (
+            <>
+              <div className="gfx-row"><span>Estimated cloud-AI spend</span><span>${usage.estCostUsd.toFixed(3)} / ${usage.budgetUsd.toFixed(2)}</span></div>
+              <div className="gfx-row"><span>Budget remaining</span><span>${usage.remainingUsd.toFixed(2)}</span></div>
+              <div className="gfx-row"><span>Tokens in</span><span>{usage.inputTokens.toLocaleString()}</span></div>
+              <div className="gfx-row"><span>Tokens out</span><span>{usage.outputTokens.toLocaleString()}</span></div>
+            </>
+          ) : (
+            <p className="settings-note" style={{ fontSize: "12px", opacity: 0.6 }}>Usage data isn't available right now.</p>
+          )}
+          <div className="gfx-row">
+            <span>Background tools</span>
+            <span>{toolHealth.length > 0 ? `${toolHealth.length} tracked · ${toolHealth.filter((t) => t.lastRanAt).length} have run` : "none recorded yet"}</span>
+          </div>
+          <div className="row" style={{ marginTop: "10px" }}>
+            <button className="mini" onClick={openSoumayaTab}>🛰️ Open the Soumaya tab for full logs &amp; budget controls</button>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>💾 Your data</h3>
+          <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "0 0 10px" }}>
+            Download your whole brain as a JSON file — every memory and connection, in a format other
+            tools can read. (For reading instead, the Browse tab exports Markdown.)
+          </p>
+          <button onClick={() => void downloadExport()} disabled={exporting}>
+            {exporting ? "Preparing…" : "⬇ Download brain export (JSON)"}
+          </button>
+        </section>
+
+        <section className="settings-section">
+          <h3>🛠 Developer / Advanced</h3>
+          <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "0 0 10px" }}>
+            Render diagnostics for troubleshooting a slow or broken galaxy — recording,
+            isolation sweeps, and state snapshots. Not part of everyday use; hidden unless you open it.
+          </p>
+          <button className="mini" aria-expanded={devOpen} onClick={() => setDevOpen(!devOpen)}>
+            {devOpen ? "Hide developer tools" : "Show developer tools"}
+          </button>
+        </section>
+
+        {devOpen && (
+          <>
+        <section className="settings-section">
           <h3>🔬 Diagnostics</h3>
+          <ModelFallbackNote assets={modelFallbacks} />
           <label className="settings-toggle">
             <span>
               Diagnostic recording
@@ -717,12 +954,16 @@ export function SettingsPanel({
           </div>
         </section>
 
+          </>
+        )}
+
         <section className="settings-section">
           <h3>🎨 Graphics &amp; performance</h3>
           <label className="settings-toggle">
             <span>
-              Lite mode <em>Turn OFF the 3D galaxy. The app stays fully usable if your device can't render it.</em>
+              Lite mode <em>Turn OFF the 3D galaxy. The app stays fully usable if your device can't render it. Applies by reloading the page.</em>
             </span>
+            <span className="gfx-when reload">reload</span>
             <button
               className={`switch ${liteOn ? "on" : ""}`}
               onClick={() => {

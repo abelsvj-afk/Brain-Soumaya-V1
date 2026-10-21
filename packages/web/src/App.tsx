@@ -1,11 +1,12 @@
 import { logDiagnosticEvent } from "./diagnostics/buffer";
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
-import type { GraphData, GraphNode, Fuel, Streak, AwayDigest } from "@brain/shared";
+import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
 import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData } from "./App.helpers.js";
+import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
-import { type Graph3DHandle } from "./graph/Graph3D.js";
+import { type Graph3DHandle, type FleetStatus } from "./graph/Graph3D.js";
 // Lazy-load the 3D galaxy so three.js (~600 kB) isn't in the initial bundle — the
 // login/shell + lite mode render without it (Post-MVP Phase 11 code-split). It only
 // downloads once the galaxy actually mounts (gated by `galaxyWillMount`).
@@ -25,6 +26,9 @@ import { getDueReviews } from "./api/client.js";
 import { FuelGauge } from "./components/FuelGauge.js";
 import { StreakEmber } from "./components/StreakEmber.js";
 import { SearchBox } from "./components/SearchBox.js";
+import { CommandPalette } from "./components/CommandPalette.js";
+import { isCaptureShortcut, isPaletteShortcut, isTextEntryTarget, parseShareLanding } from "./lib/quickCapture.js";
+import type { PaletteCommand } from "./lib/commandPalette.js";
 import { RightDock, type DockTab } from "./components/RightDock.js";
 import { HelpPanel } from "./components/HelpPanel.js";
 import { WealthFullscreen } from "./components/WealthFullscreen.js";
@@ -37,15 +41,38 @@ import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
 import { NoticingCard } from "./components/NoticingCard.js";
-import { playSfx } from "./graph/sfx.js";
+import { playSfx, sfxEnabled } from "./graph/sfx.js";
+import { isVoiceEnabled } from "./voice.js";
+import {
+  AudioStateChip,
+  BeaconReadout,
+  EmptyGalaxyCue,
+  SceneIdentityCard,
+  VisitorChip,
+} from "./components/GalaxyHud.js";
+import type { SceneIdentity } from "./graph/sceneIdentity.js";
+import { triggerHaptic } from "./graph/haptics.js";
+import { createChirpScheduler, playRadioChirp } from "./graph/adaptiveAudio.js";
+import { deriveCoolingConcern, connectionReaction } from "./lib/coolingConcern.js";
 import { useCountUp } from "./hooks/useCountUp.js";
 import { usePolledCount } from "./hooks/usePolledCount.js";
 import { LoginScreen } from "./components/LoginScreen.js";
 import { Toasts, pushToast, cleanupNotifications, setToastsPaused, setToastsQuiet, type ToastAction } from "./components/Toasts.js";
 import { PerfHUD } from "./components/PerfHUD.js";
 import { setFocusCalm } from "./graph/motion.js";
-import { ACHIEVEMENTS, unlockedIds, loadUnlocked, achvKey } from "./components/achievements.js";
+import { ACHIEVEMENTS, unlockedIds, loadUnlocked, recordUnlocked } from "./components/achievements.js";
 import { pilotRank } from "./components/rank.js";
+import { buildCodex, codexProgress } from "./components/codex.js";
+import {
+  buildUnlockStats,
+  firstUnlockedTrackIndex,
+  isTrackUnlocked,
+  nextUnlockedTrackIndex,
+  readDevUnlockAll,
+  unlockableForTrack,
+} from "./components/unlockables.js";
+import { useUnlockWatcher } from "./hooks/useUnlockWatcher.js";
+import { UnlockCelebration } from "./components/UnlockCelebration.js";
 import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
 import { NavRail } from "./components/NavRail.js";
@@ -130,6 +157,8 @@ export default function App() {
   const [showReview, setShowReview] = useState(false);
   // A full-screen "rank up" celebration moment (not just a quiet toast).
   const [rankUp, setRankUp] = useState<{ title: string; level: number } | null>(null);
+  // The "🔓 Unlocked!" celebration moment for the Unlockables system (IM-133).
+  const [unlockMoment, setUnlockMoment] = useState<UnlockableItem | null>(null);
   const [awayDigest, setAwayDigest] = useState<AwayDigest | null>(null);
   // The Observatory home overlay — fades in once, after the cinematic fly-in settles.
   const [showObs, setShowObs] = useState(false);
@@ -140,6 +169,17 @@ export default function App() {
   // Deep-space focus mode (#2): a distraction-free reading session — dims the chrome,
   // calms ambient motion, and quiets non-essential toasts. Ephemeral (not persisted).
   const [focusMode, setFocusMode] = useState(false);
+  const focusModeSeenRef = useRef(false);
+  useEffect(() => {
+    // IM-15: announce focus-mode entry/exit (it used to change silently).
+    if (!focusModeSeenRef.current) { focusModeSeenRef.current = true; return; }
+    pushToast(
+      focusMode ? "Focus mode on — the chrome has dimmed for a calm read. Toggle it in Tools to exit." : "Focus mode off — welcome back.",
+      "🎯",
+      3500,
+      focusMode ? "high" : "normal",
+    );
+  }, [focusMode]);
   useEffect(() => {
     setFocusCalm(focusMode);
     setToastsQuiet(focusMode);
@@ -238,6 +278,12 @@ export default function App() {
 
   const [panel, setPanel] = useState<Panel>(null);
   const [loaded, setLoaded] = useState(false);
+  // IM-142: ⌘K command palette visibility (global keydown effect below).
+  const [showPalette, setShowPalette] = useState(false);
+  // IM-141: one-shot Ingest prefill from a PWA share-target landing. `nonce`
+  // keys the panel so a share arriving while capture is already open still
+  // remounts it with the shared text; cleared when the panel closes.
+  const [ingestSeed, setIngestSeed] = useState<{ text: string; nonce: number } | null>(null);
   // Startup recovery: set when initialization fails/stalls so we show a recovery
   // screen (Retry / Performance Mode / Diagnostics) instead of freezing on the sun.
   const [initError, setInitError] = useState<null | "timeout" | "error">(null);
@@ -269,6 +315,13 @@ export default function App() {
   const musicClickTimer = useRef<number | null>(null);
   const musicLongPress = useRef<number | null>(null);
   const musicSuppressClick = useRef(false);
+  // Unlockables gate for the music callbacks below (IM-133): the callbacks are
+  // stable useCallbacks defined before unlockStats is computed, so they read
+  // the current gate through this ref (assigned during render, like flybyDataRef).
+  const unlockGateRef = useRef<{ stats: UnlockStats | null; devUnlockAll: boolean }>({
+    stats: null,
+    devUnlockAll: false,
+  });
   const nowPlayingTimer = useRef<number | null>(null);
   const [followShip, setFollowShip] = useState(false);
   const [followStation, setFollowStation] = useState(false);
@@ -279,6 +332,48 @@ export default function App() {
   const [followFleet, setFollowFleet] = useState(false);
   const [followFig1, setFollowFig1] = useState(false);
   const [followFig2, setFollowFig2] = useState(false);
+  // CL-1b shell HUD (IM-19/20/21): live scene identity + beacon readout +
+  // audio state, polled from the Graph3D handle — the data already exists in
+  // the scene; these overlays surface it where the scene is seen.
+  const [fleetStatusHud, setFleetStatusHud] = useState<FleetStatus | null>(null);
+  const [sceneIdentity, setSceneIdentity] = useState<SceneIdentity | null>(null);
+  const [activeVisitors, setActiveVisitors] = useState<
+    { variantName: string; targetId: number | null; targetLabel: string | null }[]
+  >([]);
+  const [sceneCardDismissed, setSceneCardDismissed] = useState(false);
+  const [sfxOnHud, setSfxOnHud] = useState(sfxEnabled());
+  const [voiceOnHud, setVoiceOnHud] = useState(isVoiceEnabled());
+  const [settingsFocusAudio, setSettingsFocusAudio] = useState(false);
+  const hudJsonRef = useRef("");
+  useEffect(() => {
+    if (!loaded) return;
+    const poll = () => {
+      const g = graphRef.current;
+      if (!g) return;
+      const next = {
+        fleet: g.getFleetStatus(),
+        identity: g.getSceneIdentity(),
+        visitors: g.getActiveVisitors(),
+        sfx: sfxEnabled(),
+        voice: isVoiceEnabled(),
+      };
+      const json = JSON.stringify(next);
+      if (json === hudJsonRef.current) return; // no visible change — skip the re-render
+      hudJsonRef.current = json;
+      setFleetStatusHud(next.fleet);
+      setSceneIdentity(next.identity);
+      setActiveVisitors(next.visitors);
+      setSfxOnHud(next.sfx);
+      setVoiceOnHud(next.voice);
+    };
+    poll();
+    const t = setInterval(poll, 2500);
+    return () => clearInterval(t);
+  }, [loaded]);
+  // A fresh follow (visitor/fleet) re-arms its identity card after a dismiss.
+  useEffect(() => {
+    if (followVisitor || followFleet) setSceneCardDismissed(false);
+  }, [followVisitor, followFleet]);
   // Money urgency → a clickable notification (bills with due dates + risk). Once per bill per
   // day; taps open the Money tab. Re-checked whenever finances change.
   useEffect(() => {
@@ -377,7 +472,7 @@ export default function App() {
   // isolated to it. Clearing it exits the isolated view.
   const [activeLens, setActiveLens] = useState<string | null>(null);
   // Ambient Level-2 read on you (foresight or newest belief) shown as a HUD pill.
-  const [selfInsight, setSelfInsight] = useState<{ kind: "foresight" | "belief"; text: string } | null>(null);
+  const [selfInsight, setSelfInsight] = useState<{ kind: "foresight" | "belief"; text: string; inDays?: number } | null>(null);
   const [clustered, setClustered] = useState(false);
   const audioRef = useRef<AmbientAudio | null>(null);
   const graphRef = useRef<Graph3DHandle>(null);
@@ -406,11 +501,51 @@ export default function App() {
 
   useEffect(() => onAiActivity(setAiBusy), []);
 
+  // Living Galaxy (IM-140a): a completed task becomes a satellite in the
+  // galaxy (spawned at its last position, before its node disappears).
+  useEffect(() => {
+    const onTaskCompleted = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: number }>).detail?.id;
+      if (typeof id === "number") graphRef.current?.spawnTaskSatellite(id);
+    };
+    window.addEventListener("brain-task-completed", onTaskCompleted);
+    return () => window.removeEventListener("brain-task-completed", onTaskCompleted);
+  }, []);
+
   // Create the ambient audio on mount so the loop preloads/buffers before the
   // first 🔈 toggle (otherwise it lags on slow/mobile connections).
   useEffect(() => {
     if (!audioRef.current) audioRef.current = makeAmbientAudio();
   }, []);
+
+  // Adaptive ambience (IM-135): the bed ducks with galaxy density and its
+  // filter brightens/darkens with the galaxy's emotional state + cooling
+  // share; while the music plays, sparse randomized radio chirps (20–60s)
+  // keep the soundscape feeling alive. All parameter-driven from real graph
+  // data — no fabricated state.
+  const chirpSchedulerRef = useRef<ReturnType<typeof createChirpScheduler> | null>(null);
+  useEffect(() => {
+    if (!audioRef.current) audioRef.current = makeAmbientAudio();
+    const nodes = data.nodes as GraphNode[];
+    const memories = nodes.filter((n) => n.kind !== "action");
+    const meanEmotion = memories.length
+      ? memories.reduce((a, n) => a + (n.emotionalWeight ?? 0), 0) / memories.length
+      : 0;
+    const coolingFrac = memories.length
+      ? memories.filter((n) => (n.entropy ?? 0) >= COOLING_ENTROPY).length / memories.length
+      : 0;
+    audioRef.current.setAdaptive({
+      nodeCount: nodes.length,
+      linkCount: data.links.length,
+      meanEmotion,
+      coolingFrac,
+    });
+    if (!chirpSchedulerRef.current) {
+      chirpSchedulerRef.current = createChirpScheduler(() => playRadioChirp(Math.random() * 1.6 - 0.8));
+    }
+    if (music) chirpSchedulerRef.current.start();
+    else chirpSchedulerRef.current.stop();
+  }, [data.nodes, data.links, music]);
 
   // "While you were away" — on return, fetch what changed since the last visit. Show
   // the welcome-back card only after a real absence (≥1h) with something to say;
@@ -460,19 +595,98 @@ export default function App() {
 
   const toggleMusic = useCallback(() => {
     if (!audioRef.current) audioRef.current = makeAmbientAudio();
-    setMusic(audioRef.current.toggle());
+    const a = audioRef.current;
+    // Unlockables gate (IM-133): if the remembered track has since been
+    // locked (or was never earned), start from the first unlocked track
+    // instead of playing a locked loop. Deep Space is always unlocked.
+    if (!a.playing) {
+      const { stats, devUnlockAll: dev } = unlockGateRef.current;
+      if (stats) {
+        const ids = TRACKS.map((t) => t.id);
+        if (!isTrackUnlocked(ids[a.index]!, stats, { devUnlockAll: dev })) {
+          const first = firstUnlockedTrackIndex(ids, stats, { devUnlockAll: dev });
+          if (first >= 0 && first !== a.index) {
+            a.playTrack(first);
+            setMusic(a.playing);
+            return;
+          }
+        }
+      }
+    }
+    setMusic(a.toggle());
   }, []);
   const nextMusic = useCallback(() => {
     if (!audioRef.current) audioRef.current = makeAmbientAudio();
-    audioRef.current.next();
-    setMusic(audioRef.current.playing);
+    const a = audioRef.current;
+    // Unlockables gate (IM-133): skip advances only across UNLOCKED tracks.
+    const { stats, devUnlockAll: dev } = unlockGateRef.current;
+    if (stats) {
+      const ids = TRACKS.map((t) => t.id);
+      const nxt = nextUnlockedTrackIndex(a.index, ids, stats, { devUnlockAll: dev });
+      if (nxt !== a.index) {
+        a.playTrack(nxt);
+      } else if (!a.playing) {
+        a.toggle(); // the current track is the only playable one — just start it
+      }
+      setMusic(a.playing);
+      return;
+    }
+    a.next();
+    setMusic(a.playing);
   }, []);
   const playSong = useCallback((i: number) => {
+    // Unlockables gate (IM-133): a locked track never plays; say why instead.
+    const track = TRACKS[i];
+    const { stats, devUnlockAll: dev } = unlockGateRef.current;
+    if (track && stats && !isTrackUnlocked(track.id, stats, { devUnlockAll: dev })) {
+      const item = unlockableForTrack(track.id);
+      pushToast(
+        `🔒 ${track.title} is locked — ${item?.requirementText ?? "keep growing your galaxy to unlock it."}`,
+        "🔒",
+        6000,
+      );
+      setSongMenuOpen(false);
+      return;
+    }
     if (!audioRef.current) audioRef.current = makeAmbientAudio();
     audioRef.current.playTrack(i);
     setMusic(audioRef.current.playing);
     setSongMenuOpen(false);
   }, []);
+  // Hangar "View in galaxy" (IM-96): close the dock and focus the ship /
+  // station / figurine in the scene, reusing the focus cluster's own
+  // follow toggles (forcing the ship on; the others toggle only when not
+  // already followed, so a view request never unfocuses its target).
+  const handleViewInGalaxy = useCallback(
+    (target: "ship" | "station" | "fig1" | "fig2") => {
+      setPanel(null);
+      setLoreDismissed(false);
+      setFollowSatellite(false);
+      setFollowVisitor(false);
+      if (target === "ship") {
+        setFollowStation(false);
+        setFollowFig1(false);
+        setFollowFig2(false);
+        setFollowShip(graphRef.current?.toggleFollowShip(true) ?? true);
+      } else if (target === "station") {
+        setFollowShip(false);
+        setFollowFig1(false);
+        setFollowFig2(false);
+        setFollowStation(followStation ? true : (graphRef.current?.toggleFollowStation() ?? true));
+      } else if (target === "fig1") {
+        setFollowShip(false);
+        setFollowStation(false);
+        setFollowFig2(false);
+        setFollowFig1(followFig1 ? true : (graphRef.current?.toggleFollowFig1() ?? true));
+      } else {
+        setFollowShip(false);
+        setFollowStation(false);
+        setFollowFig1(false);
+        setFollowFig2(followFig2 ? true : (graphRef.current?.toggleFollowFig2() ?? true));
+      }
+    },
+    [followStation, followFig1, followFig2],
+  );
   // Single click = play/pause; double click = next track (a short timer lets a
   // second click cancel the toggle so a double-click cleanly skips the song).
   // Long-press opens the radial song menu (handled by pointer handlers below).
@@ -586,6 +800,9 @@ export default function App() {
       // new structural connection worth a question, generated server-side on ingest).
       if (newIds && newIds.length > 0) window.dispatchEvent(new Event("brain-memory-added"));
       if (newIds && newIds.length > 0) {
+        // Critical moment (audio audit): a memory was saved — pair it with a
+        // haptic tap on mobile (IM-134; gated inside haptics.ts).
+        triggerHaptic("memorySaved");
         // Give the graph a moment to render the new nodes before rippling them.
         setTimeout(() => {
           for (const id of newIds) graphRef.current?.spawnBurst(id, "user");
@@ -597,14 +814,14 @@ export default function App() {
         if (fuelEarned && fuelEarned > 0)
           pushToast(`+${Math.round(fuelEarned * 10) / 10} fuel earned`, "⛽");
         // Soumaya reacts to new connections in her own voice (Wave 3).
+        // IM-139: she now speaks it in-world too — the speech bubble anchored
+        // to her ship complements the toast.
         if (linkCount && linkCount > 0) {
-          const msg =
-            linkCount >= 3
-              ? `Soumaya: oh, this one lights up — it ties into ${linkCount} of your memories.`
-              : linkCount === 2
-                ? "Soumaya: I felt two threads connect to this."
-                : "Soumaya: there — a new thread linked up.";
-          pushToast(msg, "🛰️", 7000);
+          const reaction = connectionReaction(linkCount);
+          if (reaction) {
+            graphRef.current?.sayAsSoumaya(reaction);
+            pushToast(`Soumaya: ${reaction.charAt(0).toLowerCase()}${reaction.slice(1)}`, "🛰️", 7000);
+          }
         }
         // Then fly the camera to the new memory so you can SEE where it populated.
         setTimeout(() => {
@@ -756,6 +973,22 @@ export default function App() {
     pushToast(`Welcome back, ${space.name} — ${memories.length} ${word}${tail}`, "🛰️", 10000);
   }, [space, loaded, data.nodes]);
 
+  // Mass-cooling concern (IM-139): when a real crowd of memories is cooling
+  // (deriveCoolingConcern — real entropy data only), Soumaya says so in her
+  // in-world speech bubble, with a toast alongside. Once per distinct count
+  // per session, so tending memories (or more cooling) can re-arm it, but a
+  // steady state never nags.
+  const coolingSpokenRef = useRef<number>(0);
+  useEffect(() => {
+    if (!loaded) return;
+    const concern = deriveCoolingConcern(data.nodes as GraphNode[]);
+    if (!concern.massCooling || !concern.message) return;
+    if (coolingSpokenRef.current === concern.coolingCount) return;
+    coolingSpokenRef.current = concern.coolingCount;
+    graphRef.current?.sayAsSoumaya(concern.message);
+    pushToast(`Soumaya: ${concern.message}`, "❄️", 9000);
+  }, [loaded, data.nodes]);
+
   // (The old memory-count milestone toast is gone: Pilot Rank is the single
   // count ladder now — one celebration per threshold, not three.)
 
@@ -836,26 +1069,67 @@ export default function App() {
     } catch { /* storage unavailable */ }
 
     const now = unlockedIds({ memories, links: linksCount, fuel, linkObjects, streak });
-    const key = achvKey(space.id);
     const seen = loadUnlocked(space.id);
     const fresh = now.filter((id) => !seen.has(id));
     if (fresh.length === 0) return;
-    try {
-      localStorage.setItem(key, JSON.stringify([...seen, ...fresh]));
-    } catch {
-      /* ignore */
-    }
+    // IM-92: persist the earned set WITH each fresh unlock's timestamp, so the
+    // Awards tab can show a real "earned on" date. Unlocks recorded before
+    // timestamps existed keep no date — never an invented one.
+    recordUnlocked(space.id, fresh, new Date().toISOString());
     // Seed silently the first time we ever evaluate this brain on this device.
     if (!achvInitedRef.current && seen.size === 0) {
       achvInitedRef.current = true;
       return;
     }
     achvInitedRef.current = true;
+    // Critical moment (audio audit): an achievement unlocked — haptic pair (IM-134).
+    triggerHaptic("achievement");
     for (const id of fresh.slice(0, 3)) {
       const a = ACHIEVEMENTS.find((x) => x.id === id);
       if (a) pushToast(`Achievement: ${a.name} — ${a.desc}`, a.icon ?? "🏆", 12000, "high");
     }
   }, [data.nodes, data.links, fuel, streak, space, loaded]);
+
+  // Unlockables (IM-133): the shared catalog's stats, assembled from the same
+  // live state the achievements effect above reads — earned achievements are
+  // the persisted set ∪ currently satisfied, Codex completion is computed
+  // live the way achievements.ts codexPctFrom does it. The dev-unlock-all
+  // flag is dev-only (docs/UNLOCKABLES.md); nothing in the normal UI sets it.
+  const devUnlockAll = useMemo(() => readDevUnlockAll(), [space?.id]);
+  const unlockStats = useMemo<UnlockStats | null>(() => {
+    if (!space || !loaded) return null;
+    const allNodes = data.nodes as GraphNode[];
+    const memories = allNodes.filter((n) => n.kind !== "action");
+    const earned = new Set<string>(loadUnlocked(space.id));
+    for (const id of unlockedIds({ memories, links: data.links.length, fuel, linkObjects: data.links, streak })) {
+      earned.add(id);
+    }
+    const codex = buildCodex({
+      memories: allNodes.filter((n) => n.kind !== "moc" && n.kind !== "action"),
+      constellations: allNodes.filter((n) => n.kind === "moc"),
+      links: data.links.length,
+    });
+    return buildUnlockStats({
+      nodes: allNodes,
+      linksCount: data.links.length,
+      streak,
+      achievementIds: earned,
+      codexPct: codexProgress(codex).pct,
+    });
+  }, [space, loaded, data.nodes, data.links, fuel, streak]);
+  unlockGateRef.current = { stats: unlockStats, devUnlockAll };
+  // "🔓 Unlocked!" celebrations: fires once per newly unlocked catalog item
+  // (music included — a new loop unlocking celebrates AND becomes playable).
+  useUnlockWatcher({
+    stats: unlockStats,
+    spaceId: space?.id ?? null,
+    devUnlockAll,
+    onUnlock: (item) => {
+      playSfx("achievement");
+      setUnlockMoment(item);
+      pushToast(`🔓 Unlocked! ${item.label} — ${item.description}`, "🔓", 9000, "high");
+    },
+  });
 
   // Random idle FLY-BY: when you're just watching the galaxy (nothing open or focused),
   // Soumaya occasionally swings into view, drops a determined line pulled from your
@@ -977,7 +1251,9 @@ export default function App() {
     (async () => {
       const [contact, beliefs] = await Promise.all([getDailyContact(), getBeliefs()]);
       if (!alive) return;
-      if (contact?.foresight) setSelfInsight({ kind: "foresight", text: "She sees a pattern coming" });
+      // IM-03: render the server's ACTUAL foresight text + inDays — the chip
+      // used to discard both and show a constant "She sees a pattern coming".
+      if (contact?.foresight) setSelfInsight({ kind: "foresight", text: contact.foresight.text, inDays: contact.foresight.inDays });
       else if (beliefs[0]) setSelfInsight({ kind: "belief", text: beliefs[0].content });
       else setSelfInsight(null);
     })().catch(() => {});
@@ -1231,6 +1507,85 @@ export default function App() {
     return () => window.removeEventListener("brain-toast-action", onAction);
   }, [focus]);
 
+  // IM-141/IM-142 — global keyboard shortcuts, active anywhere in the app once
+  // signed in: ⌘K / Ctrl+K toggles the command palette; a bare "c" opens
+  // quick-capture — but never while typing (the predicate + text-entry-target
+  // guard in lib/quickCapture.ts are what keep "c" in a textarea inert).
+  useEffect(() => {
+    if (!space) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (isPaletteShortcut(e)) {
+        e.preventDefault();
+        setShowPalette((v) => !v);
+        return;
+      }
+      if (isCaptureShortcut(e) && !isTextEntryTarget(e.target)) {
+        e.preventDefault();
+        setPanel("ingest");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [space]);
+
+  // IM-141 — PWA share-target / capture-shortcut landing: the manifest sends
+  // shares to /share?title=&text=&url= (and the home-screen shortcut to
+  // /share?capture=1); the server SPA-fallback serves this app for that path.
+  // Once the brain is open and loaded, open Ingest prefilled with the shared
+  // text, then rewrite the URL to "/" so a reload doesn't re-capture the same
+  // share and the shared text doesn't linger in the address bar/history.
+  const shareHandledRef = useRef(false);
+  useEffect(() => {
+    if (!space || !loaded || shareHandledRef.current) return;
+    shareHandledRef.current = true;
+    const landing = parseShareLanding(window.location.pathname, window.location.search);
+    if (!landing) return;
+    setIngestSeed({ text: landing.text, nonce: Date.now() });
+    setPanel("ingest");
+    window.history.replaceState(null, "", "/");
+  }, [space, loaded]);
+
+  // IM-142 — palette commands execute against the app's existing navigation
+  // state (the same setters the FABs, toasts and dock already use).
+  const runPaletteCommand = useCallback(
+    (cmd: PaletteCommand) => {
+      setShowPalette(false);
+      switch (cmd.id) {
+        case "capture":
+          setPanel("ingest");
+          break;
+        case "chat":
+          setShowChat(true);
+          break;
+        case "search":
+          setPanel("search");
+          break;
+        case "observatory":
+          setShowObs(true);
+          break;
+        case "timeline":
+          setShowTimeline(true);
+          break;
+        case "review":
+          setShowReview(true);
+          break;
+        case "connections":
+          setShowConnections(true);
+          break;
+        case "settings":
+          setShowSettings(true);
+          break;
+        default:
+          if (cmd.id.startsWith("tab:")) {
+            dismissObs();
+            setTab(cmd.id.slice(4) as DockTab);
+            setPanel("dock");
+          }
+      }
+    },
+    [dismissObs],
+  );
+
   // Wealth's "⛶ Expand" affordance (docs/specs/wealth-goals-allocation.md §13) — a dedicated
   // event rather than overloading brain-toast-action's `panel` kind, since that's tied to the
   // narrow `Panel` union (search/ingest/dock) and this is a direct click, not a toast route.
@@ -1238,6 +1593,24 @@ export default function App() {
     const onExpand = () => setShowWealthFullscreen(true);
     window.addEventListener("brain-open-wealth-fullscreen", onExpand);
     return () => window.removeEventListener("brain-open-wealth-fullscreen", onExpand);
+  }, []);
+
+  // IM-131 (remainder): Help's per-card "Try it" targets for the three overlay
+  // surfaces the toast-action bridge can't reach (their open state lives here,
+  // not in the Panel union or the dock tabs) — same dedicated-event pattern as
+  // the Wealth expand above.
+  useEffect(() => {
+    const onConnections = () => setShowConnections(true);
+    const onLenses = () => setShowLenses(true);
+    const onSettings = () => setShowSettings(true);
+    window.addEventListener("brain-open-connections", onConnections);
+    window.addEventListener("brain-open-lenses", onLenses);
+    window.addEventListener("brain-open-settings", onSettings);
+    return () => {
+      window.removeEventListener("brain-open-connections", onConnections);
+      window.removeEventListener("brain-open-lenses", onLenses);
+      window.removeEventListener("brain-open-settings", onSettings);
+    };
   }, []);
 
   // Money's "⛶ Expand" affordance (docs/specs/paystub-ingestion.md §7) — same dedicated-event
@@ -1299,7 +1672,8 @@ export default function App() {
       // particular memory — the whole point of a flashback is the "you wrote
       // this a while ago" reveal, which was missing entirely.
       const days = Math.round(ageDaysOf(target));
-      pushToast(`☄️ Flashback: "${target.label.slice(0, 40)}" — you wrote this ${days}d ago`, "☄️", 5000);
+      // IM-14: lore line + a tappable toast (action flies back to the memory).
+      pushToast(flashbackLoreLine(target, days), "☄️", 6000, "normal", { kind: "focus", value: target.id });
     } else {
       // Fallback if the brain is too young
       const all = view.nodes.filter(n => n.mass && n.mass > 0.2);
@@ -1308,13 +1682,7 @@ export default function App() {
         goTo(target.id, true);
         graphRef.current?.spawnBurst(target.id, "calibration");
         const days = Math.round(ageDaysOf(target));
-        pushToast(
-          Number.isFinite(days) && days > 0
-            ? `☄️ Flashback: "${target.label.slice(0, 40)}" — you wrote this ${days}d ago`
-            : `☄️ Flashback: "${target.label.slice(0, 40)}"`,
-          "☄️",
-          5000,
-        );
+        pushToast(flashbackLoreLine(target, days), "☄️", 6000, "normal", { kind: "focus", value: target.id });
       } else {
         // A brand-new brain has nothing old/heavy enough for either tier —
         // this used to just do nothing, with zero feedback for the tap.
@@ -1419,7 +1787,7 @@ export default function App() {
       {panel === null && !showChat && !showObs && !showSettings && !showConnections && !showTimeline && (
         <>
           <FuelGauge fuel={fuel} pops={fuelPops} busy={aiBusy > 0} onClick={() => setShowFuelWays(true)} />
-          <StreakEmber streak={streak?.current ?? 0} atRisk={streakAtRisk} shields={streak?.shields ?? 0} />
+          <StreakEmber streak={streak?.current ?? 0} best={streak?.best} atRisk={streakAtRisk} shields={streak?.shields ?? 0} onClick={() => { setTab("awards"); setPanel("dock"); }} />
         </>
       )}
       {rankUp && (
@@ -1433,6 +1801,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <UnlockCelebration item={unlockMoment} onDismiss={() => setUnlockMoment(null)} />
       {/* Lite mode: a calm static backdrop instead of the WebGL galaxy, so the app is
           fully usable (Mind, chat, memories, tabs) even when the 3D can't render. */}
       {lite && <div className="lite-backdrop" aria-hidden />}
@@ -1696,7 +2065,7 @@ export default function App() {
                 setPanel("dock");
               }}
             >
-              {selfInsight.kind === "foresight" ? "🔮" : "🖤"} {selfInsight.text.length > 42 ? `${selfInsight.text.slice(0, 42)}…` : selfInsight.text}
+              {selfInsight.kind === "foresight" ? "🔮" : "🖤"} {(() => { const full = selfInsight.kind === "foresight" && selfInsight.inDays != null ? foresightChipText({ text: selfInsight.text, inDays: selfInsight.inDays }) : selfInsight.text; return full.length > 42 ? `${full.slice(0, 42)}…` : full; })()}
             </button>
           )}
           {installPrompt && (
@@ -1795,7 +2164,17 @@ export default function App() {
       {/* Ambient Mind Space: live working-memory thoughts drifting over the galaxy
           (toggled from the 🧠 Mind tab; self-contained + pointer-events:none). */}
       <ErrorBoundary label="mindspace" fallback={null}>
-        <MindSpace hidden={panel !== null || showChat || showObs} />
+        <MindSpace
+          hidden={panel !== null || showChat || showObs}
+          onOpenThought={() => {
+            setTab("mind");
+            setPanel("dock");
+          }}
+          onOpenMind={() => {
+            setTab("mind");
+            setPanel("dock");
+          }}
+        />
       </ErrorBoundary>
 
       {/* Proactive intelligence: "Soumaya noticed…" — a grounded question about a
@@ -1819,8 +2198,51 @@ export default function App() {
         <ObjectLoreCard
           kind={followShip ? "ship" : followSatellite ? "satellite" : "station"}
           graph={view}
+          onFocus={(id) => focus(id)}
           onClose={() => setLoreDismissed(true)}
         />
+      )}
+
+      {/* CL-1b (IM-19): the followed visitor / fleet craft gets its own named
+          identity card in-scene — variant/roster name + lore + live status —
+          instead of an anonymous craft. Same slot discipline as the lore
+          card above (hidden while a panel is open or dismissed). */}
+      {sceneIdentity && (followVisitor || followFleet) && panel === null && !sceneCardDismissed && !noticingOpen && (
+        <SceneIdentityCard identity={sceneIdentity} onClose={() => setSceneCardDismissed(true)} />
+      )}
+
+      {/* CL-1b (IM-19/20/21): shell readouts — who is visiting, what the
+          beacon beam is warming, and the audio state — where the scene is
+          seen, not only inside panels. */}
+      {panel === null && !showObs && (
+        <>
+          <BeaconReadout status={fleetStatusHud} onFocus={(id) => focus(id)} />
+          {!followVisitor && activeVisitors.length > 0 && (
+            <VisitorChip
+              visitors={activeVisitors}
+              onFollow={() => {
+                const on = graphRef.current?.cycleFollowVisitor() ?? false;
+                setFollowVisitor(on);
+              }}
+            />
+          )}
+          <AudioStateChip
+            sfx={sfxOnHud}
+            voice={voiceOnHud}
+            music={music}
+            onOpenAudioSettings={() => {
+              setSettingsFocusAudio(true);
+              setShowSettings(true);
+            }}
+          />
+        </>
+      )}
+
+      {/* CL-1b (IM-23): an empty galaxy names where the first star goes,
+          in-scene — the Observatory hero covers arrival, this covers the
+          galaxy itself once you're standing in it. */}
+      {loaded && data.nodes.length === 0 && panel === null && !showObs && !showChat && !showSettings && (
+        <EmptyGalaxyCue onAdd={() => toggle("ingest")} />
       )}
 
       {/* Right-side-up: a clearly-visible pill (not a buried FAB) whenever you're following
@@ -2057,20 +2479,30 @@ export default function App() {
           >
             {music ? "🔊" : "🔈"}
           </button>
-          {/* Radial song menu — dots circling the music button (press-and-hold to open). */}
+          {/* Radial song menu — dots circling the music button (press-and-hold to open).
+              Unlockables gate (IM-133): locked tracks render locked with their
+              requirement and cannot be picked (playSong also guards). */}
           {songMenuOpen &&
-            TRACKS.map((t, i) => (
-              <button
-                key={t.id}
-                className={`song-dot ${musicTrack?.index === i ? "current" : ""}`}
-                style={songDotStyle(i, TRACKS.length)}
-                onClick={() => playSong(i)}
-                title={t.title}
-              >
-                <span className="song-dot-n">{i + 1}</span>
-                <span className="song-dot-name">{t.title}</span>
-              </button>
-            ))}
+            TRACKS.map((t, i) => {
+              const gateItem = unlockableForTrack(t.id);
+              const locked = unlockStats
+                ? !isTrackUnlocked(t.id, unlockStats, { devUnlockAll })
+                : false;
+              return (
+                <button
+                  key={t.id}
+                  className={`song-dot ${musicTrack?.index === i ? "current" : ""} ${locked ? "locked" : ""}`}
+                  style={songDotStyle(i, TRACKS.length)}
+                  onClick={() => playSong(i)}
+                  disabled={locked}
+                  aria-disabled={locked}
+                  title={locked ? `🔒 ${t.title} — ${gateItem?.requirementText ?? "Locked"}` : t.title}
+                >
+                  <span className="song-dot-n">{locked ? "🔒" : i + 1}</span>
+                  <span className="song-dot-name">{t.title}</span>
+                </button>
+              );
+            })}
           {music && musicTrack && nowPlayingVisible && (
             <button
               className="now-playing"
@@ -2101,7 +2533,10 @@ export default function App() {
 
       {showSettings && space && (
         <SettingsPanel
-          onClose={() => setShowSettings(false)}
+          onClose={() => {
+            setShowSettings(false);
+            setSettingsFocusAudio(false);
+          }}
           onProfileUpdated={(name) => setSpace((s) => (s ? { ...s, name } : s))}
           onBrainDeleted={() => {
             // The brain is deleted server-side and AccountSettings already
@@ -2115,6 +2550,7 @@ export default function App() {
             setPanel(null);
             setShowSettings(false);
           }}
+          focusAudio={settingsFocusAudio}
         />
       )}
 
@@ -2152,6 +2588,11 @@ export default function App() {
               setPanel("ingest");
             } else if (kind === "action") {
               setTab("actions");
+              setPanel("dock");
+            } else if (kind === "recall") {
+              setShowReview(true);
+            } else if (kind === "codex") {
+              setTab("awards");
               setPanel("dock");
             } else {
               // "mind" + "thought" both live in the Mind tab (thought capture is at its top).
@@ -2227,7 +2668,25 @@ export default function App() {
 
       {panel === "search" && <SearchBox onFocus={focus} onClose={() => setPanel(null)} />}
       {panel === "ingest" && (
-        <IngestPanel onIngested={refresh} onClose={() => setPanel(null)} />
+        <IngestPanel
+          key={ingestSeed ? `share-${ingestSeed.nonce}` : "capture"}
+          initialText={ingestSeed?.text}
+          onIngested={refresh}
+          onClose={() => {
+            setPanel(null);
+            setIngestSeed(null);
+          }}
+        />
+      )}
+      {showPalette && (
+        <CommandPalette
+          onClose={() => setShowPalette(false)}
+          onCommand={runPaletteCommand}
+          onFocusNode={(id) => {
+            setShowPalette(false);
+            focus(id);
+          }}
+        />
       )}
       {panel === "dock" && (
         // Isolated like the galaxy/mindspace/noticing surfaces: a render throw in
@@ -2274,6 +2733,13 @@ export default function App() {
           focusJourney={focusJourney}
           focusGoal={focusGoal}
           focusBill={focusBill}
+          onCapture={() => setPanel("ingest")}
+          unlockStats={unlockStats}
+          devUnlockAll={devUnlockAll}
+          onViewInGalaxy={handleViewInGalaxy}
+          onPlayTrack={playSong}
+          currentTrackIndex={musicTrack?.index ?? null}
+          musicPlaying={music}
           onAskJourney={(j) => {
             // Phase AC.1 — Journey → Chat: reuses the exact one-shot handoff pattern
             // Phase Y/Z already established for proactiveContext, just keyed by a
