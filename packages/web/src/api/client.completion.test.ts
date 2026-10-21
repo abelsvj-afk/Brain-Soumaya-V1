@@ -82,6 +82,19 @@ describe("getGraphWithCompletion (D3)", () => {
     for (const id of ids) expect(got.has(id)).toBe(true);
   });
 
+  it("drops seeded overview links whose endpoints fall outside the union node set", async () => {
+    // Regression: `node not found: 150` — an overview page can carry a link to
+    // a node it omits (superseded/merged-away). The seed must not pass it on;
+    // the renderer throws on a dangling endpoint.
+    graphStub = () => ({
+      nodes: [node(1), node(2)],
+      links: [edge(9, 1, 150), edge(10, 1, 2)],
+    });
+    edgesStub = () => ({ edges: [], nextCursor: null });
+    const g = await getGraphWithCompletion([2]);
+    expect(g.links.map((l) => (l as { id: number }).id)).toEqual([10]);
+  });
+
   it("sends no includeIds param for an empty id list (single plain overview)", async () => {
     await getGraphWithCompletion([]);
     const gc = graphCalls();

@@ -126,7 +126,14 @@ export class GraphService {
 
   /** Whole graph — fine for small datasets, used as a fast path. */
   full(): GraphData {
-    return { nodes: this.enrich(this.nodes.all()), links: this.edges.all() };
+    const nodes = this.enrich(this.nodes.all());
+    // Prune to the shipped node set: `nodes.all()` excludes deleted/archived/
+    // superseded rows while `edges.all()` does not, so an unpruned pairing can
+    // ship links whose endpoints are absent — the graph renderer throws
+    // `node not found: <id>` on any dangling link.
+    const ids = new Set(nodes.map((n) => n.id));
+    const links = this.edges.all().filter((e) => ids.has(e.source) && ids.has(e.target));
+    return { nodes, links };
   }
 
   /**
@@ -139,6 +146,11 @@ export class GraphService {
    * never leak in. The internal edge fetch uses the temp-table strategy
    * (see edges.repo.ts) and is cursor-bounded at MAX_EDGES_PER_RESPONSE;
    * `nextEdgeCursor` is the additive "more to fetch" signal (null = complete).
+   *
+   * Payload invariant: every shipped link has BOTH endpoints in the shipped
+   * node set. The edge fetch is therefore scoped to the ids `byIds` actually
+   * returned (post deleted/superseded filtering), never to the raw union —
+   * the renderer throws `node not found: <id>` on a dangling link.
    */
   overview(limit = 300, includeIds: number[] = []): GraphData & { nextEdgeCursor: number | null } {
     const rows = this.h.sqlite
@@ -159,7 +171,17 @@ export class GraphService {
       .all(this.spaceId, this.spaceId, this.spaceId, limit) as { id: number }[];
     const unionIds = [...new Set([...rows.map((r) => r.id), ...includeIds])];
     const nodes = this.enrich(this.nodes.byIds(unionIds));
-    const { edges, nextCursor } = this.edges.withinIdsPaged(unionIds, null);
+    // Prune to the shipped node set: id selection above filters only
+    // `deleted_at IS NULL`, while `byIds` additionally drops superseded (and
+    // merged-away) rows — fetching edges against the raw union would ship
+    // links to nodes the payload omits, and the renderer throws
+    // `node not found: <id>` on any dangling link. Edge paging therefore runs
+    // on the returned-id basis; `nextEdgeCursor` semantics are unchanged
+    // (id-ordered cursor over the shipped subgraph's edges).
+    const { edges, nextCursor } = this.edges.withinIdsPaged(
+      nodes.map((n) => n.id),
+      null,
+    );
     return { nodes, links: edges, nextEdgeCursor: nextCursor };
   }
 
@@ -183,7 +205,12 @@ export class GraphService {
     if (!this.nodes.getById(startId)) return { nodes: [], links: [] };
     const hops = multiHopNeighbors(this.h.sqlite, startId, depth);
     const ids = Array.from(new Set([startId, ...hops.map((hp) => hp.nodeId)]));
-    return { nodes: this.enrich(this.nodes.byIds(ids)), links: this.edges.within(ids) };
+    const nodes = this.enrich(this.nodes.byIds(ids));
+    // Prune to the shipped node set: traversal walks the raw edge table, so
+    // the visited set can include deleted/superseded nodes that `byIds`
+    // drops — edges must be fetched against the returned ids only, or the
+    // payload ships dangling links (renderer: `node not found: <id>`).
+    return { nodes, links: this.edges.within(nodes.map((n) => n.id)) };
   }
 
   /**

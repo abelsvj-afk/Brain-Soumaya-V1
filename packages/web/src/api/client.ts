@@ -145,9 +145,14 @@ export async function getGraph(
   if (!d || !Array.isArray(d.nodes) || !Array.isArray(d.links)) {
     throw new Error("The galaxy response was invalid. Please try again.");
   }
+  // Defense in depth: never hand the renderer a link whose endpoint is not in
+  // the shipped node set — d3-force throws `node not found: <id>` on a
+  // dangling link and the whole galaxy fails to render. The server prunes at
+  // the source; this guard keeps the invariant even against a stale payload.
+  const nodeIds = new Set(d.nodes.map((n) => n.id));
   return {
     nodes: d.nodes,
-    links: d.links,
+    links: d.links.filter((l) => nodeIds.has(l.source) && nodeIds.has(l.target)),
     nextEdgeCursor: d.nextEdgeCursor ?? null,
   };
 }
@@ -220,6 +225,14 @@ export async function getGraphWithCompletion(newIds: number[], limit = 300): Pro
   }
 
   const U = new Set(nodeById.keys());
+  // Prune the seeded links to the union node set: an overview page can carry
+  // links to nodes that page omitted (e.g. superseded rows), and only links
+  // with both endpoints in U may reach the renderer (dangling link →
+  // `node not found: <id>`). The completion stream below re-adds every
+  // both-endpoints-in-U edge, so pruning here loses nothing.
+  for (const [id, l] of linkById) {
+    if (!U.has(l.source) || !U.has(l.target)) linkById.delete(id);
+  }
   const Uarr = [...U];
   // Defensive: U can only exceed the server's union cap after a pathological
   // bulk sync; each slice still runs one self-completing stream, and the
