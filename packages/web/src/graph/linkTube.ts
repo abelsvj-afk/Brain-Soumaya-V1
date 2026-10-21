@@ -131,6 +131,38 @@ import * as THREE from "three";
  * exactly mirroring the "cache miss" path that already runs correctly for a brand-new
  * link — no new code path, no behavior change for the (overwhelmingly common) case where
  * nothing was disposed.
+ *
+ * THIRD defect in this same seam — the digest-time radius race (Galaxy line-latch
+ * H2 fix, 2026-10-21): the spoofed `parameters.radiusTop` is re-synced ONLY inside
+ * `update()` below, from the width that call was handed. But `update()` is
+ * deliberately NOT called every frame for every link — Graph3D's
+ * `linkPositionUpdateCb` shard-skips far/still links for up to ~600 ms — while
+ * three-forcegraph's digest (same `onUpdateObj` check quoted above) can run at
+ * ANY React re-render, evaluating the width accessor FRESH. When a link's width
+ * crosses a rounding bucket between its last `update()` and the next digest —
+ * the ship's tending cycle does exactly this: `fireLink` jumps a link's
+ * activity, and the pulse re-render it forces IS a digest — the digest finds
+ * radiusTop ≠ the radius its own fresh width implies, disposes the tube, and
+ * substitutes the shared straight cylinder, which for a tube-managed link sits
+ * unpositioned at the world origin (invisible) until the link's next
+ * position update re-assigns the tube. Bunches blink together because one
+ * digest checks every link at once; each heals on its own shard schedule —
+ * the owner's "lines vanish for ~1 s while the ship flies" report.
+ *
+ * The seam that closes it without touching the library: within `onUpdateObj`,
+ * three-forcegraph evaluates `widthAccessor(link)` IMMEDIATELY BEFORE that
+ * same link's radius comparison (verified in the installed source — the
+ * accessor call and the `radiusTop !== r` check are consecutive statements in
+ * one function). So if the width accessor itself re-syncs the cached radius
+ * from the very width it is returning, the comparison that follows always
+ * sees the current value. That is `syncDigestRadius()` below, called from
+ * Graph3D's `linkWidthCb`. The digest's check is NOT disabled — it still runs
+ * and would still swap for a width that never flowed through the accessor
+ * (none exists) — and convergence is preserved: the tube's actual vertex
+ * radius is recomputed from the current width on its next `update()`, in
+ * place, on the same geometry object. Worst case after a width change is the
+ * previous tube rendering until that update lands — never the origin
+ * placeholder.
  */
 
 // Matches three-forcegraph.mjs's hardcoded `curveResolution` (tubular segments
@@ -235,6 +267,27 @@ export interface LinkPositions {
  */
 export class CurvedLinkGeometryCache {
   private readonly cache = new WeakMap<object, LinkTubeEntry>();
+
+  /**
+   * Digest-time radius sync — the H2 blink fix (see the module doc's "THIRD
+   * defect" section). Called from Graph3D's `linkWidthCb` with the exact
+   * width that accessor is returning, so when three-forcegraph's `onUpdateObj`
+   * digest — which evaluates the width accessor immediately before comparing
+   * `geometry.parameters.radiusTop` against that same width's radius, in the
+   * same call, for the same link — performs its check, the spoofed radius is
+   * already current and the tube is never disposed/swapped for a width-bucket
+   * change. No-ops by design where the digest's own paths own the outcome: an
+   * uncached link (never tube-rendered — the digest's creation path assigns
+   * its first geometry) and a disposed entry (`update()`'s rebuild path owns
+   * resurrection; syncing a dead geometry's spoof would change nothing the
+   * digest can observe on the live object).
+   */
+  syncDigestRadius(link: object, width: number): void {
+    const entry = this.cache.get(link);
+    if (!entry || entry.disposed) return;
+    (entry.geometry as unknown as { parameters: { radiusTop: number } }).parameters.radiusTop =
+      digestRoundedRadius(width);
+  }
 
   private create(): LinkTubeEntry {
     const { index, uv } = getSharedIndexAndUv();
