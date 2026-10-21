@@ -13,7 +13,7 @@ import {
 import { getWealthSummary, patchGoal } from "../api/finance.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
 import {
-  getCognitive,
+  getCognitiveResult,
   createCognitive,
   getUpcomingEvents,
   type UpcomingEvent,
@@ -64,6 +64,12 @@ export function MindPanel({
   onChanged?: () => void;
 }) {
   const [items, setItems] = useState<CognitiveItem[]>([]);
+  // True when the cognitive-list fetch itself FAILED (server dead/slow/errored),
+  // as opposed to succeeding with an empty list — the two render differently
+  // (error + Retry vs "Nothing mapped yet"), so a dead server can no longer
+  // masquerade as an empty mind. Only the cognitive list tracks this; the
+  // panel's optional sources (thoughts, suggestions, events) stay fail-soft.
+  const [loadError, setLoadError] = useState(false);
   const [kind, setKind] = useState<CognitiveKind>("goal");
   const [label, setLabel] = useState("");
   const [content, setContent] = useState("");
@@ -119,7 +125,19 @@ export function MindPanel({
   const [goalBusy, setGoalBusy] = useState<number | null>(null); // goal id mid-link/unlink
   const [pickGoalId, setPickGoalId] = useState<Record<number, string>>({}); // per-vision picker selection
 
-  const refresh = () => getCognitive().then(setItems).catch(() => {});
+  const refresh = () =>
+    getCognitiveResult()
+      .then((r) => {
+        if (r.ok) {
+          setItems(r.items);
+          setLoadError(false);
+        } else {
+          // Keep whatever is already on screen; just flag the failure so the
+          // render can say so (and offer Retry) instead of going silently empty.
+          setLoadError(true);
+        }
+      })
+      .catch(() => setLoadError(true));
   const refreshThoughts = () => getThoughts().then(setThoughts).catch(() => {});
   const refreshSuggestions = () => getPersonSuggestions().then(setSuggestions).catch(() => {});
   const refreshEvents = () =>
@@ -620,8 +638,22 @@ export function MindPanel({
         <button className="companion-add-btn" onClick={() => setAdding(true)}>+ Map something in your mind</button>
       )}
 
-      {items.length === 0 && !adding && (
+      {items.length === 0 && !adding && !loadError && (
         <p className="empty small">Nothing mapped yet. Start with a goal you're working toward.</p>
+      )}
+
+      {loadError && items.length === 0 && !adding && (
+        <div className="mind-load-error">
+          <p className="empty small">⚠️ Couldn't load your mind — Soumaya may be unreachable, or still waking up. Your mapped mind is not gone; it just didn't arrive.</p>
+          <button className="mini" onClick={() => void refresh()}>Retry</button>
+        </div>
+      )}
+
+      {loadError && items.length > 0 && (
+        <p className="empty small">
+          ⚠️ Couldn't refresh your mind — showing the last copy that loaded.{" "}
+          <button className="mini" onClick={() => void refresh()}>Retry</button>
+        </p>
       )}
 
       {COGNITIVE_KINDS.filter((k) => byKind.has(k)).map((k) => (

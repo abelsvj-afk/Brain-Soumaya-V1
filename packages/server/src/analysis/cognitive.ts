@@ -155,16 +155,42 @@ export function listCognitive(
 ): CognitiveItem[] {
   const kinds = kind ? [kind] : (Object.keys(COGNITIVE_META) as CognitiveKind[]);
   const placeholders = kinds.map(() => "?").join(",");
+  // Degree (count of this space's edges touching the node, either direction) is
+  // computed as ONE grouped aggregation over edge endpoints, joined onto the
+  // page — never a correlated per-row COUNT(*). The correlated form could not
+  // drive the source/target indexes through its OR, so SQLite scanned EVERY
+  // edge in the space for EVERY returned row (measured: ~0.45s at 25k edges,
+  // ~1.9s at 100k — see gate-run/cogperf-record.md). The aggregation is
+  // restricted to the page's own nodes (the CTE), so it groups only edges that
+  // touch a returned row instead of every endpoint in the space. The UNION
+  // (not UNION ALL) of (endpoint, edge id) pairs keeps a self-loop counting
+  // exactly once, matching the old OR-count semantics edge-for-edge.
   const rows = ctx.handle.sqlite
     .prepare(
-      `SELECT n.id, n.kind, n.label, n.content, n.progress, n.completed_at AS completedAt, n.aliases, n.created_at AS createdAt,
-         n.remind_at AS remindAt,
-         (SELECT COUNT(*) FROM edges e WHERE e.space_id = n.space_id AND (e.source = n.id OR e.target = n.id)) AS degree
-       FROM nodes n
-       WHERE n.space_id = ? AND n.deleted_at IS NULL AND n.kind IN (${placeholders})
-       ORDER BY n.id DESC LIMIT 100`,
+      `WITH page AS (
+         SELECT n.id, n.kind, n.label, n.content, n.progress, n.completed_at AS completedAt, n.aliases, n.created_at AS createdAt,
+           n.remind_at AS remindAt
+         FROM nodes n
+         WHERE n.space_id = ? AND n.deleted_at IS NULL AND n.kind IN (${placeholders})
+         ORDER BY n.id DESC LIMIT 100
+       )
+       SELECT p.id, p.kind, p.label, p.content, p.progress, p.completedAt, p.aliases, p.createdAt,
+         p.remindAt, COALESCE(d.degree, 0) AS degree
+       FROM page p
+       LEFT JOIN (
+         SELECT endpoint AS node_id, COUNT(*) AS degree
+         FROM (
+           SELECT source AS endpoint, id AS edge_id FROM edges
+           WHERE space_id = ? AND source IN (SELECT id FROM page)
+           UNION
+           SELECT target AS endpoint, id AS edge_id FROM edges
+           WHERE space_id = ? AND target IN (SELECT id FROM page)
+         )
+         GROUP BY endpoint
+       ) d ON d.node_id = p.id
+       ORDER BY p.id DESC`,
     )
-    .all(spaceId, ...kinds) as (Omit<CognitiveItem, "kind" | "aliases"> & { kind: string; aliases: string | null })[];
+    .all(spaceId, ...kinds, spaceId, spaceId) as (Omit<CognitiveItem, "kind" | "aliases"> & { kind: string; aliases: string | null })[];
   return rows.map((r) => {
     let aliases: string[] = [];
     try {

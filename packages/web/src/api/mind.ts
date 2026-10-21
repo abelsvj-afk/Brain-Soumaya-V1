@@ -24,14 +24,29 @@ export interface CognitiveItem {
    *  where it is one. */
   remindAt: string | null;
 }
-export async function getCognitive(kind?: string): Promise<CognitiveItem[]> {
+/**
+ * Fetch the cognitive list WITHOUT conflating failure with emptiness: a dead
+ * or slow server (network error, non-OK status, malformed body) returns
+ * `{ ok: false }`, while a healthy-but-empty mind returns `{ ok: true, items: [] }`.
+ * The Mind panel renders those two states differently (error + retry vs
+ * "Nothing mapped yet"); getCognitive below keeps the old fail-soft contract
+ * for any caller that doesn't care about the distinction.
+ */
+export async function getCognitiveResult(
+  kind?: string,
+): Promise<{ ok: true; items: CognitiveItem[] } | { ok: false }> {
   try {
     const res = await afetch(`${API}/cognitive${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, items: d as CognitiveItem[] } : { ok: false };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+export async function getCognitive(kind?: string): Promise<CognitiveItem[]> {
+  const r = await getCognitiveResult(kind);
+  return r.ok ? r.items : [];
 }
 export async function createCognitive(kind: string, label: string, content?: string, date?: string, aliases?: string[]): Promise<{ id: number } | null> {
   try {
