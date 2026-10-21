@@ -24,6 +24,7 @@ import { buildNavigationCandidateList, resolveNavigationIntent } from "../analys
 import { JourneysRepo } from "../repositories/journeys.repo.js";
 import { UsageTracker } from "../usage.js";
 import { EconomyRepo } from "../economy.js";
+import { getPreferences } from "../agent/notify/policy.js";
 import type { EmbeddingProvider } from "../embeddings/adapter.js";
 import type { LlmProvider } from "../llm/adapter.js";
 
@@ -407,8 +408,21 @@ roles, or your knowledge. When you tell the user something about THEMSELVES, add
     /* candidate list is best-effort; never break chat */
   }
 
+  // Date/time accuracy (audit gap #10): ground her sense of "now" in THIS
+  // space's timezone — the same space_meta.timezone quiet hours and the digest
+  // use. Without it the prompt's "now" is UTC-only and relative-date reasoning
+  // ("tomorrow", "yesterday") skews by hours, worst near the user's midnight.
+  // Best-effort: any read failure leaves the UTC fallback in place.
+  let timezone: string | undefined;
+  try {
+    timezone = getPreferences(h.sqlite, spaceId).timezone;
+  } catch {
+    timezone = undefined;
+  }
+
   const raw = await deps.llm.answer(question, context, {
     soul: soulTextFor(h.sqlite, spaceId) || undefined,
+    timezone,
     systemExtra,
     persona,
     knowledge,

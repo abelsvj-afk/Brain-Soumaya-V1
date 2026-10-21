@@ -5,6 +5,7 @@ import { soulTextFor } from "../identity.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 import { AGENT_TOOLS } from "./tools/registry.js";
 import { validateArgs } from "./tools/validation.js";
+import { getPreferences } from "./notify/policy.js"; // space timezone source (quiet hours/digest)
 import { composeUserModelBlock } from "./userModel.js"; // W2: user-model context block (§7.2)
 import { maybeRecordStated } from "./userModel.js"; // W2: stated-write trigger (§4.8)
 import { captureEpisode } from "./episodic.js"; // W2: episode capture triggers (§5.1)
@@ -179,8 +180,20 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   // context. composeUserModelBlock() fails OPEN by contract: it returns "" when
   // the user model is unavailable or any read fails, and it never throws.
   const userModelBlock = composeUserModelBlock(ctx.handle, spaceId);
+  // Date/time accuracy (audit gap #10): the loop previously injected NO current
+  // time/timezone at all, and composeSystem's "now" was UTC-only. Ground it in
+  // the space's timezone (space_meta.timezone — the one quiet hours and the
+  // digest already use) at the turn's own clock, fail-open to the UTC rendering.
+  let spaceTimezone: string | undefined;
+  try {
+    spaceTimezone = getPreferences(ctx.handle.sqlite, spaceId).timezone;
+  } catch {
+    spaceTimezone = undefined;
+  }
   const systemInstruction = composeSystem({
     soul: soul ?? undefined,
+    timezone: spaceTimezone,
+    nowMs: now,
     systemExtra:
       buildSystemExtra() +
       (userModelBlock ? `\n\n${userModelBlock}` : "") +

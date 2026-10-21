@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import type { AppContext } from "../context.js";
 import { findCandidates } from "../synthesis/engine.js";
 import { researchSteer } from "../analysis/researchType.js";
@@ -14,6 +14,8 @@ import { insights, agentLogs, settings, nodes, edges, dailyLogs } from "../db/sc
 import { upsertEmbedding, getEmbedding, knn } from "../db/vec.js";
 import { ftsUpsert } from "../db/fts.js";
 import { mergeMemories, combineContent } from "../analysis/dedup.js";
+import { getPreferences, localDay } from "../agent/notify/policy.js";
+import { parseTolerantMs } from "../lib/time.js";
 
 /**
  * Soumaya's maintenance brain, extracted from the HTTP route so BOTH the
@@ -280,12 +282,27 @@ function selectJobInner(ctx: AppContext, spaceId: string): AgentJob | null {
   const nodesRepo = new NodesRepo(ctx.handle, spaceId);
 
   // Daily Log — once per day per brain, when there's enough to summarize.
-  const today = new Date().toISOString().slice(0, 10);
-  const logExists = ctx.handle.db
-    .select()
+  // The "day" is the SPACE's local day (owner decision 2026-10-20 — audit gap
+  // #9; timezone from space_meta via the notify layer, the same source quiet
+  // hours/digest use), never the UTC day.
+  const tz = getPreferences(ctx.handle.sqlite, spaceId).timezone;
+  const today = localDay(new Date(), tz);
+  // Day membership is DERIVED from each row's created_at instant in the space
+  // timezone — not from the stored `date` string — because rows written before
+  // the changeover were keyed by UTC day. Deriving keeps history reading
+  // consistently on the new basis without rewriting any stored row. Rows whose
+  // created_at won't parse fall back to their stored date.
+  const recentLogs = ctx.handle.db
+    .select({ date: dailyLogs.date, createdAt: dailyLogs.createdAt })
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.spaceId, spaceId), eq(dailyLogs.date, today)))
-    .get();
+    .where(eq(dailyLogs.spaceId, spaceId))
+    .orderBy(desc(dailyLogs.id))
+    .limit(40)
+    .all();
+  const logExists = recentLogs.some((r) => {
+    const ms = parseTolerantMs(r.createdAt);
+    return Number.isFinite(ms) ? localDay(new Date(ms), tz) === today : r.date === today;
+  });
   // Genesis log: a brand-new brain (no log ever) gets its first Captain's Log as
   // soon as it has a memory — even offline (heuristic generateDailyLog works with
   // no key), so a new user immediately sees Soumaya narrating their galaxy.
@@ -644,9 +661,13 @@ export async function executeJob(
       recentLogs.map((l) => l.description),
       persona,
     );
+    // Stored under the SPACE's local day (owner decision 2026-10-20), matching
+    // selectJobInner's membership read — which derives from created_at, so
+    // this row reads back consistently the moment it lands.
+    const logDate = localDay(new Date(), getPreferences(ctx.handle.sqlite, spaceId).timezone);
     ctx.handle.db
       .insert(dailyLogs)
-      .values({ spaceId, content: logText, date: new Date().toISOString().slice(0, 10) })
+      .values({ spaceId, content: logText, date: logDate })
       .run();
     description = `Captain's Log recorded: ${logText.slice(0, 50)}...`;
   } else if (type === "patrol") {

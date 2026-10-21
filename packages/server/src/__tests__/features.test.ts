@@ -10,6 +10,7 @@ import { findConstellations } from "../ml/cluster.js";
 import { chat } from "../chat/graphrag.js";
 import { EconomyRepo, FUEL_START, FUEL_JOB_COST, FUEL_CAP } from "../economy.js";
 import { StreakRepo } from "../streak.js";
+import { setPreference } from "../agent/notify/policy.js";
 import { GraphService } from "../graph/service.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { analyzeSentiment, moodFromTone, prosodyFor, toneFrom } from "@brain/shared";
@@ -205,6 +206,13 @@ describe("identity layer (soul.md)", () => {
 });
 
 describe("daily-tending streak", () => {
+  // The relative-day seeds below use SQLite date('now', …) — UTC calendar
+  // dates. Since streak days became SPACE-local (2026-10-20), each seeded
+  // space is pinned to the UTC timezone so the seeds keep their exact
+  // original meaning ("yesterday" / "two days ago" in the space's own day
+  // basis). No assertion changes — only the day basis is made explicit.
+  const pinUtc = (spaceId: string) => setPreference(handle.sqlite, spaceId, "timezone", "UTC");
+
   it("starts a streak on first touch and is idempotent within a day", () => {
     const s = new StreakRepo(handle, "spaceS");
     expect(s.get().current).toBe(0); // nothing yet
@@ -220,6 +228,7 @@ describe("daily-tending streak", () => {
 
   it("continues across consecutive days and tracks the best", () => {
     const s = new StreakRepo(handle, "spaceT");
+    pinUtc("spaceT");
     s.touch(); // day 0 → streak 1
     // Pretend the last active day was yesterday, then touch again → streak 2.
     handle.sqlite
@@ -233,6 +242,7 @@ describe("daily-tending streak", () => {
 
   it("a nebula shield forgives ONE missed day, keeping the streak alive", () => {
     const s = new StreakRepo(handle, "spaceShield");
+    pinUtc("spaceShield");
     s.touch(); // create the row
     // Streak of 4, last active TWO days ago (exactly one missed day), with a shield banked.
     handle.sqlite
@@ -247,6 +257,7 @@ describe("daily-tending streak", () => {
 
   it("does NOT forgive when no shield is banked (two-day gap lapses)", () => {
     const s = new StreakRepo(handle, "spaceNoShield");
+    pinUtc("spaceNoShield");
     s.touch();
     handle.sqlite
       .prepare(`UPDATE space_meta SET streak = 4, streak_best = 4, last_active_date = date('now','-2 days'), streak_shields = 0 WHERE space_id = ?`)
@@ -257,6 +268,7 @@ describe("daily-tending streak", () => {
 
   it("resets to 1 after a missed day but keeps the best", () => {
     const s = new StreakRepo(handle, "spaceU");
+    pinUtc("spaceU");
     s.touch(); // create the row
     // Build up a streak of 3, then simulate a 3-day gap.
     handle.sqlite

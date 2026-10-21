@@ -43,6 +43,7 @@ import {
   type RawDb,
 } from "../db/vec.js";
 import { recordAccess } from "./consolidation/retrievals.js";
+import { parseTolerantMs } from "../lib/time.js";
 
 // ---------------------------------------------------------------------------
 // Vocabularies & constants
@@ -646,7 +647,19 @@ function captureEpisodeInner(
     throw new ValidationError("kind", "unknown_kind", `Unknown episode kind: ${input.kind}`);
   }
   const now = new Date().toISOString();
-  const occurredAt = input.occurredAt ?? now;
+  // Date/time accuracy (audit gap #2): a caller-supplied occurred_at used to
+  // be stored verbatim. All current callers pass ISO-Z, so this was latent —
+  // but the write boundary now normalizes through the tolerant parser to
+  // canonical ISO-Z, so a naive/space-formatted value can never seed a
+  // mixed-format column. Unparseable input keeps the previous behavior
+  // (stored verbatim) — a timestamp is never invented or silently dropped.
+  const occurredMs = parseTolerantMs(input.occurredAt);
+  const occurredAt =
+    input.occurredAt == null
+      ? now
+      : Number.isFinite(occurredMs)
+        ? new Date(occurredMs).toISOString()
+        : input.occurredAt;
   const significant = isSignificant(input.signals);
 
   // --- Forget-list check (B5, B9 Rev 4) ---

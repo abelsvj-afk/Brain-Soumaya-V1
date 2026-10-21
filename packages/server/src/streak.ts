@@ -1,6 +1,7 @@
 import type { Streak } from "@brain/shared";
 import type { DbHandle } from "./db/client.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
+import { getPreferences, localDay, DEFAULT_PREFS } from "./agent/notify/policy.js";
 
 /**
  * Daily-tending streak: how many consecutive days a brain has been fed a memory.
@@ -13,9 +14,34 @@ import { DEFAULT_SPACE } from "./db/schema.js";
 /** Flat fuel bonus the first time a brain is tended on a new day. */
 export const STREAK_DAY_BONUS = 2;
 
-/** UTC day string (YYYY-MM-DD), optionally offset by whole days. */
-function dayStr(offsetDays = 0): string {
-  return new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
+/**
+ * The SPACE's local calendar date (YYYY-MM-DD) for `instant`, optionally offset
+ * by whole days — owner decision 2026-10-20: streak days are space-local, no
+ * UTC exemption (date/time accuracy audit gap #9). The timezone comes from the
+ * same source quiet hours and the digest use (space_meta.timezone via the
+ * notify layer's getPreferences). Offsets shift the local calendar date itself
+ * (anchored at UTC noon), so a DST transition can never make "yesterday"
+ * repeat or skip.
+ *
+ * SEAM: `last_active_date` values stored before this change were UTC days.
+ * They are interpreted as-is against local days — never rewritten. On the
+ * changeover day, an evening user's stored UTC date can read as their local
+ * today or tomorrow, a one-time artifact bounded to a single day (documented
+ * in the date/time fixes record).
+ */
+function spaceDayStr(sqlite: DbHandle["sqlite"], spaceId: string, instant: Date, offsetDays = 0): string {
+  let tz = DEFAULT_PREFS.timezone;
+  try {
+    tz = getPreferences(sqlite, spaceId).timezone;
+  } catch {
+    // space_meta unreachable (bare test DB) — the shared default applies,
+    // mirroring spaceLocalDate()'s defensive read in agent/episodic.ts.
+  }
+  const today = localDay(instant, tz);
+  if (offsetDays === 0) return today;
+  const anchor = new Date(`${today}T12:00:00Z`);
+  anchor.setUTCDate(anchor.getUTCDate() + offsetDays);
+  return anchor.toISOString().slice(0, 10);
 }
 
 interface MetaRow {
@@ -49,6 +75,11 @@ export class StreakRepo {
     return r ?? { streak: 0, streak_best: 0, last_active_date: null, streak_shields: SHIELD_CAP };
   }
 
+  /** This space's local day string (see spaceDayStr), optionally offset. */
+  private dayStr(offsetDays = 0): string {
+    return spaceDayStr(this.h.sqlite, this.spaceId, new Date(), offsetDays);
+  }
+
   /**
    * Effective current streak: alive if tended today or yesterday — OR if exactly one
    * day was missed and a nebula shield is banked to forgive it (the shield is consumed
@@ -56,10 +87,10 @@ export class StreakRepo {
    */
   get(): Streak {
     const r = this.row();
-    const today = dayStr();
+    const today = this.dayStr();
     const shields = r.streak_shields ?? SHIELD_CAP;
-    const protectedByShield = r.last_active_date === dayStr(-2) && shields > 0;
-    const alive = r.last_active_date === today || r.last_active_date === dayStr(-1) || protectedByShield;
+    const protectedByShield = r.last_active_date === this.dayStr(-2) && shields > 0;
+    const alive = r.last_active_date === today || r.last_active_date === this.dayStr(-1) || protectedByShield;
     return {
       current: alive ? r.streak : 0,
       best: r.streak_best ?? 0,
@@ -77,16 +108,16 @@ export class StreakRepo {
    */
   touch(): { streak: Streak; advanced: boolean; shieldUsed?: boolean } {
     const r = this.row();
-    const today = dayStr();
+    const today = this.dayStr();
     if (r.last_active_date === today) {
       return { streak: this.get(), advanced: false }; // already counted today
     }
     let shields = r.streak_shields ?? SHIELD_CAP;
     let shieldUsed = false;
     let current: number;
-    if (r.last_active_date === dayStr(-1)) {
+    if (r.last_active_date === this.dayStr(-1)) {
       current = r.streak + 1; // consecutive day
-    } else if (r.last_active_date === dayStr(-2) && shields > 0) {
+    } else if (r.last_active_date === this.dayStr(-2) && shields > 0) {
       current = r.streak + 1; // one missed day, forgiven by a shield
       shields -= 1;
       shieldUsed = true;
