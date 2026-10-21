@@ -14,6 +14,42 @@ import { gltfLoader } from "./gltf.js";
 export const LINK_LOD_MIN = 350;
 export const LINK_LOD_ZOOM = 650;
 export const LINK_LOD_CUTOFF = 0.6;
+/**
+ * Galaxy line-latch Fix A (2026-10-21): the width a link gets when the render
+ * gate (Graph3D's `shouldRenderLink`) says "don't draw". It must NEVER be
+ * exactly 0: three-forcegraph picks a link's Object3D type ONCE, at creation,
+ * by `!!widthAccessor(link)` (truthy -> tube Mesh, falsy -> THREE.Line
+ * hairline), and its per-frame layoutTick branches on that baked-in type
+ * (`line.type === 'Line'`) for the object's whole life — so a link born at
+ * width 0 is a 1-px hairline forever and can never swell into a tube when
+ * conditions later change. That was the S3 latch ("lines too thin until a
+ * planet click"): only a selection change, which recreates every link object,
+ * cured it. Hiding never needed width 0 — `linkColor` returns fully
+ * transparent for the exact same gate outcome, so invisibility is carried by
+ * color alone and width's only job in the hidden case is staying truthy.
+ * 0.001 also survives three-forcegraph's digest width rounding
+ * (Math.ceil(w * 10) / 10 -> 0.1, still truthy) on both the create
+ * (onCreateObj) and update (onUpdateObj) paths — pinned by
+ * linkDrawWidth.test.ts so a future epsilon edit can't silently re-arm the
+ * latch by rounding down to 0.
+ */
+export const LINK_HIDDEN_WIDTH = 0.001;
+
+/**
+ * The link-width accessor's whole decision, extracted pure (same pattern as
+ * computeGlowFar below) so the never-zero contract is unit-testable without a
+ * WebGL context. `render` is Graph3D's `shouldRenderLink` outcome for the
+ * link; the SAME boolean drives `linkColor`'s transparent return, so width
+ * and color can never disagree about draw/don't-draw within a digest. Drawn
+ * links keep the long-standing resting formula: the line itself is the glow —
+ * a tended connection swells quadratically in activity, cold links stay slim
+ * but visible.
+ */
+export function linkDrawWidth(render: boolean, weight: number | undefined, activity: number): number {
+  if (!render) return LINK_HIDDEN_WIDTH;
+  return 0.7 + (weight ?? 0.4) * 0.9 + activity * activity * 5;
+}
+
 export const linkEnd = (v: any): number => (typeof v === "object" && v !== null ? v.id : v);
 /** Stable key for a connection (undirected) so we can track which are already drawn. */
 export const linkKey = (l: any): string => {

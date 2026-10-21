@@ -12,8 +12,13 @@ import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 // Pure helpers (link LOD, figurine building, GPU disposal) live in graph3dHelpers.ts
 // (Post-MVP D4 split); behaviour unchanged.
-import { LINK_LOD_MIN, LINK_LOD_ZOOM, LINK_LOD_CUTOFF, linkEnd, linkKey, updateFigurine, disposeObject3D, isNodeCacheEntryValid, shouldApplyPixelRatio, highlightMaterialState, computeGlowFar, pickNearestIds } from "./graph3dHelpers.js";
+import { LINK_LOD_MIN, LINK_LOD_ZOOM, LINK_LOD_CUTOFF, linkEnd, linkKey, linkDrawWidth, updateFigurine, disposeObject3D, isNodeCacheEntryValid, shouldApplyPixelRatio, highlightMaterialState, computeGlowFar, pickNearestIds } from "./graph3dHelpers.js";
 import { CurvedLinkGeometryCache, type LinkPositions } from "./linkTube.js";
+import {
+  createZoomSettleScheduler,
+  createFlightCompletionLatch,
+  type ZoomSettleScheduler,
+} from "./zoomSettle.js";
 import { getGalaxyDiagConfig, shouldHideNodeChild, mountGalaxyDiagOverlay, type GalaxyDiagConfig } from "./perfDiag.js";
 import { isSweepActive, getSweepDiagConfig, getSweepNodeBodyConfig, recordSweepMeasurement, SWEEP_WARMUP_MS, SWEEP_MEASURE_MS } from "./galaxySweep.js";
 import { shouldHideNodeBodyChild, DEFAULT_NODE_BODY_DIAG, type NodeBodyDiagConfig } from "./nodeBodyDiag.js";
@@ -429,6 +434,64 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // `fg.refresh()` call in `fireLink`, which set `_flushObjects` and tore down +
   // rebuilt the entire galaxy on every link pulse.
   const [, setPulseTick] = useState(0);
+  // Flight-end settle (2026-10-21, the flagged addition to Fix B below): the
+  // settle scheduler is created inside the Fix B effect (it owns a timer, so
+  // its lifecycle belongs there), but flyTo and the render loop also need to
+  // report PROGRAMMATIC flight completions into it — flights emit no
+  // OrbitControls 'end'. This ref mirrors the live instance (null before the
+  // effect runs / after unmount). One scheduler for every trigger is the
+  // point: its debounce collapses a gesture 'end' and a flight completion
+  // that coincide into exactly ONE settle digest.
+  const cameraSettleRef = useRef<ZoomSettleScheduler | null>(null);
+  // Arms when the follow-engage fly-in starts (its end is
+  // `followFlyUntilRef`); the render loop polls it per frame and it reports
+  // the completion exactly once. See zoomSettle.ts.
+  const flightLatchRef = useRef(createFlightCompletionLatch());
+  // Galaxy line-latch Fix B (2026-10-21): the link LOD admission test below
+  // (linkVisibility's ~650-unit cutoff) and shouldRenderLink's ~800-unit latch
+  // sample the live camera distance ONLY during digests, and digests run only
+  // on re-renders — but OrbitControls gestures change no React state, so after
+  // zooming IN, the zoomed-OUT link set persisted indefinitely (S2: links
+  // missing at close zoom, persisting with the camera fully stopped). When a
+  // user camera gesture settles, fire exactly ONE pulse-tick re-render — the
+  // same sanctioned cheap digest fireLink uses (NO fg.refresh(), no mapper
+  // clear, no selection change) — so both hysteresis latches re-sample at the
+  // settled distance. The trigger is OrbitControls' 'end' event: verified
+  // against the installed three.js source, it is dispatched ONLY by the
+  // pointer-up and wheel handlers (user gestures), while the programmatic
+  // cameraPosition fly-to tween (three-render-objects) writes
+  // camera.position/controls.target directly and dispatches no controls
+  // events — so fly-to does NOT trigger this. See zoomSettle.ts for the
+  // scheduler's debounce contract (wheel zoom emits 'end' per tick).
+  //
+  // Flight-end settle (addition, 2026-10-21): that fly-to exclusion left the
+  // latches stale after PROGRAMMATIC flights — a mid-flight digest could
+  // latch the whole scene "far," and nothing re-sampled at the arrival
+  // distance until an ambient re-render happened along (the owner's
+  // total-disappearance event). The flight paths now report completion into
+  // this same scheduler (mirrored into `cameraSettleRef` below): flyTo's
+  // scheduled follow-engage timeouts notify directly, and the follow-engage
+  // fly-in arms `flightLatchRef`, which the render loop polls. Same
+  // constraints as the gesture path — one pulse-tick digest, NO
+  // fg.refresh(), no mapper clear, no selection change.
+  useEffect(() => {
+    const settle = createZoomSettleScheduler(() => setPulseTick((t) => t + 1));
+    cameraSettleRef.current = settle;
+    const controls = fgRef.current?.controls?.();
+    if (!controls) {
+      return () => {
+        settle.dispose();
+        if (cameraSettleRef.current === settle) cameraSettleRef.current = null;
+      };
+    }
+    const onControlsEnd = () => settle.notify();
+    controls.addEventListener("end", onControlsEnd);
+    return () => {
+      controls.removeEventListener("end", onControlsEnd);
+      settle.dispose();
+      if (cameraSettleRef.current === settle) cameraSettleRef.current = null;
+    };
+  }, []);
   // When set, only these node ids (a memory + its orbiting system) are shown.
   const [cluster, setCluster] = useState<Set<number> | null>(null);
   // Mirror the cluster into a ref so the render loop can scope Soumaya + the fleet to the
@@ -2670,16 +2733,30 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               // watch the body the whole way in before locking on.
               fgc.cameraPosition({ x: dest.x, y: dest.y, z: dest.z }, sp, FOLLOW_FLY_MS);
               followFlyUntilRef.current = performance.now() + FOLLOW_FLY_MS + 30;
+              // Flight-end settle: arm the completion latch with this
+              // flight's end — the poll in the post-flight branch below
+              // reports the arrival into the settle scheduler exactly once.
+              flightLatchRef.current.begin(followFlyUntilRef.current);
             } else {
               camera.position.copy(dest); // already close, or reduced-motion → no swoop
               followObjAnchor.current.copy(sp);
               followObjAnchored.current = true;
+              // Zero-length flight: the camera just teleported to the
+              // follow distance, so the distance latches are stale NOW —
+              // report the arrival directly (same settle, same digest).
+              cameraSettleRef.current?.notify();
             }
             followSnapRef.current = false;
           }
           if (performance.now() < followFlyUntilRef.current) {
             // Flying in — let the tween own the camera + target this frame.
           } else {
+            // Flight-end settle: the first frame past the fly-in window —
+            // re-sample the distance latches at the ARRIVAL distance via
+            // the settle scheduler (poll fires exactly once per flight).
+            if (flightLatchRef.current.poll(performance.now())) {
+              cameraSettleRef.current?.notify();
+            }
             if (!followObjAnchored.current) {
               // Fly finished: engage ride-along from wherever we landed.
               followObjAnchor.current.copy(sp);
@@ -2914,13 +2991,20 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     followRef.current = null;
     followObjRef.current = null; // jumping to a node releases object-follow
     followKindRef.current = null;
+    // Flight-end settle: a pending follow-engage flight (if any) is
+    // superseded by this jump — disarm its latch; THIS flight's completion
+    // is reported by the follow-engage timeouts below instead.
+    flightLatchRef.current.cancel();
     if (shouldCalmMotion()) {
       fg.cameraPosition({ x: camPos.x, y: camPos.y, z: camPos.z }, target, 0); // no swoop
       // recomputeDetailedLinksRef: covers the `focusNode` imperative-handle path (e.g.
       // chat navigation), which flies here WITHOUT going through onSelect/selectedId —
       // without this, that node's own links wouldn't be promoted into the Detailed
       // budget until some unrelated event happened to trigger a recompute.
-      scheduleTimeout(() => { followRef.current = n.id; recomputeDetailedLinksRef.current(); }, 60);
+      // The settle notify rides the same timeout: this IS the flight's
+      // completion point (the follow lock engages here), so the distance
+      // latches re-sample at the arrival distance one quiet window later.
+      scheduleTimeout(() => { followRef.current = n.id; recomputeDetailedLinksRef.current(); cameraSettleRef.current?.notify(); }, 60);
     } else {
       // Cinematic ARC: bend the path through a lifted waypoint (pushed outward from the
       // Sun + up) so the camera swoops in rather than sliding along a dead-straight line.
@@ -2935,7 +3019,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       scheduleTimeout(() => {
         fgRef.current?.cameraPosition({ x: camPos.x, y: camPos.y, z: camPos.z }, target, 640);
       }, 400);
-      scheduleTimeout(() => { followRef.current = n.id; recomputeDetailedLinksRef.current(); }, 1080);
+      // Flight-end settle: same contract as the calm path above — this
+      // timeout is the cinematic flight's completion point (it lands just
+      // after the second tween ends), so report the arrival here.
+      scheduleTimeout(() => { followRef.current = n.id; recomputeDetailedLinksRef.current(); cameraSettleRef.current?.notify(); }, 1080);
     }
   };
 
@@ -3674,12 +3761,32 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
 
   const linkWidthCb = useCallback(
     (l: any) => {
-      if (!shouldRenderLink(l)) return 0;
-      // The LINE itself is the glow. A tended connection swells into a fat, bright
-      // tube (quadratic in activity, so the bloom pass lights it up), then thins back
-      // to a clean resting filament over ~3 days. Cold links stay slim but visible.
-      const activity = getLinkActivity(l);
-      return 0.7 + (l.weight ?? 0.4) * 0.9 + activity * activity * 5;
+      // Galaxy line-latch Fix A (2026-10-21): the gated-off case must NEVER
+      // return exactly 0 (the pre-fix `if (!shouldRenderLink(l)) return 0;`).
+      // three-forcegraph picks the link's Object3D type once, at creation, by
+      // this value's truthiness — 0 births a 1-px THREE.Line hairline whose
+      // type the per-frame layout branches on forever, so it could never
+      // swell into a tube when the gate later opened (the S3 "too thin until
+      // a planet click" latch). linkDrawWidth substitutes an epsilon for 0;
+      // linkColor returns fully transparent for the SAME shouldRenderLink
+      // outcome, so the epsilon tube stays invisible, and width/color share
+      // the one gate boolean so they cannot disagree within a digest. See
+      // graph3dHelpers.ts (LINK_HIDDEN_WIDTH / linkDrawWidth) and
+      // linkDrawWidth.test.ts for the pinned contract.
+      const w = linkDrawWidth(shouldRenderLink(l), l.weight, getLinkActivity(l));
+      // Galaxy line-latch H2 fix (2026-10-21): sync the link's cached tube
+      // radius from THIS width before returning it. three-forcegraph's
+      // onUpdateObj evaluates this accessor immediately before comparing
+      // the tube geometry's (spoofed) radiusTop against this same width —
+      // so the digest now always sees the current radius and never
+      // disposes the tube / swaps in the origin placeholder for a
+      // width-bucket change (the ~1 s bunch blinks while the ship tends
+      // links: fireLink's activity jump + forced digest raced the shard-
+      // skipped position loop's own re-sync). The tube itself converges
+      // to the new radius on its next position update, in place. See
+      // linkTube.ts's module doc ("THIRD defect") and syncDigestRadius.
+      curvedLinkGeometryRef.current.syncDigestRadius(l, w);
+      return w;
     },
     [activeId],
   );

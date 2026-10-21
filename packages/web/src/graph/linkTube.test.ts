@@ -307,3 +307,87 @@ describe("linkTube — CurvedLinkGeometryCache survives external geometry.dispos
     expect(mesh.geometry).toBe(geomAfterFrame1); // still no new BufferGeometry constructed
   });
 });
+
+/**
+ * Regression coverage for the THIRD defect in this seam — the digest-time radius
+ * race (Galaxy line-latch H2 fix, 2026-10-21 — see linkTube.ts's module doc):
+ * the spoofed radiusTop was re-synced ONLY inside update(), but Graph3D's
+ * linkPositionUpdateCb shard-skips far/still links for up to ~600 ms, while
+ * three-forcegraph's digest can run at ANY re-render and evaluates the width
+ * accessor fresh. A width-bucket change in that window (the ship's tending
+ * cycle: fireLink jumps activity, and its forced pulse re-render IS a digest)
+ * made the digest dispose the tube and substitute the origin placeholder —
+ * bunches of lines blinking out for ~1 s.
+ *
+ * The fix rides the digest's own call order (verified in the installed
+ * three-forcegraph source): onUpdateObj evaluates widthAccessor(link)
+ * IMMEDIATELY BEFORE the radiusTop comparison for the same link, so
+ * Graph3D's linkWidthCb calls syncDigestRadius with the width it is
+ * returning, and the comparison that follows sees the current radius.
+ */
+describe("linkTube — digest-time radius sync (H2 blink fix)", () => {
+  const A = { x: 0, y: 0, z: 0 };
+  const B = { x: 100, y: 20, z: -30 };
+
+  it("THE DEFECT: a width-bucket change with no intervening position update leaves the digest predicate ready to dispose", () => {
+    const cache = new CurvedLinkGeometryCache();
+    const mesh = new THREE.Mesh();
+    const link = {};
+    // The link's last position update synced radiusTop for width 1.2…
+    cache.update(mesh, { start: A, end: B }, link, 1.2, 0.2);
+    expect(threeForcegraphWouldDisposeAndReassign(mesh.geometry, 1.2, RADIAL_SEGMENTS)).toBe(false);
+    // …then activity jumps (fireLink) and a digest evaluates the width
+    // accessor fresh at 3.7 — while the shard-skipped position loop has NOT
+    // re-run update() yet. Pre-fix, this is exactly what the digest saw:
+    expect(threeForcegraphWouldDisposeAndReassign(mesh.geometry, 3.7, RADIAL_SEGMENTS)).toBe(true);
+  });
+
+  it("syncDigestRadius closes the race: after the accessor-path sync, the digest predicate passes at the NEW width", () => {
+    const cache = new CurvedLinkGeometryCache();
+    const mesh = new THREE.Mesh();
+    const link = {};
+    cache.update(mesh, { start: A, end: B }, link, 1.2, 0.2);
+    // What linkWidthCb now does inside the digest's own widthAccessor call,
+    // with the very width it returns (3.7), before the comparison runs:
+    cache.syncDigestRadius(link, 3.7);
+    expect(threeForcegraphWouldDisposeAndReassign(mesh.geometry, 3.7, RADIAL_SEGMENTS)).toBe(false);
+    // The spoof now holds the NEW width's digest-rounded radius — and the old
+    // width would (correctly) read as stale against it.
+    const g = mesh.geometry as unknown as { parameters: { radiusTop: number } };
+    expect(g.parameters.radiusTop).toBe(digestRoundedRadius(3.7));
+    expect(threeForcegraphWouldDisposeAndReassign(mesh.geometry, 1.2, RADIAL_SEGMENTS)).toBe(true);
+    // And the tube still converges in place on its next position update —
+    // same geometry object, no rebuild.
+    const geom = mesh.geometry;
+    cache.update(mesh, { start: A, end: B }, link, 3.7, 0.2);
+    expect(mesh.geometry).toBe(geom);
+  });
+
+  it("syncDigestRadius is a no-op for a link with no cache entry (digest creation path owns new objects)", () => {
+    const cache = new CurvedLinkGeometryCache();
+    const mesh = new THREE.Mesh();
+    const link = {};
+    expect(() => cache.syncDigestRadius(link, 3.7)).not.toThrow();
+    // No entry was conjured into existence: the first real update() still
+    // behaves as a normal first build.
+    expect(cache.update(mesh, { start: A, end: B }, link, 3.7, 0.2)).toBe(true);
+    expect(threeForcegraphWouldDisposeAndReassign(mesh.geometry, 3.7, RADIAL_SEGMENTS)).toBe(false);
+  });
+
+  it("syncDigestRadius leaves a DISPOSED entry's spoof untouched (update()'s rebuild path owns resurrection)", () => {
+    const cache = new CurvedLinkGeometryCache();
+    const mesh = new THREE.Mesh();
+    const link = {};
+    cache.update(mesh, { start: A, end: B }, link, 1.2, 0.2);
+    const disposedGeometry = mesh.geometry;
+    const radiusBefore = (disposedGeometry as unknown as { parameters: { radiusTop: number } }).parameters.radiusTop;
+    disposedGeometry.dispose(); // the _flushObjects path — entry.disposed is now true
+    cache.syncDigestRadius(link, 3.7);
+    const radiusAfter = (disposedGeometry as unknown as { parameters: { radiusTop: number } }).parameters.radiusTop;
+    expect(radiusAfter).toBe(radiusBefore); // NOT synced — a dead geometry's spoof is not ours to freshen
+    // …and the rebuild path still produces a fresh, digest-safe geometry.
+    cache.update(mesh, { start: A, end: B }, link, 3.7, 0.2);
+    expect(mesh.geometry).not.toBe(disposedGeometry);
+    expect(threeForcegraphWouldDisposeAndReassign(mesh.geometry, 3.7, RADIAL_SEGMENTS)).toBe(false);
+  });
+});
