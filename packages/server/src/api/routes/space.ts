@@ -3,6 +3,12 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { SpacesRepo } from "../../auth/spaces.js";
 import { seedWelcomeStar } from "../../analysis/welcome.js";
+import {
+  getPreferences,
+  setPreference,
+  validateTimezone,
+  type NotifyPreferences,
+} from "../../agent/notify/policy.js";
 
 const AuthBody = z.object({
   gamerTag: z.string().trim().min(2).max(40),
@@ -14,6 +20,31 @@ const ProfileBody = z.object({
   gamerTag: z.string().trim().min(2).max(40).optional(),
   name: z.string().trim().min(1).max(40).optional(),
 });
+
+// IM-129a/b: the space's timezone + proactive-notification preferences.
+// These already exist as stored data (space_meta, owned by agent/notify/policy.ts
+// — quiet hours, digest time and the daily proactive cap genuinely gate when
+// Soumaya may reach out, and the timezone drives every space-local day) but no
+// route exposed them, so Settings had nothing real to bind to.
+const PreferencesBody = z.object({
+  timezone: z.string().min(1).max(64).optional(),
+  quietStart: z.string().max(5).optional(),
+  quietEnd: z.string().max(5).optional(),
+  digestTime: z.string().max(5).optional(),
+  dailyProactiveCap: z.number().int().min(0).max(100).optional(),
+});
+
+const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** Validate a whole preferences patch BEFORE any write, so a bad field can
+ *  never leave a half-applied patch behind. Mirrors policy.ts's own rules. */
+function preferencesPatchError(p: z.infer<typeof PreferencesBody>): string | null {
+  if (p.timezone !== undefined && !validateTimezone(p.timezone)) return `Invalid IANA timezone: ${p.timezone}`;
+  for (const k of ["quietStart", "quietEnd", "digestTime"] as const) {
+    if (p[k] !== undefined && !HHMM_RE.test(p[k]!)) return `Invalid time (expected HH:MM): ${p[k]}`;
+  }
+  return null;
+}
 
 export function spaceRoutes(ctx: AppContext): Router {
   const r = Router();
@@ -79,6 +110,48 @@ export function spaceRoutes(ctx: AppContext): Router {
     } catch (err) {
       res.status(409).json({ error: (err as Error).message });
     }
+  });
+
+  // GET /api/space/preferences -> this brain's timezone + notification
+  // preferences (defaults filled in by the policy store when unset).
+  r.get("/preferences", (req, res) => {
+    const id = (req.header("x-space-id") ?? "").trim();
+    if (!id || !repo.getById(id)) {
+      res.status(401).json({ error: "No valid brain selected." });
+      return;
+    }
+    res.json(getPreferences(ctx.handle.sqlite, id));
+  });
+
+  // PATCH /api/space/preferences { timezone?, quietStart?, quietEnd?,
+  // digestTime?, dailyProactiveCap? } -> update any subset; the whole patch
+  // is validated first, then written through the policy store (the same
+  // functions the notification boundary reads — no duplicate state).
+  r.patch("/preferences", (req, res) => {
+    const id = (req.header("x-space-id") ?? "").trim();
+    if (!id || !repo.getById(id)) {
+      res.status(401).json({ error: "No valid brain selected." });
+      return;
+    }
+    const parsed = PreferencesBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Body must be { timezone?, quietStart?, quietEnd?, digestTime?, dailyProactiveCap? }" });
+      return;
+    }
+    const err = preferencesPatchError(parsed.data);
+    if (err) {
+      res.status(400).json({ error: err });
+      return;
+    }
+    const keys = Object.keys(parsed.data) as (keyof NotifyPreferences)[];
+    for (const k of keys) {
+      const r2 = setPreference(ctx.handle.sqlite, id, k, String(parsed.data[k]));
+      if (!r2.ok) {
+        res.status(400).json({ error: r2.error });
+        return;
+      }
+    }
+    res.json(getPreferences(ctx.handle.sqlite, id));
   });
 
   return r;

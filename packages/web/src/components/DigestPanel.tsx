@@ -27,22 +27,108 @@ export function fmtLocalDate(raw?: string): string {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/**
+ * Short local date for a sparkline axis label ("Aug 28") — same tolerant
+ * parsing rule as fmtLocalDate, without the year so both ends fit.
+ */
+export function fmtAxisDate(raw?: string): string {
+  if (!raw) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+  if (dateOnly) {
+    const d = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    return Number.isNaN(d.getTime())
+      ? ""
+      : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  const t = parseTolerantMs(raw);
+  if (Number.isNaN(t)) return "";
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/**
+ * IM-59: an evolution link's time gap as its own human phrase ("3 months
+ * later") instead of a number buried inside the reason string.
+ */
+export function evolutionGapLabel(days: number): string {
+  if (!Number.isFinite(days) || days <= 0) return "the same day";
+  if (days === 1) return "1 day later";
+  if (days < 30) return `${Math.round(days)} days later`;
+  if (days < 365) {
+    const months = Math.round(days / 30.44);
+    return months <= 1 ? "1 month later" : `${months} months later`;
+  }
+  const years = Math.round((days / 365.25) * 10) / 10;
+  return years === 1 ? "1 year later" : `${years} years later`;
+}
+
+/**
+ * IM-63: evolution strength as a human label + bar proportion, matching the
+ * bars/percentages sibling sections use — not the bare uppercase enum.
+ */
+export const EVOLUTION_STRENGTH: Record<EvolutionLink["strength"], { label: string; pct: number }> = {
+  weak: { label: "Faint echo", pct: 33 },
+  medium: { label: "Clear thread", pct: 67 },
+  strong: { label: "Strong thread", pct: 100 },
+};
+
+/** IM-60: per-section collapse toggle, rendered in each section's header row. */
+function SectionToggle({
+  name,
+  open,
+  onToggle,
+}: {
+  name: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="mini ghost section-toggle"
+      aria-expanded={open}
+      aria-label={`${open ? "Collapse" : "Expand"} ${name}`}
+      title={`${open ? "Collapse" : "Expand"} ${name}`}
+      onClick={onToggle}
+      style={{ fontSize: "0.7rem", padding: "1px 7px", marginLeft: "auto" }}
+    >
+      {open ? "▾" : "▸"}
+    </button>
+  );
+}
+
 /** Dependency-free valence sparkline (−1..1). Green above the midline, red below. */
 function MoodSparkline({ points }: { points: EmotionalTrajectory["points"] }) {
   if (points.length < 2) return null;
   const W = 240;
   const H = 44;
+  const LABEL_H = 12;
   const n = points.length;
   const x = (i: number) => (i / (n - 1)) * W;
   const y = (v: number) => H / 2 - (v * (H / 2 - 3)); // +1 → top, −1 → bottom
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.valence).toFixed(1)}`).join(" ");
+  // IM-60: the sparkline had no axis at all — label the window's first and
+  // last bucket dates so the curve is anchored in time.
+  const firstPoint = points.at(0);
+  const lastPoint = points.at(-1);
+  const firstDate = firstPoint ? fmtAxisDate(firstPoint.date) : "";
+  const lastDate = lastPoint ? fmtAxisDate(lastPoint.date) : "";
   return (
-    <svg width={W} height={H} style={{ display: "block", maxWidth: "100%" }} aria-label="Mood over time">
+    <svg width={W} height={H + LABEL_H} style={{ display: "block", maxWidth: "100%" }} aria-label="Mood over time">
       <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
       <path d={line} fill="none" stroke="#7af9ff" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       {points.map((p, i) => (
         <circle key={i} cx={x(i)} cy={y(p.valence)} r={2} fill={p.valence >= 0 ? "#5ee6a0" : "#ff7a59"} />
       ))}
+      {firstDate && (
+        <text x={0} y={H + 10} fontSize={8} fill="rgba(255,255,255,0.55)">
+          {firstDate}
+        </text>
+      )}
+      {lastDate && (
+        <text x={W} y={H + 10} textAnchor="end" fontSize={8} fill="rgba(255,255,255,0.55)">
+          {lastDate}
+        </text>
+      )}
     </svg>
   );
 }
@@ -78,6 +164,10 @@ export function DigestPanel({
   // Emotional-weather patterns had no accept/snooze/done either — a "noted,
   // stop showing me this" per pattern, persisted so it stays dismissed.
   const [dismissedPatterns, setDismissedPatterns] = useState<Set<string>>(new Set());
+  // IM-60: ten stacked sections with no way to find anything — a search box
+  // (filters sections + the insight list) and per-section collapse.
+  const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     const spaceId = getSpaceId() ?? "legacy";
@@ -138,8 +228,34 @@ export function DigestPanel({
     () => [...items].sort((a, b) => (a.tier ?? 3) - (b.tier ?? 3) || b.id - a.id),
     [items],
   );
-  const shownInsights = showAllInsights ? rankedInsights : rankedInsights.slice(0, INSIGHT_CAP);
-  const TIER_LABEL: Record<number, string> = { 1: "identity", 2: "pattern", 3: "situational" };
+  // IM-60 search plumbing: while a query is active it decides which sections
+  // render at all (a section shows only if its own content matches) and
+  // filters the insight list; sections also force open so a match is never
+  // hidden behind a collapse the user set earlier.
+  const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
+  const hit = (...texts: (string | null | undefined)[]): boolean =>
+    !searching || texts.some((t) => !!t && t.toLowerCase().includes(q));
+  const sectionOpen = (id: string): boolean => searching || !collapsed.has(id);
+  const toggleSection = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const filteredInsights = searching
+    ? rankedInsights.filter((it) => hit(it.text, ...it.nodes.map((n) => n.label)))
+    : rankedInsights;
+  const shownInsights = showAllInsights ? filteredInsights : filteredInsights.slice(0, INSIGHT_CAP);
+  // IM-63: the tier used to render as the raw category word ("identity") with
+  // its meaning stranded in a tooltip. The visible label now says what the
+  // tier means; the tooltip keeps only the surfacing-order detail.
+  const TIER_LABEL: Record<number, string> = {
+    1: "About your identity",
+    2: "A recurring pattern",
+    3: "Situational",
+  };
   // Inline "save as constellation" — which cluster is being named, the draft name, and save-in-flight.
   const [promotingId, setPromotingId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -294,45 +410,127 @@ export function DigestPanel({
     );
   }
 
+  // IM-60: section visibility under search (data presence AND a content hit).
+  const showBeliefs = beliefs.length > 0 && hit(...beliefs.map((b) => b.content));
+  const showDailyLog = !!dailyLog && hit(dailyLog.content);
+  const dailyHasContent =
+    !!daily &&
+    (daily.fresh.length > 0 ||
+      (daily.connections?.length ?? 0) > 0 ||
+      daily.expiredActions.length > 0 ||
+      daily.cooling.length > 0 ||
+      (daily.reminders?.length ?? 0) > 0 ||
+      !!daily.greeting);
+  const showDaily =
+    dailyHasContent &&
+    hit(
+      daily?.greeting,
+      daily?.closing,
+      ...(daily?.fresh ?? []).flatMap((e) => [e.node.label, e.snippet, e.take]),
+      ...(daily?.connections ?? []).map((c) => c.text),
+      ...(daily?.expiredActions ?? []).map((a) => a.label),
+      ...(daily?.cooling ?? []).map((c) => c.node.label),
+      ...(daily?.reminders ?? []).map((r) => r.node.label),
+    );
+  const showConstellations =
+    constellations.length > 0 &&
+    hit(...constellations.flatMap((c) => [c.name, ...c.nodes.map((n) => n.label)]));
+  const showSelfReview =
+    selfReview.length > 0 && hit(...selfReview.flatMap((s) => [s.title, s.detail]));
+  const showLifeAreas = lifeAreas.length > 0 && hit(...lifeAreas.map((a) => a.area));
+  const showEmotional =
+    !!emotional &&
+    emotional.sampleSize >= 3 &&
+    hit(...emotional.patterns.flatMap((p) => [p.type, p.trigger, p.intervention]));
+  const showEvolution =
+    evolution.length > 0 &&
+    hit(...evolution.flatMap((e) => [e.fromLabel, e.toLabel, e.reason]));
+  const showDormant =
+    dormant.length > 0 && hit(...dormant.flatMap((d) => [d.label, d.hypothesis, d.prompt]));
+  const anySectionMatch =
+    showBeliefs ||
+    showDailyLog ||
+    showDaily ||
+    showConstellations ||
+    showSelfReview ||
+    showLifeAreas ||
+    showEmotional ||
+    showEvolution ||
+    showDormant ||
+    filteredInsights.length > 0;
+
   return (
     <div className="dock-body">
+      {/* IM-60: search across every section below + the insight list. */}
+      <input
+        className="list-filter"
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search Insights…"
+        aria-label="Search the Insights tab"
+        style={{ marginBottom: "14px" }}
+      />
       {/* What she believes about you — consolidated from clusters (dream cycles). */}
-      {beliefs.length > 0 && (
+      {showBeliefs && (
         <section className="beliefs-section" style={{ marginBottom: "16px" }}>
-          <h3>🖤 What she believes about you</h3>
-          <p className="empty small" style={{ marginTop: "-4px" }}>
-            Durable understanding she's distilled from clusters of your memories — it deepens as you grow.
-          </p>
-          <ul className="beliefs-list">
-            {beliefs.map((b) => (
-              <li
-                key={b.id}
-                className="belief-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => onFocus(b.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onFocus(b.id);
-                  }
-                }}
-                title="Fly to this belief and its evidence"
-              >
-                <span className="belief-text">{b.content}</span>
-                <span className="belief-evi">from {b.evidence} {b.evidence === 1 ? "memory" : "memories"}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="dock-head">
+            <h3>🖤 What she believes about you</h3>
+            <SectionToggle name="What she believes about you" open={sectionOpen("beliefs")} onToggle={() => toggleSection("beliefs")} />
+          </div>
+          {sectionOpen("beliefs") && (
+            <>
+              <p className="empty small" style={{ marginTop: "-4px" }}>
+                Durable understanding she's distilled from clusters of your memories — it deepens as you grow.
+              </p>
+              <ul className="beliefs-list">
+                {beliefs.map((b) => {
+                  // IM-59: when she formed the belief was fetched and never shown.
+                  const formedLabel = fmtLocalDate(b.createdAt);
+                  return (
+                    <li
+                      key={b.id}
+                      className="belief-card"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onFocus(b.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onFocus(b.id);
+                        }
+                      }}
+                      title="Fly to this belief and its evidence"
+                    >
+                      <span className="belief-text">{b.content}</span>
+                      <span className="belief-evi">from {b.evidence} {b.evidence === 1 ? "memory" : "memories"}</span>
+                      {formedLabel && (
+                        <span className="belief-date" style={{ fontSize: "0.66rem", opacity: 0.6 }}>
+                          formed {formedLabel}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </section>
       )}
 
       {/* Captain's Log — her once-a-day narrative entry (autonomous daily_log job). */}
-      {dailyLog && (
+      {showDailyLog && dailyLog && (
         <div className="daily-log" style={{ marginBottom: "16px", padding: "1rem", backgroundColor: "rgba(100, 200, 255, 0.05)", borderLeft: "3px solid rgba(100, 200, 255, 0.5)", borderRadius: "0 4px 4px 0" }}>
-          <h4 style={{ margin: "0 0 0.5rem 0", color: "rgba(100, 200, 255, 0.9)", fontSize: "13px" }}>
-            Captain's Log ({dailyLog.date})
-          </h4>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            {/* IM-63: this date rendered as the raw stored YYYY-MM-DD while
+                the same panel localises every other date. */}
+            <h4 style={{ margin: "0 0 0.5rem 0", color: "rgba(100, 200, 255, 0.9)", fontSize: "13px" }}>
+              Captain&apos;s Log{fmtLocalDate(dailyLog.date) ? ` (${fmtLocalDate(dailyLog.date)})` : ""}
+            </h4>
+            <SectionToggle name="Captain's Log" open={sectionOpen("daily-log")} onToggle={() => toggleSection("daily-log")} />
+          </div>
+          {sectionOpen("daily-log") && (
+          <>
           <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: 1.4, opacity: 0.9 }}>{dailyLog.content}</p>
           <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.6rem" }}>
             <button className="mini" disabled={savingLog || logSaved} onClick={() => void saveLogAsMemory()}>
@@ -346,6 +544,8 @@ export function DigestPanel({
               💬 Ask about this
             </button>
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -353,15 +553,14 @@ export function DigestPanel({
       {/* Used to check only fresh/expiredActions/greeting — a day with ONLY cooling
           memories or ONLY due reminders (both real, actionable lists rendered below)
           would silently render nothing at all. */}
-      {daily &&
-        (daily.fresh.length > 0 ||
-          (daily.connections?.length ?? 0) > 0 ||
-          daily.expiredActions.length > 0 ||
-          daily.cooling.length > 0 ||
-          (daily.reminders?.length ?? 0) > 0 ||
-          daily.greeting) && (
+      {showDaily && daily && (
         <section className="daily-digest">
-          <h3>🛰️ Soumaya&apos;s daily digest</h3>
+          <div className="dock-head">
+            <h3>🛰️ Soumaya&apos;s daily digest</h3>
+            <SectionToggle name="Soumaya's daily digest" open={sectionOpen("daily")} onToggle={() => toggleSection("daily")} />
+          </div>
+          {sectionOpen("daily") && (
+          <>
           {daily.greeting && <p className="digest-greeting">{daily.greeting}</p>}
 
           {daily.fresh.length > 0 && (
@@ -462,13 +661,20 @@ export function DigestPanel({
           )}
 
           {daily.closing && <p className="digest-closing">{daily.closing}</p>}
+          </>
+          )}
         </section>
       )}
 
       {/* ML constellations — unsupervised k-means groupings of the memories. */}
-      {constellations.length > 0 && (
+      {showConstellations && (
         <section className="constellations">
-          <h3>🌌 Constellations</h3>
+          <div className="dock-head">
+            <h3>🌌 Constellations</h3>
+            <SectionToggle name="Constellations" open={sectionOpen("constellations")} onToggle={() => toggleSection("constellations")} />
+          </div>
+          {sectionOpen("constellations") && (
+          <>
           <p className="constellations-sub">
             Memories the model grouped by meaning — your galaxy&apos;s natural regions.
           </p>
@@ -527,15 +733,19 @@ export function DigestPanel({
               </li>
             ))}
           </ul>
+          </>
+          )}
         </section>
       )}
 
       {/* Soumaya's self-check — read-only coverage report (#12). */}
-      {selfReview.length > 0 && (
+      {showSelfReview && (
         <section className="self-check" style={{ marginBottom: "1rem" }}>
           <div className="dock-head">
             <h3>🔍 Soumaya&apos;s self-check</h3>
+            <SectionToggle name="Soumaya's self-check" open={sectionOpen("self-check")} onToggle={() => toggleSection("self-check")} />
           </div>
+          {sectionOpen("self-check") && (
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.45rem" }}>
             {selfReview.map((s) => (
               <li key={s.title} style={{ borderLeft: "3px solid #c9a0ff", paddingLeft: "0.6rem" }}>
@@ -546,11 +756,12 @@ export function DigestPanel({
               </li>
             ))}
           </ul>
+          )}
         </section>
       )}
 
       {/* Life-area lens — optional overlay grouping memories by area of life (#6). */}
-      {lifeAreas.length > 0 && (() => {
+      {showLifeAreas && (() => {
         const total = lifeAreas.reduce((s, a) => s + a.count, 0) || 1;
         const AREA_COLOR: Record<string, string> = {
           "Identity & Growth": "#9a7aff",
@@ -565,7 +776,9 @@ export function DigestPanel({
             <div className="dock-head">
               <h3>🪟 Life-area lens</h3>
               <span style={{ fontSize: "0.72rem", opacity: 0.6 }}>where your attention goes</span>
+              <SectionToggle name="Life-area lens" open={sectionOpen("life-areas")} onToggle={() => toggleSection("life-areas")} />
             </div>
+            {sectionOpen("life-areas") && (
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
               {lifeAreas.map((a) => (
                 <li key={a.area} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -577,19 +790,23 @@ export function DigestPanel({
                 </li>
               ))}
             </ul>
+            )}
           </section>
         );
       })()}
 
       {/* Emotional weather — mood trajectory + detected patterns (offline, free). */}
-      {emotional && emotional.sampleSize >= 3 && (
+      {showEmotional && emotional && (
         <section className="emotional-weather" style={{ marginBottom: "1rem" }}>
           <div className="dock-head">
             <h3>🌡️ Emotional weather</h3>
             <span style={{ fontSize: "0.72rem", opacity: 0.7 }}>
               {emotional.trend === "rising" ? "↗ brightening" : emotional.trend === "falling" ? "↘ cooling" : "→ steady"}
             </span>
+            <SectionToggle name="Emotional weather" open={sectionOpen("emotional")} onToggle={() => toggleSection("emotional")} />
           </div>
+          {sectionOpen("emotional") && (
+          <>
           <MoodSparkline points={emotional.points} />
           <p style={{ fontSize: "0.74rem", opacity: 0.7, margin: "0.35rem 0 0.6rem 0" }}>
             Across {emotional.sampleSize} memories · avg mood {emotional.average >= 0 ? "+" : ""}
@@ -630,37 +847,63 @@ export function DigestPanel({
                 : "No strong patterns yet — your mood reads as steady."}
             </p>
           )}
+          </>
+          )}
         </section>
       )}
 
       {/* How your thinking evolved — same-theme memories across time (offline, free). */}
-      {evolution.length > 0 && (
+      {showEvolution && (
         <section className="evolution" style={{ marginBottom: "1rem" }}>
           <div className="dock-head">
             <h3>🔗 How your thinking evolved</h3>
+            <SectionToggle name="How your thinking evolved" open={sectionOpen("evolution")} onToggle={() => toggleSection("evolution")} />
           </div>
+          {sectionOpen("evolution") && (
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {evolution.map((e) => (
+            {evolution.map((e) => {
+              const strength = EVOLUTION_STRENGTH[e.strength] ?? EVOLUTION_STRENGTH.medium;
+              return (
               <li key={`${e.fromId}-${e.toId}`} style={{ borderLeft: "3px solid #5ee6a0", paddingLeft: "0.6rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
                   <button className="pill" onClick={() => onFocus(e.fromId)} title="Fly to the earlier memory">{e.fromLabel}</button>
                   <span style={{ opacity: 0.6 }}>→</span>
                   <button className="pill" onClick={() => onFocus(e.toId)} title="Fly to the later memory">{e.toLabel}</button>
-                  <span style={{ fontSize: "0.68rem", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.03em" }}>{e.strength}</span>
+                  {/* IM-59: the time gap was only ever inside the reason
+                      string — render it as its own element. */}
+                  <span className="evolution-gap" style={{ fontSize: "0.68rem", opacity: 0.75 }}>
+                    {evolutionGapLabel(e.temporalDistanceDays)}
+                  </span>
+                  {/* IM-63: strength was the bare uppercase enum while
+                      siblings show bars — human label + bar here too. */}
+                  <span
+                    className="evolution-strength"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.66rem", opacity: 0.85 }}
+                    title={`How strongly the two memories connect: ${e.strength}`}
+                  >
+                    <span style={{ width: "36px", height: "5px", background: "rgba(255,255,255,0.12)", borderRadius: "3px", overflow: "hidden", display: "inline-block" }}>
+                      <span style={{ display: "block", height: "100%", width: `${strength.pct}%`, background: "#5ee6a0" }} />
+                    </span>
+                    {strength.label}
+                  </span>
                 </div>
                 <div style={{ fontSize: "0.74rem", opacity: 0.8, marginTop: "0.2rem" }}>{e.reason}</div>
               </li>
-            ))}
+              );
+            })}
           </ul>
+          )}
         </section>
       )}
 
       {/* Dormant & worth reviving — once-active skills/goals gone quiet (offline, free). */}
-      {dormant.length > 0 && (
+      {showDormant && (
         <section className="dormant" style={{ marginBottom: "1rem" }}>
           <div className="dock-head">
             <h3>💤 Dormant &amp; worth reviving</h3>
+            <SectionToggle name="Dormant & worth reviving" open={sectionOpen("dormant")} onToggle={() => toggleSection("dormant")} />
           </div>
+          {sectionOpen("dormant") && (
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {dormant.map((d) => (
               <li key={d.nodeId} style={{ borderLeft: "3px solid #6fb6ff", paddingLeft: "0.6rem" }}>
@@ -674,9 +917,17 @@ export function DigestPanel({
                 </button>
                 <span style={{ fontSize: "0.72rem", opacity: 0.6, marginLeft: "0.4rem" }}>· quiet {d.dormantDays}d</span>
                 <div style={{ fontSize: "0.76rem", opacity: 0.85, marginTop: "0.2rem" }}>{d.hypothesis}</div>
+                {/* IM-59: the reactivation nudge the server writes for each
+                    dormant item was fetched and never rendered. */}
+                {d.prompt && (
+                  <div className="dormant-prompt" style={{ fontSize: "0.76rem", opacity: 0.95, marginTop: "0.25rem" }}>
+                    💡 {d.prompt}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
+          )}
         </section>
       )}
 
@@ -690,12 +941,18 @@ export function DigestPanel({
             ⚡ Find contradictions
           </button>
         </div>
+        <SectionToggle name="Latent connections" open={sectionOpen("insights")} onToggle={() => toggleSection("insights")} />
       </div>
+      {sectionOpen("insights") && (
+      <>
       {items.length === 0 && (
         <p className="empty">
           No insights yet. Dump a few related thoughts, then hit "🔍 Find new links" above to surface
           connections you haven&apos;t drawn.
         </p>
+      )}
+      {items.length > 0 && searching && filteredInsights.length === 0 && (
+        <p className="empty">No insights match your search.</p>
       )}
       <ul className="insights">
         {shownInsights.map((it) => {
@@ -719,27 +976,43 @@ export function DigestPanel({
                     ⚡ CONTRADICTION
                   </span>
                 )}
-                {isConflict && (
-                  <button
-                    className="mini"
-                    style={{ fontSize: "0.66rem", padding: "1px 8px" }}
-                    title="Mark reconciled — clears this and warms both memories"
-                    onClick={() => {
-                      void resolveInsight(it.id).then((ok) => {
-                        if (ok) {
-                          setItems((prev) => prev.filter((x) => x.id !== it.id));
+                {/* IM-58: the resolve affordance used to render ONLY for
+                    contradictions, though the server resolves (deletes +
+                    tends both memories) for ANY insight kind — a wrong
+                    synthesis insight could never be dismissed. Every kind
+                    now gets the button; contradictions keep their
+                    "Reconciled" wording, the rest read as Dismiss. */}
+                <button
+                  className="mini"
+                  style={{ fontSize: "0.66rem", padding: "1px 8px" }}
+                  title={
+                    isConflict
+                      ? "Mark reconciled — clears this and warms both memories"
+                      : "Dismiss this insight — clears it and warms both memories"
+                  }
+                  onClick={() => {
+                    void resolveInsight(it.id).then((ok) => {
+                      if (ok) {
+                        setItems((prev) => prev.filter((x) => x.id !== it.id));
+                        if (isConflict) {
                           pushToast("Reconciled — both memories warmed ✓", "⚡", 4500);
                         } else {
-                          pushToast("Couldn't reconcile that — try again.", "⚠️", 3500);
+                          pushToast("Insight dismissed — both memories warmed ✓", "✓", 4500);
                         }
-                      });
-                    }}
-                  >
-                    ✓ Reconciled
-                  </button>
-                )}
+                      } else {
+                        pushToast(
+                          isConflict ? "Couldn't reconcile that — try again." : "Couldn't dismiss that — try again.",
+                          "⚠️",
+                          3500,
+                        );
+                      }
+                    });
+                  }}
+                >
+                  {isConflict ? "✓ Reconciled" : "Dismiss"}
+                </button>
                 <span
-                  style={{ fontSize: "0.62rem", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.04em" }}
+                  style={{ fontSize: "0.66rem", opacity: 0.7 }}
                   title={`Tier ${it.tier ?? 3} — surfaced ${it.tier === 1 ? "first" : it.tier === 2 ? "after identity-level" : "last"}`}
                 >
                   {TIER_LABEL[it.tier ?? 3]}
@@ -779,10 +1052,17 @@ export function DigestPanel({
           );
         })}
       </ul>
-      {rankedInsights.length > INSIGHT_CAP && (
+      {filteredInsights.length > INSIGHT_CAP && (
         <button className="mini" style={{ marginTop: "0.4rem" }} onClick={() => setShowAllInsights((v) => !v)}>
-          {showAllInsights ? "Show fewer" : `Show all ${rankedInsights.length}`}
+          {showAllInsights ? "Show fewer" : `Show all ${filteredInsights.length}`}
         </button>
+      )}
+      </>
+      )}
+      {searching && !anySectionMatch && (
+        <p className="empty" style={{ marginTop: "0.6rem" }}>
+          Nothing in this tab matches “{query.trim()}”.
+        </p>
       )}
     </div>
   );

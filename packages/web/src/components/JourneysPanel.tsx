@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import type { Journey, JourneyLinksDetail } from "@brain/shared";
-import { getJourneys, createJourney, patchJourney, deleteJourney, journeyLinks } from "../api/journeys.js";
+import type { Journey, JourneyLinkSummary, JourneyLinksDetail } from "@brain/shared";
+import { getJourneys, getJourney, createJourney, patchJourney, deleteJourney, journeyLinks } from "../api/journeys.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
 import { prefersReducedMotion } from "../graph/motion.js";
+import {
+  JOURNEY_COLORS,
+  filterAndSortJourneys,
+  formatJourneyDate,
+  nextIconValue,
+  nextStepFor,
+  type JourneySort,
+  type JourneyStatusFilter,
+} from "./journeysPanelHelpers.js";
+import { JourneyLinkPicker } from "./JourneyLinkPicker.js";
 
 /**
  * Journeys (Vision 2.0) — the highest-level organizer: a life chapter everything can belong to
  * (Become an RN, Recover Financially, Buy My First Home…). This panel is the home for creating +
  * tending them; linking objects to a journey happens from those objects (a memory's inspector, a
- * transaction, etc.). Mobile-first. See docs/VISION_2_JOURNEYS.md.
+ * transaction, etc.) AND from the in-card picker (IM-88). Mobile-first. See docs/VISION_2_JOURNEYS.md.
  */
 
 const SUGGESTED = [
@@ -46,6 +56,14 @@ export function JourneysPanel({
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState("🧭");
+  // IM-85: the create form used to collect icon + title only, although the server
+  // has always accepted description (≤2000) + color — both are collected now.
+  const [description, setDescription] = useState("");
+  const [color, setColor] = useState<string | undefined>(undefined);
+  // IM-88: search / status filter / sort over the panel's own lists.
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<JourneyStatusFilter>("all");
+  const [sort, setSort] = useState<JourneySort>("recent");
 
   const refresh = async () => {
     const result = await getJourneys();
@@ -61,14 +79,19 @@ export function JourneysPanel({
   };
   useEffect(() => { void refresh(); }, []);
 
-  const add = async (t: string, ic: string) => {
+  const add = async (t: string, ic: string, desc?: string, col?: string) => {
     if (!t.trim()) return;
-    const created = await createJourney({ title: t.trim(), icon: ic.trim() || "🧭" });
+    const created = await createJourney({
+      title: t.trim(),
+      icon: ic.trim() || "🧭",
+      ...(desc?.trim() ? { description: desc.trim() } : {}),
+      ...(col ? { color: col } : {}),
+    });
     if (!created) {
       pushToast("Couldn't create that Journey — try again.", "⚠️", 3500);
       return;
     }
-    setTitle(""); setAdding(false);
+    setTitle(""); setDescription(""); setColor(undefined); setAdding(false);
     await refresh();
   };
 
@@ -85,6 +108,8 @@ export function JourneysPanel({
 
   const active = journeys.filter((j) => j.status !== "done");
   const done = journeys.filter((j) => j.status === "done");
+  const shownActive = filterAndSortJourneys(active, query, statusFilter, sort);
+  const shownDone = filterAndSortJourneys(done, query, statusFilter, sort);
 
   return (
     <div className="jn-panel">
@@ -93,6 +118,30 @@ export function JourneysPanel({
         all connect through it — so instead of "where do I save this?", the question becomes
         "<em>what Journey does this move forward?</em>"
       </div>
+
+      {journeys.length > 1 && (
+        <div className="jn-toolbar">
+          <input
+            className="jn-search"
+            placeholder="Search journeys…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search journeys"
+          />
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as JourneyStatusFilter)} aria-label="Filter by status">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="done">Done</option>
+          </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value as JourneySort)} aria-label="Sort journeys">
+            <option value="recent">Recently updated</option>
+            <option value="title">Title A–Z</option>
+            <option value="progress">Progress</option>
+            <option value="links">Most linked</option>
+          </select>
+        </div>
+      )}
 
       {active.length === 0 && (
         <div className="jn-suggest">
@@ -109,7 +158,11 @@ export function JourneysPanel({
         </div>
       )}
 
-      {active.map((j) => <JourneyCard key={j.id} j={j} onChanged={refresh} onFocus={onFocus} focusJourney={focusJourney} onAskJourney={onAskJourney} />)}
+      {(query.trim() !== "" || statusFilter !== "all") && shownActive.length === 0 && active.length > 0 && (
+        <p className="jn-hint">No journeys match your search/filter.</p>
+      )}
+
+      {shownActive.map((j) => <JourneyCard key={j.id} j={j} onChanged={refresh} onFocus={onFocus} focusJourney={focusJourney} onAskJourney={onAskJourney} />)}
 
       {adding ? (
         <div className="jn-form">
@@ -117,17 +170,25 @@ export function JourneysPanel({
             <input
               className="jn-icon-in"
               value={icon}
-              // Array.from splits by Unicode code point, not UTF-16 unit — .slice(0,2)
-              // truncated any emoji outside the BMP (most modern ones) mid-character.
-              // Still imperfect for multi-codepoint ZWJ sequences (e.g. 👨‍👩‍👧), but
-              // strictly better than cutting a single emoji in half.
-              onChange={(e) => setIcon(Array.from(e.target.value).slice(0, 1).join(""))}
+              // IM-89: grapheme-aware — one code point truncated ZWJ/flag emoji
+              // mid-sequence (see firstGrapheme/nextIconValue in the helpers).
+              onChange={(e) => setIcon(nextIconValue(icon, e.target.value))}
               aria-label="Icon"
             />
             <input className="jn-title-in" placeholder="Name your journey (e.g. Become an RN)" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Journey title" />
           </div>
+          <textarea
+            className="jn-desc-in"
+            placeholder="What is this chapter about? (optional)"
+            value={description}
+            maxLength={2000}
+            rows={3}
+            onChange={(e) => setDescription(e.target.value)}
+            aria-label="Description"
+          />
+          <JourneyColorPicker value={color} onChange={setColor} />
           <div className="jn-form-actions">
-            <button className="jn-primary" onClick={() => add(title, icon)}>Create</button>
+            <button className="jn-primary" onClick={() => add(title, icon, description, color)}>Create</button>
             <button className="jn-secondary" onClick={() => setAdding(false)}>Cancel</button>
           </div>
         </div>
@@ -135,12 +196,55 @@ export function JourneysPanel({
         <button className="jn-primary jn-add" onClick={() => setAdding(true)}>＋ New Journey</button>
       )}
 
-      {done.length > 0 && (
+      {shownDone.length > 0 && (
         <details className="jn-done">
-          <summary>Completed ({done.length})</summary>
-          {done.map((j) => <JourneyCard key={j.id} j={j} onChanged={refresh} onFocus={onFocus} onAskJourney={onAskJourney} />)}
+          <summary>Completed ({shownDone.length})</summary>
+          {shownDone.map((j) => <JourneyCard key={j.id} j={j} onChanged={refresh} onFocus={onFocus} onAskJourney={onAskJourney} />)}
         </details>
       )}
+    </div>
+  );
+}
+
+/** IM-85 colour picker: preset swatches + a native colour input for anything
+ *  else + an explicit "No colour" choice. Shared by the create and edit forms. */
+function JourneyColorPicker({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (v: string | undefined) => void;
+}) {
+  return (
+    <div className="jn-color-row" role="group" aria-label="Colour">
+      <span className="jn-color-label">Colour</span>
+      <button
+        type="button"
+        className={`jn-swatch none${value === undefined ? " sel" : ""}`}
+        onClick={() => onChange(undefined)}
+        aria-label="No colour"
+        aria-pressed={value === undefined}
+      >
+        ∅
+      </button>
+      {JOURNEY_COLORS.map((c) => (
+        <button
+          key={c.value}
+          type="button"
+          className={`jn-swatch${value === c.value ? " sel" : ""}`}
+          style={{ background: c.value }}
+          onClick={() => onChange(c.value)}
+          aria-label={`Colour ${c.label}`}
+          aria-pressed={value === c.value}
+        />
+      ))}
+      <input
+        type="color"
+        className="jn-color-in"
+        value={value ?? "#5bd6ff"}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Custom colour"
+      />
     </div>
   );
 }
@@ -162,6 +266,17 @@ function JourneyCard({
   const [links, setLinks] = useState<JourneyLinksDetail | null>(null);
   const [linksError, setLinksError] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  // IM-89 decision — USE getJourney(id) in the detail view (not remove it):
+  // it was the one journeys read with zero web callers while the detail was
+  // assembled from the list row alone. The detail now loads the journey's own
+  // record on open and renders description/colour/dates from it; local merges
+  // below keep it fresh after edits made from this same card.
+  const [detailJourney, setDetailJourney] = useState<Journey | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editIcon, setEditIcon] = useState("🧭");
+  const [editDescription, setEditDescription] = useState("");
+  const [editColor, setEditColor] = useState<string | undefined>(undefined);
 
   // Galaxy entity detail focus (Phase O): every JourneyCard in the `active` list is
   // always mounted (unlike WealthPanel's goals, which sit behind a collapsed bucket),
@@ -184,20 +299,31 @@ function JourneyCard({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
+  const loadLinks = async (isCancelled: () => boolean) => {
+    const result = await journeyLinks(j.id);
+    if (isCancelled()) return;
+    if (result) setLinks(result);
+    else { setLinks(null); setLinksError(true); }
+  };
+
   useEffect(() => {
     let cancelled = false;
     if (open) {
       setLinksError(false);
-      void journeyLinks(j.id).then((result) => {
-        if (cancelled) return; // this journey closed (or another opened) before it resolved
-        if (result) setLinks(result);
-        else { setLinks(null); setLinksError(true); }
+      void loadLinks(() => cancelled);
+      void getJourney(j.id).then((result) => {
+        if (cancelled || !result) return;
+        const { links: _rawLinks, ...journey } = result;
+        setDetailJourney(journey);
       });
     } else {
       // Reset so re-opening shows "Loading…" rather than a stale list from last time.
       setLinks(null);
+      setDetailJourney(null);
+      setEditing(false);
     }
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, j.id]);
 
   const bumpProgress = (next: number) => {
@@ -234,56 +360,153 @@ function JourneyCard({
     else pushToast("Couldn't delete that Journey — try again.", "⚠️", 3500);
   };
 
+  // IM-85 edit flow: every field the server accepts (title/icon/description/
+  // colour) is editable from the detail view, through the same patchJourney
+  // the status/progress controls already use.
+  const startEdit = () => {
+    const src = detailJourney ?? j;
+    setEditTitle(src.title);
+    setEditIcon(src.icon ?? "🧭");
+    setEditDescription(src.description ?? "");
+    setEditColor(src.color);
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editTitle.trim()) {
+      pushToast("A Journey needs a title.", "⚠️", 3500);
+      return;
+    }
+    const updated = await patchJourney(j.id, {
+      title: editTitle.trim(),
+      icon: editIcon.trim() || "🧭",
+      description: editDescription.trim(),
+      // "" clears the colour server-side (an omitted/undefined field would
+      // leave the old colour in place — see JourneysRepo.update's merge).
+      color: editColor ?? "",
+    });
+    if (!updated) {
+      pushToast("Couldn't save those changes — try again.", "⚠️", 3500);
+      return;
+    }
+    setDetailJourney((prev) => (prev ? { ...prev, ...updated } : updated));
+    setEditing(false);
+    pushToast("Journey updated", "🧭", 3000);
+    onChanged();
+  };
+
+  const dj = detailJourney ?? j;
+  const created = formatJourneyDate(dj.createdAt);
+  const updated = formatJourneyDate(dj.updatedAt);
+  const nextStep = links
+    ? nextStepFor({
+        status: j.status,
+        pct,
+        totalCount: links.totalCount,
+        taskCount: links.links.filter((l) => l.kind === "task").length,
+        goalCount: links.links.filter((l) => l.kind === "goal").length,
+      })
+    : null;
+
   return (
-    <div ref={cardRef} className={`jn-card ${j.status}`}>
+    <div ref={cardRef} className={`jn-card ${j.status}`} style={dj.color ? { borderLeft: `4px solid ${dj.color}` } : undefined}>
       <button className="jn-card-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="jn-icon">{j.icon ?? "🧭"}</span>
-        <span className="jn-name">{j.title}</span>
+        <span className="jn-icon">{dj.icon ?? "🧭"}</span>
+        <span className="jn-name">{dj.title}</span>
         {/* Paused/done used to be distinguished ONLY by a subtle 0.6/0.7 opacity
             on the whole card — invisible at a glance, especially collapsed. */}
         {j.status === "paused" && <span className="jn-status-badge paused">⏸ Paused</span>}
         {j.status === "done" && <span className="jn-status-badge done">✓ Done</span>}
         <span className="jn-link-count">{j.linkCount ?? 0} linked</span>
       </button>
-      <div className="jn-bar" aria-label={`${pct}% progress`}><div className="jn-bar-fill" style={{ width: `${pct}%` }} /></div>
+      <div className="jn-bar" aria-label={`${pct}% progress`}>
+        <div className="jn-bar-fill" style={{ width: `${pct}%`, ...(dj.color ? { background: dj.color } : {}) }} />
+      </div>
       {open && (
         <div className="jn-detail">
-          {j.description && <p className="jn-desc">{j.description}</p>}
-          <div className="jn-progress-row">
-            <span>Progress</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={pct}
-              onChange={(e) => bumpProgress(Number(e.target.value))}
-              role="progressbar"
-              aria-valuenow={pct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Progress"
-            />
-            <strong>{pct}%</strong>
-          </div>
-          <div className="jn-detail-actions">
-            {onAskJourney && (
-              <button className="jn-secondary" onClick={() => onAskJourney({ id: j.id, title: j.title })}>
-                💬 Ask Soumaya
-              </button>
-            )}
-            {j.status !== "done" ? (
-              <button className="jn-secondary" onClick={() => void setStatus("done")}>Mark complete</button>
-            ) : (
-              <button className="jn-secondary" onClick={() => void setStatus("active")}>Reopen</button>
-            )}
-            {j.status === "active" ? (
-              <button className="jn-secondary" onClick={() => void setStatus("paused")}>Pause</button>
-            ) : j.status === "paused" ? (
-              <button className="jn-secondary" onClick={() => void setStatus("active")}>Resume</button>
-            ) : null}
-            <button className="jn-danger" onClick={() => void remove()}>Delete</button>
-          </div>
-          <JourneyLinksSection detail={links} linksError={linksError} onFocus={onFocus} />
+          {/* IM-88: the journey's own dates, in local time. "Last moved" is the
+              record's updatedAt — links and edits both touch it server-side. */}
+          {(created || updated) && (
+            <p className="jn-meta">
+              {created && <>Started {created}</>}
+              {created && updated && <> · </>}
+              {updated && <>Last moved {updated}</>}
+            </p>
+          )}
+          {editing ? (
+            <div className="jn-form">
+              <div className="jn-form-row">
+                <input
+                  className="jn-icon-in"
+                  value={editIcon}
+                  onChange={(e) => setEditIcon(nextIconValue(editIcon, e.target.value))}
+                  aria-label="Icon"
+                />
+                <input className="jn-title-in" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} aria-label="Journey title" />
+              </div>
+              <textarea
+                className="jn-desc-in"
+                value={editDescription}
+                maxLength={2000}
+                rows={3}
+                onChange={(e) => setEditDescription(e.target.value)}
+                aria-label="Description"
+                placeholder="What is this chapter about? (optional)"
+              />
+              <JourneyColorPicker value={editColor} onChange={setEditColor} />
+              <div className="jn-form-actions">
+                <button className="jn-primary" onClick={() => void saveEdit()}>Save changes</button>
+                <button className="jn-secondary" onClick={() => setEditing(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {dj.description && <p className="jn-desc">{dj.description}</p>}
+              <div className="jn-progress-row">
+                <span>Progress</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={pct}
+                  onChange={(e) => bumpProgress(Number(e.target.value))}
+                  role="progressbar"
+                  aria-valuenow={pct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Progress"
+                />
+                <strong>{pct}%</strong>
+              </div>
+              {nextStep && <p className="jn-next-step">{nextStep}</p>}
+              <div className="jn-detail-actions">
+                {onAskJourney && (
+                  <button className="jn-secondary" onClick={() => onAskJourney({ id: j.id, title: j.title })}>
+                    💬 Ask Soumaya
+                  </button>
+                )}
+                <button className="jn-secondary" onClick={startEdit}>✏️ Edit</button>
+                {j.status !== "done" ? (
+                  <button className="jn-secondary" onClick={() => void setStatus("done")}>Mark complete</button>
+                ) : (
+                  <button className="jn-secondary" onClick={() => void setStatus("active")}>Reopen</button>
+                )}
+                {j.status === "active" ? (
+                  <button className="jn-secondary" onClick={() => void setStatus("paused")}>Pause</button>
+                ) : j.status === "paused" ? (
+                  <button className="jn-secondary" onClick={() => void setStatus("active")}>Resume</button>
+                ) : null}
+                <button className="jn-danger" onClick={() => void remove()}>Delete</button>
+              </div>
+            </>
+          )}
+          <JourneyLinksSection
+            detail={links}
+            linksError={linksError}
+            journeyId={j.id}
+            onFocus={onFocus}
+            onLinksChanged={() => { void loadLinks(() => false); onChanged(); }}
+          />
         </div>
       )}
     </div>
@@ -291,6 +514,15 @@ function JourneyCard({
 }
 
 const fmt = (cents: number): string => (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
+
+/** The small date shown on a linked row (IM-88): the item's own date when it
+ *  has one, otherwise the date it was linked. */
+function linkDate(l: JourneyLinkSummary): string | null {
+  const own = formatJourneyDate(l.occurredAt);
+  if (own) return own;
+  const linked = formatJourneyDate(l.linkedAt);
+  return linked ? `linked ${linked}` : null;
+}
 
 /** Everything linked to a Journey — memories/tasks with fly-to, transactions with
  *  earned/spent totals. The totals come from the server's aggregate over ALL links
@@ -300,20 +532,26 @@ const fmt = (cents: number): string => (cents / 100).toLocaleString(undefined, {
 function JourneyLinksSection({
   detail,
   linksError,
+  journeyId,
   onFocus,
+  onLinksChanged,
 }: {
   detail: JourneyLinksDetail | null;
   linksError?: boolean;
+  journeyId: number;
   onFocus?: (id: number) => void;
+  onLinksChanged: () => void;
 }) {
   if (linksError) return <p className="jn-hint">⚠️ Couldn't load what's linked — try reopening this Journey.</p>;
   if (detail === null) return <p className="jn-hint">Loading what's linked…</p>;
   const { links } = detail;
+  const linkedKeys = new Set(links.map((l) => `${l.kind}:${l.refId}`));
+  const picker = <JourneyLinkPicker journeyId={journeyId} linkedKeys={linkedKeys} onLinked={onLinksChanged} />;
   if (detail.totalCount === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-start" }}>
         <p className="jn-hint" style={{ margin: 0 }}>
-          Nothing linked yet — connect a memory, task, or transaction from where you're already working.
+          Nothing linked yet — connect a memory, task, or transaction from where you're already working, or right here:
         </p>
         <button
           className="mini"
@@ -321,10 +559,18 @@ function JourneyLinksSection({
         >
           ➕ Dump a thought to link here
         </button>
+        {picker}
       </div>
     );
   }
   const memories = links.filter((l) => l.kind === "node" || l.kind === "insight" || l.kind === "doc");
+  // IM-86 remainder: tasks/chats/achievements are hydrated server-side into
+  // per-link summaries (real node labels for tasks that resolve; a generic
+  // label + the link's own date where no source row exists) — they render as
+  // their own groups here and no longer fall into the "also linked" count.
+  const tasks = links.filter((l) => l.kind === "task");
+  const chats = links.filter((l) => l.kind === "chat");
+  const achievements = links.filter((l) => l.kind === "achievement");
   // Goals ARE hydrated server-side (fin_goal name) — the panel used to drop them
   // on the floor, so a goal-only journey showed an empty detail under an
   // "N linked" header (IM-86). Rendered as plain rows: a goal's refId is a
@@ -339,16 +585,41 @@ function JourneyLinksSection({
   const hasTxnTotals = earned !== 0 || spent !== 0;
   const unshown = unshownText(detail);
 
+  const datedRow = (l: JourneyLinkSummary, children?: React.ReactNode) => {
+    const d = linkDate(l);
+    return (
+      <>
+        <span>{l.label}</span>
+        {children}
+        {d && <span className="jn-link-date">{d}</span>}
+      </>
+    );
+  };
+
   return (
     <div className="jn-links">
       {memories.length > 0 && (
         <div className="jn-links-group">
-          <div className="jn-links-label">🧭 Memories &amp; Tasks</div>
+          <div className="jn-links-label">🧭 Memories &amp; Insights</div>
           {memories.map((l) => (
             <button key={`${l.kind}-${l.refId}`} className="jn-link-row" onClick={() => onFocus?.(l.refId)} title="Find it in the galaxy">
-              {l.label}
+              {datedRow(l)}
             </button>
           ))}
+        </div>
+      )}
+      {tasks.length > 0 && (
+        <div className="jn-links-group">
+          <div className="jn-links-label">✅ Tasks</div>
+          {tasks.map((l) =>
+            l.nodeRefId != null ? (
+              <button key={`task-${l.refId}`} className="jn-link-row" onClick={() => onFocus?.(l.nodeRefId!)} title="Find it in the galaxy">
+                {datedRow(l)}
+              </button>
+            ) : (
+              <div key={`task-${l.refId}`} className="jn-link-row">{datedRow(l)}</div>
+            ),
+          )}
         </div>
       )}
       {goals.length > 0 && (
@@ -356,8 +627,24 @@ function JourneyLinksSection({
           <div className="jn-links-label">🎯 Goals</div>
           {goals.map((l) => (
             <div key={`goal-${l.refId}`} className="jn-link-row">
-              {l.label}
+              {datedRow(l)}
             </div>
+          ))}
+        </div>
+      )}
+      {chats.length > 0 && (
+        <div className="jn-links-group">
+          <div className="jn-links-label">💬 Chats</div>
+          {chats.map((l) => (
+            <div key={`chat-${l.refId}`} className="jn-link-row">{datedRow(l)}</div>
+          ))}
+        </div>
+      )}
+      {achievements.length > 0 && (
+        <div className="jn-links-group">
+          <div className="jn-links-label">🏆 Achievements</div>
+          {achievements.map((l) => (
+            <div key={`achievement-${l.refId}`} className="jn-link-row">{datedRow(l)}</div>
           ))}
         </div>
       )}
@@ -367,6 +654,10 @@ function JourneyLinksSection({
           {[...income, ...expense].map((l) => (
             <div key={`${l.kind}-${l.refId}`} className="jn-link-row jn-link-txn">
               <span>{l.label}</span>
+              {/* IM-88: the server has always sent occurredAt for transactions;
+                  the panel used to drop it. Date-only values render as that
+                  local calendar date (see formatJourneyDate). */}
+              {formatJourneyDate(l.occurredAt) && <span className="jn-link-date">{formatJourneyDate(l.occurredAt)}</span>}
               <strong className={l.kind === "income" ? "jn-earn" : "jn-spend"}>
                 {l.kind === "income" ? "+" : "-"}{fmt(l.amount ?? 0)}
               </strong>
@@ -391,6 +682,7 @@ function JourneyLinksSection({
       {links.length > 0 && links.length < detail.totalCount && (
         <p className="jn-hint">Showing {links.length} of {detail.totalCount} linked</p>
       )}
+      {picker}
     </div>
   );
 }
@@ -408,10 +700,10 @@ const KIND_NOUN: Record<string, [string, string]> = {
   bill: ["bill", "bills"],
 };
 
-/** IM-86: links that exist but produced no displayable summary (kinds with no
- *  source table to hydrate from — task/chat/achievement — and dangling refs) are
- *  stated plainly, so the detail never reads "nothing here" while the header
- *  counts them. Returns null when everything linked is shown. */
+/** IM-86: links that exist but produced no displayable summary (after the
+ *  remainder work: dangling refs of the hydratable kinds, whose target row is
+ *  gone) are stated plainly, so the detail never reads "nothing here" while the
+ *  header counts them. Returns null when everything linked is shown. */
 function unshownText(detail: JourneyLinksDetail): string | null {
   const parts = Object.entries(detail.unshownByKind)
     .filter(([, n]) => (n ?? 0) > 0)

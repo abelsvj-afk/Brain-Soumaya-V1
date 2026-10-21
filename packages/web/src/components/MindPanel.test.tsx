@@ -9,8 +9,16 @@ const createCognitive = vi.fn();
 const updateCognitive = vi.fn();
 const setCognitiveProgress = vi.fn();
 const getUpcomingEvents = vi.fn();
+const getUpcomingEventsResult = vi.fn();
 const getThoughts = vi.fn();
+const getThoughtsResult = vi.fn();
 const getPersonSuggestions = vi.fn();
+const getPersonSuggestionsResult = vi.fn();
+const getCognitiveEvidence = vi.fn();
+const getPersonProfile = vi.fn();
+const deleteNode = vi.fn();
+const splitIdea = vi.fn();
+const mergeIdeas = vi.fn();
 vi.mock("../api/client.js", () => ({
   getCognitive: (...a: unknown[]) => getCognitive(...a),
   getCognitiveResult: (...a: unknown[]) => getCognitiveResult(...a),
@@ -18,20 +26,25 @@ vi.mock("../api/client.js", () => ({
   updateCognitive: (...a: unknown[]) => updateCognitive(...a),
   setCognitiveProgress: (...a: unknown[]) => setCognitiveProgress(...a),
   getUpcomingEvents: (...a: unknown[]) => getUpcomingEvents(...a),
+  getUpcomingEventsResult: (...a: unknown[]) => getUpcomingEventsResult(...a),
   promoteIdea: vi.fn(),
+  splitIdea: (...a: unknown[]) => splitIdea(...a),
+  mergeIdeas: (...a: unknown[]) => mergeIdeas(...a),
   unlinkCognitive: vi.fn(),
   pruneCognitive: vi.fn(),
-  getCognitiveEvidence: vi.fn(),
-  getPersonProfile: vi.fn(),
+  getCognitiveEvidence: (...a: unknown[]) => getCognitiveEvidence(...a),
+  getPersonProfile: (...a: unknown[]) => getPersonProfile(...a),
   getPersonSuggestions: (...a: unknown[]) => getPersonSuggestions(...a),
+  getPersonSuggestionsResult: (...a: unknown[]) => getPersonSuggestionsResult(...a),
   dismissPersonSuggestion: vi.fn(),
   getThoughts: (...a: unknown[]) => getThoughts(...a),
+  getThoughtsResult: (...a: unknown[]) => getThoughtsResult(...a),
   addThought: vi.fn(),
   reinforceThought: vi.fn(),
   promoteThought: vi.fn(),
   dismissThought: vi.fn(),
   editThought: vi.fn(),
-  deleteNode: vi.fn(),
+  deleteNode: (...a: unknown[]) => deleteNode(...a),
 }));
 
 const getWealthSummary = vi.fn();
@@ -47,6 +60,8 @@ vi.mock("../graph/sfx.js", () => ({ playSfx: vi.fn() }));
 vi.mock("./MindSpace.js", () => ({ mindSpaceEnabled: () => false, setMindSpaceEnabled: vi.fn() }));
 
 import { MindPanel } from "./MindPanel.js";
+import { pushToast } from "./Toasts.js";
+const pushToastMock = pushToast as unknown as ReturnType<typeof vi.fn>;
 
 function vision(over: Partial<CognitiveItem> = {}): CognitiveItem {
   return {
@@ -94,6 +109,28 @@ beforeEach(() => {
   getUpcomingEvents.mockResolvedValue([]);
   getThoughts.mockResolvedValue([]);
   getPersonSuggestions.mockResolvedValue([]);
+  // CL-4 (IM-45): the panel now loads thoughts/suggestions/events via the
+  // truthful-state Result variants; by default they faithfully wrap the legacy
+  // mocks so existing setups keep working. Failure tests override the Result
+  // mock directly with { ok: false }.
+  getThoughtsResult.mockImplementation(async (...a: unknown[]) => ({
+    ok: true as const,
+    thoughts: (await getThoughts(...a)) as never[],
+  }));
+  getPersonSuggestionsResult.mockImplementation(async (...a: unknown[]) => ({
+    ok: true as const,
+    suggestions: (await getPersonSuggestions(...a)) as never[],
+  }));
+  getUpcomingEventsResult.mockImplementation(async (...a: unknown[]) => ({
+    ok: true as const,
+    events: (await getUpcomingEvents(...a)) as never[],
+  }));
+  getCognitiveEvidence.mockResolvedValue({ for: [], against: [], confidence: 0 });
+  getPersonProfile.mockResolvedValue(null);
+  deleteNode.mockResolvedValue(undefined);
+  splitIdea.mockResolvedValue({ newId: 99, moved: 0 });
+  mergeIdeas.mockResolvedValue(true);
+  setCognitiveProgress.mockResolvedValue(true);
   getWealthSummary.mockResolvedValue(wealth());
 });
 afterEach(() => cleanup());
@@ -205,7 +242,9 @@ describe("MindPanel — Life Vision target date display (never a reminder)", () 
     getUpcomingEvents.mockResolvedValue([{ id: 9, label: "Conference", date: "2026-01-01", inDays: -3 }]);
     render(<MindPanel onFocus={() => {}} />);
     await screen.findByText("Conference");
-    expect(screen.getByText("overdue 3d")).toBeTruthy();
+    // IM-48 supersedes the relative-only label: the relative wording is
+    // unchanged, and the absolute local date now rides alongside it.
+    expect(screen.getByText(/overdue 3d · /)).toBeTruthy();
   });
 });
 
@@ -339,6 +378,280 @@ describe("MindPanel — Life Vision entry point (Phase M)", () => {
     expect(scrollIntoView).toHaveBeenCalled();
     // The section it scrolled to is the ONE existing rendered list, not a second copy.
     expect(screen.getAllByText("Own a small fleet")).toHaveLength(1);
+  });
+});
+
+function ideaItem(over: Partial<CognitiveItem> = {}): CognitiveItem {
+  return {
+    id: 5,
+    kind: "idea",
+    label: "Boat project",
+    content: "",
+    progress: null,
+    completedAt: null,
+    degree: 0,
+    aliases: [],
+    createdAt: "2026-01-01 00:00:00",
+    remindAt: null,
+    ...over,
+  };
+}
+
+describe("MindPanel — IM-45: the other refreshes are truthful too", () => {
+  it("working-memory failure renders an error + Retry, never 'mind space is clear', and recovers", async () => {
+    getThoughtsResult.mockResolvedValue({ ok: false });
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText(/Couldn't load your working memory/)).toBeTruthy();
+    expect(screen.queryByText(/mind space is clear/)).toBeNull();
+
+    getThoughtsResult.mockResolvedValue({
+      ok: true,
+      thoughts: [{ id: 1, text: "call the marina", source: "manual", strength: 0.9, reinforceCount: 0, createdAt: "2026-01-01" }],
+    });
+    // Two Retry buttons may exist (cognitive succeeded, so only thoughts') — click the thoughts one.
+    const retries = screen.getAllByRole("button", { name: "Retry" });
+    fireEvent.click(retries[retries.length - 1]!);
+    expect(await screen.findByText("call the marina")).toBeTruthy();
+    expect(screen.queryByText(/Couldn't load your working memory/)).toBeNull();
+  });
+
+  it("people-suggestions failure is an error state, not a silent absence", async () => {
+    getPersonSuggestionsResult.mockResolvedValue({ ok: false });
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText(/Couldn't load people suggestions/)).toBeTruthy();
+  });
+
+  it("events failure is disclosed, and a future event still shows its stored absolute date", async () => {
+    getUpcomingEventsResult.mockResolvedValue({ ok: false });
+    getCognitive.mockResolvedValue([
+      ideaItem({ id: 9, kind: "future_event", label: "Regatta", remindAt: "2027-06-15T15:00:00Z" }),
+    ]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Regatta");
+    expect(screen.getByText(/Couldn't load event dates/)).toBeTruthy();
+    // The absolute local date comes from the item's own stored date — never nothing.
+    const { parseTolerantMs } = await import("../utils/dueReminders.js");
+    const abs = new Date(parseTolerantMs("2027-06-15T15:00:00Z")).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    expect(screen.getByText(new RegExp(abs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeTruthy();
+  });
+
+  it("the first cognitive load shows a loading state, not the empty-mind copy", async () => {
+    let resolveIt: (v: unknown) => void = () => {};
+    getCognitiveResult.mockImplementation(() => new Promise((r) => { resolveIt = r as (v: unknown) => void; }));
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText(/Loading your mind/)).toBeTruthy();
+    expect(screen.queryByText(/Nothing mapped yet/)).toBeNull();
+    await act(async () => { resolveIt({ ok: true, items: [] }); });
+    expect(await screen.findByText(/Nothing mapped yet/)).toBeTruthy();
+  });
+});
+
+describe("MindPanel — IM-46/47/48: card content, search/filter/sort, dates", () => {
+  it("renders the item's own content as a snippet on the card", async () => {
+    getCognitive.mockResolvedValue([goalItem({ content: "Train three mornings a week" })]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    expect(screen.getByText("Train three mornings a week")).toBeTruthy();
+  });
+
+  it("does not duplicate the label when content just repeats it (server create fallback)", async () => {
+    getCognitive.mockResolvedValue([goalItem({ content: "Run a 5k" })]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    expect(screen.getAllByText("Run a 5k")).toHaveLength(1);
+  });
+
+  it("renders the mapped date (createdAt) in local human form on the card", async () => {
+    getCognitive.mockResolvedValue([goalItem()]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    const { fmtBrowseDate } = await import("../utils/browseFormat.js");
+    expect(screen.getByText(`Added ${fmtBrowseDate("2026-01-01 00:00:00")}`)).toBeTruthy();
+  });
+
+  it("a future event shows BOTH the relative countdown and the absolute local date", async () => {
+    getCognitive.mockResolvedValue([ideaItem({ id: 9, kind: "future_event", label: "Regatta", remindAt: "2027-06-15T15:00:00Z" })]);
+    getUpcomingEvents.mockResolvedValue([{ id: 9, label: "Regatta", date: "2027-06-15T15:00:00Z", inDays: 3 }]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Regatta");
+    const { parseTolerantMs } = await import("../utils/dueReminders.js");
+    const abs = new Date(parseTolerantMs("2027-06-15T15:00:00Z")).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    expect(screen.getByText(new RegExp(`in 3d · ${abs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))).toBeTruthy();
+  });
+
+  it("search narrows the list and reports the count; clearing restores it", async () => {
+    getCognitive.mockResolvedValue([
+      goalItem(),
+      goalItem({ id: 3, label: "Save for a boat", content: "" }),
+    ]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    fireEvent.change(screen.getByLabelText("Search your mind"), { target: { value: "boat" } });
+    expect(screen.queryByText("Run a 5k")).toBeNull();
+    expect(screen.getByText("Save for a boat")).toBeTruthy();
+    expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
+    fireEvent.click(screen.getByText("Clear"));
+    expect(await screen.findByText("Run a 5k")).toBeTruthy();
+  });
+
+  it("the kind filter hides other kinds entirely", async () => {
+    getCognitive.mockResolvedValue([
+      goalItem(),
+      ideaItem({ id: 6, label: "A wild idea" }),
+    ]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    fireEvent.change(screen.getByLabelText("Filter by kind"), { target: { value: "idea" } });
+    expect(screen.queryByText("Run a 5k")).toBeNull();
+    expect(screen.getByText("A wild idea")).toBeTruthy();
+  });
+
+  it("sort by name orders cards A–Z within their section", async () => {
+    getCognitive.mockResolvedValue([
+      goalItem({ id: 10, label: "Zumba classes" }),
+      goalItem({ id: 11, label: "Alpha project" }),
+    ]);
+    const { container } = render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Zumba classes");
+    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "name" } });
+    const labels = [...container.querySelectorAll(".mind-card-label")].map((el) => el.textContent ?? "");
+    expect(labels[0]).toContain("Alpha project");
+    expect(labels[1]).toContain("Zumba classes");
+  });
+
+  it("identity evidence overflow is disclosed with '+N more' and expands", async () => {
+    getCognitive.mockResolvedValue([ideaItem({ id: 7, kind: "identity", label: "A builder" })]);
+    getCognitiveEvidence.mockResolvedValue({
+      for: Array.from({ length: 10 }, (_, i) => ({ id: 100 + i, label: `Proof ${i + 1}` })),
+      against: [],
+      confidence: 0.8,
+    });
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("A builder");
+    fireEvent.click(screen.getByText(/Evidence/));
+    expect(await screen.findByText("+2 more")).toBeTruthy();
+    expect(screen.queryByText("Proof 10")).toBeNull();
+    fireEvent.click(screen.getByText("+2 more"));
+    expect(screen.getByText("Proof 10")).toBeTruthy();
+  });
+});
+
+describe("MindPanel — IM-49: source legend + per-interaction details", () => {
+  it("renders a legend naming every working-memory source colour", async () => {
+    getThoughts.mockResolvedValue([
+      { id: 1, text: "aim at the regatta", source: "goal", strength: 0.8, reinforceCount: 1, createdAt: "2026-01-01" },
+    ]);
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText("aim at the regatta")).toBeTruthy();
+    expect(screen.getByText("goal-driven")).toBeTruthy();
+    expect(screen.getByText("held by you")).toBeTruthy();
+    expect(screen.getByText("a feeling")).toBeTruthy();
+  });
+
+  it("person interactions render their own date and emotional tone", async () => {
+    getCognitive.mockResolvedValue([ideaItem({ id: 8, kind: "person_entity", label: "Mara" })]);
+    getPersonProfile.mockResolvedValue({
+      count: 1,
+      lastAt: "2026-09-03 10:00:00",
+      tone: "warm",
+      interactions: [{ id: 42, label: "Dinner with Mara", createdAt: "2026-09-03 10:00:00", emotionalWeight: 0.9 }],
+    });
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Mara");
+    fireEvent.click(screen.getByText(/Relationship/));
+    expect(await screen.findByText("Dinner with Mara")).toBeTruthy();
+    const { fmtBrowseDate } = await import("../utils/browseFormat.js");
+    expect(screen.getByText(new RegExp(`${fmtBrowseDate("2026-09-03 10:00:00")} · warm`))).toBeTruthy();
+  });
+});
+
+describe("MindPanel — IM-50: ConfirmDialog delete + honest progress saves", () => {
+  it("delete asks via the app dialog (never window.confirm) and removes on confirm", async () => {
+    // jsdom defines no window.confirm — install a stub so a native-confirm
+    // call would be OBSERVED (and would fail this test), not silently absent.
+    const confirmFn = vi.fn(() => true);
+    window.confirm = confirmFn;
+    getCognitive.mockResolvedValue([goalItem()]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    fireEvent.click(screen.getByTitle("Delete"));
+    expect(await screen.findByText("Delete this from your mind?")).toBeTruthy();
+    expect(confirmFn).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deleteNode).toHaveBeenCalledWith(2));
+    await waitFor(() => expect(screen.queryByText("Run a 5k")).toBeNull());
+    delete (window as { confirm?: unknown }).confirm;
+  });
+
+  it("a failed delete restores the card and toasts the failure", async () => {
+    deleteNode.mockRejectedValue(new Error("server down"));
+    getCognitive.mockResolvedValue([goalItem()]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    fireEvent.click(screen.getByTitle("Delete"));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(pushToastMock).toHaveBeenCalledWith(expect.stringContaining("Couldn't remove"), expect.anything(), expect.anything()),
+    );
+    expect(screen.getByText("Run a 5k")).toBeTruthy();
+  });
+
+  it("a failed progress save rolls the bar back and toasts", async () => {
+    setCognitiveProgress.mockResolvedValue(false);
+    getCognitive.mockResolvedValue([goalItem({ progress: 0.3 })]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    expect(screen.getByText("30%")).toBeTruthy();
+    fireEvent.click(screen.getByTitle("More"));
+    await waitFor(() =>
+      expect(pushToastMock).toHaveBeenCalledWith(expect.stringContaining("Couldn't save that progress"), expect.anything(), expect.anything()),
+    );
+    expect(screen.getByText("30%")).toBeTruthy();
+    expect(screen.queryByText("40%")).toBeNull();
+  });
+});
+
+describe("MindPanel — IM-136: idea split / merge", () => {
+  it("split: naming a branch and confirming calls splitIdea and refreshes", async () => {
+    getCognitive.mockResolvedValue([ideaItem()]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Boat project");
+    fireEvent.click(screen.getByText("✂ Split"));
+    fireEvent.change(screen.getByLabelText("Name the branch that splits off"), { target: { value: "Sailing half" } });
+    fireEvent.click(screen.getByText("Split…"));
+    expect(await screen.findByText("Split this idea?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Split" }));
+    await waitFor(() => expect(splitIdea).toHaveBeenCalledWith(5, "Sailing half", undefined));
+  });
+
+  it("merge: selecting two ideas offers the merge, first selected survives", async () => {
+    getCognitive.mockResolvedValue([
+      ideaItem(),
+      ideaItem({ id: 6, label: "Sail the coast" }),
+    ]);
+    const { container } = render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Boat project");
+    // Select per-card (DOM order is newest-first sort, not fixture order):
+    // "Boat project" (id 5) first, so IT is the survivor.
+    const cardOf = (label: string) =>
+      [...container.querySelectorAll(".mind-card")].find((c) => c.textContent?.includes(label))!;
+    fireEvent.click(within(cardOf("Boat project") as HTMLElement).getByText("⇄ Select for merge"));
+    fireEvent.click(within(cardOf("Sail the coast") as HTMLElement).getByText("⇄ Select for merge"));
+    expect(await screen.findByText(/first selected survives/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Merge…"));
+    expect(await screen.findByText("Merge these ideas?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    await waitFor(() => expect(mergeIdeas).toHaveBeenCalledWith(5, 6));
   });
 });
 

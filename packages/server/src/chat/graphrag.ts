@@ -85,6 +85,16 @@ export async function chat(
    * never an error, never a broken turn.
    */
   proactiveContext: ProactiveContextInput | null = null,
+  /**
+   * In-chat attachments (IM-106): files the user attached to THIS message in
+   * the web chat, already extracted to text client-side. One-turn context only
+   * — never stored, never embedded into retrieval (the question alone drives
+   * retrieval, so an attachment can't drag in unrelated memories), just shown
+   * to the model as something the user shared right now. `null`/omitted (the
+   * default, every existing caller incl. Telegram/agent paths) = prior
+   * behaviour exactly.
+   */
+  attachments: { name: string; text: string }[] | null = null,
 ): Promise<ChatResponse> {
   const vec = await deps.embeddings.embed(question);
   // Hybrid seeds: vector KNN fused with BM25 keyword hits (RRF) — questions that
@@ -420,12 +430,17 @@ roles, or your knowledge. When you tell the user something about THEMSELVES, add
     timezone = undefined;
   }
 
+  const attachmentText =
+    attachments && attachments.length > 0
+      ? attachments.map((a) => `[${a.name}]\n${a.text}`).join("\n\n")
+      : undefined;
   const raw = await deps.llm.answer(question, context, {
     soul: soulTextFor(h.sqlite, spaceId) || undefined,
     timezone,
     systemExtra,
     persona,
     knowledge,
+    attachments: attachmentText,
     history: turns.length > 0 ? turns.join("\n") : undefined,
     justAsked,
     galaxyCandidates: galaxyCandidates.length > 0 ? galaxyCandidates : undefined,

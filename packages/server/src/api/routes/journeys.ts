@@ -24,6 +24,9 @@ const CreateBody = z.object({
   color: z.string().max(20).optional(),
   icon: z.string().max(8).optional(),
   status: z.enum(["active", "paused", "done"]).optional(),
+  // IM-132: explicit span dates (bare date or datetime string, stored as given).
+  startedAt: z.string().max(40).nullable().optional(),
+  endedAt: z.string().max(40).nullable().optional(),
 }).strict();
 const PatchBody = z.object({
   title: z.string().trim().min(1).max(80).optional(),
@@ -32,6 +35,8 @@ const PatchBody = z.object({
   icon: z.string().max(8).optional(),
   status: z.enum(["active", "paused", "done"]).optional(),
   progress: z.number().min(0).max(1).optional(),
+  startedAt: z.string().max(40).nullable().optional(),
+  endedAt: z.string().max(40).nullable().optional(),
 }).strict();
 const LinkBody = z.object({ kind: z.enum(LINK_KINDS), refId: z.number().int().positive() }).strict();
 
@@ -134,7 +139,10 @@ export function journeysRoutes(ctx: AppContext): Router {
   // The hydrated list is display-capped, but totals + counts are computed over ALL
   // links (IM-87: a capped subset must never be presented as the journey's totals),
   // and links that exist but can't be hydrated are counted per kind rather than
-  // silently dropped (IM-86: detail must never contradict the header's link count).
+  // silently dropped (IM-86: detail must never contradict the header's link count;
+  // the IM-86 remainder hydrates task/chat/achievement into per-link summaries —
+  // see hydrateJourneyLinks — so unshownByKind now only carries dangling refs of
+  // the hydratable kinds).
   const LINKS_DISPLAY_LIMIT = 20;
   r.get("/:id/links", (req, res) => {
     const id = Number(req.params.id);

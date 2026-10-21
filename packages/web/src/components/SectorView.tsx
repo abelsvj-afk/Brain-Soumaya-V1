@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type GraphData, type GraphNode, CELESTIAL_ICON, SECTOR_MASS, NODE_TYPE_LABEL, normalizeNodeType } from "@brain/shared";
 import { colorForType } from "../graph/theme.js";
 import { parseTolerantMs as msOf } from "../utils/dueReminders.js";
+import { fmtBrowseDate } from "../utils/browseFormat.js";
 import { playSfx } from "../graph/sfx.js";
 import { pushToast } from "./Toasts.js";
 
@@ -25,6 +26,17 @@ function toneOf(avg: number): { label: string; color: string } {
  * a blob.
  */
 export function SectorView({ graph, onFocus, onIsolate }: Props) {
+  // IM-41: hubs had no search. IM-39: cards announced "N memories orbiting"
+  // but never listed them — the member set was computed and discarded.
+  const [q, setQ] = useState("");
+  const [expandedHubs, setExpandedHubs] = useState<Set<number>>(new Set());
+  const toggleHub = (id: number) =>
+    setExpandedHubs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   // Adjacency once, for system membership + context aggregation.
   const adj = useMemo(() => {
     const m = new Map<number, Set<number>>();
@@ -102,7 +114,19 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
     // Emotional tone.
     const ews = members.map((m) => m.emotionalWeight).filter((x): x is number => typeof x === "number");
     const tone = toneOf(ews.length ? ews.reduce((s, x) => s + x, 0) / ews.length : 0);
-    return { count: members.length, tags, people, span, tone };
+    // IM-41: absolute local dates alongside the relative span — the earliest
+    // and latest member dates in the viewer's own calendar.
+    const validTimes = times.filter((t) => !Number.isNaN(t));
+    const spanDates =
+      validTimes.length > 0
+        ? {
+            from: fmtBrowseDate(new Date(Math.min(...validTimes)).toISOString()),
+            to: fmtBrowseDate(new Date(Math.max(...validTimes)).toISOString()),
+          }
+        : null;
+    // IM-39: keep the member set — the card lists it on expand instead of
+    // announcing a count it never shows.
+    return { count: members.length, tags, people, span, tone, members, spanDates };
   };
 
   // contextFor() used to be re-derived for every sector on every render (it was
@@ -134,20 +158,53 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
     );
   }
 
+  // IM-41: search over hub labels AND their members' labels/tags — a hub is
+  // findable by the memories orbiting it, not just its own name.
+  const needle = q.trim().toLowerCase();
+  const visibleSectors = needle
+    ? sectors.filter((s) => {
+        if (s.label.toLowerCase().includes(needle)) return true;
+        const ctx = contextByHubId.get(s.id);
+        return (
+          ctx?.members.some(
+            (m) => m.label.toLowerCase().includes(needle) || (m.tags ?? []).some((t) => t.toLowerCase().includes(needle)),
+          ) ?? false
+        );
+      })
+    : sectors;
+
   return (
     <div className="dock-body">
       <p className="sector-intro">
         The galaxy is divided into <strong>{sectors.length} major sectors</strong>. Focus on a
         hub to explore its connected memories.
       </p>
+      <input
+        className="list-filter"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={`Search ${sectors.length} hubs…`}
+        aria-label="Search hubs"
+      />
+      {needle && visibleSectors.length === 0 && (
+        <div className="empty" style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center", padding: "0.8rem" }}>
+          <span>No hubs match “{q.trim()}”.</span>
+          <button className="mini" onClick={() => setQ("")}>
+            Clear search
+          </button>
+        </div>
+      )}
       <ul className="neighbors sector-list">
-        {sectors.map((s) => {
+        {visibleSectors.map((s) => {
           const ctx = contextByHubId.get(s.id)!;
           // The server's own `degree` is enriched from the full edge set; the
           // locally-recomputed member count silently drops any neighbor whose
           // node object isn't present client-side (e.g. archived/filtered out),
           // which used to under-report "N memories orbiting" in that case.
           const orbiting = s.degree ?? Math.max(ctx.count - 1, 0);
+          const expanded = expandedHubs.has(s.id);
+          const hubDate = fmtBrowseDate(s.occurredAt ?? s.createdAt);
+          const orbiters = ctx.members.filter((m) => m.id !== s.id);
           return (
             <li key={s.id} className="sector-card">
               <div className="sector-header">
@@ -160,6 +217,8 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
               {s.celestialTitle && <p className="sector-title">"{s.celestialTitle}"</p>}
               <div className="sector-stats">
                 <span>{orbiting} memories orbiting</span>
+                {/* IM-41: the hub's own local date was never shown. */}
+                {hubDate && <span title="when this hub's memory is from"> · since {hubDate}</span>}
               </div>
               <div className="sector-context">
                 <span className="sector-ctx" title="emotional tone">
@@ -168,6 +227,7 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
                 {ctx.span && (
                   <span className="sector-ctx" title="time span">
                     🗓 {ctx.span}
+                    {ctx.spanDates ? ` · ${ctx.spanDates.from} – ${ctx.spanDates.to}` : ""}
                   </span>
                 )}
                 {ctx.people.length > 0 && (
@@ -181,6 +241,37 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
                   </span>
                 ))}
               </div>
+              {/* IM-39: the orbiting memories themselves, listable in place —
+                  each one flies to its memory. */}
+              {orbiters.length > 0 && (
+                <button
+                  className="mini ghost"
+                  aria-expanded={expanded}
+                  onClick={() => toggleHub(s.id)}
+                  title={expanded ? "Hide the orbiting memories" : "List the orbiting memories"}
+                >
+                  {expanded ? "▾ Hide members" : `▸ Show ${orbiters.length} orbiting ${orbiters.length === 1 ? "memory" : "memories"}`}
+                </button>
+              )}
+              {expanded && orbiters.length > 0 && (
+                <ul className="sector-members" style={{ listStyle: "none", margin: "0.35rem 0 0", padding: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  {orbiters.map((m) => (
+                    <li key={m.id}>
+                      <button
+                        className="pill"
+                        style={{ borderColor: colorForType(m.type), width: "100%", textAlign: "left" }}
+                        onClick={() => onFocus(m.id)}
+                        title="Fly to this memory in the galaxy"
+                      >
+                        <span className="dot" style={{ background: colorForType(m.type) }} /> {m.label}
+                        {fmtBrowseDate(m.occurredAt ?? m.createdAt) && (
+                          <span style={{ opacity: 0.6, fontSize: "0.85em" }}> · {fmtBrowseDate(m.occurredAt ?? m.createdAt)}</span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <div className="sector-actions">
                 <button className="mini" onClick={() => onFocus(s.id)}>
                   ⊙ Focus

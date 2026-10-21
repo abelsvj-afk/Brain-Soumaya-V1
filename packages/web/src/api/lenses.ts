@@ -52,6 +52,23 @@ export async function deleteLens(id: number): Promise<boolean> {
   }
 }
 
+/** IM-118: live match count for an UNSAVED query (the builder's preview).
+ *  Returns null on failure so the UI can say "couldn't count" honestly. */
+export async function previewLens(query: LensQuery): Promise<number | null> {
+  try {
+    const res = await afetch(`${API}/lenses/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) return null;
+    const d = (await res.json().catch(() => ({}))) as { count?: number };
+    return typeof d.count === "number" ? d.count : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Evaluate a lens → the node ids the galaxy should isolate to. */
 export async function lensNodes(id: number): Promise<number[]> {
   try {

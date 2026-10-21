@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { SUGGESTED_TAGS } from "@brain/shared";
 import { ingestText } from "../api/client.js";
+import { extractFileText } from "../lib/extractFileText.js";
 import { JourneyChips } from "./JourneyChips.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
+import { pushToast } from "./Toasts.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const SpeechRec =
@@ -16,34 +19,81 @@ function toIso(local: string): string | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
+/**
+ * IM-117: a brain-dump draft survives closing the panel. It lives in
+ * localStorage (like ChatDock's history), restores on reopen, clears only on
+ * a successful save or an explicit confirmed discard.
+ */
+const DRAFT_KEY = "brain.ingestDraft";
+interface IngestDraft {
+  text: string; details: string; tags: string[]; action: boolean; ttl: number;
+  occurred: string; remind: string;
+}
+function loadDraft(): Partial<IngestDraft> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null") as IngestDraft | null;
+    return raw && typeof raw === "object" ? raw : {};
+  } catch { return {}; }
+}
+const draftIsEmpty = (d: Partial<IngestDraft>) => !(d.text?.trim() || d.details?.trim());
+
+/** Chat's patient mic window (ChatDock MIC_SILENCE_MS) — IM-117 mic parity. */
+const MIC_SILENCE_MS = 2800;
+
 export function IngestPanel({
   onIngested,
   onClose,
+  initialText,
 }: {
   onIngested: (newIds?: number[], fuelEarned?: number, linkCount?: number) => void;
   onClose?: () => void;
+  /** IM-141: prefill from a PWA share-target landing (App parses the shared
+   *  title/text/url and seeds the box, so a share becomes one tap on
+   *  "Add to brain"). Seeds the initial state only — never overwrites typing. */
+  initialText?: string;
 }) {
-  const [text, setText] = useState("");
-  const [details, setDetails] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
+  const initial = useRef(loadDraft()).current;
+  // IM-141 + IM-117 compose: a fresh share-target seed wins over a saved
+  // draft (it is the newer intent); otherwise the draft restores.
+  const [text, setText] = useState(initialText ?? initial.text ?? "");
+  const [details, setDetails] = useState(initial.details ?? "");
+  const [showDetails, setShowDetails] = useState(!!initial.details);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  // IM-117: errors get their OWN surface — raw error text used to land in the
+  // same small span as the success message.
+  const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
-  const [action, setAction] = useState(false);
-  const [ttl, setTtl] = useState(24); // hours
-  // Temporal + context metadata.
-  const [tags, setTags] = useState<string[]>([]);
+  const [action, setAction] = useState(initial.action ?? false);
+  const [ttl, setTtl] = useState(initial.ttl ?? 24); // hours
+  const [tags, setTags] = useState<string[]>(initial.tags ?? []);
   const [customTag, setCustomTag] = useState("");
-  const [showWhen, setShowWhen] = useState(false);
-  const [occurred, setOccurred] = useState(""); // datetime-local
-  const [remind, setRemind] = useState(""); // datetime-local
+  const [showWhen, setShowWhen] = useState(!!(initial.occurred || initial.remind));
+  const [occurred, setOccurred] = useState(initial.occurred ?? "");
+  const [remind, setRemind] = useState(initial.remind ?? "");
   const recRef = useRef<any>(null);
-  // The most recently saved capture's node id — shown as an optional, skippable
-  // "add to a Journey?" prompt below the confirmation. Cleared on the next submit or
-  // after ~8s untouched (docs/specs/journeys-connective-tissue.md).
+  const wantMicRef = useRef(false);
+  const micTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micRestartCountRef = useRef(0);
+  const micBaseRef = useRef("");
   const [savedNodeId, setSavedNodeId] = useState<number | null>(null);
+  // IM-117: the created nodes were returned but never listed — now a preview.
+  const [createdNodes, setCreatedNodes] = useState<{ id: number; label: string }[]>([]);
   const savedNodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => () => { if (savedNodeTimerRef.current) clearTimeout(savedNodeTimerRef.current); }, []);
+
+  // Persist the draft as it changes (cleared explicitly on save/discard).
+  useEffect(() => {
+    try {
+      if (!text && !details) localStorage.removeItem(DRAFT_KEY);
+      else localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, details, tags, action, ttl, occurred, remind } satisfies IngestDraft));
+    } catch { /* ignore */ }
+  }, [text, details, tags, action, ttl, occurred, remind]);
 
   const toggleTag = (t: string) =>
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -54,12 +104,28 @@ export function IngestPanel({
     setCustomTag("");
   };
 
+  const dirty = !!(text.trim() || details.trim());
+  const requestClose = () => {
+    if (!onClose) return;
+    // IM-117: closing with a draft asks first (shared ConfirmDialog) instead
+    // of silently destroying a long brain-dump.
+    if (dirty) { setConfirmDiscard(true); return; }
+    onClose();
+  };
+  const discardAndClose = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setConfirmDiscard(false);
+    onClose?.();
+  };
+
   async function submit() {
     const body = details.trim() ? `${text.trim()}\n\n${details.trim()}` : text.trim();
     if (!body) return;
-    recRef.current?.stop();
+    stopMic();
     setBusy(true);
     setMsg("");
+    setError(null);
+    setCreatedNodes([]);
     if (savedNodeTimerRef.current) clearTimeout(savedNodeTimerRef.current);
     setSavedNodeId(null);
     try {
@@ -72,8 +138,6 @@ export function IngestPanel({
       const n = r.nodes.length;
       const e = r.extractedEdges.length + r.associativeEdges.length;
       const fuelBit = r.fuelEarned ? ` · +${r.fuelEarned.toFixed(1)} ⛽` : "";
-      // #9 "no research zone": tell the user whether this is worth a deep-dive. A
-      // weighty memory may get researched in Research Mode; a light one is just stored.
       const weighty = r.nodes.some((x: any) => (x.importance ?? 0) >= 0.6);
       const researchBit = action ? "" : weighty ? " · 🔬 may deep-dive in Research Mode" : " · 🗃️ stored, no research needed";
       setMsg(
@@ -81,6 +145,7 @@ export function IngestPanel({
           ? `Action item added (expires in ${ttl}h)${fuelBit}`
           : `+${n} node${n !== 1 ? "s" : ""}, ${e} connection${e !== 1 ? "s" : ""}${fuelBit}${researchBit}`,
       );
+      setCreatedNodes(r.nodes.map((x: any) => ({ id: x.id, label: x.label })));
       setText("");
       setDetails("");
       setShowDetails(false);
@@ -88,6 +153,7 @@ export function IngestPanel({
       setOccurred("");
       setRemind("");
       setShowWhen(false);
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       const firstId = r.nodes[0]?.id ?? null;
       setSavedNodeId(firstId);
       if (firstId != null) {
@@ -95,48 +161,116 @@ export function IngestPanel({
       }
       onIngested(r.nodes.map((x: any) => x.id), r.fuelEarned, e);
     } catch (err) {
-      setMsg((err as Error).message);
+      setError((err as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
-  // Voice → text via the browser's Web Speech API (no dependency, mobile Chrome OK).
+  /** IM-116: file import via the existing extraction pipeline (the same
+   *  lib/extractFileText the Companion Knowledge upload uses). The extracted
+   *  text lands in the capture box as an editable draft — nothing is saved
+   *  until the user hits "Add to brain". */
+  async function importFile(file: File) {
+    setImporting(true);
+    setError(null);
+    try {
+      const { text: extracted } = await extractFileText(file);
+      setText((t) => (t.trim() ? `${t.trim()}\n\n${extracted}` : extracted));
+      pushToast(`Imported ${file.name} — review, then Add to brain.`, "📎", 4000);
+    } catch (err) {
+      setError((err as Error).message || "Couldn't read that file.");
+    } finally {
+      setImporting(false);
+    }
+  }
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void importFile(f);
+  };
+
+  // Voice → text, at parity with Chat's mic (IM-117): interim results, a
+  // 2.8s silence window before it stops, and auto-restart with backoff when
+  // the engine self-terminates mid-dictation. Dictation appends to the draft
+  // (it does NOT auto-send — this is a capture box, not a conversation).
+  function stopMic() {
+    wantMicRef.current = false;
+    if (micTimerRef.current) clearTimeout(micTimerRef.current);
+    if (micRestartTimerRef.current) clearTimeout(micRestartTimerRef.current);
+    micRestartCountRef.current = 0;
+    try { recRef.current?.stop?.(); } catch { /* already stopped */ }
+    setListening(false);
+  }
   function toggleMic() {
     if (!SpeechRec) return;
-    if (listening) {
-      recRef.current?.stop();
-      return;
-    }
+    if (listening) { stopMic(); return; }
     const rec = new SpeechRec();
     rec.lang = "en-US";
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.continuous = true;
-    rec.onresult = (e: any) => {
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-      }
-      if (final) setText((t) => (t ? `${t} ${final.trim()}` : final.trim()));
+    micBaseRef.current = text.trim();
+    let finalText = "";
+    const armSilenceTimer = () => {
+      if (micTimerRef.current) clearTimeout(micTimerRef.current);
+      micTimerRef.current = setTimeout(() => { if (wantMicRef.current) stopMic(); }, MIC_SILENCE_MS);
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    rec.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t;
+        else interim += t;
+      }
+      const said = `${finalText} ${interim}`.trim();
+      setText(micBaseRef.current ? `${micBaseRef.current} ${said}` : said);
+      micRestartCountRef.current = 0;
+      armSilenceTimer();
+    };
+    rec.onerror = (e: any) => {
+      if (e?.error && e.error !== "no-speech" && e.error !== "aborted") stopMic();
+    };
+    rec.onend = () => {
+      if (wantMicRef.current) {
+        micRestartCountRef.current += 1;
+        if (micRestartCountRef.current > 6) {
+          stopMic();
+          pushToast("The mic kept dropping — try again.", "⚠️", 4000);
+          return;
+        }
+        const delay = Math.min(150 * micRestartCountRef.current, 1000);
+        micRestartTimerRef.current = setTimeout(() => {
+          try { rec.start(); } catch { stopMic(); }
+        }, delay);
+      }
+    };
     recRef.current = rec;
-    rec.start();
+    wantMicRef.current = true;
+    micRestartCountRef.current = 0;
     setListening(true);
+    armSilenceTimer();
+    rec.start();
   }
 
   return (
-    <div className="panel ingest">
+    <div
+      className={`panel ingest ${dragOver ? "drag-over" : ""}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      data-testid="ingest-panel"
+    >
       <div className="panel-head">
         <h2>Dump a thought</h2>
         {onClose && (
-          <button className="panel-close" onClick={onClose} aria-label="Close">
+          <button className="panel-close" onClick={requestClose} aria-label="Close">
             ×
           </button>
         )}
       </div>
       <textarea
+        autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="A business idea, a reflection, a random thought…"
@@ -145,6 +279,25 @@ export function IngestPanel({
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
         }}
       />
+
+      {/* IM-116: import a document (PDF / Word / text) — or drag one in. */}
+      <div className="ingest-import">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.md,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          style={{ display: "none" }}
+          aria-label="Import a file"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void importFile(f);
+            e.target.value = "";
+          }}
+        />
+        <button type="button" className="ingest-more" disabled={importing} onClick={() => fileInputRef.current?.click()}>
+          {importing ? "Reading file…" : "📎 Import a file (PDF / Word / text) — or drag & drop it here"}
+        </button>
+      </div>
 
       {showDetails ? (
         <textarea
@@ -160,7 +313,6 @@ export function IngestPanel({
         </button>
       )}
 
-      {/* Tag chips: curated blend (life-areas + moods) plus free-form. */}
       <div className="tag-row">
         {SUGGESTED_TAGS.map((t) => (
           <button
@@ -194,7 +346,6 @@ export function IngestPanel({
         />
       </div>
 
-      {/* When did this happen + optional reminder. */}
       {showWhen ? (
         <div className="when-block">
           <label className="when-field">
@@ -248,10 +399,37 @@ export function IngestPanel({
         )}
         <span className="msg">{msg}</span>
       </div>
+      {/* IM-117: separated error surface (never the success span). */}
+      {error && (
+        <div className="ingest-error" role="alert">
+          ⚠️ {error}
+        </div>
+      )}
+      {/* IM-117: what was actually created — verify Soumaya heard you right. */}
+      {createdNodes.length > 0 && (
+        <div className="ingest-created">
+          <span className="ingest-created-label">Created:</span>
+          <ul className="ingest-created-list">
+            {createdNodes.map((n) => (
+              <li key={n.id}>{n.label}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {savedNodeId != null && (
         <div className="ingest-journey-prompt">
           <JourneyChips kind="node" refId={savedNodeId} />
         </div>
+      )}
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard this draft?"
+          message="This thought hasn't been added to your brain yet. Discard it, or go back and keep writing?"
+          confirmLabel="Discard"
+          cancelLabel="Keep writing"
+          onConfirm={discardAndClose}
+          onCancel={() => setConfirmDiscard(false)}
+        />
       )}
     </div>
   );

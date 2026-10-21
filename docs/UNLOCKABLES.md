@@ -1,9 +1,12 @@
-# Unlockables — design (NOT yet enforced)
+# Unlockables — design (ENFORCED — live since IM-133 / CL-12)
 
-> **Current state (intentional):** nothing is locked. Every song, ship, trail, figurine,
-> and scenery asset is available to everyone. This doc captures how unlocking **should**
-> work when the app goes live, so the vision isn't lost. Enforcement is deferred until
-> we're near launch; until then the pilot (and their partner) have everything.
+> **Current state:** enforcement is **live**. The shared catalog
+> (`packages/shared/src/unlockables.ts`) is the single source of truth, the
+> music playlist and the Hangar both gate through `isUnlocked(item, stats)`,
+> and a dev / owner override (below) keeps testing unblocked. This doc was
+> reconciled with the shipped code in CL-12 (IM-100); where an older draft
+> of this doc disagreed with the code, the code's reality won and is what
+> is written here.
 
 ## Principle
 
@@ -16,34 +19,32 @@ the galaxy visibly grows richer (more music, better ship, cinematic scenery) as 
 
 | Category | Items (assets that exist today) | Notes |
 |---|---|---|
-| **Music** | The 3 loops (Deep Space · Slow Tide · Interstellar) + future tracks | Start with **1**; unlock the rest over time. `graph/audio.ts` playlist. |
-| **Ships** | `soumaya-ship.glb`, `organic-spaceship.glb`, procedural variants | Hangar already exists (`equippedShip`). |
-| **Trails** | Blue / Void Purple / Hyperdrive Neon / Solar Gold … | Several already tied to achievements (see `components/achievements.ts` — e.g. "Unlocks Aegis Shield Spire", "Void Purple Trail"). |
-| **Figurines** | `equippedFig1/2` cockpit companions | Hangar slots exist. |
-| **Scenery** | `blackhole.glb`, `dyson-sphere.glb`, `nebula-skybox.glb`, procedural nebulae/galaxies/comets | **`blackhole.glb` + `dyson-sphere.glb` are NOT wired into the scene yet** — wiring them as distant background scenery is a visual pass (place + scale on a desktop browser). Gate behind a rare, high-tier unlock once wired. |
+| **Music** | The 3 loops (Deep Space · Slow Tide · Interstellar) | Start with **1** (Deep Space); Slow Tide unlocks at 25 memories, Interstellar at 100. Gated in App's player + the Hangar's music picker (CL-12). `graph/audio.ts` playlist. |
+| **Ships** | `soumaya-ship.glb`, `organic-spaceship.glb`, procedural variants | Hangar (`equippedShip`), gated by the catalog. |
+| **Trails** | Blue / Void Purple / Hyperdrive Neon / Solar Gold … | Tied to feats (see `packages/shared/src/unlockables.ts` — e.g. "Aegis Shield Spire", "Void Purple Trail"); requirement copy is humanized and never leaks achievement ids. |
+| **Figurines** | `equippedFig1/2` — **deep space background monuments** | Hangar slots. Terminology (IM-100): the shipped scene mounts these far in the background at civilization scale (see `graph/graph3dHelpers.ts`), so "background monuments" is the term of record — an older draft of this doc called them "cockpit companions", which the scene never embodied; that term is retired. |
+| **Scenery** | `blackhole.glb`, `dyson-sphere.glb` (+ the galaxy's procedural nebulae/galaxies/comets backdrop) | **Wired into the scene today** as the two capstone figurines above — the same assets, rendered as distant background scenery — and catalogued as `scenery` twins with identical conditions to their figurine twins (one asset, one rule). The nebula backdrop is a fixed galaxy layer: it is **not** a gated item and has **no user-facing controls**, and none are promised here. |
 
-## Unlock conditions (draw from signals we already compute)
+## Unlock conditions (drawn from signals we already compute)
 
-- **Memory count** → pilot rank ladder (`components/rank.ts`). Each rank can unlock a track / trail / ship.
-- **Streak** (`getStreak`) → milestone unlocks (7-day, 30-day).
-- **Achievements** (`components/achievements.ts`) → already the natural unlock trigger; extend it to grant music/scenery, not just trails.
-- **Codex completion** (`components/codex.ts`) → the rarest scenery (black hole / Dyson sphere) as a capstone reward.
-- **Fuel / research milestones** → optional cosmetic unlocks.
+- **Memory count** → pilot rank ladder (`components/rank.ts`). Ranks unlock tracks / trails / ships.
+- **Streak** (`getStreak`) → milestone unlocks (7-day, 30-day) — supported by the evaluator (`streak` conditions), available to future catalog entries.
+- **Achievements** (`components/achievements.ts`) → the natural unlock trigger; several Hangar items gate on feats, and the legacy achievement ids the old ad-hoc Hangar honoured are preserved as `anyOf` branches in the catalog so nothing already earned re-locked during the migration.
+- **Codex completion** (`components/codex.ts`) → the rarest scenery (black hole / Dyson sphere) as a capstone reward — an additional way in, alongside the memory-count thresholds the Hangar always enforced.
+- **Fuel / research milestones** → optional cosmetic unlocks (evaluator supports `links` conditions today).
 
-## Data model (when we enforce)
+## Data model (as enforced)
 
-- Compute unlocked state **client-side** from the stats above (like achievements already do) — no server round-trip needed for a cosmetic gate. Persist "seen/claimed" per brain in `localStorage` (mirror `achvKey`).
-- OR, if we want it authoritative/cross-device: a space-scoped `unlocks` table (`space_id`, `item_id`, `unlocked_at`) written when a condition is first met. Additive migration, same pattern as `candidate_links`.
-- A **catalog** in `packages/shared` (single source of truth): `{ id, category, label, assetPath, condition }`, so server + web + the Hangar/Music UIs all agree.
+- Unlocked state is computed **client-side** from the stats above — no server round-trip for a cosmetic gate. `buildUnlockStats` (web `components/unlockables.ts`) assembles the stats from App's live state; the persisted celebrated set lives per brain in `localStorage` (mirroring `achvKey`).
+- The **catalog** lives in `packages/shared` (`unlockables.ts`): `{ id, category, label, equipValue, assetPath?, condition, requirementText }`, so server + web + the Hangar/Music UIs all agree. A space-scoped server `unlocks` table remains a possible future step if cross-device authority is ever needed; it does not exist today and nothing here claims it does.
 
 ## Dev / owner override (so testing is never blocked)
 
-- A **`dev: unlock everything`** flag (per-account, e.g. gated to the owner's space or a `localStorage` `brain.devUnlockAll`). While on, `isUnlocked()` always returns true.
-- This is how the owner + partner keep full access during development while the *logic* for real gating already exists behind the flag.
+- A **`dev: unlock everything`** flag: `localStorage` key `brain.devUnlockAll` = `"1"`/`"true"`. While on, `isUnlocked()` always returns true — for the Hangar's items as well as music (CL-12 completed the Hangar side). It is DEV-ONLY: nothing in the normal UI sets it. This is how the owner + partner keep full access while the gating logic is exercised.
 
-## Rollout order (later)
+## Rollout order (status)
 
-1. Build the shared **catalog** + `isUnlocked(item, stats)` helper + the dev-unlock-all flag (logic only, gate OFF).
-2. Wire the **Music** picker + **Hangar** to read `isUnlocked` (start-with-1-song), with the owner override on.
-3. Wire **black hole / Dyson** GLBs as scenery (visual pass), gate as capstone unlocks.
-4. Add "🔓 Unlocked!" moments (reuse the rank-up celebration surface) when a new item is earned.
+1. ✅ Shared **catalog** + `isUnlocked(item, stats)` helper + the dev-unlock-all flag (IM-133).
+2. ✅ **Music** picker + **Hangar** read `isUnlocked` (music in IM-133; the Hangar migrated onto the same system in CL-12, which also gave it the music picker, previews, loadout header, and unlock-progress hints).
+3. ✅ **Black hole / Dyson** GLBs are wired as scenery — as the capstone figurines/monuments above — gated as capstone unlocks.
+4. ✅ "🔓 Unlocked!" moments (`useUnlockWatcher` + `UnlockCelebration`, reusing the rank-up celebration surface) fire when a new item is earned.

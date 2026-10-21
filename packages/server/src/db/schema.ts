@@ -449,6 +449,30 @@ export type CandidateLinkRow = typeof candidateLinks.$inferSelect;
 export type NodeRow = typeof nodes.$inferSelect;
 export type EdgeRow = typeof edges.$inferSelect;
 export type InsightRow = typeof insights.$inferSelect;
+
+/** Server-backed Inbox notifications (IM-74) — one row per real away-event.
+ *  Retention (Q7 interim default): persist until the user clears them; the
+ *  repository drops only the oldest past a high disclosed cap. */
+export const inboxNotifications = sqliteTable(
+  "inbox_notifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull().default(DEFAULT_SPACE),
+    source: text("source").notNull(), // digest | insight | discovery | bill-risk
+    text: text("text").notNull(),
+    icon: text("icon").notNull().default("🔔"),
+    priority: text("priority").notNull().default("normal"), // low | normal | high
+    dedupeKey: text("dedupe_key"),
+    seenAt: text("seen_at"),
+    snoozedUntil: text("snoozed_until"),
+    createdAt: text("created_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("inbox_notifications_space_idx").on(t.spaceId, t.id),
+    uniqueIndex("inbox_notifications_dedupe_idx").on(t.spaceId, t.dedupeKey),
+  ],
+);
+export type InboxNotificationRow = typeof inboxNotifications.$inferSelect;
 /**
  * W1 temporal truth: append-only correction events. Corrections are events, not
  * row mutations — a mutable flag on the node row would corrupt historical as-of

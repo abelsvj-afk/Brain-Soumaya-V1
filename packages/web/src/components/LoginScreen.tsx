@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { authSpace } from "../api/client.js";
+import { SoumayaEye } from "./SoumayaEye.js";
+import { humanizeAuthError } from "./cl1a.helpers.js";
 
 /**
  * The gate to a private brain. A gamer tag + passcode opens an existing brain (on any
  * device) or creates a new one with a custom companion name.
+ *
+ * IM-18: galaxy ambience + preview (star field + her eye), design-system styling
+ * (the tabs used to be inline-styled with 4px corners against the card's 18px
+ * glass), a fade transition into the app, and human error copy — raw HTTP
+ * status text never reaches the user.
+ * IM-13: SoumayaEye lives here too, not only in the Chat header.
  */
 export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name: string }) => void }) {
   const [gamerTag, setGamerTag] = useState("");
@@ -11,6 +19,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
   const [passcode, setPasscode] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [entering, setEntering] = useState(false);
   const [error, setError] = useState("");
 
   const submit = async (e: React.FormEvent) => {
@@ -38,42 +47,41 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
     setBusy(true);
     try {
       const res = await authSpace(trimmedGamerTag, passcode, isSignUp ? trimmedBrainName : undefined);
-      onAuthed({ id: res.id, name: res.name });
+      // Transition into the app instead of a hard cut.
+      setEntering(true);
+      window.setTimeout(() => onAuthed({ id: res.id, name: res.name }), 260);
     } catch (err) {
-      setError((err as Error).message);
+      setError(humanizeAuthError((err as Error).message));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="login-screen">
+    <div className={`login-screen${entering ? " login-entering" : ""}`}>
+      <div className="login-stars" aria-hidden="true">
+        {["✦", "·", "✦", "·", "⭐", "·", "✦", "·"].map((s, i) => (
+          <span key={i} className={`login-star ls-${i}`}>{s}</span>
+        ))}
+      </div>
       <div className="login-card">
+        <div className="login-eye"><SoumayaEye state="idle" mood="thoughtful" size={44} /></div>
         <h1>
           Soumaya <span className="sep">·</span> Second Brain
         </h1>
         <p className="login-sub">
           {isSignUp
-            ? "Create a new private galaxy. Choose a unique gamer tag and name your companion."
+            ? "Create a new private galaxy — each memory you add becomes a star in it. Choose a unique gamer tag and name your companion."
             : "Open your private galaxy with your gamer tag and passcode."}
         </p>
 
-        <div className="login-tabs" style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem" }}>
+        <div className="login-tabs">
           <button
             type="button"
             className={`login-tab-btn ${!isSignUp ? "active" : ""}`}
             onClick={() => {
               setIsSignUp(false);
               setError("");
-            }}
-            style={{
-              background: !isSignUp ? "rgba(255, 255, 255, 0.15)" : "transparent",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              color: "white",
-              padding: "0.5rem 1rem",
-              borderRadius: "4px",
-              cursor: "pointer",
-              flex: 1,
             }}
           >
             Enter My Galaxy
@@ -84,15 +92,6 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
             onClick={() => {
               setIsSignUp(true);
               setError("");
-            }}
-            style={{
-              background: isSignUp ? "rgba(255, 255, 255, 0.15)" : "transparent",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              color: "white",
-              padding: "0.5rem 1rem",
-              borderRadius: "4px",
-              cursor: "pointer",
-              flex: 1,
             }}
           >
             Create New Galaxy

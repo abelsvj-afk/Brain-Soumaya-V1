@@ -8,6 +8,9 @@ import { playSfx } from "../graph/sfx.js";
 import { isVoiceSupported, isVoiceEnabled, setVoiceEnabled, speak, stopSpeaking } from "../voice.js";
 import { SoumayaEye } from "./SoumayaEye.js";
 import { CompanionPanel } from "./CompanionPanel.js";
+import { MarkdownView } from "./MarkdownView.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
+import { extractFileText } from "../lib/extractFileText.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -38,7 +41,34 @@ interface ChatMessage {
    *  index-keyed Set) so it survives a reload; an index-keyed flag forgot every
    *  save on refresh and let the ＋ button re-ingest the same line as a duplicate. */
   saved?: boolean;
+  /** When this message was sent/received (epoch ms, IM-105). Absent on
+   *  history persisted before timestamps existed — those render without a
+   *  time rather than with an invented one. */
+  at?: number;
+  /** Names of files attached to this (user) message (IM-106) — names only;
+   *  the extracted text is one-turn context and is never persisted here. */
+  attachments?: string[];
+  /** The subgraph she actually consulted for this reply (IM-107) — powers
+   *  the "drew on N memories" galaxy-highlight chip. */
+  contextIds?: number[];
 }
+
+/** Local time for a message (IM-105): time-of-day today, date + time before
+ *  that — enough for a resumed conversation to read as resumed. */
+function fmtMsgTime(at: number): string {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
+}
+
+/** Human copy for an empty reply (IM-108) — never the old "(no answer)"
+ *  plumbing literal in her voice. */
+const EMPTY_ANSWER_COPY = "I don't have an answer for that one yet — ask me another way and I'll dig in.";
+
+/** Per-file cap for in-chat attachments — mirrors the chat route's zod bound
+ *  (routes/chat.ts). Longer documents belong in 🎭 Knowledge. */
+const ATTACH_TEXT_CAP = 20000;
 
 /** Browser SpeechRecognition (Chrome/Safari prefix it). Null if unsupported. */
 function getRecognition(): any {
@@ -140,6 +170,25 @@ export function ChatDock({
   // End-of-conversation: notes Soumaya proposes to save (null = none shown yet).
   const [proposals, setProposals] = useState<string[] | null>(null);
   const [distilling, setDistilling] = useState(false);
+  // IM-103: how long the in-flight reply has been running (drives the staged
+  // typing presence + elapsed cue in the busy bubble).
+  const [elapsedMs, setElapsedMs] = useState(0);
+  // IM-108: failures live OUTSIDE her voice — a bar above the input with the
+  // raw detail in small print and a Retry that re-sends the same turn.
+  const [notice, setNotice] = useState<{
+    text: string;
+    detail?: string;
+    retry?: { q: string; history: { role: "you" | "soumaya"; text: string }[]; atts: { name: string; text: string }[] };
+  } | null>(null);
+  // IM-106: files staged for the NEXT message (extracted text rides along as
+  // one-turn context; cleared the moment that message is sent).
+  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; text: string }[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
+  // IM-108: clear-conversation confirmation via the shared ConfirmDialog
+  // (was native confirm()).
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const attachFileRef = useRef<HTMLInputElement>(null);
   const distilledRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -168,9 +217,21 @@ export function ChatDock({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  // IM-103: elapsed ticker for the in-flight reply's presence cue.
+  useEffect(() => {
+    if (!busy) {
+      setElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    const t = window.setInterval(() => setElapsedMs(Date.now() - start), 250);
+    return () => window.clearInterval(t);
+  }, [busy]);
+
   useEffect(
     () => () => {
       stopSpeaking();
+      abortRef.current?.abort();
       wantMicRef.current = false;
       recRef.current?.stop?.();
       if (micTimerRef.current) window.clearTimeout(micTimerRef.current);
@@ -179,9 +240,89 @@ export function ChatDock({
     [],
   );
 
+  /**
+   * One request/response turn. Split from `send` so the IM-108 error bar's
+   * Retry can re-run the EXACT same turn (same question, history, attachments)
+   * without duplicating the user's bubble.
+   */
+  const performSend = async (
+    q: string,
+    history: { role: "you" | "soumaya"; text: string }[],
+    atts: { name: string; text: string }[],
+    journeyForThisSend?: number,
+    ctxForThisSend?: ProactiveContext,
+  ) => {
+    setBusy(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const r = await askChat(
+        q,
+        history,
+        journeyForThisSend,
+        ctxForThisSend,
+        atts.length > 0 ? atts : undefined,
+        controller.signal,
+      );
+      const citations = r.citations ?? [];
+      // Visibility: which of your Companion roles/docs actually shaped this reply.
+      const applied = [
+        ...(r.appliedRoles ?? []).map((n) => `🎭 ${n}`),
+        ...(r.appliedDocs ?? []).map((n) => `📚 ${n}`),
+      ];
+      const hasAnswer = typeof r.answer === "string" && r.answer.trim().length > 0;
+      setMessages((m) => {
+        const next: ChatMessage[] = [
+          ...m,
+          {
+            role: "soumaya",
+            text: hasAnswer ? r.answer : EMPTY_ANSWER_COPY,
+            citations,
+            navigation: r.navigation,
+            mood: r.mood,
+            applied,
+            at: Date.now(),
+            contextIds: r.contextIds && r.contextIds.length > 0 ? r.contextIds : undefined,
+          },
+        ];
+        // Interview instinct: her clarifying question gets its own bubble so it
+        // reads as HER asking, not a footnote.
+        if (r.askBack) next.push({ role: "soumaya", text: r.askBack, mood: r.mood, ask: true, at: Date.now() });
+        return next;
+      });
+      // IM-107: light up the subgraph she actually consulted (contextIds is a
+      // superset of the citations). RESTRAINT: this reuses fireRecall — a
+      // particles-only visual along existing synapses. It never moves the
+      // camera, never isolates/filters the graph, and changes no state, so it
+      // is safe even while the user is mid-interaction with the galaxy.
+      const consulted = r.contextIds && r.contextIds.length > 0 ? r.contextIds : citations.map((c) => c.id);
+      if (consulted.length > 0) onRecall?.(consulted);
+      if (speakOn && hasAnswer) speak(r.askBack ? `${r.answer} ${r.askBack}` : r.answer, r.tone);
+    } catch (err) {
+      // IM-108: the failure is shown OUTSIDE her voice (the notice bar above
+      // the input), never as a Soumaya bubble — and it carries a Retry.
+      if (controller.signal.aborted) {
+        setNotice({ text: "Stopped — she didn't get to finish that reply.", retry: { q, history, atts } });
+      } else {
+        setNotice({
+          text: "Couldn't reach Soumaya just now — your message is still here, try again.",
+          detail: (err as Error).message,
+          retry: { q, history, atts },
+        });
+      }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setBusy(false);
+    }
+  };
+
+  /** IM-103: cancel the in-flight reply (AbortController through askChat). */
+  const cancelSend = () => abortRef.current?.abort();
+
   const send = async (text: string) => {
     const q = text.trim();
     if (!q || busy) return;
+    setNotice(null);
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
     // She sees the recent thread too — this is what makes it a conversation
@@ -195,8 +336,14 @@ export function ChatDock({
       else history.push({ role: m.role, text: m.text });
     }
     const trimmed = history.slice(-32);
-    setMessages((m) => [...m, { role: "you", text: q }]);
-    setBusy(true);
+    // IM-106: staged attachments ride with exactly this message, then clear —
+    // the user bubble keeps only their names.
+    const atts = pendingAttachments;
+    setPendingAttachments([]);
+    setMessages((m) => [
+      ...m,
+      { role: "you", text: q, at: Date.now(), ...(atts.length > 0 ? { attachments: atts.map((a) => a.name) } : {}) },
+    ]);
     // One-shot: attach to exactly this send, then tell the caller to clear it — a
     // later message in the same session must never silently carry stale proactive
     // framing (or Journey scoping) forward.
@@ -204,30 +351,39 @@ export function ChatDock({
     if (journeyForThisSend) onConsumeJourneyContext?.();
     const ctxForThisSend = proactiveContext ?? undefined;
     if (ctxForThisSend) onConsumeProactiveContext?.();
+    await performSend(q, trimmed, atts, journeyForThisSend, ctxForThisSend);
+  };
+
+  const retryNotice = () => {
+    const r = notice?.retry;
+    if (!r || busy) return;
+    setNotice(null);
+    void performSend(r.q, r.history, r.atts);
+  };
+
+  /** IM-106: extract a picked file's text client-side (same pipeline as
+   *  🎭 Knowledge upload) and stage it for the next message. */
+  const onAttachFile = async (file: File) => {
+    setAttachBusy(true);
     try {
-      const r = await askChat(q, trimmed, journeyForThisSend, ctxForThisSend);
-      const citations = r.citations ?? [];
-      // Visibility: which of your Companion roles/docs actually shaped this reply.
-      const applied = [
-        ...(r.appliedRoles ?? []).map((n) => `🎭 ${n}`),
-        ...(r.appliedDocs ?? []).map((n) => `📚 ${n}`),
-      ];
-      setMessages((m) => {
-        const next: ChatMessage[] = [
-          ...m,
-          { role: "soumaya", text: r.answer || "(no answer)", citations, navigation: r.navigation, mood: r.mood, applied },
-        ];
-        // Interview instinct: her clarifying question gets its own bubble so it
-        // reads as HER asking, not a footnote.
-        if (r.askBack) next.push({ role: "soumaya", text: r.askBack, mood: r.mood, ask: true });
-        return next;
-      });
-      if (citations.length > 0) onRecall?.(citations.map((c) => c.id));
-      if (speakOn) speak(r.askBack ? `${r.answer} ${r.askBack}` : r.answer, r.tone);
+      const { text } = await extractFileText(file);
+      const truncated = text.length > ATTACH_TEXT_CAP;
+      setPendingAttachments((p) => [
+        ...p.slice(-2),
+        { name: file.name, text: text.slice(0, ATTACH_TEXT_CAP) },
+      ]);
+      if (truncated) {
+        pushToast(
+          `"${file.name}" is long — she'll read the first ${ATTACH_TEXT_CAP.toLocaleString()} characters with your message. For the whole document, add it under 🎭 Knowledge.`,
+          "📎",
+          6000,
+        );
+      }
     } catch (err) {
-      setMessages((m) => [...m, { role: "soumaya", text: (err as Error).message }]);
+      pushToast((err as Error).message || "Couldn't read that file.", "⚠️", 4500);
     } finally {
-      setBusy(false);
+      setAttachBusy(false);
+      if (attachFileRef.current) attachFileRef.current.value = "";
     }
   };
 
@@ -427,15 +583,22 @@ export function ChatDock({
     if (!next) stopSpeaking();
   };
 
-  const clearChat = () => {
-    if (!confirm("Clear this conversation? This can't be undone.")) return;
+  const doClearChat = () => {
     stopSpeaking();
     setMessages([]);
     // Reset per-conversation state too — a stale distill flag would otherwise
     // suppress the next conversation's wrap-up offer.
     setProposals(null);
     distilledRef.current = false;
+    setNotice(null);
+    setPendingAttachments([]);
+    setShowClearConfirm(false);
   };
+
+  // IM-103 staged presence: what she appears to be doing shifts as the wait
+  // grows, so a long reply never reads as a hung request.
+  const typingStage =
+    elapsedMs < 2500 ? "Reading your galaxy…" : elapsedMs < 9000 ? "Thinking it through…" : "Still working on it — the deep ones take a moment…";
 
   return (
     <div className="chatdock" role="dialog" aria-label={`Chat with ${spaceName}`} ref={dockRef}>
@@ -481,7 +644,7 @@ export function ChatDock({
             </button>
           )}
           {messages.length > 0 && !showPersona && (
-            <button className="chatdock-tool" onClick={clearChat} title="Clear conversation">
+            <button className="chatdock-tool" onClick={() => setShowClearConfirm(true)} title="Clear conversation">
               🗑
             </button>
           )}
@@ -549,7 +712,10 @@ export function ChatDock({
                     {MOOD_ICON[m.mood]}
                   </span>
                 )}
-                {m.text}
+                {/* IM-104: her replies are Markdown (lists/bold from the model) —
+                    render them via the shared MarkdownView instead of raw text.
+                    The user's own words stay verbatim plain text. */}
+                {m.role === "soumaya" ? <MarkdownView text={m.text} /> : m.text}
                 <button
                   className={`chatdock-save ${m.saved ? "done" : ""}`}
                   onClick={() => saveMemory(m.text, i)}
@@ -560,6 +726,22 @@ export function ChatDock({
                   {m.saved ? "✓" : "＋"}
                 </button>
               </div>
+              {/* IM-105: when this message happened (local time). Messages
+                  persisted before timestamps existed render without one. */}
+              {m.at != null && (
+                <time className="chatdock-time" dateTime={new Date(m.at).toISOString()}>
+                  {fmtMsgTime(m.at)}
+                </time>
+              )}
+              {m.attachments && m.attachments.length > 0 && (
+                <div className="chatdock-cites">
+                  {m.attachments.map((n) => (
+                    <span key={n} className="chatdock-att-chip" title="Attached to this message — she read it as context for her reply">
+                      📎 {n}
+                    </span>
+                  ))}
+                </div>
+              )}
               {m.citations && m.citations.length > 0 && (
                 <div className="chatdock-cites">
                   {m.citations.map((c) => (
@@ -573,6 +755,20 @@ export function ChatDock({
                       {c.label}
                     </button>
                   ))}
+                </div>
+              )}
+              {/* IM-107: the subgraph she actually consulted for this reply —
+                  re-light it in the galaxy on demand (same fireRecall path the
+                  reply itself used; visual only, never moves the camera). */}
+              {m.contextIds && m.contextIds.length > 0 && (
+                <div className="chatdock-cites">
+                  <button
+                    className="pill"
+                    onClick={() => onRecall?.(m.contextIds!)}
+                    title="Light up the memories she consulted for this reply in the galaxy"
+                  >
+                    ✦ drew on {m.contextIds.length} {m.contextIds.length === 1 ? "memory" : "memories"}
+                  </button>
                 </div>
               )}
               {m.navigation && (
@@ -599,8 +795,22 @@ export function ChatDock({
           ))}
           {busy && (
             <div className="chatdock-msg soumaya">
-              <div className="chatdock-bubble typing">
+              {/* IM-103: staged typing presence — animated dots, a stage label
+                  that changes as the wait grows, an elapsed-seconds cue, and a
+                  working Stop (AbortController). A 3s wait and a hung request
+                  no longer look the same. */}
+              <div className="chatdock-bubble typing" role="status" aria-live="polite">
                 <SoumayaEye state="thinking" mood={lastMood} size={24} />
+                <span className="chatdock-typing-stage">{typingStage}</span>
+                <span className="chatdock-typing-dots" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                {elapsedMs >= 1000 && <span className="chatdock-typing-elapsed">{Math.floor(elapsedMs / 1000)}s</span>}
+                <button className="chatdock-stop" onClick={cancelSend} title="Stop this reply">
+                  Stop
+                </button>
               </div>
             </div>
           )}
@@ -628,8 +838,67 @@ export function ChatDock({
         </div>
       )}
 
+      {/* IM-108: failures surface HERE — outside her voice, with retry —
+          never as a Soumaya bubble carrying a raw network/HTTP string. */}
+      {notice && !showPersona && (
+        <div className="chatdock-notice" role="alert">
+          <span className="chatdock-notice-text">
+            ⚠️ {notice.text}
+            {notice.detail && <span className="chatdock-notice-detail"> ({notice.detail})</span>}
+          </span>
+          {notice.retry && (
+            <button className="mini" onClick={retryNotice} disabled={busy}>
+              Retry
+            </button>
+          )}
+          <button className="mini ghost" onClick={() => setNotice(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {pendingAttachments.length > 0 && !showPersona && (
+        <div className="chatdock-pending-att">
+          {pendingAttachments.map((a, i) => (
+            <span
+              key={`${a.name}-${i}`}
+              className="chatdock-att-chip"
+              title={`${a.text.length.toLocaleString()} characters — she'll read this with your next message`}
+            >
+              📎 {a.name}
+              <button
+                className="chatdock-att-x"
+                aria-label={`Remove ${a.name}`}
+                onClick={() => setPendingAttachments((p) => p.filter((_, idx) => idx !== i))}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {!showPersona && (
         <div className="chatdock-input">
+          <input
+            ref={attachFileRef}
+            type="file"
+            hidden
+            accept=".txt,.md,.markdown,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onAttachFile(f);
+            }}
+          />
+          <button
+            className="chatdock-mic"
+            onClick={() => attachFileRef.current?.click()}
+            disabled={attachBusy}
+            title={attachBusy ? "Reading file…" : "Attach a file — she'll read it with your next message"}
+            aria-label="Attach a file"
+          >
+            {attachBusy ? "⏳" : "📎"}
+          </button>
           {micSupported && (
             <button
               className={`chatdock-mic ${listening ? "live" : ""}`}
@@ -663,6 +932,16 @@ export function ChatDock({
             ➤
           </button>
         </div>
+      )}
+
+      {showClearConfirm && (
+        <ConfirmDialog
+          title="Clear this conversation?"
+          message="Every message in this chat will be removed. This can't be undone."
+          confirmLabel="Clear"
+          onConfirm={doClearChat}
+          onCancel={() => setShowClearConfirm(false)}
+        />
       )}
     </div>
   );

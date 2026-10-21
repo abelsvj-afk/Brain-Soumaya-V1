@@ -17,6 +17,19 @@ export async function listAttachments(nodeId: number): Promise<Attachment[]> {
   }
 }
 
+/**
+ * Strict variant of listAttachments (IM-29/IM-31 pattern): THROWS on
+ * network/HTTP failure so a surface can tell "load failed" apart from
+ * "genuinely no attachments". listAttachments' fail-soft contract is
+ * unchanged for its other callers (Timeline).
+ */
+export async function listAttachmentsStrict(nodeId: number): Promise<Attachment[]> {
+  const res = await afetch(`${API}/nodes/${nodeId}/attachments`);
+  if (!res.ok) throw new Error(`Attachments failed (${res.status})`);
+  const d = await res.json().catch(() => []);
+  return Array.isArray(d) ? (d as Attachment[]) : [];
+}
+
 /** Attach a file (read as base64) to a memory note. Returns the metadata or throws. */
 export async function addAttachment(
   nodeId: number,

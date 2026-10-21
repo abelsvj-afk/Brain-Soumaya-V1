@@ -1,4 +1,4 @@
-import type { TimelineChapter } from "@brain/shared";
+import type { LifeSeasonsTimeline, TimelineChapter } from "@brain/shared";
 import { API, afetch } from "./http.js";
 
 /**
@@ -34,6 +34,20 @@ export async function addTimelineChapter(title?: string): Promise<TimelineChapte
     return null;
   }
 }
+/** Life Seasons + Journey spans for the Timeline's real time axis (IM-132).
+ *  Returns null on any failure so the Timeline can show a distinct state for
+ *  this section without taking down the chapters list. */
+export async function getLifeSeasons(): Promise<LifeSeasonsTimeline | null> {
+  try {
+    const res = await afetch(`${API}/timeline/seasons`);
+    if (!res.ok) return null;
+    const d = (await res.json()) as LifeSeasonsTimeline;
+    return Array.isArray(d?.seasons) && Array.isArray(d?.journeySpans) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteTimelineChapter(id: number): Promise<boolean> {
   try {
     const res = await afetch(`${API}/timeline/${id}`, { method: "DELETE" });
@@ -61,17 +75,50 @@ export async function getDueReviews(): Promise<DueReview[]> {
     return [];
   }
 }
+/**
+ * IM-124 residual: strict sibling of `getDueReviews` — `{ ok: false }` on
+ * any failure (network, non-OK, malformed body) instead of the fail-soft
+ * `[]`, for callers (the Observatory) that must distinguish a failed fetch
+ * from "nothing due". `getDueReviews` keeps its contract for everyone else.
+ */
+export async function getDueReviewsResult(): Promise<{ ok: true; reviews: DueReview[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/review/due`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, reviews: d as DueReview[] } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
 /** Grade a recall attempt; SM-2 reschedules server-side. */
 export async function gradeReview(id: number, remembered: boolean): Promise<boolean> {
+  return (await gradeReviewDetailed(id, remembered)).ok;
+}
+
+export interface GradeResult {
+  ok: boolean;
+  /** ISO instant of the next scheduled review (IM-114), when the server sent it. */
+  nextReviewAt?: string;
+  /** Whole days until that review (IM-114) — "next review in ~N days". */
+  nextIntervalDays?: number;
+}
+
+/** IM-114: like gradeReview, but also surfaces WHEN the memory comes back —
+ *  the grade response already carried nextReviewAt; the boolean wrapper
+ *  discarded it, so the panel could never give reschedule feedback. */
+export async function gradeReviewDetailed(id: number, remembered: boolean): Promise<GradeResult> {
   try {
     const res = await afetch(`${API}/review/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ remembered }),
     });
-    return res.ok;
+    if (!res.ok) return { ok: false };
+    const d = (await res.json().catch(() => ({}))) as { nextReviewAt?: string; nextIntervalDays?: number };
+    return { ok: true, nextReviewAt: d.nextReviewAt, nextIntervalDays: d.nextIntervalDays };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 

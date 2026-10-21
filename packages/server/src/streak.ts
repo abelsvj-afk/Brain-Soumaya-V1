@@ -80,13 +80,85 @@ export class StreakRepo {
     return spaceDayStr(this.h.sqlite, this.spaceId, new Date(), offsetDays);
   }
 
+  /** Shift a YYYY-MM-DD day string by whole days (anchored at UTC noon, DST-proof). */
+  private shiftDay(day: string, offsetDays: number): string {
+    const anchor = new Date(`${day}T12:00:00Z`);
+    anchor.setUTCDate(anchor.getUTCDate() + offsetDays);
+    return anchor.toISOString().slice(0, 10);
+  }
+
+  /** The day-tracking table (IM-64) — additive; created here too so a bare handle works. */
+  private ensureDaysTable(): void {
+    this.h.sqlite.exec(
+      `CREATE TABLE IF NOT EXISTS streak_days (
+         space_id TEXT NOT NULL,
+         day TEXT NOT NULL,
+         PRIMARY KEY (space_id, day)
+       )`,
+    );
+  }
+
+  /** Record that this space was tended on `day` (IM-64 day history). Idempotent. */
+  private recordDay(day: string): void {
+    this.ensureDaysTable();
+    this.h.sqlite
+      .prepare(`INSERT OR IGNORE INTO streak_days (space_id, day) VALUES (?, ?)`)
+      .run(this.spaceId, day);
+  }
+
+  private recordedDays(): Set<string> {
+    this.ensureDaysTable();
+    const rows = this.h.sqlite
+      .prepare(`SELECT day FROM streak_days WHERE space_id = ?`)
+      .all(this.spaceId) as { day: string }[];
+    return new Set(rows.map((r) => r.day));
+  }
+
   /**
-   * Effective current streak: alive if tended today or yesterday — OR if exactly one
-   * day was missed and a nebula shield is banked to forgive it (the shield is consumed
-   * on the next tend, in `touch`). Older gaps lapse to 0.
+   * Per-day tending history for the last `days` space-local days, oldest first (IM-64).
+   * Honesty rules — a day is only asserted `false` (not tended) when that is knowable:
+   *  - `true`: recorded by touch() in streak_days, OR the stored last_active_date, OR
+   *    inside the current streak's span ending at last_active_date (every day in that
+   *    span counted toward the streak; the one nuance is a shield-forgiven gap day
+   *    inside a PRE-tracking span, which counted toward the streak without a tend —
+   *    it reads as tended, bounded to at most one day and only for legacy spans).
+   *  - `false`: today (known from last_active_date) or any day on/after the first
+   *    recorded day with no record — every tend since tracking began is recorded,
+   *    so absence is a fact there.
+   *  - `null`: before the recorded era and not derivable — "no record", never
+   *    presented as a missed day.
    */
-  get(): Streak {
+  history(days = 14): { date: string; tended: boolean | null }[] {
     const r = this.row();
+    const today = this.dayStr();
+    const recorded = this.recordedDays();
+    const knownStart = recorded.size > 0 ? [...recorded].sort()[0]! : null;
+    // Span of the current (still-alive) streak ending at last_active_date.
+    const s = this.getBase(r);
+    const span = new Set<string>();
+    if (s.current > 0 && r.last_active_date) {
+      for (let i = 0; i < s.current; i++) span.add(this.shiftDay(r.last_active_date, -i));
+    }
+    const out: { date: string; tended: boolean | null }[] = [];
+    for (let back = days - 1; back >= 0; back--) {
+      const date = this.shiftDay(today, -back);
+      let tended: boolean | null;
+      if (recorded.has(date) || span.has(date) || date === r.last_active_date) {
+        tended = true;
+      } else if (date === today) {
+        tended = false; // today is always knowable: last_active_date !== today here
+      } else if (knownStart !== null && date >= knownStart) {
+        tended = false;
+      } else {
+        tended = null;
+      }
+      out.push({ date, tended });
+    }
+    return out;
+  }
+
+  /** The pre-IM-64 streak fields, factored so get()/history() share one computation. */
+  private getBase(r: MetaRow): { current: number; best: number; today: boolean; shields: number } {
     const today = this.dayStr();
     const shields = r.streak_shields ?? SHIELD_CAP;
     const protectedByShield = r.last_active_date === this.dayStr(-2) && shields > 0;
@@ -96,6 +168,20 @@ export class StreakRepo {
       best: r.streak_best ?? 0,
       today: r.last_active_date === today,
       shields,
+    };
+  }
+
+  /**
+   * Effective current streak: alive if tended today or yesterday — OR if exactly one
+   * day was missed and a nebula shield is banked to forgive it (the shield is consumed
+   * on the next tend, in `touch`). Older gaps lapse to 0.
+   */
+  get(): Streak {
+    const r = this.row();
+    return {
+      ...this.getBase(r),
+      lastActiveDate: r.last_active_date,
+      history: this.history(),
     };
   }
 
@@ -110,6 +196,7 @@ export class StreakRepo {
     const r = this.row();
     const today = this.dayStr();
     if (r.last_active_date === today) {
+      this.recordDay(today); // IM-64: keep the day record complete even for repeats
       return { streak: this.get(), advanced: false }; // already counted today
     }
     let shields = r.streak_shields ?? SHIELD_CAP;
@@ -130,6 +217,7 @@ export class StreakRepo {
     this.h.sqlite
       .prepare(`UPDATE space_meta SET streak = ?, streak_best = ?, last_active_date = ?, streak_shields = ? WHERE space_id = ?`)
       .run(current, best, today, shields, this.spaceId);
-    return { streak: { current, best, today: true, shields }, advanced: true, shieldUsed };
+    this.recordDay(today); // IM-64
+    return { streak: this.get(), advanced: true, shieldUsed };
   }
 }

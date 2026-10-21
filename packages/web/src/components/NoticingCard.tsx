@@ -3,6 +3,7 @@ import { getInquiries, answerInquiry, dismissInquiry, rejectInquiry, confirmInqu
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
 import { logDiagnosticEvent } from "../diagnostics/buffer";
+import { inquiryKindLabel, inquiryAgeText } from "./cl1a.helpers.js";
 
 /**
  * "Soumaya noticed…" — the proactive-intelligence surface. She NEVER pops this open on
@@ -34,6 +35,9 @@ export function NoticingCard({
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
+  // IM-07: which inquiry in the queue is showing — the card used to pin [0]
+  // forever ("(1 of N)" with no way to reach the rest).
+  const [index, setIndex] = useState(0);
   const seenKey = `brain.noticing.seen.${spaceId ?? "legacy"}`;
   const [seenId, setSeenId] = useState<number>(() => {
     try { return parseInt(localStorage.getItem(seenKey) || "0", 10) || 0; } catch { return 0; }
@@ -68,7 +72,8 @@ export function NoticingCard({
   }, [open]);
 
   if (hidden || inquiries.length === 0) return null;
-  const q = inquiries[0]!;
+  const safeIndex = Math.min(index, inquiries.length - 1);
+  const q = inquiries[safeIndex]!;
   const maxId = inquiries.reduce((m, i) => Math.max(m, i.id), 0);
   const glow = maxId > seenId; // there's a noticing you haven't opened yet
 
@@ -113,6 +118,7 @@ export function NoticingCard({
     // If that was the last one, close the popover; the button hides itself (length 0).
     const remaining = inquiries.filter((x) => x.id !== q.id);
     if (remaining.length === 0) setOpen(false);
+    else setIndex((i) => Math.min(i, remaining.length - 1));
   };
   const wave = async () => {
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
@@ -166,10 +172,20 @@ export function NoticingCard({
         <div className="noticing-card" role="dialog" aria-label="Soumaya noticed something">
           <div className="noticing-head">
             <span className="noticing-eye">💭</span>
-            <span className="noticing-title">Soumaya noticed{inquiries.length > 1 ? ` (1 of ${inquiries.length})` : ""}</span>
+            <span className="noticing-title">Soumaya noticed{inquiries.length > 1 ? ` (${safeIndex + 1} of ${inquiries.length})` : ""}</span>
             <button className="noticing-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
+          <div className="noticing-meta">
+            <span className="noticing-kind">{inquiryKindLabel(q.kind)}</span>
+            {inquiryAgeText(q.createdAt) && <span className="noticing-age">{inquiryAgeText(q.createdAt)}</span>}
+          </div>
           <p className="noticing-q">{q.question}</p>
+          {inquiries.length > 1 && (
+            <div className="noticing-nav">
+              <button className="mini ghost" onClick={() => setIndex((i) => Math.max(0, Math.min(i, inquiries.length - 1) - 1))} disabled={safeIndex === 0} aria-label="Previous noticing">← Prev</button>
+              <button className="mini ghost" onClick={() => setIndex((i) => Math.min(inquiries.length - 1, i + 1))} disabled={safeIndex >= inquiries.length - 1} aria-label="Next noticing">Next →</button>
+            </div>
+          )}
           {q.nodes.length > 0 && (
             <div className="noticing-chips">
               {q.nodes.slice(0, 8).map((n) => (

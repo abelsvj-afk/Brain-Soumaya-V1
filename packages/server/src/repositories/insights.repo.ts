@@ -3,6 +3,7 @@ import type { Insight, InsightKind, NodeRef, NodeType } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { insights, DEFAULT_SPACE, type InsightRow } from "../db/schema.js";
 import { NodesRepo } from "./nodes.repo.js";
+import { NotificationsRepo } from "./notifications.repo.js";
 
 /** Significance tier (#10) from an insight's kind + the memories it spans.
  *  1 = identity-shaping, 2 = behavioral pattern, 3 = situational. */
@@ -30,11 +31,24 @@ export class InsightsRepo {
     score: number,
     kind: InsightKind = "synthesis",
   ): InsightRow {
-    return this.h.db
+    const row = this.h.db
       .insert(insights)
       .values({ spaceId: this.spaceId, nodeA, nodeB, text, score, kind })
       .returning()
       .get();
+    // IM-74 producer: a newly synthesized insight is a real away-event — record
+    // it in the server Inbox so it can be reported even if no session was live.
+    // Best-effort: a notification failure must never fail insight creation.
+    try {
+      new NotificationsRepo(this.h, this.spaceId).record({
+        source: "insight",
+        text,
+        icon: kind === "contradiction" ? "⚡" : "💡",
+        priority: kind === "contradiction" ? "high" : "normal",
+        dedupeKey: `insight:${row.id}`,
+      });
+    } catch { /* inbox is a mirror, never a gate */ }
+    return row;
   }
 
   /** True if an insight already exists for this unordered pair (dedupe). When `kind`

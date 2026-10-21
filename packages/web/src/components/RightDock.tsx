@@ -8,14 +8,16 @@ import { DigestPanel } from "./DigestPanel.js";
 import { SoumayaPanel } from "./SoumayaPanel.js";
 import { FleetPanel } from "./FleetPanel.js";
 import { AchievementsPanel } from "./AchievementsPanel.js";
-import { HangarPanel } from "./HangarPanel.js";
+import { HangarPanel, type HangarViewTarget } from "./HangarPanel.js";
+import type { UnlockStats } from "@brain/shared";
 import { InboxPanel } from "./InboxPanel.js";
 import { LibraryPanel } from "./LibraryPanel.js";
 import { CodexPanel } from "./CodexPanel.js";
+import { DailyQuests } from "./DailyQuests.js";
 import { MindPanel } from "./MindPanel.js";
 import { FinancePanel } from "./FinancePanel.js";
 import { JourneysPanel } from "./JourneysPanel.js";
-import { getDigest } from "../api/client.js";
+import { SoumayaEye } from "./SoumayaEye.js";
 import type { FleetStatus } from "../graph/Graph3D.js";
 import type { Fuel, Streak } from "@brain/shared";
 
@@ -86,6 +88,17 @@ interface Props {
   focusBill?: { id: number; nonce: number } | null;
   /** Journey → Chat (Phase AC.1): "Ask Soumaya about this" from a JourneyCard. */
   onAskJourney?: (journey: { id: number; title: string }) => void;
+  /** IM-90: open the capture/ingest panel (the daily quest "log a memory" action). */
+  onCapture?: () => void;
+  /** CL-12 (IM-96/102/133): the shared Unlockables stats + dev flag App
+   *  assembled, the Hangar's "view in galaxy" action, and the gated music
+   *  player's state/callback — all owned by App, passed through the dock. */
+  unlockStats?: UnlockStats | null;
+  devUnlockAll?: boolean;
+  onViewInGalaxy?: (target: HangarViewTarget) => void;
+  onPlayTrack?: (index: number) => void;
+  currentTrackIndex?: number | null;
+  musicPlaying?: boolean;
 }
 
 // Each tab carries a human `name` (tooltip + accessible label) so the icon row is
@@ -101,10 +114,15 @@ interface Props {
 export function visibleTabIds(
   allTabs: readonly { id: DockTab }[],
   activeTab: DockTab,
-  signals: { hasInsights: boolean; hasRealMemory: boolean },
+  signals: { hasRealMemory: boolean },
 ): DockTab[] {
+  // IM-62: Insights used to gate on "an insight already exists" — but the
+  // tab's own scans are how a first insight gets created, so a new user
+  // could never reach them (the same chicken-and-egg the Journeys comment
+  // below rejects). It now shares the has-memories gate with Progress/Hangar:
+  // once there's a real memory to scan, the tab (and its scans) is reachable.
   const gated: Partial<Record<DockTab, boolean>> = {
-    insights: signals.hasInsights,
+    insights: signals.hasRealMemory,
     awards: signals.hasRealMemory,
     hangar: signals.hasRealMemory,
   };
@@ -189,17 +207,24 @@ export function RightDock({
   focusGoal,
   focusBill,
   onAskJourney,
+  onCapture,
+  unlockStats,
+  devUnlockAll,
+  onViewInGalaxy,
+  onPlayTrack,
+  currentTrackIndex,
+  musicPlaying,
 }: Props) {
   const [unseenCount, setUnseenCount] = useState(0);
-  // Progressive Discovery: Insights needs its own check (a server-side fetch —
-  // whether ANY insight has ever been synthesized). Progress/Hangar don't need a
-  // fetch: Codex entries (Progress's other half) unlock from the first real
-  // memory, well before any Achievement, so "at least one real memory exists" —
-  // already available via `graph` below — is the earlier, correct signal for both.
-  const [hasInsights, setHasInsights] = useState(false);
+  // Progressive Discovery: no server fetch needed for gating. Codex entries
+  // (Progress's other half) unlock from the first real memory, well before
+  // any Achievement, so "at least one real memory exists" — already available
+  // via `graph` below — is the earlier, correct signal for Progress/Hangar.
+  // IM-62: Insights shares that same signal (see visibleTabIds) — gating it
+  // on an existing insight hid the very scans that create the first one.
   const [browseView, setBrowseView] = useState<BrowseView>("all");
   const [progressView, setProgressView] = useState<ProgressView>("codex");
-  const [fleetOpen, setFleetOpen] = useState(false);
+  const [fleetOpen, setFleetOpen] = useState(true); // IM-68: Fleet starts open/prominent
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   // IM-02: the ambient strip shows REAL state only (see dockAmbientDetail).
   // The clock ticks so the greeting/time stay current; everything else is
@@ -243,15 +268,8 @@ export function RightDock({
     return () => window.removeEventListener("brain-notifications-updated", updateCount);
   }, [spaceId]);
 
-  // Checked once per mount, not live-reactive — see the file-header comment.
-  useEffect(() => {
-    getDigest()
-      .then((items) => setHasInsights(items.length > 0))
-      .catch(() => {});
-  }, [spaceId]);
-
   const hasRealMemory = graph.nodes.some((n) => n.kind !== "action");
-  const shownIds = new Set(visibleTabIds(TABS, tab, { hasInsights, hasRealMemory }));
+  const shownIds = new Set(visibleTabIds(TABS, tab, { hasRealMemory }));
   const dynamicTabs = TABS.filter((t) => shownIds.has(t.id)).map((t) => {
     if (t.id === "soumaya") return { ...t, name: spaceName, badge: 0 };
     if (t.id === "inbox") return { ...t, badge: unseenCount };
@@ -320,7 +338,7 @@ export function RightDock({
         fontFamily: "monospace",
         opacity: 0.85
       }}>
-        <span>{ambientInfo.greeting}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><SoumayaEye state="idle" mood="thoughtful" size={22} />{ambientInfo.greeting}</span>
         <span>{ambientInfo.location}</span>
       </div>
       <div className="dock-content">
@@ -352,20 +370,27 @@ export function RightDock({
                 🪐 Hubs
               </button>
             </div>
-            {browseView === "all" && (
-              <NodeList
-                nodes={graph.nodes}
-                onFocus={onFocus}
-                initialTag={selectedTag}
-                onTagChange={setSelectedTag}
-              />
-            )}
-            {browseView === "folders" && (
-              <LibraryPanel graph={graph} onFocus={onFocus} spaceName={spaceName} />
-            )}
-            {browseView === "hubs" && (
-              <SectorView graph={graph} onFocus={onFocus} onIsolate={(id) => onIsolate?.(id)} />
-            )}
+            {/* IM-43: subtab swaps used to replace each other synchronously
+                with no transition. The keyed wrapper re-mounts per view so the
+                browse-view-enter animation runs on every swap. (No fake
+                skeleton: all three views derive synchronously from the
+                already-loaded graph — there is no fetch to skeleton against.) */}
+            <div key={browseView} className="browse-view-enter">
+              {browseView === "all" && (
+                <NodeList
+                  nodes={graph.nodes}
+                  onFocus={onFocus}
+                  initialTag={selectedTag}
+                  onTagChange={setSelectedTag}
+                />
+              )}
+              {browseView === "folders" && (
+                <LibraryPanel graph={graph} onFocus={onFocus} spaceName={spaceName} />
+              )}
+              {browseView === "hubs" && (
+                <SectorView graph={graph} onFocus={onFocus} onIsolate={(id) => onIsolate?.(id)} />
+              )}
+            </div>
           </div>
         )}
         {tab === "mind" && <MindPanel onFocus={onFocus} onChanged={() => onChanged?.(-1)} />}
@@ -384,9 +409,13 @@ export function RightDock({
               setShipViewMode={setShipViewMode}
               tasks={tasks}
               onReorderTasks={onReorderTasks}
+              nodes={graph.nodes}
             />
+            {/* IM-68: the Fleet is the most immersive element in this tab —
+                surface it OPEN and prominent, not buried behind a closed
+                <details> below the whole panel. It stays collapsible. */}
             <details
-              className="dock-section"
+              className="dock-section fleet-section"
               open={fleetOpen}
               onToggle={(e) => setFleetOpen((e.target as HTMLDetailsElement).open)}
             >
@@ -402,6 +431,16 @@ export function RightDock({
         {tab === "journeys" && <JourneysPanel onFocus={onFocus} focusJourney={focusJourney} onAskJourney={onAskJourney} />}
         {tab === "awards" && (
           <div className="subtab-wrap">
+            {/* IM-90: today's tending quests live in Progress (the "what do I
+                do next" tab), above the Codex/Awards switch so they're visible
+                from either half — previously only the Observatory showed them. */}
+            <DailyQuests
+              graph={graph}
+              fedToday={!!streak?.today}
+              onFocus={onFocus}
+              onCapture={onCapture}
+              onOpenInsights={() => setTab("insights")}
+            />
             <div className="subtabs" role="tablist" aria-label="Progress view">
               <button className={progressView === "codex" ? "on" : ""} onClick={() => setProgressView("codex")}>
                 📖 Codex
@@ -414,7 +453,13 @@ export function RightDock({
               </button>
             </div>
             {progressView === "codex" && (
-              <CodexPanel graph={graph} onFocus={onFocus} spaceId={spaceId} onReward={() => onChanged?.(-1)} />
+              <CodexPanel
+                graph={graph}
+                onFocus={onFocus}
+                spaceId={spaceId}
+                onReward={() => onChanged?.(-1)}
+                onNavigate={(t) => setTab(t as DockTab)}
+              />
             )}
             {progressView === "awards" && (
               <AchievementsPanel graph={graph} fuel={fuel ?? null} streak={streak ?? null} spaceId={spaceId ?? ""} />
@@ -426,6 +471,12 @@ export function RightDock({
             spaceId={spaceId ?? ""}
             memoriesCount={graph.nodes.filter((n) => n.kind !== "action").length}
             onEquipChanged={() => onChanged?.(-1)}
+            unlockStats={unlockStats}
+            devUnlockAll={devUnlockAll}
+            onViewInGalaxy={onViewInGalaxy}
+            onPlayTrack={onPlayTrack}
+            currentTrackIndex={currentTrackIndex}
+            musicPlaying={musicPlaying}
           />
         )}
       </div>

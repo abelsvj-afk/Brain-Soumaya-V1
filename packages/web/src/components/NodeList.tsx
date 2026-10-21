@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type GraphNode,
   type CelestialClass,
@@ -13,6 +13,7 @@ import {
 import { colorForType, TYPE_COLORS } from "../graph/theme.js";
 import { getConstellations, getVisitorActivity, useProcessingNodes, type VisitedMemory } from "../api/client.js";
 import { parseTolerantMs as ms } from "../utils/dueReminders.js";
+import { fmtBrowseDate } from "../utils/browseFormat.js";
 
 interface Props {
   nodes: GraphNode[];
@@ -100,38 +101,65 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
     onTagChange?.(newTag);
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => getVisitorActivity().then((v) => { if (!cancelled) setVisited(v); }).catch(() => {});
-    load();
-    const iv = window.setInterval(load, 15000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(iv);
-    };
+  // IM-42: the visitor/constellation enrichments used to fail silently
+  // (`.catch(() => {})`) — a missing 👽/🌌 was indistinguishable from "never
+  // visited / no constellation". Failures now surface a subtle notice with a
+  // retry; a successful (re)load clears it.
+  const [visitorFailed, setVisitorFailed] = useState(false);
+  const [constellationFailed, setConstellationFailed] = useState(false);
+  const cancelledRef = useRef(false);
+
+  const loadVisitors = useCallback(() => {
+    getVisitorActivity()
+      .then((v) => {
+        if (cancelledRef.current) return;
+        setVisited(v);
+        setVisitorFailed(false);
+      })
+      .catch(() => {
+        if (!cancelledRef.current) setVisitorFailed(true);
+      });
+  }, []);
+
+  const loadConstellations = useCallback(() => {
+    getConstellations()
+      .then((cs) => {
+        if (cancelledRef.current) return;
+        const map = new Map<number, string>();
+        for (const c of cs) for (const n of c.nodes) map.set(n.id, c.name);
+        setConstellationMap(map);
+        setConstellationFailed(false);
+      })
+      .catch(() => {
+        if (!cancelledRef.current) setConstellationFailed(true);
+      });
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      getConstellations()
-        .then((cs) => {
-          if (cancelled) return;
-          const map = new Map<number, string>();
-          for (const c of cs) for (const n of c.nodes) map.set(n.id, c.name);
-          setConstellationMap(map);
-        })
-        .catch(() => {});
-    load();
+    cancelledRef.current = false;
+    loadVisitors();
+    const iv = window.setInterval(loadVisitors, 15000);
+    return () => {
+      cancelledRef.current = true;
+      window.clearInterval(iv);
+    };
+  }, [loadVisitors]);
+
+  useEffect(() => {
+    loadConstellations();
     // A newly-promoted constellation (DigestPanel's "Save as constellation") used
     // to never appear here until the next full reload — this refetches on the
     // same event the galaxy uses to fly to the new hub.
-    window.addEventListener("brain-constellation-formed", load);
+    window.addEventListener("brain-constellation-formed", loadConstellations);
     return () => {
-      cancelled = true;
-      window.removeEventListener("brain-constellation-formed", load);
+      window.removeEventListener("brain-constellation-formed", loadConstellations);
     };
-  }, []);
+  }, [loadConstellations]);
+
+  const retryEnrichments = useCallback(() => {
+    loadVisitors();
+    loadConstellations();
+  }, [loadVisitors, loadConstellations]);
 
   const visitorMap = useMemo(() => {
     const map = new Map<number, VisitedMemory>();
@@ -250,7 +278,8 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
     const emo = emotionBucket(n.emotionalWeight);
     const when = relative(n.occurredAt ?? n.createdAt);
     const timestamp = ms(n.occurredAt ?? n.createdAt);
-    const fullDate = !Number.isNaN(timestamp) ? new Date(timestamp).toLocaleDateString() : "";
+    // IM-43: one human local format across the whole Browse tab (shared helper).
+    const fullDate = !Number.isNaN(timestamp) ? fmtBrowseDate(n.occurredAt ?? n.createdAt) : "";
     const showExactDate = sort === "recent" || timeline;
     const v = visitorMap.get(n.id);
     const constel = constellationMap.get(n.id);
@@ -305,6 +334,38 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
         onChange={(e) => setQ(e.target.value)}
         placeholder={`Search ${memories.length} memories…`}
       />
+
+      {/* IM-42: enrichment failure notice — subtle, but never silent. */}
+      {(visitorFailed || constellationFailed) && (
+        <div
+          className="enrich-failed"
+          role="status"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            margin: "8px 0",
+            padding: "6px 10px",
+            fontSize: "12px",
+            border: "1px solid rgba(255, 207, 107, 0.35)",
+            borderRadius: "8px",
+            background: "rgba(255, 207, 107, 0.07)",
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            ⚠️ Couldn't load{" "}
+            {visitorFailed && constellationFailed
+              ? "visitor and constellation info"
+              : visitorFailed
+                ? "visitor info"
+                : "constellation info"}{" "}
+            — some 👽/🌌 badges may be missing (that doesn't mean a memory was never visited).
+          </span>
+          <button className="mini" onClick={retryEnrichments}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {(todayMemories.length > 0 || upcomingReminders.length > 0) && (
         <div className="sticky-today-strip" style={{

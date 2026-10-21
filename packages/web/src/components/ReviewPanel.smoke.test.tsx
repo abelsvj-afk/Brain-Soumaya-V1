@@ -5,9 +5,11 @@ import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-libra
 // pattern for testing any data-driven component (the majority) under the new harness.
 const getDueReviews = vi.fn();
 const gradeReview = vi.fn();
+const gradeReviewDetailed = vi.fn();
 vi.mock("../api/client.js", () => ({
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
   gradeReview: (...a: unknown[]) => gradeReview(...a),
+  gradeReviewDetailed: (...a: unknown[]) => gradeReviewDetailed(...a),
 }));
 const pushToast = vi.fn();
 vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) }));
@@ -19,6 +21,7 @@ beforeEach(() => {
   localStorage.clear();
   getDueReviews.mockResolvedValue([{ id: 1, label: "the studio lease", content: "Signed a 12-month lease on the King Street studio, $900 a month, keys collected on the 3rd.", strength: 0.1, reviewCount: 0 }]);
   gradeReview.mockResolvedValue(true);
+  gradeReviewDetailed.mockResolvedValue({ ok: true, nextIntervalDays: 6 });
 });
 
 afterEach(cleanup);
@@ -32,7 +35,7 @@ describe("ReviewPanel (recall session)", () => {
     expect(screen.queryByText("I remembered")).toBeNull();
     fireEvent.click(screen.getByText("Reveal & rate my recall"));
     fireEvent.click(screen.getByText("I remembered"));
-    await waitFor(() => expect(gradeReview).toHaveBeenCalledWith(1, true));
+    await waitFor(() => expect(gradeReviewDetailed).toHaveBeenCalledWith(1, true));
   });
 });
 
@@ -51,22 +54,22 @@ describe("ReviewPanel — Reveal actually reveals the memory's content (IM-111)"
 
 describe("ReviewPanel — grading is guarded against rapid double-taps", () => {
   it("only submits one grade even if the button is clicked twice before it resolves", async () => {
-    let resolveGrade!: (v: boolean) => void;
-    gradeReview.mockReturnValue(new Promise((r) => { resolveGrade = r; }));
+    let resolveGrade!: (v: never) => void;
+    gradeReviewDetailed.mockReturnValue(new Promise((r) => { resolveGrade = r as never; }));
     render(<ReviewPanel onClose={vi.fn()} />);
     await screen.findByText("the studio lease");
     fireEvent.click(screen.getByText("Reveal & rate my recall"));
     const btn = screen.getByText("I remembered");
     fireEvent.click(btn);
     fireEvent.click(btn); // rapid second tap while the first is still in flight
-    await act(async () => { resolveGrade(true); });
-    expect(gradeReview).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveGrade({ ok: true } as never); });
+    expect(gradeReviewDetailed).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("ReviewPanel — a failed grade doesn't vanish silently", () => {
   it("toasts and leaves the card revealed so the user can retry", async () => {
-    gradeReview.mockRejectedValue(new Error("network down"));
+    gradeReviewDetailed.mockRejectedValue(new Error("network down"));
     render(<ReviewPanel onClose={vi.fn()} />);
     await screen.findByText("the studio lease");
     fireEvent.click(screen.getByText("Reveal & rate my recall"));
@@ -84,7 +87,7 @@ describe("ReviewPanel — a grade the server refused (boolean false) is not coun
       { id: 1, label: "the studio lease", content: "lease content", strength: 0.1, reviewCount: 0 },
       { id: 2, label: "grandma's recipe", content: "recipe content", strength: 0.2, reviewCount: 1 },
     ]);
-    gradeReview.mockResolvedValue(false); // HTTP failure: gradeReview returns false, never throws
+    gradeReviewDetailed.mockResolvedValue({ ok: false }); // HTTP failure: the grade call reports ok:false
     render(<ReviewPanel onClose={vi.fn()} />);
     await screen.findByText("the studio lease");
     fireEvent.click(screen.getByText("Reveal & rate my recall"));

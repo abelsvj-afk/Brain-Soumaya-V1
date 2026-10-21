@@ -10,6 +10,7 @@
  * both reach it.
  */
 import { prefersReducedMotion } from "./motion.js";
+import { triggerHaptic, hapticKindForSfx } from "./haptics.js";
 
 export type SfxName =
   | "tap"
@@ -195,6 +196,17 @@ const RECIPES: Record<SfxName, (ac: AudioContext, dest: GainNode) => void> = {
 
 /** Play a UI sound. No-op if disabled, unsupported, or throttled. Never throws. */
 export function playSfx(name: SfxName): void {
+  playSfxInternal(name, undefined);
+}
+
+/** Play a UI sound panned by on-screen position (IM-135 spatial audio):
+ *  `panNdc` is the source's projected screen x in NDC (-1 left … +1 right).
+ *  Falls back to centred playback where StereoPanner is unavailable. */
+export function playSfxSpatial(name: SfxName, panNdc: number): void {
+  playSfxInternal(name, panNdc);
+}
+
+function playSfxInternal(name: SfxName, panNdc: number | undefined): void {
   try {
     if (!sfxEnabled()) return;
     // lastPlay used to be overwritten by every sound, not just `tap` — a burst of
@@ -207,7 +219,19 @@ export function playSfx(name: SfxName): void {
     }
     const ac = ensure();
     if (!ac || !master) return;
-    RECIPES[name]?.(ac, master);
+    let dest: GainNode = master;
+    if (panNdc !== undefined && typeof ac.createStereoPanner === "function") {
+      const panner = ac.createStereoPanner();
+      panner.pan.value = Math.max(-1, Math.min(1, Number.isFinite(panNdc) ? panNdc : 0));
+      panner.connect(master);
+      dest = panner as unknown as GainNode;
+    }
+    RECIPES[name]?.(ac, dest);
+    // Haptics (IM-134): the audit pairs the Critical cues + UI taps with a
+    // vibration on mobile. Gated inside haptics.ts (support / reduced-motion
+    // / mute) — fire-and-forget, never throws.
+    const hk = hapticKindForSfx(name);
+    if (hk) triggerHaptic(hk);
     // Briefly duck the ambient music so meatier cues punch through (not the rapid tap,
     // which would make the music pump). The audio module listens for this.
     if (name !== "tap") {

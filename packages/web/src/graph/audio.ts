@@ -4,10 +4,18 @@
  * crossfaded on track change so switching isn't abrupt. Best-effort: if a file
  * can't load/play it simply no-ops.
  *
- * Tracks are unlockable over time; for now the whole list is available in every
- * brain. On track change we emit a `brain-music-track` window event carrying the
- * title + position so the UI can pop a "now playing" cue and show the count.
+ * Tracks are gated by the Unlockables system (IM-133): the shared catalog
+ * (packages/shared/src/unlockables.ts) decides which loops a brain has
+ * earned — Deep Space from the start, the rest as it grows. The gate lives
+ * in App (the only caller): the picker disables locked tracks and skip /
+ * play advance only across unlocked ones, so this module just plays what
+ * it is told to. On track change we emit a `brain-music-track` window event
+ * carrying the title + position so the UI can pop a "now playing" cue and
+ * show the count.
  */
+import { densityBedGain, bedFilterFreq } from "./adaptiveAudio.js";
+import { audioContext } from "./sfx.js";
+
 export interface Track {
   id: string;
   title: string;
@@ -34,6 +42,10 @@ export interface AmbientAudio {
   next: () => void;
   /** Jump to a specific track by index (wraps). Starts playback if paused. */
   playTrack: (index: number) => void;
+  /** Adaptive bed (IM-135): drive the bed's gain (galaxy density ducking)
+   *  and brightness filter (emotional state / mass cooling) from live
+   *  galaxy data. Parameter-only — playback behaviour is unchanged. */
+  setAdaptive: (state: { nodeCount: number; linkCount: number; meanEmotion: number; coolingFrac: number }) => void;
   readonly playing: boolean;
   readonly index: number;
   readonly title: string;
@@ -42,6 +54,8 @@ export interface AmbientAudio {
 
 const TARGET_VOLUME = 0.5; // leaves headroom so UI sounds sit clearly on top
 const KEY_INDEX = "music.track"; // remember the last track across sessions
+
+// Adaptive bed state (IM-135) — pure parameter math lives in adaptiveAudio.ts.
 
 /** Broadcast the current track so the UI can show a now-playing cue + count. */
 function emitTrack(state: MusicState) {
@@ -64,6 +78,50 @@ export function makeAmbientAudio(): AmbientAudio {
 
   const track = () => TRACKS[index]!;
   const state = (): MusicState => ({ playing, index, title: track().title, total: TRACKS.length });
+
+  // --- Adaptive bed (IM-135) -------------------------------------------------
+  // Density ducking scales the bed's target volume; emotional state drives a
+  // lowpass filter the element is routed through (once, lazily, via the shared
+  // SFX context). If Web-Audio routing is unavailable the gain half still
+  // applies and playback stays on the plain element path.
+  let adaptiveGain = 1;
+  let filterNode: BiquadFilterNode | null = null;
+  let routed = false;
+  const effectiveTarget = () => TARGET_VOLUME * adaptiveGain;
+
+  const ensureRouted = (): boolean => {
+    if (routed) return filterNode != null;
+    routed = true;
+    try {
+      const ac = audioContext();
+      const a = el;
+      if (!ac || !a || typeof ac.createMediaElementSource !== "function") return false;
+      const src = ac.createMediaElementSource(a);
+      filterNode = ac.createBiquadFilter();
+      filterNode.type = "lowpass";
+      filterNode.frequency.value = bedFilterFreq(0, 0);
+      src.connect(filterNode);
+      filterNode.connect(ac.destination);
+      void ac.resume?.();
+      return true;
+    } catch {
+      filterNode = null;
+      return false;
+    }
+  };
+
+  const setAdaptive = (s: { nodeCount: number; linkCount: number; meanEmotion: number; coolingFrac: number }) => {
+    adaptiveGain = densityBedGain(s.nodeCount, s.linkCount);
+    if (ensureRouted() && filterNode) {
+      try {
+        filterNode.frequency.value = bedFilterFreq(s.meanEmotion, s.coolingFrac);
+      } catch {
+        /* filter is non-critical */
+      }
+    }
+    // If we're playing and not mid-fade, ease the element toward the new target.
+    if (el && playing && !fadeTimer) fadeTo(effectiveTarget(), 600);
+  };
 
   const ensure = (): HTMLAudioElement => {
     if (el) return el;
@@ -99,7 +157,7 @@ export function makeAmbientAudio(): AmbientAudio {
       playing = false;
     } else {
       void a.play().catch(() => {}); // gesture-driven; ignore autoplay rejections
-      fadeTo(TARGET_VOLUME, 1500);
+      fadeTo(effectiveTarget(), 1500);
       playing = true;
     }
     emitTrack(state());
@@ -120,7 +178,7 @@ export function makeAmbientAudio(): AmbientAudio {
       a.currentTime = 0;
       if (playing) {
         void a.play().catch(() => {});
-        fadeTo(TARGET_VOLUME, 900);
+        fadeTo(effectiveTarget(), 900);
       }
       emitTrack(state());
     };
@@ -152,10 +210,10 @@ export function makeAmbientAudio(): AmbientAudio {
     const a = el;
     if (!a || !playing) return;
     if (fadeTimer) return; // don't fight an in-progress fade in/out
-    a.volume = Math.max(0, TARGET_VOLUME * 0.4);
+    a.volume = Math.max(0, effectiveTarget() * 0.4);
     if (duckTimer) window.clearTimeout(duckTimer);
     duckTimer = window.setTimeout(() => {
-      if (el && playing && !fadeTimer) fadeTo(TARGET_VOLUME, 280);
+      if (el && playing && !fadeTimer) fadeTo(effectiveTarget(), 280);
     }, 120);
   };
   if (typeof window !== "undefined") window.addEventListener("brain-sfx-duck", onDuck);
@@ -169,6 +227,7 @@ export function makeAmbientAudio(): AmbientAudio {
     toggle,
     next,
     playTrack,
+    setAdaptive,
     get playing() {
       return playing;
     },

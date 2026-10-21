@@ -6,9 +6,13 @@ const getDueReviews = vi.fn().mockResolvedValue([]);
 vi.mock("../api/client.js", () => ({
   getConstellations: vi.fn().mockResolvedValue([]),
   getDigest: vi.fn().mockResolvedValue([]),
+  // IM-124 residual: Observatory consumes the strict Result variants.
+  getConstellationsResult: vi.fn().mockResolvedValue({ ok: true, constellations: [] }),
+  getDigestResult: vi.fn().mockResolvedValue({ ok: true, insights: [] }),
   getDailyContact: vi.fn().mockResolvedValue(null),
   answerDailyContact: vi.fn().mockResolvedValue(null),
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
+  getDueReviewsResult: async (...a: unknown[]) => ({ ok: true, reviews: await getDueReviews(...a) }),
 }));
 vi.mock("../api/finance.js", () => ({
   getFinanceSummary: vi.fn().mockResolvedValue(null),

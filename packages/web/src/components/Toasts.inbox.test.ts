@@ -51,36 +51,39 @@ describe("inbox storage helpers", () => {
   });
 });
 
-describe("cleanupNotifications", () => {
-  const old = Date.now() - 10 * 60 * 1000; // 10 minutes ago
-
-  it("prunes long-seen items but keeps unseen and high-priority ones", () => {
+describe("cleanupNotifications — IM-73 honest retention", () => {
+  it("never deletes by age: seen items persist, unseen items persist", () => {
+    const longAgo = Date.now() - 30 * 24 * 3600 * 1000; // 30 days
     writeNotifications(
       [
-        note({ text: "seen-old", seen: true, seenAt: old }),
-        note({ text: "unseen-recent" }),
-        note({ text: "important-old", timestamp: Date.now() - 48 * 3600 * 1000, priority: "high" }),
+        note({ text: "seen-long-ago", seen: true, seenAt: longAgo, timestamp: longAgo }),
+        note({ text: "unseen-long-ago", timestamp: longAgo }),
+        note({ text: "important-old", timestamp: longAgo, priority: "high" }),
       ],
       SPACE,
     );
     cleanupNotifications(SPACE);
     const texts = readNotifications(SPACE).map((n) => n.text);
-    expect(texts).not.toContain("seen-old");
-    expect(texts).toContain("unseen-recent");
-    expect(texts).toContain("important-old");
+    expect(texts).toEqual(["seen-long-ago", "unseen-long-ago", "important-old"]);
   });
 
-  it("announces a real prune so already-loaded readers re-sync", () => {
+  it("trims only an over-cap log (keeping the newest) and announces the trim", () => {
+    // Seed storage directly, bypassing writeNotifications' own cap enforcement.
+    const many = Array.from({ length: INBOX_CAP + 20 }, (_, i) => note({ text: `n${i}` }));
+    localStorage.setItem(notificationsKey(SPACE), JSON.stringify(many));
+
     let fired = 0;
     const onUpdate = () => { fired++; };
     window.addEventListener("brain-notifications-updated", onUpdate);
     try {
-      writeNotifications([note({ text: "seen-old", seen: true, seenAt: old })], SPACE);
-      fired = 0; // ignore the write's own event
       cleanupNotifications(SPACE);
       expect(fired).toBe(1);
+      const back = readNotifications(SPACE);
+      expect(back).toHaveLength(INBOX_CAP);
+      expect(back[back.length - 1]!.text).toBe(`n${INBOX_CAP + 19}`);
 
-      // A no-op cleanup must NOT announce (that would loop readers pointlessly).
+      // A within-cap cleanup is a no-op and must NOT announce (that would loop
+      // readers pointlessly).
       fired = 0;
       cleanupNotifications(SPACE);
       expect(fired).toBe(0);
@@ -89,26 +92,23 @@ describe("cleanupNotifications", () => {
     }
   });
 
-  it("REGRESSION: a stale in-memory snapshot must not resurrect pruned rows", () => {
-    // Reproduces the original bug: the panel loaded state, cleanup then pruned storage
-    // without announcing, and the next mutation wrote the stale snapshot back — undoing
-    // the prune. The fix is that mutations re-read storage instead of trusting state.
-    writeNotifications(
-      [note({ text: "keep-me" }), note({ text: "prune-me", seen: true, seenAt: old })],
-      SPACE,
-    );
+  it("REGRESSION: a stale in-memory snapshot must not resurrect trimmed rows", () => {
+    // The panel's mutations re-read storage instead of trusting state: a stale
+    // snapshot written back wholesale would resurrect rows cleanup trimmed.
+    const many = Array.from({ length: INBOX_CAP + 5 }, (_, i) => note({ text: `n${i}` }));
+    localStorage.setItem(notificationsKey(SPACE), JSON.stringify(many));
     const staleSnapshot = readNotifications(SPACE); // what a mounted panel would hold
-    expect(staleSnapshot).toHaveLength(2);
+    expect(staleSnapshot).toHaveLength(INBOX_CAP + 5);
 
     cleanupNotifications(SPACE);
-    expect(readNotifications(SPACE).map((n) => n.text)).toEqual(["keep-me"]);
+    expect(readNotifications(SPACE)).toHaveLength(INBOX_CAP);
 
-    // The panel's mutate() re-reads rather than writing `staleSnapshot` back.
+    // mutate() re-reads rather than writing `staleSnapshot` back.
     const fresh = readNotifications(SPACE).map((n) => ({ ...n, seen: true, seenAt: Date.now() }));
     writeNotifications(fresh, SPACE);
 
     const finalTexts = readNotifications(SPACE).map((n) => n.text);
-    expect(finalTexts).toEqual(["keep-me"]);
-    expect(finalTexts).not.toContain("prune-me");
+    expect(finalTexts).toHaveLength(INBOX_CAP);
+    expect(finalTexts).not.toContain("n0"); // trimmed rows stay trimmed
   });
 });

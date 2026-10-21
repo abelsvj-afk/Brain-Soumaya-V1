@@ -44,6 +44,79 @@ export function gltfLoader(): GLTFLoader {
   return loader;
 }
 
+/**
+ * IM-24 — model-fallback registry. A glTF that fails to load used to swap to
+ * its procedural stand-in with only a console line, so the user saw a pop
+ * (or a permanently simpler object) with no explanation anywhere. Callers
+ * now record the failure here; Settings → diagnostics surfaces it as a
+ * visible note via getModelFallbacks(), and the "brain-model-fallback"
+ * window event lets an already-open surface refresh.
+ */
+const modelFallbacks: string[] = [];
+
+export function noteModelFallback(asset: string): void {
+  if (!modelFallbacks.includes(asset)) modelFallbacks.push(asset);
+  try {
+    window.dispatchEvent(new CustomEvent("brain-model-fallback"));
+  } catch {
+    /* no window (tests / SSR) — the registry itself still holds the note */
+  }
+}
+
+export function getModelFallbacks(): string[] {
+  return [...modelFallbacks];
+}
+
+/**
+ * IM-24 — soften a model swap-in: fade the loaded model in over ~0.6s
+ * instead of popping it in, hiding the procedural fallback once the model
+ * is mostly visible (a crossfade, not a cut). Materials are set transparent
+ * for the fade and restored afterwards. Never throws — a failed fade still
+ * leaves the model fully visible.
+ */
+export function fadeSwapIn(model: THREE.Object3D, hideFallback: () => void): void {
+  try {
+    const mats = new Set<THREE.Material>();
+    model.traverse((o: any) => {
+      const m = o?.material;
+      if (Array.isArray(m)) m.forEach((x) => x && mats.add(x));
+      else if (m) mats.add(m);
+    });
+    // Capture each material's resting state BEFORE zeroing opacity.
+    const saved = [...mats].map((m) => ({ m, transparent: m.transparent, target: m.opacity }));
+    for (const s of saved) {
+      s.m.transparent = true;
+      s.m.opacity = 0;
+    }
+    const DURATION = 600;
+    const start = performance.now();
+    let hidFallback = false;
+    const stepFn = (now: number) => {
+      const t = Math.min(1, (now - start) / DURATION);
+      for (const s of saved) s.m.opacity = s.target * t;
+      if (t >= 0.5 && !hidFallback) {
+        hidFallback = true;
+        hideFallback();
+      }
+      if (t < 1) {
+        requestAnimationFrame(stepFn);
+      } else {
+        for (const s of saved) {
+          s.m.opacity = s.target;
+          s.m.transparent = s.transparent;
+        }
+      }
+    };
+    requestAnimationFrame(stepFn);
+  } catch {
+    try {
+      hideFallback();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Call once, as early as a renderer exists (see gltfLoader's doc comment for why). */
 export function ensureKtx2Support(renderer: THREE.WebGLRenderer): void {
   if (!ktx2) {

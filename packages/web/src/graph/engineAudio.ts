@@ -15,7 +15,9 @@ import { sfxEnabled, sfxVolume, audioContext } from "./sfx.js";
  * flying) each frame. Best-effort + gated by the interface-sounds setting.
  */
 export interface EngineAudio {
-  setLevel: (focus: number, motion: number) => void;
+  /** `pan` (IM-135): the ship's projected screen x in NDC (-1..1); the
+   *  thruster loop is stereo-panned to follow her across the screen. */
+  setLevel: (focus: number, motion: number, pan?: number) => void;
   dispose: () => void;
 }
 
@@ -39,6 +41,8 @@ export function makeEngineAudio(): EngineAudio {
   let loading = false;
   let src: AudioBufferSourceNode | null = null;
   let gainNode: GainNode | null = null;
+  let panNode: StereoPannerNode | null = null;
+  let panTarget = 0;
 
   const ensureStart = () => {
     if (startEl) return;
@@ -69,7 +73,16 @@ export function makeEngineAudio(): EngineAudio {
     if (!gainNode) {
       gainNode = ac.createGain();
       gainNode.gain.value = 0;
-      gainNode.connect(ac.destination);
+      // Spatial (IM-135): route the loop through a StereoPanner so the ship's
+      // engine follows her on-screen position; centred fallback if unsupported.
+      if (typeof ac.createStereoPanner === "function") {
+        panNode = ac.createStereoPanner();
+        panNode.pan.value = panTarget;
+        gainNode.connect(panNode);
+        panNode.connect(ac.destination);
+      } else {
+        gainNode.connect(ac.destination);
+      }
     }
     src = ac.createBufferSource();
     src.buffer = buffer;
@@ -135,6 +148,7 @@ export function makeEngineAudio(): EngineAudio {
       if (ac && buffer) {
         startLoop(ac);
         if (gainNode) gainNode.gain.value = Math.min(1, loopCur * g);
+        if (panNode) panNode.pan.value = panTarget;
       }
     } else if (src) {
       stopLoop();
@@ -145,9 +159,10 @@ export function makeEngineAudio(): EngineAudio {
   raf = requestAnimationFrame(frame);
 
   return {
-    setLevel: (focus: number, motion: number) => {
+    setLevel: (focus: number, motion: number, pan?: number) => {
       focusTarget = Math.max(0, Math.min(1, focus));
       motionTarget = Math.max(0, Math.min(1, motion));
+      if (pan !== undefined && Number.isFinite(pan)) panTarget = Math.max(-1, Math.min(1, pan));
     },
     dispose: () => {
       disposed = true;

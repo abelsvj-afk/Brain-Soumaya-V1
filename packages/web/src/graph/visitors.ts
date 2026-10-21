@@ -15,7 +15,7 @@ interface Variant {
   glow: string;
 }
 import { bodyColor } from "./theme.js";
-import { gltfLoader } from "./gltf.js";
+import { gltfLoader, fadeSwapIn, noteModelFallback } from "./gltf.js";
 
 const FRIENDLY: Variant = { name: "Luminous Traveler", hull: "#dfe9ff", glow: "#7af9ff" };
 const NEUTRAL: Variant = { name: "Drifter", hull: "#cfd0e0", glow: "#b388ff" };
@@ -71,14 +71,20 @@ function makeCraft(index: number): {
         const center = new THREE.Vector3();
         box.getCenter(center);
         model.position.copy(center.multiplyScalar(-k));
-        
-        body.visible = false;
-        ring.visible = false;
+
         loadedModel = model;
         group.add(model);
+        // IM-24: crossfade the real craft in over the procedural saucer.
+        fadeSwapIn(model, () => {
+          body.visible = false;
+          ring.visible = false;
+        });
       },
       undefined,
-      (err) => console.log("[visitor] organic spaceship failed to load; using procedural fallback", err)
+      (err) => {
+        console.log("[visitor] organic spaceship failed to load; using procedural fallback", err);
+        noteModelFallback("The visitor craft model");
+      }
     );
   }
 
@@ -116,8 +122,10 @@ export interface VisitorHazard {
 export interface VisitorSystem {
   group: THREE.Group;
   update: (dt: number, nodes: any[], hazard?: VisitorHazard) => void;
-  /** Visible craft currently in the sandbox (for the "jump to visitor" button). */
-  getActive: () => { object: THREE.Object3D; targetId: number | null }[];
+  /** Visible craft currently in the sandbox (for the "jump to visitor" button).
+   *  IM-19: carries the variant's name so the shell can identify the craft
+   *  in-scene instead of leaving it anonymous. */
+  getActive: () => { object: THREE.Object3D; targetId: number | null; variantName: string }[];
 }
 
 /** How close a beacon must get before a drifter panics and bolts. */
@@ -303,7 +311,7 @@ export function makeVisitors(maxConcurrent = 3, onVisit?: OnVisit): VisitorSyste
   const getActive = () =>
     slots
       .filter((s) => s.phase !== "idle" && s.craft.group.visible)
-      .map((s) => ({ object: s.craft.group as THREE.Object3D, targetId: s.targetId }));
+      .map((s) => ({ object: s.craft.group as THREE.Object3D, targetId: s.targetId, variantName: s.variant.name }));
 
   return { group, update, getActive };
 }

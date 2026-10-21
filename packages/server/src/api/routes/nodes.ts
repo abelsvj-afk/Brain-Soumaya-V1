@@ -9,6 +9,7 @@ import { GraphService } from "../../graph/service.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { AttachmentsRepo } from "../../repositories/attachments.repo.js";
 import { EconomyRepo, EARN_ACTION_DONE } from "../../economy.js";
+import { JourneysRepo } from "../../repositories/journeys.repo.js";
 import { requestMaintenance } from "../../maintenance/agent.js";
 import { spaceOf, rateLimit } from "../middleware.js";
 import { researchSteer } from "../../analysis/researchType.js";
@@ -19,7 +20,30 @@ import { researchSteer } from "../../analysis/researchType.js";
 const llmLimiter = rateLimit({ max: Number(process.env.LLM_RATE_LIMIT_MAX ?? 20) });
 
 // importance: 0..1 to set manually, or null to reset to the auto (heuristic) weight.
-const PatchBody = z.object({ importance: z.number().min(0).max(1).nullable() });
+// label/content: the Details tab's edit flow (IM-26) — at least one field required.
+const PatchBody = z
+  .object({
+    importance: z.number().min(0).max(1).nullable().optional(),
+    label: z.string().min(1).max(200).optional(),
+    content: z.string().max(100_000).optional(),
+  })
+  .refine((b) => b.importance !== undefined || b.label !== undefined || b.content !== undefined, {
+    message: "Provide importance, label, and/or content",
+  });
+
+// Agenda edit/reschedule/snooze (IM-51, additive): label/content edits plus the
+// two agenda timestamps. null clears a timestamp; omitting a field leaves it.
+const AgendaPatchBody = z
+  .object({
+    label: z.string().min(1).max(200).optional(),
+    content: z.string().max(4000).optional(),
+    remindAt: z.string().datetime().nullable().optional(),
+    expiresAt: z.string().datetime().nullable().optional(),
+  })
+  .refine(
+    (b) => b.label !== undefined || b.content !== undefined || b.remindAt !== undefined || b.expiresAt !== undefined,
+    { message: "Provide label, content, remindAt, and/or expiresAt" },
+  );
 
 // Attachment upload: base64 bytes capped so it fits the JSON body limit (8mb). Photos
 // are downscaled client-side (lib/image.ts) to ~a few hundred KB, so this cap is really
@@ -244,8 +268,32 @@ export function nodesRoutes(ctx: AppContext): Router {
     res.json({ ok: true });
   });
 
-  // PATCH /api/nodes/:id  { importance: number|null } -> adjust gravitational weight
-  r.patch("/:id", (req, res) => {
+  // PATCH /api/nodes/:id/agenda { label?, content?, remindAt?, expiresAt? } ->
+  // edit / reschedule / snooze an Agenda item in place (IM-51). Snooze is this
+  // same patch with a future remindAt/expiresAt computed by the client.
+  // NOTE: registered before PATCH /:id so Express matches the longer path first.
+  r.patch("/:id/agenda", (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const parsed = AgendaPatchBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Body must be { label?, content?, remindAt?, expiresAt? }", issues: parsed.error.issues });
+      return;
+    }
+    const node = new NodesRepo(ctx.handle, spaceOf(res)).updateAgenda(id, parsed.data);
+    if (!node) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.json(node);
+  });
+
+  // PATCH /api/nodes/:id  { importance?: number|null, label?: string, content?: string }
+  // -> adjust gravitational weight and/or edit the label/body (IM-26).
+  r.patch("/:id", async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
       res.status(400).json({ error: "Invalid id" });
@@ -253,16 +301,34 @@ export function nodesRoutes(ctx: AppContext): Router {
     }
     const parsed = PatchBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { importance: number 0..1 | null }" });
+      res.status(400).json({ error: "Body must be { importance?: number 0..1 | null, label?: string, content?: string }", issues: parsed.error.issues });
       return;
     }
-    const node = graphFor(res).setImportance(id, parsed.data.importance);
-    if (!node) {
+    const spaceId = spaceOf(res);
+    const repo = new NodesRepo(ctx.handle, spaceId);
+    if (parsed.data.label !== undefined || parsed.data.content !== undefined) {
+      const updated = repo.updateDetails(id, { label: parsed.data.label, content: parsed.data.content });
+      if (!updated) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      // Keep search honest: the edited text is what FTS + semantic search must
+      // find (same refresh the cognitive edit path performs).
+      upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(`${updated.label}. ${updated.content}`));
+      ftsUpsert(ctx.handle.sqlite, id, updated.label, updated.content);
+    }
+    if (parsed.data.importance !== undefined) {
+      const node = graphFor(res).setImportance(id, parsed.data.importance);
+      if (!node) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+    } else if (!repo.getById(id)) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    new NodesRepo(ctx.handle, spaceOf(res)).tend(id); // editing weight tends it
-    res.json(node);
+    repo.tend(id); // editing tends it
+    res.json(graphFor(res).getNode(id));
   });
 
   // DELETE /api/nodes/:id -> remove a memory and everything attached to it
@@ -284,6 +350,11 @@ export function nodesRoutes(ctx: AppContext): Router {
           `SELECT 1 FROM nodes WHERE id = ? AND space_id = ? AND created_at <= datetime('now', '-10 minutes')`,
         )
         .get(id, spaceId) != null;
+    // Living Galaxy (IM-140): completing an ACTION item is completing a
+    // mission — capture its linked journeys BEFORE the node (and the meaning
+    // of its links) is gone, then auto-credit them after the delete lands.
+    const linkedJourneys =
+      existing?.kind === "action" ? new JourneysRepo(ctx.handle, spaceId).journeysForMission(id) : [];
     const ok = graph.deleteNode(id);
     if (!ok) {
       res.status(404).json({ error: "Not found" });
@@ -291,7 +362,11 @@ export function nodesRoutes(ctx: AppContext): Router {
     }
     // Clearing a (real, aged) day-to-day action item earns a little fuel.
     if (oldEnough) new EconomyRepo(ctx.handle, spaceId).add(EARN_ACTION_DONE);
-    res.json({ ok: true, id });
+    const journeyProgress = linkedJourneys
+      .map((j) => new JourneysRepo(ctx.handle, spaceId).creditCompletedMission(j.id, id))
+      .filter((c): c is NonNullable<typeof c> => c != null)
+      .map((c) => ({ journeyId: c.journey.id, progress: c.journey.progress, missionsCompleted: c.completedCount }));
+    res.json({ ok: true, id, ...(journeyProgress.length > 0 ? { journeyProgress } : {}) });
   });
 
   // GET /api/nodes/:id -> node detail. The web client reads via /api/graph, so

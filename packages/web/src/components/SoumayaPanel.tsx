@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
-import { type Fuel } from "@brain/shared";
+import { useEffect, useMemo, useState } from "react";
+import { type Fuel, type Streak } from "@brain/shared";
 import {
-  getAgentLogs,
+  getAgentLogsStrict,
   getFuel,
   getUndertaking,
+  getUndertakingHistory,
+  getStreak,
   getSettings,
   updateSetting,
   getUsage,
@@ -24,6 +26,16 @@ import {
   commissionWarm,
 } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
+import { SoumayaEye } from "./SoumayaEye.js";
+import {
+  constellationCells,
+  derivePresence,
+  filterLogs,
+  groupLogsByDay,
+  humanizeLogAction,
+  logDateTime,
+  LOG_PAGE_SIZE,
+} from "../lib/soumayaPanel.js";
 
 /** Naive SQLite timestamps ("YYYY-MM-DD HH:MM:SS", no zone) must be read as UTC — same
  *  bug class already fixed for remindAt/expiresAt/Timeline chapters elsewhere in the app. */
@@ -66,6 +78,7 @@ export function SoumayaPanel({
   setShipViewMode,
   tasks,
   onReorderTasks,
+  nodes,
 }: {
   spaceName?: string;
   onFocus: (id: number) => void;
@@ -75,31 +88,50 @@ export function SoumayaPanel({
   setShipViewMode?: (v: "orbit" | "cockpit") => void;
   tasks?: any[];
   onReorderTasks?: (newOrder: any[]) => void;
+  /** Graph nodes for memory-label lookups (IM-70 target pills). */
+  nodes?: { id: number; label: string }[];
 }) {
   // Telemetry & Logs state
   const [logs, setLogs] = useState<AgentLog[]>([]);
+  const [logsError, setLogsError] = useState(false);
   const [researchEnabled, setResearchEnabled] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [toolHealth, setToolHealth] = useState<ToolHealth[]>([]);
   const [undertaking, setUndertaking] = useState<Undertaking | null>(null);
+  const [undertakingHistory, setUndertakingHistory] = useState<Undertaking[]>([]);
+  const [streak, setStreak] = useState<Streak | null>(null);
   const [fuel, setFuel] = useState<Fuel | null>(null);
   const [commissioning, setCommissioning] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
   const [budgetError, setBudgetError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // IM-66 log browsing state
+  const [logQuery, setLogQuery] = useState("");
+  const [logAction, setLogAction] = useState("all");
+  const [logVisible, setLogVisible] = useState(LOG_PAGE_SIZE);
+  // IM-71: in-app admin-token dialog (never window.prompt). Holds the action
+  // to run once a token has been entered.
+  const [tokenRequest, setTokenRequest] = useState<{ onReady: () => void } | null>(null);
+  const [tokenDraft, setTokenDraft] = useState("");
 
   // Budget mutations are admin-gated server-side (shared deployment cap). Ask for
-  // the ADMIN_TOKEN once, remember it, and surface a clear message on refusal.
-  const ensureAdminToken = (): boolean => {
-    if (getAdminToken()) return true;
-    const entered = window.prompt(
-      "Budget changes need the deployment admin token (the ADMIN_TOKEN secret):",
-    );
-    if (!entered) return false;
-    setAdminToken(entered.trim());
-    return true;
+  // the ADMIN_TOKEN once (in-app dialog, IM-71), remember it, and surface a clear
+  // message on refusal.
+  const ensureAdminToken = (onReady: () => void): void => {
+    if (getAdminToken()) {
+      onReady();
+      return;
+    }
+    setTokenDraft("");
+    setTokenRequest({ onReady });
   };
+
+  /** IM-70: a target pill reads the memory's label, like FleetPanel's labelOf. */
+  const labelOf = useMemo(() => {
+    const byId = new Map((nodes ?? []).map((n) => [n.id, n.label]));
+    return (id: number) => byId.get(id) ?? `Memory #${id}`;
+  }, [nodes]);
 
   const moveTask = (index: number, direction: "up" | "down") => {
     if (!tasks || !onReorderTasks || !tasks[index]) return;
@@ -122,23 +154,35 @@ export function SoumayaPanel({
     onReorderTasks(newOrder);
   };
 
-  // Fetch telemetry/logs
+  // Fetch telemetry/logs. Logs load through the STRICT variant (IM-66): a
+  // failed load sets logsError so the panel shows a real error state instead
+  // of rendering a dead server as a legitimately empty brain.
   const fetchData = async () => {
     try {
-      const [logsData, settings, usageData, fuelData, arc, healthData, toolHealthData] = await Promise.all([
-        getAgentLogs(),
+      const logsData = await getAgentLogsStrict();
+      setLogs(logsData);
+      setLogsError(false);
+    } catch (err) {
+      console.error("Failed to fetch Soumaya logs", err);
+      setLogsError(true);
+    }
+    try {
+      const [settings, usageData, fuelData, arc, arcHistory, streakData, healthData, toolHealthData] = await Promise.all([
         getSettings(),
         getUsage(),
         getFuel(),
         getUndertaking(),
+        getUndertakingHistory(),
+        getStreak(),
         getHealth().catch(() => null), // diagnostics-only — never block the rest of the panel
         getToolHealth().catch(() => []), // diagnostics-only — never block the rest of the panel
       ]);
-      setLogs(logsData);
       setResearchEnabled(settings.research_enabled === "true");
       if (usageData) setUsage(usageData);
       if (fuelData) setFuel(fuelData);
       setUndertaking(arc);
+      setUndertakingHistory(arcHistory);
+      if (streakData) setStreak(streakData);
       setHealth(healthData);
       setToolHealth(toolHealthData);
     } catch (err) {
@@ -154,20 +198,49 @@ export function SoumayaPanel({
     return () => clearInterval(timer);
   }, []);
 
+  // IM-72: honour the write result — flip optimistically, but on failure roll
+  // back and toast instead of lying until the next poll silently flips it.
   const toggleResearch = async () => {
-    const newVal = !researchEnabled;
+    const prev = researchEnabled;
+    const newVal = !prev;
     setResearchEnabled(newVal);
-    await updateSetting("research_enabled", String(newVal));
+    try {
+      const r = await updateSetting("research_enabled", String(newVal));
+      if (!r || r.ok !== true) throw new Error("setting rejected");
+    } catch {
+      setResearchEnabled(prev);
+      pushToast("Couldn't save Research Mode — it's still " + (prev ? "on." : "off."), "⚠️", 4000);
+    }
   };
 
 
   if (loading) {
     return (
-      <div className="dock-body">
+      <div className="dock-body" aria-busy="true">
         <p className="empty">Initializing {spaceName} link...</p>
+        <div className="loading-shimmer" aria-hidden="true">
+          <div className="skeleton-section">
+            <div className="skeleton-line" />
+            <div className="skeleton-line short" />
+            <div className="skeleton-line" />
+          </div>
+        </div>
       </div>
     );
   }
+
+  // IM-65 presence + IM-67 history derivations (real state only).
+  const latestCompleted = undertakingHistory.find((u) => u.status === "done") ?? null;
+  const presence = derivePresence({
+    tasks,
+    undertaking,
+    latestLog: logs[0] ?? null,
+    latestCompleted: undertaking && undertaking.status === "active" ? null : latestCompleted,
+    fuel,
+  });
+  const pastUndertakings = undertakingHistory.filter(
+    (u) => u.id !== undertaking?.id && (undertaking ? true : u.id !== latestCompleted?.id),
+  );
 
   return (
     <div className="dock-body">
@@ -197,6 +270,20 @@ export function SoumayaPanel({
         </div>
       </div>
 
+      {/* IM-65: her identity header — the eye, what she's doing NOW, and her
+          current mode/mood, all derived from live panel state (derivePresence). */}
+      <div className="soumaya-identity">
+        <SoumayaEye state={presence.eyeState} mood={presence.mood} size={44} />
+        <div className="soumaya-identity-text">
+          <p className="soumaya-now">{presence.sentence}</p>
+          <p className="soumaya-mood">
+            {presence.moodLabel}
+            {researchEnabled ? " · Research Mode on" : ""}
+            {streak ? ` · 🔥 ${streak.current}-day streak` : ""}
+          </p>
+        </div>
+      </div>
+
       {/* Her multi-day undertaking — autonomy with a narrative arc. */}
       {undertaking && undertaking.status === "active" && (
         <div className="undertaking-card">
@@ -207,6 +294,35 @@ export function SoumayaPanel({
           <div className="undertaking-bar">
             <span style={{ width: `${Math.round((undertaking.done / undertaking.total) * 100)}%` }} />
           </div>
+        </div>
+      )}
+
+      {/* IM-67: no active undertaking is a state, not a disappearance — and a
+          finished arc is celebrated, with past arcs kept as history. */}
+      {!undertaking && latestCompleted && (
+        <div className="undertaking-card undertaking-done">
+          <div className="undertaking-head">
+            <span>🎉 Completed: {latestCompleted.title}</span>
+            <span className="undertaking-day">{latestCompleted.done} of {latestCompleted.total} days</span>
+          </div>
+          <p className="budget-note" style={{ fontSize: "11px", marginTop: "4px" }}>
+            She finished this arc — a new one begins when there's enough to work on.
+          </p>
+        </div>
+      )}
+      {pastUndertakings.length > 0 && (
+        <div className="undertaking-history">
+          <h5 className="undertaking-history-title">Past undertakings</h5>
+          <ul className="undertaking-history-list">
+            {pastUndertakings.map((u) => (
+              <li key={u.id} className="undertaking-history-item">
+                <span>{u.status === "done" ? "🎉" : "🎯"} {u.title}</span>
+                <span className="undertaking-day">
+                  {u.status === "done" ? "Completed" : `${u.done} of ${u.total} days`}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -341,110 +457,171 @@ export function SoumayaPanel({
       {/* (The Captain's Log moved to the Insights tab — it's her narrative read on
           the day, same job as the daily digest, so they live together now.) */}
 
-      {/* 5. Consistency Constellation */}
+      {/* 5. Consistency Constellation — IM-64: rebuilt on the real streak
+          endpoint (GET /maintenance/streak), NOT the agent-log feed. Lit =
+          you tended your brain that day; hollow outline = no record (before
+          day-tracking began); dim = not tended. */}
       <div className="constellation-grid" style={{ marginTop: "20px", borderTop: "1px solid var(--glass-border)", paddingTop: "15px" }}>
         <h4 style={{ marginBottom: '8px', fontSize: '13px', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Consistency Constellation
         </h4>
-        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-          {Array.from({ length: 14 }).map((_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - (13 - i));
-            const dateStr = date.toISOString().split('T')[0]!;
-            const hasActivity = logs.some(l => l.createdAt.startsWith(dateStr));
-            
-            return (
-              <div 
-                key={dateStr} 
-                title={hasActivity ? `Activity on ${dateStr}` : `No activity on ${dateStr}`}
-                style={{
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '2px',
-                  backgroundColor: hasActivity ? 'rgba(100, 200, 255, 0.8)' : 'rgba(255, 255, 255, 0.05)',
-                  boxShadow: hasActivity ? '0 0 4px rgba(100, 200, 255, 0.5)' : 'none',
-                  transition: 'background-color 0.3s'
-                }}
-              />
-            );
-          })}
-        </div>
+        {streak ? (
+          <>
+            <p className="streak-summary">
+              🔥 <strong>{streak.current}-day streak</strong>
+              {streak.best > 0 ? ` · best ${streak.best}` : ""}
+              {typeof streak.shields === "number" ? ` · 🛡️ ${streak.shields} shield${streak.shields === 1 ? "" : "s"}` : ""}
+              {streak.today ? " · tended today ✓" : " · not tended yet today"}
+            </p>
+            {(() => {
+              const cells = constellationCells(streak);
+              if (!cells) return <p className="empty">No day-by-day record yet — it builds as you tend.</p>;
+              return (
+                <>
+                  <div className="constellation-cells" role="img" aria-label={`Your last 14 days: ${cells.filter((c) => c.tended).length} tended`}>
+                    {cells.map((c) => (
+                      <div key={c.date} className="constellation-cell-wrap">
+                        <div
+                          title={c.tended === true ? `Tended on ${c.date}` : c.tended === false ? `Not tended on ${c.date}` : `No record for ${c.date}`}
+                          className={`constellation-cell ${c.tended === true ? "lit" : c.tended === false ? "missed" : "unknown"} ${c.isToday ? "today" : ""}`}
+                        />
+                        <span className="constellation-axis">{c.axis}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="constellation-legend">
+                    <span className="legend-swatch lit" /> tended · <span className="legend-swatch missed" /> not tended · <span className="legend-swatch unknown" /> no record · outlined = today. Oldest → newest, left to right.
+                  </p>
+                </>
+              );
+            })()}
+          </>
+        ) : (
+          <p className="empty">Streak unavailable right now.</p>
+        )}
       </div>
 
-      {/* 6. Recent Activity */}
+      {/* 6. Recent Activity — IM-66 (search/filter/day groups/pagination,
+          full dates, honest error) + IM-70 (humanized actions, memory labels) */}
       <div className="log-container" style={{ marginTop: "20px", borderTop: "1px solid var(--glass-border)", paddingTop: "15px" }}>
         <h4 style={{ marginBottom: "10px", fontSize: "13px", color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Recent Activity
         </h4>
-        {logs.length === 0 && <p className="empty">No recent logs recorded.</p>}
-        <ul className="agent-logs" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {logs.map((log) => {
-            let targets: number[] = [];
-            try {
-              const parsed = JSON.parse(log.targets);
-              if (Array.isArray(parsed)) targets = parsed;
-            } catch {
-              /* ignore malformed targets */
-            }
-            
-            const rawDate = log.createdAt;
-            const isoDate = rawDate.includes("Z") ? rawDate : rawDate.replace(" ", "T") + "Z";
-
-            let rationale: JobRationale | null = null;
-            try {
-              if (log.result) {
-                const r = JSON.parse(log.result);
-                if (r && r.objective) rationale = r as JobRationale;
-              }
-            } catch {
-              /* ignore malformed rationale */
-            }
-
-            return (
-              <li key={log.id} style={{ 
-                marginBottom: '0.8rem', 
-                padding: '0.6rem', 
-                backgroundColor: 'rgba(255,255,255,0.03)',
-                borderRadius: '4px',
-                fontSize: '0.85rem'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.6, fontSize: '0.7rem' }}>
-                  <span style={{ textTransform: 'uppercase' }}>{log.action}</span>
-                  <span>{new Date(isoDate).toLocaleTimeString()}</span>
-                </div>
-                <p style={{ margin: '0.3rem 0' }}>{log.description}</p>
-                {rationale && (
-                  <div
-                    style={{
-                      margin: '0.4rem 0',
-                      padding: '0.45rem 0.55rem',
-                      borderLeft: '2px solid rgba(100,200,255,0.5)',
-                      background: 'rgba(100,200,255,0.06)',
-                      borderRadius: '3px',
-                      fontSize: '0.78rem',
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    <div><span style={{ opacity: 0.55 }}>Objective · </span>{rationale.objective}</div>
-                    <div><span style={{ opacity: 0.55 }}>Why now · </span>{rationale.why}</div>
-                    <div><span style={{ opacity: 0.55 }}>Benefit · </span>{rationale.benefit}</div>
-                  </div>
-                )}
-                <div className="pills">
-                  {targets.map((id) => (
-                    <button
-                      key={id}
-                      className="pill mini"
-                      onClick={() => onFocus(id)}
-                    >
-                      Node #{id}
-                    </button>
+        {logsError ? (
+          <div className="logs-error" role="alert">
+            <p className="empty">Couldn't load her activity — this isn't an empty brain, it's a failed connection.</p>
+            <button className="mini" onClick={() => fetchData()}>Try again</button>
+          </div>
+        ) : (
+          <>
+            <div className="log-controls">
+              <input
+                type="search"
+                className="log-search"
+                placeholder="Search her activity…"
+                value={logQuery}
+                onChange={(e) => { setLogQuery(e.target.value); setLogVisible(LOG_PAGE_SIZE); }}
+                aria-label="Search activity logs"
+              />
+              <select
+                className="log-filter"
+                value={logAction}
+                onChange={(e) => { setLogAction(e.target.value); setLogVisible(LOG_PAGE_SIZE); }}
+                aria-label="Filter activity by kind"
+              >
+                <option value="all">All kinds</option>
+                {[...new Set(logs.map((l) => l.action))].sort().map((a) => (
+                  <option key={a} value={a}>{humanizeLogAction(a)}</option>
+                ))}
+              </select>
+            </div>
+            {(() => {
+              const filtered = filterLogs(logs, logQuery, logAction);
+              if (logs.length === 0) return <p className="empty">No recent logs recorded.</p>;
+              if (filtered.length === 0) return <p className="empty">No activity matches that search.</p>;
+              const visible = filtered.slice(0, logVisible);
+              const groups = groupLogsByDay(visible);
+              return (
+                <>
+                  {groups.map((g) => (
+                    <div key={g.key} className="log-day-group">
+                      <h5 className="log-day-head">{g.label}</h5>
+                      <ul className="agent-logs" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {g.logs.map((log) => {
+                          let targets: number[] = [];
+                          try {
+                            const parsed = JSON.parse(log.targets);
+                            if (Array.isArray(parsed)) targets = parsed;
+                          } catch {
+                            /* ignore malformed targets */
+                          }
+                          let rationale: JobRationale | null = null;
+                          try {
+                            if (log.result) {
+                              const r = JSON.parse(log.result);
+                              if (r && r.objective) rationale = r as JobRationale;
+                            }
+                          } catch {
+                            /* ignore malformed rationale */
+                          }
+                          return (
+                            <li key={log.id} style={{
+                              marginBottom: '0.8rem',
+                              padding: '0.6rem',
+                              backgroundColor: 'rgba(255,255,255,0.03)',
+                              borderRadius: '4px',
+                              fontSize: '0.85rem'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.6, fontSize: '0.7rem' }}>
+                                <span>{humanizeLogAction(log.action)}</span>
+                                <span>{logDateTime(log.createdAt)}</span>
+                              </div>
+                              <p style={{ margin: '0.3rem 0' }}>{log.description}</p>
+                              {rationale && (
+                                <div
+                                  style={{
+                                    margin: '0.4rem 0',
+                                    padding: '0.45rem 0.55rem',
+                                    borderLeft: '2px solid rgba(100,200,255,0.5)',
+                                    background: 'rgba(100,200,255,0.06)',
+                                    borderRadius: '3px',
+                                    fontSize: '0.78rem',
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  <div><span style={{ opacity: 0.55 }}>Objective · </span>{rationale.objective}</div>
+                                  <div><span style={{ opacity: 0.55 }}>Why now · </span>{rationale.why}</div>
+                                  <div><span style={{ opacity: 0.55 }}>Benefit · </span>{rationale.benefit}</div>
+                                </div>
+                              )}
+                              <div className="pills">
+                                {targets.map((id) => (
+                                  <button
+                                    key={id}
+                                    className="pill mini"
+                                    onClick={() => onFocus(id)}
+                                  >
+                                    {labelOf(id)}
+                                  </button>
+                                ))}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   ))}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                  <p className="log-count">Showing {visible.length} of {filtered.length} entries{filtered.length !== logs.length ? ` (${logs.length} loaded)` : ""}</p>
+                  {logVisible < filtered.length && (
+                    <button className="mini log-more" onClick={() => setLogVisible((v) => v + LOG_PAGE_SIZE)}>
+                      Show more
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+          </>
+        )}
       </div>
 
       {/* 7. Expandable Advanced Settings (Telegram Bot + API Budget) */}
@@ -564,19 +741,20 @@ export function SoumayaPanel({
                 />
                 <button
                   className="mini"
-                  onClick={async () => {
+                  onClick={() => {
                     const v = Number(budgetInput);
                     if (!Number.isFinite(v) || v < 0) return;
-                    if (!ensureAdminToken()) return;
-                    const u = await apiSetBudget(v);
-                    if (u) {
-                      setUsage(u);
-                      setBudgetError(null);
-                      setBudgetInput("");
-                    } else {
-                      setAdminToken(""); // forget a bad token so the next click re-prompts
-                      setBudgetError("Rejected — check the admin token and try again.");
-                    }
+                    ensureAdminToken(async () => {
+                      const u = await apiSetBudget(v);
+                      if (u) {
+                        setUsage(u);
+                        setBudgetError(null);
+                        setBudgetInput("");
+                      } else {
+                        setAdminToken(""); // forget a bad token so the next click re-asks
+                        setBudgetError("Rejected — check the admin token and try again.");
+                      }
+                    });
                   }}
                   style={{ padding: "4px 8px", fontSize: "11px" }}
                 >
@@ -584,16 +762,17 @@ export function SoumayaPanel({
                 </button>
                 <button
                   className="mini"
-                  onClick={async () => {
-                    if (!ensureAdminToken()) return;
-                    const u = await resetUsage();
-                    if (u) {
-                      setUsage(u);
-                      setBudgetError(null);
-                    } else {
-                      setAdminToken(""); // forget a bad token so the next click re-prompts
-                      setBudgetError("Rejected — check the admin token and try again.");
-                    }
+                  onClick={() => {
+                    ensureAdminToken(async () => {
+                      const u = await resetUsage();
+                      if (u) {
+                        setUsage(u);
+                        setBudgetError(null);
+                      } else {
+                        setAdminToken(""); // forget a bad token so the next click re-asks
+                        setBudgetError("Rejected — check the admin token and try again.");
+                      }
+                    });
                   }}
                   style={{ padding: "4px 8px", fontSize: "11px" }}
                 >
@@ -607,6 +786,59 @@ export function SoumayaPanel({
           )}
         </div>
       </details>
+
+      {/* IM-71: in-app admin-token dialog — same overlay/card pattern as
+          ConfirmDialog, with a password input; never window.prompt. */}
+      {tokenRequest && (
+        <div className="confirm-overlay" onClick={() => setTokenRequest(null)}>
+          <div
+            className="confirm-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Admin token needed"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="confirm-title">Admin token needed</h3>
+            <p className="confirm-message">
+              Budget changes need the deployment admin token (the ADMIN_TOKEN secret). It's remembered on this device after a successful use.
+            </p>
+            <input
+              type="password"
+              className="admin-token-input"
+              placeholder="Admin token"
+              value={tokenDraft}
+              autoFocus
+              onChange={(e) => setTokenDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setTokenRequest(null);
+                if (e.key === "Enter" && tokenDraft.trim()) {
+                  const req = tokenRequest;
+                  setAdminToken(tokenDraft.trim());
+                  setTokenRequest(null);
+                  req.onReady();
+                }
+              }}
+            />
+            <div className="confirm-actions" style={{ marginTop: "12px" }}>
+              <button className="mini" onClick={() => setTokenRequest(null)}>
+                Cancel
+              </button>
+              <button
+                className="mini"
+                disabled={!tokenDraft.trim()}
+                onClick={() => {
+                  const req = tokenRequest;
+                  setAdminToken(tokenDraft.trim());
+                  setTokenRequest(null);
+                  req.onReady();
+                }}
+              >
+                Save token & continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

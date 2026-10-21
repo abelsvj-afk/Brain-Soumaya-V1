@@ -2,11 +2,12 @@
 import * as THREE from "three";
 // Pure helpers (vector conv, smoothstep, task-label sprite, body radius) live in
 // soumayaHelpers.ts (Post-MVP D4 split); behaviour unchanged.
-import { vecOf, smooth, makeTaskLabel, bodyRadius } from "./soumayaHelpers.js";
-import { gltfLoader } from "./gltf.js";
+import { vecOf, smooth, makeTaskLabel, makeSpeechBubble, bodyRadius } from "./soumayaHelpers.js";
+import { gltfLoader, fadeSwapIn, noteModelFallback } from "./gltf.js";
 import { SUN_RADIUS_MAX } from "./sun.js";
 import { getNextMaintenanceJob, completeMaintenanceJob, type MaintenanceJob } from "../api/client.js";
 import { playSfx } from "./sfx.js";
+import { shipTaskLabel } from "../lib/jobLabels.js";
 
 /** Free GPU resources for a swapped-out ship model so skin changes don't leak VRAM. */
 function disposeModel(obj: THREE.Object3D): void {
@@ -74,6 +75,12 @@ export interface SoumayaHandle {
   taskLabel: THREE.Object3D;
   /** Turn the floating task label on/off (user preference). */
   setTaskVisible: (v: boolean) => void;
+  /** In-world speech bubble (IM-139) — added to the scene by Graph3D so it
+   *  floats anchored above the ship, untitled by her banking. */
+  speechBubble: THREE.Object3D;
+  /** Speak a reaction in the bubble for a few seconds (her in-world voice:
+   *  connection reactions, the mass-cooling concern). Latest call wins. */
+  say: (message: string) => void;
   /** Fuel her fast flight has burned since the last read (Graph3D flushes it to spend). */
   getAndResetFuelBurn: () => number;
   getTasks: (nodes: any[]) => { id: string; type: string; label: string; status: "doing" | "planned" | "done" }[];
@@ -232,13 +239,17 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
         box.getCenter(center);
         model.position.copy(center.multiplyScalar(-k)); // recenter on origin
 
-        hull.visible = false;
         currentLoadedModel = model;
         group.add(model);
+        // IM-24: crossfade the real hull in over the procedural one.
+        fadeSwapIn(model, () => {
+          hull.visible = false;
+        });
       },
       undefined,
       (err) => {
         console.warn(`[soumaya] ship skin '${skin}' failed to load; using procedural hull`, err);
+        noteModelFallback("Soumaya's ship model");
         // Ensure procedural fallback remains visible
         hull.visible = true;
       }
@@ -337,6 +348,17 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
 
   // Floating "what she's doing" label (billboard added to scene by Graph3D).
   const taskLabel = makeTaskLabel();
+  // In-world speech bubble (IM-139): her reactions, spoken above the ship.
+  const speechBubble = makeSpeechBubble();
+  let bubbleText = "";
+  let bubbleUntil = 0;
+  const say = (message: string) => {
+    const text = message.trim().slice(0, 140);
+    if (!text) return;
+    bubbleText = text;
+    speechBubble.draw(text);
+    bubbleUntil = Date.now() + 6000;
+  };
   let taskEnabled = false;
   let lastTaskText = "";
   let bank = 0; // current banked roll (smoothed toward target each frame)
@@ -729,9 +751,9 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
     } else if (mode === "distressTravel" || mode === "distressHover") {
       taskText = hailLabel ?? "🚨 Fuel depleted! Help me refuel.";
     } else if (currentJob) {
-      taskText =
-        currentJob.description ||
-        (currentJob.type === "patrol" ? "Patrolling the galaxy" : `Running ${currentJob.type}`);
+      // IM-04: never render a raw job-type token ("Running sector_vibe") —
+      // the shared label map humanizes every server job type.
+      taskText = shipTaskLabel(currentJob);
     }
     if (taskText !== lastTaskText) {
       lastTaskText = taskText;
@@ -747,6 +769,12 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
     // Hails + distress always show (attention grab); routine task labels honor the toggle.
     const forceShow = hailLabel != null || mode === "distressTravel" || mode === "distressHover";
     taskLabel.sprite.visible = (taskEnabled || forceShow) && group.visible && taskText !== "";
+    // Speech bubble (IM-139): anchored above the task label while its line lasts.
+    const bubbleLive = bubbleText !== "" && Date.now() < bubbleUntil;
+    speechBubble.sprite.visible = bubbleLive && group.visible;
+    if (bubbleLive) {
+      speechBubble.sprite.position.copy(pos).addScaledVector(upVec, taskLabel.sprite.visible ? 13 : 9);
+    }
   };
 
   // Done tasks cache
@@ -1621,6 +1649,8 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
     cargo,
     trail: plume,
     taskLabel: taskLabel.sprite,
+    speechBubble: speechBubble.sprite,
+    say,
     setTaskVisible,
     setPilotSpeed,
     hail,

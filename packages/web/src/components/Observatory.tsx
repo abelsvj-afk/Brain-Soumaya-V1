@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import type { AwayDigest, GraphNode, Constellation, Insight } from "@brain/shared";
 import {
-  getConstellations,
-  getDigest,
+  getConstellationsResult,
+  getDigestResult,
   getDailyContact,
   answerDailyContact,
-  getDueReviews,
+  getDueReviewsResult,
   type DailyContact,
   type DueReview,
 } from "../api/client.js";
@@ -39,8 +39,13 @@ const CONTACT_ICON: Record<string, string> = {
  * `getJourneys`; the same rule JourneysPanel applies to `getJourneys`) —
  * when it resolves null. The server's success responses for those three are
  * always an object/array, so null can only mean failure, never "empty".
- * The array helpers (`getDigest`, `getConstellations`, `getDueReviews`)
- * resolve [] for a genuine empty result; [] is therefore success-empty.
+ * The array sources use the strict Result variants (`getDigestResult`,
+ * `getConstellationsResult`, `getDueReviewsResult` — IM-124 residual): the
+ * legacy fail-soft helpers resolve [] for BOTH failure and genuine empty,
+ * which made this error state unreachable for those three sources; the
+ * Result variants return `{ ok: false }` on failure and `{ ok: true, … }`
+ * (possibly empty) only on a real success. The legacy helpers keep their
+ * contract for every other consumer.
  */
 type SourceKey = "digest" | "constellations" | "contact" | "finance" | "journeys" | "reviews";
 type SourceStatus = "loading" | "ok" | "error";
@@ -62,6 +67,62 @@ function humanAway(ms: number): string {
   const d = Math.floor(h / 24);
   return `${d} day${d === 1 ? "" : "s"}`;
 }
+
+/**
+ * IM-126: Observatory showed NO timestamps anywhere (createdAt was only a
+ * sort key) while sibling panels localise dates, and the money card pasted
+ * the raw `nextIncomeDate` string ("2026-11-03") into copy. These helpers
+ * format for display: a bare date-only string ("YYYY-MM-DD") is formatted
+ * in UTC so the day never shifts under the viewer's timezone; anything
+ * with a time component localises like the sibling panels do. Returns null
+ * for missing/unparseable input so callers can omit the fragment instead
+ * of printing a raw or "Invalid Date" string.
+ */
+export function formatObsDate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(
+    undefined,
+    dateOnly
+      ? { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }
+      : { month: "short", day: "numeric", year: "numeric" },
+  );
+}
+
+export function formatObsDateTime(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  // Naive SQLite timestamps ("YYYY-MM-DD HH:MM:SS", no zone) are UTC on the
+  // server — normalise before parsing, like TimelineView.normalizeDate, or
+  // the localised time is off by the viewer's offset.
+  const s = raw.trim();
+  const naive = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s);
+  const d = new Date(naive ? s.replace(" ", "T") + "Z" : s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+/** "$42" for whole dollars, "$42.50" otherwise — bill amounts keep their cents. */
+export function formatCents(cents: number): string {
+  return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
+}
+
+/** "today" / "tomorrow" / "in N days" / "N days ago" for a day offset. */
+export function inDaysLabel(inDays: number): string {
+  if (inDays === 0) return "today";
+  if (inDays === 1) return "tomorrow";
+  if (inDays > 1) return `in ${inDays} days`;
+  if (inDays === -1) return "yesterday";
+  return `${-inDays} days ago`;
+}
+
+const INSIGHT_TIER_LABEL: Record<number, string> = {
+  1: "identity-level",
+  2: "pattern",
+  3: "situational",
+};
 
 /**
  * The Observatory — a calm home that fades in *after* the cinematic fly-in settles
@@ -142,8 +203,12 @@ export function Observatory({
   const loadDigest = async () => {
     markSource("digest", "loading");
     try {
-      const items = await getDigest();
-      setInsights(items.slice(0, 3));
+      const r = await getDigestResult();
+      if (!r.ok) {
+        markSource("digest", "error");
+        return;
+      }
+      setInsights(r.insights.slice(0, 3));
       markSource("digest", "ok");
     } catch {
       markSource("digest", "error");
@@ -152,8 +217,12 @@ export function Observatory({
   const loadConstellations = async () => {
     markSource("constellations", "loading");
     try {
-      const c = await getConstellations();
-      setConstellations(c.slice(0, 3));
+      const r = await getConstellationsResult();
+      if (!r.ok) {
+        markSource("constellations", "error");
+        return;
+      }
+      setConstellations(r.constellations.slice(0, 3));
       markSource("constellations", "ok");
     } catch {
       markSource("constellations", "error");
@@ -207,8 +276,12 @@ export function Observatory({
   const loadReviews = async () => {
     markSource("reviews", "loading");
     try {
-      const d = await getDueReviews();
-      setDueReview(d[0] ?? null);
+      const r = await getDueReviewsResult();
+      if (!r.ok) {
+        markSource("reviews", "error");
+        return;
+      }
+      setDueReview(r.reviews[0] ?? null);
       markSource("reviews", "ok");
     } catch {
       markSource("reviews", "error");
@@ -367,6 +440,12 @@ export function Observatory({
             <span className="obs-ic">🛰️</span>
             <span className="obs-body">
               <span className="obs-title">While you were away</span>
+              {/* IM-125: the digest's own greeting + the moment the absence
+                  began were fetched but never rendered. */}
+              {away.greeting && <span className="obs-line">{away.greeting}</span>}
+              {formatObsDateTime(away.since) && (
+                <span className="obs-meta">Away since {formatObsDateTime(away.since)}</span>
+              )}
               {away.agentActions.length > 0 && (
                 <span className="obs-line">
                   ✦ She {away.agentActions.map((a) => a.label).join(", ")}.
@@ -390,7 +469,7 @@ export function Observatory({
               {(away.dueReminders.length > 0 || away.resurfaced) && (
                 <span className="obs-chips">
                   {away.dueReminders.map((r) => (
-                    <button key={r.id} className="obs-chip" onClick={() => onFocus(r.id)} title="Reminder due — fly to it">
+                    <button key={r.id} className="obs-chip" onClick={() => onFocus(r.id)} title={`${r.label} — reminder due, fly to it`}>
                       🔔 {r.label.length > 24 ? `${r.label.slice(0, 24)}…` : r.label}
                     </button>
                   ))}
@@ -398,7 +477,7 @@ export function Observatory({
                     <button
                       className="obs-chip"
                       onClick={() => onFocus(away.resurfaced!.id)}
-                      title={`Resurfaced from ${away.resurfaced.dormantDays} days ago`}
+                      title={`${away.resurfaced.label} — resurfaced from ${away.resurfaced.dormantDays} days ago`}
                     >
                       💤 {away.resurfaced.label.length > 24 ? `${away.resurfaced.label.slice(0, 24)}…` : away.resurfaced.label}
                     </button>
@@ -431,7 +510,7 @@ export function Observatory({
               {dueReminders.length > 0 && (
                 <span className="obs-chips">
                   {dueReminders.slice(0, 2).map((n) => (
-                    <span key={n.id} className="obs-chip-static">
+                    <span key={n.id} className="obs-chip-static" title={n.label}>
                       {n.label.length > 24 ? `${n.label.slice(0, 24)}…` : n.label}
                     </span>
                   ))}
@@ -447,6 +526,14 @@ export function Observatory({
             <span className="obs-body">
               <span className="obs-title">Worth a moment</span>
               <span className="obs-line obs-clamp">{dueReview.label}</span>
+              {/* IM-125: how faded this memory is + how often it's been
+                  recalled were fetched but never shown. */}
+              <span className="obs-meta">
+                memory strength {Math.round(dueReview.strength * 100)}% ·{" "}
+                {dueReview.reviewCount === 0
+                  ? "first recall"
+                  : `recalled ${dueReview.reviewCount} time${dueReview.reviewCount === 1 ? "" : "s"} before`}
+              </span>
             </span>
           </button>
         )}
@@ -506,14 +593,26 @@ export function Observatory({
             <span className="obs-body">
               <span className="obs-title">She sees a pattern coming</span>
               <span className="obs-line">{contact.foresight.text}</span>
+              {/* IM-125: when she expects it — fetched, never rendered. */}
+              <span className="obs-meta">expected {inDaysLabel(contact.foresight.inDays)}</span>
             </span>
           </div>
         )}
         {contact?.discovery && (
           <button
             className="obs-card"
-            onClick={() => contact.discovery!.nodeId != null && onFocus(contact.discovery!.nodeId!)}
-            title="Her best recent find"
+            onClick={() => {
+              // IM-126: nodeId: null is a type-allowed server answer; the
+              // old handler silently no-opped, so the button looked broken.
+              // Say so, and land the user where discoveries live instead.
+              if (contact.discovery!.nodeId != null) {
+                onFocus(contact.discovery!.nodeId!);
+              } else {
+                pushToast("That discovery isn't tied to one memory — opening her observations instead.", "🔭", 4500);
+                onOpenInsights();
+              }
+            }}
+            title={contact.discovery.text}
           >
             <span className="obs-ic">🔭</span>
             <span className="obs-body">
@@ -531,9 +630,37 @@ export function Observatory({
               <span className="obs-money-amt">${Math.round(finance.budget.safeToSpendCents / 100)}</span>
               <span className="obs-line">
                 {finance.budget.shortfallCents > 0
-                  ? `⚠️ short $${Math.round(finance.budget.shortfallCents / 100)} before ${finance.budget.nextIncomeDate}`
+                  ? // IM-126: nextIncomeDate was interpolated RAW ("…before
+                    // 2026-11-03") — format it, and drop the clause entirely
+                    // when there's no parseable date rather than print one.
+                    `⚠️ short $${Math.round(finance.budget.shortfallCents / 100)}${formatObsDate(finance.budget.nextIncomeDate) ? ` before ${formatObsDate(finance.budget.nextIncomeDate)}` : " before your next income"}`
                   : `${finance.upcoming.length} bill${finance.upcoming.length === 1 ? "" : "s"} coming up`}
               </span>
+              {/* IM-125: the bills themselves — names, due dates, amounts —
+                  were fetched but the card only ever counted them. */}
+              {finance.upcoming.slice(0, 3).map((b) => (
+                <span key={b.id} className="obs-bill">
+                  <span className="obs-bill-name">{b.name}</span>
+                  <span className="obs-bill-meta">
+                    {formatObsDate(b.dueDate) ?? b.dueDate} · {formatCents(b.amountCents)}
+                  </span>
+                </span>
+              ))}
+              {finance.upcoming.length > 3 && (
+                <span className="obs-meta">+{finance.upcoming.length - 3} more in Money</span>
+              )}
+              {finance.budget.weekEarnedCents > 0 && (
+                <span className="obs-meta">Earned this week {formatCents(finance.budget.weekEarnedCents)}</span>
+              )}
+              {/* IM-125: what the balance is already holding for named bills. */}
+              {(finance.budget.reserved ?? []).slice(0, 3).map((r) => (
+                <span key={r.billId} className="obs-bill">
+                  <span className="obs-bill-name">Reserved for {r.name}</span>
+                  <span className="obs-bill-meta">
+                    {formatObsDate(r.dueDate) ?? r.dueDate} · {formatCents(r.amountCents)}
+                  </span>
+                </span>
+              ))}
             </span>
           </button>
         )}
@@ -545,8 +672,16 @@ export function Observatory({
               <span className="obs-title">Your journeys</span>
               {journeys.map((j) => (
                 <span key={j.id} className="obs-jn">
-                  <span className="obs-jn-name">{j.icon ?? "🧭"} {j.title}</span>
+                  <span className="obs-jn-name">
+                    {/* IM-125: the journey's own accent colour, fetched but unused. */}
+                    {j.color && <span className="obs-jn-dot" style={{ background: j.color }} aria-hidden="true" />}
+                    {j.icon ?? "🧭"} {j.title}
+                    {typeof j.linkCount === "number" && <span className="obs-meta"> · {j.linkCount} linked</span>}
+                  </span>
+                  {/* IM-125: what the journey IS — its description never rendered here. */}
+                  {j.description && <span className="obs-line obs-clamp">{j.description}</span>}
                   <span className="obs-jn-bar"><span className="obs-jn-fill" style={{ width: `${Math.round((j.progress ?? 0) * 100)}%` }} /></span>
+                  {formatObsDate(j.updatedAt) && <span className="obs-meta">updated {formatObsDate(j.updatedAt)}</span>}
                 </span>
               ))}
             </span>
@@ -599,9 +734,22 @@ export function Observatory({
                   key={ins.id}
                   className="obs-observation-row"
                   onClick={() => (ins.nodes[0] ? onFocus(ins.nodes[0].id) : onOpenInsights())}
-                  title="See the connection"
+                  title={ins.text}
                 >
                   <span className="obs-line obs-clamp">{ins.text}</span>
+                  {/* IM-125/IM-126: kind, tier, strength (score) and WHEN she
+                      saw it were all fetched and none rendered — createdAt
+                      was only ever a sort key. */}
+                  <span className="obs-meta">
+                    {[
+                      ins.kind === "contradiction" ? "⚡ contradiction" : "✦ connection",
+                      ins.tier ? INSIGHT_TIER_LABEL[ins.tier] ?? null : null,
+                      `strength ${Math.round(ins.score * 100)}%`,
+                      formatObsDateTime(ins.createdAt),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </button>
               ))}
             </span>
@@ -619,9 +767,11 @@ export function Observatory({
                     key={c.id}
                     className="obs-chip"
                     onClick={() => c.nodes[0] && onFocus(c.nodes[0].id)}
-                    title={`${c.nodes.length} memories`}
+                    title={`${c.name} — ${c.nodes.length} memories, cohesion ${Math.round(c.cohesion * 100)}%`}
                   >
                     {c.name}
+                    {/* IM-125: how tightly the cluster holds together. */}
+                    <span className="obs-chip-sub"> · {Math.round(c.cohesion * 100)}%</span>
                   </button>
                 ))}
               </span>
@@ -636,8 +786,17 @@ export function Observatory({
               <span className="obs-title">Jump back in</span>
               <span className="obs-chips">
                 {recent.map((n) => (
-                  <button key={n.id} className="obs-chip" onClick={() => onFocus(n.id)}>
+                  <button
+                    key={n.id}
+                    className="obs-chip"
+                    onClick={() => onFocus(n.id)}
+                    // IM-126: labels truncate at 28 chars — the full text
+                    // (and when it was captured, IM-126's timestamp) must be
+                    // reachable, incl. on touch via the visible date.
+                    title={formatObsDateTime(n.createdAt) ? `${n.label} — ${formatObsDateTime(n.createdAt)}` : n.label}
+                  >
                     {n.label.length > 28 ? `${n.label.slice(0, 28)}…` : n.label}
+                    {formatObsDate(n.createdAt) && <span className="obs-chip-sub"> · {formatObsDate(n.createdAt)}</span>}
                   </button>
                 ))}
               </span>

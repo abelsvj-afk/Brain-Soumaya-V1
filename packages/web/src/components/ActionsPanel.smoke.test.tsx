@@ -4,9 +4,13 @@ import type { GraphNode } from "@brain/shared";
 
 const deleteNode = vi.fn();
 const ackReminder = vi.fn();
+const ingestText = vi.fn();
+const updateAgendaItem = vi.fn();
 vi.mock("../api/client.js", () => ({
   deleteNode: (...a: unknown[]) => deleteNode(...a),
   ackReminder: (...a: unknown[]) => ackReminder(...a),
+  ingestText: (...a: unknown[]) => ingestText(...a),
+  updateAgendaItem: (...a: unknown[]) => updateAgendaItem(...a),
 }));
 const pushToast = vi.fn();
 vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) }));
@@ -65,6 +69,8 @@ describe("ActionsPanel — clearing a task is celebrated, not silent", () => {
     render(<ActionsPanel nodes={[node({ id: 1, label: "Ship it", kind: "action" })]} onFocus={() => {}} onChanged={onChanged} />);
     const doneBtn = await screen.findByTitle(/Mark done/);
     await act(async () => { doneBtn.click(); });
+    const confirmBtn = await screen.findByText("Confirm done");
+    await act(async () => { confirmBtn.click(); });
     expect(playSfx).toHaveBeenCalledWith("complete");
     expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Ship it"), "✅", expect.any(Number));
     expect(onChanged).toHaveBeenCalled();
@@ -125,6 +131,9 @@ describe("ActionsPanel — an upcoming reminder can be dismissed, not just flown
     render(<ActionsPanel nodes={[node({ id: 1, label: "Soon thing", remindAt: soon })]} onFocus={() => {}} />);
     const dismissBtn = await screen.findByTitle("Dismiss — cancel this reminder");
     await act(async () => { dismissBtn.click(); });
+    expect(ackReminder).not.toHaveBeenCalled();
+    const confirmBtn = await screen.findByText("Confirm dismiss");
+    await act(async () => { confirmBtn.click(); });
     await waitFor(() => expect(ackReminder).toHaveBeenCalledWith(1));
   });
 });

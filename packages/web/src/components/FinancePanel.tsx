@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import type { FinBill, BillFrequency, FinIncome, FinExpense, FinPaystub, PaystubExtractionResult, PaystubLineItem, FinAsset, FinAssetKind, IncomePoint, NetWorthPoint } from "@brain/shared";
+import type { FinBill, BillFrequency, FinIncome, FinExpense, FinPaystub, PaystubExtractionResult, PaystubLineItem, FinAsset, FinAssetKind, FinAssetSnapshot, IncomePoint, NetWorthPoint } from "@brain/shared";
 import type { FinExtractionResult } from "@brain/shared";
 import { useCountUp } from "../hooks/useCountUp.js";
 import {
-  getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, deleteBill, markOccurrencePaid, listBills,
+  getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, patchBill, deleteBill, markOccurrencePaid, listBills,
   ingestPaste, ingestImage, confirmIngest,
   listIncome, listExpense, editIncome, deleteIncome, editExpense, deleteExpense,
   getAfford, getWealthSummary,
-  extractPaystubText, extractPaystubImage, confirmPaystub, listPaystubs, deletePaystub, paystubSourceObjectUrl,
-  listAssets, createAsset, archiveAsset, listAssetSnapshots, addAssetSnapshot,
+  extractPaystubText, extractPaystubImage, confirmPaystub, listPaystubs, getPaystub, deletePaystub, paystubSourceObjectUrl,
+  listAssets, createAsset, patchAsset, archiveAsset, listAssetSnapshots, addAssetSnapshot,
   getIncomeTrend, getNetWorthTrend,
-  type FinanceSummary, type PaystubConfirmInput,
+  type FinanceSummary, type PaystubConfirmInput, type BillInput, type AffordResult,
 } from "../api/finance.js";
 import { JourneyChips } from "./JourneyChips.js";
 import { WealthPanel } from "./WealthPanel.js";
 import { GrowthTrendChart, type ChartSeries } from "./GrowthTrendChart.js";
 import { extractFileText } from "../lib/extractFileText.js";
 import { prefersReducedMotion } from "../graph/motion.js";
+import { fmtMoneyDate, fmtMoneyDateRel, fmtStampRel } from "./moneyDates.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
+import { filterHistoryRows, monthlyTotals, monthLabel, EMPTY_HISTORY_FILTERS, type HistoryFilters } from "./historyTools.js";
 
 /** A dollar amount that DIALS to its value (never snaps) — respects reduced-motion. */
 function Money({ cents, className }: { cents: number; className?: string }) {
@@ -105,7 +108,14 @@ export function FinancePanel({
   }, []);
 
   if (loading && !sum) return <div className="fin-panel"><p className="fin-empty">Loading your budget…</p></div>;
-  if (!sum) return <div className="fin-panel"><p className="fin-empty">Couldn't reach the budget (offline?). Try again.</p></div>;
+  // IM-84: the honest load-error state used to have NO retry — the user had to leave
+  // and re-enter the tab. Offer the retry in place.
+  if (!sum) return (
+    <div className="fin-panel">
+      <p className="fin-empty">Couldn't reach the budget (offline?). Try again.</p>
+      <button className="fin-secondary" onClick={() => void refresh()}>Retry</button>
+    </div>
+  );
 
   const b = sum.budget;
 
@@ -129,9 +139,16 @@ export function FinancePanel({
         <Money cents={b.safeToSpendCents} className="fin-hero-amount" />
         {b.shortfallCents > 0 && (
           <div className="fin-shortfall" role="status">
-            <span aria-hidden>⚠️</span> Short by <MoneyC cents={b.shortfallCents} /> before {b.nextIncomeDate}
+            <span aria-hidden>⚠️</span> Short by <MoneyC cents={b.shortfallCents} /> before {fmtMoneyDateRel(b.nextIncomeDate)}
           </div>
         )}
+        {/* IM-81: account name/currency/updatedAt crossed the wire but were never
+            rendered — no freshness cue on the money hero. Show which account this
+            is and when its balance was last set. */}
+        <p className="fin-muted" style={{ margin: "4px 0 0" }}>
+          {sum.account.name} · {sum.account.currency}
+          {fmtStampRel(sum.account.updatedAt) && <> · Updated {fmtStampRel(sum.account.updatedAt)}</>}
+        </p>
       </section>
 
       {/* This is a separate question from Safe-to-Spend, not a refinement of it — never styled
@@ -145,6 +162,9 @@ export function FinancePanel({
       <div className="fin-row2">
         <div className="fin-stat"><span>Earned this week</span><Money cents={b.weekEarnedCents} className="fin-stat-num" /></div>
         <div className="fin-stat"><span>Balance</span><Money cents={b.balanceCents} className="fin-stat-num" /></div>
+        {/* IM-81: avgWeeklyIncomeCents is the pace the afford calculator reasons
+            from — it was fetched with the summary and never shown anywhere. */}
+        <div className="fin-stat"><span>Avg weekly income</span><Money cents={b.avgWeeklyIncomeCents} className="fin-stat-num" /></div>
       </div>
 
       {/* ---- Safety buffer (IM-78): bufferCents is subtracted, together with reserved
@@ -170,7 +190,7 @@ export function FinancePanel({
         <ul className="fin-reserved-list">
           {b.reserved.length === 0 && <li className="fin-muted">Nothing due before your next income.</li>}
           {b.reserved.map((r) => (
-            <li key={`${r.billId}-${r.dueDate}`}><span>{r.name}</span><span>{r.dueDate}</span><strong>{fmt(r.amountCents)}</strong></li>
+            <li key={`${r.billId}-${r.dueDate}`}><span>{r.name}</span><span>{fmtMoneyDateRel(r.dueDate)}</span><strong>{fmt(r.amountCents)}</strong></li>
           ))}
         </ul>
       )}
@@ -194,7 +214,7 @@ export function FinancePanel({
           {sum.upcoming.map((o) => (
             <li key={o.id}>
               <span className="fin-bill-name">{o.name}</span>
-              <span className="fin-bill-due">{o.dueDate}</span>
+              <span className="fin-bill-due">{fmtMoneyDateRel(o.dueDate)}</span>
               <strong>{fmt(o.amountCents)}</strong>
               <button className="fin-paid" onClick={async () => { await markOccurrencePaid(o.id); await refresh(); }}>Paid</button>
             </li>
@@ -245,18 +265,30 @@ export function FinancePanel({
 }
 
 // ---- History: recent income + expenses, each editable + deletable ----
-interface TxnRow { kind: "income" | "expense"; id: number; date: string; cents: number; label: string; category?: string }
+interface TxnRow {
+  kind: "income" | "expense"; id: number; date: string; cents: number; label: string; category?: string;
+  /** Income-only detail (IM-82): captured via Add income / pay stubs, editable here. */
+  grossCents?: number | null; taxCents?: number | null; hours?: number | null;
+}
 
 function History({ onChanged }: { onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<TxnRow[]>([]);
   const [editing, setEditing] = useState<TxnRow | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  // IM-82: search / kind filter / date range + monthly totals — the full merged
+  // list used to render at once with no way to find or total anything.
+  const [filters, setFilters] = useState<HistoryFilters>(EMPTY_HISTORY_FILTERS);
+  // IM-84: deletes used to be instant with no confirmation and no undo.
+  const [confirmDelete, setConfirmDelete] = useState<TxnRow | null>(null);
 
   const load = async () => {
     const [inc, exp] = await Promise.all([listIncome(), listExpense()]);
     const merged: TxnRow[] = [
-      ...(inc ?? []).map((i: FinIncome): TxnRow => ({ kind: "income", id: i.id, date: i.date, cents: i.netCents, label: i.platform ?? "" })),
+      ...(inc ?? []).map((i: FinIncome): TxnRow => ({
+        kind: "income", id: i.id, date: i.date, cents: i.netCents, label: i.platform ?? "",
+        grossCents: i.grossCents ?? null, taxCents: i.taxCents ?? null, hours: i.hours ?? null,
+      })),
       ...(exp ?? []).map((e: FinExpense): TxnRow => ({ kind: "expense", id: e.id, date: e.date, cents: e.amountCents, label: e.merchant ?? "", category: e.category })),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
     setRows(merged);
@@ -267,63 +299,128 @@ function History({ onChanged }: { onChanged: () => void }) {
     if (row.kind === "income") await deleteIncome(row.id); else await deleteExpense(row.id);
     await load(); onChanged();
   };
-  const save = async (row: TxnRow, amount: string, label: string, date: string, category: string) => {
+  const save = async (row: TxnRow, amount: string, label: string, date: string, category: string, extra: { gross: string; tax: string; hours: string }) => {
     const c = toCents(amount);
     if (c == null || c <= 0) return;
-    if (row.kind === "income") await editIncome(row.id, { netCents: c, platform: label || null, date });
-    else await editExpense(row.id, { amountCents: c, merchant: label || null, date, category: category || "misc" });
+    if (row.kind === "income") {
+      const hours = extra.hours.trim() ? parseFloat(extra.hours) : null;
+      await editIncome(row.id, {
+        netCents: c, platform: label || null, date,
+        grossCents: extra.gross.trim() ? toCents(extra.gross) : null,
+        taxCents: extra.tax.trim() ? toCents(extra.tax) : null,
+        hours: hours != null && Number.isFinite(hours) ? hours : null,
+      });
+    } else await editExpense(row.id, { amountCents: c, merchant: label || null, date, category: category || "misc" });
     setEditing(null); await load(); onChanged();
   };
+
+  const visible = filterHistoryRows(rows, filters);
+  const totals = monthlyTotals(visible);
+  const filtersActive = filters.query !== "" || filters.kind !== "all" || filters.from !== "" || filters.to !== "";
 
   return (
     <section className="fin-history">
       <button className="fin-secondary" onClick={() => setOpen((v) => !v)}>{open ? "Hide history" : "🧾 View / edit history"}</button>
       {open && (
-        <ul className="fin-txn-list">
-          {rows.length === 0 && <li className="fin-muted">Nothing recorded yet.</li>}
-          {rows.map((row) => editing && editing.id === row.id && editing.kind === row.kind ? (
-            <li key={`${row.kind}-${row.id}`} className="fin-txn edit">
-              <EditRow row={row} onSave={save} onCancel={() => setEditing(null)} />
-            </li>
-          ) : (
-            <li key={`${row.kind}-${row.id}`} className="fin-txn">
-              <span className={row.kind === "income" ? "fin-tag-in" : "fin-tag-out"}>{row.kind === "income" ? "IN" : "OUT"}</span>
-              <button
-                className="fin-txn-lbl fin-txn-lbl-btn"
-                onClick={() => setExpandedKey((k) => (k === `${row.kind}-${row.id}` ? null : `${row.kind}-${row.id}`))}
-                aria-expanded={expandedKey === `${row.kind}-${row.id}`}
-              >
-                {row.label || (row.category ?? "—")}
-              </button>
-              <span className="fin-txn-date">{row.date}</span>
-              <strong>{fmt(row.cents)}</strong>
-              <button className="fin-mini" onClick={() => setEditing(row)} aria-label="Edit">✏️</button>
-              <button className="fin-mini" onClick={() => del(row)} aria-label="Delete">🗑️</button>
-              {expandedKey === `${row.kind}-${row.id}` && (
-                <div className="fin-row-detail">
-                  <JourneyChips kind={row.kind} refId={row.id} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="fin-inline-form">
+            <input className="list-filter" placeholder="Search history…" value={filters.query} onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))} aria-label="Search history" />
+            <select value={filters.kind} onChange={(e) => setFilters((f) => ({ ...f, kind: e.target.value as HistoryFilters["kind"] }))} aria-label="History kind filter">
+              <option value="all">All</option>
+              <option value="income">Income</option>
+              <option value="expense">Expenses</option>
+            </select>
+            <input type="date" value={filters.from} onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))} aria-label="History from date" />
+            <input type="date" value={filters.to} onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))} aria-label="History to date" />
+            {filtersActive && <button className="fin-mini" onClick={() => setFilters(EMPTY_HISTORY_FILTERS)}>Clear filters</button>}
+          </div>
+          {totals.length > 0 && (
+            <ul className="fin-monthly-totals">
+              {totals.map((t) => (
+                <li key={t.month}>
+                  <span>{monthLabel(t.month)}</span>
+                  <span>in {fmtc(t.incomeCents)}</span>
+                  <span>out {fmtc(t.expenseCents)}</span>
+                  <strong>net {fmtc(t.netCents)}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ul className="fin-txn-list">
+            {rows.length === 0 && <li className="fin-muted">Nothing recorded yet.</li>}
+            {rows.length > 0 && visible.length === 0 && <li className="fin-muted">No transactions match those filters.</li>}
+            {visible.map((row) => editing && editing.id === row.id && editing.kind === row.kind ? (
+              <li key={`${row.kind}-${row.id}`} className="fin-txn edit">
+                <EditRow row={row} onSave={save} onCancel={() => setEditing(null)} />
+              </li>
+            ) : (
+              <li key={`${row.kind}-${row.id}`} className="fin-txn">
+                <span className={row.kind === "income" ? "fin-tag-in" : "fin-tag-out"}>{row.kind === "income" ? "IN" : "OUT"}</span>
+                <button
+                  className="fin-txn-lbl fin-txn-lbl-btn"
+                  onClick={() => setExpandedKey((k) => (k === `${row.kind}-${row.id}` ? null : `${row.kind}-${row.id}`))}
+                  aria-expanded={expandedKey === `${row.kind}-${row.id}`}
+                >
+                  {row.label || (row.category ?? "—")}
+                </button>
+                <span className="fin-txn-date">{fmtMoneyDate(row.date)}</span>
+                <strong>{fmt(row.cents)}</strong>
+                <button className="fin-mini" onClick={() => setEditing(row)} aria-label="Edit">✏️</button>
+                <button className="fin-mini" onClick={() => setConfirmDelete(row)} aria-label="Delete">🗑️</button>
+                {expandedKey === `${row.kind}-${row.id}` && (
+                  <div className="fin-row-detail">
+                    {row.kind === "income" && (row.grossCents != null || row.taxCents != null || row.hours != null) && (
+                      <p className="fin-muted">
+                        {row.grossCents != null && <>Gross {fmtc(row.grossCents)} </>}
+                        {row.taxCents != null && <>· Tax {fmtc(row.taxCents)} </>}
+                        {row.hours != null && <>· {row.hours} hrs</>}
+                      </p>
+                    )}
+                    <JourneyChips kind={row.kind} refId={row.id} />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this transaction?"
+          message={`${confirmDelete.label || confirmDelete.category || "Transaction"} — ${fmtc(confirmDelete.cents)} on ${fmtMoneyDate(confirmDelete.date)}. Your balance will be adjusted back. This can't be undone.`}
+          confirmLabel="Delete"
+          onConfirm={async () => { const row = confirmDelete; setConfirmDelete(null); await del(row); }}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </section>
   );
 }
 
-function EditRow({ row, onSave, onCancel }: { row: TxnRow; onSave: (r: TxnRow, amount: string, label: string, date: string, category: string) => void; onCancel: () => void }) {
+function EditRow({ row, onSave, onCancel }: { row: TxnRow; onSave: (r: TxnRow, amount: string, label: string, date: string, category: string, extra: { gross: string; tax: string; hours: string }) => void; onCancel: () => void }) {
   const [amount, setAmount] = useState((row.cents / 100).toFixed(2));
   const [label, setLabel] = useState(row.label);
   const [date, setDate] = useState(row.date);
   const [category, setCategory] = useState(row.category ?? "");
+  // IM-82: gross/tax/hours were only capturable via pay stubs — they're plain
+  // income-row fields server-side, so the edit form offers them too.
+  const [gross, setGross] = useState(row.grossCents != null ? (row.grossCents / 100).toFixed(2) : "");
+  const [tax, setTax] = useState(row.taxCents != null ? (row.taxCents / 100).toFixed(2) : "");
+  const [hours, setHours] = useState(row.hours != null ? String(row.hours) : "");
   return (
     <>
       <input className="fin-draft-amt" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Amount" />
       <input className="fin-draft-lbl" value={label} placeholder={row.kind === "income" ? "Platform" : "Merchant"} onChange={(e) => setLabel(e.target.value)} />
       {row.kind === "expense" && <input className="fin-draft-cat" value={category} placeholder="Category" onChange={(e) => setCategory(e.target.value)} />}
+      {row.kind === "income" && (
+        <>
+          <input className="fin-draft-cat" inputMode="decimal" value={gross} placeholder="Gross $" onChange={(e) => setGross(e.target.value)} aria-label="Gross pay" />
+          <input className="fin-draft-cat" inputMode="decimal" value={tax} placeholder="Tax $" onChange={(e) => setTax(e.target.value)} aria-label="Tax" />
+          <input className="fin-draft-cat" inputMode="decimal" value={hours} placeholder="Hours" onChange={(e) => setHours(e.target.value)} aria-label="Hours" />
+        </>
+      )}
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
-      <button className="fin-mini" onClick={() => onSave(row, amount, label, date, category)} aria-label="Save">✅</button>
+      <button className="fin-mini" onClick={() => onSave(row, amount, label, date, category, { gross, tax, hours })} aria-label="Save">✅</button>
       <button className="fin-mini" onClick={onCancel} aria-label="Cancel">✖️</button>
     </>
   );
@@ -389,19 +486,32 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
   // change — picking "Self-employed" just pre-fills the free-text platform field (still
   // editable) so incomeTrend.ts's text heuristic can split it out on the Growth chart.
   const [source, setSource] = useState<IncomeSource>("paycheck");
+  // IM-82: gross/tax/hours are real income-row fields (IncomeBody) that used to be
+  // capturable ONLY via pay stubs — a manual income entry can carry them too.
+  const [gross, setGross] = useState("");
+  const [tax, setTax] = useState("");
+  const [hours, setHours] = useState("");
 
   const submit = async () => {
     const c = toCents(amount);
     if (c == null || c <= 0) { onDone("Entry", false, false); return; }
     if (mode === "income") {
       const platform = label.trim() || (source === "self-employed" ? "Self-employed" : source === "other" ? "Other" : undefined);
-      const r = await addIncome({ date, netCents: c, platform });
+      const grossCents = gross.trim() ? toCents(gross) : null;
+      const taxCents = tax.trim() ? toCents(tax) : null;
+      const hrs = hours.trim() ? parseFloat(hours) : NaN;
+      const r = await addIncome({
+        date, netCents: c, platform,
+        ...(grossCents != null ? { grossCents } : {}),
+        ...(taxCents != null ? { taxCents } : {}),
+        ...(Number.isFinite(hrs) ? { hours: hrs } : {}),
+      });
       onDone("Income", !!r, !!r?.duplicate);
     } else {
       const r = await addExpense({ date, amountCents: c, category: label || "misc", direction: "out" });
       onDone("Expense", !!r, !!r?.duplicate);
     }
-    setMode(null); setAmount(""); setLabel(""); setSource("paycheck");
+    setMode(null); setAmount(""); setLabel(""); setSource("paycheck"); setGross(""); setTax(""); setHours("");
   };
 
   if (!mode) return (
@@ -428,6 +538,13 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
         value={label}
         onChange={(e) => setLabel(e.target.value)}
       />
+      {mode === "income" && (
+        <div className="fin-inline-form">
+          <input inputMode="decimal" placeholder="Gross $ (optional)" value={gross} onChange={(e) => setGross(e.target.value)} aria-label="Gross pay" />
+          <input inputMode="decimal" placeholder="Tax $ (optional)" value={tax} onChange={(e) => setTax(e.target.value)} aria-label="Tax" />
+          <input inputMode="decimal" placeholder="Hours (optional)" value={hours} onChange={(e) => setHours(e.target.value)} aria-label="Hours" />
+        </div>
+      )}
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
       <div className="fin-form-actions">
         <button className="fin-primary" onClick={submit}>Save</button>
@@ -598,13 +715,116 @@ function SnapImport({ onDone }: { onDone: (committed: number) => void }) {
 /** `focusBill` (Phase AC.1, Galaxy entity detail focus): a Bill clicked in the Money
  *  Sky — mirrors WealthPanel's `focusGoal` handling exactly (force-open, then scroll to
  *  the matching row once it's actually mounted). */
+/** IM-80: the full bill schema as form state (dollar/number strings, like every
+ *  other money form in this panel). The server + shared types have always supported
+ *  everyDays/autopay/category/graceDays/lateFeeCents/payee/accountLast4 — the form
+ *  only ever offered name/amount/frequency/anchor, so "custom" was selectable but
+ *  its interval could never be entered, and no bill could be edited at all. */
+interface BillFormState {
+  name: string; amount: string; frequency: BillFrequency; anchorDate: string;
+  everyDays: string; autopay: boolean; category: string; graceDays: string;
+  lateFee: string; payee: string; accountLast4: string;
+}
+
+function emptyBillForm(): BillFormState {
+  return {
+    name: "", amount: "", frequency: "monthly", anchorDate: today(),
+    everyDays: "", autopay: false, category: "", graceDays: "", lateFee: "", payee: "", accountLast4: "",
+  };
+}
+
+function billToForm(bl: FinBill): BillFormState {
+  return {
+    name: bl.name,
+    amount: (bl.amountCents / 100).toFixed(2),
+    frequency: bl.frequency,
+    anchorDate: bl.anchorDate,
+    everyDays: bl.everyDays != null ? String(bl.everyDays) : "",
+    autopay: !!bl.autopay,
+    category: bl.category ?? "",
+    graceDays: bl.graceDays != null ? String(bl.graceDays) : "",
+    lateFee: bl.lateFeeCents != null ? (bl.lateFeeCents / 100).toFixed(2) : "",
+    payee: bl.payee ?? "",
+    accountLast4: bl.accountLast4 ?? "",
+  };
+}
+
+/** Form state → BillInput, or null when the required fields don't validate.
+ *  "custom" REQUIRES a positive interval — that's the whole point of the frequency. */
+function billFormToInput(f: BillFormState): BillInput | null {
+  const c = toCents(f.amount);
+  if (!f.name.trim() || c == null || c <= 0 || !f.anchorDate) return null;
+  const input: BillInput = { name: f.name.trim(), amountCents: c, frequency: f.frequency, anchorDate: f.anchorDate, autopay: f.autopay };
+  if (f.frequency === "custom") {
+    const days = parseInt(f.everyDays, 10);
+    if (!Number.isFinite(days) || days <= 0) return null;
+    input.everyDays = days;
+  }
+  if (f.category.trim()) input.category = f.category.trim();
+  if (f.graceDays.trim()) {
+    const g = parseInt(f.graceDays, 10);
+    if (Number.isFinite(g) && g >= 0) input.graceDays = g;
+  }
+  if (f.lateFee.trim()) {
+    const fee = toCents(f.lateFee);
+    if (fee != null && fee >= 0) input.lateFeeCents = fee;
+  }
+  if (f.payee.trim()) input.payee = f.payee.trim();
+  if (/^\d{4}$/.test(f.accountLast4.trim())) input.accountLast4 = f.accountLast4.trim();
+  return input;
+}
+
+function BillFields({ value, onChange, idPrefix }: { value: BillFormState; onChange: (f: BillFormState) => void; idPrefix: string }) {
+  const set = (patch: Partial<BillFormState>) => onChange({ ...value, ...patch });
+  return (
+    <>
+      <input placeholder="Name (e.g. Rent)" value={value.name} onChange={(e) => set({ name: e.target.value })} aria-label="Bill name" />
+      <input inputMode="decimal" placeholder="Amount" value={value.amount} onChange={(e) => set({ amount: e.target.value })} aria-label="Bill amount in dollars" />
+      <select value={value.frequency} onChange={(e) => set({ frequency: e.target.value as BillFrequency })} aria-label="Frequency">
+        <option value="weekly">Weekly</option>
+        <option value="biweekly">Every 2 weeks</option>
+        <option value="monthly">Monthly</option>
+        <option value="custom">Custom</option>
+      </select>
+      {value.frequency === "custom" && (
+        <input inputMode="numeric" placeholder="Every N days" value={value.everyDays} onChange={(e) => set({ everyDays: e.target.value })} aria-label="Every how many days" />
+      )}
+      <input type="date" value={value.anchorDate} onChange={(e) => set({ anchorDate: e.target.value })} aria-label="First due date" />
+      <input placeholder="Category (e.g. housing)" value={value.category} onChange={(e) => set({ category: e.target.value })} aria-label="Bill category" />
+      <input placeholder="Payee (e.g. Landlord LLC)" value={value.payee} onChange={(e) => set({ payee: e.target.value })} aria-label="Payee" />
+      <input inputMode="numeric" placeholder="Grace days (optional)" value={value.graceDays} onChange={(e) => set({ graceDays: e.target.value })} aria-label="Grace days" />
+      <input inputMode="decimal" placeholder="Late fee $ (optional)" value={value.lateFee} onChange={(e) => set({ lateFee: e.target.value })} aria-label="Late fee in dollars" />
+      <input inputMode="numeric" maxLength={4} placeholder="Account last 4 (optional)" value={value.accountLast4} onChange={(e) => set({ accountLast4: e.target.value })} aria-label="Account last 4 digits" />
+      <label className="fin-muted">
+        <input type="checkbox" checked={value.autopay} onChange={(e) => set({ autopay: e.target.checked })} aria-label="Autopay" /> Autopay
+      </label>
+      <span id={idPrefix} hidden />
+    </>
+  );
+}
+
+/** The row's secondary line: every stored field the schema carries, shown — not
+ *  just name/frequency/amount (IM-80). Empty when the bill carries none of them. */
+function billMeta(bl: FinBill): string {
+  const parts: string[] = [];
+  if (bl.frequency === "custom" && bl.everyDays != null) parts.push(`every ${bl.everyDays} days`);
+  parts.push(`first due ${fmtMoneyDate(bl.anchorDate)}`);
+  if (bl.autopay) parts.push("autopay");
+  if (bl.category) parts.push(bl.category);
+  if (bl.payee) parts.push(`to ${bl.payee}`);
+  if (bl.graceDays != null) parts.push(`${bl.graceDays}-day grace`);
+  if (bl.lateFeeCents != null) parts.push(`late fee ${fmtc(bl.lateFeeCents)}`);
+  if (bl.accountLast4) parts.push(`••${bl.accountLast4}`);
+  return parts.join(" · ");
+}
+
 function BillManager({ onChanged, focusBill }: { onChanged: () => void; focusBill?: { id: number; nonce: number } | null }) {
   const [open, setOpen] = useState(false);
   const [bills, setBills] = useState<FinBill[]>([]);
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [freq, setFreq] = useState<BillFrequency>("monthly");
-  const [anchor, setAnchor] = useState(today());
+  const [form, setForm] = useState<BillFormState>(emptyBillForm);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<BillFormState>(emptyBillForm);
+  const [confirmRemove, setConfirmRemove] = useState<FinBill | null>(null);
   const focusedBillRef = useRef<HTMLLIElement | null>(null);
 
   const load = async () => {
@@ -629,10 +849,18 @@ function BillManager({ onChanged, focusBill }: { onChanged: () => void; focusBil
   }, [focusBill?.nonce, bills, open]);
 
   const add = async () => {
-    const c = toCents(amount);
-    if (!name.trim() || c == null || c <= 0) return;
-    await createBill({ name: name.trim(), amountCents: c, frequency: freq, anchorDate: anchor });
-    setName(""); setAmount("");
+    const input = billFormToInput(form);
+    if (!input) return;
+    await createBill(input);
+    setForm(emptyBillForm());
+    await load(); onChanged();
+  };
+
+  const saveEdit = async (id: number) => {
+    const input = billFormToInput(editForm);
+    if (!input) return;
+    await patchBill(id, input);
+    setEditingId(null);
     await load(); onChanged();
   };
 
@@ -646,26 +874,41 @@ function BillManager({ onChanged, focusBill }: { onChanged: () => void; focusBil
               <li key={bl.id} ref={bl.id === focusBill?.id ? focusedBillRef : undefined}>
                 <div className="fin-bill-row">
                   <span>{bl.name}</span><span className="fin-muted">{bl.frequency}</span><strong>{fmt(bl.amountCents)}</strong>
-                  <button className="fin-secondary" onClick={async () => { await deleteBill(bl.id); await load(); onChanged(); }}>Remove</button>
+                  <button className="fin-secondary" onClick={() => { setEditingId(bl.id); setEditForm(billToForm(bl)); }}>Edit</button>
+                  {/* IM-84: removal used to be instant — one stray tap destroyed a
+                      bill that feeds the budget. Confirm via the shared dialog. */}
+                  <button className="fin-secondary" onClick={() => setConfirmRemove(bl)}>Remove</button>
                 </div>
+                <div className="fin-muted">{billMeta(bl)}</div>
+                {editingId === bl.id && (
+                  <div className="fin-form">
+                    <div className="fin-form-title">Edit bill</div>
+                    <BillFields value={editForm} onChange={setEditForm} idPrefix={`bill-edit-${bl.id}`} />
+                    <div className="fin-form-actions">
+                      <button className="fin-primary" onClick={() => void saveEdit(bl.id)}>Save bill</button>
+                      <button className="fin-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
                 <JourneyChips kind="bill" refId={bl.id} />
               </li>
             ))}
           </ul>
           <div className="fin-form">
             <div className="fin-form-title">Add a bill (once)</div>
-            <input placeholder="Name (e.g. Rent)" value={name} onChange={(e) => setName(e.target.value)} />
-            <input inputMode="decimal" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Bill amount in dollars" />
-            <select value={freq} onChange={(e) => setFreq(e.target.value as BillFrequency)} aria-label="Frequency">
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Every 2 weeks</option>
-              <option value="monthly">Monthly</option>
-              <option value="custom">Custom</option>
-            </select>
-            <input type="date" value={anchor} onChange={(e) => setAnchor(e.target.value)} aria-label="First due date" />
+            <BillFields value={form} onChange={setForm} idPrefix="bill-new" />
             <div className="fin-form-actions"><button className="fin-primary" onClick={add}>Add bill</button></div>
           </div>
         </div>
+      )}
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove this bill?"
+          message={`"${confirmRemove.name}" (${fmtc(confirmRemove.amountCents)}) will stop recurring and stop being reserved for. This can't be undone.`}
+          confirmLabel="Remove"
+          onConfirm={async () => { const bl = confirmRemove; setConfirmRemove(null); await deleteBill(bl.id); await load(); onChanged(); }}
+          onCancel={() => setConfirmRemove(null)}
+        />
       )}
     </div>
   );
@@ -676,7 +919,10 @@ function AffordCalculator() {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [extra, setExtra] = useState("");
-  const [result, setResult] = useState<{ weeks: number | null } | "error" | null>(null);
+  // IM-81: keep the WHOLE result — the server returns surplusCents +
+  // weeklyBillLoadCents as the explanation behind `weeks`, and the UI used to
+  // discard both, leaving an unbelievable bare number.
+  const [result, setResult] = useState<AffordResult | "error" | null>(null);
   const [busy, setBusy] = useState(false);
 
   const check = async () => {
@@ -685,7 +931,7 @@ function AffordCalculator() {
     const extraCents = extra ? toCents(extra) : 0;
     setBusy(true);
     const r = await getAfford(targetCents, extraCents && extraCents > 0 ? extraCents : 0);
-    setResult(r ? { weeks: r.weeks } : "error");
+    setResult(r ?? "error");
     setBusy(false);
   };
 
@@ -703,14 +949,20 @@ function AffordCalculator() {
           </div>
           {result === "error" && <p className="fin-muted">Couldn't reach the budget (offline?). Try again.</p>}
           {result && result !== "error" && (
-            result.weeks == null ? (
-              <p className="fin-muted">You're not currently saving toward this — earning more or cutting a bill would change that.</p>
-            ) : (
-              <p className="fin-afford-result">
-                <strong>~{result.weeks} week{result.weeks === 1 ? "" : "s"}</strong>
-                {result.weeks >= 5 && ` (about ${Math.round(result.weeks / 4.345)} month${Math.round(result.weeks / 4.345) === 1 ? "" : "s"})`} at your current pace.
+            <>
+              {result.weeks == null ? (
+                <p className="fin-muted">You're not currently saving toward this — earning more or cutting a bill would change that.</p>
+              ) : (
+                <p className="fin-afford-result">
+                  <strong>~{result.weeks} week{result.weeks === 1 ? "" : "s"}</strong>
+                  {result.weeks >= 5 && ` (about ${Math.round(result.weeks / 4.345)} month${Math.round(result.weeks / 4.345) === 1 ? "" : "s"})`} at your current pace.
+                </p>
+              )}
+              {/* IM-81: the explanation behind the answer — weekly surplus after bills. */}
+              <p className="fin-muted">
+                That's {fmtc(result.surplusCents)}/week of surplus after {fmtc(result.weeklyBillLoadCents)}/week of bills, at your average weekly income.
               </p>
-            )
+            </>
           )}
         </div>
       )}
@@ -980,6 +1232,15 @@ function PaystubSection({ onChanged }: { onChanged: () => void }) {
   const [detail, setDetail] = useState<FinPaystub | null>(null);
   const [viewUrl, setViewUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [confirmDeleteStub, setConfirmDeleteStub] = useState(false);
+
+  // IM-82: getPaystub was exported-but-uncalled — the detail view just reused the
+  // list row. Open the detail from the single-stub endpoint (a fresh read), with
+  // the list row as the offline fallback.
+  const openDetail = async (s: FinPaystub) => {
+    const fresh = await getPaystub(s.id);
+    setDetail(fresh ?? s);
+  };
 
   const load = async () => setStubs((await listPaystubs()) ?? []);
   useEffect(() => { if (open) void load(); }, [open]);
@@ -1041,8 +1302,8 @@ function PaystubSection({ onChanged }: { onChanged: () => void }) {
                 {stubs.length === 0 && <li className="fin-muted">No pay stubs saved yet.</li>}
                 {stubs.map((s) => (
                   <li key={s.id} className="fin-paystub-row">
-                    <button className="fin-txn-lbl fin-txn-lbl-btn" onClick={() => setDetail(s)}>
-                      {s.employer || "Pay stub"} — {s.payDate ?? "no date"}
+                    <button className="fin-txn-lbl fin-txn-lbl-btn" onClick={() => void openDetail(s)}>
+                      {s.employer || "Pay stub"} — {s.payDate ? fmtMoneyDate(s.payDate) : "no date"}
                     </button>
                     <span>{s.grossCents != null ? `${fmt(s.grossCents)} → ` : ""}{fmt(s.netCents)}</span>
                   </li>
@@ -1056,7 +1317,7 @@ function PaystubSection({ onChanged }: { onChanged: () => void }) {
               <button className="fin-secondary" onClick={() => setDetail(null)}>← Back</button>
               <h4>{detail.employer || "Pay stub"}</h4>
               <p className="fin-muted">
-                {detail.payDate ?? ""} {detail.periodStart && detail.periodEnd ? `(${detail.periodStart} – ${detail.periodEnd})` : ""}
+                {detail.payDate ? fmtMoneyDate(detail.payDate) : ""} {detail.periodStart && detail.periodEnd ? `(${fmtMoneyDate(detail.periodStart)} – ${fmtMoneyDate(detail.periodEnd)})` : ""}
               </p>
               <p>Gross: {detail.grossCents != null ? fmt(detail.grossCents) : "—"} · Net: {fmt(detail.netCents)}</p>
               {detail.hours != null && <p>Hours: {detail.hours}{detail.hourlyRateCents != null ? ` @ ${fmt(detail.hourlyRateCents)}/hr` : ""}</p>}
@@ -1091,8 +1352,17 @@ function PaystubSection({ onChanged }: { onChanged: () => void }) {
               )}
               <div className="fin-form-actions">
                 {detail.hasSource && <button className="fin-secondary" onClick={() => viewOriginal(detail.id)}>View original</button>}
-                <button className="fin-secondary" onClick={() => remove(detail.id)}>Delete</button>
+                <button className="fin-secondary" onClick={() => setConfirmDeleteStub(true)}>Delete</button>
               </div>
+              {confirmDeleteStub && (
+                <ConfirmDialog
+                  title="Delete this pay stub?"
+                  message={`The saved pay stub${detail.employer ? ` from ${detail.employer}` : ""} and its original document will be removed. This can't be undone.`}
+                  confirmLabel="Delete"
+                  onConfirm={async () => { setConfirmDeleteStub(false); await remove(detail.id); }}
+                  onCancel={() => setConfirmDeleteStub(false)}
+                />
+              )}
             </div>
           )}
           {viewUrl && (
@@ -1120,8 +1390,25 @@ function AssetManager({ onChanged }: { onChanged: () => void }) {
   const [kind, setKind] = useState<FinAssetKind>("savings");
   const [label, setLabel] = useState("");
   const [drafts, setDrafts] = useState<Record<number, { amount: string; asOf: string }>>({});
+  // IM-79: snapshot history was written into a void — listAssetSnapshots was
+  // imported and never called, so an asset showed no current balance, no history,
+  // and no chart. Snapshots load alongside the assets (repo returns newest first).
+  const [snapshots, setSnapshots] = useState<Record<number, FinAssetSnapshot[]>>({});
+  const [historyOpen, setHistoryOpen] = useState<number | null>(null);
+  // IM-82: patchAsset was exported-but-uncalled — an asset's label/kind could
+  // never be corrected after creation.
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editKind, setEditKind] = useState<FinAssetKind>("savings");
 
-  const load = async () => setAssets((await listAssets()) ?? []);
+  const load = async () => {
+    const list = (await listAssets()) ?? [];
+    setAssets(list);
+    const entries = await Promise.all(
+      list.map(async (a) => [a.id, (await listAssetSnapshots(a.id)) ?? []] as const),
+    );
+    setSnapshots(Object.fromEntries(entries));
+  };
   useEffect(() => { void load(); }, []);
 
   const add = async () => {
@@ -1144,6 +1431,14 @@ function AssetManager({ onChanged }: { onChanged: () => void }) {
     if (c == null) return;
     await addAssetSnapshot(assetId, c, draft?.asOf || today());
     setDrafts((s) => ({ ...s, [assetId]: { amount: "", asOf: today() } }));
+    await load();
+    onChanged();
+  };
+  const saveEdit = async (id: number) => {
+    if (!editLabel.trim()) return;
+    await patchAsset(id, { label: editLabel.trim(), kind: editKind });
+    setEditingId(null);
+    await load();
     onChanged();
   };
 
@@ -1151,21 +1446,57 @@ function AssetManager({ onChanged }: { onChanged: () => void }) {
     <div className="fin-assets">
       <ul className="fin-asset-list">
         {assets.length === 0 && <li className="fin-muted">No accounts yet — add a savings, investment, or retirement account below.</li>}
-        {assets.map((a) => (
-          <li key={a.id} className="fin-asset-row">
-            <span>{a.label} <span className="fin-muted">({a.kind})</span></span>
-            <div className="fin-inline-form">
-              <input inputMode="decimal" placeholder="Balance" value={drafts[a.id]?.amount ?? ""}
-                onChange={(e) => setDrafts((s) => ({ ...s, [a.id]: { amount: e.target.value, asOf: s[a.id]?.asOf ?? today() } }))}
-                aria-label={`${a.label} balance`} />
-              <input type="date" value={drafts[a.id]?.asOf ?? today()}
-                onChange={(e) => setDrafts((s) => ({ ...s, [a.id]: { amount: s[a.id]?.amount ?? "", asOf: e.target.value } }))}
-                aria-label={`${a.label} as-of date`} />
-              <button className="fin-mini" onClick={() => logSnapshot(a.id)} aria-label={`Log ${a.label} balance`}>✅</button>
-              <button className="fin-mini" onClick={() => remove(a.id)} aria-label={`Remove ${a.label}`}>🗑️</button>
-            </div>
-          </li>
-        ))}
+        {assets.map((a) => {
+          const snaps = snapshots[a.id] ?? [];
+          const current = snaps[0]; // newest first (repo ORDER BY as_of DESC, id DESC)
+          const chartSeries: ChartSeries[] = snaps.length >= 2
+            ? [{ label: a.label, color: "#a6ff7a", points: [...snaps].reverse().map((s) => ({ x: fmtMoneyDate(s.asOf), y: s.amountCents / 100 })) }]
+            : [];
+          return (
+            <li key={a.id} className="fin-asset-row">
+              <span>{a.label} <span className="fin-muted">({a.kind})</span></span>
+              {current
+                ? <span className="fin-asset-balance">Current balance {fmtc(current.amountCents)} <span className="fin-muted">as of {fmtMoneyDateRel(current.asOf)}</span></span>
+                : <span className="fin-muted">No balance logged yet</span>}
+              <div className="fin-inline-form">
+                <input inputMode="decimal" placeholder="Balance" value={drafts[a.id]?.amount ?? ""}
+                  onChange={(e) => setDrafts((s) => ({ ...s, [a.id]: { amount: e.target.value, asOf: s[a.id]?.asOf ?? today() } }))}
+                  aria-label={`${a.label} balance`} />
+                <input type="date" value={drafts[a.id]?.asOf ?? today()}
+                  onChange={(e) => setDrafts((s) => ({ ...s, [a.id]: { amount: s[a.id]?.amount ?? "", asOf: e.target.value } }))}
+                  aria-label={`${a.label} as-of date`} />
+                <button className="fin-mini" onClick={() => logSnapshot(a.id)} aria-label={`Log ${a.label} balance`}>✅</button>
+                <button className="fin-mini" onClick={() => { setEditingId(a.id); setEditLabel(a.label); setEditKind(a.kind); }} aria-label={`Edit ${a.label}`}>✏️</button>
+                <button className="fin-mini" onClick={() => setHistoryOpen((v) => (v === a.id ? null : a.id))} aria-expanded={historyOpen === a.id}>History</button>
+                <button className="fin-mini" onClick={() => remove(a.id)} aria-label={`Remove ${a.label}`}>🗑️</button>
+              </div>
+              {editingId === a.id && (
+                <div className="fin-inline-form">
+                  <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} aria-label="Account name" />
+                  <select value={editKind} onChange={(e) => setEditKind(e.target.value as FinAssetKind)} aria-label="Account type">
+                    <option value="savings">Savings</option>
+                    <option value="investment">Investment</option>
+                    <option value="retirement">Retirement</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <button className="fin-mini" onClick={() => void saveEdit(a.id)}>Save account</button>
+                  <button className="fin-mini" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              )}
+              {historyOpen === a.id && (
+                <div className="fin-asset-history">
+                  {snaps.length === 0 && <p className="fin-muted">No balances logged yet for this account.</p>}
+                  {chartSeries.length > 0 && <GrowthTrendChart series={chartSeries} height={80} />}
+                  <ul className="fin-asset-snapshots">
+                    {snaps.map((s) => (
+                      <li key={s.id}><span>{fmtMoneyDate(s.asOf)}</span><strong>{fmtc(s.amountCents)}</strong></li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
       <div className="fin-form">
         <div className="fin-form-title">Add an account</div>
