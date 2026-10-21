@@ -36,6 +36,20 @@ import type { ShaderTier } from "./shaders.js";
  * `step()` is a pure function: given the previous state and one new sample, it returns
  * the next state. No timers, no DOM, no randomness — the caller (Graph3D) owns the
  * clock and the sampling cadence, which is what makes this exhaustively unit-testable.
+ *
+ * Fix C (Galaxy line-latch, 2026-10-21) — the cold-start exception to the ascend
+ * motion gate: the motion-evidence requirement exists because an idle scene is
+ * cheap and proves nothing about capacity. But a descent in the session's first
+ * seconds is driven by load turbulence (shader compiles, texture uploads), and
+ * once the user stops moving — e.g. watching the ship tend the galaxy — an idle
+ * scene NEVER produces motion evidence, so a cold-start descent parked the
+ * scene at floor quality for the whole session (and the parked rung persisted
+ * into the next session's seed). A rung reached by a descent within
+ * COLD_START_WINDOW_MS of the first sample is therefore marked cold-reached
+ * (AdaptiveState.coldDescent) and may be climbed out of on good frames alone —
+ * once: the recovery ascend clears the mark, a descent outside the window
+ * clears it too, and every other rule (streaks, cooldown, re-ascend block,
+ * failed-ascent ceiling) is untouched.
  */
 
 export interface RungSettings {
@@ -115,11 +129,32 @@ export interface AdaptiveState {
   lastDescendAt: number;
   lastAscendToRung: number | null;
   lastAscendAt: number;
+  /** Clock value of the first sample this session (null until the first step()).
+   *  Anchors the cold-start window below — set once, never moved, so a session's
+   *  "first seconds" can't be redefined by later samples. */
+  firstSampleAt: number | null;
+  /** Cold-start recovery provenance (Galaxy line-latch Fix C, 2026-10-21): true
+   *  while the CURRENT rung was reached by a descent that happened within
+   *  COLD_START_WINDOW_MS of the session's first sample. Session-scoped only —
+   *  deliberately NOT persisted (see loadPersistedRung/savePersistedRung): the
+   *  persisted payload's shape and meaning are unchanged. */
+  coldDescent: boolean;
 }
 
 const BAD_STREAK_TO_DESCEND = 2;
 const GOOD_STREAK_TO_ASCEND = 5;
 const ASCEND_COOLDOWN_MS = 8000;
+// Cold-start window (Fix C): a descent this soon after the session's first
+// sample is attributed to load turbulence (shader compiles, texture uploads on
+// a large galaxy) rather than to the device's sustained capacity — the samples
+// in this window are the least representative the session will ever produce,
+// yet the descend path (deliberately) reacts to them fastest, including the
+// severe-overage jump straight to the floor. A descent inside this window
+// marks the rung it lands on as cold-reached (see AdaptiveState.coldDescent),
+// which admits ONE motionless recovery ascend in step() below. 15s at the
+// caller's ~2s sampling cadence is ~7 samples — comfortably past the
+// compile/upload spike, far short of "the session generally."
+const COLD_START_WINDOW_MS = 15000;
 // "Never ascend within 4s of a descend at the same rung" — blocks immediately re-
 // climbing into a rung this device just proved it can't sustain.
 const REASCEND_BLOCK_MS = 4000;
@@ -158,6 +193,8 @@ export function initialState(seedRung: number, rungRange: [number, number]): Ada
     lastDescendAt: -Infinity,
     lastAscendToRung: null,
     lastAscendAt: -Infinity,
+    firstSampleAt: null,
+    coldDescent: false,
   };
 }
 
@@ -170,7 +207,11 @@ export function step(state: AdaptiveState, sample: AdaptiveSample, rungRange: [n
   const [minRung, maxRung] = rungRange;
   let rung = clampRung(state.rung, rungRange);
   const ceilingRung = Math.min(state.ceilingRung, maxRung);
-  let { failedAscents, goodStreak, badStreak, movedDuringStreak, lastChangeAt, lastDescendFromRung, lastDescendAt, lastAscendToRung, lastAscendAt } = state;
+  let { failedAscents, goodStreak, badStreak, movedDuringStreak, lastChangeAt, lastDescendFromRung, lastDescendAt, lastAscendToRung, lastAscendAt, coldDescent } = state;
+  // The session's cold-start anchor: the FIRST sample's clock, set once and
+  // never moved (a local, not a mutation of the input state — step() stays pure).
+  const firstSampleAt = state.firstSampleAt ?? sample.now;
+  const withinColdWindow = sample.now - firstSampleAt <= COLD_START_WINDOW_MS;
 
   const over = sample.workMs > sample.targetMs;
   const severelyOver = over && sample.workMs >= sample.targetMs * SEVERE_OVERAGE_RATIO;
@@ -202,6 +243,9 @@ export function step(state: AdaptiveState, sample: AdaptiveSample, rungRange: [n
     lastChangeAt = sample.now;
     lastDescendFromRung = from;
     lastDescendAt = sample.now;
+    // Fix C provenance: this rung was reached by a descent — cold-reached only
+    // if the descent landed inside the session's cold-start window.
+    coldDescent = withinColdWindow;
   } else if (badStreak >= BAD_STREAK_TO_DESCEND && rung > minRung) {
     const from = rung;
     rung = from - 1;
@@ -217,11 +261,22 @@ export function step(state: AdaptiveState, sample: AdaptiveSample, rungRange: [n
     lastChangeAt = sample.now;
     lastDescendFromRung = from;
     lastDescendAt = sample.now;
+    coldDescent = withinColdWindow;
   } else if (
     goodStreak >= GOOD_STREAK_TO_ASCEND &&
     rung < maxRung &&
     rung + 1 <= ceilingRung &&
-    movedDuringStreak &&
+    // Motion evidence — OR the cold-start recovery exception (Fix C): if the
+    // current rung was reached by a descent inside the session's first
+    // seconds, that descent is attributed to load turbulence, not sustained
+    // capacity, and an idle scene's cheap frames would otherwise NEVER
+    // produce motion evidence (a still camera is exactly the state the
+    // motion gate waits on) — the ladder could never climb back for the
+    // rest of the session. The exception is single-shot: the ascend below
+    // clears coldDescent, so further climbs need normal motion evidence.
+    // Every other gate (streak, cooldown, re-ascend block, ceiling) still
+    // applies unchanged.
+    (movedDuringStreak || coldDescent) &&
     sample.now - lastChangeAt >= ASCEND_COOLDOWN_MS &&
     !(lastDescendFromRung === rung + 1 && sample.now - lastDescendAt < REASCEND_BLOCK_MS)
   ) {
@@ -233,6 +288,7 @@ export function step(state: AdaptiveState, sample: AdaptiveSample, rungRange: [n
     lastChangeAt = sample.now;
     lastAscendToRung = to;
     lastAscendAt = sample.now;
+    coldDescent = false; // this rung was reached by an ascend — exception spent
   }
 
   const nextCeiling =
@@ -250,6 +306,8 @@ export function step(state: AdaptiveState, sample: AdaptiveSample, rungRange: [n
     lastDescendAt,
     lastAscendToRung,
     lastAscendAt,
+    firstSampleAt,
+    coldDescent,
   };
 }
 

@@ -278,6 +278,81 @@ describe("adaptiveController — mode range re-clamping", () => {
   });
 });
 
+describe("adaptiveController — cold-start recovery (Fix C)", () => {
+  // Galaxy line-latch Fix C (2026-10-21): a descent within the session's cold-
+  // start window is attributed to load turbulence, not sustained capacity —
+  // and an idle scene can never produce the motion evidence the ascend gate
+  // otherwise demands (the owner stops moving to watch the ship), so a
+  // cold-start descent parked the ladder at floor quality for the whole
+  // session. The exception admits ONE motionless recovery ascend out of a
+  // cold-reached rung; every other rule is unchanged.
+
+  it("a severe cold-start descent marks the rung cold-reached, and motionless good frames climb back out", () => {
+    let s = initialState(3, FULL_RANGE);
+    s = step(s, severeSample(0), FULL_RANGE); // cold spike -> straight to the floor
+    expect(s.rung).toBe(0);
+    expect(s.coldDescent).toBe(true);
+    expect(s.firstSampleAt).toBe(0);
+    // The owner sits still and watches: good frames, zero camera motion.
+    for (const t of [2000, 4000, 6000, 8000]) {
+      s = step(s, goodSample(t, false), FULL_RANGE);
+      expect(s.rung).toBe(0); // streak/cooldown not yet satisfied
+    }
+    s = step(s, goodSample(10000, false), FULL_RANGE); // streak 5, cooldown met
+    expect(s.rung).toBe(1); // recovered WITHOUT any motion evidence
+    expect(s.coldDescent).toBe(false); // ...and the exception is spent
+  });
+
+  it("an ordinary two-window descent inside the cold window is marked too", () => {
+    let s = initialState(4, FULL_RANGE);
+    s = step(s, badSample(0), FULL_RANGE);
+    s = step(s, badSample(2000), FULL_RANGE);
+    expect(s.rung).toBe(3);
+    expect(s.coldDescent).toBe(true);
+    for (const t of [4000, 6000, 8000, 10000]) {
+      s = step(s, goodSample(t, false), FULL_RANGE);
+    }
+    s = step(s, goodSample(12000, false), FULL_RANGE);
+    expect(s.rung).toBe(4); // fully back to the pre-descent rung, motionlessly
+    expect(s.coldDescent).toBe(false);
+  });
+
+  it("a descent AFTER the cold window gets no exception — motionless frames never ascend, motion still works", () => {
+    let s = initialState(3, FULL_RANGE);
+    // Sit motionless past the 15s cold window (no descent, no ascend — the
+    // motion gate holds throughout, exactly as before Fix C).
+    for (let t = 0; t <= 16000; t += 2000) {
+      s = step(s, goodSample(t, false), FULL_RANGE);
+    }
+    expect(s.rung).toBe(3);
+    expect(s.firstSampleAt).toBe(0); // anchored at the first sample, never moved
+    s = step(s, severeSample(18000), FULL_RANGE); // a REAL mid-session collapse
+    expect(s.rung).toBe(0);
+    expect(s.coldDescent).toBe(false);
+    for (const t of [20000, 22000, 24000, 26000, 28000, 30000, 32000]) {
+      s = step(s, goodSample(t, false), FULL_RANGE);
+    }
+    expect(s.rung).toBe(0); // parked — the gate was NOT loosened generally
+    s = step(s, goodSample(34000, true), FULL_RANGE); // motion evidence arrives
+    expect(s.rung).toBe(1); // ...and the normal path climbs, as before
+  });
+
+  it("the exception is single-shot: after the recovery ascend, the next rung needs motion evidence again", () => {
+    let s = initialState(2, FULL_RANGE);
+    s = step(s, severeSample(0), FULL_RANGE);
+    expect(s.coldDescent).toBe(true);
+    for (const t of [2000, 4000, 6000, 8000, 10000]) {
+      s = step(s, goodSample(t, false), FULL_RANGE);
+    }
+    expect(s.rung).toBe(1); // the one motionless recovery
+    // Keep sitting still with perfect frames: no second free climb.
+    for (const t of [12000, 14000, 16000, 18000, 20000, 22000, 24000]) {
+      s = step(s, goodSample(t, false), FULL_RANGE);
+    }
+    expect(s.rung).toBe(1);
+  });
+});
+
 describe("adaptiveController — persistence", () => {
   beforeEach(() => {
     localStorage.clear();
