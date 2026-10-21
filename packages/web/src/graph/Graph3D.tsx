@@ -12,7 +12,7 @@ import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 // Pure helpers (link LOD, figurine building, GPU disposal) live in graph3dHelpers.ts
 // (Post-MVP D4 split); behaviour unchanged.
-import { LINK_LOD_MIN, LINK_LOD_ZOOM, LINK_LOD_CUTOFF, linkEnd, linkKey, linkDrawWidth, updateFigurine, disposeObject3D, isNodeCacheEntryValid, shouldApplyPixelRatio, highlightMaterialState, computeGlowFar, pickNearestIds } from "./graph3dHelpers.js";
+import { LINK_LOD_MIN, LINK_LOD_ZOOM, LINK_LOD_CUTOFF, linkEnd, linkKey, linkDrawWidth, isNodeLit, updateFigurine, disposeObject3D, isNodeCacheEntryValid, shouldApplyPixelRatio, highlightMaterialState, computeGlowFar, pickNearestIds } from "./graph3dHelpers.js";
 import { CurvedLinkGeometryCache, type LinkPositions } from "./linkTube.js";
 import {
   createZoomSettleScheduler,
@@ -52,6 +52,7 @@ import { makeDeepSpace, makeBackdropBakeSources, DEEP_SPACE_BASE } from "./deepS
 import { bakeBackdrop, disposeBakedBackdrop, type BakedBackdrop } from "./backdropBake.js";
 import { beginTick, endTick, attachRenderer, markMoved, reset as resetPerfStats, snapshot as perfSnapshot, registerGalaxyCounts, getRendererPixelRatio } from "./perfStats.js";
 import { applyRenderRateCap } from "./renderRateCap.js";
+import { decideTubeSync } from "./tubeSync.js";
 import { makeMoneySky, MONEY_SKY_BASE } from "./moneySky.js";
 import { getMoneySky } from "../api/finance.js";
 import { makeJourneyHubs, JOURNEY_HUBS_BASE } from "./journeyHubs.js";
@@ -506,8 +507,17 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // Ref mirror for callbacks captured once (the imperative handle only rebuilds on
   // [data], so reading `activeId` there directly recalled from a stale selection).
   const activeIdRef = useRef<number | null>(null);
+  // Render-time assignment, not effect-only: the []-stable linkWidthCb below
+  // reads this ref from three-forcegraph's digest, which runs post-commit via
+  // the CHILD's effects — and child effects flush before this component's own,
+  // so an effect-only mirror would hand the digest the PREVIOUS selection for
+  // one digest (a just-lit link briefly keeping its hidden epsilon width).
+  // Assigning during render makes the mirror current for the very commit that
+  // carries the new selection — the same currency reasoning as the
+  // sectorHubIds application during render below. The effect is kept for its
+  // recomputeDetailedLinks side effect.
+  activeIdRef.current = activeId;
   useEffect(() => {
-    activeIdRef.current = activeId;
     recomputeDetailedLinksRef.current();
   }, [activeId]);
   const insetRef = useRef(false);
@@ -1102,8 +1112,20 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     return m;
   }, [data]);
 
-  const isLit = (id: number): boolean =>
-    activeId === null || id === activeId || (adjacency.get(activeId)?.has(id) ?? false);
+  // Render-time mirror for the []-stable linkWidthCb (see activeIdRef above
+  // and the perf comment at linkWidthCb): the digest-time width gate reads
+  // adjacency from here so the callback never closes over a stale [data] memo.
+  const adjacencyRef = useRef(adjacency);
+  adjacencyRef.current = adjacency;
+
+  // (active, adj) default to the current render's closure values; the
+  // []-stable linkWidthCb passes its ref-mirrored pair instead — same values,
+  // delivered by ref (see shouldRenderLink's matching parameters below).
+  const isLit = (
+    id: number,
+    active: number | null = activeId,
+    adj: Map<number, Set<number>> = adjacency,
+  ): boolean => isNodeLit(id, active, adj);
 
   // Pending defer() handles, tracked so a fast unmount (route change, logout) inside the
   // ~2s idle-callback window can cancel them — otherwise scenery gets added to an already
@@ -3206,11 +3228,15 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   };
   
   // Minimal Link LOD: short-circuit expensive accessors for distant/inactive links.
-  const shouldRenderLink = (l: any) => {
+  const shouldRenderLink = (
+    l: any,
+    active: number | null = activeId,
+    adj: Map<number, Set<number>> = adjacency,
+  ) => {
     const activity = getLinkActivity(l);
     const sId = linkEnd(l.source);
     const tId = linkEnd(l.target);
-    const lit = activeId === null || (isLit(sId) && isLit(tId));
+    const lit = active === null || (isLit(sId, active, adj) && isLit(tId, active, adj));
     
     // Always render if active or important (recently tended)
     if (lit || activity > 0.4) return true;
@@ -3719,10 +3745,25 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // reference and forwards to three-forcegraph, wiping and rebuilding every currently-tracked
   // node/link Object3D (nodeDataMapper.clear()/linkDataMapper.clear() → _deallocate()) for no
   // visual reason. Confirmed safe by the audit: nodeThreeObject closes only over refs
-  // (nodeThreeObjCacheRef, gfxRef), so `[]` is correct with no stale-closure risk. linkWidth
-  // transitively reads `activeId` (via shouldRenderLink) — NOT a ref — so it must depend on
-  // `[activeId]`; memoizing it with `[]` would freeze hover/selection-driven link width at
-  // whatever it was on first render, a real correctness bug, not merely a missed optimization.
+  // (nodeThreeObjCacheRef, gfxRef), so `[]` is correct with no stale-closure risk.
+  //
+  // Galaxy fluidity (2026-10-21): linkWidth is `[]`-stable too now. It used to
+  // depend on `[activeId]` — it transitively reads the selection (via
+  // shouldRenderLink → isLit) — so EVERY hover move across nodes and every
+  // selection still wiped and rebuilt all ~900 link objects (the tap/hover
+  // hitch, S1/F1): three-forcegraph clears linkDataMapper iff the linkWidth
+  // identity changes (verified in the installed source). The freeze the old
+  // version of this comment warned about is avoided by delivering the
+  // selection by REF instead of by closure: shouldRenderLink/isLit take
+  // (active, adjacency) parameters (defaulting to the render closure for
+  // every other caller), and linkWidthCb passes (activeIdRef.current,
+  // adjacencyRef.current) — both mirrored during render, so the digest
+  // always reads the current commit's values. Selection changes now flow
+  // through the ordinary per-render digest (onUpdateObj re-evaluates width;
+  // PR #79's H2 radius sync keeps bucket changes swap-free) with no mapper
+  // clear and no object rebuild. Every other read inside linkWidthCb is a
+  // ref or a pure function (getLinkActivity → refs, linkDrawWidth → pure,
+  // curvedLinkGeometryRef → ref).
   const nodeThreeObjectCb = useCallback((node: any) => {
     // Performance Program Round 3: cache identity is computed by nodeVisualCacheKey
     // (nodeObject.ts), which buckets `entropy` instead of using it raw — see that
@@ -3773,7 +3814,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // the one gate boolean so they cannot disagree within a digest. See
       // graph3dHelpers.ts (LINK_HIDDEN_WIDTH / linkDrawWidth) and
       // linkDrawWidth.test.ts for the pinned contract.
-      const w = linkDrawWidth(shouldRenderLink(l), l.weight, getLinkActivity(l));
+      const w = linkDrawWidth(shouldRenderLink(l, activeIdRef.current, adjacencyRef.current), l.weight, getLinkActivity(l));
       // Galaxy line-latch H2 fix (2026-10-21): sync the link's cached tube
       // radius from THIS width before returning it. three-forcegraph's
       // onUpdateObj evaluates this accessor immediately before comparing
@@ -3788,7 +3829,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       curvedLinkGeometryRef.current.syncDigestRadius(l, w);
       return w;
     },
-    [activeId],
+    [],
   );
 
   // Extracted (unchanged logic) so linkPositionUpdateCb below can compute the exact
@@ -3821,17 +3862,26 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // Tube-sync: a full tube recompute per link per frame (Frenet frames + ~217
   // sin/cos vertex writes + dual GPU buffer uploads, ×941 links) collapsed FPS
   // to ~5 once the d3 engine stopped cooling down. But a fixed time-shard made
-  // tubes visibly step (~10Hz) instead of tracking smoothly. Solution: sync
-  // every frame for links near what you're looking at (smooth where visible),
-  // and for the rest only when their endpoints actually moved (epsilon-gated) —
-  // orbit drift is sub-pixel per frame, so most links skip most frames. A slow
-  // time-shard remains as backstop for width/curvature drift on still links.
-  // Returning true keeps the old geometry and tells three-forcegraph to skip
-  // its own rebuild for skipped links.
-  const TUBE_SYNC_SHARDS = 6;
-  const TUBE_SYNC_MS = 100;
-  const TUBE_EPS = 0.12; // world units; endpoint drift below this is sub-pixel
-  const TUBE_NEAR_TARGET = 350; // links this close to the look-target sync every frame
+  // tubes visibly step (~10Hz) instead of tracking smoothly. The original
+  // answer: sync every frame for links near what you're looking at (smooth
+  // where visible), and for the rest only when their endpoints actually moved
+  // (epsilon-gated) — orbit drift is sub-pixel per frame, so most links skip
+  // most frames — with a slow time-shard backstop for width/curvature drift
+  // on still links.
+  // Galaxy fluidity (2026-10-21): the DECISION now lives in tubeSync.ts
+  // (decideTubeSync — pure, unit-tested). It keeps that shape: drift is still
+  // the correctness authority, and drift beyond the hard epsilon syncs
+  // immediately in BOTH tiers, exactly as before, so fast camera motion
+  // tracks identically. What it adds is a rate gate aligned to the fps cap —
+  // the draw side already caps GPU submissions at fpsCap (renderRateCap.ts),
+  // but near links were still re-shaped on every NATIVE frame (up to
+  // 120×/s on a 120 Hz phone) for frames that are never drawn. Near-tier
+  // syncs are now budgeted to the display cadence with a tight 0.03-unit
+  // drift band and a ~150 ms shard backstop; the far tier is unchanged apart
+  // from the same rate gate inside its shard windows. Returning true keeps
+  // the old geometry and tells three-forcegraph to skip its own rebuild for
+  // skipped links.
+  const TUBE_NEAR_TARGET = 350; // links this close to the look-target are the "near" tier
   const TUBE_NEAR_CAM_DIST = 1200; // ...but only when the camera is this close (zoomed in)
   // WeakMap keyed by link OBJECT (not id): when link objects are replaced on a
   // data reload, old entries are GC'd and new links always build on first sight.
@@ -3839,16 +3889,17 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // for recreated link objects entirely (returning "handled" for nonexistent
   // geometry → invisible links). Falls back to always-update for links without
   // a usable object identity (defensive; shouldn't happen).
-  // Value is always the 6-element [start.xyz, end.xyz] snapshot set below.
+  // Value: the last SYNCED endpoint snapshot plus when it synced — tubeSync's
+  // drift/rate decisions are computed against exactly this pair.
   const lastTubePosRef = useRef(
-    new WeakMap<object, [number, number, number, number, number, number]>(),
+    new WeakMap<object, { pos: [number, number, number, number, number, number]; lastSyncMs: number }>(),
   );
   const linkPositionUpdateCb = useCallback(
     (obj: any, pos: LinkPositions, link: any) => {
       const linkId = link?.id;
-      // Smooth where it matters: near the look-target (e.g. a focused planet's
-      // links), tubes track every frame — no stepping. Gated by camera distance
-      // so galaxy-view doesn't waste every-frame updates on sub-pixel tubes.
+      // Tier: near the look-target (e.g. a focused planet's links) when zoomed
+      // in — smooth where visible. Gated by camera distance so galaxy-view
+      // doesn't treat sub-pixel tubes as near.
       const camera = fgRef.current?.camera();
       const target = fgRef.current?.controls?.()?.target as THREE.Vector3 | undefined;
       let nearTarget = false;
@@ -3860,27 +3911,39 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         nearTarget = dx * dx + dy * dy + dz * dz < TUBE_NEAR_TARGET * TUBE_NEAR_TARGET;
       }
 
-      if (!nearTarget) {
-        const last = lastTubePosRef.current.get(link);
-        if (last) {
-          const dx1 = pos.start.x - last[0], dy1 = (pos.start.y || 0) - last[1], dz1 = (pos.start.z || 0) - last[2];
-          const dx2 = pos.end.x - last[3], dy2 = (pos.end.y || 0) - last[4], dz2 = (pos.end.z || 0) - last[5];
-          const eps2 = TUBE_EPS * TUBE_EPS;
-          const moved = dx1 * dx1 + dy1 * dy1 + dz1 * dz1 > eps2 || dx2 * dx2 + dy2 * dy2 + dz2 * dz2 > eps2;
-          if (!moved) {
-            const linkShard = Math.abs(Number(linkId) || 0) % TUBE_SYNC_SHARDS;
-            if (Math.floor(performance.now() / TUBE_SYNC_MS) % TUBE_SYNC_SHARDS !== linkShard) {
-              return true;
-            }
-          }
-        }
+      const last = lastTubePosRef.current.get(link);
+      let driftSq: number | null = null;
+      if (last) {
+        const [lx1, ly1, lz1, lx2, ly2, lz2] = last.pos;
+        const dx1 = pos.start.x - lx1, dy1 = (pos.start.y || 0) - ly1, dz1 = (pos.start.z || 0) - lz1;
+        const dx2 = pos.end.x - lx2, dy2 = (pos.end.y || 0) - ly2, dz2 = (pos.end.z || 0) - lz2;
+        driftSq = Math.max(
+          dx1 * dx1 + dy1 * dy1 + dz1 * dz1,
+          dx2 * dx2 + dy2 * dy2 + dz2 * dz2,
+        );
+      }
+      const nowMs = performance.now();
+      if (
+        !decideTubeSync({
+          tier: nearTarget ? "near" : "far",
+          driftSq,
+          nowMs,
+          lastSyncMs: last?.lastSyncMs ?? null,
+          shardKey: Number(linkId) || 0,
+          fpsCap: gfxRef.current?.fpsCap ?? 60,
+        })
+      ) {
+        return true;
       }
 
       const ok = curvedLinkGeometryRef.current.update(obj, pos, link, linkWidthCb(link), computeLinkCurvature(link));
-      lastTubePosRef.current.set(link, [
-        pos.start.x, pos.start.y || 0, pos.start.z || 0,
-        pos.end.x, pos.end.y || 0, pos.end.z || 0,
-      ]);
+      lastTubePosRef.current.set(link, {
+        pos: [
+          pos.start.x, pos.start.y || 0, pos.start.z || 0,
+          pos.end.x, pos.end.y || 0, pos.end.z || 0,
+        ],
+        lastSyncMs: nowMs,
+      });
       return ok;
     },
     [linkWidthCb],
