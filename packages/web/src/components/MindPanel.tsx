@@ -11,6 +11,7 @@ import {
   type WealthSummary,
 } from "@brain/shared";
 import { getWealthSummary, patchGoal } from "../api/finance.js";
+import { parseTolerantMs } from "../utils/dueReminders.js";
 import {
   getCognitive,
   createCognitive,
@@ -355,8 +356,14 @@ export function MindPanel({
   // date for the card summary line — never "overdue" framing (that's reminder language).
   const visionDateLabel = (it: CognitiveItem): string | null => {
     if (!it.remindAt) return null;
-    const passed = new Date(it.remindAt).getTime() < Date.now();
-    const date = new Date(it.remindAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    // Parse via the shared tolerant parser (date/time accuracy audit gap
+    // #16): a naive SQLite "YYYY-MM-DD HH:MM:SS" remindAt is a UTC instant,
+    // but a direct new Date() reads it as LOCAL time — shifting the shown
+    // date (and the passed/target call) by the viewer's offset.
+    // parseTolerantMs reads it the way every other panel does.
+    const t = parseTolerantMs(it.remindAt);
+    const passed = t < Date.now();
+    const date = new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
     return passed ? `target date passed · ${date}` : `target: ${date}`;
   };
 

@@ -157,6 +157,24 @@ describe("MindPanel — Life Vision target date display (never a reminder)", () 
     expect(screen.queryByText(/overdue/)).toBeNull();
   });
 
+  it("a naive SQLite-format remindAt is read as UTC (parseTolerantMs), not local time", async () => {
+    // "2026-10-20 01:30:00" is the stored column-default shape. Read as UTC it
+    // is Oct 19 evening in America/New_York; a direct new Date() reads it as
+    // local wall time (Oct 20). The label must show the tolerant-parser date —
+    // the same date every other panel shows for this instant.
+    const { parseTolerantMs } = await import("../utils/dueReminders.js");
+    const remindAt = "2026-10-20 01:30:00";
+    const expectedDate = new Date(parseTolerantMs(remindAt)).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    getCognitive.mockResolvedValue([vision({ remindAt })]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Our first house");
+    expect(screen.getByText(new RegExp(expectedDate))).toBeTruthy();
+  });
+
   it("existing future_event overdue/in-Nd labeling is unchanged (regression)", async () => {
     getCognitive.mockResolvedValue([vision({ id: 9, kind: "future_event", label: "Conference" })]);
     getUpcomingEvents.mockResolvedValue([{ id: 9, label: "Conference", date: "2026-01-01", inDays: -3 }]);

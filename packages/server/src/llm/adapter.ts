@@ -49,6 +49,10 @@ export interface AnswerOptions {
   systemExtra?: string;
   /** "About Me": who the user is. Soumaya is AWARE of this, never becomes them. */
   persona?: string;
+  /** The space's IANA timezone (space_meta.timezone) — grounds the system
+   *  prompt's "now" in the user's local day (date/time accuracy). Absent →
+   *  the prompt falls back to the UTC-only rendering. */
+  timezone?: string;
   /** Retrieved knowledge-document chunks, pre-formatted with doc names. */
   knowledge?: string;
   /** Recent conversation turns, pre-formatted ("User: …\nSoumaya: …") — WITHOUT

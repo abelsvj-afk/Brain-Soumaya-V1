@@ -119,8 +119,12 @@ export function buildCommunicationContext(
  */
 export function recentActionCount(handle: DbHandle, spaceId: string, action: string, sinceDays: number, now: Date = new Date()): number {
   const since = new Date(now.getTime() - sinceDays * 86_400_000).toISOString();
+  // julianday() on both sides: agent_logs.created_at mixes the column default's
+  // space format with the router's ISO-Z writes, and a raw string comparison
+  // silently drops same-day space-format rows (audit gap #6 — same fix as
+  // goalFundingTrend's cooldown read).
   const row = handle.sqlite
-    .prepare(`SELECT COUNT(*) AS c FROM agent_logs WHERE space_id = ? AND action = ? AND created_at >= ?`)
+    .prepare(`SELECT COUNT(*) AS c FROM agent_logs WHERE space_id = ? AND action = ? AND julianday(created_at) >= julianday(?)`)
     .get(spaceId, action, since) as { c: number };
   return row.c;
 }

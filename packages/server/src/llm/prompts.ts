@@ -303,6 +303,52 @@ export function buildAnswerPrompt(
 }
 
 /**
+ * The "RIGHT NOW" grounding line (date/time accuracy requirement, audit gap #10).
+ * When the caller supplies the SPACE's timezone, "now" is presented in that zone —
+ * the local time with the zone named, AND the UTC instant beside it — because
+ * relative dates ("tomorrow 9am", "yesterday") must ground in the USER's day, not
+ * the UTC day; near local midnight the two can be a full calendar day apart.
+ * Without a (valid) timezone, the historical UTC-only rendering is kept, so
+ * callers that don't know the space behave exactly as before.
+ */
+export function formatNowLine(nowMs: number, timezone?: string): string {
+  const now = new Date(nowMs);
+  if (timezone) {
+    try {
+      const local = now.toLocaleString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: timezone,
+        timeZoneName: "short",
+      });
+      return (
+        `RIGHT NOW: It is ${local} in the user's timezone (${timezone}); ` +
+        `in UTC it is ${now.toISOString()}. Use the user's LOCAL time as "now" for ` +
+        `anything time-relative (today, tomorrow, this week, how long ago something ` +
+        `was) — the user's day follows their local date, not the UTC date.`
+      );
+    } catch {
+      // Unknown IANA zone — fall through to the UTC rendering rather than break the prompt.
+    }
+  }
+  const utc = now.toLocaleString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
+  return `RIGHT NOW: ${utc}. Use this as "now" for anything time-relative (today, this week, how long ago something was).`;
+}
+
+/**
  * The AI Companion's layered system prompt: permanent core identity (Layer 1),
  * then optional awareness of WHO the user is (About Me — she's aware, never becomes
  * them), then optional stacked custom-instruction profiles (Layer 2). Identity
@@ -313,22 +359,18 @@ export function composeSystem(opts?: {
   soul?: string;
   persona?: string;
   systemExtra?: string;
+  /** The space's IANA timezone (space_meta.timezone — the same one quiet hours
+   *  and the digest use). Grounds the RIGHT NOW line in the user's local day. */
+  timezone?: string;
+  /** Epoch ms for "now" (defaults to Date.now(); injectable for tests). */
+  nowMs?: number;
 }): string {
   let s = ANSWER_SYSTEM;
   // She previously had NO notion of the current date/time at all — nothing in this prompt
   // ever told her "now", so she couldn't reason about recency, relative dates ("last
   // Tuesday" from today), or how stale/fresh a memory is beyond what relativeTime() already
   // stamps on each memory line below.
-  s += `\n\nRIGHT NOW: ${new Date().toLocaleString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
-  })}. Use this as "now" for anything time-relative (today, this week, how long ago something was).`;
+  s += `\n\n${formatNowLine(opts?.nowMs ?? Date.now(), opts?.timezone)}`;
   if (opts?.soul) {
     // Deeper character (soul.md). Sits in the identity slot but cannot override the
     // mechanics above (companion-never-the-user, citations, JSON output).

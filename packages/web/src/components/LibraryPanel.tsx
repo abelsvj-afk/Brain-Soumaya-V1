@@ -3,6 +3,7 @@ import type { GraphData, GraphNode, NodeType } from "@brain/shared";
 import { NODE_TYPE_LABEL, normalizeNodeType } from "@brain/shared";
 import { colorForType } from "../graph/theme.js";
 import { getArchivedNodes, archiveNode } from "../api/client.js";
+import { parseTolerantMs } from "../utils/dueReminders.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
 
@@ -28,7 +29,24 @@ const FOLDER_ORDER: { key: NodeType | "moc"; label: string }[] = [
   { key: "other", label: "Other" },
 ];
 
-const dateOf = (n: GraphNode) => (n.occurredAt ?? n.createdAt ?? "").slice(0, 10);
+/**
+ * The memory's date as the VIEWER's local calendar date (YYYY-MM-DD) — the same
+ * date NodeInspector shows for the same memory (date/time accuracy rule 4:
+ * panels must agree). The old `.slice(0, 10)` returned the UTC date, so an
+ * evening memory (22:00 ET = 02:00 UTC next day) showed Oct 19 here and
+ * Oct 20 in the Inspector. Parsed via the shared tolerant parser (naive
+ * SQLite strings read as UTC, exactly as NodeInspector's fmtWhen reads them);
+ * unparseable values keep the raw prefix rather than disappearing.
+ */
+const dateOf = (n: GraphNode): string => {
+  const raw = n.occurredAt ?? n.createdAt ?? "";
+  const t = parseTolerantMs(raw);
+  if (Number.isNaN(t)) return raw.slice(0, 10);
+  const d = new Date(t);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+};
 
 /** The visible clipping was only CSS (maxHeight/overflow) — a long note's FULL
  *  body still landed in the DOM for every row across every open folder. A plain

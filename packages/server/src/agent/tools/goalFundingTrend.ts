@@ -46,8 +46,15 @@ const GOAL_TREND_COOLDOWN_DAYS = 30;
  */
 function wasGoalRecentlySurfaced(handle: DbHandle, spaceId: string, goalId: number, now: Date): boolean {
   const since = new Date(now.getTime() - GOAL_TREND_COOLDOWN_DAYS * DAY_MS).toISOString();
+  // agent_logs.created_at MIXES formats in one column: rows written through the
+  // column default are SQLite's "YYYY-MM-DD HH:MM:SS", while the tool router
+  // writes explicit ISO-Z. A raw string `>=` compares " " (0x20) < "T" (0x54),
+  // so same-day space-format rows sorted BEFORE an ISO-Z cutoff and were
+  // silently excluded — the cooldown effectively stretched to the next UTC
+  // midnight. julianday() parses both shapes as instants (date/time accuracy
+  // audit gap #6), so the comparison is format-blind.
   const rows = handle.sqlite
-    .prepare(`SELECT targets FROM agent_logs WHERE space_id = ? AND action = 'tool:goal_trend' AND created_at >= ?`)
+    .prepare(`SELECT targets FROM agent_logs WHERE space_id = ? AND action = 'tool:goal_trend' AND julianday(created_at) >= julianday(?)`)
     .all(spaceId, since) as { targets: string }[];
   return rows.some((r) => {
     try {

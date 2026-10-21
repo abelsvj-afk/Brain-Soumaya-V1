@@ -86,3 +86,27 @@ describe("LibraryPanel — a failed archived-list fetch is retryable, not perman
     await screen.findByText("Resting memory");
   });
 });
+
+describe("LibraryPanel — memory date is the viewer's LOCAL date (date/time rule 4)", () => {
+  const localDateOf = (iso: string): string => {
+    const d = new Date(Date.parse(iso));
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  };
+
+  it("renders the local date of the instant, not the UTC slice — agreeing with NodeInspector", async () => {
+    // 02:30 UTC is the previous evening in UTC-negative zones; 11:30 UTC is
+    // already the next day at UTC+14. Across the multi-TZ gate legs
+    // (America/New_York, Pacific/Kiritimati) at least one of these differs
+    // from its UTC calendar date, so a regression to `.slice(0, 10)` fails.
+    const a = node({ id: 1, label: "Early UTC memory", createdAt: "2026-10-20T02:30:00.000Z" });
+    const b = node({ id: 2, label: "Late UTC memory", createdAt: "2026-10-20T11:30:00.000Z" });
+    render(<LibraryPanel graph={graph([a, b])} onFocus={() => {}} />);
+    const folder = await screen.findByText("Concepts");
+    act(() => folder.click());
+    await screen.findByText("Early UTC memory");
+    expect(screen.getAllByText(localDateOf("2026-10-20T02:30:00.000Z")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(localDateOf("2026-10-20T11:30:00.000Z")).length).toBeGreaterThan(0);
+  });
+});

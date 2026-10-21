@@ -11,6 +11,7 @@
     "dev:web": "npm run dev -w @brain/web",
     "build": "npm run build -w @brain/web",
     "test": "npm test --workspaces --if-present",
+    "test:web:tz": "TZ=America/New_York npm run test -w @brain/web && TZ=Pacific/Kiritimati npm run test -w @brain/web",
     "seed": "npm run seed -w @brain/server",
     "typecheck": "npm run typecheck --workspaces --if-present"
   }
