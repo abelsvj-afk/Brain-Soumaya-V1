@@ -6,13 +6,9 @@ const getDueReviews = vi.fn().mockResolvedValue([]);
 vi.mock("../api/client.js", () => ({
   getConstellations: vi.fn().mockResolvedValue([]),
   getDigest: vi.fn().mockResolvedValue([]),
-  // IM-124 residual: Observatory consumes the strict Result variants.
-  getConstellationsResult: vi.fn().mockResolvedValue({ ok: true, constellations: [] }),
-  getDigestResult: vi.fn().mockResolvedValue({ ok: true, insights: [] }),
   getDailyContact: vi.fn().mockResolvedValue(null),
   answerDailyContact: vi.fn().mockResolvedValue(null),
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
-  getDueReviewsResult: async (...a: unknown[]) => ({ ok: true, reviews: await getDueReviews(...a) }),
 }));
 vi.mock("../api/finance.js", () => ({
   getFinanceSummary: vi.fn().mockResolvedValue(null),
@@ -74,6 +70,67 @@ describe("Observatory — search entry point (OPTIMIZATION_ROADMAP.md Problem 4)
     );
     await waitFor(() => expect(screen.getByText("a memory")).toBeTruthy());
     expect(screen.queryByLabelText("Search your memories")).toBeNull();
+  });
+});
+
+describe("Observatory — Today's tending quest card (CL1)", () => {
+  afterEach(() => localStorage.clear());
+
+  it("shows an honest all-done state when every quest is complete", async () => {
+    render(
+      <Observatory
+        spaceName="You"
+        spaceId="space-all-done"
+        memories={[memory({ id: 1, label: "a memory", degree: 1, entropy: 0 })]}
+        streak={1}
+        fedToday={true}
+        onCapture={vi.fn()}
+        onFocus={vi.fn()}
+        onOpenInsights={vi.fn()}
+        onEnter={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText("Today's tending")).toBeTruthy();
+    expect(screen.getByText("1/1 done")).toBeTruthy();
+    expect(screen.getByText("All tended for today ✓")).toBeTruthy();
+    const logQuest = screen.getByText("Fed your brain today").closest("button")!;
+    expect(logQuest.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows a cooling-memory quest as not done, with no fake all-done line", async () => {
+    render(
+      <Observatory
+        spaceName="You"
+        spaceId="space-cooling"
+        memories={[memory({ id: 2, label: "old note", degree: 2, entropy: 0.9 })]}
+        streak={0}
+        fedToday={false}
+        onCapture={vi.fn()}
+        onFocus={vi.fn()}
+        onOpenInsights={vi.fn()}
+        onEnter={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText(/Warm a cooling memory · 1 drifting cold/)).toBeTruthy();
+    expect(screen.getByText("0/2 done")).toBeTruthy();
+    expect(screen.queryByText("All tended for today ✓")).toBeNull();
+  });
+
+  it("uses reconnect copy for a drifting memory", async () => {
+    render(
+      <Observatory
+        spaceName="You"
+        spaceId="space-drifting"
+        memories={[memory({ id: 3, label: "loose note", degree: 0, entropy: 0 })]}
+        streak={0}
+        fedToday={false}
+        onCapture={vi.fn()}
+        onFocus={vi.fn()}
+        onOpenInsights={vi.fn()}
+        onEnter={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText(/Reconnect a drifting memory · 1 unlinked/)).toBeTruthy();
   });
 });
 

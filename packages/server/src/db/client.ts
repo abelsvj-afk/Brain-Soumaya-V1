@@ -522,25 +522,6 @@ function migrateSchema(sqlite: RawDb): void {
   if (outboxCols.length > 0 && !outboxCols.some((c) => c.name === "bill_due_at")) {
     sqlite.exec(`ALTER TABLE notification_outbox ADD COLUMN bill_due_at TEXT`);
   }
-  // Server-backed Inbox notifications (IM-74): same DDL as BOOTSTRAP_SQL —
-  // CREATE TABLE IF NOT EXISTS makes this a no-op on fresh volumes and the
-  // creation path on volumes that predate the table.
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS inbox_notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      space_id TEXT NOT NULL DEFAULT 'legacy',
-      source TEXT NOT NULL,
-      text TEXT NOT NULL,
-      icon TEXT NOT NULL DEFAULT '🔔',
-      priority TEXT NOT NULL DEFAULT 'normal',
-      dedupe_key TEXT,
-      seen_at TEXT,
-      snoozed_until TEXT,
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-    CREATE INDEX IF NOT EXISTS inbox_notifications_space_idx ON inbox_notifications(space_id, id);
-    CREATE UNIQUE INDEX IF NOT EXISTS inbox_notifications_dedupe_idx ON inbox_notifications(space_id, dedupe_key);
-  `);
   // Life Vision (docs/specs/life-vision.md): optional one-to-many link from a Financial
   // Goal to the Life Vision node it helps fund. Nullable, no SQL FK (matches bucket_id's
   // own style in this table) — validated at the application layer only. `tcols.length > 0`
@@ -557,20 +538,6 @@ function migrateSchema(sqlite: RawDb): void {
     // upgraded old one — unlike creating it unconditionally right after CREATE TABLE,
     // which fails on an old volume where the CREATE TABLE is a no-op.
     sqlite.exec(`CREATE INDEX IF NOT EXISTS fin_goal_vision_idx ON fin_goal(vision_node_id)`);
-  }
-  // Life Seasons (IM-132, docs/specs/timeline-life-seasons.md): explicit Journey
-  // span columns — migrateSchema ONLY (PRAGMA-guarded ALTERs), never in
-  // BOOTSTRAP_SQL (bootstrap runs before migrateSchema, so a bootstrap
-  // reference to a migration-only column crashes fresh-volume boot). Nullable:
-  // existing journeys keep NULL and their span is link-inferred on read.
-  const journeyColsIM132 = sqlite.prepare(`PRAGMA table_info(journeys)`).all() as { name: string }[];
-  if (journeyColsIM132.length > 0) {
-    if (!journeyColsIM132.some((c) => c.name === "started_at")) {
-      sqlite.exec(`ALTER TABLE journeys ADD COLUMN started_at TEXT`);
-    }
-    if (!journeyColsIM132.some((c) => c.name === "ended_at")) {
-      sqlite.exec(`ALTER TABLE journeys ADD COLUMN ended_at TEXT`);
-    }
   }
   // (Table creation lives ONLY in bootstrapSchema, which always runs first —
   // a second CREATE block here once drifted out of sync and shipped wrong shapes.)
@@ -943,17 +910,16 @@ function migrateSchema(sqlite: RawDb): void {
       PRIMARY KEY (space_id, consolidated_id, stated_id)
     );
 
-    -- Living Galaxy (IM-140): journey mission completions — identical DDL to
-    -- BOOTSTRAP_SQL in db/schemaSql.ts (new table, both paths).
-    CREATE TABLE IF NOT EXISTS journey_mission_completions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      space_id TEXT NOT NULL DEFAULT 'legacy',
-      journey_id INTEGER NOT NULL,
-      task_ref_id INTEGER NOT NULL,
-      completed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    -- Telegram TTS (Phase D) — same column set as BOOTSTRAP_SQL in
+    -- db/schemaSql.ts. Cached voice-note audio keyed by content hash;
+    -- see telegram/ttsCache.ts.
+    CREATE TABLE IF NOT EXISTS tts_audio_cache (
+      cache_key TEXT PRIMARY KEY,
+      audio BLOB NOT NULL,
+      content_type TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS journey_mission_completions_unique
-      ON journey_mission_completions(space_id, journey_id, task_ref_id);
   `);
   // W3 columns on EXISTING tables — migrateSchema ONLY (PRAGMA-guarded
   // ALTERs). These must never appear in BOOTSTRAP_SQL (the v252 precedent:
@@ -1092,6 +1058,24 @@ function migrateSchema(sqlite: RawDb): void {
       throw new Error(`W3 migration: table ${table} missing columns: ${missing.join(", ")}`);
     }
   }
+
+  // Web push (Immersion Round 3, CL3): subscription storage for existing
+  // volumes. New table only — CREATE TABLE IF NOT EXISTS with DDL identical
+  // to BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have it; this is a
+  // no-op there). No columns are added to existing tables, so the
+  // bootstrap-references-migration-column crash pattern cannot arise.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_subscriptions_space_idx ON push_subscriptions(space_id);
+  `);
 }
 
 /**

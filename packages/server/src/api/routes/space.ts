@@ -2,13 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { SpacesRepo } from "../../auth/spaces.js";
+import { requireSpace, spaceOf } from "../middleware.js";
 import { seedWelcomeStar } from "../../analysis/welcome.js";
-import {
-  getPreferences,
-  setPreference,
-  validateTimezone,
-  type NotifyPreferences,
-} from "../../agent/notify/policy.js";
 
 const AuthBody = z.object({
   gamerTag: z.string().trim().min(2).max(40),
@@ -21,30 +16,20 @@ const ProfileBody = z.object({
   name: z.string().trim().min(1).max(40).optional(),
 });
 
-// IM-129a/b: the space's timezone + proactive-notification preferences.
-// These already exist as stored data (space_meta, owned by agent/notify/policy.ts
-// — quiet hours, digest time and the daily proactive cap genuinely gate when
-// Soumaya may reach out, and the timezone drives every space-local day) but no
-// route exposed them, so Settings had nothing real to bind to.
-const PreferencesBody = z.object({
-  timezone: z.string().min(1).max(64).optional(),
-  quietStart: z.string().max(5).optional(),
-  quietEnd: z.string().max(5).optional(),
-  digestTime: z.string().max(5).optional(),
-  dailyProactiveCap: z.number().int().min(0).max(100).optional(),
+// Passcode change + brain deletion (IM-129). Body floors stay at the login
+// floor (min 1 / max 100) on purpose: the CURRENT passcode may be a legacy
+// short one that must still verify, and the NEW-passcode minimum (8) is
+// enforced in SpacesRepo beside the registration check it mirrors — a zod
+// floor here would only produce a vaguer error for the same refusal.
+const PasscodeBody = z.object({
+  currentPasscode: z.string().min(1).max(100),
+  newPasscode: z.string().min(1).max(100),
 });
 
-const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-/** Validate a whole preferences patch BEFORE any write, so a bad field can
- *  never leave a half-applied patch behind. Mirrors policy.ts's own rules. */
-function preferencesPatchError(p: z.infer<typeof PreferencesBody>): string | null {
-  if (p.timezone !== undefined && !validateTimezone(p.timezone)) return `Invalid IANA timezone: ${p.timezone}`;
-  for (const k of ["quietStart", "quietEnd", "digestTime"] as const) {
-    if (p[k] !== undefined && !HHMM_RE.test(p[k]!)) return `Invalid time (expected HH:MM): ${p[k]}`;
-  }
-  return null;
-}
+const DeleteBody = z.object({
+  passcode: z.string().min(1).max(100),
+  confirmation: z.string().min(1).max(40),
+});
 
 export function spaceRoutes(ctx: AppContext): Router {
   const r = Router();
@@ -112,46 +97,52 @@ export function spaceRoutes(ctx: AppContext): Router {
     }
   });
 
-  // GET /api/space/preferences -> this brain's timezone + notification
-  // preferences (defaults filled in by the policy store when unset).
-  r.get("/preferences", (req, res) => {
-    const id = (req.header("x-space-id") ?? "").trim();
-    if (!id || !repo.getById(id)) {
-      res.status(401).json({ error: "No valid brain selected." });
-      return;
-    }
-    res.json(getPreferences(ctx.handle.sqlite, id));
-  });
-
-  // PATCH /api/space/preferences { timezone?, quietStart?, quietEnd?,
-  // digestTime?, dailyProactiveCap? } -> update any subset; the whole patch
-  // is validated first, then written through the policy store (the same
-  // functions the notification boundary reads — no duplicate state).
-  r.patch("/preferences", (req, res) => {
-    const id = (req.header("x-space-id") ?? "").trim();
-    if (!id || !repo.getById(id)) {
-      res.status(401).json({ error: "No valid brain selected." });
-      return;
-    }
-    const parsed = PreferencesBody.safeParse(req.body);
+  // POST /api/space/passcode { currentPasscode, newPasscode } -> rotate the
+  // login passcode. Authenticated by x-space-id (requireSpace) AND by proof
+  // of the current passcode — holding a stolen id alone cannot lock the
+  // owner out by changing the secret. Wrong current passcode -> 401 (the
+  // bad-login precedent in /auth above) and nothing changes. The space id
+  // itself does NOT change (see SpacesRepo.changePasscode).
+  r.post("/passcode", requireSpace(ctx.handle), (req, res) => {
+    const parsed = PasscodeBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { timezone?, quietStart?, quietEnd?, digestTime?, dailyProactiveCap? }" });
+      res.status(400).json({ error: "Body must be { currentPasscode, newPasscode }" });
       return;
     }
-    const err = preferencesPatchError(parsed.data);
-    if (err) {
-      res.status(400).json({ error: err });
-      return;
-    }
-    const keys = Object.keys(parsed.data) as (keyof NotifyPreferences)[];
-    for (const k of keys) {
-      const r2 = setPreference(ctx.handle.sqlite, id, k, String(parsed.data[k]));
-      if (!r2.ok) {
-        res.status(400).json({ error: r2.error });
+    try {
+      const changed = repo.changePasscode(spaceOf(res), parsed.data.currentPasscode, parsed.data.newPasscode);
+      if (!changed) {
+        res.status(401).json({ error: "Current passcode is incorrect." });
         return;
       }
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
     }
-    res.json(getPreferences(ctx.handle.sqlite, id));
+  });
+
+  // DELETE /api/space { passcode, confirmation } -> permanently delete this
+  // brain and all of its data. Requires BOTH the passcode re-entered (401
+  // when wrong) AND `confirmation` exactly equal to the brain's gamer tag
+  // (400 when mismatched) — either failure deletes nothing. There is no
+  // undo and no recovery path; the client gates this behind a typed
+  // hard-confirm flow for the same reason.
+  r.delete("/", requireSpace(ctx.handle), (req, res) => {
+    const parsed = DeleteBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Body must be { passcode, confirmation }" });
+      return;
+    }
+    try {
+      const deleted = repo.deleteSpace(spaceOf(res), parsed.data.passcode, parsed.data.confirmation);
+      if (!deleted) {
+        res.status(401).json({ error: "Passcode is incorrect." });
+        return;
+      }
+      res.json({ ok: true, deleted: true });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
   });
 
   return r;

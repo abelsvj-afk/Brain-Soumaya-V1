@@ -1,5 +1,6 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
+import { sendPushToSpace } from "../../push/service.js";
 
 /**
  * Firing reminders — the first tool Soumaya calls on her own. `remind_at` used to be
@@ -134,6 +135,26 @@ export const reminderTool: Tool = {
       delivered = true;
     } catch {
       /* logged below regardless; the in-app bar still surfaces it */
+    }
+    // Web push (CL3): an independent delivery channel dispatched HERE, at
+    // the real firing site — deliberately NOT routed through the Telegram
+    // policy boundary above. That boundary only exists when a Telegram
+    // token is configured (index.ts passes notify=undefined otherwise),
+    // and its outbox queues for quiet hours/caps; push-only brains would
+    // otherwise never receive anything. sendPushToSpace is a strict no-op
+    // when VAPID is unconfigured and never throws, so this cannot change
+    // any existing behavior. Trade-off of the minimal design: push fires
+    // immediately at due time rather than being deferred by the policy
+    // layer's quiet-hours/cap rules.
+    try {
+      const push = await sendPushToSpace(tc.ctx.handle, tc.spaceId, {
+        title: "⏰ Soumaya reminder",
+        body: msg,
+        url: "/",
+      });
+      if (push.sent > 0) delivered = true;
+    } catch {
+      /* push is best-effort — the firing itself already succeeded */
     }
     return { ok: true, summary: `fired reminder "${row.label}"`, delivered, message: msg };
   },

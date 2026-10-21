@@ -270,21 +270,6 @@ body,
   color: var(--text);
   border-bottom-color: var(--accent);
 }
-/* IM-43: Browse subtab swaps get a short enter transition instead of an
-   abrupt synchronous replacement (respecting reduced-motion). */
-@keyframes browse-view-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.browse-view-enter {
-  animation: browse-view-in 0.18s ease-out;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .browse-view-enter { animation: none; }
-}
 /* Second-level view switcher inside a merged tab (Browse: All/Folders/Hubs;
    Progress: Codex/Awards). Chips, not another tab row, so hierarchy reads. */
 .subtab-wrap {
@@ -1203,9 +1188,6 @@ body,
   animation: song-pop 0.28s cubic-bezier(0.2, 1.3, 0.5, 1) backwards;
 }
 .song-dot.current { border-color: rgba(143, 220, 255, 0.8); box-shadow: 0 0 10px rgba(143, 220, 255, 0.4); }
-/* Unlockables (IM-133): a locked track in the song menu — visibly locked, not pickable. */
-.song-dot.locked { opacity: 0.55; cursor: not-allowed; border-color: rgba(160, 160, 190, 0.3); }
-.song-dot.locked .song-dot-n { background: rgba(160, 160, 190, 0.2); font-size: 0.58rem; }
 .song-dot-n {
   display: inline-flex; align-items: center; justify-content: center;
   width: 18px; height: 18px; border-radius: 50%; font-size: 0.66rem; font-weight: 700;
@@ -1740,25 +1722,6 @@ body,
   font-size: 11px;
   color: var(--muted);
 }
-/* IM-110: truthful load-failure surface for Companion sections — visually an
-   error, never mistakable for an empty section. */
-.companion-error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #ffb3b3;
-  background: rgba(120, 30, 30, 0.22);
-  border: 1px solid rgba(255, 120, 120, 0.35);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin: 6px 0;
-  list-style: none;
-}
-.companion-error span { flex: 1 1 auto; }
-/* IM-109: instruction priority field in the add/edit forms. */
-.companion-priority { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.companion-priority input { width: 64px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text); padding: 6px 8px; font: inherit; }
 .companion-new {
   display: flex;
   flex-direction: column;
@@ -2897,196 +2860,6 @@ button {
 }
 .toast.actionable { cursor: pointer; }
 .toast.actionable:hover { border-color: rgba(122, 220, 255, 0.6); }
-
-/* Inbox panel (IM-75/76): dock design system — CSS vars only, no inline rgba. */
-.notification-inbox {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  gap: 12px;
-}
-.notification-inbox .section-desc {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin: -4px 0 0;
-  line-height: 1.45;
-}
-.inbox-error {
-  font-size: 0.78rem;
-  color: var(--muted);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.inbox-tools {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.inbox-search {
-  flex: 1 1 140px;
-  min-width: 0;
-  background: var(--glass-panel, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 0.8rem;
-  padding: 5px 8px;
-}
-.inbox-select {
-  background: var(--glass-panel, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 0.8rem;
-  padding: 5px 6px;
-  cursor: pointer;
-}
-.inbox-tabs {
-  display: flex;
-  gap: 6px;
-  border-bottom: 1px solid var(--glass-border);
-  padding-bottom: 8px;
-}
-.inbox-tab {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.inbox-tab.on {
-  background: var(--accent-dim, rgba(168, 85, 247, 0.2));
-  color: var(--text);
-  border-color: var(--accent);
-}
-.inbox-badge {
-  background: #ef4444;
-  color: #fff;
-  border-radius: 999px;
-  padding: 1px 6px;
-  font-size: 0.7rem;
-  font-weight: bold;
-}
-.inbox-list {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-right: 4px;
-}
-.inbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.inbox-group-head {
-  font-size: 0.72rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 2px 0 0;
-}
-.inbox-row {
-  background: var(--glass-panel, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  position: relative;
-}
-.inbox-row.high {
-  border-color: var(--accent);
-}
-.inbox-row-icon {
-  font-size: 1.2rem;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.inbox-row-main {
-  flex: 1;
-  min-width: 0;
-}
-.inbox-row-text {
-  font-size: 0.82rem;
-  color: var(--text);
-  word-break: break-word;
-  line-height: 1.35;
-}
-.inbox-row-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 4px;
-  font-size: 0.7rem;
-  color: var(--muted);
-}
-.inbox-tag {
-  border: 1px solid var(--glass-border);
-  border-radius: 3px;
-  padding: 1px 4px;
-  font-size: 0.62rem;
-  font-weight: 600;
-}
-.inbox-tag.important {
-  color: var(--accent);
-  border-color: var(--accent);
-  font-weight: bold;
-}
-.inbox-row-actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.inbox-row-actions button {
-  background: transparent;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  padding: 2px;
-  font-size: 0.95rem;
-  line-height: 1;
-}
-.inbox-row-actions button:hover {
-  transform: scale(1.15);
-}
-.inbox-empty {
-  text-align: center;
-  padding: 32px 16px;
-  color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-.inbox-clear-btn {
-  width: 100%;
-  background: transparent;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
-  color: #f87171;
-  padding: 6px;
-  font-size: 0.78rem;
-  cursor: pointer;
-  font-weight: 500;
-  margin-top: auto;
-}
-.inbox-clear-btn:hover {
-  border-color: #f87171;
-}
 .toast-go { color: rgba(122,220,255,0.85); font-size: 0.95rem; }
 .toast-ic { font-size: 1.05rem; flex: 0 0 auto; }
 .toast-msg { min-width: 0; }
@@ -3171,66 +2944,6 @@ button {
 .award-prog-bar > span { display: block; height: 100%; background: #5bd6ff; transition: width 0.5s ease; }
 .award-prog-num { font-size: 0.72rem; color: #9fd0ff; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 .awards-section-h { margin: 0 0 4px; font-size: 0.9rem; }
-
-/* IM-90: daily tending quests at the top of Progress. */
-.dq-wrap { margin-bottom: 12px; }
-.dq-title { margin: 0 0 6px; font-size: 0.9rem; }
-.dq-list { display: flex; flex-direction: column; gap: 6px; }
-.dq-quest {
-  display: flex; align-items: center; gap: 8px; text-align: left;
-  padding: 8px 11px; border-radius: 10px; cursor: pointer;
-  background: rgba(14, 18, 38, 0.6); border: 1px solid rgba(122, 200, 255, 0.18);
-  color: inherit; font-size: 0.82rem;
-}
-.dq-quest:hover { background: rgba(91, 214, 255, 0.12); }
-.dq-quest.done { opacity: 0.62; }
-.dq-ic { flex: 0 0 auto; }
-
-/* IM-95: fuel balance/context banner in Progress (mirrors the streak banner). */
-.fuel-banner {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 9px 12px; border-radius: 12px; margin-bottom: 14px;
-  background: rgba(16, 30, 22, 0.55); border: 1px solid rgba(110, 220, 160, 0.3);
-  font-size: 0.82rem; line-height: 1.3;
-}
-.fuel-ic { font-size: 1.3rem; flex: 0 0 auto; line-height: 1.2; }
-.fuel-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; }
-.fuel-bar { height: 5px; border-radius: 999px; background: rgba(120, 220, 170, 0.16); overflow: hidden; }
-.fuel-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #57e6a9, #b8f25e); transition: width 0.5s ease; }
-.fuel-sub { font-size: 0.74rem; color: #aebbd6; }
-
-/* IM-92: awards filter/sort controls + detail drill-in. */
-.awards-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-.awards-filters { display: inline-flex; gap: 4px; }
-.awards-filters button, .awards-sort {
-  padding: 4px 10px; border-radius: 999px; cursor: pointer; font-size: 0.74rem;
-  background: transparent; color: inherit; border: 1px solid rgba(255, 255, 255, 0.14);
-}
-.awards-filters button.on, .awards-sort.on { border-color: var(--accent); background: rgba(122, 249, 255, 0.12); }
-.award-drill {
-  background: none; border: none; padding: 0; cursor: pointer; color: inherit;
-  font: inherit; font-weight: 600; text-align: left;
-}
-.award-drill-caret { font-size: 0.68rem; opacity: 0.6; }
-.award-detail { font-size: 0.74rem; color: #9fd0ff; margin-top: 4px; }
-
-/* IM-95: ONE locked-state dialect across the Progress tab — Codex locked rows
-   take the exact Awards locked treatment (same dimming + greyscaled icon). */
-.codex-row.locked { opacity: 0.62; }
-.codex-row.locked .codex-ic { filter: grayscale(0.8); opacity: 0.8; }
-.codex-title-btn {
-  background: none; border: none; padding: 0; cursor: pointer; color: inherit;
-  font: inherit; font-weight: 600; font-size: 0.9rem; text-align: left; flex: 1;
-}
-.codex-caret { font-size: 0.68rem; opacity: 0.6; }
-.codex-detail { font-size: 0.72rem; opacity: 0.75; margin-top: 0.45rem; border-top: 1px solid rgba(255, 255, 255, 0.07); padding-top: 0.4rem; }
-.codex-goto { margin-top: 0.35rem; font-size: 0.72rem; }
-.codex-notes-error {
-  display: flex; align-items: center; gap: 8px; justify-content: space-between;
-  padding: 8px 11px; border-radius: 10px; margin-bottom: 0.7rem;
-  background: rgba(60, 24, 16, 0.55); border: 1px solid rgba(255, 150, 90, 0.4);
-  font-size: 0.78rem;
-}
 .miles-row {
   list-style: none;
   margin: 8px 0 0;
@@ -3649,6 +3362,7 @@ button {
 .obs-quest:hover { background: rgba(91, 214, 255, 0.18); }
 .obs-quest.done { opacity: 0.6; color: #9fe0b8; cursor: default; }
 .obs-quest-ic { flex: 0 0 auto; font-size: 0.95rem; }
+.obs-quests-done { color: #9fe0b8; margin-top: 6px; }
 
 /* Companion: collapsible instruction items + tidier controls. */
 .companion-expand {
@@ -3810,30 +3524,6 @@ button {
 }
 .mind-prune:hover { background: rgba(255, 205, 70, 0.18); }
 .mind-card-aka { font-size: 0.68rem; opacity: 0.55; font-weight: 400; }
-/* CL-4 (IM-46/47/48/49/136): card content snippet + mapped-date meta, the
-   search/filter/sort bar, the working-memory source legend, per-interaction
-   meta inside person chips, and the idea split/merge affordances. */
-.mind-card-content {
-  margin: 5px 0 0; font-size: 0.74rem; line-height: 1.45; color: #d7e4f5; opacity: 0.85;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.mind-card-meta { margin: 3px 0 0; font-size: 0.66rem; opacity: 0.5; }
-.mind-search { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 2px; }
-.mind-search-row { display: flex; gap: 6px; align-items: center; }
-.mind-search-row select { flex: 1 1 0; min-width: 0; }
-.mind-search-count { margin: 0; font-size: 0.68rem; opacity: 0.6; }
-.mind-ws-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 2px 0 6px; font-size: 0.66rem; opacity: 0.75; }
-.mind-ws-legend-item { display: inline-flex; align-items: center; gap: 4px; }
-.mind-ws-legend .mind-mote-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
-.mind-ev-chip-meta { font-size: 0.62rem; opacity: 0.65; white-space: nowrap; }
-.mind-idea-actions { display: flex; gap: 6px; margin-top: 6px; }
-.mind-idea-actions .mini.on { background: rgba(143, 220, 255, 0.22); border-color: rgba(143, 220, 255, 0.55); }
-.mind-split-form { margin-top: 6px; }
-.mind-merge-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
-  padding: 8px 10px; border-radius: 8px; font-size: 0.74rem;
-  background: rgba(143, 220, 255, 0.1); border: 1px solid rgba(143, 220, 255, 0.35); color: #dff2ff;
-}
 /* "How the Mind works" explainer */
 .mind-explain-toggle { background: transparent; border: none; color: #cbbcff; cursor: pointer; font-size: 0.74rem; padding: 2px 0 6px; }
 .mind-explain {
@@ -4150,28 +3840,6 @@ button {
 .chatdock-msg.soumaya .chatdock-bubble { background: rgba(20, 24, 44, 0.85); border: 1px solid rgba(122, 200, 255, 0.18); color: #eaf2ff; }
 .chatdock-bubble.typing { letter-spacing: 2px; opacity: 0.85; display: flex; align-items: center; }
 .chatdock-cites { display: flex; flex-wrap: wrap; gap: 5px; }
-/* IM-105: per-message local time, quiet under the bubble. */
-.chatdock-time { font-size: 0.68rem; color: #7d90b4; letter-spacing: 0.02em; }
-/* IM-103: staged typing presence inside the busy bubble. */
-.chatdock-bubble.typing { gap: 8px; letter-spacing: normal; }
-.chatdock-typing-stage { font-size: 0.82rem; color: #b9cdf0; white-space: nowrap; }
-.chatdock-typing-dots { display: inline-flex; gap: 3px; }
-.chatdock-typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: #7ac8ff; opacity: 0.35; animation: chatdock-dot 1.2s ease-in-out infinite; }
-.chatdock-typing-dots i:nth-child(2) { animation-delay: 0.15s; }
-.chatdock-typing-dots i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes chatdock-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
-.chatdock-typing-elapsed { font-size: 0.72rem; color: #7d90b4; font-variant-numeric: tabular-nums; }
-.chatdock-stop { margin-left: auto; background: rgba(255, 120, 120, 0.12); border: 1px solid rgba(255, 120, 120, 0.45); color: #ffb3b3; border-radius: 999px; padding: 2px 10px; font-size: 0.74rem; cursor: pointer; }
-.chatdock-stop:hover { background: rgba(255, 120, 120, 0.22); color: #fff; }
-/* IM-108: error surface outside her voice, above the input. */
-.chatdock-notice { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 8px 10px; border-radius: 10px; background: rgba(120, 30, 30, 0.28); border: 1px solid rgba(255, 120, 120, 0.4); font-size: 0.8rem; color: #ffd9d9; flex: 0 0 auto; }
-.chatdock-notice-text { flex: 1 1 auto; }
-.chatdock-notice-detail { opacity: 0.75; font-size: 0.74rem; }
-/* IM-106: staged + sent attachment chips. */
-.chatdock-pending-att { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; flex: 0 0 auto; }
-.chatdock-att-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; color: #b9cdf0; background: rgba(91, 214, 255, 0.1); border: 1px solid rgba(91, 214, 255, 0.35); border-radius: 999px; padding: 3px 9px; }
-.chatdock-att-x { background: none; border: none; color: #b9cdf0; cursor: pointer; font-size: 0.7rem; padding: 0; }
-.chatdock-att-x:hover { color: #fff; }
 /* Her reply's emotional register tints the bubble's left edge (the same palette
    as the galaxy's links: gold joyful · green neutral · indigo heavy). */
 .chatdock-msg.soumaya .chatdock-bubble.mood-happy,
@@ -4388,38 +4056,6 @@ button {
 .undertaking-day { opacity: 0.6; font-size: 0.7rem; white-space: nowrap; }
 .undertaking-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
 .undertaking-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #5bd6ff, #b98bff); }
-
-/* Soumaya tab — identity header (IM-65), undertaking history (IM-67),
-   streak constellation (IM-64), log browsing (IM-66), token dialog (IM-71). */
-.soumaya-identity { display: flex; gap: 12px; align-items: center; margin: 12px 0 4px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.03); }
-.soumaya-identity-text { min-width: 0; }
-.soumaya-now { margin: 0; font-size: 0.86rem; line-height: 1.45; }
-.soumaya-mood { margin: 3px 0 0; font-size: 0.72rem; opacity: 0.65; }
-.undertaking-done { border-color: rgba(139, 233, 160, 0.4); background: rgba(139, 233, 160, 0.07); }
-.undertaking-history { margin-top: 10px; }
-.undertaking-history-title { margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.undertaking-history-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.undertaking-history-item { display: flex; justify-content: space-between; gap: 8px; font-size: 0.78rem; padding: 5px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); }
-.streak-summary { font-size: 0.82rem; margin: 0 0 8px; }
-.constellation-cells { display: flex; gap: 4px; flex-wrap: wrap; }
-.constellation-cell-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.constellation-cell { width: 14px; height: 14px; border-radius: 2px; background: rgba(255,255,255,0.05); }
-.constellation-cell.lit { background: rgba(100, 200, 255, 0.8); box-shadow: 0 0 4px rgba(100, 200, 255, 0.5); }
-.constellation-cell.missed { background: rgba(255,255,255,0.05); }
-.constellation-cell.unknown { background: transparent; border: 1px dashed rgba(255,255,255,0.25); }
-.constellation-cell.today { outline: 1px solid var(--accent); outline-offset: 1px; }
-.constellation-axis { font-size: 8px; opacity: 0.55; line-height: 1; }
-.constellation-legend { font-size: 0.7rem; opacity: 0.7; margin: 8px 0 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.05); }
-.legend-swatch.lit { background: rgba(100, 200, 255, 0.8); }
-.legend-swatch.unknown { background: transparent; border: 1px dashed rgba(255,255,255,0.25); }
-.log-controls { display: flex; gap: 6px; margin-bottom: 10px; }
-.log-search { flex: 1; min-width: 0; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: var(--text); padding: 5px 8px; border-radius: 4px; font: inherit; font-size: 12px; }
-.log-filter { background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: var(--text); padding: 5px 6px; border-radius: 4px; font: inherit; font-size: 12px; max-width: 45%; }
-.log-day-head { margin: 12px 0 6px; font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
-.log-count { font-size: 0.72rem; opacity: 0.6; margin: 6px 0; }
-.admin-token-input { width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: var(--text); padding: 7px 9px; border-radius: 4px; font: inherit; font-size: 13px; }
-.fleet-section > summary { font-size: 13px; font-weight: 600; color: var(--accent); padding: 8px 0; }
 
 /* Foresight — a pattern she sees coming (Observatory). */
 .obs-foresight {
@@ -4661,7 +4297,8 @@ button {
   50% { box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 0 10px rgba(91,214,255,0); }
 }
 
-/* =====================================================================   2D MOTION PASS — make the interface feel as alive as the galaxy.
+/* ============================================================================
+   2D MOTION PASS — make the interface feel as alive as the galaxy.
    Enter animations for panels, staggered list reveals, tactile button press,
    spring toasts. All gated behind prefers-reduced-motion at the bottom.
    ============================================================================ */
@@ -4836,32 +4473,6 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
   width: 72px; height: 72px; display: flex; align-items: center; justify-content: center;
   border-radius: 10px; background: rgba(255, 255, 255, 0.05); font-size: 22px; opacity: 0.6;
 }
-/* CL-15 (IM-121/122/123/137): chapter search, theme/score meta, honest
-   no-photo chip, and the future-events ("Ahead") section. */
-.tl-search {
-  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px; color: #eef3ff; font-size: 0.8rem; padding: 5px 9px; min-width: 130px;
-}
-.tl-search::placeholder { color: rgba(230, 238, 255, 0.45); }
-.tl-node-meta { display: flex; gap: 10px; font-size: 0.7rem; color: #a9c6ff; }
-.tl-card-meta { display: flex; gap: 12px; font-size: 0.74rem; color: #a9c6ff; margin-bottom: 8px; }
-.tl-photo-missing {
-  background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255, 255, 255, 0.25);
-  border-radius: 8px; color: #c8d4ee; font-size: 0.72rem; padding: 6px 9px; cursor: pointer;
-}
-.tl-photo-missing:hover { background: rgba(255, 255, 255, 0.1); }
-.tl-ahead { margin: 18px auto 8px; max-width: 640px; width: 100%; }
-.tl-ahead-head { font-size: 0.85rem; font-weight: 600; color: #dfe9ff; margin-bottom: 8px; }
-.tl-ahead-list { display: flex; flex-direction: column; gap: 6px; }
-.tl-ahead-row {
-  display: flex; justify-content: space-between; gap: 12px; text-align: left;
-  background: rgba(120, 160, 255, 0.07); border: 1px solid rgba(120, 160, 255, 0.22);
-  border-radius: 10px; padding: 8px 12px; cursor: pointer; color: #eef3ff;
-}
-.tl-ahead-row:hover { background: rgba(120, 160, 255, 0.14); }
-.tl-ahead-label { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-ahead-when { font-size: 0.72rem; color: #a9c6ff; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-.tl-ahead-error { display: flex; gap: 10px; align-items: center; font-size: 0.8rem; color: #ffb3a7; }
 .tl-mems { margin-bottom: 12px; }
 .tl-mems-label { font-size: 0.68rem; opacity: 0.55; margin-bottom: 6px; }
 .tl-mem {
@@ -4876,29 +4487,6 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
   border-radius: 8px; padding: 6px 10px; cursor: pointer;
 }
 .tl-del:hover { background: rgba(255, 90, 120, 0.18); }
-
-/* ── Life Seasons + Journey spans (IM-132): bands behind spans on a real time axis ── */
-.tl-seasons {
-  position: relative; z-index: 1; max-width: 640px; margin: 4px auto 0; width: calc(100% - 38px);
-  padding: 10px 14px 12px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-.tl-seasons-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.tl-seasons-title { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #9fb4d8; }
-.tl-seasons-range { font-size: 0.68rem; opacity: 0.55; color: #cfd6e6; }
-.tl-seasons-axis { position: relative; min-height: 56px; }
-.tl-season-band {
-  position: absolute; top: 0; height: 30px; border: 1px solid; border-radius: 8px;
-  overflow: hidden; padding: 3px 6px; box-sizing: border-box;
-}
-.tl-season-label { font-size: 0.68rem; font-weight: 600; color: #eaf4ff; white-space: nowrap; }
-.tl-journey-lane { position: relative; height: 18px; margin-top: 36px; }
-.tl-journey-lane + .tl-journey-lane { margin-top: 4px; }
-.tl-journey-span {
-  position: absolute; top: 0; height: 16px; border-radius: 999px; opacity: 0.85;
-  overflow: hidden; padding: 0 7px; box-sizing: border-box; display: flex; align-items: center;
-}
-.tl-journey-span-label { font-size: 0.64rem; font-weight: 600; color: #06121a; white-space: nowrap; }
 
 /* ── "Ways to earn Fuel" sheet (from the fuel gauge / low-fuel banner) ── */
 .fuel-ways-backdrop {
@@ -5194,58 +4782,6 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
   display: flex; align-items: center; justify-content: center;
 }
 
-/* Command palette (IM-142, ⌘K) — a top-anchored modal in the same glass
-   language as .tools-menu; z-index above the confirm overlay (300) so it is
-   reachable from anywhere, including over an open panel. */
-.cmdk-overlay {
-  position: fixed; inset: 0; z-index: 320;
-  background: rgba(4, 6, 16, 0.55);
-  display: flex; justify-content: center; align-items: flex-start;
-  padding: calc(10vh + env(safe-area-inset-top)) 14px 14px;
-}
-.cmdk {
-  width: min(560px, 94vw);
-  max-height: min(70dvh, 560px);
-  display: flex; flex-direction: column;
-  border-radius: 16px;
-  background: linear-gradient(160deg, rgba(18, 22, 44, 0.98), rgba(10, 12, 28, 0.98));
-  border: 1px solid rgba(122, 200, 255, 0.25);
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55);
-  animation: obs-fade 0.25s ease both;
-  overflow: hidden;
-}
-.cmdk-input {
-  width: 100%; box-sizing: border-box;
-  padding: 15px 16px;
-  background: transparent; border: none; outline: none;
-  border-bottom: 1px solid rgba(122, 200, 255, 0.18);
-  color: #eaf0ff; font-size: 16px;
-}
-.cmdk-input::placeholder { color: rgba(234, 240, 255, 0.4); }
-.cmdk-list { overflow-y: auto; padding: 6px; }
-.cmdk-section {
-  padding: 8px 10px 4px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-  color: rgba(234, 240, 255, 0.45);
-}
-.cmdk-row {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; box-sizing: border-box;
-  padding: 9px 10px; border-radius: 10px;
-  background: transparent; border: 1px solid transparent;
-  color: #e8ecff; font-size: 14px; text-align: left; cursor: pointer;
-}
-.cmdk-row.active { background: rgba(122, 200, 255, 0.14); border-color: rgba(122, 200, 255, 0.22); }
-.cmdk-ic { font-size: 16px; line-height: 1; flex: 0 0 auto; }
-.cmdk-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cmdk-hint { flex: 0 0 auto; font-size: 11.5px; color: rgba(234, 240, 255, 0.5); }
-.cmdk-empty { padding: 10px; margin: 0; font-size: 13px; color: rgba(234, 240, 255, 0.6); }
-.cmdk-foot {
-  padding: 8px 14px;
-  border-top: 1px solid rgba(122, 200, 255, 0.14);
-  font-size: 11px; color: rgba(234, 240, 255, 0.45);
-}
-
 /* Commission button — the player-controlled Fuel sink in Soumaya's tab. */
 .commission-btn {
   width: 100%; margin-top: 8px; padding: 9px 12px; border-radius: 10px;
@@ -5421,12 +4957,6 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
 .fin-assets { display: flex; flex-direction: column; gap: 10px; }
 .fin-asset-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .fin-asset-row { display: flex; flex-direction: column; gap: 4px; }
-.fin-asset-balance { font-size: 0.85rem; }
-.fin-asset-history { display: flex; flex-direction: column; gap: 6px; }
-.fin-asset-snapshots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.fin-asset-snapshots li { display: flex; justify-content: space-between; gap: 8px; }
-.fin-monthly-totals { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.fin-monthly-totals li { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
 
 /* ---- Wealth (docs/specs/wealth-goals-allocation.md) — intention layered on Money's reality.
    Deliberately visually distinct from the Safe-to-Spend hero above: never the same size/weight,
@@ -5526,22 +5056,6 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 .jn-secondary { background: var(--glass); color: var(--text); }
 .jn-danger { background: var(--glass); color: #ff8a8a; }
 .jn-done summary { color: var(--muted); cursor: pointer; font-size: 0.85rem; padding: 6px 0; }
-/* CL-10 (IM-85/IM-88): toolbar, description/colour form fields, dates, next-step, picker */
-.jn-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
-.jn-toolbar input, .jn-toolbar select { background: rgba(0,0,0,0.25); color: var(--text); border: 1px solid var(--glass-border); border-radius: 10px; padding: 8px 10px; min-height: 40px; font-size: 0.9rem; }
-.jn-search { flex: 1; min-width: 140px; }
-.jn-desc-in { background: rgba(0,0,0,0.25); color: var(--text); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; font-size: 0.95rem; font-family: inherit; resize: vertical; }
-.jn-color-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.jn-color-label { font-size: 0.85rem; color: var(--muted); }
-.jn-swatch { width: 28px; height: 28px; border-radius: 999px; border: 2px solid transparent; cursor: pointer; color: var(--muted); background: var(--glass); font-size: 0.8rem; padding: 0; }
-.jn-swatch.sel { border-color: var(--text); }
-.jn-color-in { width: 36px; height: 32px; padding: 0; border: 1px solid var(--glass-border); border-radius: 8px; background: none; cursor: pointer; }
-.jn-meta { color: var(--muted); font-size: 0.78rem; margin: 0; }
-.jn-next-step { font-size: 0.85rem; color: var(--text); background: rgba(122,249,255,0.08); border: 1px solid var(--glass-border); border-radius: 10px; padding: 8px 10px; margin: 0; }
-.jn-link-date { color: var(--muted); font-size: 0.75rem; margin-left: 8px; white-space: nowrap; }
-.jn-picker { display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.18); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; width: 100%; }
-.jn-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
-.jn-picker-search { background: rgba(0,0,0,0.25); color: var(--text); border: 1px solid var(--glass-border); border-radius: 10px; padding: 8px 10px; min-height: 40px; font-size: 0.9rem; }
 
 /* Journey chips inside the memory inspector */
 .ni-journeys { margin: 10px 0; padding: 8px 10px; background: rgba(0,0,0,0.18); border: 1px solid var(--glass-border); border-radius: 10px; }
@@ -5592,13 +5106,6 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 .obs-money { border-color: rgba(122,249,192,0.28); }
 
 /* Journeys mini-progress card */
-/* IM-125/IM-126: secondary fetched detail (timestamps, bill rows, cohesion…). */
-.obs-meta { font-size: 0.72rem; color: #7f8fb3; font-variant-numeric: tabular-nums; }
-.obs-bill { display: flex; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: #c8d6f2; }
-.obs-bill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.obs-bill-meta { flex: 0 0 auto; color: #9fb4d8; font-variant-numeric: tabular-nums; }
-.obs-chip-sub { color: #8fb8dd; font-size: 0.72rem; }
-.obs-jn-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: baseline; }
 .obs-jn { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
 .obs-jn-name { font-size: 0.82rem; color: #dbe6ff; }
 .obs-jn-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
@@ -5734,333 +5241,3 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 }
 .perf-hud .ph-actions button:last-child { flex: 0 0 24px; }
 .perf-hud .ph-actions button:hover { background: rgba(122, 200, 255, 0.22); }
-
-/* ── Immersion Round 2 · CL-2 (Details tab) ─────────────────────────────── */
-/* Shared in-app confirmation dialog (IM-34) — sits above the lightbox (200). */
-.confirm-overlay {
-  position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center;
-  background: rgba(2, 4, 12, 0.72); padding: 16px;
-}
-.confirm-card {
-  max-width: min(92vw, 380px); width: 100%; padding: 18px; border-radius: 14px;
-  background: rgba(20, 26, 46, 0.97); border: 1px solid rgba(255, 120, 150, 0.35); color: #eaf0ff;
-}
-.confirm-title { margin: 0 0 6px; font-size: 0.98rem; }
-.confirm-message { margin: 0 0 14px; font-size: 0.84rem; line-height: 1.5; color: #b9c3dd; }
-.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.confirm-danger { background: rgba(255, 90, 120, 0.22) !important; border-color: rgba(255, 120, 150, 0.55) !important; color: #ffb3c1 !important; font-weight: 600; }
-
-/* Loading skeletons for the Details async sections (IM-29). */
-.skeleton-line {
-  display: block; height: 10px; border-radius: 5px; margin: 6px 0;
-  background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.14), rgba(255,255,255,0.06));
-  background-size: 200% 100%; animation: skeleton-shimmer 1.2s linear infinite;
-}
-.skeleton-line.short { width: 55%; }
-@keyframes skeleton-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }
-
-/* NodeInspector: dates/state facts, members drill-in, edit form (IM-26/27/29). */
-.node-facts { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
-.node-members h3, .research-answers h3 { font-size: 13px; margin: 14px 0 6px; color: var(--accent); }
-.research-answer { margin: 0 0 8px; }
-.research-answer-q { margin: 0; font-size: 12px; font-weight: 600; color: #eaf2ff; }
-.research-answer-a { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-.node-edit { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 10px; }
-.node-edit-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-.node-edit-input, .node-edit-body {
-  background: rgba(10, 12, 28, 0.6); border: 1px solid rgba(122, 200, 255, 0.25); border-radius: 6px;
-  color: #fff; padding: 8px; font-size: 0.88rem; font-family: inherit; width: 100%; box-sizing: border-box;
-}
-.node-edit-body { resize: vertical; line-height: 1.5; }
-.node-edit-error { margin: 0; font-size: 12px; color: #ff8fa3; }
-.node-edit-actions { display: flex; gap: 8px; }
-.node-edit-btn { margin-top: 6px; }
-
-/* Neighbours: relationship + weight on each row (IM-28). */
-.neighbor-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.neighbor-rel { margin-left: auto; font-size: 11px; color: var(--accent); white-space: nowrap; }
-.neighbors-more { padding: 7px 8px; font-size: 12px; }
-
-/* Synthesis error surface — visually NOT the insight (IM-32). */
-.synth-error {
-  margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.5;
-  background: rgba(255, 90, 120, 0.1); border: 1px solid rgba(255, 120, 150, 0.4); color: #ffb3c1;
-}
-.synth-error p { margin: 0 0 8px; }
-
-/* Chronicle: chapter meta (trigger + local date) and error state (IM-31/35). */
-.chronicle-meta, .chronicle-current-meta { font-size: 11px; color: var(--muted); }
-.chronicle-current-meta { margin: 4px 0 0; }
-.chronicle-error p { margin: 0 0 6px; }
-
-/* Deep-dive / Investigator (IM-37). */
-.deep-dive-hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0 0 8px; }
-.deep-dive-type { font-size: 12px; margin: 0 0 6px; color: var(--muted); }
-.deep-dive-summary { font-size: 12.5px; line-height: 1.55; margin: 0 0 10px; }
-.deep-dive-report h4 { font-size: 12px; margin: 10px 0 6px; color: var(--accent); }
-.deep-dive-evidence, .deep-dive-questions { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.deep-dive-evidence li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.deep-dive-why { font-size: 11px; color: var(--muted); }
-.deep-dive-questions li { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.deep-dive-error {
-  padding: 10px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.5;
-  background: rgba(255, 90, 120, 0.1); border: 1px solid rgba(255, 120, 150, 0.4); color: #ffb3c1;
-}
-.deep-dive-error p { margin: 0 0 8px; }
-
-/* Attachments: per-image metadata under the grid + in the lightbox (IM-36). */
-.att-cell { margin: 0; display: flex; flex-direction: column; gap: 3px; width: 76px; }
-.att-meta { display: flex; flex-direction: column; font-size: 0.62rem; line-height: 1.35; color: rgba(234, 240, 255, 0.65); }
-.att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.att-lb-meta { opacity: 0.75; }
-
-/* ── CL-1a Round 2 (IM-05..IM-18) ─────────────────────────────── */
-.toast-time { font-size: 0.72rem; opacity: 0.65; white-space: nowrap; }
-.toast-priority { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
-.toast-priority.priority-high { color: #ffcf6b; }
-.toast-priority.priority-low { color: #9fb4d8; }
-.fuel-gauge .fg-meta { font-size: 9px; line-height: 1.1; color: rgba(255,255,255,0.72); text-align: center; font-variant-numeric: tabular-nums; }
-.fuel-gauge .fg-cost { color: #ffcf6b; }
-.streak-ember.tappable { cursor: pointer; font: inherit; }
-.streak-ember .se-best { font-size: 10px; color: #ffd98c; opacity: 0.9; white-space: nowrap; }
-.streak-ember .se-shields { letter-spacing: 0; }
-.noticing-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; opacity: 0.85; margin-bottom: 2px; }
-.noticing-kind { font-weight: 700; color: var(--accent, #7ac8ff); }
-.noticing-nav { display: flex; gap: 8px; margin: 4px 0; }
-.object-lore-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.ol-stat { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05); color: #cfcbe8; }
-button.ol-stat.ol-coldest { cursor: pointer; }
-button.ol-stat.ol-coldest:hover { color: #fff; border-color: rgba(122,200,255,0.6); }
-@keyframes cl1a-rise { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.object-lore-enter { animation: cl1a-rise 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-@keyframes fuel-ways-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
-.fuel-ways-enter { animation: fuel-ways-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-.fw-cost { font-weight: 600; }
-.login-tabs { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-.login-tab-btn { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.5rem 1rem; border-radius: 18px; cursor: pointer; flex: 1; }
-.login-tab-btn.active { background: rgba(255,255,255,0.15); }
-.login-stars, .welcome-stars { display: flex; gap: 14px; justify-content: center; opacity: 0.75; font-size: 13px; margin-bottom: 8px; }
-.login-screen { transition: opacity 0.26s ease; }
-.login-entering { opacity: 0; }
-.login-eye, .welcome-eye { display: flex; justify-content: center; margin-bottom: 6px; }
-.perf-hud .ph-human { font-size: 11px; line-height: 1.45; opacity: 0.85; margin: 4px 0; }
-.perf-hud .ph-offramp { font-size: 11px; line-height: 1.45; opacity: 0.7; margin: 4px 0 8px; }
-/* IM-15: focus mode also dims the header/brand, the notifications bar and the insight chip. */
-.focus-mode .brand, .focus-mode .notifications-bar, .focus-mode .self-insight-chip { opacity: 0.08; transition: opacity 0.5s ease; }
-.focus-mode .brand:hover, .focus-mode .notifications-bar:hover, .focus-mode .self-insight-chip:hover { opacity: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .object-lore-enter, .fuel-ways-enter { animation: none; }
-  .focus-mode .brand, .focus-mode .notifications-bar, .focus-mode .self-insight-chip { transition: none; }
-}
-
-/* ── CL-1b: galaxy shell identity & ambience (IM-19..IM-25) ─────────────── */
-/* IM-24: theme force-graph's native node tooltip (float-tooltip injects its
-   own single-class styles; the element+class selector outranks them) as the
-   same glass as the rest of the shell UI. */
-div.float-tooltip-kap {
-  padding: 7px 11px;
-  border-radius: 10px;
-  font: 500 12.5px/1.45 Inter, system-ui, sans-serif;
-  color: #e6efff;
-  background: rgba(10, 16, 34, 0.88);
-  border: 1px solid rgba(143, 200, 255, 0.35);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-}
-
-/* IM-20: beacon-target readout, pinned bottom-left above the now-playing pill. */
-.beacon-readout {
-  position: fixed;
-  left: 62px;
-  bottom: 172px;
-  z-index: 55;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: min(46vw, 340px);
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(12, 20, 40, 0.72);
-  border: 1px solid rgba(255, 178, 77, 0.35);
-  color: #ffe9c9;
-  font-size: 0.72rem;
-  backdrop-filter: blur(6px);
-  animation: np-in 0.3s ease;
-}
-.beacon-readout-head { font-weight: 600; }
-.beacon-readout-targets { color: #d9ecff; }
-.beacon-target {
-  background: none; border: none; padding: 0; margin: 0;
-  color: #ffd98c; font: inherit; cursor: pointer; text-decoration: underline dotted;
-}
-.beacon-target:hover { color: #fff; }
-.beacon-readout-hint { opacity: 0.65; font-size: 0.66rem; }
-
-/* IM-19: visitor chip + followed-craft identity card. */
-.visitor-chip {
-  position: fixed;
-  left: 62px;
-  bottom: 216px;
-  z-index: 55;
-  padding: 7px 12px;
-  border-radius: 999px;
-  background: rgba(12, 20, 40, 0.72);
-  border: 1px solid rgba(179, 136, 255, 0.4);
-  color: #e9ddff;
-  font-size: 0.72rem;
-  backdrop-filter: blur(6px);
-  cursor: pointer;
-  animation: np-in 0.3s ease;
-  text-align: left;
-}
-div.visitor-chip { cursor: default; }
-.scene-id-card { animation: cl1a-rise 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-.scene-id-line { margin: 2px 0 4px; font-size: 0.82rem; color: #ffd98c; }
-
-/* IM-21: audio state chip — bottom-left, under the music FAB column. */
-.audio-state-chip {
-  position: fixed;
-  left: 62px;
-  bottom: 88px;
-  z-index: 55;
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: rgba(12, 20, 40, 0.66);
-  border: 1px solid rgba(143, 200, 255, 0.28);
-  color: #cfe4ff;
-  font-size: 0.68rem;
-  backdrop-filter: blur(6px);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.audio-state-chip.all-off { border-color: rgba(255, 150, 120, 0.55); color: #ffd9cf; }
-
-/* IM-23: empty-galaxy first-star cue, centred over the empty sky. */
-.empty-galaxy-cue {
-  position: fixed;
-  left: 50%;
-  top: 46%;
-  transform: translate(-50%, -50%);
-  z-index: 41;
-  width: min(400px, 90vw);
-  text-align: center;
-  padding: 22px 20px;
-  border-radius: 16px;
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
-  animation: obs-fade 0.5s ease;
-}
-.empty-galaxy-title { margin: 0 0 6px; font-size: 1.05rem; font-weight: 700; color: #eaf3ff; }
-.empty-galaxy-sub { margin: 0 0 14px; font-size: 0.82rem; line-height: 1.5; color: rgba(215, 230, 255, 0.8); }
-.empty-galaxy-add {
-  padding: 9px 16px; border-radius: 999px; cursor: pointer;
-  background: rgba(122, 200, 255, 0.16); border: 1px solid rgba(122, 200, 255, 0.55);
-  color: #eaf3ff; font-size: 0.82rem; font-weight: 600;
-}
-.empty-galaxy-add:hover { background: rgba(122, 200, 255, 0.28); }
-
-/* IM-24: model-fallback note inside Settings diagnostics. */
-.model-fallback-note { margin: 8px 0; font-size: 12px; color: #ffd9cf; }
-.model-fallback-note p { margin: 2px 0; }
-
-/* IM-25: MindSpace motes are interactive now — the layer still lets the
-   galaxy through everywhere except on the motes/controls themselves. */
-.mindspace-mote {
-  pointer-events: auto;
-  background: none; border: none; cursor: pointer; font: inherit;
-  padding: 4px 6px; border-radius: 10px; text-align: left;
-}
-.mindspace-mote:hover, .mindspace-mote.selected { background: rgba(20, 34, 64, 0.45); }
-.mindspace-more {
-  position: absolute; right: 14px; bottom: 96px;
-  pointer-events: auto;
-  padding: 6px 11px; border-radius: 999px;
-  background: rgba(12, 20, 40, 0.72); border: 1px solid rgba(143, 200, 255, 0.35);
-  color: #d9ecff; font-size: 0.7rem; backdrop-filter: blur(6px);
-}
-button.mindspace-more { cursor: pointer; }
-.mindspace-legend {
-  position: absolute; left: 14px; bottom: 96px;
-  display: flex; gap: 10px; flex-wrap: wrap;
-  padding: 6px 10px; border-radius: 999px;
-  background: rgba(12, 20, 40, 0.6); border: 1px solid rgba(143, 200, 255, 0.22);
-  font-size: 0.66rem; color: rgba(215, 230, 255, 0.85);
-}
-.mindspace-legend-item { display: inline-flex; align-items: center; gap: 5px; }
-.mindspace-legend-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
-.mindspace-empty {
-  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
-  pointer-events: auto; cursor: pointer;
-  max-width: min(520px, 92vw);
-  padding: 8px 14px; border-radius: 999px;
-  background: rgba(12, 20, 40, 0.66); border: 1px dashed rgba(143, 200, 255, 0.4);
-  color: rgba(215, 230, 255, 0.85); font-size: 0.72rem; backdrop-filter: blur(6px);
-}
-.mindspace-card {
-  position: absolute;
-  width: min(280px, 86vw);
-  pointer-events: auto;
-  padding: 11px 13px; border-radius: 14px;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  backdrop-filter: blur(14px); box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
-  color: #e6efff; z-index: 42;
-  animation: obs-fade 0.25s ease;
-}
-.mindspace-card-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-.mindspace-card-source { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.9; }
-.mindspace-card-close { margin-left: auto; background: none; border: none; color: inherit; cursor: pointer; opacity: 0.7; }
-.mindspace-card-text { margin: 0 0 5px; font-size: 0.85rem; line-height: 1.45; }
-.mindspace-card-meta { margin: 0 0 9px; font-size: 0.68rem; opacity: 0.75; }
-.mindspace-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-@media (prefers-reduced-motion: reduce) {
-  .beacon-readout, .visitor-chip, .scene-id-card, .mindspace-card { animation: none; }
-}
-/* IM-114: Recall scheduling context + reschedule feedback. */
-.rv-meta { font-size: 0.72rem; opacity: 0.65; margin-bottom: 10px; }
-.rv-feedback { font-size: 0.78rem; color: #b6ffcf; margin-bottom: 8px; }
-
-/* IM-115: rich search rows, recents, keyboard-active hit. */
-.search-recents { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 2px; }
-.search-recents-label { font-size: 0.7rem; opacity: 0.55; }
-.search-recent { font-size: 0.75rem; padding: 3px 9px; border-radius: 999px; }
-.search-hit { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; }
-.search-hit.active { outline: 1px solid var(--accent); background: rgba(122, 249, 255, 0.1); }
-.search-hit-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.search-hit-label { font-weight: 600; }
-.search-hit-title { font-size: 0.72rem; opacity: 0.75; font-style: italic; }
-.search-hit-snippet { font-size: 0.75rem; opacity: 0.7; overflow: hidden; }
-.search-hit-meta { font-size: 0.68rem; opacity: 0.55; }
-
-/* IM-116/117: Ingest file import, separated error surface, created preview. */
-.ingest.drag-over { outline: 2px dashed var(--accent); outline-offset: -6px; }
-.ingest-error { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 0.8rem; color: #ffb3b3; background: rgba(255, 90, 90, 0.12); border: 1px solid rgba(255, 120, 120, 0.4); }
-.ingest-created { margin-top: 8px; font-size: 0.8rem; }
-.ingest-created-label { opacity: 0.65; }
-.ingest-created-list { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
-
-/* IM-118: Lenses kinds/tags builder controls + live preview count. */
-.lens-chipblock { display: flex; flex-direction: column; gap: 4px; }
-.lens-chipblock-label { font-size: 11px; opacity: 0.8; }
-.lens-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.lens-preview { font-size: 12px; color: #7af9ff; margin: 2px 0 0; }
-
-/* IM-120: Connections gets its OWN chrome (it reused Settings' classes and
-   visually WAS Settings) + score/age, context preview, undo and bulk bars. */
-.connections-overlay { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6, 8, 20, 0.62); backdrop-filter: blur(4px); animation: obs-fade 0.25s ease both; }
-.connections-card { width: min(94vw, 460px); max-height: 88vh; overflow-y: auto; background: rgba(14, 12, 34, 0.97); border: 1px solid rgba(150, 134, 255, 0.35); border-radius: 16px; box-shadow: 0 16px 56px rgba(0, 0, 0, 0.6); padding: 18px 18px 22px; animation: obs-rise 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.1) both; }
-.connections-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.connections-head h2 { margin: 0; font-size: 1.15rem; }
-.connections-close { background: none; border: none; color: #aebbd6; font-size: 22px; cursor: pointer; padding: 4px 8px; }
-.connections-close:hover { color: #fff; }
-.connections-section { margin-top: 16px; }
-.connections-section h3 { margin: 0 0 10px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #cbbcff; }
-.connections-note { color: #cdd8ee; }
-.cand-meta { display: flex; gap: 10px; font-size: 0.72rem; margin-top: 4px; }
-.cand-score { color: #7af9ff; font-weight: 700; }
-.cand-age { opacity: 0.6; }
-.cand-preview { font-size: 0.76rem; opacity: 0.85; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 6px 9px; margin: 6px 0; }
-.cand-preview p { margin: 3px 0; }
-.cand-undo, .cand-bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.78rem; padding: 7px 9px; border-radius: 8px; background: rgba(150, 134, 255, 0.12); border: 1px solid rgba(150, 134, 255, 0.3); margin-bottom: 8px; }

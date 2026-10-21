@@ -157,6 +157,19 @@ export const BOOTSTRAP_SQL = `
       last_digest_date TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- Telegram TTS (Phase D): synthesized voice-note audio, cached by a hash of
+    -- (voice, model, prosody, normalized text) so an unchanged reply is NEVER
+    -- re-synthesized — replays are free even after a restart, and cached
+    -- replies still play when the provider quota is exhausted. Global (not
+    -- per-space): the key is content-derived and contains no user data beyond
+    -- the reply text itself, which is Soumaya's own output.
+    CREATE TABLE IF NOT EXISTS tts_audio_cache (
+      cache_key TEXT PRIMARY KEY,
+      audio BLOB NOT NULL,
+      content_type TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
     -- Append-only, versioned lore per object (memory/ship/station/beacon).
     CREATE TABLE IF NOT EXISTS lore (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,14 +243,6 @@ export const BOOTSTRAP_SQL = `
       ends_at TEXT
     );
     CREATE INDEX IF NOT EXISTS undertakings_space_idx ON undertakings(space_id, status);
-    -- Streak day history (IM-64): one row per space-local day the brain was tended,
-    -- recorded by StreakRepo.touch() so the Soumaya tab's consistency view can be
-    -- built on real streak data instead of the agent-log feed. Additive only.
-    CREATE TABLE IF NOT EXISTS streak_days (
-      space_id TEXT NOT NULL,
-      day TEXT NOT NULL,
-      PRIMARY KEY (space_id, day)
-    );
     -- The Daily Contact: her one question/discovery per brain per day, persisted
     -- so it stays stable across reloads; answered flips when the user replies.
     CREATE TABLE IF NOT EXISTS daily_contact (
@@ -372,25 +377,6 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS codex_disc_key ON codex_discoveries(space_id, key);
-
-    -- Server-backed Inbox notifications (IM-74). One row per real away-event
-    -- (digest delivered, insight created, discovery charted, bill-risk warning).
-    -- Retention (Q7 interim default): rows persist until the user clears them;
-    -- the repository drops only the oldest past a high disclosed cap.
-    CREATE TABLE IF NOT EXISTS inbox_notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      space_id TEXT NOT NULL DEFAULT 'legacy',
-      source TEXT NOT NULL,
-      text TEXT NOT NULL,
-      icon TEXT NOT NULL DEFAULT '🔔',
-      priority TEXT NOT NULL DEFAULT 'normal',
-      dedupe_key TEXT,
-      seen_at TEXT,
-      snoozed_until TEXT,
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-    CREATE INDEX IF NOT EXISTS inbox_notifications_space_idx ON inbox_notifications(space_id, id);
-    CREATE UNIQUE INDEX IF NOT EXISTS inbox_notifications_dedupe_idx ON inbox_notifications(space_id, dedupe_key);
 
     -- Financial OS (Stage 1a). Money is INTEGER cents. Every table space-scoped.
     CREATE TABLE IF NOT EXISTS fin_account (
@@ -620,19 +606,6 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS journey_link_space_idx ON journey_link(space_id, journey_id);
     CREATE UNIQUE INDEX IF NOT EXISTS journey_link_unique ON journey_link(space_id, journey_id, kind, ref_id);
-
-    -- Living Galaxy (IM-140): a durable record that a journey-linked mission
-    -- (an action node) was completed, so Journey progress can be auto-credited
-    -- from completed missions even after the action node itself is deleted.
-    CREATE TABLE IF NOT EXISTS journey_mission_completions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      space_id TEXT NOT NULL DEFAULT 'legacy',
-      journey_id INTEGER NOT NULL,
-      task_ref_id INTEGER NOT NULL,
-      completed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS journey_mission_completions_unique
-      ON journey_mission_completions(space_id, journey_id, task_ref_id);
 
     -- Maya Intelligence — clarification lifecycle (docs/specs/maya-intelligence-architecture.md,
     -- Part I2). The ONE piece of intelligence-originated persistence this feature introduces —
@@ -963,4 +936,20 @@ export const BOOTSTRAP_SQL = `
       attempts INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (space_id, consolidated_id, stated_id)
     );
+
+    -- Web push (Immersion Round 3, CL3): one row per browser PushSubscription.
+    -- endpoint is globally UNIQUE (a subscription belongs to exactly one push
+    -- service endpoint); re-subscribing upserts keys + owning space. Dead
+    -- endpoints (send returns 404/410) are pruned by the send path. Identical
+    -- DDL runs in db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_subscriptions_space_idx ON push_subscriptions(space_id);
 `;
