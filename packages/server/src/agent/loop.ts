@@ -5,7 +5,7 @@ import { soulTextFor } from "../identity.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 import { AGENT_TOOLS } from "./tools/registry.js";
 import { validateArgs } from "./tools/validation.js";
-import { getPreferences, spaceTimezone, validateTimezone, DEFAULT_PREFS } from "./notify/policy.js"; // space timezone sources (quiet hours/digest + the sweep's shared resolver)
+import { resolveAgentTimezone } from "./notify/policy.js"; // E2/E7: the shared timezone resolution chain (preferences → stored space_meta → sweep resolver → null)
 import { buildCompanionContext } from "../chat/companionContext.js"; // Phase 0 parity: shared context builder
 import { composeUserModelBlock } from "./userModel.js"; // W2: user-model context block (§7.2)
 import { maybeRecordStated } from "./userModel.js"; // W2: stated-write trigger (§4.8)
@@ -196,54 +196,12 @@ export async function maybeConfirmPending(
   return "I tried, but it didn't go through. Try again in a moment.";
 }
 
-/**
- * E2 — resolve the timezone that grounds this turn's "now" (owner rule:
- * time grounding is ALWAYS the space's own zone; UTC is never a silent
- * fallback, and neither is an assumed zone when storage itself failed).
- *
- * Chain — precedence follows the sweep's shared resolver (stored zone
- * first, then the shared default):
- *  1. `getPreferences()` — the space's stored zone, or the shared default
- *     (DEFAULT_PREFS.timezone) when the space has none set and storage is
- *     reachable. This is exactly the value the shared resolver returns on
- *     the happy path.
- *  2. A direct single-column read of the stored `space_meta.timezone` —
- *     survives a failure of the wider preferences read (e.g. a lagging
- *     preferences column), so a preferences failure ALONE can no longer
- *     lose the stored zone (pre-fix it landed on the UTC rendering).
- *  3. The sweep's shared `spaceTimezone()` resolver — its signed-off
- *     default for a reachable-but-unset space whose reads above failed.
- * Returns null when no step yields a VALID zone — including when both
- * storage reads hard-failed (step 3's result is then the bare default, a
- * pure assumption rather than a resolution). The caller passes null to
- * composeSystem, which renders the time context as UNAVAILABLE for the
- * turn — never the UTC rendering.
- */
-export function resolveAgentTimezone(sqlite: AppContext["handle"]["sqlite"], spaceId: string): string | null {
-  let prefsThrew = false;
-  try {
-    const tz = getPreferences(sqlite, spaceId).timezone;
-    if (tz && validateTimezone(tz)) return tz;
-  } catch {
-    prefsThrew = true;
-  }
-  let storedThrew = false;
-  try {
-    const row = sqlite
-      .prepare(`SELECT timezone FROM space_meta WHERE space_id = ?`)
-      .get(spaceId) as { timezone?: unknown } | undefined;
-    const tz = typeof row?.timezone === "string" ? row.timezone : undefined;
-    if (tz && validateTimezone(tz)) return tz;
-  } catch {
-    storedThrew = true;
-  }
-  const resolved = spaceTimezone(sqlite, spaceId);
-  if (resolved && validateTimezone(resolved)) {
-    if (prefsThrew && storedThrew && resolved === DEFAULT_PREFS.timezone) return null;
-    return resolved;
-  }
-  return null;
-}
+// E2's resolveAgentTimezone lives in the shared timezone module
+// (agent/notify/policy.ts) since Package E7 — the web chat path resolves
+// through the same chain, so the implementation moved to its natural home
+// beside getPreferences/spaceTimezone. Re-exported here so this module's
+// existing importers (tests, E2 call sites) keep their path.
+export { resolveAgentTimezone } from "./notify/policy.js";
 
 export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
   const { ctx, spaceId, principal, now } = input;

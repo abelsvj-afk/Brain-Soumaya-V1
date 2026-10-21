@@ -134,6 +134,58 @@ export function spaceTimezone(sqlite: RawDb, spaceId: string): string {
   }
 }
 
+/**
+ * Resolve the timezone that grounds a conversational turn's "now" (owner
+ * rule: time grounding is ALWAYS the space's own zone; UTC is never a
+ * silent fallback, and neither is an assumed zone when storage itself
+ * failed). Built for the agent loop in Package E2 and shared with the web
+ * chat path in Package E7 — both channels resolve through this one chain.
+ *
+ * Chain — precedence follows the shared resolver (stored zone first, then
+ * the shared default):
+ *  1. `getPreferences()` — the space's stored zone, or the shared default
+ *     (DEFAULT_PREFS.timezone) when the space has none set and storage is
+ *     reachable. This is exactly the value the shared resolver returns on
+ *     the happy path.
+ *  2. A direct single-column read of the stored `space_meta.timezone` —
+ *     survives a failure of the wider preferences read (e.g. a lagging
+ *     preferences column), so a preferences failure ALONE can no longer
+ *     lose the stored zone (pre-fix both chat paths landed on the UTC
+ *     rendering).
+ *  3. The shared `spaceTimezone()` resolver — its signed-off default for a
+ *     reachable-but-unset space whose reads above failed.
+ * Returns null when no step yields a VALID zone — including when both
+ * storage reads hard-failed (step 3's result is then the bare default, a
+ * pure assumption rather than a resolution). Callers pass null to
+ * composeSystem, which renders the time context as UNAVAILABLE for the
+ * turn — never the UTC rendering.
+ */
+export function resolveAgentTimezone(sqlite: RawDb, spaceId: string): string | null {
+  let prefsThrew = false;
+  try {
+    const tz = getPreferences(sqlite, spaceId).timezone;
+    if (tz && validateTimezone(tz)) return tz;
+  } catch {
+    prefsThrew = true;
+  }
+  let storedThrew = false;
+  try {
+    const row = sqlite
+      .prepare(`SELECT timezone FROM space_meta WHERE space_id = ?`)
+      .get(spaceId) as { timezone?: unknown } | undefined;
+    const tz = typeof row?.timezone === "string" ? row.timezone : undefined;
+    if (tz && validateTimezone(tz)) return tz;
+  } catch {
+    storedThrew = true;
+  }
+  const resolved = spaceTimezone(sqlite, spaceId);
+  if (resolved && validateTimezone(resolved)) {
+    if (prefsThrew && storedThrew && resolved === DEFAULT_PREFS.timezone) return null;
+    return resolved;
+  }
+  return null;
+}
+
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export function validateTimezone(tz: string): boolean {

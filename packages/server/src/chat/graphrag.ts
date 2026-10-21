@@ -11,7 +11,7 @@ import { recordPreferenceSignal } from "../analysis/interactionPreferences.js";
 import { type ProactiveContextInput } from "../analysis/proactiveContext.js";
 import { buildNavigationCandidateList, resolveNavigationIntent } from "../analysis/galaxyEntity.js";
 import { JourneysRepo } from "../repositories/journeys.repo.js";
-import { getPreferences } from "../agent/notify/policy.js";
+import { resolveAgentTimezone } from "../agent/notify/policy.js";
 import { buildCompanionContext } from "./companionContext.js";
 import type { EmbeddingProvider } from "../embeddings/adapter.js";
 import type { AnswerResult, LlmProvider } from "../llm/adapter.js";
@@ -217,17 +217,18 @@ export async function chat(
     /* candidate list is best-effort; never break chat */
   }
 
-  // Date/time accuracy (audit gap #10): ground her sense of "now" in THIS
-  // space's timezone — the same space_meta.timezone quiet hours and the digest
-  // use. Without it the prompt's "now" is UTC-only and relative-date reasoning
-  // ("tomorrow", "yesterday") skews by hours, worst near the user's midnight.
-  // Best-effort: any read failure leaves the UTC fallback in place.
-  let timezone: string | undefined;
-  try {
-    timezone = getPreferences(h.sqlite, spaceId).timezone;
-  } catch {
-    timezone = undefined;
-  }
+  // Date/time accuracy (audit gap #10) + Package E7: ground her sense of
+  // "now" in THIS space's timezone — the same space_meta.timezone quiet
+  // hours and the digest use. Resolution goes through the SAME chain the
+  // agent loop got in E2 (resolveAgentTimezone: preferences → stored
+  // space_meta → the sweep's shared resolver → null): a preferences read
+  // failure can no longer fail-open to the UTC rendering — when no valid
+  // zone resolves, composeSystem grounds the turn with the explicit "local
+  // time unavailable" line instead. Happy path unchanged: the chain's
+  // first step returns exactly getPreferences().timezone when it is a
+  // valid zone, so the composed prompt is byte-identical to before (the
+  // Telegram-parity golden fixture pins that prompt).
+  const timezone: string | null = resolveAgentTimezone(h.sqlite, spaceId);
 
   const attachmentText =
     attachments && attachments.length > 0
