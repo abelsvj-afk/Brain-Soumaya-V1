@@ -369,6 +369,19 @@ LLM is optional: no key → heuristic mode. To enable, set `LLM_PROVIDER` +
 `GEMINI_API_KEY` / `OPENAI_API_KEY` as Fly secrets. Cloud providers degrade to the
 heuristic automatically on credit/quota errors (`ResilientLlmProvider`).
 
+
+## Approved architecture decision — global notification cap and per-space TTS cache
+
+**Decision record:** [ADR-018](./ADR-018-global-notification-cap-and-space-owned-tts-cache.md) — approved design, implementation not started.
+
+- The configured daily proactive cap is **global across Telegram and web push per space-local calendar day**. Every channel delivery consumes one slot; urgency bypasses quiet-hours deferral only, never the cap. Both outboxes must reserve/release from one transaction-safe shared ledger. Definite failures release a claim; successful and ambiguous outcomes retain it; deferred items do not reserve until eligible to send.
+- Cap-day calculations use the space's validated IANA timezone and a single captured decision time, not a UTC date slice or device timezone. Delivery retries revalidate the original due time, staleness, and urgency instead of trusting a persisted urgent bit.
+- TTS cache rows are **owned by one space**. Lookups/inserts use `space_id`; deletion of a space deletes only that space's audio within the same deletion transaction. Legacy unowned rows are purged during migration rather than guessed into a tenant. The cache retains its 500-row global bound.
+- TTS synthesis is described as **free while cached**, not “exactly once ever”; eviction, concurrent misses, and cache-write failure may cause later synthesis.
+- Fresh bootstrap and upgraded-volume migration must converge on the same schema and indexes. TTS and push remain disabled until implementation, full gate, and independent review pass; deployment is separate.
+
+This design decision does not authorize implementation, feature arming, merging, or deployment.
+
 ## Risks / technical-debt notes (from the code)
 
 - **Single-process assumptions**: the rate limiter, the in-memory job-claim
