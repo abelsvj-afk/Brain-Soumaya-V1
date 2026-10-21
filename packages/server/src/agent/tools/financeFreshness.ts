@@ -85,11 +85,17 @@ function buildFinanceFreshnessMessage(input: {
 export const financeFreshnessTool: Tool = {
   name: "finance_freshness",
   description:
-    "When manually-tracked income or net worth data has gone stale, nudge the user to update it so the Growth chart stays accurate. At most once a week.",
+    "Report how current the user's manually-tracked finance data is: when income was last logged and when net-worth accounts were last snapshotted, and whether either has gone stale. Call with NO arguments in conversation (\"is my finance data up to date?\") — freshness is computed fresh. (The router's detector-shaped call, carrying incomeStale/assetStale, still works exactly as before.)",
   parameters: {
     type: "object",
-    properties: { incomeDays: { type: "number" }, assetDays: { type: "number" } },
+    properties: {
+      incomeDays: { type: "number", description: "Router-internal; omit in conversation." },
+      assetDays: { type: "number", description: "Router-internal; omit in conversation." },
+      incomeStale: { type: "boolean", description: "Router-internal; omit in conversation." },
+      assetStale: { type: "boolean", description: "Router-internal; omit in conversation." },
+    },
     required: [],
+    additionalProperties: false,
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
@@ -127,6 +133,38 @@ export const financeFreshnessTool: Tool = {
   },
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+    // Telegram Parity Phase 4 — conversational path: the router's call is
+    // the only one carrying the stale flags (detect() computed them). A
+    // conversation call computes freshness FRESH from the same repos and
+    // thresholds detect() uses — read-only, no notify, no weekly cooldown
+    // (the user asked explicitly). Router path below is unchanged.
+    if (typeof args.incomeStale !== "boolean" && typeof args.assetStale !== "boolean") {
+      const lastIncome = new FinIncomeRepo(tc.ctx.handle, tc.spaceId).mostRecentDate();
+      const incomeDays = lastIncome ? daysSince(lastIncome, tc.now) : null;
+      const hasAssets = new FinAssetRepo(tc.ctx.handle, tc.spaceId).listAll().length > 0;
+      const lastSnapshot = hasAssets ? new FinAssetSnapshotRepo(tc.ctx.handle, tc.spaceId).mostRecentAny() : null;
+      const assetDays = lastSnapshot ? daysSince(lastSnapshot.asOf, tc.now) : null;
+      const lines = ["FINANCE FRESHNESS (exact, from the finance records — report as-is):"];
+      if (lastIncome === null) {
+        lines.push("  - Income: no income has ever been recorded, so there is nothing to be stale.");
+      } else {
+        const stale = incomeDays != null && incomeDays > INCOME_STALE_DAYS;
+        lines.push(`  - Income: last logged ${lastIncome} (${incomeDays} day(s) ago) — ${stale ? `STALE (over the ${INCOME_STALE_DAYS}-day freshness bar).` : "current."}`);
+      }
+      if (!hasAssets) {
+        lines.push("  - Net worth: no accounts/assets are tracked, so there is nothing to be stale.");
+      } else if (!lastSnapshot) {
+        lines.push("  - Net worth: accounts exist but no balance snapshot has ever been logged — STALE (nothing current to chart).");
+      } else {
+        const stale = assetDays != null && assetDays > ASSET_STALE_DAYS;
+        lines.push(`  - Net worth: last snapshot ${lastSnapshot.asOf} (${assetDays} day(s) ago) — ${stale ? `STALE (over the ${ASSET_STALE_DAYS}-day freshness bar).` : "current."}`);
+      }
+      return {
+        ok: true,
+        summary: "finance_freshness (conversational): freshness reported",
+        message: lines.join("\n"),
+      };
+    }
     const incomeStale = !!args.incomeStale;
     const assetStale = !!args.assetStale;
     const incomeDays = Number(args.incomeDays ?? 0);

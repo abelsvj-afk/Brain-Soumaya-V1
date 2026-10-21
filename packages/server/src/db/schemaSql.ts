@@ -170,6 +170,22 @@ export const BOOTSTRAP_SQL = `
       filename TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- Telegram open-ended notes (parity Phase 3): the DURABLE draft behind the
+    -- /note → append-verbatim → /done flow. One open draft per (space, chat);
+    -- text is the accumulated verbatim note (parts joined by one newline),
+    -- stored in the DB — never an in-memory map — so a dictated note survives
+    -- a server restart/redeploy. Identical DDL runs in migrateSchema
+    -- (db/client.ts); keep the two in sync.
+    CREATE TABLE IF NOT EXISTS telegram_note_drafts (
+      space_id TEXT NOT NULL,
+      chat_id INTEGER NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      part_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, chat_id)
+    );
+    CREATE INDEX IF NOT EXISTS telegram_note_drafts_space_idx ON telegram_note_drafts(space_id);
     -- Append-only, versioned lore per object (memory/ship/station/beacon).
     CREATE TABLE IF NOT EXISTS lore (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -992,4 +1008,34 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE INDEX IF NOT EXISTS push_subscriptions_space_idx ON push_subscriptions(space_id);
+
+    -- Web push policy deferral (Immersion Round 3 follow-up, owner decision
+    -- 2026-10-21): pushes the Phase-2 notification policy defers (quiet
+    -- hours / daily cap) wait here and are drained by the router tick —
+    -- deferred, never dropped. Lifecycle mirrors notification_outbox
+    -- (pending -> sending -> sent/failed/dropped/ambiguous) on its own rows
+    -- so the Telegram outbox and its accounting stay untouched. Identical
+    -- DDL runs in db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS push_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      push_key TEXT NOT NULL UNIQUE,
+      space_id TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      occurrence_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      url TEXT NOT NULL DEFAULT '/',
+      status TEXT NOT NULL DEFAULT 'pending',
+      is_urgent INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      deliver_after TEXT NOT NULL,
+      cap_day TEXT,
+      send_started_at TEXT,
+      claimed_by TEXT,
+      claimed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS push_outbox_pending_idx ON push_outbox(status, deliver_after);
 `;

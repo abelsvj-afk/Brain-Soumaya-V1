@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { linkEnd, linkKey, LINK_LOD_MIN, LINK_LOD_ZOOM, LINK_LOD_CUTOFF, isNodeCacheEntryValid, shouldApplyPixelRatio, highlightMaterialState, computeGlowFar, pickNearestIds } from "./graph3dHelpers.js";
+import { linkEnd, linkKey, LINK_LOD_MIN, LINK_LOD_ZOOM, LINK_LOD_CUTOFF, isNodeLit, isNodeCacheEntryValid, shouldApplyPixelRatio, highlightMaterialState, computeGlowFar, pickNearestIds } from "./graph3dHelpers.js";
 
 /** Locks the pure Graph3D helpers extracted in D4. (updateFigurine/disposeObject3D
  *  need a WebGL/GLTF context, so they're exercised by the app, not here.) */
@@ -230,5 +230,42 @@ describe("graph3dHelpers — pickNearestIds (bounded full-fidelity population)",
 
   it("handles an empty candidate list", () => {
     expect(pickNearestIds([], 12, none).size).toBe(0);
+  });
+});
+
+describe("graph3dHelpers — isNodeLit (galaxy fluidity: ref-delivered selection gate)", () => {
+  // The predicate Graph3D's isLit closure used to compute inline; extracted
+  // so the []-stable linkWidthCb can evaluate it against (activeIdRef,
+  // adjacencyRef) with identical outcomes. Truth table pinned here.
+  const adj = new Map<number, Set<number>>([
+    [5, new Set([7, 8])],
+    [7, new Set([5])],
+    [8, new Set([5])],
+  ]);
+
+  it("no active node → everything is lit", () => {
+    expect(isNodeLit(5, null, adj)).toBe(true);
+    expect(isNodeLit(999, null, adj)).toBe(true);
+    expect(isNodeLit(999, null, new Map())).toBe(true);
+  });
+
+  it("the active node itself is lit", () => {
+    expect(isNodeLit(5, 5, adj)).toBe(true);
+  });
+
+  it("direct neighbors of the active node are lit", () => {
+    expect(isNodeLit(7, 5, adj)).toBe(true);
+    expect(isNodeLit(8, 5, adj)).toBe(true);
+    expect(isNodeLit(5, 7, adj)).toBe(true);
+  });
+
+  it("non-neighbors are not lit", () => {
+    expect(isNodeLit(8, 7, adj)).toBe(false);
+    expect(isNodeLit(999, 5, adj)).toBe(false);
+  });
+
+  it("an active node with no adjacency entry lights only itself", () => {
+    expect(isNodeLit(42, 42, adj)).toBe(true);
+    expect(isNodeLit(5, 42, adj)).toBe(false);
   });
 });

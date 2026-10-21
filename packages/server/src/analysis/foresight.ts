@@ -1,5 +1,28 @@
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+import { localDayInZone } from "../lib/time.js";
+
+/**
+ * Calendar parts of an instant in the SPACE's timezone (owner rule
+ * 2026-10-21: weekday / day-of-month / month patterns describe the user's
+ * own lived calendar, never the UTC calendar — a memory logged Monday
+ * evening in Florida is a Monday memory, even though its stored timestamp
+ * already reads Tuesday in UTC). The local date string is anchored at UTC
+ * noon so weekday derivation can never shift a day.
+ */
+function localParts(ms: number, tz: string): { dom: number; weekday: number; monthKey: string; weekKey: string } {
+  const day = localDayInZone(ms, tz); // YYYY-MM-DD in the space's zone
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const anchored = new Date(`${day}T12:00:00Z`);
+  const week = Math.floor((d + 6) / 7) + (m - 1) * 5; // coarse week bucket, as before
+  return {
+    dom: d,
+    weekday: anchored.getUTCDay(),
+    monthKey: `${y}-${m - 1}`,
+    weekKey: `${y}-${week}`,
+  };
+}
 
 /**
  * Foresight (Level 2, B3) — the step from DESCRIBING the past to CALLING the next
@@ -44,24 +67,19 @@ export function detectForesight(h: DbHandle, spaceId: string = DEFAULT_SPACE): F
     .all(spaceId) as { ts: string }[];
   if (rows.length < 4) return null;
 
+  const tz = spaceTimezone(h.sqlite, spaceId);
   const mems: DatedMem[] = [];
   for (const r of rows) {
     const ms = parseTs(r.ts);
     if (Number.isNaN(ms)) continue;
-    const d = new Date(ms);
-    const y = d.getUTCFullYear();
-    const week = Math.floor((d.getUTCDate() + 6) / 7) + d.getUTCMonth() * 5; // coarse week bucket
-    mems.push({
-      dom: d.getUTCDate(),
-      weekday: d.getUTCDay(),
-      monthKey: `${y}-${d.getUTCMonth()}`,
-      weekKey: `${y}-${week}`,
-    });
+    mems.push(localParts(ms, tz));
   }
 
   const now = new Date();
-  const todayDom = now.getUTCDate();
-  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  const nowParts = localParts(now.getTime(), tz);
+  const todayDom = nowParts.dom;
+  const [nowY, nowM] = nowParts.monthKey.split("-").map(Number) as [number, number];
+  const daysInMonth = new Date(Date.UTC(nowY, nowM + 1, 0)).getUTCDate();
 
   // --- Monthly window: negatives clustering in the same ±3-day day-of-month band
   // across ≥2 distinct months. ---
@@ -105,7 +123,7 @@ export function detectForesight(h: DbHandle, spaceId: string = DEFAULT_SPACE): F
     }
   }
   if (worst) {
-    const todayW = now.getUTCDay();
+    const todayW = nowParts.weekday;
     let inDays = (worst.weekday - todayW + 7) % 7;
     if (inDays <= 2) {
       return {

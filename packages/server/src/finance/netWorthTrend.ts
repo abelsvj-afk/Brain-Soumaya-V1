@@ -4,6 +4,8 @@ import type { NetWorthPoint } from "@brain/shared";
 import { FinAccountRepo } from "../repositories/finAccount.repo.js";
 import { FinAssetRepo } from "../repositories/finAsset.repo.js";
 import { FinAssetSnapshotRepo } from "../repositories/finAssetSnapshot.repo.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+import { localMonthInZone } from "../lib/time.js";
 
 /**
  * Net worth trend (docs/specs/income-net-worth-trend.md) — cash (fin_account) + every
@@ -18,20 +20,24 @@ import { FinAssetSnapshotRepo } from "../repositories/finAssetSnapshot.repo.js";
  * rather than presenting fabricated history as fact; the current month's point uses today's
  * genuinely-current balance, so it is not "projected."
  */
-function monthEnds(months: number, now: Date): string[] {
+function monthEnds(months: number, anchorY: number, anchorM: number): string[] {
   const out: string[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    out.push(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0)).toISOString().slice(0, 10));
+    out.push(new Date(Date.UTC(anchorY, anchorM - i + 1, 0)).toISOString().slice(0, 10));
   }
   return out;
 }
 
 export function netWorthSeries(handle: DbHandle, spaceId: string = DEFAULT_SPACE, months = 12, now: Date = new Date()): NetWorthPoint[] {
-  const ends = monthEnds(Math.max(1, months), now);
+  // The current month is the SPACE-local month of `now` (owner rule
+  // 2026-10-21), so "this month's point is real, earlier ones are
+  // projected" flips on the user's own month boundary.
+  const currentMonthKey = localMonthInZone(now.getTime(), spaceTimezone(handle.sqlite, spaceId));
+  const [anchorY, anchorM] = currentMonthKey.split("-").map(Number) as [number, number];
+  const ends = monthEnds(Math.max(1, months), anchorY, anchorM - 1);
   const account = new FinAccountRepo(handle, spaceId).getOrCreate();
   const assets = new FinAssetRepo(handle, spaceId).listAll();
   const snapshotRepo = new FinAssetSnapshotRepo(handle, spaceId);
-  const currentMonthKey = now.toISOString().slice(0, 7);
 
   return ends.map((asOf) => {
     let assetsTotal = 0;

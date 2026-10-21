@@ -1,5 +1,6 @@
 import type { GraphNode, EpistemicStatus, ProvenanceRef } from "@brain/shared";
-import { parseTolerantMs } from "../lib/time.js";
+import { parseTolerantMs, localDayInZone } from "../lib/time.js";
+import { DEFAULT_PREFS } from "../agent/notify/policy.js";
 
 /**
  * Direction-of-currency resolver (docs/specs/maya-longitudinal-intelligence.md, Phase A). The
@@ -59,7 +60,7 @@ const MIN_CONFIDENT_GAP_MS = 60_000; // 1 minute — generous relative to normal
  * `"observation"`) stays unchanged; this resolver only ever adds a stronger label, never removes
  * or downgrades one, and never promotes anything to `"confirmed"`.
  */
-export function resolveSupersession(a: GraphNode, b: GraphNode, kind: SupersessionKind): SupersessionResult | null {
+export function resolveSupersession(a: GraphNode, b: GraphNode, kind: SupersessionKind, tz: string = DEFAULT_PREFS.timezone): SupersessionResult | null {
   const ta = timeOf(a);
   const tb = timeOf(b);
   if (!Number.isFinite(ta) || !Number.isFinite(tb)) return null;
@@ -67,7 +68,9 @@ export function resolveSupersession(a: GraphNode, b: GraphNode, kind: Supersessi
 
   const [older, newer] = ta < tb ? [a, b] : [b, a];
   const status: SupersessionResult["status"] = kind === "contradiction" ? "contradicted" : "outdated";
-  const dateLabel = new Date(Math.max(ta, tb)).toISOString().slice(0, 10);
+  // The reason text is user-facing: the date is the SPACE-local calendar date
+  // of the newer statement (owner rule 2026-10-21), never its UTC date.
+  const dateLabel = localDayInZone(Math.max(ta, tb), tz);
 
   return {
     current: { domain: "memory", kind: "node", id: newer.id, label: newer.label },

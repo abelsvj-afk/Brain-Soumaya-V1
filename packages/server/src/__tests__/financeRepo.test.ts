@@ -105,7 +105,7 @@ describe("getBudgetSummary — end to end", () => {
     bills.create({ name: "Phone", amountCents: 7000, frequency: "monthly", anchorDate: "2026-01-16" });
 
     // now = Sat 2026-01-10; cadence 30 → horizon ~2026-02-09, so all four Jan bills reserve.
-    const b = getBudgetSummary(handle, spaceId, new Date("2026-01-10T00:00:00Z"), 30);
+    const b = getBudgetSummary(handle, spaceId, new Date("2026-01-10T12:00:00Z"), 30); // midday UTC = Sat Jan 10 in Florida too
     expect(b.reservedCents).toBe(113000);
     expect(b.safeToSpendCents).toBe(1000);
     expect(b.shortfallCents).toBe(0);

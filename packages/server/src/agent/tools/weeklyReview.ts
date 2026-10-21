@@ -78,8 +78,8 @@ function heuristicDigest(mems: WeekMem[]): string {
 export const weeklyReviewTool: Tool = {
   name: "weekly_review",
   description:
-    "Once a week, compose a short reflective digest of the past 7 days (count, mood, a standout memory) and deliver it. At most one per week.",
-  parameters: { type: "object", properties: {}, required: [] },
+    "Compose a short reflective review of the user's past 7 days (how many moments they logged, the mood running through them, a standout memory). Call with NO arguments in conversation when the user asks for their weekly review / a look back at their week. (Also fires proactively via the router at most once per week.)",
+  parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
 
   detect(tc: ToolContext): ToolInvocation[] {
     // Rate-limit: at most one weekly review in any rolling 7-day window.

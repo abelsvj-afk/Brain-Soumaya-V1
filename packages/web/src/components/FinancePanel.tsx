@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FinBill, BillFrequency, FinIncome, FinExpense, FinPaystub, PaystubExtractionResult, PaystubLineItem, FinAsset, FinAssetKind, FinAssetSnapshot, IncomePoint, NetWorthPoint } from "@brain/shared";
 import type { FinExtractionResult } from "@brain/shared";
 import { useCountUp } from "../hooks/useCountUp.js";
+import { spaceLocalDay } from "../utils/localDay.js";
 import {
   getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, patchBill, deleteBill, markOccurrencePaid, listBills,
   ingestPaste, ingestImage, confirmIngest,
@@ -59,7 +60,9 @@ const toCents = (s: string): number | null => {
   const n = parseFloat(String(s).replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 };
-const today = (): string => new Date().toISOString().slice(0, 10);
+/** The user's own local calendar day (owner rule 2026-10-21) — form defaults
+ *  for income/expense/paystub dates are the day the user is actually in. */
+const today = (): string => spaceLocalDay();
 
 /** Shared body, rendered both embedded in RightDock's Money tab and inside
  *  FinanceFullscreen.tsx — mirrors WealthPanel/WealthFullscreen's split exactly. Only

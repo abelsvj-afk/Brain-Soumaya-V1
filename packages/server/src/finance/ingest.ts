@@ -12,6 +12,7 @@ import { FinCategoryOverrideRepo } from "../repositories/finCategoryOverride.rep
 import { FinPaystubRepo } from "../repositories/finPaystub.repo.js";
 import { categorize } from "./categorize.js";
 import { getBudgetSummary } from "./summary.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
 
 /**
  * Ingestion pipeline (Stage 1b) — paste text → retained source → DRAFT candidates → (user
@@ -20,9 +21,12 @@ import { getBudgetSummary } from "./summary.js";
  * docs/financial-os/architecture.md §3.
  */
 
-/** A default day for a candidate that carried no parseable date. */
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
+/** A default day for a candidate that carried no parseable date: the
+ *  SPACE's local calendar day (owner rule 2026-10-21) — an entry logged in
+ *  the user's evening is dated that evening's day, never tomorrow's UTC
+ *  date. */
+function today(handle: DbHandle, spaceId: string): string {
+  return localDay(new Date(), spaceTimezone(handle.sqlite, spaceId));
 }
 
 /** Categorize expenses (learned overrides + rules) + flag likely duplicates against the DB. */
@@ -32,12 +36,12 @@ function annotate(handle: DbHandle, spaceId: string, raw: FinExtractionResult): 
   const expenseRepo = new FinExpenseRepo(handle, spaceId);
   const incomes: ExtractedIncome[] = raw.incomes.map((i) => ({
     ...i,
-    duplicate: !!incomeRepo.findDuplicate(i.date ?? today(), i.netCents),
+    duplicate: !!incomeRepo.findDuplicate(i.date ?? today(handle, spaceId), i.netCents),
   }));
   const expenses: ExtractedExpense[] = raw.expenses.map((e) => ({
     ...e,
     category: categorize(e.merchant, overrides.get(e.merchant ?? "")),
-    duplicate: !!expenseRepo.findDuplicate(e.date ?? today(), e.amountCents, e.merchant ?? null),
+    duplicate: !!expenseRepo.findDuplicate(e.date ?? today(handle, spaceId), e.amountCents, e.merchant ?? null),
   }));
   return { incomes, expenses, provider: raw.provider };
 }
@@ -119,13 +123,13 @@ export function confirmIngest(
 
   const tx = handle.sqlite.transaction(() => {
     for (const i of input.incomes) {
-      const date = (i.date ?? today()).slice(0, 10);
+      const date = (i.date ?? today(handle, spaceId)).slice(0, 10);
       incomeRepo.create({ date, netCents: i.netCents, platform: i.platform ?? null, sourceId: source.id, confidence: 1 });
       account.adjustBalance(i.netCents);
       committed++;
     }
     for (const e of input.expenses) {
-      const date = (e.date ?? today()).slice(0, 10);
+      const date = (e.date ?? today(handle, spaceId)).slice(0, 10);
       const dir = e.direction ?? "out";
       expenseRepo.create({ date, amountCents: e.amountCents, category: e.category, direction: dir, merchant: e.merchant ?? null, sourceId: source.id, confidence: 1 });
       account.adjustBalance(dir === "out" ? -e.amountCents : e.amountCents);
@@ -200,7 +204,7 @@ export function confirmPaystub(
   const incomeRepo = new FinIncomeRepo(handle, spaceId);
   const account = new FinAccountRepo(handle, spaceId);
   const paystubRepo = new FinPaystubRepo(handle, spaceId);
-  const date = (input.payDate ?? today()).slice(0, 10);
+  const date = (input.payDate ?? today(handle, spaceId)).slice(0, 10);
   const taxCents = input.deductions.reduce((s, d) => s + (d.amountCents || 0), 0);
 
   const tx = handle.sqlite.transaction(() => {

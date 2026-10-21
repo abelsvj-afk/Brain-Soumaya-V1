@@ -5,6 +5,7 @@ import { setTelegramWebhook, sendDailyDigests, tgSend } from "./telegram/bot.js"
 import { TelegramLinksRepo } from "./telegram/links.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
+import { sweepPendingPushes } from "./push/outbox.js";
 import { captureEpisode } from "./agent/episodic.js"; // W2: job_run capture (§5.1)
 import { selectJob, executeJob, researchEnabled } from "./maintenance/agent.js";
 import { nextAutonomyBatch } from "./maintenance/autonomyBatch.js";
@@ -28,6 +29,7 @@ import { rollPastEvents } from "./analysis/future.js";
 import { stepDrives } from "./analysis/drives.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
 import { EconomyRepo } from "./economy.js";
+import { spaceTimezone, localDay } from "./agent/notify/policy.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -216,6 +218,19 @@ setInterval(() => {
           console.log(`[notify] sweep: ${sweep.sent} sent, ${sweep.ambiguous} ambiguous`);
         }
       }
+      // Web push (Round 3 policy follow-up): drain policy-deferred pushes
+      // on the same tick — deliberately OUTSIDE the tgToken gate above, so
+      // push-only brains (no Telegram configured) still receive pushes
+      // the policy held back for quiet hours / the daily cap. Strict
+      // no-op when VAPID is unconfigured.
+      try {
+        const pushSweep = await sweepPendingPushes(ctx.handle, { workerId: `push-sweep-${process.pid}` });
+        if (pushSweep.sent > 0 || pushSweep.ambiguous > 0) {
+          console.log(`[push] sweep: ${pushSweep.sent} sent, ${pushSweep.ambiguous} ambiguous`);
+        }
+      } catch (err) {
+        console.error("[push] sweep error:", err);
+      }
     } catch (err) {
       console.error("[tools] router sweep error:", err);
     }
@@ -273,11 +288,11 @@ if (process.env.AUTONOMY !== "off") {
         } catch (e) {
           console.error("[autonomy] constellation reconcile failed:", e);
         }
-        // Dream cycle (Level 2): once per UTC day per brain, consolidate the densest
+        // Dream cycle (Level 2): once per SPACE-local day per brain, consolidate the densest
         // cluster into a durable belief. LLM when Research Mode + budget allow (counts
         // toward the paid ceiling); otherwise a free offline template. Additive-only.
         try {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
           const dreamt = ctx.handle.sqlite
             .prepare(`SELECT last_dream_date FROM space_meta WHERE space_id = ?`)
             .get(spaceId) as { last_dream_date: string | null } | undefined;

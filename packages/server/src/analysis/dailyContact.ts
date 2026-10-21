@@ -5,6 +5,7 @@ import { EdgesRepo } from "../repositories/edges.repo.js";
 import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../economy.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
 import { detectForesight } from "./foresight.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
 
 /**
  * The Daily Contact — once a day SOUMAYA initiates. She prepares the single most
@@ -38,7 +39,12 @@ export interface DailyContact {
   answered: boolean;
 }
 
-const today = (): string => new Date().toISOString().slice(0, 10);
+/** The SPACE's local calendar date (owner rule 2026-10-21: the daily
+ *  question rolls over at the user's own midnight, never UTC midnight).
+ *  Timezone from space_meta via the notify layer — the same source as
+ *  quiet hours, the digest, and the streak. */
+const today = (ctx: AppContext, spaceId: string): string =>
+  localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
 
 /** Pick the most valuable question she could ask right now (deterministic ladder). */
 function pickQuestion(ctx: AppContext, spaceId: string): DailyContact["question"] {
@@ -148,7 +154,7 @@ function pickDiscovery(ctx: AppContext, spaceId: string): DailyContact["discover
  */
 export function getDailyContact(ctx: AppContext, spaceId: string): DailyContact {
   const s = ctx.handle.sqlite;
-  const date = today();
+  const date = today(ctx, spaceId);
   const existing = s
     .prepare(`SELECT payload, answered FROM daily_contact WHERE space_id = ? AND date = ?`)
     .get(spaceId, date) as { payload: string; answered: number } | undefined;

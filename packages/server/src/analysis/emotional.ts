@@ -2,6 +2,8 @@ import type { EmotionalTrajectory, EmotionalPattern, EmotionalPoint, GraphNode }
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
+import { spaceTimezone, DEFAULT_PREFS } from "../agent/notify/policy.js";
+import { localDateOfStored } from "../lib/time.js";
 
 /**
  * Emotional trajectory analysis (research-agent add-on #5). Turns the per-memory
@@ -13,7 +15,19 @@ import { NodesRepo } from "../repositories/nodes.repo.js";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
-const dayOf = (iso: string) => iso.slice(0, 10);
+
+/** The SPACE-local calendar day a memory belongs to (owner rule 2026-10-21:
+ *  day buckets follow the user's own day, never the UTC day). A bare stored
+ *  date stays itself; a stored timestamp is bucketed by its local day in the
+ *  space's timezone. Unparseable values return null and are skipped. */
+const dayOf = (iso: string, tz: string): string | null => localDateOfStored(iso, tz);
+
+/** The space's timezone for day bucketing — same source (space_meta via the
+ *  notify layer) the streak/digest fixes use; the shared default applies when
+ *  space_meta is unreachable (bare test DB). */
+function spaceTz(h: DbHandle, spaceId: string): string {
+  return spaceTimezone(h.sqlite, spaceId);
+}
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 function stddev(xs: number[]): number {
@@ -68,7 +82,7 @@ const EMPTY: EmotionalTrajectory = {
  * whatever set the caller already resolved (every memory in the space, or a small
  * already-retrieved candidate set) — this function does no querying of its own.
  */
-function trajectoryFrom(nodes: GraphNode[]): EmotionalTrajectory {
+function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone): EmotionalTrajectory {
   const dated = nodes
     .filter((n) => n.kind !== "action" && typeof n.emotionalWeight === "number")
     .map((n) => ({ t: n.occurredAt ?? n.createdAt, v: clamp(n.emotionalWeight!, -1, 1), node: n }))
@@ -80,7 +94,8 @@ function trajectoryFrom(nodes: GraphNode[]): EmotionalTrajectory {
   // Day buckets → averaged series.
   const buckets = new Map<string, { sum: number; count: number }>();
   for (const d of dated) {
-    const day = dayOf(d.t);
+    const day = dayOf(d.t, tz);
+    if (!day) continue;
     const b = buckets.get(day) ?? { sum: 0, count: 0 };
     b.sum += d.v;
     b.count++;
@@ -163,7 +178,7 @@ function trajectoryFrom(nodes: GraphNode[]): EmotionalTrajectory {
  * byte-for-byte identical to before Phase E's refactor.
  */
 export function buildEmotionalTrajectory(h: DbHandle, spaceId: string = DEFAULT_SPACE): EmotionalTrajectory {
-  return trajectoryFrom(new NodesRepo(h, spaceId).all());
+  return trajectoryFrom(new NodesRepo(h, spaceId).all(), spaceTz(h, spaceId));
 }
 
 /**
@@ -178,7 +193,7 @@ export function buildEmotionalTrajectory(h: DbHandle, spaceId: string = DEFAULT_
  */
 export function buildEmotionalTrajectoryAmong(h: DbHandle, spaceId: string = DEFAULT_SPACE, relevantIds: number[]): EmotionalTrajectory {
   if (relevantIds.length === 0) return EMPTY;
-  return trajectoryFrom(new NodesRepo(h, spaceId).byIds(relevantIds));
+  return trajectoryFrom(new NodesRepo(h, spaceId).byIds(relevantIds), spaceTz(h, spaceId));
 }
 
 /**

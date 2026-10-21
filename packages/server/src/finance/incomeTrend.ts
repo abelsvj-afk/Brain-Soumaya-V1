@@ -2,6 +2,8 @@ import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import type { IncomePoint } from "@brain/shared";
 import { FinIncomeRepo } from "../repositories/finIncome.repo.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+import { localMonthInZone } from "../lib/time.js";
 
 /**
  * Income trend (docs/specs/income-net-worth-trend.md) — monthly net-income totals across
@@ -18,19 +20,27 @@ function monthKey(dateIso: string): string {
   return dateIso.slice(0, 7); // YYYY-MM
 }
 
-/** `months` consecutive month-start ISO dates, oldest first, ending at `now`'s month. */
-function monthStarts(months: number, now: Date): string[] {
+/** `months` consecutive month-start ISO dates, oldest first, ending at the
+ *  month containing the anchor year/month. Pure calendar math on (y, m). */
+function monthStarts(months: number, anchorY: number, anchorM: number): string[] {
   const out: string[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    out.push(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1)).toISOString().slice(0, 10));
+    out.push(new Date(Date.UTC(anchorY, anchorM - i, 1)).toISOString().slice(0, 10));
   }
   return out;
 }
 
 export function incomeSeries(handle: DbHandle, spaceId: string = DEFAULT_SPACE, months = 12, now: Date = new Date()): IncomePoint[] {
-  const starts = monthStarts(Math.max(1, months), now);
+  // The current month is the SPACE-local month of `now` (owner rule
+  // 2026-10-21) — on the evening of the local last day of a month, the
+  // series still ends at that month, not the next one. Rows themselves
+  // carry bare calendar dates and bucket by their own month, unchanged.
+  const [anchorY, anchorM] = localMonthInZone(now.getTime(), spaceTimezone(handle.sqlite, spaceId))
+    .split("-")
+    .map(Number) as [number, number];
+  const starts = monthStarts(Math.max(1, months), anchorY, anchorM - 1);
   const rangeStart = starts[0]!;
-  const rangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+  const rangeEnd = new Date(Date.UTC(anchorY, anchorM, 0)).toISOString().slice(0, 10);
   const rows = new FinIncomeRepo(handle, spaceId).listBetween(rangeStart, rangeEnd);
 
   const byMonth = new Map<string, { total: number; paycheck: number; selfEmployed: number }>();

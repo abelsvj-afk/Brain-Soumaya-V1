@@ -44,6 +44,100 @@ export function daysBetween(earlierMs: number, laterMs: number): number {
   return Math.floor((laterMs - earlierMs) / 86_400_000);
 }
 
+/* ------------------------------------------------------------------ *
+ * Space-local calendar helpers (owner rule, restated 2026-10-21: NO UTC
+ * in anything user-facing — every calendar boundary, bucket, label,
+ * "today", streak, season, and digest is computed in the SPACE's own
+ * timezone, read from space_meta.timezone). Stored instants stay
+ * instants; only the day/month a user PERCEIVES is derived here.
+ * ------------------------------------------------------------------ */
+
+/** Fallback zone when a stored zone string is unusable — the schema default
+ *  (space_meta.timezone DEFAULT 'America/New_York'), mirroring the defensive
+ *  read in agent/episodic.ts. Zone strings are validated on write
+ *  (notify/policy.ts validateTimezone), so this is a last resort only. */
+const FALLBACK_ZONE = "America/New_York";
+
+function dayParts(instantMs: number, tz: string): { y: string; m: string; d: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(instantMs));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+
+/** The calendar date (YYYY-MM-DD) of an instant in zone `tz` — the day a user
+ *  in that zone would say the instant falls on. Same algorithm as the notify
+ *  layer's `localDay()` (agent/notify/policy.ts); this is the low-level home
+ *  for code that cannot import the notify layer. */
+export function localDayInZone(instantMs: number, tz: string): string {
+  try {
+    const p = dayParts(instantMs, tz);
+    return `${p.y}-${p.m}-${p.d}`;
+  } catch {
+    const p = dayParts(instantMs, FALLBACK_ZONE);
+    return `${p.y}-${p.m}-${p.d}`;
+  }
+}
+
+/** The YYYY-MM month key of an instant in zone `tz`. */
+export function localMonthInZone(instantMs: number, tz: string): string {
+  return localDayInZone(instantMs, tz).slice(0, 7);
+}
+
+/** Offset of zone `tz` at `instantMs`, in ms (wall-clock-minus-UTC). */
+function tzOffsetMs(instantMs: number, tz: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(instantMs));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? "0");
+  const wallAsUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return wallAsUtc - Math.floor(instantMs / 1000) * 1000;
+}
+
+/** Epoch ms of local midnight (00:00 in zone `tz`) on calendar date y-m-d.
+ *  Two-pass offset correction so a DST transition adjacent to midnight can
+ *  never shift the result onto the wrong day. */
+function zonedMidnightMs(y: number, m: number, d: number, tz: string): number {
+  const guess = Date.UTC(y, m - 1, d);
+  try {
+    const first = guess - tzOffsetMs(guess, tz);
+    return guess - tzOffsetMs(first, tz);
+  } catch {
+    const first = guess - tzOffsetMs(guess, FALLBACK_ZONE);
+    return guess - tzOffsetMs(first, FALLBACK_ZONE);
+  }
+}
+
+/** [start, end) epoch-ms bounds of the zone-local calendar day containing
+ *  `instantMs`. Use for instant-range membership tests (e.g. SQL julianday
+ *  ranges over stored timestamps) that must follow the user's local day
+ *  rather than the UTC day. DST days are 23/25 hours — the bounds reflect
+ *  the real local midnights, never startMs + 86_400_000. */
+export function localDayBoundsMs(instantMs: number, tz: string): { startMs: number; endMs: number } {
+  const day = localDayInZone(instantMs, tz);
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const startMs = zonedMidnightMs(y, m, d, tz);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const endMs = zonedMidnightMs(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), tz);
+  return { startMs, endMs };
+}
+
+/** The space-local calendar date for a STORED value, or null when unparseable.
+ *  A bare `YYYY-MM-DD` already IS a calendar date and is returned verbatim —
+ *  it must never be re-zoned (a stored "2026-10-21" means Oct 21, full stop).
+ *  A timestamp (naive SQLite UTC, or zoned ISO) is an instant: its perceived
+ *  date is the local day of that instant in zone `tz`. */
+export function localDateOfStored(raw: string | null | undefined, tz: string): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const ms = parseTolerantMs(t);
+  return Number.isFinite(ms) ? localDayInZone(ms, tz) : null;
+}
+
 /** `daysBetween` from a stored date/timestamp string to `now` — the single most common shape
  *  every classifier in analysis/temporal.ts needs. Returns `null` (not `NaN`) when `raw` doesn't
  *  parse, so callers can treat "no date at all" as a distinct, explicit case rather than a

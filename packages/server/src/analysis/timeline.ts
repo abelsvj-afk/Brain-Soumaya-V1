@@ -1,6 +1,8 @@
 import type { AppContext } from "../context.js";
 import type { TimelineChapter, ChapterTrend, ChapterThread } from "@brain/shared";
 import { DEFAULT_SPACE } from "../db/schema.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+import { parseTolerantMs, localMonthInZone } from "../lib/time.js";
 
 /**
  * The Chronicle — chapters of your life on the 3D flowing-river timeline. Soumaya
@@ -275,12 +277,22 @@ function narrate(a: Assessment): string {
 }
 
 function chaptersThisMonth(ctx: AppContext, spaceId: string, nowISO: string): number {
-  const month = nowISO.slice(0, 7); // YYYY-MM
-  return (
-    ctx.handle.sqlite
-      .prepare(`SELECT COUNT(*) AS c FROM timeline_chapters WHERE space_id = ? AND origin = 'auto' AND substr(period_end,1,7) = ?`)
-      .get(spaceId, month) as { c: number }
-  ).c;
+  // The cap counts chapters in the SPACE's current local calendar month
+  // (owner rule 2026-10-21) — month membership is derived from each row's
+  // period_end INSTANT in the space's timezone, never the stored string's
+  // UTC month prefix.
+  const tz = spaceTimezone(ctx.handle.sqlite, spaceId);
+  const nowMs = parseTolerantMs(nowISO);
+  const month = Number.isFinite(nowMs) ? localMonthInZone(nowMs, tz) : nowISO.slice(0, 7);
+  const rows = ctx.handle.sqlite
+    .prepare(`SELECT period_end FROM timeline_chapters WHERE space_id = ? AND origin = 'auto'`)
+    .all(spaceId) as { period_end: string }[];
+  let count = 0;
+  for (const r of rows) {
+    const endMs = parseTolerantMs(r.period_end);
+    if (Number.isFinite(endMs) && localMonthInZone(endMs, tz) === month) count++;
+  }
+  return count;
 }
 
 function insertChapter(

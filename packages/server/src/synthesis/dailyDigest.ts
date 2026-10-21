@@ -5,9 +5,14 @@ import { NodesRepo } from "../repositories/nodes.repo.js";
 import { InsightsRepo } from "../repositories/insights.repo.js";
 import { buildCommunicationContext } from "../communication/context.js";
 import { consolidationDigestLine } from "../agent/consolidation/run.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
+import { localDateOfStored, localDayBoundsMs } from "../lib/time.js";
 
-/** YYYY-MM-DD prefix of a stored timestamp (CURRENT_TIMESTAMP or ISO). */
-const day = (ts: string | undefined): string => (ts ?? "").slice(0, 10);
+/** The SPACE-local calendar date (YYYY-MM-DD) of a stored timestamp, or ""
+ *  when unparseable. Day membership follows the user's own day (owner rule
+ *  2026-10-21) — derived from the stored instant, never its raw string
+ *  prefix, so an evening memory counts toward the evening's local day. */
+const day = (ts: string | undefined, tz: string): string => localDateOfStored(ts, tz) ?? "";
 
 const refOf = (n: GraphNode): NodeRef => ({ id: n.id, label: n.label, type: n.type });
 
@@ -85,16 +90,20 @@ function buildClosing(bits: string[], preferConcise: boolean): string {
  * themselves are gone). We logged them as `action_expired` with the labels in the
  * description: "Action items timed out: a; b; c".
  */
-function expiredActionsToday(h: DbHandle, today: string, spaceId: string): ExpiredAction[] {
+function expiredActionsToday(h: DbHandle, now: Date, tz: string, spaceId: string): ExpiredAction[] {
   let rows: { description: string; created_at: string }[] = [];
   try {
+    // Local-day membership by INSTANT range (julianday on both sides — the
+    // stored formats mix SQLite space format with ISO-Z, audit gap #6 pattern).
+    const { startMs, endMs } = localDayBoundsMs(now.getTime(), tz);
     rows = h.sqlite
       .prepare(
         `SELECT description, created_at FROM agent_logs
-         WHERE space_id = ? AND action = 'action_expired' AND substr(created_at, 1, 10) = ?
+         WHERE space_id = ? AND action = 'action_expired'
+           AND julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)
          ORDER BY id DESC`,
       )
-      .all(spaceId, today) as { description: string; created_at: string }[];
+      .all(spaceId, new Date(startMs).toISOString(), new Date(endMs).toISOString()) as { description: string; created_at: string }[];
   } catch {
     return [];
   }
@@ -116,7 +125,11 @@ function expiredActionsToday(h: DbHandle, today: string, spaceId: string): Expir
  * action items.
  */
 export function buildDailyDigest(h: DbHandle, spaceId: string = DEFAULT_SPACE): DailyDigest {
-  const today = new Date().toISOString().slice(0, 10);
+  // "Today" is the SPACE's local day (owner rule 2026-10-21), from the same
+  // space_meta timezone source as quiet hours and the streak.
+  const now = new Date();
+  const tz = spaceTimezone(h.sqlite, spaceId);
+  const today = localDay(now, tz);
   const nodesRepo = new NodesRepo(h, spaceId);
 
   // Phase T: the shared, read-only communication boundary. The digest is a
@@ -131,12 +144,12 @@ export function buildDailyDigest(h: DbHandle, spaceId: string = DEFAULT_SPACE): 
   // Fresh, real memories logged today (action items are summarized separately).
   const fresh: DigestEntry[] = nodesRepo
     .recent(60)
-    .filter((n) => n.kind !== "action" && day(n.createdAt) === today)
+    .filter((n) => n.kind !== "action" && day(n.createdAt, tz) === today)
     .slice(0, 8)
     .map((n) => ({ node: refOf(n), snippet: snippetOf(n.content), take: takeFor(n, preferConcise) }));
 
   const connections = new InsightsRepo(h, spaceId).recent(5);
-  const expiredActions = expiredActionsToday(h, today, spaceId);
+  const expiredActions = expiredActionsToday(h, now, tz, spaceId);
 
   // Cooling memories (high entropy from neglect) — the "tend me" nudge.
   // Computed via targeted SQL: loading the WHOLE enriched graph (GraphService

@@ -6,7 +6,8 @@ import { EMBED_DIM } from "../db/vec.js";
 import type { AppContext } from "../context.js";
 import { UsageTracker } from "../usage.js";
 import { maybeGenerateChapter, createManualChapter } from "../analysis/timeline.js";
-import { LifeSeasonsRepo, chapterRowToSeason, seasonLabel, utcDateOf } from "../repositories/lifeSeasons.repo.js";
+import { LifeSeasonsRepo, chapterRowToSeason, seasonLabel, localDateOf } from "../repositories/lifeSeasons.repo.js";
+import { setPreference } from "../agent/notify/policy.js";
 import { JourneysRepo } from "../repositories/journeys.repo.js";
 
 let handle: DbHandle;
@@ -38,7 +39,10 @@ function chapterRow(space: string, origin: string, start: string, end: string, t
 
 describe("Life Seasons detection (IM-132)", () => {
   it("derives a season from an auto-detected chapter produced by the existing heuristic", () => {
-    const base = Date.UTC(2026, 0, 1);
+    // Seeded at UTC noon so each memory's SPACE-local date (the space default
+    // is America/New_York) is the same calendar date as its UTC date — this
+    // test pins derivation, not boundary conversion (pinned separately below).
+    const base = Date.UTC(2026, 0, 1, 12);
     for (let i = 0; i < 6; i++) mem("wonderful day, so happy and proud", 0.7, iso(base + i * DAY));
     const ch = maybeGenerateChapter(ctx, "legacy", iso(base + 7 * DAY));
     expect(ch).not.toBeNull();
@@ -79,18 +83,37 @@ describe("Life Seasons detection (IM-132)", () => {
     expect(new LifeSeasonsRepo(handle, "legacy").listSeasons()).toHaveLength(0);
   });
 
-  it("boundary: season dates are the UTC calendar dates of the stored instants", () => {
-    // 23:30 UTC on Jan 1 is already Jan 2 in Pacific/Kiritimati local time and
-    // still Jan 1 in America/New_York — the season boundary must be Jan 1 in
-    // BOTH test timezones (fixed calendar dates, UTC getters only).
-    expect(utcDateOf("2026-01-01 23:30:00")).toBe("2026-01-01");
-    expect(utcDateOf("2026-01-01T00:30:00Z")).toBe("2026-01-01");
-    const s = chapterRowToSeason({
+  it("boundary: season dates are the SPACE-local calendar dates of the stored instants", () => {
+    // Owner rule (restated 2026-10-21): season boundaries follow the user's
+    // own timezone, never UTC. 23:30 UTC on Jan 1 is still Jan 1 in
+    // America/New_York (18:30) but already Jan 2 in Pacific/Kiritimati
+    // (13:30 next day) — the same stored instant yields different season
+    // boundaries in different spaces, each correct for its user.
+    expect(localDateOf("2026-01-01 23:30:00", "America/New_York")).toBe("2026-01-01");
+    expect(localDateOf("2026-01-01 23:30:00", "Pacific/Kiritimati")).toBe("2026-01-02");
+    expect(localDateOf("2026-01-01T00:30:00Z", "America/New_York")).toBe("2025-12-31");
+    expect(localDateOf("2026-01-01T00:30:00Z", "Pacific/Kiritimati")).toBe("2026-01-01");
+    const row = {
       id: 7, title: "T", theme: "recovery", trend: "growth", score: 0.5,
       period_start: "2026-01-01 23:30:00", period_end: "2026-01-10 00:30:00", origin: "auto",
-    });
-    expect(s!.startDate).toBe("2026-01-01");
-    expect(s!.endDate).toBe("2026-01-10");
+    };
+    const ny = chapterRowToSeason(row, "America/New_York");
+    expect(ny!.startDate).toBe("2026-01-01");
+    expect(ny!.endDate).toBe("2026-01-09"); // Jan 10 00:30 UTC = Jan 9, 19:30 in New York
+    const ki = chapterRowToSeason(row, "Pacific/Kiritimati");
+    expect(ki!.startDate).toBe("2026-01-02");
+    expect(ki!.endDate).toBe("2026-01-10");
+  });
+
+  it("the repo reads the space's own timezone from space_meta", () => {
+    handle.sqlite.prepare(`INSERT OR IGNORE INTO space_meta (space_id) VALUES ('ki-space')`).run();
+    setPreference(handle.sqlite, "ki-space", "timezone", "Pacific/Kiritimati");
+    // Jan 1 23:30 UTC → Jan 2 in Kiritimati; a 9-day stored span.
+    chapterRow("ki-space", "auto", "2026-01-01 23:30:00", "2026-01-10 00:30:00");
+    const seasons = new LifeSeasonsRepo(handle, "ki-space").listSeasons();
+    expect(seasons).toHaveLength(1);
+    expect(seasons[0]!.startDate).toBe("2026-01-02");
+    expect(seasons[0]!.endDate).toBe("2026-01-10");
   });
 
   it("skips chapters with unparseable periods instead of emitting NaN dates", () => {
@@ -114,6 +137,19 @@ describe("Journey spans (IM-132, hybrid derivation)", () => {
     expect(cleared).not.toBeNull();
   });
 
+  it("span dates derived from linked memories use the SPACE-local day, not the UTC day", () => {
+    // Owner rule (restated 2026-10-21): a memory logged Mar 10 at 9:30 PM in
+    // the space's default zone (America/New_York) — stored as Mar 11 01:30
+    // UTC — starts the journey's displayed span on Mar 10, the day lived.
+    const repo = new JourneysRepo(handle, "legacy");
+    const j = repo.create({ title: "Evening start" });
+    const a = mem("first", 0.1, "2026-03-11T01:30:00.000Z");
+    repo.link(j.id, "node", a);
+    const span = repo.spanFor(repo.get(j.id)!);
+    expect(span.startSource).toBe("links");
+    expect(span.startDate).toBe("2026-03-10");
+  });
+
   it("infers the span from linked node dates when no explicit dates are set", () => {
     const repo = new JourneysRepo(handle, "legacy");
     const j = repo.create({ title: "Recovery" });
@@ -132,7 +168,11 @@ describe("Journey spans (IM-132, hybrid derivation)", () => {
     const done = repo.spanFor(repo.get(j.id)!);
     expect(done.end).toBe(iso(base + 20 * DAY));
     expect(done.endSource).toBe("links");
-    expect(done.endDate).toBe("2026-03-30");
+    // The displayed end date is the SPACE-local day of the end instant
+    // (owner rule 2026-10-21): Mar 30 00:00 UTC is Mar 29, 8:00 PM in the
+    // space's default zone (America/New_York) — the evening it was lived.
+    // (Previously this asserted the UTC date, "2026-03-30".)
+    expect(done.endDate).toBe("2026-03-29");
   });
 
   it("a link-less journey falls back to created_at (start) — defined, no NaN/crash", () => {

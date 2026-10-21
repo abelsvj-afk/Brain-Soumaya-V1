@@ -107,7 +107,7 @@ describe("Soumaya's tool-router — firing reminders", () => {
 
 describe("Soumaya's tool-router — a tool's `message` logs verbatim", () => {
   it("stores bill_risk's full user-facing text, not the internal summary/reason", async () => {
-    const now = Date.parse("2026-01-10T00:00:00Z");
+    const now = Date.parse("2026-01-10T12:00:00Z"); // midday UTC = Sat Jan 10 in the space's Florida timezone too
     new FinAccountRepo(handle, "legacy").setBalance(10000);
     const inc = new FinIncomeRepo(handle, "legacy");
     inc.create({ date: "2026-01-01", netCents: 1000 });

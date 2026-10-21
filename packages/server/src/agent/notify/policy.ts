@@ -121,6 +121,19 @@ export function getPreferences(sqlite: RawDb, spaceId: string): NotifyPreference
   };
 }
 
+/** The space's timezone, defensively read: the shared default applies when
+ *  space_meta is unreachable (bare test DB) — the same defensive pattern as
+ *  spaceLocalDate() in agent/episodic.ts and spaceDayStr() in streak.ts.
+ *  THE one resolver every space-local calendar computation should use
+ *  (owner rule 2026-10-21: user-facing days follow the space's own zone). */
+export function spaceTimezone(sqlite: RawDb, spaceId: string): string {
+  try {
+    return getPreferences(sqlite, spaceId).timezone;
+  } catch {
+    return DEFAULT_PREFS.timezone;
+  }
+}
+
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export function validateTimezone(tz: string): boolean {

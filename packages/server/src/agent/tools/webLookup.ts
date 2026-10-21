@@ -1,4 +1,5 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
+import { actionFiredToday } from "../../communication/context.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { EdgesRepo } from "../../repositories/edges.repo.js";
 import { EconomyRepo, FUEL_JOB_COST } from "../../economy.js";
@@ -43,11 +44,9 @@ export const webLookupTool: Tool = {
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
-    const today = new Date(tc.now).toISOString().slice(0, 10);
-    const didToday = tc.ctx.handle.sqlite
-      .prepare(`SELECT 1 FROM agent_logs WHERE space_id = ? AND action = 'tool:web_lookup' AND substr(created_at,1,10) = ?`)
-      .get(tc.spaceId, today);
-    if (didToday) return [];
+    // Once per SPACE-local day (owner rule 2026-10-21 — the guard follows
+    // the user's own day, never the UTC day of the stored timestamp).
+    if (actionFiredToday(tc.ctx.handle, tc.spaceId, "tool:web_lookup", new Date(tc.now))) return [];
     const rows = tc.ctx.handle.sqlite
       .prepare(
         `SELECT id, label, content, created_at FROM nodes

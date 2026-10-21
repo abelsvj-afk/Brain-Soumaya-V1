@@ -100,16 +100,17 @@ function buildGoalTrendMessage(input: {
 export const goalFundingTrendTool: Tool = {
   name: "goal_trend",
   description:
-    "When a Financial Goal's funding pace has genuinely shifted across two consecutive 30-day periods, let Soumaya raise it as a real conversation, not a generic notification.",
+    "Report how the user's financial goals' funding pace is trending (allocations in the last 30 days vs the 30 days before, per goal). Call with NO arguments in conversation (\"how are my goals trending?\") — every goal is assessed fresh, and goals without enough history are reported as such, never invented. Optionally pass goalId to focus on one goal. (The router's detector-shaped call, with goalId/goalName/direction/deltaCents, still works exactly as before.)",
   parameters: {
     type: "object",
     properties: {
-      goalId: { type: "number" },
-      goalName: { type: "string" },
-      direction: { type: "string", enum: ["increased", "decreased"] },
-      deltaCents: { type: "number" },
+      goalId: { type: "number", description: "Optional: focus on one financial goal by id. Omit in conversation to assess all goals." },
+      goalName: { type: "string", description: "Router-internal; omit in conversation." },
+      direction: { type: "string", enum: ["increased", "decreased"], description: "Router-internal; omit in conversation." },
+      deltaCents: { type: "number", description: "Router-internal; omit in conversation." },
     },
-    required: ["goalId", "goalName", "direction", "deltaCents"],
+    required: [],
+    additionalProperties: false,
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
@@ -142,6 +143,47 @@ export const goalFundingTrendTool: Tool = {
   },
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+    // Telegram Parity Phase 4 — conversational path: the router's call is
+    // the only one carrying direction/deltaCents (it computed them in
+    // detect()). A conversation call (no direction) is assessed FRESH here
+    // via the same goalAllocationChange() intelligence — read-only, no
+    // notify, no surfacing cooldown (the user asked explicitly), and
+    // insufficient history is reported honestly, never fabricated.
+    if (typeof args.direction !== "string") {
+      const goals = new FinGoalRepo(tc.ctx.handle, tc.spaceId).list();
+      const focus = typeof args.goalId === "number" ? goals.filter((g) => g.id === args.goalId) : goals;
+      if (goals.length === 0) {
+        return {
+          ok: true,
+          summary: "goal_trend (conversational): no financial goals",
+          message: "GOAL TRENDS (exact, from the allocation ledger): the user has no financial goals set up, so there is no funding trend to report. Say so honestly.",
+        };
+      }
+      if (focus.length === 0) {
+        return {
+          ok: true,
+          summary: "goal_trend (conversational): goal not found",
+          message: `GOAL TRENDS: no financial goal with id ${String(args.goalId)} exists in this brain. Say so — do not invent one.`,
+        };
+      }
+      const now = new Date(tc.now);
+      const lines = ["GOAL TRENDS (exact, from the allocation ledger — allocations in the last 30 days vs the 30 days before; report as-is):"];
+      for (const g of focus) {
+        const c = goalAllocationChange(tc.ctx.handle, tc.spaceId, g, now);
+        if (c.status === "compared") {
+          lines.push(
+            `  - "${g.name}": ${c.direction} — ${dollars(c.currentCents)} allocated in the last 30 days vs ${dollars(c.previousCents)} in the 30 days before (change of ${dollars(c.deltaCents)}).`,
+          );
+        } else {
+          lines.push(`  - "${g.name}": not enough history to establish a trend (${c.reason}).`);
+        }
+      }
+      return {
+        ok: true,
+        summary: `goal_trend (conversational): ${focus.length} goal(s) assessed`,
+        message: lines.join("\n"),
+      };
+    }
     const goalId = Number(args.goalId);
     const goalName = String(args.goalName);
     const direction = args.direction === "increased" ? "increased" : "decreased";

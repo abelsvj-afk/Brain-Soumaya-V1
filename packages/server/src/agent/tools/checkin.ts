@@ -1,5 +1,5 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
-import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
+import { buildCommunicationContext, recentActionCount, actionFiredToday } from "../../communication/context.js";
 
 /**
  * Proactive check-ins (SOUMAYA_TOOLS.md tool #3). Beyond the once-a-day digest, she
@@ -76,11 +76,9 @@ export const checkinTool: Tool = {
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
-    const today = new Date(tc.now).toISOString().slice(0, 10);
-    const didToday = tc.ctx.handle.sqlite
-      .prepare(`SELECT 1 FROM agent_logs WHERE space_id = ? AND action = 'tool:check_in' AND substr(created_at,1,10) = ?`)
-      .get(tc.spaceId, today);
-    if (didToday) return [];
+    // Once per SPACE-local day (owner rule 2026-10-21 — the guard follows
+    // the user's own day, never the UTC day of the stored timestamp).
+    if (actionFiredToday(tc.ctx.handle, tc.spaceId, "tool:check_in", new Date(tc.now))) return [];
 
     // Signal 1: a heavy emotional stretch across recent memories.
     const recent = tc.ctx.handle.sqlite

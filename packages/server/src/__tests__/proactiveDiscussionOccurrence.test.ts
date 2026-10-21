@@ -33,7 +33,10 @@ const embeddings = new HashEmbeddingProvider(EMBED_DIM);
 const llm = new HeuristicProvider();
 // Fixed historical clock for the unit-level describe blocks below, which always pass this
 // SAME value explicitly into chat()/runToolRouter() as `now` — safe regardless of wall-clock.
-const NOW = Date.parse("2026-01-10T00:00:00Z");
+// Midday UTC: the same calendar day (Sat 2026-01-10) in the space's own
+// timezone (America/New_York) — midnight UTC is still Jan 9 in Florida, and
+// day-boundary logic follows the space's local day (owner rule 2026-10-21).
+const NOW = Date.parse("2026-01-10T12:00:00Z");
 // The real `/api/chat` route has no injectable clock — it always resolves proactive context
 // with the server's actual wall-clock `new Date()` (see analysis/proactiveContext.ts). Fixture
 // data for the "Real /api/chat route" describe block below must therefore be anchored to the
