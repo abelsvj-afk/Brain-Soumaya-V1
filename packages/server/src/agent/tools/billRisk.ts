@@ -90,11 +90,16 @@ function buildBillRiskMessage(input: {
 export const billRiskTool: Tool = {
   name: "bill_risk",
   description:
-    "When today's spending pace could make an upcoming (non-autopay) bill short, warn the user before it happens. At most one nudge per day.",
+    "Check the user's upcoming bills for shortfall risk: balance, safe-to-spend, and every bill reserved before the next income, flagging non-autopay bills the cushion may not cover. Call with NO arguments in conversation (\"how are my bills looking?\") — the current budget state is computed fresh. (The router's detector-shaped call, with billId/mode/threshold, still works exactly as before.)",
   parameters: {
     type: "object",
-    properties: { billId: { type: "number" }, mode: { type: "string" }, threshold: { type: "number" } },
-    required: ["billId"],
+    properties: {
+      billId: { type: "number", description: "Optional: a specific bill id (router path). Omit in conversation to assess all upcoming bills." },
+      mode: { type: "string", description: "Router-internal (\"short\" | \"pace\"); omit in conversation." },
+      threshold: { type: "number", description: "Router-internal threshold in cents; omit in conversation." },
+    },
+    required: [],
+    additionalProperties: false,
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
@@ -128,6 +133,48 @@ export const billRiskTool: Tool = {
   },
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+    // Telegram Parity Phase 4 — conversational path: no billId means the
+    // model is asking "how are my bills looking?" — answer from the CURRENT
+    // Budget Engine state (the same source detect() reads), read-only: no
+    // notify, no once-a-day gate (the user asked explicitly). The router
+    // path below (billId present) is byte-for-byte the pre-Phase-4 behavior.
+    if (typeof args.billId !== "number" || !Number.isFinite(args.billId)) {
+      const budget = getBudgetSummary(tc.ctx.handle, tc.spaceId, new Date(tc.now));
+      const autopay = new Map(new FinBillRepo(tc.ctx.handle, tc.spaceId).list().map((b) => [b.id, b.autopay]));
+      if (budget.reserved.length === 0) {
+        return {
+          ok: true,
+          summary: "bill_risk (conversational): no upcoming bills reserved",
+          message:
+            "BILL RISK CHECK (exact, from the budget engine): no bills are reserved before the next income, so there is no upcoming-bill shortfall risk to report. Balance: " +
+            `${dollars(budget.balanceCents)}; safe to spend: ${dollars(budget.safeToSpendCents)}.`,
+        };
+      }
+      const lines = [
+        "BILL RISK CHECK (exact, from the budget engine — report these figures as-is):",
+        `Balance: ${dollars(budget.balanceCents)}; reserved for upcoming bills: ${dollars(budget.reservedCents)}; safe to spend: ${dollars(budget.safeToSpendCents)}; shortfall: ${dollars(budget.shortfallCents)}; next income expected: ${budget.nextIncomeDate}.`,
+        "Upcoming bills reserved before next income (earliest first):",
+        ...budget.reserved.map(
+          (r) =>
+            `  - "${r.name}" — ${dollars(r.amountCents)}, due ${r.dueDate}${autopay.get(r.billId) ? " (autopay)" : " (NOT autopay — needs manual payment)"}`,
+        ),
+      ];
+      const atRisk = budget.reserved.filter((r) => !autopay.get(r.billId));
+      if (budget.shortfallCents > 0) {
+        lines.push(`RISK: the balance is ${dollars(budget.shortfallCents)} SHORT of covering the reserved bills + buffer.`);
+      } else if (atRisk.length > 0 && budget.safeToSpendCents <= atRisk[0]!.amountCents) {
+        lines.push(
+          `RISK: the cushion is tight — safe-to-spend (${dollars(budget.safeToSpendCents)}) is no larger than the earliest non-autopay bill ("${atRisk[0]!.name}", ${dollars(atRisk[0]!.amountCents)}), so overspending could leave it short.`,
+        );
+      } else {
+        lines.push("No shortfall risk right now: the reserved bills are covered by the current balance.");
+      }
+      return {
+        ok: true,
+        summary: `bill_risk (conversational): ${budget.reserved.length} upcoming bill(s), shortfall ${dollars(budget.shortfallCents)}`,
+        message: lines.join("\n"),
+      };
+    }
     const billId = Number(args.billId);
     const bill = new FinBillRepo(tc.ctx.handle, tc.spaceId).get(billId);
     if (!bill) return { ok: false, summary: `bill ${billId} gone` };

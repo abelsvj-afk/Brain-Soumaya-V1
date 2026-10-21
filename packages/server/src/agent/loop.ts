@@ -6,6 +6,7 @@ import type { Tool, ToolContext } from "./tools/types.js";
 import { AGENT_TOOLS } from "./tools/registry.js";
 import { validateArgs } from "./tools/validation.js";
 import { getPreferences } from "./notify/policy.js"; // space timezone source (quiet hours/digest)
+import { buildCompanionContext } from "../chat/companionContext.js"; // Phase 0 parity: shared context builder
 import { composeUserModelBlock } from "./userModel.js"; // W2: user-model context block (§7.2)
 import { maybeRecordStated } from "./userModel.js"; // W2: stated-write trigger (§4.8)
 import { captureEpisode } from "./episodic.js"; // W2: episode capture triggers (§5.1)
@@ -93,7 +94,17 @@ function buildSystemExtra(): string {
     "- Call a tool by name with arguments matching its schema. You may propose up to 4 calls per response.\n" +
     "- WRITE tools never execute immediately: proposing one creates a confirmation request. " +
     'Tell the user what you want to do and ask them to say "yes". Do NOT claim it is done until confirmed.\n' +
-    "- If a tool result says an approval is pending, your next message must be the confirmation question — nothing else."
+    "- If a tool result says an approval is pending, your next message must be the confirmation question — nothing else.\n" +
+    "- For any question about HOW MANY of something there is, or that asks you to list/enumerate everything (all people, all connections, totals), " +
+    "you MUST call the exact-answer tools (brain_stats, people_lookup, entity_lookup) and report their labeled numbers as-is. " +
+    "NEVER estimate, tally, or infer a count from memory_search results — search returns a relevance sample, not a total. " +
+    "For tab questions, call the matching tab tool and report its grounded result as-is: bills/money risk → bill_risk, goal funding → goal_trend, " +
+    "finance-data freshness → finance_freshness, the week's review → weekly_review, unconnected memories → surface_orphan, Codex discoveries → chart_discovery, " +
+    "memories due for recall → review_nudge, tasks + due/upcoming reminders → agenda_list, journeys → journeys_list, insights/patterns → insights_list. " +
+    "For the memory games, drive memory_quiz / constellation_tour with their action argument across turns (start, then answer/next/jump as the user replies, end to close) " +
+    "and present their questions and narration verbatim — never invent a quiz answer or a tour connection yourself. " +
+    "If the user says a quiz memory or answer is WRONG, call memory_quiz with action \"correct\" and their corrected statement, then follow its instruction: " +
+    "propose capture_memory with that corrected statement (a WRITE — it needs their \"yes\") and never claim the original memory was edited."
   );
 }
 
@@ -160,7 +171,11 @@ export async function maybeConfirmPending(
 
 export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
   const { ctx, spaceId, principal, now } = input;
-  const tc: ToolContext = { ctx, spaceId, now, notify: input.notify };
+  // Phase 5-B: the principal rides into ToolContext so multi-turn session
+  // tools (memory_quiz / constellation_tour) can key their in-memory state
+  // by (spaceId, principal) — identically for Telegram and web callers,
+  // since both reach the tools only through this loop.
+  const tc: ToolContext = { ctx, spaceId, now, notify: input.notify, principal };
 
   // W2 §4.8: conservative stated-write trigger. Evaluated on the user's raw
   // message at turn start — the assertion is HIS, independent of whatever the
@@ -176,6 +191,28 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   }
 
   const soul = soulTextFor(ctx.handle.sqlite, spaceId);
+  // Telegram Parity Phase 0: the SAME companion-context stack the web chat
+  // assembles (chat/companionContext.ts) — telemetry with exact counts,
+  // instruction profiles, behavior + snapshots, grounded-insight block, and
+  // the About-Me persona — so Telegram / /api/chat/agent know the user the
+  // way the in-app chat does, from one shared builder that cannot drift.
+  // The loop embeds the user's message ONCE per turn for 'auto'-profile
+  // routing; FAIL OPEN — an embedding failure (or a builder failure) simply
+  // degrades to always-profiles only / no companion stack, never a broken
+  // turn. Clarification resolution and the proactive handoff are NOT passed:
+  // they are web-chat turn mechanics, not context (see the builder's opts).
+  let companion: { systemExtra: string; persona?: string } = { systemExtra: "" };
+  try {
+    let questionVec: Float32Array | undefined;
+    try {
+      questionVec = await ctx.embeddings.embed(input.userMessage);
+    } catch {
+      questionVec = undefined;
+    }
+    companion = await buildCompanionContext(ctx.handle, spaceId, { questionVec, llm: ctx.llm });
+  } catch {
+    companion = { systemExtra: "" };
+  }
   // W2 §7.2 / §6.4: the user-model block is additive, best-effort conversational
   // context. composeUserModelBlock() fails OPEN by contract: it returns "" when
   // the user model is unavailable or any read fails, and it never throws.
@@ -190,12 +227,20 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   } catch {
     spaceTimezone = undefined;
   }
+  // System-instruction layout (Phase 0): the loop's own tool list + rules
+  // first, then the shared companion stack (whose instruction profiles sit
+  // last among ITS blocks, mirroring web), then the W2 user-model block,
+  // then the caller's contextExtra LAST — on Telegram that is PR #72's
+  // auto-retrieved memories, a separate block framed as untrusted data,
+  // never instructions; it is never merged into the trusted builder stack.
   const systemInstruction = composeSystem({
     soul: soul ?? undefined,
+    persona: companion.persona,
     timezone: spaceTimezone,
     nowMs: now,
     systemExtra:
       buildSystemExtra() +
+      (companion.systemExtra ? `\n\n${companion.systemExtra}` : "") +
       (userModelBlock ? `\n\n${userModelBlock}` : "") +
       (input.contextExtra ? `\n\n${input.contextExtra}` : ""),
   });

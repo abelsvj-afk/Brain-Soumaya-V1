@@ -13,6 +13,8 @@ import { TelegramLinksRepo } from "./links.js";
 import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
 import { captureEpisode } from "../agent/episodic.js"; // W2: episode capture triggers (§5.1)
 import { memorySearchTool } from "../agent/tools/memorySearch.js";
+import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand } from "./notes.js";
+import { chunkTelegramText } from "./chunking.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
 
 /**
@@ -78,6 +80,7 @@ const HELP =
   "Then, any time:\n" +
   "• Send me anything and I'll answer from your memories (with what I drew on).\n" +
   "• /log <thought> — save a new memory; I'll tell you what landed.\n" +
+  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it.\n" +
   "• /digest — get today's digest now (I also send it once a day on my own).\n" +
   "• /digest 07:00 — change when the daily digest arrives.\n" +
   "• /quiet 21:00 04:30 — set quiet hours (I won't ping you then unless it's urgent).\n" +
@@ -233,11 +236,22 @@ export function formatDigest(digest: DailyDigest, spaceName: string): string {
 export async function handleTelegramUpdate(
   ctx: AppContext,
   update: TelegramUpdate,
-  send: Send,
+  sendRaw: Send,
 ): Promise<void> {
+  // Phase 4: every outbound message goes through the chunker — long tool
+  // answers (tab lists, weekly reviews) exceed Telegram's 4096-char limit
+  // and a single send would fail. Short messages pass through untouched
+  // (chunkTelegramText returns [text]), so existing behavior is identical
+  // under the limit. The wrapper is transparent to all handlers below.
+  const send: Send = async (chatId, text) => {
+    for (const chunk of chunkTelegramText(text)) await sendRaw(chatId, chunk);
+  };
   const msg = update.message;
   const chatId = msg?.chat?.id;
-  const text = (msg?.text ?? "").trim();
+  // Raw bytes are kept for note appends (verbatim dictation); `text` is the
+  // trimmed copy all command parsing + the agent path have always used.
+  const rawText = msg?.text ?? "";
+  const text = rawText.trim();
   if (chatId == null || !text) return;
 
   const links = new TelegramLinksRepo(ctx.handle);
@@ -294,6 +308,14 @@ export async function handleTelegramUpdate(
     return;
   }
   const spaceId = link.spaceId;
+
+  // Note expiry (Phase 3): a draft idle >24h is discarded on next contact,
+  // whatever this message turns out to be — warn first, then let the message
+  // flow on normally (the draft is gone, so nothing below can append to it).
+  const staleNote = expireStaleDraft(ctx.handle, spaceId, chatId, Date.now());
+  if (staleNote) {
+    await send(chatId, expiredDraftWarning(staleNote));
+  }
 
   // /digest — send now; /digest HH:MM — set the daily digest time.
   if (text === "/digest" || text.startsWith("/digest ")) {
@@ -375,6 +397,16 @@ export async function handleTelegramUpdate(
     return;
   }
 
+  // Open-ended notes (Phase 3): /note, /done, /cancel — all logic lives in
+  // telegram/notes.ts; this is only the dispatch. Commands are handled here,
+  // before any append interception, so a command mid-note always runs as a
+  // command and is never swallowed as note text.
+  const noteReply = await handleNoteCommand(ctx, spaceId, chatId, text, Date.now());
+  if (noteReply !== null) {
+    await send(chatId, noteReply);
+    return;
+  }
+
   if (text.startsWith("/log")) {
     const body = text.slice("/log".length).trim();
     if (!body) {
@@ -419,6 +451,15 @@ export async function handleTelegramUpdate(
   const confirmation = await maybeConfirmPending(ctx, spaceId, principal, text, tc);
   if (confirmation !== null) {
     await send(chatId, confirmation);
+    return;
+  }
+  // Note append interception (Phase 3) — deliberately AFTER the approval
+  // check above: a pending approval's "yes"/"no" confirms the approval and
+  // never lands in an open note. Returns null when no draft is active (or
+  // the message is a command), leaving the message untouched for the loop.
+  const noteAppend = await handleNoteAppend(ctx, spaceId, chatId, rawText, Date.now());
+  if (noteAppend !== null) {
+    await send(chatId, noteAppend);
     return;
   }
   try {

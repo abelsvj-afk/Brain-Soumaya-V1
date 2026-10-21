@@ -429,17 +429,159 @@ describe("agent_logs append-only", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Registry: the loop only offers the 5 approved tools
+// 7. Registry: the loop only offers the approved tools
+//
+// DELIBERATE CHANGE (Telegram Parity Phase 1, owner decision): the original
+// pin was "exactly the 5 approved tools". The owner approved adding three
+// exact-answer READ tools (brain_stats, people_lookup, entity_lookup)
+// because the 5-tool loop had no way to count, list people, or look up an
+// entity and invented answers instead (the "39 memories" incident). The
+// approved conversational set became 8. The WRITE pin below was
+// UNCHANGED at that point: writes were still exactly fire_reminder +
+// create_task.
+//
+// DELIBERATE CHANGE (Telegram Parity Phase 2, owner decision D3):
+// capture_memory joins as a WRITE tool so the owner can act from Telegram
+// conversationally ("remember this: …" without the /log prefix). Under
+// D3, writes SHE proposes need his "yes" (capture_memory is approval-gated
+// like the existing writes); owner-typed commands like /log still act
+// immediately and are unchanged. The WRITE pin is therefore EXTENDED,
+// deliberately: writes are now exactly fire_reminder + create_task +
+// capture_memory.
+//
+// DELIBERATE CHANGE (Telegram Parity Phase 4, owner decision): tab parity.
+// The seven router-only analysis tools (bill_risk, goal_trend,
+// finance_freshness, weekly_review, surface_orphan, chart_discovery,
+// review_nudge) are promoted to model-callable READ tools (each with a
+// conversational no-arg path; router behavior unchanged), and three list
+// tools (agenda_list, journeys_list, insights_list) cover the remaining
+// tabs. All ten are read-only; the write pin is unaffected by this phase.
+//
+// COMBINED PIN AT PHASES 2 + 4 (coordinator reconciliation at that
+// integration; superseded by the Phase 5 final pin below): the approved
+// conversational set was 19 tools — 5 original + 3 Phase 1 exact-answer
+// reads + capture_memory (Phase 2) + 10 Phase 4 tab reads. Writes were
+// exactly fire_reminder + create_task + capture_memory.
+//
+// DELIBERATE CHANGE (Telegram Parity Phase 5-A, owner decision): four
+// assembled READ tools join — brief_me, relationship_radar, on_this_day,
+// prepare_me (all compose existing sources; no new data stores). This
+// phase alone does not change the write pin.
+//
+// DELIBERATE CHANGE (Telegram Parity Phase 5-B, owner decision): the two
+// multi-turn conversational games join as READ tools — memory_quiz and
+// constellation_tour. Both hold only in-memory game state (agent/
+// gameSessions.ts, keyed by (spaceId, principal)); neither writes brain
+// data. A quiz correction is routed to a capture_memory PROPOSAL (the
+// existing approval-gated write), never to a direct edit by the quiz
+// tool itself — so this phase alone does not change the write pin.
+//
+// DELIBERATE CHANGE (Telegram Parity Phase 5-C, owner decision): two
+// narration tools join. story_time is a READ. dream_playback is pinned as
+// a WRITE — FLAGGED: its playback half is a pure read, but its "that's
+// wrong" correction path records a stated correction through the
+// approval-gated capture/ingest intake (the D3 line), and the loop gates
+// per-tool, not per-args, so the tool is a write in the pin's terms. It
+// never edits a belief (INV-KC-1).
+//
+// FINAL COMBINED PIN (coordinator reconciliation at integration, ALL
+// phases merged): the approved conversational set is 27 tools — the 19
+// above + brief_me + relationship_radar + on_this_day + prepare_me
+// (Phase 5-A) + memory_quiz + constellation_tour (Phase 5-B) + story_time
+// + dream_playback (Phase 5-C). Writes are exactly fire_reminder +
+// create_task + capture_memory + dream_playback.
 // ---------------------------------------------------------------------------
 
 describe("agent tool set", () => {
-  it("AGENT_TOOLS is exactly the 5 approved tools", () => {
+  it("AGENT_TOOLS is exactly the 27 approved tools (19 through Phase 4 + 8 Phase 5 extras, by owner decision)", () => {
     const names = AGENT_TOOLS.map((e) => e.tool.name).sort();
-    expect(names).toEqual(["check_in", "create_task", "fire_reminder", "memory_search", "web_lookup"].sort());
+    expect(names).toEqual(
+      [
+        "agenda_list",
+        "bill_risk",
+        "brain_stats",
+        "brief_me",
+        "capture_memory",
+        "chart_discovery",
+        "check_in",
+        "constellation_tour",
+        "create_task",
+        "dream_playback",
+        "entity_lookup",
+        "finance_freshness",
+        "fire_reminder",
+        "goal_trend",
+        "insights_list",
+        "journeys_list",
+        "memory_quiz",
+        "memory_search",
+        "on_this_day",
+        "people_lookup",
+        "prepare_me",
+        "relationship_radar",
+        "review_nudge",
+        "story_time",
+        "surface_orphan",
+        "web_lookup",
+        "weekly_review",
+      ].sort(),
+    );
   });
-  it("write tools are exactly fire_reminder + create_task", () => {
+  it("the 4 Phase 5-A tools are read-only (no approval gating)", () => {
+    const phase5a = AGENT_TOOLS.filter((e) =>
+      ["brief_me", "relationship_radar", "on_this_day", "prepare_me"].includes(e.tool.name),
+    );
+    expect(phase5a).toHaveLength(4);
+    expect(phase5a.every((e) => e.isWrite === false)).toBe(true);
+  });
+  it("the 2 Phase 5-B game tools are read-only (no approval gating; quiz corrections flow through capture_memory)", () => {
+    const phase5b = AGENT_TOOLS.filter((e) =>
+      ["memory_quiz", "constellation_tour"].includes(e.tool.name),
+    );
+    expect(phase5b).toHaveLength(2);
+    expect(phase5b.every((e) => e.isWrite === false)).toBe(true);
+  });
+  it("the 3 Phase 1 tools are read-only (no approval gating)", () => {
+    const phase1 = AGENT_TOOLS.filter((e) =>
+      ["brain_stats", "people_lookup", "entity_lookup"].includes(e.tool.name),
+    );
+    expect(phase1).toHaveLength(3);
+    expect(phase1.every((e) => e.isWrite === false)).toBe(true);
+  });
+  it("the 10 Phase 4 tools are read-only (no approval gating)", () => {
+    const phase4 = AGENT_TOOLS.filter((e) =>
+      [
+        "bill_risk",
+        "goal_trend",
+        "finance_freshness",
+        "weekly_review",
+        "surface_orphan",
+        "chart_discovery",
+        "review_nudge",
+        "agenda_list",
+        "journeys_list",
+        "insights_list",
+      ].includes(e.tool.name),
+    );
+    expect(phase4).toHaveLength(10);
+    expect(phase4.every((e) => e.isWrite === false)).toBe(true);
+  });
+  it("capture_memory (Phase 2) is a WRITE tool (approval-gated, owner decision D3)", () => {
+    const entry = AGENT_TOOLS.find((e) => e.tool.name === "capture_memory");
+    expect(entry).toBeDefined();
+    expect(entry!.isWrite).toBe(true);
+  });
+  it("Phase 5-C: story_time is a READ tool; dream_playback is a WRITE tool (correction path, flagged)", () => {
+    const story = AGENT_TOOLS.find((e) => e.tool.name === "story_time");
+    expect(story).toBeDefined();
+    expect(story!.isWrite).toBe(false);
+    const dream = AGENT_TOOLS.find((e) => e.tool.name === "dream_playback");
+    expect(dream).toBeDefined();
+    expect(dream!.isWrite).toBe(true);
+  });
+  it("write tools are exactly fire_reminder + create_task + capture_memory + dream_playback (Phase 5-C flagged)", () => {
     const writes = AGENT_TOOLS.filter((e) => e.isWrite).map((e) => e.tool.name).sort();
-    expect(writes).toEqual(["create_task", "fire_reminder"]);
+    expect(writes).toEqual(["capture_memory", "create_task", "dream_playback", "fire_reminder"]);
   });
   it("argsHash is stable and order-independent", () => {
     expect(argsHash({ b: 2, a: 1 })).toBe(argsHash({ a: 1, b: 2 }));

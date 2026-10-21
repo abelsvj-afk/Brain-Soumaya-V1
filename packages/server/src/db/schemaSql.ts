@@ -157,6 +157,22 @@ export const BOOTSTRAP_SQL = `
       last_digest_date TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- Telegram open-ended notes (parity Phase 3): the DURABLE draft behind the
+    -- /note → append-verbatim → /done flow. One open draft per (space, chat);
+    -- text is the accumulated verbatim note (parts joined by one newline),
+    -- stored in the DB — never an in-memory map — so a dictated note survives
+    -- a server restart/redeploy. Identical DDL runs in migrateSchema
+    -- (db/client.ts); keep the two in sync.
+    CREATE TABLE IF NOT EXISTS telegram_note_drafts (
+      space_id TEXT NOT NULL,
+      chat_id INTEGER NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      part_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, chat_id)
+    );
+    CREATE INDEX IF NOT EXISTS telegram_note_drafts_space_idx ON telegram_note_drafts(space_id);
     -- Append-only, versioned lore per object (memory/ship/station/beacon).
     CREATE TABLE IF NOT EXISTS lore (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
