@@ -64,9 +64,12 @@ export function anchorMatchTokens(label: string, aliasesJson: string | null): st
   const toks = new Set(labelTokens(label));
   if (aliasesJson) {
     try {
-      const arr = JSON.parse(aliasesJson) as string[];
-      for (const a of arr) {
-        const phrase = a.trim().toLowerCase();
+      const parsed: unknown = JSON.parse(aliasesJson);
+      // Same coercion as listCognitive/parseTags: the column can hold any valid JSON
+      // (a legacy bare string is not an array of aliases) — only a real array yields
+      // alias tokens; anything else is ignored rather than iterated char-by-char.
+      for (const a of Array.isArray(parsed) ? parsed : []) {
+        const phrase = String(a).trim().toLowerCase();
         if (phrase.length >= 2) toks.add(phrase); // whole alias ("my girl")
         for (const w of phrase.split(/[^a-z0-9]+/)) if (w.length >= 4) toks.add(w);
       }

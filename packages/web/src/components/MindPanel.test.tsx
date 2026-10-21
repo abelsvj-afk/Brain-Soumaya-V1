@@ -130,12 +130,29 @@ describe("MindPanel — Life Vision creation", () => {
   });
 });
 
+describe("MindPanel — card aka line", () => {
+  it("renders a well-formed aliases array as 'aka …' on the card", async () => {
+    getCognitive.mockResolvedValue([goalItem({ aliases: ["5k", "race day"] })]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Run a 5k");
+    expect(screen.getByText(/aka 5k, race day/)).toBeTruthy();
+  });
+});
+
 describe("MindPanel — Life Vision target date display (never a reminder)", () => {
   it("shows 'no target date' when unset", async () => {
     getCognitive.mockResolvedValue([vision({ remindAt: null })]);
     render(<MindPanel onFocus={() => {}} />);
     await screen.findByText("Our first house");
     expect(screen.getByText("no target date")).toBeTruthy();
+  });
+
+  it("an unparseable remindAt falls back to 'no target date', never the literal 'Invalid Date'", async () => {
+    getCognitive.mockResolvedValue([vision({ remindAt: "not a date" })]);
+    render(<MindPanel onFocus={() => {}} />);
+    await screen.findByText("Our first house");
+    expect(screen.getByText("no target date")).toBeTruthy();
+    expect(screen.queryByText(/Invalid Date/)).toBeNull();
   });
 
   it("shows a plain future date, never reminder/overdue language", async () => {

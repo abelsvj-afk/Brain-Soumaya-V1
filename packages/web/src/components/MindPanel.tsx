@@ -362,6 +362,10 @@ export function MindPanel({
     // date (and the passed/target call) by the viewer's offset.
     // parseTolerantMs reads it the way every other panel does.
     const t = parseTolerantMs(it.remindAt);
+    // An unparseable stored date is NO date, not a label: without this guard the
+    // card renders the literal text "Invalid Date" (new Date(NaN)). Returning null
+    // lets the caller fall back to its plain "no target date" wording.
+    if (Number.isNaN(t)) return null;
     const passed = t < Date.now();
     const date = new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
     return passed ? `target date passed · ${date}` : `target: ${date}`;

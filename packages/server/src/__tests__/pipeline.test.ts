@@ -228,6 +228,47 @@ describe("ingestion pipeline", () => {
       // exactly the behavior that was silently broken before this fix.
       expect(count.c).toBe(2);
     });
+
+    it("still links via a valid alias when the stored aliases array holds a non-string element", async () => {
+      const personId = await addPerson("Kiana");
+      // Legacy/mixed row: the aliases column holds a valid JSON array, but one
+      // element is a number. The old cast trusted JSON.parse's result type —
+      // .toLowerCase() on the number threw, the blanket catch swallowed it, and
+      // the person's ENTIRE alias list was dropped, so a memory naming the valid
+      // alias silently never linked. The coercion (Array.isArray + String, the
+      // parseTags/listCognitive contract) keeps the real aliases working.
+      handle.sqlite
+        .prepare(`UPDATE nodes SET aliases = ? WHERE id = ?`)
+        .run(JSON.stringify(["kiki", 42]), personId);
+      const res = await ingest(
+        handle,
+        { embeddings, llm: new FakeLlm() },
+        "Had coffee with Kiki this morning",
+      );
+      const edge = res.associativeEdges.find(
+        (e) => e.target === personId && e.relationship === "supports",
+      );
+      expect(edge).toBeDefined();
+      expect(edge!.source).toBe(res.nodes[0]!.id);
+    });
+
+    it("treats a bare-string aliases value as no aliases (contract pin)", async () => {
+      const personId = await addPerson("Marisol");
+      // The reported Mind-crash shape: aliases holds a JSON string, not an array.
+      // It is not an alias list, so it must contribute no mention tokens — the
+      // value must never be treated as an iterable of names/characters.
+      handle.sqlite
+        .prepare(`UPDATE nodes SET aliases = ? WHERE id = ?`)
+        .run(JSON.stringify("mari"), personId);
+      const res = await ingest(
+        handle,
+        { embeddings, llm: new FakeLlm() },
+        "Ran into Mari at the market",
+      );
+      expect(
+        res.associativeEdges.find((e) => e.target === personId && e.relationship === "supports"),
+      ).toBeUndefined();
+    });
   });
 });
 
