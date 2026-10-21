@@ -4,6 +4,7 @@ import type { WealthSummary } from "@brain/shared";
 import type { CognitiveItem } from "../api/mind.js";
 
 const getCognitive = vi.fn();
+const getCognitiveResult = vi.fn();
 const createCognitive = vi.fn();
 const updateCognitive = vi.fn();
 const setCognitiveProgress = vi.fn();
@@ -12,6 +13,7 @@ const getThoughts = vi.fn();
 const getPersonSuggestions = vi.fn();
 vi.mock("../api/client.js", () => ({
   getCognitive: (...a: unknown[]) => getCognitive(...a),
+  getCognitiveResult: (...a: unknown[]) => getCognitiveResult(...a),
   createCognitive: (...a: unknown[]) => createCognitive(...a),
   updateCognitive: (...a: unknown[]) => updateCognitive(...a),
   setCognitiveProgress: (...a: unknown[]) => setCognitiveProgress(...a),
@@ -83,6 +85,12 @@ function wealth(over: Partial<WealthSummary> = {}): WealthSummary {
 beforeEach(() => {
   vi.resetAllMocks();
   getCognitive.mockResolvedValue([]);
+  // MindPanel now loads via getCognitiveResult; by default it faithfully
+  // wraps the getCognitive mock so existing tests keep their setup.
+  getCognitiveResult.mockImplementation(async (...a: unknown[]) => ({
+    ok: true as const,
+    items: (await getCognitive(...a)) as CognitiveItem[],
+  }));
   getUpcomingEvents.mockResolvedValue([]);
   getThoughts.mockResolvedValue([]);
   getPersonSuggestions.mockResolvedValue([]);
@@ -331,5 +339,41 @@ describe("MindPanel — Life Vision entry point (Phase M)", () => {
     expect(scrollIntoView).toHaveBeenCalled();
     // The section it scrolled to is the ONE existing rendered list, not a second copy.
     expect(screen.getAllByText("Own a small fleet")).toHaveLength(1);
+  });
+});
+
+describe("MindPanel — cognitive load failure is not an empty mind (Finding 2)", () => {
+  it("shows 'Nothing mapped yet' only for a successful empty fetch", async () => {
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText(/Nothing mapped yet/)).toBeTruthy();
+    expect(screen.queryByText(/Couldn't load your mind/)).toBeNull();
+  });
+
+  it("renders an explicit error state with Retry when the fetch fails, and recovers on retry", async () => {
+    getCognitiveResult.mockResolvedValue({ ok: false });
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText(/Couldn't load your mind/)).toBeTruthy();
+    // Failure must NOT masquerade as an empty mind.
+    expect(screen.queryByText(/Nothing mapped yet/)).toBeNull();
+
+    getCognitiveResult.mockResolvedValue({ ok: true, items: [goalItem()] });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Run a 5k")).toBeTruthy();
+    expect(screen.queryByText(/Couldn't load your mind/)).toBeNull();
+  });
+
+  it("keeps already-loaded items visible and flags a failed refresh as stale", async () => {
+    getCognitiveResult.mockResolvedValue({ ok: true, items: [goalItem()] });
+    render(<MindPanel onFocus={() => {}} />);
+    expect(await screen.findByText("Run a 5k")).toBeTruthy();
+
+    // The next refresh fails (an edit-save re-fetches): items stay, and the
+    // panel says it's showing a stale copy instead of going silently empty.
+    getCognitiveResult.mockResolvedValue({ ok: false });
+    updateCognitive.mockResolvedValue(true);
+    fireEvent.click(screen.getByTitle("Edit"));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/Couldn't refresh your mind/)).toBeTruthy();
+    expect(screen.getByText("Run a 5k")).toBeTruthy();
   });
 });
