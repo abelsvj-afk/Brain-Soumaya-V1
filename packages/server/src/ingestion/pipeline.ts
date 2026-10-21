@@ -45,7 +45,16 @@ function getMentionedPeople(s: any, spaceId: string, text: string): { id: number
     const tokens = [p.label.toLowerCase()];
     if (p.aliases) {
         try {
-            tokens.push(...(JSON.parse(p.aliases) as string[]).map(a => a.toLowerCase()));
+            const parsed: unknown = JSON.parse(p.aliases);
+            // Same aliases-column contract as parseTags (nodes.repo.ts) and
+            // listCognitive: the column is meant to hold a JSON array, but a legacy
+            // row can hold any valid JSON. The old cast trusted the parse result's
+            // type — a non-string element in an otherwise valid array made
+            // .toLowerCase() throw, and the blanket catch then dropped the person's
+            // ENTIRE alias list, so real alias mentions silently never linked.
+            // Keep only a real array, elements mapped through String; anything
+            // else degrades to no aliases.
+            if (Array.isArray(parsed)) tokens.push(...parsed.map(a => String(a).toLowerCase()));
         } catch {}
     }
 

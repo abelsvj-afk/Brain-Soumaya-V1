@@ -227,7 +227,10 @@ export function suggestPeople(ctx: AppContext, spaceId: string): PersonSuggestio
     add(p.label);
     if (p.aliases) {
       try {
-        for (const a of JSON.parse(p.aliases) as string[]) add(a);
+        // Only a real JSON array is an alias list (same coercion as listCognitive/
+        // parseTags) — a legacy bare-string value must not be iterated char-by-char.
+        const parsed: unknown = JSON.parse(p.aliases);
+        if (Array.isArray(parsed)) for (const a of parsed) add(String(a));
       } catch {
         /* ignore malformed */
       }

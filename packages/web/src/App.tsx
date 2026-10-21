@@ -2217,6 +2217,18 @@ export default function App() {
         <IngestPanel onIngested={refresh} onClose={() => setPanel(null)} />
       )}
       {panel === "dock" && (
+        // Isolated like the galaxy/mindspace/noticing surfaces: a render throw in
+        // ANY dock panel (e.g. the Mind tab) degrades the dock to a contained note
+        // instead of unmounting the whole app.
+        <ErrorBoundary
+          label="dock"
+          fallback={
+            <div className="galaxy-off-note galaxy-err" role="alert">
+              <span>⚠️ This panel hit an error</span>
+              <button onClick={() => setPanel(null)}>Close panel</button>
+            </div>
+          }
+        >
         <RightDock
           spaceName={space?.name ?? "Soumaya"}
           tab={tab}
@@ -2258,6 +2270,7 @@ export default function App() {
             pushToast(`🧭 Opening chat about "${j.title}"`, "🧭", 3500);
           }}
         />
+        </ErrorBoundary>
       )}
     </div>
   );

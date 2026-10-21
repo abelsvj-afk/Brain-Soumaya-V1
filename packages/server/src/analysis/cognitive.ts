@@ -168,7 +168,16 @@ export function listCognitive(
   return rows.map((r) => {
     let aliases: string[] = [];
     try {
-      if (r.aliases) aliases = JSON.parse(r.aliases);
+      if (r.aliases) {
+        const parsed: unknown = JSON.parse(r.aliases);
+        // The column is meant to hold a JSON array, but a legacy/double-encoded row
+        // can hold any valid JSON — a bare string, a number, an object. Trusting the
+        // parse result's type shipped a bare string to the client, whose `.join()`
+        // on the Mind panel then threw mid-render and unmounted the whole app.
+        // Coerce exactly like parseTags (nodes.repo.ts): only a real array is kept,
+        // its elements mapped through String; anything else degrades to [].
+        if (Array.isArray(parsed)) aliases = parsed.map(String);
+      }
     } catch {
       /* ignore */
     }

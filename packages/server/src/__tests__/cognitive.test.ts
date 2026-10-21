@@ -279,6 +279,36 @@ describe("cognitive layer (goals/ideas/skills/… as first-class bodies)", () =>
     expect(node?.label).toBe("Conference (renamed)");
     expect(node?.remindAt).toBe(originalDate); // unchanged
   });
+
+  // Mind-crash regression: the aliases column is supposed to hold a JSON array, but
+  // a legacy/double-encoded row can hold any valid JSON. listCognitive used to trust
+  // JSON.parse's result type and hand a bare string to the client, whose `.join()`
+  // threw mid-render and unmounted the whole app once the payload landed.
+  it("listCognitive coerces a non-array aliases value (JSON string/number/object) to []", async () => {
+    const id = await createCognitive(ctx, "legacy", "person_entity", "The Partner", "", {
+      aliases: ["girlfriend"],
+    });
+    const setRaw = (raw: string) =>
+      handle.sqlite.prepare(`UPDATE nodes SET aliases = ? WHERE id = ?`).run(raw, id);
+    const listed = () => listCognitive(ctx, "legacy", "person_entity").find((i) => i.id === id)!;
+
+    // The poisoned shapes: valid JSON, but not an array.
+    setRaw(JSON.stringify("girlfriend")); // a JSON string — the reported crash shape
+    expect(Array.isArray(listed().aliases)).toBe(true);
+    expect(listed().aliases).toEqual([]);
+    setRaw("42"); // a JSON number
+    expect(listed().aliases).toEqual([]);
+    setRaw(JSON.stringify({ name: "girlfriend" })); // a JSON object
+    expect(listed().aliases).toEqual([]);
+
+    // A well-formed array still round-trips, elements coerced through String.
+    setRaw(JSON.stringify(["partner", 7]));
+    expect(listed().aliases).toEqual(["partner", "7"]);
+
+    // Invalid JSON keeps the long-standing ignore-to-[] behavior.
+    setRaw("not json{");
+    expect(listed().aliases).toEqual([]);
+  });
 });
 
 describe("cognitiveSnapshotText — the rest of the Mind tab, for chat context", () => {

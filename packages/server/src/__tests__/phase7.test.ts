@@ -41,6 +41,22 @@ describe("Cognitive Layer Phase 7 — future events, intentions, motivations", (
     expect(kindOf(a)).toBe("future_event"); // the upcoming one is untouched
   });
 
+  it("excludes a future event whose remind_at is unparseable (never a null inDays)", async () => {
+    const ok = await createCognitive(ctx, "legacy", "future_event", "Dentist", "", {
+      date: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    });
+    const bad = await createCognitive(ctx, "legacy", "future_event", "Mystery", "", {
+      date: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+    });
+    // Corrupt the stored date: julianday() of this is NULL, so the row used to
+    // surface with inDays = NULL — rendered by the Mind panel as "in nulld".
+    handle.sqlite.prepare(`UPDATE nodes SET remind_at = 'not a date' WHERE id = ?`).run(bad);
+
+    const up = upcomingEvents(ctx, "legacy");
+    expect(up.map((e) => e.id)).toEqual([ok]);
+    expect(up.every((e) => Number.isInteger(e.inDays))).toBe(true);
+  });
+
   it("fulfils an intention that gets acted on, and expires one that doesn't", async () => {
     const acted = await createCognitive(ctx, "legacy", "intention", "Call the plumber", "");
     const ignored = await createCognitive(ctx, "legacy", "intention", "Reorganise the garage", "");

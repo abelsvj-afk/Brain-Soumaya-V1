@@ -22,4 +22,15 @@ describe("cognitiveTokens", () => {
     const toks = anchorMatchTokens("Shaqavia Jones", null);
     expect(toks.length).toBeGreaterThan(0);
   });
+
+  it("anchorMatchTokens ignores a non-array aliases value instead of iterating it", () => {
+    // The aliases column can hold any valid JSON (legacy bare string/number/object).
+    // Only a real array yields alias tokens; the label's own tokens are unaffected.
+    const labelOnly = anchorMatchTokens("Shaqavia Jones", null);
+    expect(anchorMatchTokens("Shaqavia Jones", JSON.stringify("girlfriend"))).toEqual(labelOnly);
+    expect(anchorMatchTokens("Shaqavia Jones", "42")).toEqual(labelOnly);
+    expect(anchorMatchTokens("Shaqavia Jones", JSON.stringify({ a: 1 }))).toEqual(labelOnly);
+    // A well-formed array still contributes its alias tokens.
+    expect(anchorMatchTokens("Shaqavia Jones", JSON.stringify(["girlfriend"]))).toContain("girlfriend");
+  });
 });

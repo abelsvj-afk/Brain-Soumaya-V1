@@ -17,12 +17,18 @@ export interface UpcomingEvent {
 
 /** Future events sorted by date (soonest first), with days-until (neg = overdue). */
 export function upcomingEvents(ctx: AppContext, spaceId: string): UpcomingEvent[] {
+  // The julianday() IS NOT NULL term deliberately EXCLUDES an event whose stored
+  // remind_at can't be parsed as a date at all: such an event can't be placed on a
+  // timeline, and without the filter it surfaced with inDays = NULL (julianday of
+  // garbage), which the Mind panel rendered as the literal text "in nulld". With
+  // the filter, every returned row's inDays is a real integer, as typed.
   const rows = ctx.handle.sqlite
     .prepare(
       `SELECT id, label, remind_at AS date,
          CAST(julianday(remind_at) - julianday('now') AS INTEGER) AS inDays
        FROM nodes
        WHERE space_id = ? AND deleted_at IS NULL AND kind = 'future_event' AND remind_at IS NOT NULL
+         AND julianday(remind_at) IS NOT NULL
        ORDER BY remind_at ASC LIMIT 50`,
     )
     .all(spaceId) as UpcomingEvent[];
