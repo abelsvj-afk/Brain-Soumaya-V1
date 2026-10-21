@@ -12,7 +12,17 @@
  *       helper, updateUserModel) — in particular NOT in
  *       sweepStaleEmotions / sweepWithdrawnEvidence or any helper they
  *       could hide behind (any other function appearing with a write
- *       fails this test by name).
+ *       fails this test by name), or
+ *   (c) in episodic.ts outside the §8.6-sanctioned forget flow
+ *       (Package E6, 2026-10-21: the W3 design sanctions THREE writers —
+ *       the consolidation boundary, the validated W2 APIs, and the forget
+ *       flow in episodic.ts; the gate originally scanned only the first
+ *       two scopes, so the forget flow held by discipline, not
+ *       enforcement). episodic.ts writes must appear ONLY inside
+ *       applyForgetRequest AND match one of the two vetted statement
+ *       shapes exactly (suspension on sole-evidence withdrawal; evidence
+ *       pruning) — the scope's scan also covers DELETE FROM user_model,
+ *       so any new UPDATE/INSERT/DELETE shape fails by name.
  *
  * Implementation: the TypeScript compiler AST is used instead of raw
  * text regex, which makes the scan immune to comments (a comment
@@ -31,8 +41,13 @@ const agentDir = path.resolve(here, "..");
 const consolidationDir = path.join(agentDir, "consolidation");
 const boundaryFile = path.join(consolidationDir, "boundary.ts");
 const userModelFile = path.join(agentDir, "userModel.ts");
+const episodicFile = path.join(agentDir, "episodic.ts");
 
 const WRITE_RE = /\b(update\s+user_model|insert\s+into\s+user_model)\b/i;
+/** The episodic scope additionally covers DELETE (E6): the forget flow is
+ *  a sanctioned writer, so a user_model DELETE appearing there must fail
+ *  exactly like an unvetted UPDATE/INSERT would. */
+const WRITE_OR_DELETE_RE = /\b(update\s+user_model|insert\s+into\s+user_model|delete\s+from\s+user_model)\b/i;
 
 interface WriteSite {
   file: string;
@@ -41,6 +56,8 @@ interface WriteSite {
   /** Character offset of the literal in the source. */
   pos: number;
   snippet: string;
+  /** Full whitespace-collapsed literal text (for exact-shape matching). */
+  normalized: string;
 }
 
 function literalText(node: ts.Node): string | null {
@@ -66,7 +83,7 @@ function enclosingTopLevelFunction(node: ts.Node, sf: ts.SourceFile): string | n
   return null;
 }
 
-function collectWriteSites(file: string): WriteSite[] {
+function collectWriteSites(file: string, writeRe: RegExp = WRITE_RE): WriteSite[] {
   const source = fs.readFileSync(file, "utf8");
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const sites: WriteSite[] = [];
@@ -74,12 +91,13 @@ function collectWriteSites(file: string): WriteSite[] {
     const text = literalText(node);
     if (text !== null) {
       const normalized = text.replace(/\s+/g, " ");
-      if (WRITE_RE.test(normalized)) {
+      if (writeRe.test(normalized)) {
         sites.push({
           file,
           fn: enclosingTopLevelFunction(node, sf),
           pos: node.getStart(sf),
           snippet: normalized.slice(0, 60),
+          normalized,
         });
       }
     }
@@ -154,6 +172,35 @@ describe("Phase F grep gate: user_model writes live only behind the boundary", (
     expect(fns.has("recordStated")).toBe(true);
     expect(fns.has("updateUserModel")).toBe(true);
     expect(fns.has("correctUserModel")).toBe(true);
+  });
+
+  it("episodic.ts: user_model writes exist ONLY as the two vetted forget-flow shapes inside applyForgetRequest (§8.6 third sanctioned writer, E6)", () => {
+    // The vetted write shapes of applyForgetRequest's evidence propagation
+    // (episodic.ts §5 of the flow) — exact statements after the scan's
+    // whitespace normalization. Anything else (a new column set, an INSERT,
+    // a DELETE, the same statement moved to another function) fails below.
+    const VETTED_SHAPES = new Set([
+      // Sole evidence withdrawn → suspend the claim (never delete it).
+      "UPDATE user_model SET invalid_at = ?, invalid_reason = 'evidence_withdrawn' WHERE id = ?",
+      // Independent evidence remains → prune only the forgotten refs.
+      "UPDATE user_model SET evidence_ids = ? WHERE id = ?",
+    ]);
+    const sites = collectWriteSites(episodicFile, WRITE_OR_DELETE_RE);
+    // Sanity: the gate is not vacuous — the forget flow really writes, and
+    // both vetted shapes are actually present (a shape silently vanishing
+    // from the flow is a behavior change the gate should surface here).
+    expect(sites.length).toBe(2);
+    expect(new Set(sites.map((s) => s.normalized))).toEqual(VETTED_SHAPES);
+    for (const site of sites) {
+      expect(
+        site.fn === "applyForgetRequest",
+        `user_model write outside applyForgetRequest in episodic.ts (fn=${site.fn}): ${site.snippet}`,
+      ).toBe(true);
+      expect(
+        VETTED_SHAPES.has(site.normalized),
+        `unvetted user_model write shape in episodic.ts: ${site.normalized}`,
+      ).toBe(true);
+    }
   });
 
   it("the boundary exports the single entry point", () => {

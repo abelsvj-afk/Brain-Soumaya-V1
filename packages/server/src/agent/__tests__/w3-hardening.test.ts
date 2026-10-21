@@ -315,6 +315,57 @@ describe("T-C81 (partial): forget invalidating a stated entry bumps V → V+1", 
 });
 
 // ---------------------------------------------------------------------------
+// E6 (Package E, 2026-10-21): forget-flow transactional pin for the
+// user_model side specifically. The W2 rollback pin (w2.test.ts "a fault
+// mid-apply rolls back the entire propagation") faults at the tombstone
+// UPDATE — step 1, BEFORE any user_model write exists to roll back. This
+// pin faults DURING step 5 (evidence propagation), after the first claim
+// has already been suspended inside the transaction: no partial
+// suspension/pruning may survive — the earlier write, the episode
+// tombstone, the version, and the request status all roll back.
+// ---------------------------------------------------------------------------
+
+describe("E6: a fault mid-propagation rolls back the forget flow's user_model writes too", () => {
+  it("suspension written before the fault is rolled back; nothing is half-applied", () => {
+    const E = seedEpisode("episode both claims rest on");
+    // Two sole-evidence claims on the same episode: the propagation loop
+    // suspends the first, then reaches the second — where the fault fires.
+    const first = recordStated(handle, SPACE, "belief", "believes the first thing", ev(E));
+    const second = recordStated(handle, SPACE, "belief", "believes the second thing", ev(E));
+    const v = statedVersion();
+
+    const req = createForgetRequest(E);
+    approveForgetRequest(req, [E]);
+
+    handle.sqlite.exec(
+      `CREATE TRIGGER e6_test_fault BEFORE UPDATE ON user_model
+       WHEN NEW.id = ${second.id} BEGIN SELECT RAISE(ABORT, 'e6 injected fault'); END;`,
+    );
+    try {
+      expect(() => applyForgetRequest(handle, req)).toThrow(/e6 injected fault/);
+    } finally {
+      handle.sqlite.exec(`DROP TRIGGER e6_test_fault`);
+    }
+    // The first claim's suspension (already executed inside the tx) is gone.
+    expect(userModelRow(first.id).invalid_at).toBeNull();
+    expect(userModelRow(first.id).invalid_reason).toBeNull();
+    expect(userModelRow(second.id).invalid_at).toBeNull();
+    // Episode side rolled back too: no tombstone.
+    const ep = handle.sqlite
+      .prepare(`SELECT summary, forgotten_at FROM episodes WHERE id = ?`)
+      .get(E) as { summary: string; forgotten_at: string | null };
+    expect(ep.forgotten_at).toBeNull();
+    expect(ep.summary).not.toContain("[redacted per forget request");
+    // No version bump, request still approved (never marked applied).
+    expect(statedVersion()).toBe(v);
+    const fr = handle.sqlite
+      .prepare(`SELECT status FROM forget_requests WHERE id = ?`)
+      .get(req) as { status: string };
+    expect(fr.status).toBe("approved");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // §6.3 sweep matrix (Phase A wiring): stated emotion rows are flagged,
 // never expired, by sweepStaleEmotions.
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { EXTRACTABLE_NODE_TYPES, NODE_TYPE_GUIDE, RELATIONSHIP_TYPES } from "@brain/shared";
 import type { ContextNode, LinkCandidate } from "./adapter.js";
+import { localDayInZone } from "../lib/time.js";
 
 /** Bulleted "kind — definition" guide, so the model classifies into the taxonomy. */
 const NODE_TYPE_LIST = EXTRACTABLE_NODE_TYPES.map((t) => `  • ${t} — ${NODE_TYPE_GUIDE[t]}`).join("\n");
@@ -8,16 +9,44 @@ const NODE_TYPE_LIST = EXTRACTABLE_NODE_TYPES.map((t) => `  • ${t} — ${NODE_
  * A short "how long ago" label for a memory's occurredAt/createdAt, relative to real
  * wall-clock time — the model otherwise has NO temporal signal at all (ContextNode
  * carried no date until this) and treats every memory as equally "now".
+ *
+ * Package E3: the label is a CALENDAR label, not an elapsed-hours label. It
+ * is the whole-day difference between the memory's calendar day and today's
+ * calendar day, BOTH in the SPACE's timezone (via the sweep's shared
+ * localDayInZone): a memory logged 23:00 local and read 07:00 the next
+ * local day is "yesterday" (8 elapsed hours, 1 calendar day) — the
+ * pre-fix elapsed math called it "today", a wrong label the model could
+ * repeat to the owner. Bucketing for larger gaps keeps the previous shape
+ * (weeks / months / years), keyed off the calendar-day difference.
+ *
+ * The timezone is REQUIRED for a label: with no zone — or an unusable zone
+ * string — the tag is omitted (undefined) rather than computed from raw
+ * elapsed hours against an assumed zone (never UTC, never the server's
+ * zone, never localDayInZone's internal last-resort fallback, which is
+ * why the zone is validated here before that helper is called).
+ * `nowMs` is injectable for tests (defaults to the wall clock).
  */
-function relativeTime(iso?: string): string | undefined {
+export function relativeTime(iso?: string, timezone?: string, nowMs: number = Date.now()): string | undefined {
   if (!iso) return undefined;
   const ms = Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
   if (Number.isNaN(ms)) return undefined;
-  const days = (Date.now() - ms) / 86_400_000;
-  if (days < 0) return undefined; // clock skew / future timestamp — say nothing rather than lie
-  if (days < 1) return "today";
-  if (days < 2) return "yesterday";
-  if (days < 7) return `${Math.floor(days)} days ago`;
+  if (ms > nowMs) return undefined; // clock skew / future timestamp — say nothing rather than lie
+  if (!timezone) return undefined; // no zone → no calendar tag (see above)
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: timezone });
+  } catch {
+    return undefined; // unusable zone string → omit, same as no zone
+  }
+  const memDay = localDayInZone(ms, timezone);
+  const todayDay = localDayInZone(nowMs, timezone);
+  // Whole CALENDAR days between the two local dates (noon-UTC anchors make
+  // the subtraction exact — the same pattern as lifeSeasons'
+  // calendarDaysBetween; DST never applies to a date-string difference).
+  const days = Math.round((Date.parse(`${todayDay}T12:00:00Z`) - Date.parse(`${memDay}T12:00:00Z`)) / 86_400_000);
+  if (days < 0) return undefined; // future local day (skew) — say nothing rather than lie
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
   if (days < 31) return `${Math.floor(days / 7)} week${Math.floor(days / 7) === 1 ? "" : "s"} ago`;
   if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) === 1 ? "" : "s"} ago`;
   return `${Math.floor(days / 365)} year${Math.floor(days / 365) === 1 ? "" : "s"} ago`;
@@ -272,12 +301,17 @@ export function buildAnswerPrompt(
   justAsked?: boolean,
   galaxyCandidates?: { kind: string; id: number; label: string }[],
   attachments?: string,
+  /** The space's IANA timezone — threaded to relativeTime() so each
+   *  memory's "today / yesterday / N days ago" tag follows the SPACE-LOCAL
+   *  calendar (Package E3). Callers without a zone omit it and the tags are
+   *  omitted too — never computed against an assumed zone. */
+  timezone?: string,
 ): string {
   const memories =
     context.length > 0
       ? context
           .map((c) => {
-            const when = relativeTime(c.occurredAt);
+            const when = relativeTime(c.occurredAt, timezone);
             return `[${c.id}] (${c.type}${when ? `, ${when}` : ""}) ${c.label}: ${c.content}`;
           })
           .join("\n")
@@ -318,6 +352,23 @@ export function buildAnswerPrompt(
  * Without a (valid) timezone, the historical UTC-only rendering is kept, so
  * callers that don't know the space behave exactly as before.
  */
+/**
+ * The "RIGHT NOW" line for a turn whose timezone genuinely could not be
+ * resolved (Package E2, owner rule: NO silent UTC grounding, ever). This is
+ * NOT a zone rendering at all — it tells the model time context is
+ * unavailable and forbids relative-date claims, instead of dressing the UTC
+ * instant up as "now". Reached only via composeSystem's explicit
+ * `timezone: null`; `undefined` keeps the historical rendering for callers
+ * that supply no zone.
+ */
+export function formatNowUnavailableLine(): string {
+  return (
+    "RIGHT NOW: The current local date and time are unavailable — the user's timezone could not be resolved for this turn. " +
+    "Do not assume a date, day, or time, and do not present any other zone's time as the user's now. " +
+    "If timing matters for your answer, say plainly that you don't have their local time right now, and answer without relative-date claims."
+  );
+}
+
 export function formatNowLine(nowMs: number, timezone?: string): string {
   const now = new Date(nowMs);
   if (timezone) {
@@ -367,8 +418,12 @@ export function composeSystem(opts?: {
   persona?: string;
   systemExtra?: string;
   /** The space's IANA timezone (space_meta.timezone — the same one quiet hours
-   *  and the digest use). Grounds the RIGHT NOW line in the user's local day. */
-  timezone?: string;
+   *  and the digest use). Grounds the RIGHT NOW line in the user's local day.
+   *  `undefined` = the caller supplies no zone (historical rendering, kept
+   *  for existing callers); `null` = the caller TRIED to resolve the space's
+   *  zone and genuinely could not (Package E2) — the turn is grounded with
+   *  formatNowUnavailableLine(), never the UTC rendering. */
+  timezone?: string | null;
   /** Epoch ms for "now" (defaults to Date.now(); injectable for tests). */
   nowMs?: number;
 }): string {
@@ -377,7 +432,7 @@ export function composeSystem(opts?: {
   // ever told her "now", so she couldn't reason about recency, relative dates ("last
   // Tuesday" from today), or how stale/fresh a memory is beyond what relativeTime() already
   // stamps on each memory line below.
-  s += `\n\n${formatNowLine(opts?.nowMs ?? Date.now(), opts?.timezone)}`;
+  s += `\n\n${opts?.timezone === null ? formatNowUnavailableLine() : formatNowLine(opts?.nowMs ?? Date.now(), opts?.timezone ?? undefined)}`;
   if (opts?.soul) {
     // Deeper character (soul.md). Sits in the identity slot but cannot override the
     // mechanics above (companion-never-the-user, citations, JSON output).

@@ -2,7 +2,7 @@ import type { AppContext } from "../context.js";
 import type { TimelineChapter, ChapterTrend, ChapterThread } from "@brain/shared";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { spaceTimezone } from "../agent/notify/policy.js";
-import { parseTolerantMs, localMonthInZone } from "../lib/time.js";
+import { parseTolerantMs, localMonthInZone, localDayInZone } from "../lib/time.js";
 
 /**
  * The Chronicle — chapters of your life on the 3D flowing-river timeline. Soumaya
@@ -254,26 +254,204 @@ function titleFor(trend: ChapterTrend, theme: string): string {
   return t ? `Holding steady in ${t}` : "Steady days";
 }
 
+/** The trend sentence of a chapter narrative, by trend. ONE source of truth:
+ *  narrate() writes exactly these, and the formula-signature matcher below
+ *  builds its template from the same strings. */
+const TREND_SENTENCE: Record<ChapterTrend, string> = {
+  growth: "The mood of this stretch lifted — more brightened than dimmed.",
+  decline: "This was a heavier stretch; the weight of it shows in what you logged.",
+  mixed: "It pulled both ways — real highs threaded through real lows.",
+  neutral: "It held a steady register, neither soaring nor sinking.",
+};
+
+/** The opening sentence of a chapter narrative — the ONLY sentence the
+ *  2026-10-21 truthfulness fix changed. The measure is DISTINCT ACTIVE
+ *  DAYS: the number of SPACE-local calendar days on which at least one of
+ *  the chapter's memories was actually logged. Chosen over a first→last
+ *  span because the sentence sits under a card whose header already shows
+ *  the chapter's full period; what a reader wants from the sentence is how
+ *  much of that period they actually showed up in — and a span measure
+ *  repeats the header while still reading as activity. The wording states
+ *  the measure exactly: "on N different days". */
+export function narrativeOpening(memoryCount: number, activeDays: number): string {
+  if (memoryCount <= 0) return "No new memories landed in this stretch.";
+  return `You added ${memoryCount} memor${memoryCount === 1 ? "y" : "ies"} on ${activeDays} different day${activeDays === 1 ? "" : "s"}.`;
+}
+
+/** Distinct SPACE-local days among the given instants (owner rule: day
+ *  boundaries are the space's own local days, via lib/time localDayInZone). */
+export function activeDaysOf(instantsMs: number[], tz: string): number {
+  const days = new Set<string>();
+  for (const ms of instantsMs) {
+    if (Number.isFinite(ms)) days.add(localDayInZone(ms, tz));
+  }
+  return days.size;
+}
+
 /** Deterministic, offline narrative for a chapter (meaningful with no API key). */
-function narrate(a: Assessment): string {
-  // Span the window from the FIRST memory in it — not `a.since`, which is the epoch for
-  // the first/backfill chapter (that made the opening chapter read "Across ~20000 days").
-  const startMs = toMs(a.since) > 0 ? toMs(a.since) : toMs(a.windowMems[0]?.created_at);
-  const endMs = toMs(a.windowMems[a.windowMems.length - 1]?.created_at);
-  const days = Math.max(1, Math.round((endMs - startMs) / 86_400_000)) || 1;
+function narrate(a: Assessment, tz: string): string {
   const m = a.windowMems.length;
+  const activeDays = activeDaysOf(a.windowMems.map((mem) => toMs(mem.created_at)), tz);
   const parts: string[] = [];
-  parts.push(`Across about ${days} day${days === 1 ? "" : "s"}, you added ${m} memor${m === 1 ? "y" : "ies"}.`);
-  if (a.trend === "growth") parts.push("The mood of this stretch lifted — more brightened than dimmed.");
-  else if (a.trend === "decline") parts.push("This was a heavier stretch; the weight of it shows in what you logged.");
-  else if (a.trend === "mixed") parts.push("It pulled both ways — real highs threaded through real lows.");
-  else parts.push("It held a steady register, neither soaring nor sinking.");
+  parts.push(narrativeOpening(m, activeDays));
+  parts.push(TREND_SENTENCE[a.trend]);
   if (a.theme) parts.push(`Much of it circled around ${a.theme}.`);
   const people = a.threads.filter((t) => t.name).map((t) => t.name);
   if (people.length) parts.push(`${people.slice(0, 3).join(", ")} kept showing up.`);
   if (a.milestones > 0) parts.push(`${a.milestones} new thing${a.milestones === 1 ? "" : "s"} took root in your mind.`);
   if (a.photoCount > 0) parts.push(`You captured ${a.photoCount} moment${a.photoCount === 1 ? "" : "s"} in pictures.`);
   return parts.join(" ");
+}
+
+/* ------------------------------------------------------------------ *
+ * Stored-narrative regeneration (screenshot finding #5, 2026-10-21).
+ *
+ * Chapter narratives are STORED at creation, so fixing narrate() alone
+ * leaves every existing card telling the old lie ("Across about 1 day"
+ * measured window-opening → last memory, under a 9-day header). This is
+ * the backfill path for those stored texts.
+ *
+ * TEMPLATE SIGNATURE (what "purely formula-derived" means, exactly): a
+ * stored summary is formula-derived iff it FULLY matches (anchored ^…$)
+ *   OPENING ( " " TREND )? ( " " THEME )? ( " " PEOPLE )? ( " " MILESTONES )? ( " " PHOTOS )?
+ * where
+ *   OPENING    = the pre-fix span form  "Across about N day(s), you added M memory/ies."
+ *              | the current form       "You added M memory/ies on D different day(s)."
+ *              | the current empty form "No new memories landed in this stretch."
+ *   TREND      = one of the four TREND_SENTENCE strings, verbatim
+ *   THEME      = "Much of it circled around <anything>."
+ *   PEOPLE     = "<anything> kept showing up."
+ *   MILESTONES = "K new thing(s) took root in your mind."
+ *   PHOTOS     = "You captured K moment(s) in pictures."
+ * in that fixed order — i.e. precisely the sentence inventory narrate()
+ * can emit, nothing else. ANY deviation (a hand edit, LLM prose, an extra
+ * or reordered sentence) fails the match and the narrative is EXCLUDED:
+ * counted, never rewritten. Before an old-span narrative is rewritten,
+ * its stated memory count is additionally cross-checked against the
+ * count recomputed from the chapter's own window; a mismatch (data
+ * drifted since creation) also excludes it.
+ * ------------------------------------------------------------------ */
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const FORMULA_TAIL =
+  `(?: (?:${Object.values(TREND_SENTENCE).map(escapeRegExp).join("|")}))?` +
+  `(?: Much of it circled around .+\\.)?` +
+  `(?: .+ kept showing up\\.)?` +
+  `(?: \\d+ new things? took root in your mind\\.)?` +
+  `(?: You captured \\d+ moments? in pictures\\.)?`;
+const OLD_OPENING_RE = /^Across about (\d+) days?, you added (\d+) memor(?:y|ies)\./;
+const OLD_FORMULA_RE = new RegExp(`^Across about \\d+ days?, you added \\d+ memor(?:y|ies)\\.${FORMULA_TAIL}$`);
+const CURRENT_FORMULA_RE = new RegExp(
+  `^(?:You added \\d+ memor(?:y|ies) on \\d+ different days?\\.|No new memories landed in this stretch\\.)${FORMULA_TAIL}$`,
+);
+
+export type FormulaNarrativeKind = "old-span" | "current";
+/** Classify a stored chapter summary against the narrate() template
+ *  signature (see above). Returns null for ANY non-formula content. */
+export function matchFormulaNarrative(summary: string): { kind: FormulaNarrativeKind; memoryCount: number | null } | null {
+  const text = (summary ?? "").trim();
+  if (!text) return null;
+  const old = OLD_OPENING_RE.exec(text);
+  if (old && OLD_FORMULA_RE.test(text)) return { kind: "old-span", memoryCount: Number(old[2]) };
+  if (CURRENT_FORMULA_RE.test(text)) {
+    const m = /^You added (\d+) memor/.exec(text);
+    return { kind: "current", memoryCount: m ? Number(m[1]) : 0 };
+  }
+  return null;
+}
+
+export interface ChapterNarrativeClasses {
+  /** Stored narratives matching the CURRENT formula (nothing to do). */
+  current: number;
+  /** Stored narratives matching the OLD span formula (regenerable). */
+  oldFormula: number;
+  /** Stored narratives with ANY non-formula content — EXCLUDED from
+   *  regeneration by rule. This count (never the content) is how the
+   *  owner can size the excluded class. */
+  nonFormula: number;
+}
+
+/** Count-only classification of a space's stored chapter narratives.
+ *  Reads summaries solely to classify them against the template signature;
+ *  returns counts, never content. */
+export function countChapterNarratives(ctx: AppContext, spaceId: string = DEFAULT_SPACE): ChapterNarrativeClasses {
+  const rows = ctx.handle.sqlite
+    .prepare(`SELECT summary FROM timeline_chapters WHERE space_id = ?`)
+    .all(spaceId) as { summary: string }[];
+  const out: ChapterNarrativeClasses = { current: 0, oldFormula: 0, nonFormula: 0 };
+  for (const r of rows) {
+    const match = matchFormulaNarrative(r.summary ?? "");
+    if (!match) out.nonFormula++;
+    else if (match.kind === "old-span") out.oldFormula++;
+    else out.current++;
+  }
+  return out;
+}
+
+export interface ChapterNarrativeRegenReport extends ChapterNarrativeClasses {
+  /** Old-formula narratives actually rewritten to the truthful measure. */
+  regenerated: number;
+  /** Old-formula narratives whose stated memory count no longer matches
+   *  the recomputed window count — excluded rather than rewritten on a
+   *  guess (counted here, and also inside oldFormula). */
+  skippedCountMismatch: number;
+}
+
+/**
+ * Rewrite stored OLD-formula chapter narratives to the current truthful
+ * opening sentence. Only the opening sentence is replaced; the remainder
+ * of the stored text (trend/theme/people/milestone/photo sentences) is
+ * preserved byte-for-byte. Non-formula narratives are never touched.
+ *
+ * Deliberately a callable routine, NOT wired to any route/job/lazy read:
+ * no existing maintenance trigger owns chapter text, and silently
+ * rewriting stored prose on a read path would be the wrong default. The
+ * trigger is an owner decision (see the package report).
+ */
+export function regenerateChapterNarratives(ctx: AppContext, spaceId: string = DEFAULT_SPACE): ChapterNarrativeRegenReport {
+  const s = ctx.handle.sqlite;
+  const tz = spaceTimezone(s, spaceId);
+  const classes = countChapterNarratives(ctx, spaceId);
+  const rows = s
+    .prepare(`SELECT id, summary, period_start, period_end FROM timeline_chapters WHERE space_id = ? ORDER BY period_end ASC, id ASC`)
+    .all(spaceId) as { id: number; summary: string; period_start: string; period_end: string }[];
+  const allMems = s
+    .prepare(
+      `SELECT created_at FROM nodes
+       WHERE space_id = ? AND deleted_at IS NULL AND (kind IS NULL OR kind = 'memory')
+       ORDER BY created_at ASC`,
+    )
+    .all(spaceId) as { created_at: string }[];
+
+  let regenerated = 0;
+  let skippedCountMismatch = 0;
+  let prevPeriodEnd: string | null = null;
+  for (const row of rows) {
+    const match = matchFormulaNarrative(row.summary ?? "");
+    if (match?.kind === "old-span") {
+      // Recompute the chapter's window exactly as assessChange defined it
+      // at creation: (previous chapter's boundary, this chapter's end].
+      const sinceMs = prevPeriodEnd ? toMs(prevPeriodEnd) : 0;
+      const endMs = toMs(row.period_end);
+      const windowMs = allMems
+        .map((mem) => toMs(mem.created_at))
+        .filter((ms) => ms > sinceMs && ms <= endMs);
+      if (match.memoryCount !== windowMs.length) {
+        skippedCountMismatch++; // data drifted — excluded, never guessed at
+      } else {
+        const opening = OLD_OPENING_RE.exec((row.summary ?? "").trim())!;
+        const rest = (row.summary ?? "").trim().slice(opening[0].length);
+        const next = narrativeOpening(windowMs.length, activeDaysOf(windowMs, tz)) + rest;
+        s.prepare(`UPDATE timeline_chapters SET summary = ? WHERE id = ? AND space_id = ?`).run(next, row.id, spaceId);
+        regenerated++;
+      }
+    }
+    prevPeriodEnd = row.period_end;
+  }
+  return { ...classes, regenerated, skippedCountMismatch };
 }
 
 function chaptersThisMonth(ctx: AppContext, spaceId: string, nowISO: string): number {
@@ -304,7 +482,7 @@ function insertChapter(
   titleOverride?: string,
 ): TimelineChapter {
   const title = titleOverride?.trim() || titleFor(a.trend, a.theme);
-  const summary = narrate(a);
+  const summary = narrate(a, spaceTimezone(ctx.handle.sqlite, spaceId));
   const periodStart = a.since && toMs(a.since) > 0 ? a.since : a.windowMems[0]?.created_at ?? nowISO;
   const info = ctx.handle.sqlite
     .prepare(

@@ -8,7 +8,8 @@ import type { GraphNode, TimelineChapter } from "@brain/shared";
  *  - IM-122: jump-to-latest, chapter search, honest add/delete failure
  *    toasts, delete via the shared ConfirmDialog, and a settled-but-empty
  *    photo slot reads "no photo", never a forever-loading 📷.
- *  - IM-123: chapter dates keep UTC grouping but SAY SO (header + card).
+ *  - IM-123 (superseded 2026-10-21, owner no-UTC rule): chapter dates group
+ *    + render in the space's own local timezone; no "UTC" text anywhere.
  *  - IM-137 (future-events portion): the "Ahead" section lists the existing
  *    future_event kind with dates; a failed fetch is an honest note + retry.
  *
@@ -38,7 +39,7 @@ vi.mock("../api/client.js", () => ({
 }));
 vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) }));
 
-import { TimelineView } from "./TimelineView.js";
+import { TimelineView, formatLocalDate } from "./TimelineView.js";
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -100,13 +101,28 @@ describe("IM-121 — theme + change magnitude render", () => {
   });
 });
 
-describe("IM-123 — UTC basis is labelled, not silent", () => {
-  it("header names the UTC basis; the card repeats it next to the dates", async () => {
+describe("Owner no-UTC rule (2026-10-21) — dates are local, and say so plainly", () => {
+  it("subtitle speaks in local terms; NO 'UTC' string renders anywhere", async () => {
     await renderWithChapters(CHAPTERS);
-    expect(screen.getByText(/chapter dates in UTC/)).toBeTruthy();
+    expect(screen.getByText("your story, in order · dates in your local time")).toBeTruthy();
     fireEvent.click(screen.getByText("The Quiet Winter"));
-    const when = await screen.findByText(/· UTC/);
-    expect(when).toBeTruthy();
+    await screen.findByText("change magnitude 35%");
+    expect(document.body.textContent ?? "").not.toContain("UTC");
+  });
+
+  it("row + card dates render the SPACE-local day of the stored instant", async () => {
+    // 02:00 UTC on Jan 1 is still Dec 31 in America/New_York (the space's
+    // zone) — the local render must follow formatLocalDate, never the UTC day.
+    const ch = chapter({
+      id: 3, title: "Late Night Chapter",
+      periodStart: "2026-01-01 02:00:00", periodEnd: "2026-01-10 02:00:00",
+    });
+    await renderWithChapters([ch]);
+    const expected = `${formatLocalDate(ch.periodStart)} – ${formatLocalDate(ch.periodEnd)}`;
+    expect(screen.getByText(expected)).toBeTruthy();
+    fireEvent.click(screen.getByText("Late Night Chapter"));
+    const cardExpected = `${formatLocalDate(ch.periodStart)} → ${formatLocalDate(ch.periodEnd)}`;
+    await waitFor(() => expect(document.body.textContent ?? "").toContain(cardExpected));
   });
 });
 

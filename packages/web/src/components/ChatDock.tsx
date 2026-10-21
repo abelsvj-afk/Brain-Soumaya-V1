@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatMood, NodeRef, NavigationIntent } from "@brain/shared";
+import type { ChatDegradedReason, ChatMood, NodeRef, NavigationIntent } from "@brain/shared";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { askChat, getSpaceId, ingestText, distillChat, type ProactiveContext } from "../api/client.js";
+import { CHAT_QUESTION_MAX } from "../api/chatSend.js";
 import { colorForType } from "../graph/theme.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
@@ -51,6 +52,30 @@ interface ChatMessage {
   /** The subgraph she actually consulted for this reply (IM-107) — powers
    *  the "drew on N memories" galaxy-highlight chip. */
   contextIds?: number[];
+  /** Finding 2: this reply came from the offline fallback — rendered with a
+   *  visible limited-mode banner naming the real reason, and WITHOUT the
+   *  "drew on N memories" dressing (the field above stays unset for it). */
+  degraded?: { reason: ChatDegradedReason };
+}
+
+/** Finding 2: truthful limited-mode copy per degraded reason. The
+ *  "connect a key" line appears ONLY for the missing-key case (offline) —
+ *  quota/timeout/budget/auth each name their actual cause. */
+function degradedCopy(reason: ChatDegradedReason): string {
+  switch (reason) {
+    case "offline":
+      return "No AI key is connected, so this is my offline mind — a simple look at your memories, not my full thinking. Connect an OpenAI or Gemini key to bring my deep mind online.";
+    case "auth":
+      return "My cloud AI key was rejected, so I answered with my offline mind — a simple look at your memories, not my full thinking. Check the key in Settings to restore full answers.";
+    case "quota":
+      return "The cloud AI account is out of credit, so I answered with my offline mind — a simple look at your memories, not my full thinking.";
+    case "timeout":
+      return "The cloud AI took too long to answer, so I answered with my offline mind — a simple look at your memories, not my full thinking.";
+    case "budget":
+      return "This app's own AI spend cap was reached, so I answered with my offline mind — a simple look at your memories. You can raise the cap in the Soumaya tab → Advanced.";
+    case "error":
+      return "The cloud AI hit a problem, so I answered with my offline mind — a simple look at your memories, not my full thinking.";
+  }
 }
 
 /** Local time for a message (IM-105): time-of-day today, date + time before
@@ -78,6 +103,46 @@ function getRecognition(): any {
 }
 
 const chatKey = (): string => `brain.chat.${getSpaceId() ?? "default"}`;
+
+/** Finding 8 (exit 7): a send that finishes while the dock is closed parks
+ *  its outcome here, so reopening the chat resolves it visibly instead of
+ *  stranding the user's message with no reply and no error. */
+const chatNoticeKey = (): string => `brain.chatNotice.${getSpaceId() ?? "default"}`;
+
+type ChatRetry = { q: string; history: { role: "you" | "soumaya"; text: string }[]; atts: { name: string; text: string }[] };
+type ChatNotice = { text: string; retry?: ChatRetry };
+
+function readStoredNotice(): ChatNotice | null {
+  try {
+    const raw = localStorage.getItem(chatNoticeKey());
+    if (!raw) return null;
+    localStorage.removeItem(chatNoticeKey());
+    const parsed = JSON.parse(raw) as ChatNotice;
+    return parsed && typeof parsed.text === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeNotice(notice: ChatNotice): void {
+  try {
+    localStorage.setItem(chatNoticeKey(), JSON.stringify(notice));
+  } catch {
+    /* storage unavailable — nothing more we can do */
+  }
+}
+
+/** Append reply messages to the persisted conversation (used when a send
+ *  resolves after the dock has unmounted — the in-memory state is gone,
+ *  but the conversation itself is durable in localStorage). */
+function persistReplyMessages(reply: ChatMessage[]): void {
+  try {
+    const existing = JSON.parse(localStorage.getItem(chatKey()) || "[]") as ChatMessage[];
+    localStorage.setItem(chatKey(), JSON.stringify([...existing, ...reply].slice(-60)));
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 /** A few tools people don't discover on their own — surfaced as one-tap chips on a
  *  fresh chat rather than requiring the user to already know the dock exists. Reuses
@@ -173,13 +238,12 @@ export function ChatDock({
   // IM-103: how long the in-flight reply has been running (drives the staged
   // typing presence + elapsed cue in the busy bubble).
   const [elapsedMs, setElapsedMs] = useState(0);
-  // IM-108: failures live OUTSIDE her voice — a bar above the input with the
-  // raw detail in small print and a Retry that re-sends the same turn.
-  const [notice, setNotice] = useState<{
-    text: string;
-    detail?: string;
-    retry?: { q: string; history: { role: "you" | "soumaya"; text: string }[]; atts: { name: string; text: string }[] };
-  } | null>(null);
+  // IM-108: failures live OUTSIDE her voice — a bar above the input with a
+  // Retry that re-sends the same turn. Finding 1: the bar carries ONLY
+  // plain-language copy — no `detail` field exists anymore, so a raw server
+  // or network string has nowhere to render. Finding 8: a notice parked by
+  // a send that finished while the dock was closed is picked up on open.
+  const [notice, setNotice] = useState<ChatNotice | null>(() => readStoredNotice());
   // IM-106: files staged for the NEXT message (extracted text rides along as
   // one-turn context; cleared the moment that message is sent).
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; text: string }[]>([]);
@@ -188,6 +252,10 @@ export function ChatDock({
   // (was native confirm()).
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  /** Finding 8 (exit 7): tracks whether the dock is still on screen when an
+   *  in-flight send resolves, so the outcome can be persisted instead of
+   *  stranded (see performSend). */
+  const mountedRef = useRef(true);
   const attachFileRef = useRef<HTMLInputElement>(null);
   const distilledRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -228,10 +296,22 @@ export function ChatDock({
     return () => window.clearInterval(t);
   }, [busy]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   useEffect(
     () => () => {
       stopSpeaking();
-      abortRef.current?.abort();
+      // Finding 8 (exit 7): unmount NO LONGER aborts an in-flight send.
+      // Closing the chat used to kill the request and strand the user's
+      // message with no reply and no error; now the send runs to
+      // completion and performSend persists its outcome (reply messages
+      // or a retryable notice) for the reopened dock. Stop still aborts —
+      // that is the user explicitly cancelling, not just leaving.
       wantMicRef.current = false;
       recRef.current?.stop?.();
       if (micTimerRef.current) window.clearTimeout(micTimerRef.current);
@@ -271,48 +351,66 @@ export function ChatDock({
         ...(r.appliedDocs ?? []).map((n) => `📚 ${n}`),
       ];
       const hasAnswer = typeof r.answer === "string" && r.answer.trim().length > 0;
-      setMessages((m) => {
-        const next: ChatMessage[] = [
-          ...m,
-          {
-            role: "soumaya",
-            text: hasAnswer ? r.answer : EMPTY_ANSWER_COPY,
-            citations,
-            navigation: r.navigation,
-            mood: r.mood,
-            applied,
-            at: Date.now(),
-            contextIds: r.contextIds && r.contextIds.length > 0 ? r.contextIds : undefined,
-          },
-        ];
-        // Interview instinct: her clarifying question gets its own bubble so it
-        // reads as HER asking, not a footnote.
-        if (r.askBack) next.push({ role: "soumaya", text: r.askBack, mood: r.mood, ask: true, at: Date.now() });
-        return next;
-      });
+      // Finding 2: a degraded (offline-fallback) reply is marked as such and
+      // does NOT get the "drew on N memories" dressing — contextIds stays
+      // unset, the galaxy is not lit up as if she had reasoned over it.
+      const replyMessages: ChatMessage[] = [
+        {
+          role: "soumaya",
+          text: hasAnswer ? r.answer : EMPTY_ANSWER_COPY,
+          citations,
+          navigation: r.navigation,
+          mood: r.mood,
+          applied,
+          at: Date.now(),
+          contextIds: !r.degraded && r.contextIds && r.contextIds.length > 0 ? r.contextIds : undefined,
+          degraded: r.degraded,
+        },
+      ];
+      // Interview instinct: her clarifying question gets its own bubble so it
+      // reads as HER asking, not a footnote.
+      if (r.askBack) replyMessages.push({ role: "soumaya", text: r.askBack, mood: r.mood, ask: true, at: Date.now() });
+      if (!mountedRef.current) {
+        // Finding 8 (exit 7): the dock closed mid-flight — persist the reply
+        // into the durable conversation so reopening shows it, instead of
+        // the user's question hanging unanswered forever.
+        persistReplyMessages(replyMessages);
+        return;
+      }
+      setMessages((m) => [...m, ...replyMessages]);
       // IM-107: light up the subgraph she actually consulted (contextIds is a
       // superset of the citations). RESTRAINT: this reuses fireRecall — a
       // particles-only visual along existing synapses. It never moves the
       // camera, never isolates/filters the graph, and changes no state, so it
       // is safe even while the user is mid-interaction with the galaxy.
-      const consulted = r.contextIds && r.contextIds.length > 0 ? r.contextIds : citations.map((c) => c.id);
-      if (consulted.length > 0) onRecall?.(consulted);
+      // (Skipped for degraded replies — see above.)
+      const consulted = !r.degraded && r.contextIds && r.contextIds.length > 0 ? r.contextIds : citations.map((c) => c.id);
+      if (!r.degraded && consulted.length > 0) onRecall?.(consulted);
       if (speakOn && hasAnswer) speak(r.askBack ? `${r.answer} ${r.askBack}` : r.answer, r.tone);
     } catch (err) {
       // IM-108: the failure is shown OUTSIDE her voice (the notice bar above
       // the input), never as a Soumaya bubble — and it carries a Retry.
-      if (controller.signal.aborted) {
-        setNotice({ text: "Stopped — she didn't get to finish that reply.", retry: { q, history, atts } });
-      } else {
-        setNotice({
-          text: "Couldn't reach Soumaya just now — your message is still here, try again.",
-          detail: (err as Error).message,
-          retry: { q, history, atts },
-        });
-      }
+      // Finding 1: the bar text is plain-language copy ONLY — askChat's
+      // ChatRequestError messages are user-safe by construction; anything
+      // else (network/abort plumbing) collapses to the generic line. A raw
+      // server/network string is never rendered.
+      const failure: ChatNotice =
+        controller.signal.aborted
+          ? { text: "Stopped — she didn't get to finish that reply.", retry: { q, history, atts } }
+          : {
+              text:
+                (err as { name?: string })?.name === "ChatRequestError"
+                  ? (err as Error).message
+                  : "Couldn't reach Soumaya just now — your message is still here, try again.",
+              retry: { q, history, atts },
+            };
+      // Finding 8 (exit 7): closed mid-flight → park the notice so the
+      // reopened dock shows it (with Retry) instead of silent stranding.
+      if (!mountedRef.current) storeNotice(failure);
+      else setNotice(failure);
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
 
@@ -367,6 +465,15 @@ export function ChatDock({
     setAttachBusy(true);
     try {
       const { text } = await extractFileText(file);
+      // Finding 1: a file whose extracted text is EMPTY (e.g. an image-only
+      // PDF that slipped past extraction's own guards) must never be staged
+      // — the server requires attachment text ≥1 char, so sending it is a
+      // guaranteed 400, and silently dropping it would lie about what she
+      // read. Block it here, at pick time, with honest copy.
+      if (!text.trim()) {
+        pushToast(`"${file.name}" has no readable text, so it wasn't attached.`, "⚠️", 5000);
+        return;
+      }
       const truncated = text.length > ATTACH_TEXT_CAP;
       setPendingAttachments((p) => [
         ...p.slice(-2),
@@ -700,8 +807,16 @@ export function ChatDock({
           )}
           {messages.map((m, i) => (
             <div key={i} className={`chatdock-msg ${m.role}`}>
+              {/* Finding 2: a degraded reply is visibly marked BEFORE its
+                  text — limited mode, with the true reason — instead of
+                  wearing a full answer's clothes. */}
+              {m.role === "soumaya" && m.degraded && (
+                <div className="chatdock-degraded" role="note">
+                  <span className="chatdock-degraded-tag">⚠ Limited mode</span> {degradedCopy(m.degraded.reason)}
+                </div>
+              )}
               <div
-                className={`chatdock-bubble ${m.ask ? "ask" : ""} ${m.role === "soumaya" && m.mood ? `mood-${m.mood}` : ""}`}
+                className={`chatdock-bubble ${m.ask ? "ask" : ""} ${m.degraded ? "degraded" : ""} ${m.role === "soumaya" && m.mood ? `mood-${m.mood}` : ""}`}
               >
                 {m.ask && <span className="chatdock-ask-tag">she wants to understand</span>}
                 {/* The mood border-left color used to be the ONLY signal of her tone —
@@ -842,10 +957,7 @@ export function ChatDock({
           never as a Soumaya bubble carrying a raw network/HTTP string. */}
       {notice && !showPersona && (
         <div className="chatdock-notice" role="alert">
-          <span className="chatdock-notice-text">
-            ⚠️ {notice.text}
-            {notice.detail && <span className="chatdock-notice-detail"> ({notice.detail})</span>}
-          </span>
+          <span className="chatdock-notice-text">⚠️ {notice.text}</span>
           {notice.retry && (
             <button className="mini" onClick={retryNotice} disabled={busy}>
               Retry
@@ -913,6 +1025,7 @@ export function ChatDock({
             ref={inputRef}
             rows={1}
             value={input}
+            maxLength={CHAT_QUESTION_MAX}
             onChange={(e) => setInput(e.target.value)}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
@@ -928,6 +1041,14 @@ export function ChatDock({
               }
             }}
           />
+          {/* Finding 1: the 2,000-char question cap is visible BEFORE it
+              bites — a counter appears near the limit (the textarea's
+              maxLength enforces the cap itself). */}
+          {input.length >= CHAT_QUESTION_MAX - 200 && (
+            <span className="chatdock-charcount" aria-live="polite">
+              {input.length.toLocaleString()}/{CHAT_QUESTION_MAX.toLocaleString()}
+            </span>
+          )}
           <button className="chatdock-send" onClick={() => void send(input)} disabled={busy || !input.trim()}>
             ➤
           </button>

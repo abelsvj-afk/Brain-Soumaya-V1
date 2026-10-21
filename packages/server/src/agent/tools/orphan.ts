@@ -1,5 +1,7 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { buildCommunicationContext, recentActionCount, actionFiredToday } from "../../communication/context.js";
+import { spaceTimezone } from "../notify/policy.js";
+import { localDateOfStored } from "../../lib/time.js";
 
 /**
  * Orphan-star surfacing (NEURO_ALIGNMENT.md #4). An unlinked memory is a star adrift —
@@ -142,11 +144,21 @@ export const orphanTool: Tool = {
         };
       }
       const ageDays = Math.max(0, Math.floor((tc.now - toMs(row.created_at)) / 86_400_000));
+      // Package E4 (owner rule): the "created" date is a calendar label the
+      // user reads — render the SPACE-LOCAL date of the stored instant (the
+      // sweep's shared resolver + localDateOfStored, which never re-zones a
+      // bare stored date), NOT a raw slice of the stored UTC timestamp —
+      // an evening-Florida memory used to show tomorrow's date. The
+      // `ageDays` beside it is an elapsed DURATION, not a calendar label,
+      // and is deliberately unchanged. Fallback (unparseable stored value
+      // only — no correct rendering exists): keep the stored date part.
+      const createdLocal =
+        localDateOfStored(row.created_at, spaceTimezone(tc.ctx.handle.sqlite, tc.spaceId)) ?? row.created_at.slice(0, 10);
       return {
         ok: true,
         summary: `surface_orphan (conversational): top orphan "${row.label}"`,
         targets: [row.id],
-        message: `ORPHAN CHECK (exact, from the graph): ${total} live memor${total === 1 ? "y is" : "ies are"} unconnected. The most significant long-drifting one is #${row.id} "${row.label}" — created ${row.created_at.slice(0, 10)}, drifting for ${ageDays} day(s) with no connections. Invite the user to link it into their galaxy.`,
+        message: `ORPHAN CHECK (exact, from the graph): ${total} live memor${total === 1 ? "y is" : "ies are"} unconnected. The most significant long-drifting one is #${row.id} "${row.label}" — created ${createdLocal}, drifting for ${ageDays} day(s) with no connections. Invite the user to link it into their galaxy.`,
       };
     }
     const nodeId = Number(args.nodeId);

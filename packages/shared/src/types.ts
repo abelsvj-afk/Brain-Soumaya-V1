@@ -487,6 +487,13 @@ export const CHAT_MOODS = [
 ] as const;
 export type ChatMood = (typeof CHAT_MOODS)[number];
 
+/** Why a chat reply was produced by the offline fallback instead of the cloud
+ *  AI (Screenshot Fixes Package A, Finding 2). The first four mirror the
+ *  server LLM layer's DegradeReason; "offline" = no cloud key is configured
+ *  at all (the heuristic is the only provider); "error" = the cloud call
+ *  failed in a way that fits none of the named categories. */
+export type ChatDegradedReason = "auth" | "quota" | "timeout" | "budget" | "offline" | "error";
+
 /** Answer from chat-with-your-brain (GraphRAG), with node citations. */
 export interface ChatResponse {
   answer: string;
@@ -511,6 +518,11 @@ export interface ChatResponse {
    *  `resolveGalaxyEntity`/`navigationIntentFor`'s already-computed, real state. Absent when
    *  nothing was proposed or nothing the model proposed resolved. */
   navigation?: import("./intelligence.js").NavigationIntent;
+  /** Present ONLY when this reply came from the offline fallback (Finding 2):
+   *  the client renders it visibly as a limited-mode reply instead of dressing
+   *  it up as a full answer. Absent = a normal cloud answer. Additive — older
+   *  consumers that ignore it keep working. */
+  degraded?: { reason: ChatDegradedReason };
 }
 
 export interface DailyLog {
@@ -673,9 +685,10 @@ export interface Journey {
  *  auto-detected timeline chapter by the existing Chronicle heuristic
  *  (docs/specs/timeline-life-seasons.md — chapters are the detection INPUT,
  *  seasons are the band rendered behind Journey spans, never a competing
- *  timeline entry). Dates are UTC calendar dates (YYYY-MM-DD): chapter dates
- *  are fixed calendar dates, so a season boundary is the UTC calendar day of
- *  the stored period instant, independent of the viewer's timezone. */
+ *  timeline entry). Dates are SPACE-local calendar dates (YYYY-MM-DD): a
+ *  season boundary is the calendar day of the stored period instant in the
+ *  space's own timezone (derived server-side, lifeSeasons.repo) — the day
+ *  the user actually lived it, per the owner's no-UTC rule (2026-10-21). */
 export interface LifeSeason {
   /** The source auto chapter's id ( seasons are derived, not separately stored). */
   id: number;
@@ -689,8 +702,8 @@ export interface LifeSeason {
   /** Raw stored period instants of the source chapter. */
   periodStart: string;
   periodEnd: string;
-  /** UTC calendar dates (YYYY-MM-DD) of periodStart / periodEnd — the band's
-   *  fixed-calendar-date boundaries. */
+  /** Space-local calendar dates (YYYY-MM-DD) of periodStart / periodEnd —
+   *  the band's fixed-calendar-date boundaries. */
   startDate: string;
   endDate: string;
 }
@@ -706,7 +719,7 @@ export interface JourneySpan {
   /** Effective span end, or null while ongoing (status != done, no explicit end). */
   end: string | null;
   ongoing: boolean;
-  /** UTC calendar dates (YYYY-MM-DD) of start / end (end null when ongoing). */
+  /** Space-local calendar dates (YYYY-MM-DD) of start / end (end null when ongoing). */
   startDate: string;
   endDate: string | null;
   startSource: "explicit" | "links" | "created";

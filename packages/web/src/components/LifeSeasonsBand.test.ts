@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { JourneySpan, LifeSeason } from "@brain/shared";
-import { buildSeasonAxis, utcDayMs } from "./LifeSeasonsBand.js";
+import { buildSeasonAxis, utcDayMs, labelFitsInBand } from "./LifeSeasonsBand.js";
 
 function season(overrides: Partial<LifeSeason> = {}): LifeSeason {
   return {
@@ -73,5 +73,56 @@ describe("LifeSeasonsBand.buildSeasonAxis — real time axis (IM-132)", () => {
     const axis = buildSeasonAxis([season()], [span({ start: "not-a-date" })], Date.UTC(2026, 6, 1))!;
     expect(axis.spans).toHaveLength(0);
     expect(axis.bands).toHaveLength(1);
+  });
+});
+
+describe("LifeSeasonsBand.buildSeasonAxis — lane packing + label fit (finding #4)", () => {
+  const now = Date.UTC(2026, 6, 1);
+
+  it("overlapping seasons occupy SEPARATE lanes", () => {
+    const a = season({ id: 1, startDate: "2026-01-01", endDate: "2026-03-31" });
+    const b = season({ id: 2, startDate: "2026-02-01", endDate: "2026-04-30" });
+    const axis = buildSeasonAxis([a, b], [], now)!;
+    expect(axis.laneCount).toBe(2);
+    expect(axis.bands[0]!.lane).not.toBe(axis.bands[1]!.lane);
+  });
+
+  it("three mutually overlapping seasons take three lanes; a later clear one reuses lane 0", () => {
+    const a = season({ id: 1, startDate: "2026-01-01", endDate: "2026-06-30" });
+    const b = season({ id: 2, startDate: "2026-02-01", endDate: "2026-05-31" });
+    const c = season({ id: 3, startDate: "2026-03-01", endDate: "2026-04-30" });
+    const d = season({ id: 4, startDate: "2026-08-01", endDate: "2026-09-30" });
+    const axis = buildSeasonAxis([a, b, c, d], [], Date.UTC(2026, 11, 31))!;
+    expect(axis.laneCount).toBe(3);
+    const lanes = Object.fromEntries(axis.bands.map((x) => [x.season.id, x.lane]));
+    expect(new Set([lanes[1], lanes[2], lanes[3]]).size).toBe(3);
+    expect(lanes[4]).toBe(0); // starts after every lane-0 band ended → shared lane
+  });
+
+  it("non-overlapping seasons SHARE a lane (axis does not grow)", () => {
+    const early = season({ id: 1, startDate: "2026-01-01", endDate: "2026-03-31" });
+    const late = season({ id: 2, startDate: "2026-04-01", endDate: "2026-06-30" });
+    const axis = buildSeasonAxis([early, late], [], now)!;
+    expect(axis.laneCount).toBe(1);
+    expect(axis.bands.every((b) => b.lane === 0)).toBe(true);
+  });
+
+  it("a band too narrow for its label sends the label to the legend, never a clipped in-band label", () => {
+    const long = season({ id: 1, label: "Recovery Era", startDate: "2026-01-01", endDate: "2026-12-31" });
+    const sliver = season({ id: 2, label: "The Long Summer Rebuilding Season", startDate: "2026-06-10", endDate: "2026-06-12" });
+    const axis = buildSeasonAxis([long, sliver], [], Date.UTC(2026, 11, 31))!;
+    const sliverBand = axis.bands.find((b) => b.season.id === 2)!;
+    expect(sliverBand.widthPct).toBeLessThan(5);
+    expect(sliverBand.labelInBand).toBe(false);
+    expect(axis.legendBands.map((b) => b.season.id)).toEqual([2]);
+    const longBand = axis.bands.find((b) => b.season.id === 1)!;
+    expect(longBand.labelInBand).toBe(true);
+    expect(axis.legendBands).not.toContain(longBand);
+  });
+
+  it("labelFitsInBand: a wide band fits its label, a sliver does not", () => {
+    expect(labelFitsInBand("Recovery Era", 50)).toBe(true);
+    expect(labelFitsInBand("Recovery Era", 3)).toBe(false);
+    expect(labelFitsInBand("", 1.5)).toBe(false); // padding alone exceeds a min-width sliver? see policy: 0 chars still needs the pad — an empty label renders nothing either way
   });
 });

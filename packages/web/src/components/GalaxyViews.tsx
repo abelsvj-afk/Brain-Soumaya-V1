@@ -129,11 +129,20 @@ export function GalaxyViews({
 
   return (
     <div className="gv-wrap">
+      {/* Package B (finding #6): the toggle is a 46px CIRCLE in the camera
+          column (directly below the 🎯), like every neighbour — the old
+          oval pill was the widest element in the column and reached under
+          the beacon box. The word "Views" stays as visually-hidden text so
+          the control keeps its name for assistive tech and tests. */}
       <button className={`gv-toggle ${open ? "open" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        title="View one category at a time (lighter on your phone)">
-        🌌 Views {open ? "▾" : "▸"}
+        aria-label="Galaxy views"
+        title="Views — view one category at a time (lighter on your phone)">
+        <span aria-hidden="true">🌌</span>
+        <span className="gv-toggle-text">Views</span>
+        <span className="gv-toggle-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
+        <div className="gv-sheet">
         <div className="gv-chips" role="toolbar" aria-label="Galaxy category views">
           {cats.map((v) => {
             const name = `${v.icon} ${v.label}`;
@@ -169,12 +178,14 @@ export function GalaxyViews({
           )}
           {activeView && <button className="gv-chip gv-all" onClick={onExit}>★ Show all</button>}
         </div>
-      )}
       {/* Pinned Smart Lenses live in this SAME dropdown now, not their own floating overlay
           (see .lens-list's CSS comment) — Views and Lens are already "two legitimate,
           complementary tools" per this file's own header comment, so this is a real,
-          coherent grouping rather than an arbitrary place to hide it. */}
-      {open && <LensChips activeLens={activeView} onOpen={onOpen} onExit={onExit} hidden={!open} />}
+          coherent grouping rather than an arbitrary place to hide it. They render
+          inside the same .gv-sheet as the category chips (Package B). */}
+      <LensChips activeLens={activeView} onOpen={onOpen} onExit={onExit} hidden={!open} />
+        </div>
+      )}
     </div>
   );
 }

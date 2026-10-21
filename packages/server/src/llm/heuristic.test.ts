@@ -3,6 +3,25 @@ import { HeuristicProvider } from "./heuristic.js";
 
 const llm = new HeuristicProvider();
 
+describe("HeuristicProvider.answer — Finding 2: the limitation leads, and never misdiagnoses the cause", () => {
+  const ctx = [{ id: 1, label: "Car fund", type: "daily", content: "Saving for a car." }];
+
+  it("leads with the offline limitation when it has memories to show", async () => {
+    const r = await llm.answer("what about my car?", ctx);
+    expect(r.answer.startsWith("I'm answering with my offline mind")).toBe(true);
+    // The old closing line blamed a missing key even for quota/timeout/budget
+    // fallbacks — it must never appear; reason copy lives in the client banner.
+    expect(r.answer).not.toContain("Connect an OpenAI or Gemini key");
+    expect(r.answer).not.toContain("fuller story");
+    expect(r.answer).toContain("Car fund");
+  });
+
+  it("leads with the offline limitation on a heavy question with no memories", async () => {
+    const r = await llm.answer("I'm scared about losing everything", []);
+    expect(r.answer.startsWith("I'm answering with my offline mind")).toBe(true);
+  });
+});
+
 describe("HeuristicProvider.interpretClarificationAnswer (I2)", () => {
   it("recognizes an explicit affirmative reply as answering the question", async () => {
     const r = await llm.interpretClarificationAnswer(

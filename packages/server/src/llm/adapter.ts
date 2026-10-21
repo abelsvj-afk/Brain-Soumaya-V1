@@ -50,9 +50,14 @@ export interface AnswerOptions {
   /** "About Me": who the user is. Soumaya is AWARE of this, never becomes them. */
   persona?: string;
   /** The space's IANA timezone (space_meta.timezone) — grounds the system
-   *  prompt's "now" in the user's local day (date/time accuracy). Absent →
-   *  the prompt falls back to the UTC-only rendering. */
-  timezone?: string;
+   *  prompt's "now" in the user's local day (date/time accuracy).
+   *  `undefined` → the caller supplies no zone (historical UTC-only
+   *  rendering, kept for existing callers); `null` → the caller TRIED to
+   *  resolve the space's zone and genuinely could not (Packages E2/E7) —
+   *  the prompt renders the explicit "local time unavailable" line, never
+   *  the UTC rendering, and memory relative-date tags are omitted rather
+   *  than computed against an assumed zone. */
+  timezone?: string | null;
   /** Retrieved knowledge-document chunks, pre-formatted with doc names. */
   knowledge?: string;
   /** Text the user attached to THIS chat message (in-chat attachment, IM-106),
@@ -108,6 +113,11 @@ export interface LlmProvider {
   readonly degraded?: boolean;
   /** WHY it's degraded, when `degraded` is true — null/undefined otherwise. */
   readonly degradedReason?: DegradeReason | null;
+  /** WHY the most recent answer() call fell back to the offline heuristic, or
+   *  null when it was served by the cloud (or no answer has run yet). Set by
+   *  ResilientLlmProvider per call — including single-call fallbacks that do
+   *  NOT trip the cooldown and so never show up in `degradedReason`. */
+  readonly lastAnswerDegradedReason?: AnswerDegradeReason | null;
   /** Parse raw text into typed nodes + edges, grounded in existing context. */
   extract(text: string, context: ContextNode[]): Promise<ExtractionResult>;
   /** Decide whether a semantic neighbour should become a formal graph edge. */
@@ -263,6 +273,13 @@ export type LlmProviderKind = "gemini" | "openai" | "heuristic";
  *  provider's own quota/billing/auth state. Surfaced through `/api/health` so "it's not
  *  working" has an actual, actionable answer instead of one generic message. */
 export type DegradeReason = "auth" | "quota" | "timeout" | "budget";
+
+/** Why ONE answer() call was served by the offline fallback (Finding 2):
+ *  DegradeReason, plus "error" for a cloud failure that fits no named
+ *  category (a non-fatal error degrades a single call without tripping the
+ *  provider-wide cooldown, so `degradedReason` stays null for it — this
+ *  per-call record is how chat() still learns the truth about THAT turn). */
+export type AnswerDegradeReason = DegradeReason | "error";
 
 export interface LlmProviderOptions {
   kind?: LlmProviderKind;
