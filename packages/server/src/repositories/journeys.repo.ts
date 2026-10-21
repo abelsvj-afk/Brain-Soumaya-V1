@@ -1,6 +1,7 @@
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
-import { parseTolerantMs, toIsoDate } from "../lib/time.js";
+import { parseTolerantMs } from "../lib/time.js";
+import { getPreferences, localDay, DEFAULT_PREFS } from "../agent/notify/policy.js";
 import type { Journey, JourneyLink, JourneyLinkKind, JourneySpan, JourneyStatus } from "@brain/shared";
 
 /**
@@ -20,6 +21,16 @@ export function missionProgress(completed: number, remaining: number): number {
 
 export class JourneysRepo {
   constructor(private handle: DbHandle, private spaceId: string = DEFAULT_SPACE) {}
+
+  /** The space's timezone for displayed span dates — the shared default
+   *  applies when space_meta is unreachable (bare test DB). */
+  private spaceTz(): string {
+    try {
+      return getPreferences(this.handle.sqlite, this.spaceId).timezone;
+    } catch {
+      return DEFAULT_PREFS.timezone;
+    }
+  }
 
   private map(r: any): Journey {
     return {
@@ -128,15 +139,23 @@ export class JourneysRepo {
       const sMs = parseTolerantMs(start), eMs = parseTolerantMs(end);
       if (Number.isFinite(sMs) && Number.isFinite(eMs) && eMs < sMs) end = start;
     }
-    const startMs = parseTolerantMs(start);
-    const endMs = end !== null ? parseTolerantMs(end) : NaN;
+    // Displayed span dates follow the SPACE's local calendar (owner rule
+    // 2026-10-21): an explicit bare date stays itself; a stored instant
+    // (from linked memories / created / updated) renders as its local day.
+    const tz = this.spaceTz();
+    const displayDate = (raw: string): string => {
+      const t = raw.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+      const ms = parseTolerantMs(t);
+      return Number.isFinite(ms) ? localDay(new Date(ms), tz) : t.slice(0, 10);
+    };
     return {
       journey,
       start,
       end,
       ongoing: end === null,
-      startDate: Number.isFinite(startMs) ? toIsoDate(new Date(startMs)) : start.slice(0, 10),
-      endDate: end !== null && Number.isFinite(endMs) ? toIsoDate(new Date(endMs)) : null,
+      startDate: displayDate(start),
+      endDate: end !== null ? displayDate(end) : null,
       startSource,
       endSource,
     };

@@ -2,6 +2,8 @@ import type { AppContext } from "../context.js";
 import type { DbHandle } from "../db/client.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { labelTokens } from "./cognitive.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+import { localDateOfStored } from "../lib/time.js";
 
 /**
  * People as entities (Cognitive Layer Phase 6, docs/COGNITIVE_LAYER.md). A
@@ -341,9 +343,12 @@ export function recentPeopleSummaries(handle: DbHandle, spaceId: string): Recent
 export function peopleSnapshotText(handle: DbHandle, spaceId: string): string | null {
   const rows = recentPeopleSummaries(handle, spaceId);
   if (rows.length === 0) return null;
+  const tz = spaceTimezone(handle.sqlite, spaceId);
 
   const line = (r: RecentPersonSummary) => {
-    const when = r.lastAt ? `, last ${r.lastAt.slice(0, 10)}` : "";
+    // "last <date>" is the SPACE-local date of the last interaction instant
+    // (owner rule 2026-10-21), never the stored timestamp's UTC date.
+    const when = r.lastAt ? `, last ${localDateOfStored(r.lastAt, tz) ?? r.lastAt.slice(0, 10)}` : "";
     return `${r.label} (${r.interactionCount} interaction${r.interactionCount === 1 ? "" : "s"}${when}, tone: ${r.tone})`;
   };
 

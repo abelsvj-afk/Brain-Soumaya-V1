@@ -33,7 +33,10 @@ const embeddings = new HashEmbeddingProvider(EMBED_DIM);
 const llm = new HeuristicProvider();
 const SPACE = "s1";
 const OTHER_SPACE = "s2";
-const NOW = Date.parse("2026-01-10T00:00:00Z");
+// Midday UTC: the same calendar day (Sat 2026-01-10) in the space's own
+// timezone (America/New_York) — midnight UTC is still Jan 9 in Florida, and
+// day-boundary logic follows the space's local day (owner rule 2026-10-21).
+const NOW = Date.parse("2026-01-10T12:00:00Z");
 const DAY_MS = 86_400_000;
 
 beforeEach(() => { handle = createDb(":memory:"); });

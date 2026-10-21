@@ -1,4 +1,5 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
+import { actionFiredToday } from "../../communication/context.js";
 import { CodexDiscoveriesRepo } from "../../repositories/codexDiscoveries.repo.js";
 
 /**
@@ -99,11 +100,9 @@ export const chartDiscoveryTool: Tool = {
   parameters: { type: "object", properties: {}, required: [] },
 
   detect(tc: ToolContext): ToolInvocation[] {
-    const today = new Date(tc.now).toISOString().slice(0, 10);
-    const didToday = tc.ctx.handle.sqlite
-      .prepare(`SELECT 1 FROM agent_logs WHERE space_id = ? AND action = 'tool:chart_discovery' AND substr(created_at,1,10) = ?`)
-      .get(tc.spaceId, today);
-    if (didToday) return [];
+    // Once per SPACE-local day (owner rule 2026-10-21 — the guard follows
+    // the user's own day, never the UTC day of the stored timestamp).
+    if (actionFiredToday(tc.ctx.handle, tc.spaceId, "tool:chart_discovery", new Date(tc.now))) return [];
     const cand = findDiscovery(tc);
     if (!cand) return [];
     return [{ tool: "chart_discovery", args: { ...cand }, reason: cand.reason }];

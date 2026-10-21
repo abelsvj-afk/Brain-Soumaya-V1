@@ -1,5 +1,6 @@
 import type { BudgetSummary, ReservedLine } from "@brain/shared";
 import { parseDay, toDay } from "./bills.js";
+import { localDayInZone } from "../lib/time.js";
 
 /**
  * Budget Engine — PURE money math (no DB, no LLM). This is the heart of the Financial OS:
@@ -49,9 +50,14 @@ export function estimateNextIncomeDate(
   incomeDates: string[],
   now: Date,
   cadenceDays?: number,
+  todayStr?: string,
 ): string {
   const cadence = cadenceDays && cadenceDays > 0 ? Math.round(cadenceDays) : medianIncomeGapDays(incomeDates);
-  const nowMs = now.getTime();
+  // "Today" for the projection is a CALENDAR date: the caller passes the
+  // space-local today (owner rule 2026-10-21); without one, fall back to the
+  // UTC calendar date of `now` (pure-function callers/tests only — every
+  // production path goes through finance/summary.ts, which passes local).
+  const todayMs = todayStr ? parseDay(todayStr).getTime() : parseDay(toDay(now)).getTime();
   if (cadence) {
     // Project forward from the most recent income by whole cadence steps until it's future.
     const last = [...incomeDates]
@@ -62,11 +68,11 @@ export function estimateNextIncomeDate(
     if (last != null) {
       let next = last;
       let guard = 0;
-      while (next <= nowMs && guard++ < 10_000) next += cadence * DAY_MS;
+      while (next <= todayMs && guard++ < 10_000) next += cadence * DAY_MS;
       return toDay(new Date(next));
     }
   }
-  return toDay(new Date(nowMs + DEFAULT_HORIZON_DAYS * DAY_MS));
+  return toDay(new Date(todayMs + DEFAULT_HORIZON_DAYS * DAY_MS));
 }
 
 export interface UnpaidOccurrence {
@@ -93,6 +99,10 @@ export interface BudgetInput {
   now: Date;
   /** Optional explicit pay cadence (days) from settings. */
   cadenceDays?: number;
+  /** The space-local calendar date (YYYY-MM-DD) of `now`, when the caller
+   *  knows the space's timezone — the next-income projection is anchored to
+   *  it so "today" is the user's own day. */
+  today?: string;
 }
 
 /**
@@ -102,7 +112,7 @@ export interface BudgetInput {
  * so we never show a misleadingly-positive number.
  */
 export function computeBudget(input: BudgetInput): BudgetSummary {
-  const nextIncomeDate = estimateNextIncomeDate(input.incomeDates, input.now, input.cadenceDays);
+  const nextIncomeDate = estimateNextIncomeDate(input.incomeDates, input.now, input.cadenceDays, input.today);
   const horizon = parseDay(nextIncomeDate).getTime();
 
   const reserved: ReservedLine[] = input.occurrences
@@ -128,9 +138,14 @@ export function computeBudget(input: BudgetInput): BudgetSummary {
   };
 }
 
-/** Monday-anchored start of the week containing `now` (UTC), as `YYYY-MM-DD`. */
-export function weekStart(now: Date): string {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const dow = (d.getUTCDay() + 6) % 7; // 0 = Monday
-  return toDay(new Date(d.getTime() - dow * DAY_MS));
+/** Monday-anchored start of the week containing `now`, as `YYYY-MM-DD` — the
+ *  week of the user's own local day in zone `tz` (owner rule 2026-10-21:
+ *  "earned this week" follows the user's calendar, never the UTC calendar).
+ *  The Monday anchor is computed on the local date itself (anchored at UTC
+ *  noon), so the result is a pure calendar date. */
+export function weekStart(now: Date, tz: string): string {
+  const local = localDayInZone(now.getTime(), tz);
+  const anchor = new Date(`${local}T12:00:00Z`);
+  const dow = (anchor.getUTCDay() + 6) % 7; // 0 = Monday
+  return toDay(new Date(anchor.getTime() - dow * DAY_MS));
 }

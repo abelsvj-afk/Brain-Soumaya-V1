@@ -1,6 +1,7 @@
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
-import { parseTolerantMs, toIsoDate } from "../lib/time.js";
+import { parseTolerantMs } from "../lib/time.js";
+import { getPreferences, localDay, DEFAULT_PREFS } from "../agent/notify/policy.js";
 import type { ChapterTrend, LifeSeason } from "@brain/shared";
 
 /**
@@ -24,11 +25,15 @@ import type { ChapterTrend, LifeSeason } from "@brain/shared";
  *    (a chapter's score becomes the season's confidence as-is), and no
  *    merging of adjacent/overlapping seasons.
  *
- * Boundary semantics (Date & Time Accuracy decision — chapter dates are
- * FIXED calendar dates): a season's boundaries are the UTC calendar dates
- * (YYYY-MM-DD) of the source chapter's stored period instants, computed with
- * UTC getters only (parseTolerantMs treats naive SQLite timestamps as UTC,
- * toIsoDate renders the UTC date) — identical under any process timezone.
+ * Boundary semantics (owner rule, restated 2026-10-21: NO UTC in anything
+ * user-facing): a season's boundaries are the SPACE-local calendar dates
+ * (YYYY-MM-DD) of the source chapter's stored period instants — the days
+ * the user actually lived them in their own timezone (space_meta.timezone
+ * via the notify layer, the same source as the streak and the digest).
+ * (This supersedes the earlier UTC-boundary reading: chapter period
+ * timestamps are instants, and an instant's perceived date is its local
+ * day. Chapters' own authored calendar dates remain fixed dates — this
+ * derivation never rewrites them, it only reads the instants locally.)
  */
 
 /** ASSUMED (Q5): an era must span at least one whole elapsed day. */
@@ -36,18 +41,18 @@ export const MIN_SEASON_DAYS = 1;
 
 const DAY_MS = 86_400_000;
 
-/** UTC calendar date (YYYY-MM-DD) for a stored instant, or null if unparseable. */
-export function utcDateOf(raw: string | null | undefined): string | null {
+/** SPACE-local calendar date (YYYY-MM-DD) for a stored instant in zone
+ *  `tz`, or null if unparseable. */
+export function localDateOf(raw: string | null | undefined, tz: string): string | null {
   const ms = parseTolerantMs(raw ?? undefined);
-  return Number.isFinite(ms) ? toIsoDate(new Date(ms)) : null;
+  return Number.isFinite(ms) ? localDay(new Date(ms), tz) : null;
 }
 
-/** Whole elapsed days between two stored instants (floor), or null if either is unparseable. */
-export function elapsedDays(startRaw: string, endRaw: string): number | null {
-  const a = parseTolerantMs(startRaw);
-  const b = parseTolerantMs(endRaw);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  return Math.floor((b - a) / DAY_MS);
+/** Whole CALENDAR days between two YYYY-MM-DD dates (end − start). */
+function calendarDaysBetween(startDate: string, endDate: string): number {
+  const a = Date.parse(`${startDate}T12:00:00Z`);
+  const b = Date.parse(`${endDate}T12:00:00Z`);
+  return Math.round((b - a) / DAY_MS);
 }
 
 /** ASSUMED (Q5) label rule: "<Theme> Era" when the chapter has a theme, else its title. */
@@ -63,15 +68,18 @@ export function seasonLabel(theme: string, title: string): string {
 export function chapterRowToSeason(r: {
   id: number; title?: unknown; theme?: unknown; trend?: unknown; score?: unknown;
   period_start?: unknown; period_end?: unknown; origin?: unknown;
-}): LifeSeason | null {
+}, tz: string = DEFAULT_PREFS.timezone): LifeSeason | null {
   if (String(r.origin ?? "auto") !== "auto") return null;
   const periodStart = String(r.period_start ?? "");
   const periodEnd = String(r.period_end ?? "");
-  const startDate = utcDateOf(periodStart);
-  const endDate = utcDateOf(periodEnd);
+  const startDate = localDateOf(periodStart, tz);
+  const endDate = localDateOf(periodEnd, tz);
   if (!startDate || !endDate) return null;
-  const days = elapsedDays(periodStart, periodEnd);
-  if (days === null || days < MIN_SEASON_DAYS) return null;
+  // The era span is measured on the same local calendar the boundaries are
+  // drawn on: whole calendar days from the local start date to the local
+  // end date (MIN_SEASON_DAYS=1 → the era must reach a later local day).
+  const days = calendarDaysBetween(startDate, endDate);
+  if (days < MIN_SEASON_DAYS) return null;
   const theme = String(r.theme ?? "");
   return {
     id: Number(r.id),
@@ -102,9 +110,18 @@ export class LifeSeasonsRepo {
          ORDER BY period_start ASC, id ASC`,
       )
       .all(this.spaceId) as Record<string, unknown>[];
+    // Season boundaries follow the SPACE's own timezone (owner rule
+    // 2026-10-21) — the same space_meta source as the streak and digest;
+    // the shared default applies when space_meta is unreachable.
+    let tz = DEFAULT_PREFS.timezone;
+    try {
+      tz = getPreferences(this.handle.sqlite, this.spaceId).timezone;
+    } catch {
+      /* space_meta unreachable (bare test DB) — the shared default applies */
+    }
     const seasons: LifeSeason[] = [];
     for (const r of rows) {
-      const s = chapterRowToSeason(r as never);
+      const s = chapterRowToSeason(r as never, tz);
       if (s) seasons.push(s);
     }
     return seasons;

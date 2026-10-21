@@ -6,6 +6,7 @@ import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS, DEF
 export { getSpaceId, getSpaceName, BOOT_TIMEOUT_MS } from "./http.js";
 // The "AI is working" activity signal lives in activity.ts (D4 split); re-export the hook.
 import { tracked } from "./activity.js";
+import { spaceLocalDay } from "../utils/localDay.js";
 export { onAiActivity } from "./activity.js";
 // Node "processing" (mid-ingest) state lives in processing.ts (D4 split).
 import { setNodeProcessing } from "./processing.js";
@@ -589,7 +590,7 @@ export async function getDigestResult(): Promise<{ ok: true; insights: Insight[]
 /** Soumaya's daily digest (free, no LLM). Returns a safe empty shape on error. */
 export async function getDailyDigest(): Promise<DailyDigest> {
   const empty: DailyDigest = {
-    date: new Date().toISOString().slice(0, 10),
+    date: spaceLocalDay(),
     greeting: "",
     fresh: [],
     connections: [],

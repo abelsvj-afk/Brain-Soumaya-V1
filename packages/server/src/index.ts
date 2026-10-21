@@ -28,6 +28,7 @@ import { rollPastEvents } from "./analysis/future.js";
 import { stepDrives } from "./analysis/drives.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
 import { EconomyRepo } from "./economy.js";
+import { spaceTimezone, localDay } from "./agent/notify/policy.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -273,11 +274,11 @@ if (process.env.AUTONOMY !== "off") {
         } catch (e) {
           console.error("[autonomy] constellation reconcile failed:", e);
         }
-        // Dream cycle (Level 2): once per UTC day per brain, consolidate the densest
+        // Dream cycle (Level 2): once per SPACE-local day per brain, consolidate the densest
         // cluster into a durable belief. LLM when Research Mode + budget allow (counts
         // toward the paid ceiling); otherwise a free offline template. Additive-only.
         try {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
           const dreamt = ctx.handle.sqlite
             .prepare(`SELECT last_dream_date FROM space_meta WHERE space_id = ?`)
             .get(spaceId) as { last_dream_date: string | null } | undefined;

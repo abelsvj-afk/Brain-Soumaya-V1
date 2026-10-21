@@ -1,6 +1,6 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { dueForReview, snoozeReview, memoryStrength } from "../../analysis/review.js";
-import { buildCommunicationContext } from "../../communication/context.js";
+import { buildCommunicationContext, actionFiredToday } from "../../communication/context.js";
 
 /**
  * Review-nudge (NEURO_ALIGNMENT.md #1) — the active-recall arm of spaced repetition.
@@ -47,11 +47,9 @@ export const reviewNudgeTool: Tool = {
   parameters: { type: "object", properties: { nodeId: { type: "number" } }, required: ["nodeId"] },
 
   detect(tc: ToolContext): ToolInvocation[] {
-    const today = new Date(tc.now).toISOString().slice(0, 10);
-    const didToday = tc.ctx.handle.sqlite
-      .prepare(`SELECT 1 FROM agent_logs WHERE space_id = ? AND action = 'tool:review_nudge' AND substr(created_at,1,10) = ?`)
-      .get(tc.spaceId, today);
-    if (didToday) return [];
+    // Once per SPACE-local day (owner rule 2026-10-21 — the guard follows
+    // the user's own day, never the UTC day of the stored timestamp).
+    if (actionFiredToday(tc.ctx.handle, tc.spaceId, "tool:review_nudge", new Date(tc.now))) return [];
     const due = dueForReview(tc.ctx, tc.spaceId, tc.now, 1);
     if (due.length === 0) return [];
     const m = due[0]!;

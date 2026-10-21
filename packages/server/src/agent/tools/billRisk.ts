@@ -2,7 +2,8 @@ import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { getBudgetSummary } from "../../finance/summary.js";
 import { FinBillRepo } from "../../repositories/finBill.repo.js";
 import { parseDay } from "../../finance/bills.js";
-import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
+import { buildCommunicationContext, recentActionCount, actionFiredToday } from "../../communication/context.js";
+import { spaceTimezone, localDay } from "../notify/policy.js";
 import { NotificationsRepo } from "../../repositories/notifications.repo.js";
 
 /**
@@ -98,11 +99,9 @@ export const billRiskTool: Tool = {
   },
 
   detect(tc: ToolContext): ToolInvocation[] {
-    const today = new Date(tc.now).toISOString().slice(0, 10);
-    const didToday = tc.ctx.handle.sqlite
-      .prepare(`SELECT 1 FROM agent_logs WHERE space_id = ? AND action = 'tool:bill_risk' AND substr(created_at,1,10) = ?`)
-      .get(tc.spaceId, today);
-    if (didToday) return [];
+    // Once per SPACE-local day (owner rule 2026-10-21 — the guard follows
+    // the user's own day, never the UTC day of the stored timestamp).
+    if (actionFiredToday(tc.ctx.handle, tc.spaceId, "tool:bill_risk", new Date(tc.now))) return [];
 
     const budget = getBudgetSummary(tc.ctx.handle, tc.spaceId, new Date(tc.now));
     if (budget.reserved.length === 0) return []; // nothing reserved → nothing at risk
@@ -117,6 +116,9 @@ export const billRiskTool: Tool = {
     const tight = budget.shortfallCents > 0 || budget.safeToSpendCents <= atRisk.amountCents;
     if (!tight) return [];
 
+    // Days until due, counted on the SPACE's local calendar (owner rule
+    // 2026-10-21) — a bill due "tomorrow" is tomorrow in the user's own day.
+    const today = localDay(new Date(tc.now), spaceTimezone(tc.ctx.handle.sqlite, tc.spaceId));
     const days = Math.max(1, Math.round((parseDay(atRisk.dueDate).getTime() - parseDay(today).getTime()) / DAY_MS));
     if (budget.shortfallCents > 0) {
       return [{ tool: "bill_risk", args: { billId: atRisk.billId, mode: "short", threshold: budget.shortfallCents },

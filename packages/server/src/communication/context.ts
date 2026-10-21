@@ -9,6 +9,8 @@ import {
 } from "../repositories/interactionPreferences.repo.js";
 import { SURFACE_CONFIDENCE_THRESHOLD, MIN_EVIDENCE_TO_SURFACE } from "../analysis/interactionPreferences.js";
 import { buildEmotionalTrajectory, buildEmotionalTrajectoryAmong } from "../analysis/emotional.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
+import { localDayBoundsMs } from "../lib/time.js";
 
 /**
  * Shared Soumaya Communication boundary (Phase S,
@@ -117,6 +119,27 @@ export function buildCommunicationContext(
  * concern (how much has already been said), not a detection concern (whether to fire again),
  * which is why it lives here rather than in any tool's own detection logic.
  */
+/**
+ * Has `action` already fired on the SPACE's current local day? The once-per-day
+ * guard for the proactive tools. Day membership is derived from each log row's
+ * created_at INSTANT against the local day's real [start, end) bounds (owner
+ * rule 2026-10-21: day-keyed limits follow the user's own day, never the UTC
+ * day — a nudge fired at 9pm Florida time belongs to that Florida day even
+ * though its stored UTC timestamp already reads as tomorrow). julianday() on
+ * both sides because created_at mixes SQLite's space format with ISO-Z writes
+ * (same reasoning as recentActionCount below).
+ */
+export function actionFiredToday(handle: DbHandle, spaceId: string, action: string, now: Date = new Date()): boolean {
+  const { startMs, endMs } = localDayBoundsMs(now.getTime(), spaceTimezone(handle.sqlite, spaceId));
+  const row = handle.sqlite
+    .prepare(
+      `SELECT COUNT(*) AS c FROM agent_logs WHERE space_id = ? AND action = ?
+       AND julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)`,
+    )
+    .get(spaceId, action, new Date(startMs).toISOString(), new Date(endMs).toISOString()) as { c: number };
+  return row.c > 0;
+}
+
 export function recentActionCount(handle: DbHandle, spaceId: string, action: string, sinceDays: number, now: Date = new Date()): number {
   const since = new Date(now.getTime() - sinceDays * 86_400_000).toISOString();
   // julianday() on both sides: agent_logs.created_at mixes the column default's

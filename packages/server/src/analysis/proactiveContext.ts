@@ -5,6 +5,7 @@ import { FinBillRepo } from "../repositories/finBill.repo.js";
 import { goalAllocationChange } from "./temporalChange.js";
 import { getBudgetSummary } from "../finance/summary.js";
 import { parseDay } from "../finance/bills.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
 
 /**
  * Proactive → Chat context handoff (Phase Y, docs/specs/soumaya-proactive-chat-handoff.md;
@@ -115,7 +116,9 @@ function billRiskContextText(handle: DbHandle, spaceId: string, billId: number, 
   if (budget.shortfallCents > 0) {
     return `PROACTIVE CONTEXT (why this conversation was initiated): You reached out to the user first this conversation because their budget is currently ${dollars(budget.shortfallCents)} short to cover "${bill.name}" (due ${reserved.dueDate}) — a real cushion shortfall, not a guess. This is why you're speaking with them right now. Explain naturally in your own words if they ask; don't force the topic if they've clearly come to talk about something else.`;
   }
-  const today = now.toISOString().slice(0, 10);
+  // Days until due counted on the SPACE's local calendar (owner rule
+  // 2026-10-21), from the same space_meta timezone source as everywhere else.
+  const today = localDay(now, spaceTimezone(handle.sqlite, spaceId));
   const days = Math.max(1, Math.round((parseDay(reserved.dueDate).getTime() - parseDay(today).getTime()) / DAY_MS));
   const perDay = Math.floor(budget.safeToSpendCents / days);
   return `PROACTIVE CONTEXT (why this conversation was initiated): You reached out to the user first this conversation because their spending pace needs to stay under ${dollars(perDay)}/day to keep "${bill.name}" (due ${reserved.dueDate}) covered — the cushion is genuinely thin right now, not a guess. This is why you're speaking with them right now. Explain naturally in your own words if they ask; don't force the topic if they've clearly come to talk about something else.`;

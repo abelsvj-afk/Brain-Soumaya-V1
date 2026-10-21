@@ -1,4 +1,6 @@
 import { logDiagnosticEvent } from "./diagnostics/buffer";
+import { spaceLocalDay, localDateOfStored } from "./utils/localDay.js";
+import { parseTolerantMs } from "./utils/dueReminders.js";
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
@@ -383,7 +385,7 @@ export default function App() {
       if (!stars) return;
       const urgent = stars.filter((s) => s.state === "overdue" || s.state === "cooling").slice(0, 2);
       for (const s of urgent) {
-        const key = `notif.bill.${s.id}.${new Date().toISOString().slice(0, 10)}`;
+        const key = `notif.bill.${s.id}.${spaceLocalDay()}`;
         try { if (localStorage.getItem(key)) continue; localStorage.setItem(key, "1"); } catch { /* ignore */ }
         const word = s.state === "overdue" ? `${s.label} is overdue` : `${s.label} needs attention — you can't cover it yet`;
         pushToast(`${word}`, "💸", 9000, "high", { kind: "tab", value: "money" });
@@ -758,10 +760,13 @@ export default function App() {
   const streakShown = useCountUp(streak?.current ?? 0);
 
   // Streak stakes: is the streak alive but unfed TODAY? (drives the "at risk" ember)
+  // "Today" is the user's own local day (owner rule 2026-10-21): a memory's
+  // createdAt is a stored instant, so membership is derived from the instant
+  // — never its raw UTC string prefix.
   const loggedToday = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spaceLocalDay();
     return (data.nodes as GraphNode[]).some(
-      (n) => n.kind !== "action" && (n.createdAt || "").slice(0, 10) === today,
+      (n) => n.kind !== "action" && localDateOfStored(n.createdAt, parseTolerantMs) === today,
     );
   }, [data.nodes]);
   const streakAtRisk = (streak?.current ?? 0) > 0 && !loggedToday;
