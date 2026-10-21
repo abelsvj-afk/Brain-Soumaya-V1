@@ -11,6 +11,7 @@ import {
   type UpcomingEvent,
 } from "../api/client.js";
 import { LifeSeasonsBand } from "./LifeSeasonsBand.js";
+import { localDateOfStored } from "../utils/localDay.js";
 import { pushToast } from "./Toasts.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 
@@ -49,6 +50,21 @@ interface Props {
 export function normalizeDate(raw: string): Date {
   const iso = raw.includes("Z") || raw.includes("+") ? raw : raw.replace(" ", "T") + "Z";
   return new Date(iso);
+}
+
+/** A stored chapter/event timestamp rendered as the calendar date the user
+ *  actually lived it on — its day in the space's own timezone (owner rule,
+ *  2026-10-21: no UTC in anything user-facing). The web's canonical helper
+ *  (utils/localDay.ts) derives that day in this device's zone, which is the
+ *  zone the space timezone is set from; the YYYY-MM-DD it returns is a fixed
+ *  calendar date, so it is formatted from its own parts (a local-midnight
+ *  Date) and can never shift a day under the viewer's zone. Returns "" for
+ *  an unparseable value rather than printing "Invalid Date". */
+export function formatLocalDate(raw: string): string {
+  const day = localDateOfStored(raw, (r) => normalizeDate(r ?? "").getTime());
+  if (!day) return "";
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  return new Date(y, m - 1, d).toLocaleDateString(undefined);
 }
 
 /** Whole days between two (possibly naive) timestamps, oldest → newest. Never negative,
@@ -114,15 +130,18 @@ export function buildRows(chapters: TimelineChapter[]): Row[] {
   let prevMonthKey: number | null = null;
   let prevPeriodEnd: string | null = null;
   chapters.forEach((ch, index) => {
-    const d = normalizeDate(ch.periodEnd);
-    // Month bucketing must use UTC, like normalizeDate itself: local getters
-    // shift a UTC-midnight periodEnd into the previous month for UTC-negative
-    // viewers, so a new month's chapter lands under the old month's header
-    // (or gets no header at all).
-    const monthKey = d.getUTCFullYear() * 12 + d.getUTCMonth();
+    // Month bucketing follows the SPACE-local calendar (owner rule,
+    // 2026-10-21): a chapter groups under the month its periodEnd falls in
+    // in the user's own timezone — the same local day formatLocalDate shows
+    // on the card — never the UTC month of the stored instant.
+    const localDay = localDateOfStored(ch.periodEnd, (r) => normalizeDate(r ?? "").getTime());
+    const [ly, lm] = localDay ? localDay.split("-").map(Number) as [number, number, number] : [NaN, NaN, NaN];
+    const monthKey = Number.isFinite(ly) && Number.isFinite(lm) ? ly! * 12 + (lm! - 1) : Number.NaN;
     const gap = prevPeriodEnd ? gapFor(daysBetween(prevPeriodEnd, ch.periodEnd)) : 0;
     if (monthKey !== prevMonthKey) {
-      const label = d.toLocaleString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+      const label = Number.isFinite(monthKey)
+        ? new Date(ly!, lm! - 1, 1).toLocaleString(undefined, { month: "long", year: "numeric" })
+        : "";
       rows.push({ type: "header", key: `h-${monthKey}`, label, gapBefore: prevMonthKey === null ? 0 : gap });
       rows.push({ type: "chapter", key: String(ch.id), chapter: ch, index, gapBefore: MIN_GAP });
     } else {
@@ -306,10 +325,10 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
       <div className="timeline-head">
         <div className="timeline-title">
           <span className="tl-glyph">🌌</span> {spaceName}'s Chronicle
-          {/* IM-123: chapter dates are grouped + shown in UTC (deliberate, for
-              server agreement) — say so, so an 11pm-local chapter landing on
-              the next UTC day doesn't read as a bug. */}
-          <span className="tl-sub">your story, in order · chapter dates in UTC</span>
+          {/* Dates are grouped + shown in the space's own local timezone
+              (owner rule, 2026-10-21 — supersedes IM-123's UTC labelling):
+              the day on a card is the day the user lived it. */}
+          <span className="tl-sub">your story, in order · dates in your local time</span>
         </div>
         <div className="timeline-actions">
           {/* IM-122: search across chapters (title / summary / theme). */}
@@ -356,7 +375,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
                 <span className="tl-node-body">
                   <span className="tl-node-title">{row.chapter.title}</span>
                   <span className="tl-node-when">
-                    {normalizeDate(row.chapter.periodStart).toLocaleDateString(undefined, { timeZone: "UTC" })} – {normalizeDate(row.chapter.periodEnd).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                    {formatLocalDate(row.chapter.periodStart)} – {formatLocalDate(row.chapter.periodEnd)}
                   </span>
                   {row.chapter.summary && <span className="tl-node-summary">{row.chapter.summary}</span>}
                   {/* IM-121: the chapter's theme + change magnitude were
@@ -422,7 +441,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
                 <button key={ev.id} className="tl-ahead-row" onClick={() => onFocus?.(ev.id)} title="Find it in the galaxy">
                   <span className="tl-ahead-label">{ev.label}</span>
                   <span className="tl-ahead-when">
-                    {normalizeDate(ev.date).toLocaleDateString(undefined, { timeZone: "UTC" })} · {eventWhenLabel(ev)}
+                    {formatLocalDate(ev.date)} · {eventWhenLabel(ev)}
                   </span>
                 </button>
               ))}
@@ -437,9 +456,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
           <div className="tl-card-trend" style={{ color: TREND_COLOR[sel.trend] }}>{TREND_LABEL[sel.trend]}</div>
           <h3>{sel.title}</h3>
           <div className="tl-card-when">
-            {normalizeDate(sel.periodStart).toLocaleDateString(undefined, { timeZone: "UTC" })} → {normalizeDate(sel.periodEnd).toLocaleDateString(undefined, { timeZone: "UTC" })}
-            {/* IM-123: name the basis right where the date is read. */}
-            <span className="tl-origin"> · UTC</span>
+            {formatLocalDate(sel.periodStart)} → {formatLocalDate(sel.periodEnd)}
             {sel.origin === "user" && <span className="tl-origin"> · you marked this</span>}
           </div>
           {/* IM-121: theme + change magnitude, on the card as on the row. */}

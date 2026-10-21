@@ -108,6 +108,11 @@ export interface LlmProvider {
   readonly degraded?: boolean;
   /** WHY it's degraded, when `degraded` is true — null/undefined otherwise. */
   readonly degradedReason?: DegradeReason | null;
+  /** WHY the most recent answer() call fell back to the offline heuristic, or
+   *  null when it was served by the cloud (or no answer has run yet). Set by
+   *  ResilientLlmProvider per call — including single-call fallbacks that do
+   *  NOT trip the cooldown and so never show up in `degradedReason`. */
+  readonly lastAnswerDegradedReason?: AnswerDegradeReason | null;
   /** Parse raw text into typed nodes + edges, grounded in existing context. */
   extract(text: string, context: ContextNode[]): Promise<ExtractionResult>;
   /** Decide whether a semantic neighbour should become a formal graph edge. */
@@ -263,6 +268,13 @@ export type LlmProviderKind = "gemini" | "openai" | "heuristic";
  *  provider's own quota/billing/auth state. Surfaced through `/api/health` so "it's not
  *  working" has an actual, actionable answer instead of one generic message. */
 export type DegradeReason = "auth" | "quota" | "timeout" | "budget";
+
+/** Why ONE answer() call was served by the offline fallback (Finding 2):
+ *  DegradeReason, plus "error" for a cloud failure that fits no named
+ *  category (a non-fatal error degrades a single call without tripping the
+ *  provider-wide cooldown, so `degradedReason` stays null for it — this
+ *  per-call record is how chat() still learns the truth about THAT turn). */
+export type AnswerDegradeReason = DegradeReason | "error";
 
 export interface LlmProviderOptions {
   kind?: LlmProviderKind;

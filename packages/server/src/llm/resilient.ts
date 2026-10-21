@@ -1,5 +1,5 @@
 import type { ExtractionResult, ClarificationInterpretation } from "@brain/shared";
-import type { AnswerOptions, AnswerResult, ContextNode, ContradictionResult, DegradeReason, LinkCandidate, LinkValidation, LlmProvider, LlmToolCallInput, LlmToolResult } from "./adapter.js";
+import type { AnswerDegradeReason, AnswerOptions, AnswerResult, ContextNode, ContradictionResult, DegradeReason, LinkCandidate, LinkValidation, LlmProvider, LlmToolCallInput, LlmToolResult } from "./adapter.js";
 import { HeuristicProvider } from "./heuristic.js";
 
 /**
@@ -43,6 +43,14 @@ export class ResilientLlmProvider implements LlmProvider {
    *  a new cooldown period starts, cleared implicitly since `degradedReason` only
    *  reads it while `disabledUntil` is still in the future. */
   private lastFatalReason: DegradeReason | null = null;
+  /** Why the LAST answer() call was served by the fallback, or null when the
+   *  cloud served it. Per-call (unlike `degradedReason`, which only describes
+   *  an active cooldown) so chat() can flag THAT reply honestly (Finding 2). */
+  private lastAnswerReason: AnswerDegradeReason | null = null;
+
+  get lastAnswerDegradedReason(): AnswerDegradeReason | null {
+    return this.lastAnswerReason;
+  }
 
   constructor(
     private readonly primary: LlmProvider,
@@ -191,11 +199,19 @@ export class ResilientLlmProvider implements LlmProvider {
     context: ContextNode[],
     opts?: AnswerOptions,
   ): Promise<AnswerResult> {
-    if (this.blocked) return this.fallback.answer(question, context, opts);
+    this.lastAnswerReason = null;
+    if (this.blocked) {
+      // Blocked = budget (checked live) or a fatal-error cooldown whose reason
+      // was recorded when it tripped; "error" is the honest remainder if a
+      // future block source records neither.
+      this.lastAnswerReason = this.isOverBudget?.() ? "budget" : (this.lastFatalReason ?? "error");
+      return this.fallback.answer(question, context, opts);
+    }
     try {
       return await withTimeout(this.primary.answer(question, context, opts), this.timeoutMs, "answer");
     } catch (err) {
       this.note(err, "answer");
+      this.lastAnswerReason = classifyFatalError(err) ?? "error";
       return this.fallback.answer(question, context, opts);
     }
   }

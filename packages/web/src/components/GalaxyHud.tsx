@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   audioSummary,
   beaconReadout,
@@ -17,6 +18,35 @@ import {
  * Graph3D/App from live scene state — nothing here invents scene facts.
  */
 
+/**
+ * Package B (HUD reorganization, finding #6) — the ONE container for the
+ * left-edge ship-status readouts. The Drifter chip renders as its header
+ * line, the beacon box as its body, and the sounds pill as its footer line
+ * (App renders them in that order as children). The stack is a single
+ * anchored object: its height is negotiated once in CSS (capped, with the
+ * beacon body shrinking/clipping first) so the beacon box can never again
+ * grow up through the Drifter chip. `belowNoticing` applies the one
+ * coordination rule with the "Soumaya noticed" card: while that card is up,
+ * the stack docks in its low slot instead of the mid-screen slot.
+ */
+export function ShipStatusStack({
+  belowNoticing,
+  children,
+}: {
+  belowNoticing?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`ship-status-stack${belowNoticing ? " below-noticing" : ""}`}
+      role="group"
+      aria-label="Ship status"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function BeaconReadout({
   status,
   onFocus,
@@ -26,11 +56,17 @@ export function BeaconReadout({
 }) {
   const r = beaconReadout(status);
   if (!r) return null;
+  // Finding #6 small print: Graph3D's beacon detail already reads
+  // "Dispatching 1…" when a dispatch is in flight — appending
+  // "· dispatching 1…" said the same fact twice in the box's head line.
+  // The pending count is only appended when the detail doesn't already
+  // carry the dispatching fact.
+  const showPending = r.pending > 0 && !/dispatch/i.test(r.detail);
   return (
     <div className="beacon-readout" role="status" aria-label="Aura beacon status">
       <span className="beacon-readout-head">
         📡 {r.detail}
-        {r.pending > 0 ? ` · dispatching ${r.pending}…` : ""}
+        {showPending ? ` · dispatching ${r.pending}…` : ""}
       </span>
       {r.targets.length > 0 && (
         <span className="beacon-readout-targets">

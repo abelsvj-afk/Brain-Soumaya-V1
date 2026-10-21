@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TimelineChapter } from "@brain/shared";
-import { normalizeDate, daysBetween, gapFor, buildRows } from "./TimelineView.js";
+import { normalizeDate, daysBetween, gapFor, buildRows, formatLocalDate } from "./TimelineView.js";
 
 function chapter(overrides: Partial<TimelineChapter> & { periodEnd: string }): TimelineChapter {
   return {
@@ -108,12 +108,48 @@ describe("TimelineView.buildRows", () => {
   });
 
   it("inserts a month/year header only when the calendar month actually changes", () => {
+    // Midday-UTC fixtures: the LOCAL month is Jan/Jan/Feb in both gate zones
+    // (America/New_York and Pacific/Kiritimati) — grouping is local now.
     const rows = buildRows([
-      chapter({ id: 1, periodEnd: "2026-01-05 00:00:00" }),
-      chapter({ id: 2, periodEnd: "2026-01-20 00:00:00" }), // same month — no new header
-      chapter({ id: 3, periodEnd: "2026-02-01 00:00:00" }), // new month — new header
+      chapter({ id: 1, periodEnd: "2026-01-05 12:00:00" }),
+      chapter({ id: 2, periodEnd: "2026-01-20 12:00:00" }), // same month — no new header
+      chapter({ id: 3, periodEnd: "2026-02-01 12:00:00" }), // new month — new header
     ]);
     const headers = rows.filter((r) => r.type === "header");
     expect(headers).toHaveLength(2);
+  });
+
+  it("groups a chapter under its LOCAL month, not the UTC month of the stored instant", () => {
+    // 2026-02-01 02:00 UTC is Jan 31 21:00 in America/New_York and Feb 1
+    // 16:00 in Pacific/Kiritimati — the header must match the zone the
+    // runtime reports (the device/space zone), computed independently here.
+    const rows = buildRows([chapter({ id: 1, periodEnd: "2026-02-01 02:00:00" })]);
+    const header = rows.find((r) => r.type === "header");
+    const expectedLabel = new Date(Date.UTC(2026, 1, 1, 2)).toLocaleString(undefined, { month: "long", year: "numeric" });
+    expect(header).toMatchObject({ type: "header", label: expectedLabel });
+  });
+});
+
+describe("TimelineView.formatLocalDate — the day the user lived, in their zone", () => {
+  it("renders the local calendar day of a stored instant (never its UTC day)", () => {
+    const raw = "2026-01-01 02:00:00"; // naive SQLite = 02:00 UTC
+    const instant = new Date(Date.UTC(2026, 0, 1, 2));
+    const expected = instant.toLocaleDateString(undefined);
+    expect(formatLocalDate(raw)).toBe(expected);
+    // In America/New_York this is 12/31/2025 — a UTC-pinned render (the old
+    // code) would print 1/1/2026 there and fail this assertion under that TZ.
+  });
+
+  it("a bare YYYY-MM-DD is a fixed calendar date and renders as itself", () => {
+    const rendered = formatLocalDate("2026-03-15");
+    const back = new Date(rendered);
+    expect(back.getFullYear()).toBe(2026);
+    expect(back.getMonth()).toBe(2);
+    expect(back.getDate()).toBe(15);
+  });
+
+  it("returns '' for an unparseable value instead of 'Invalid Date'", () => {
+    expect(formatLocalDate("not-a-date")).toBe("");
+    expect(formatLocalDate("")).toBe("");
   });
 });

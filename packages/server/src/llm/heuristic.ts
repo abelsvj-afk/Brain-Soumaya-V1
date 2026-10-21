@@ -235,8 +235,8 @@ export class HeuristicProvider implements LlmProvider {
       const line = chitchat
         ? "Cruising the quiet outer reaches of your galaxy — calm out here, just starlight and a little drift. Ask me about a memory and I'll plot a course to it."
         : heavy
-          ? "That sounds like it carries real weight, and I don't have memories charted on it yet — I don't want to guess at something that matters."
-          : "I'm not picking up any memories on that heading yet. Log a few related thoughts and I'll chart the connections.";
+          ? "I'm answering with my offline mind right now, so I can't think this through the way I usually do. That sounds like it carries real weight, and I don't have memories charted on it yet — I don't want to guess at something that matters."
+          : "I'm answering with my offline mind right now. I'm not picking up any memories on that heading yet. Log a few related thoughts and I'll chart the connections.";
       // Interview instinct (offline): only when weighty AND she hasn't just asked,
       // so the offline path can't interrogate in a loop either.
       const askBack =
@@ -246,9 +246,15 @@ export class HeuristicProvider implements LlmProvider {
       return { answer: line + kb, citations: [], mood, askBack };
     }
     const top = context.slice(0, 5);
+    // Finding 2: the limitation LEADS — an offline reply must not read as a
+    // full answer with a disclaimer tacked onto the end. (The old closing
+    // "Connect an OpenAI or Gemini key…" line also misdiagnosed quota/
+    // timeout/budget fallbacks, where a key IS connected; the truthful,
+    // reason-specific copy now lives in the client's degraded banner, driven
+    // by ChatResponse.degraded — not in this template.)
     const preface = heavy
-      ? "I hear the weight in that. Here's what your own galaxy holds on this heading:\n"
-      : "From up here I can see a cluster on that heading:\n";
+      ? "I'm answering with my offline mind right now, so I can't reason the way I usually do — but I hear the weight in that. Here's what your own galaxy holds on this heading:\n"
+      : "I'm answering with my offline mind right now — this is a simple look at your memories, not my full thinking. From up here I can see a cluster on that heading:\n";
     // Honesty over silence: offline she can't reason over custom roles — say so
     // instead of letting the user think their Companion config is being ignored.
     const rolesNote = opts?.systemExtra?.includes("ACTIVE CUSTOM INSTRUCTIONS")
@@ -258,7 +264,7 @@ export class HeuristicProvider implements LlmProvider {
       preface +
       top.map((c) => `• ${c.label}: ${c.content}`).join("\n") +
       kb +
-      `\n\n— I'd plot a course between them. (Connect an OpenAI or Gemini key and I can tell you the fuller story.${rolesNote})`;
+      `\n\n— That's as far as my offline mind reaches on this one.${rolesNote}`;
     // Thin coverage on a weighty topic → one genuine ask-back (never twice running).
     const askBack =
       heavy && context.length < 3 && !opts?.justAsked

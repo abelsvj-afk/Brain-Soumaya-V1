@@ -78,6 +78,12 @@ import { playSfxSpatial } from "./sfx.js";
 import { makeSpaceStation } from "./spaceStation.js";
 import { gltfLoader, ensureKtx2Support } from "./gltf.js";
 import { makeSun, SUN_RADIUS_MAX } from "./sun.js";
+import {
+  clampCameraToSunFloor,
+  labelOpacityNearSun,
+  sectorTitleScaleK,
+  sunProximityFade,
+} from "./sunProximity.js";
 import { makeOrbitSystem } from "./orbits.js";
 import { makeVisitors, type VisitorSystem } from "./visitors.js";
 import { isNodeProcessing, logVisits } from "../api/client.js";
@@ -461,6 +467,21 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // point: its debounce collapses a gesture 'end' and a flight completion
   // that coincide into exactly ONE settle digest.
   const cameraSettleRef = useRef<ZoomSettleScheduler | null>(null);
+  // Sun camera floor (Package D, finding #7): the MANUAL-drive window during
+  // which the tick applies clampCameraToSunFloor to the camera. Opened by
+  // OrbitControls 'start' (a real user gesture — programmatic cameraPosition
+  // tweens dispatch no controls events, the same verified fact the settle
+  // scheduler above relies on), held open through the gesture, and kept for
+  // a damping tail after 'end' (dampingFactor 0.075 leaves ~(1-0.075)^n of
+  // the gesture's velocity after n frames; 1.6s ≈ 96 frames ≈ 0.06% —
+  // spent). Programmatic entry points (flyTo, frameGalaxy, the entity
+  // flights) close the window on entry, and the tick additionally exempts
+  // object-follow, whose camera is positioned programmatically every frame
+  // (the ship's cockpit view legitimately sits inside the floor radius —
+  // the ship's own sun standoff keeps IT outside the corona, but its
+  // camera rides 28 units off its nose). See sunProximity.ts.
+  const manualDrivingRef = useRef(false);
+  const manualSunFloorUntilRef = useRef(0);
   // Arms when the follow-engage fly-in starts (its end is
   // `followFlyUntilRef`); the render loop polls it per frame and it reports
   // the completion exactly once. See zoomSettle.ts.
@@ -504,8 +525,22 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     }
     const onControlsEnd = () => settle.notify();
     controls.addEventListener("end", onControlsEnd);
+    // Sun camera floor: the same gesture events delimit the manual-drive
+    // window (see manualDrivingRef's comment). 'start' opens it; 'end'
+    // closes the gesture but arms the damping tail.
+    const onControlsStart = () => {
+      manualDrivingRef.current = true;
+    };
+    const onControlsEndFloor = () => {
+      manualDrivingRef.current = false;
+      manualSunFloorUntilRef.current = performance.now() + 1600;
+    };
+    controls.addEventListener("start", onControlsStart);
+    controls.addEventListener("end", onControlsEndFloor);
     return () => {
       controls.removeEventListener("end", onControlsEnd);
+      controls.removeEventListener("start", onControlsStart);
+      controls.removeEventListener("end", onControlsEndFloor);
       settle.dispose();
       if (cameraSettleRef.current === settle) cameraSettleRef.current = null;
     };
@@ -2384,6 +2419,13 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           }
         }
 
+        // Sun-proximity fade for titles/labels (Package D): a function of the
+        // CAMERA's distance to the sun (the world origin) only — constant for
+        // the whole pass. See sunProximity.ts for why this smooth factor
+        // replaces neither the labels' anchor occlusion test nor the titles'
+        // deliberate no-occlusion-gate design.
+        const camSunFade = sunProximityFade(camera.position.length());
+
         graphGroup.children.forEach((o: any) => {
           if (o.userData?.nodeId == null) return;
           const id = o.userData.nodeId;
@@ -2498,19 +2540,28 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
             // is scenery, not an occluder. Occluding them made titles blink on/off as
             // hubs grazed the sun's limb during orbit ("pops up for a second then
             // disappears"). The hub's own close-up label keeps its occlusion check.
-            child.visible = isDiagForceHidden(child) ? false : isTitleFarView;
+            // Package D adds a SUN-PROXIMITY FADE instead — a different mechanism
+            // answering a different condition: not "is the sun between camera and
+            // hub" (the blinking gate) but "is the CAMERA inside the sun's glow"
+            // (the whiteout shots). camSunFade is a smoothstep of camera distance
+            // to the origin, so it cannot blink, and outside its band it is
+            // exactly 1 — far-view titles are untouched. See sunProximity.ts.
+            child.visible = isDiagForceHidden(child) ? false : isTitleFarView && camSunFade > 0.02;
             if (child.visible) {
               const mat = child.material as THREE.SpriteMaterial;
-              mat.opacity = 0.92;
+              mat.opacity = 0.92 * camSunFade;
               // Grow the label with camera distance so it holds a readable on-screen size
               // as you pull further out (world-scale sprites otherwise shrink to specks),
-              // with an extra bump on small screens. No upper cap: the old 3.4× cap
-              // froze title growth past ~4100 units, so titles shrank into specks in
-              // the recentered whole-galaxy view. Uncapped, a title holds constant
-              // on-screen size at any zoom (map-label behavior).
+              // with an extra bump on small screens. The old 3.4× cap froze title
+              // growth past ~4100 units, so titles shrank into specks in the
+              // recentered whole-galaxy view; sectorTitleScaleK keeps the uncapped
+              // constant-on-screen-size rule (map-label behavior) and bounds only
+              // the growth factor at 16 — above the worst framing demand this
+              // codebase produces (~15.3, portrait far-rim) — so the cap binds
+              // only past 19,200 units camera-to-hub. See sunProximity.ts.
               const base = child.userData.baseScale;
               if (base) {
-                const k = Math.max(1, dist / MACRO_DIST) * SECTOR_LABEL_BOOST;
+                const k = sectorTitleScaleK(dist, MACRO_DIST, SECTOR_LABEL_BOOST);
                 child.scale.set(base.x * k, base.y * k, 1);
               }
               const mq = child.userData.marquee;
@@ -2587,14 +2638,32 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               // A hub's own label fades out when its sector title takes over (far view),
               // gated on the distance-only flag so it can't flicker with the LOD set.
               const labelVis = (isTitleFarView && !isSelected) || capped || occludedBySun ? 0 : Math.min(1, Math.max(0, (labelFadeFar - dist) / (labelFadeFar - FADE_NEAR)));
+              // Package D (finding #7): compose the label's opacity with the
+              // sun rules in sunProximity.ts — the camera fade (dissolve with
+              // the scene when the camera is inside the glow; selected/followed
+              // exempt, mirroring occludedBySun's exemption above) and the
+              // near-sun contrast floor (a label anchored on the innermost
+              // orbit ring is raised toward 0.9 opacity so it reads against
+              // the corona wash instead of washing out at distance-fade
+              // values ~0.3; the label texture's baked dark shadow does the
+              // rest, as it does everywhere else). The crowd cap, the
+              // distance fade, and the occlusion test above are unchanged —
+              // this only rescales the opacity of a label already visible.
+              // `tmp` still holds this body's position here.
+              const sunOpacity = labelOpacityNearSun(
+                labelVis * 0.95,
+                tmp.length(),
+                camSunFade,
+                isSelected || id === followRef.current,
+              );
               // Galaxy Performance Isolation Mode: same reasoning as the LOD-swap guard
               // above — this line otherwise reassigns label visibility every frame,
               // fighting the one-time diagnostic hide. `diag.enabled &&` short-circuits
               // to zero added cost in the normal (non-diagnostic) path.
-              child.visible = isDiagForceHidden(child) ? false : labelVis > 0.02;
+              child.visible = isDiagForceHidden(child) ? false : labelVis > 0.02 && sunOpacity > 0.02;
               if (child.visible) {
                 const mat = child.material as THREE.SpriteMaterial;
-                mat.opacity = labelVis * 0.95;
+                mat.opacity = sunOpacity;
                 const mq = child.userData.marquee;
                 if (mq) {
                   // motionDt (not raw dt) — same reduced-motion slowdown orbit motion already
@@ -2876,6 +2945,27 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
 
       // Single damped update per frame (required for inertia + zoom-to-cursor).
       controls?.update();
+
+      // Sun camera floor (Package D, finding #7) — MANUAL drive only. This
+      // runs after the controls' own damped update, and only inside the
+      // manual-drive window (OrbitControls 'start'/'end' + damping tail;
+      // programmatic entry points close the window on entry, and
+      // object-follow is exempt because its camera is positioned
+      // programmatically every frame — see manualDrivingRef's comment).
+      // Programmatic cameraPosition tweens write camera.position from
+      // their own animator and never open the window, so fly-to / follow /
+      // intro / recenter flight paths are untouched. The clamp itself is a
+      // radial projection onto the corona-edge sphere (sunProximity.ts):
+      // applied to incremental hand-driven steps it reads as easing to a
+      // stop at the glow's edge and sliding along it, never a snap.
+      if (
+        controls &&
+        !followObjRef.current &&
+        (manualDrivingRef.current || performance.now() < manualSunFloorUntilRef.current)
+      ) {
+        const floored = clampCameraToSunFloor(camera.position);
+        if (floored.clamped) camera.position.set(floored.pos.x, floored.pos.y, floored.pos.z);
+      }
       // Close the frame-timing bracket (Stage 0 instrument). The sample is only committed
       // once the frame actually draws — see perfStats.attachRenderer.
       endTick();
@@ -3033,6 +3123,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   const flyTo = (n: any) => {
     const fg = fgRef.current;
     if (!fg || !n || n.x == null) return;
+    // Programmatic flight: close the sun floor's manual-drive window so the
+    // tween is never clamped (see manualDrivingRef's comment).
+    manualDrivingRef.current = false;
+    manualSunFloorUntilRef.current = 0;
     const D = 115; // consistent camera distance from the node
     const cam: THREE.Camera = fg.camera();
     const node = new THREE.Vector3(n.x, n.y, n.z ?? 0);
@@ -3167,6 +3261,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   const frameGalaxy = (ms = 900, filter?: (n: any) => boolean, isIntro = false): boolean => {
     const fg = fgRef.current;
     if (!fg) return false;
+    // Programmatic framing (recenter / intro / lens isolate): close the sun
+    // floor's manual-drive window so its cameraPosition flight is never
+    // clamped (see manualDrivingRef's comment).
+    manualDrivingRef.current = false;
+    manualSunFloorUntilRef.current = 0;
     const pts = (dataRef.current.nodes as any[]).filter(
       (n) => n.x != null && !isNaN(n.x) && n.y != null && !isNaN(n.y) && (!filter || filter(n)),
     );
@@ -3431,6 +3530,19 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           const len = Math.max(NEAR, Math.min(ceiling, dist * factor));
           cam.position.copy(target.clone().add(offset.normalize().multiplyScalar(len)));
         }
+        // Sun camera floor (Package D): zoomBy is a MANUAL drive path (the
+        // HUD zoom buttons — including the forward-travel branch above,
+        // which deliberately flies the camera through space), so the
+        // corona floor binds it directly here. The node-follow branch's
+        // destinations sit at a followed body (≥ ~1,117 units from the
+        // sun by orbit geometry), so this is a no-op there; object-follow
+        // (ship/station/figurine) is exempt entirely, mirroring the tick —
+        // its framing is programmatic and the ship's cockpit view
+        // legitimately sits inside the floor radius.
+        if (!followObjRef.current) {
+          const floored = clampCameraToSunFloor(cam.position);
+          if (floored.clamped) cam.position.set(floored.pos.x, floored.pos.y, floored.pos.z);
+        }
         controls.update?.();
       },
       toggleFollowShip: (forceState?: boolean) => {
@@ -3606,6 +3718,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         const fg = fgRef.current;
         const cam = fg?.camera?.() as THREE.PerspectiveCamera | undefined;
         if (!obj || !fg || !cam) return false;
+        // Programmatic flight: close the sun floor's manual-drive window
+        // (see manualDrivingRef's comment).
+        manualDrivingRef.current = false;
+        manualSunFloorUntilRef.current = 0;
         followRef.current = null;
         followObjRef.current = null;
         followKindRef.current = null;

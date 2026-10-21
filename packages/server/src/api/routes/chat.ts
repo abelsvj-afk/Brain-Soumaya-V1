@@ -63,6 +63,22 @@ function heuristicDistill(messages: { role: string; text: string }[]): string[] 
   return out.slice(-3);
 }
 
+/** Plain-language 400 for a rejected chat body (Finding 1): the old string
+ *  ("Body must be { question: string }") was pasted verbatim into the chat
+ *  banner. This copy is safe to show a user; the technical detail goes to the
+ *  server log below, never the response. */
+const CHAT_BODY_ERROR = "That message couldn't be sent as-is — please shorten it or remove an attachment and try again.";
+
+/** Log WHICH FIELD failed validation (field path + zod rule code only —
+ *  never the submitted content) so a rejected chat send is diagnosable from
+ *  server logs instead of being an unexplained 400 (Finding 1). */
+function logChatBodyFailure(route: string, error: z.ZodError): void {
+  const fields = error.issues
+    .map((i) => `${i.path.join(".") || "(body)"}: ${i.code}`)
+    .join("; ");
+  console.warn(`[chat] ${route} rejected a message body — ${fields}`);
+}
+
 export function chatRoutes(ctx: AppContext): Router {
   const r = Router();
 
@@ -94,7 +110,8 @@ export function chatRoutes(ctx: AppContext): Router {
   r.post("/", async (req, res) => {
     const parsed = ChatBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { question: string }" });
+      logChatBodyFailure("POST /api/chat", parsed.error);
+      res.status(400).json({ error: CHAT_BODY_ERROR });
       return;
     }
     const result = await chat(
@@ -125,7 +142,8 @@ export function chatRoutes(ctx: AppContext): Router {
   r.post("/agent", async (req, res) => {
     const parsed = ChatBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { question: string }" });
+      logChatBodyFailure("POST /api/chat/agent", parsed.error);
+      res.status(400).json({ error: CHAT_BODY_ERROR });
       return;
     }
     const spaceId = spaceOf(res);

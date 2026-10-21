@@ -6,6 +6,36 @@
   --muted: #9b96c4;
   --accent: #7af9ff;
   font-family: Inter, system-ui, -apple-system, sans-serif;
+
+  /* ── Galaxy HUD dock (Package B, finding #6) ──────────────────────────
+     ONE z-ladder for the whole HUD: every floating galaxy element takes
+     its layer from these variables, so a future element can't silently
+     out-rank the dock. Passive readouts < camera controls < Views <
+     ship-status stack < noticed card. */
+  --hud-z-passive: 30; /* streak ember, fuel gauge */
+  --hud-z-camera: 40; /* FAB tier: corner buttons, 🎯 cluster, focus toggle */
+  --hud-z-views: 45; /* Views circle + its dropdown sheet */
+  --hud-z-status: 55; /* ship-status stack (and its transient neighbours) */
+  --hud-z-noticed: 57; /* "Soumaya noticed" card */
+  /* ONE slot system for the left dock. The bottom-left column is a 56px
+     ladder (46px circle + 10px gap) shared by the corner FABs and the
+     camera cluster — every left-edge control takes its bottom from these
+     variables instead of a private fixed constant:
+       dock 18 · recenter 74 · music 130 (corner FABs, unchanged)
+       focus-mode toggle 186 · Views circle 242 · 🎯 focus cluster 298
+     The camera cluster sits directly ABOVE the corner-FAB column: the
+     originally-sketched Views slot (≈132) lands exactly on the music FAB
+     (bottom 130, same left/width) and a toggle below it (≈78) lands
+     exactly on the recenter FAB (bottom 74) — verified at 390×780. */
+  --hud-dock-left: 14px;
+  --hud-status-left: 62px; /* just right of the 46px camera column (14+46=60) */
+  --hud-cam-toggle-bottom: 186px;
+  --hud-cam-views-bottom: 242px;
+  --hud-cam-focus-bottom: 298px;
+  /* Ship-status stack: one anchored object directly above the 🎯's slot
+     (298+46=344, +10 gap), height negotiated once via the cap. */
+  --hud-status-bottom: 354px;
+  --hud-status-max-h: 196px;
 }
 
 * {
@@ -1253,23 +1283,28 @@ body,
   .fab-recenter, .fab-zoom-out { bottom: calc(74px + env(safe-area-inset-bottom)); }
   .fab-music, .fab-zoom-in { bottom: calc(130px + env(safe-area-inset-bottom)); }
   .fab-observatory { bottom: calc(186px + env(safe-area-inset-bottom)); }
-  .focus-cluster { bottom: calc(186px + env(safe-area-inset-bottom)); }
+  /* .focus-cluster's safe-area offset lives in its own dock rule (Package B). */
 }
-/* Deep-space focus mode toggle — bottom-left, one slot ABOVE the camera-focus cluster
-   (186px). The cluster's target menu only expands upward while it's OPEN, so in the
-   normal (closed) state this slot is clear; we hide the toggle while that menu is open
-   (see App) so the two never fight. */
+/* Deep-space focus mode toggle — Package B (finding #6, §6.4/§6.5.2).
+   This class's CSS survived in the stylesheet after its button had been
+   folded into the Tools menu, leaving an orphan slot at bottom 242 that
+   the Views pill (z 45) painted over — the owner's buried button. The
+   button is back as a real element (App.tsx, wired to the same focusMode
+   state as the Tools entry) in the camera cluster's BOTTOM slot:
+   🎯 298 → Views circle 242 → focus toggle 186, directly above the
+   corner-FAB column (music tops out at 176).
+   The old `.focus-menu-open .fab-focus-toggle { opacity: 0 }` fade is
+   REMOVED, not replaced: it existed because the fan (opening upward from
+   the 🎯) travelled through the toggle's old slot above the 🎯. The
+   toggle now sits BELOW the 🎯 and the fan only travels UP, so the two
+   never share space and the toggle stays visible and tappable while the
+   fan is open. */
 .fab-focus-toggle {
-  bottom: 242px;
-  left: 14px;
+  bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
+  left: var(--hud-dock-left);
   font-size: 20px;
-  transition: opacity 0.2s ease;
+  z-index: var(--hud-z-camera);
 }
-@supports (padding: env(safe-area-inset-bottom)) {
-  .fab-focus-toggle { bottom: calc(242px + env(safe-area-inset-bottom)); }
-}
-/* While the camera-focus menu is fanned out, get out of its way. */
-.focus-menu-open .fab-focus-toggle { opacity: 0; pointer-events: none; }
 
 /* Deep-space focus mode (#2): a distraction-free reading session. Everything but the
    galaxy + the way-out recedes; hover brings a control back if you reach for it. The
@@ -1302,15 +1337,33 @@ body,
   .focus-mode .now-playing { transition: none; }
 }
 
-/* Game-style focus cluster: a single button that pops its targets upward. */
+/* Game-style focus cluster: a single button that pops its targets upward.
+   Package B: the 🎯 takes the TOP slot of the camera cluster
+   (--hud-cam-focus-bottom 298 = focus-toggle 186 + Views 56 + 56), still
+   on the dock's shared 56px ladder. Its fan opens UPWARD into a reserved
+   column: 7 items × 54px steps reach bottom 676 (+46 = top 722 at a 780px
+   viewport, inside the screen), in the x-band 14–60 where the only other
+   dock members are the passive mid-left readouts — those step aside
+   while the fan is open (see the .focus-menu-open rules below), so the
+   fan's column is genuinely reserved, not shared. */
 .focus-cluster {
   position: fixed;
-  left: 14px;
-  bottom: 186px;
+  left: var(--hud-dock-left);
+  bottom: calc(var(--hud-cam-focus-bottom) + env(safe-area-inset-bottom, 0px));
   width: 44px;
   height: 44px;
-  z-index: 40; /* the FAB tier — was 20, which let other FABs/HUD render on top of it */
+  z-index: var(--hud-z-camera); /* the FAB tier — was 20, which let other FABs/HUD render on top of it */
 }
+/* The fan's reserved column (Package B): while the target fan is open, the
+   two passive mid-left readouts it passes (streak ember, fuel gauge) fade
+   out and stop taking clicks; both return the moment the fan closes.
+   Nothing is hidden permanently — this is the same step-aside pattern the
+   old focus-toggle fade used, applied to the elements actually in the
+   fan's path. The focus-mode TOGGLE is not in the path (below the 🎯)
+   and deliberately has no such rule anymore. */
+.focus-menu-open .streak-ember,
+.focus-menu-open .fuel-gauge { opacity: 0; pointer-events: none; }
+.streak-ember, .fuel-gauge { transition: opacity 0.18s ease; }
 .focus-cluster .focus-main {
   position: absolute;
   left: 0;
@@ -2249,10 +2302,13 @@ body,
 }
 /* Streak ember — always-visible daily-streak stake on the left edge. */
 .streak-ember {
+  /* The dock's passive slot (Package B §6.5.1: streak keeps its own
+     mid-left anchor — it's pointer-events:none and outside every other
+     slot's horizontal band). Its z comes from the shared HUD ladder. */
   position: fixed;
   left: calc(8px + env(safe-area-inset-left));
   top: calc(50% - 118px);
-  z-index: 30;
+  z-index: var(--hud-z-passive);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2613,7 +2669,7 @@ button {
   left: calc(8px + env(safe-area-inset-left));
   top: 50%;
   transform: translateY(-50%);
-  z-index: 30; /* below FABs/panels so it never sits on top of them */
+  z-index: var(--hud-z-passive); /* below FABs/panels so it never sits on top of them */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3978,7 +4034,7 @@ button {
   top: 62px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 57;
+  z-index: var(--hud-z-noticed);
   width: min(94vw, 420px);
   padding: 12px 14px;
   border-radius: 14px;
@@ -4166,7 +4222,14 @@ button {
 /* IM-108: error surface outside her voice, above the input. */
 .chatdock-notice { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 8px 10px; border-radius: 10px; background: rgba(120, 30, 30, 0.28); border: 1px solid rgba(255, 120, 120, 0.4); font-size: 0.8rem; color: #ffd9d9; flex: 0 0 auto; }
 .chatdock-notice-text { flex: 1 1 auto; }
-.chatdock-notice-detail { opacity: 0.75; font-size: 0.74rem; }
+/* Finding 2: a degraded (offline-fallback) reply is visibly marked — an amber
+   limited-mode banner above the bubble and a dashed, muted bubble — so it
+   never wears a full answer's clothes. */
+.chatdock-degraded { font-size: 0.74rem; line-height: 1.35; color: #ffe1a8; background: rgba(255, 180, 60, 0.1); border: 1px solid rgba(255, 180, 60, 0.4); border-radius: 9px; padding: 6px 9px; margin-bottom: 5px; max-width: 85%; }
+.chatdock-degraded-tag { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.66rem; color: #ffcd46; }
+.chatdock-msg.soumaya .chatdock-bubble.degraded { border-style: dashed; opacity: 0.88; }
+/* Finding 1: character counter shown near the 2,000-char question cap. */
+.chatdock-charcount { flex: 0 0 auto; align-self: center; font-size: 0.7rem; color: #ffb3b3; font-variant-numeric: tabular-nums; }
 /* IM-106: staged + sent attachment chips. */
 .chatdock-pending-att { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; flex: 0 0 auto; }
 .chatdock-att-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; color: #b9cdf0; background: rgba(91, 214, 255, 0.1); border: 1px solid rgba(91, 214, 255, 0.35); border-radius: 999px; padding: 3px 9px; }
@@ -4887,13 +4950,19 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
 .tl-seasons-title { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #9fb4d8; }
 .tl-seasons-range { font-size: 0.68rem; opacity: 0.55; color: #cfd6e6; }
 .tl-seasons-axis { position: relative; min-height: 56px; }
+/* Season bands are lane-packed by buildSeasonAxis (finding #4): `top` comes
+   from the band's lane, inline — overlapping eras stack, never share a plane. */
 .tl-season-band {
-  position: absolute; top: 0; height: 30px; border: 1px solid; border-radius: 8px;
+  position: absolute; height: 30px; border: 1px solid; border-radius: 8px;
   overflow: hidden; padding: 3px 6px; box-sizing: border-box;
 }
 .tl-season-label { font-size: 0.68rem; font-weight: 600; color: #eaf4ff; white-space: nowrap; }
-.tl-journey-lane { position: relative; height: 18px; margin-top: 36px; }
-.tl-journey-lane + .tl-journey-lane { margin-top: 4px; }
+/* Labels too narrow for their band live here instead of clipping mid-word. */
+.tl-season-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.tl-season-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; color: #cfd6e6; }
+.tl-season-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+/* Journey lanes dock below the season block; `top` is inline (lane-aware). */
+.tl-journey-lane { position: absolute; left: 0; right: 0; height: 18px; }
 .tl-journey-span {
   position: absolute; top: 0; height: 16px; border-radius: 999px; opacity: 0.85;
   overflow: hidden; padding: 0 7px; box-sizing: border-box; display: flex; align-items: center;
@@ -5619,43 +5688,48 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 }
 
 /* ---- Galaxy Views (mobile perf: render one category at a time) ---- */
-/* Real, on-device bug (reported with screenshots from two different sessions on the same
-   phone): this toggle would sometimes render mid-screen, overlapping the sun, instead of
-   near the bottom. Root cause, confirmed by reading the actual CSS rather than guessing:
-   .fuel-gauge/.streak-ember (the group this button visually sits under) are anchored to
-   `top: 50%` (the viewport's vertical CENTER, via translateY(-50%)/calc(50% - Npx)) — a
-   value that moves in real pixels whenever the browser's actual visible height changes
-   (Android's collapsing/expanding address bar, a taller/shorter phone, immersive-mode
-   differences — all of which change `100%`/`50%` in absolute pixels). This toggle was
-   instead anchored to `bottom: 300px`, a FIXED distance from the bottom edge that does
-   NOT move with viewport height. Two anchors that both look "roughly near the fuel gauge"
-   on one test device will visibly drift apart from each other the moment the real visible
-   height differs even slightly — exactly the symptom reported. The fix is structural, not
-   a new pixel constant: this toggle now shares the SAME `top: 50%`-relative anchor family
-   as .fuel-gauge/.streak-ember, so it is genuinely GROUPED with them (moves as one unit
-   with the fuel gauge, never drifts independently) rather than merely coincidentally
-   close on one specific screen. The vertical gap below the fuel gauge's own center
-   (roughly: 18px icon + 5px gap + 128px tube + 5px gap + 14px value ≈ 170px tall, so
-   ~85px from center to its bottom edge, plus a small clearance) is estimated from the
-   fuel gauge's own CSS below, not pixel-measured on a device — flag for on-device
-   confirmation of the exact gap, per this repo's own "prove visual changes on-device"
-   discipline; the STRUCTURAL fix (shared anchor family) is what actually closes the bug
-   regardless of the exact offset chosen. z-index stays above .fab so it's never ambiguous. */
-.gv-wrap { position: fixed; left: 12px; top: calc(50% + 100px); z-index: 45; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: 70vw; }
-.gv-toggle { background: rgba(12,16,34,0.82); border: 1px solid var(--glass-border); color: var(--text);
-  border-radius: 999px; padding: 8px 14px; min-height: 40px; font-size: 0.85rem; font-weight: 700; cursor: pointer; backdrop-filter: blur(6px); }
+/* Package B (finding #6) — Views joins the left dock as a CIRCLE.
+   History kept short: this toggle once drifted mid-screen because it used a
+   different anchor family (fixed `bottom`) than its neighbours (`top: 50%`).
+   It then became an oval pill at top: calc(50% + 100px), z 45 — the widest
+   element in the left column, painting over the focus-mode slot and tucking
+   under the beacon box, with a dropdown that grew DOWNWARD across the 🎯
+   and slid under the z-55 readouts (§6.2.2/§6.2.4).
+   Now the toggle is a 46px circle on the dock's shared bottom-ladder
+   (--hud-cam-views-bottom: directly below the 🎯 at 298, directly above
+   the focus-mode toggle at 186 — the same bottom-anchor family as every
+   other circle in this column, so the whole column moves as one unit).
+   The originally-sketched slot (bottom ≈132) is NOT used: at 390×780 it
+   lands exactly on the music FAB (bottom 130, same left/width). */
+.gv-wrap { position: fixed; left: var(--hud-dock-left); bottom: calc(var(--hud-cam-views-bottom) + env(safe-area-inset-bottom, 0px)); z-index: var(--hud-z-views); width: 46px; height: 46px; }
+.gv-toggle { position: relative; width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(12,16,34,0.82); border: 1px solid var(--glass-border); color: var(--text);
+  border-radius: 50%; font-size: 20px; cursor: pointer; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
 .gv-toggle.open { border-color: rgba(122,220,255,0.5); }
+/* The word "Views" is the circle's accessible name — visually hidden. */
+.gv-toggle-text { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.gv-toggle-chev { position: absolute; right: 3px; bottom: 1px; font-size: 8px; color: var(--accent); pointer-events: none; }
+/* The dropdown is a SHEET in the dock's reserved lower-left panel slot:
+   right of the camera column (left 52px relative to the circle, so it never
+   crosses the 🎯/Views/focus-toggle circles) and below the ship-status
+   stack (its bottom edge aligns with the dock's bottom row, its height is
+   capped so its top stays under the stack's slot). Opening UPWARD from
+   the circle was rejected on geometry: at 390×780 a usable sheet
+   (≥180px) above the circle (top edge 288) would reach into — and slide
+   under — the z-55 status stack anchored at 354. The sheet never grows
+   downward across the 🎯 (the 🎯 is ABOVE the circle now) and never slides
+   under the stack. Capped + scrollable: up to 8 categories plus the
+   money/journeys/save-as-lens/show-all chips and the pinned-lens list. */
+.gv-sheet {
+  position: absolute; left: 52px; bottom: -224px; width: min(74vw, 300px); max-height: 224px;
+  overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border-radius: 14px; background: rgba(10, 14, 30, 0.88);
+  border: 1px solid var(--glass-border); backdrop-filter: blur(8px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5); animation: finFade 0.2s ease both;
+}
+.gv-sheet .lens-list { width: 100%; }
 .gv-chips {
-  display: flex; flex-wrap: wrap; gap: 6px; max-width: 72vw; animation: finFade 0.2s ease both;
-  /* Capped + scrollable rather than growing indefinitely — up to 8 categories plus the
-     money/journeys/save-as-lens/show-all chips (and now the pinned-lens list below them)
-     can wrap to several rows. .gv-wrap now grows DOWNWARD from a top-anchor (see its own
-     comment) instead of upward from a bottom-anchor, so this cap is sized off the actual
-     remaining space to the bottom of the viewport (50vh - 100px, matching .gv-wrap's own
-     `top: calc(50% + 100px)`, minus room for the toggle button + gap above it) rather than
-     a flat 40vh — an unbounded/mis-capped height here would push content off the bottom
-     of a short device instead of the old bug's "off the top". */
-  max-height: calc(50vh - 156px); overflow-y: auto; scrollbar-width: thin;
+  display: flex; flex-wrap: wrap; gap: 6px; animation: finFade 0.2s ease both;
 }
 .gv-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(12,16,34,0.82); border: 1px solid var(--glass-border);
   color: var(--text); border-radius: 999px; padding: 7px 12px; min-height: 38px; font-size: 0.82rem; cursor: pointer; backdrop-filter: blur(6px); }
@@ -5869,16 +5943,42 @@ div.float-tooltip-kap {
   backdrop-filter: blur(8px);
 }
 
-/* IM-20: beacon-target readout, pinned bottom-left above the now-playing pill. */
-.beacon-readout {
+/* Package B (finding #6): the ship-status stack — ONE container anchoring
+   the three left-62 readouts that used to be independently fixed (beacon
+   bottom 172 growing upward through the Drifter chip at 216, sounds pill
+   at 88). Now: Drifter chip = header line, beacon box = body, sounds pill
+   = footer line, all in-flow inside this single anchored object. Height
+   is negotiated once (max-height cap); when content exceeds the cap the
+   beacon BODY shrinks/clips first (flex shrink + overflow hidden below)
+   while header and footer keep their chip size — nothing paints over a
+   neighbour ever again. */
+.ship-status-stack {
   position: fixed;
-  left: 62px;
-  bottom: 172px;
-  z-index: 55;
+  left: calc(var(--hud-status-left) + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--hud-status-bottom) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--hud-z-status);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(56vw, 340px);
+  max-height: var(--hud-status-max-h);
+}
+/* §6.5.5 coordination: while the "Soumaya noticed" card is up (top-centre),
+   the stack docks in its LOW slot (the focus-toggle row, to the right of
+   that circle) instead of competing for the mid-screen field. */
+.ship-status-stack.below-noticing {
+  bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
+}
+
+/* IM-20: beacon-target readout — now the BODY of the ship-status stack
+   (in-flow; the stack owns the anchor, the cap and the z-layer). */
+.beacon-readout {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: min(46vw, 340px);
   padding: 8px 12px;
   border-radius: 12px;
   background: rgba(12, 20, 40, 0.72);
@@ -5899,10 +5999,9 @@ div.float-tooltip-kap {
 
 /* IM-19: visitor chip + followed-craft identity card. */
 .visitor-chip {
-  position: fixed;
-  left: 62px;
-  bottom: 216px;
-  z-index: 55;
+  /* Header line of the ship-status stack — in-flow, never shrinks. */
+  flex: none;
+  width: 100%;
   padding: 7px 12px;
   border-radius: 999px;
   background: rgba(12, 20, 40, 0.72);
@@ -5920,10 +6019,9 @@ div.visitor-chip { cursor: default; }
 
 /* IM-21: audio state chip — bottom-left, under the music FAB column. */
 .audio-state-chip {
-  position: fixed;
-  left: 62px;
-  bottom: 88px;
-  z-index: 55;
+  /* Footer line of the ship-status stack — in-flow pill, never shrinks. */
+  flex: none;
+  align-self: flex-start;
   padding: 6px 11px;
   border-radius: 999px;
   background: rgba(12, 20, 40, 0.66);

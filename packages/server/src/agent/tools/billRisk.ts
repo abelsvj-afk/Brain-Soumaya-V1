@@ -226,7 +226,14 @@ export const billRiskTool: Tool = {
     if (delivered) {
       // IM-74 producer: the warning was issued — mirror it into the server
       // Inbox so it survives even when the Telegram send was the only copy.
-      // Deduped per bill per UTC day, matching detect()'s once-a-day guard.
+      // Package E5: deduped per bill per SPACE-LOCAL day — the SAME day
+      // detect()'s once-a-day guard (actionFiredToday, which bounds the
+      // local day via localDayBoundsMs in the space's zone) fires on, and
+      // the same localDay()+spaceTimezone() construction detect() above
+      // already uses for its days-until-due count. The pre-fix key sliced
+      // the UTC date out of the instant, so two warnings on different
+      // local days sharing one UTC date deduped to a single Inbox entry
+      // and the second day's warning never reached the Inbox.
       // Best-effort: the nudge itself already happened.
       try {
         new NotificationsRepo(tc.ctx.handle, tc.spaceId).record({
@@ -234,7 +241,7 @@ export const billRiskTool: Tool = {
           text: msg,
           icon: "💸",
           priority: "high",
-          dedupeKey: `bill-risk:${billId}:${new Date(tc.now).toISOString().slice(0, 10)}`,
+          dedupeKey: `bill-risk:${billId}:${localDay(new Date(tc.now), spaceTimezone(tc.ctx.handle.sqlite, tc.spaceId))}`,
         });
       } catch { /* inbox is a mirror, never a gate */ }
     }

@@ -48,6 +48,7 @@ import { isVoiceEnabled } from "./voice.js";
 import {
   AudioStateChip,
   BeaconReadout,
+  ShipStatusStack,
   EmptyGalaxyCue,
   SceneIdentityCard,
   VisitorChip,
@@ -2218,10 +2219,14 @@ export default function App() {
 
       {/* CL-1b (IM-19/20/21): shell readouts — who is visiting, what the
           beacon beam is warming, and the audio state — where the scene is
-          seen, not only inside panels. */}
+          seen, not only inside panels. Package B (finding #6): the three
+          readouts now live in ONE ship-status stack (Drifter chip = header,
+          beacon box = body, sounds pill = footer) with a single negotiated
+          anchor + height cap, instead of three independently-fixed boxes
+          that grew through each other. While the noticed card is up, the
+          stack docks in its low slot (§6.5.5). */}
       {panel === null && !showObs && (
-        <>
-          <BeaconReadout status={fleetStatusHud} onFocus={(id) => focus(id)} />
+        <ShipStatusStack belowNoticing={noticingOpen}>
           {!followVisitor && activeVisitors.length > 0 && (
             <VisitorChip
               visitors={activeVisitors}
@@ -2231,6 +2236,7 @@ export default function App() {
               }}
             />
           )}
+          <BeaconReadout status={fleetStatusHud} onFocus={(id) => focus(id)} />
           <AudioStateChip
             sfx={sfxOnHud}
             voice={voiceOnHud}
@@ -2240,7 +2246,7 @@ export default function App() {
               setShowSettings(true);
             }}
           />
-        </>
+        </ShipStatusStack>
       )}
 
       {/* CL-1b (IM-23): an empty galaxy names where the first star goes,
@@ -2311,6 +2317,24 @@ export default function App() {
             onZoomIn={() => graphRef.current?.zoomBy(0.8)}
             onZoomOut={() => graphRef.current?.zoomBy(1.25)}
           />
+          {/* Package B (finding #6, §6.4): the deep-space focus-mode toggle
+              is a real button again, in the camera cluster's bottom slot
+              (🎯 → Views circle → this toggle). Its CSS class survived in
+              index.css after the button itself was folded into the Tools
+              menu, and the orphan slot sat buried under the Views pill and
+              faded out whenever the target fan opened. Here it stays
+              visible in both states (the fan travels UP from the 🎯; this
+              slot is below it) and toggles the same focusMode state as the
+              Tools menu entry — two doors to the same room, neither hidden. */}
+          <button
+            className={`fab fab-focus-toggle ${focusMode ? "on" : ""}`}
+            onClick={() => setFocusMode((v) => !v)}
+            aria-label={focusMode ? "Exit focus mode" : "Focus mode"}
+            aria-pressed={focusMode}
+            title={focusMode ? "Exit deep-space focus mode" : "Deep-space focus mode — dim the chrome for a calm read"}
+          >
+            {focusMode ? "🌐" : "🌌"}
+          </button>
           {/* Game-style focus cluster: one button that pops up the camera targets. */}
           {(() => {
             let focusIdx = 0;

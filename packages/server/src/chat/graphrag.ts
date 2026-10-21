@@ -1,4 +1,4 @@
-import { type ChatMood, type ChatResponse, type NodeRef, CHAT_MOODS, toneFrom } from "@brain/shared";
+import { type ChatDegradedReason, type ChatMood, type ChatResponse, type NodeRef, CHAT_MOODS, toneFrom } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { knn, knnDocs } from "../db/vec.js";
@@ -14,7 +14,8 @@ import { JourneysRepo } from "../repositories/journeys.repo.js";
 import { getPreferences } from "../agent/notify/policy.js";
 import { buildCompanionContext } from "./companionContext.js";
 import type { EmbeddingProvider } from "../embeddings/adapter.js";
-import type { LlmProvider } from "../llm/adapter.js";
+import type { AnswerResult, LlmProvider } from "../llm/adapter.js";
+import { HeuristicProvider } from "../llm/heuristic.js";
 
 export interface ChatOptions {
   /** Semantic seed nodes from KNN. */
@@ -26,6 +27,29 @@ export interface ChatOptions {
 }
 
 export const DEFAULT_CHAT: ChatOptions = { k: 6, depth: 1, kDocs: 4 };
+
+/**
+ * Finding 8: a chat turn has a real end-to-end budget. The embedding step is
+ * time-boxed on its own (a hung embed used to hang the whole turn forever —
+ * it runs BEFORE the answer call, outside the resilient provider's timeout);
+ * the whole turn then has a deadline after which it completes as a degraded
+ * offline reply (flagged, Finding 2) instead of hanging until the provider's
+ * 20s timeout or the client's old 60s cap. Both are env-overridable for tests
+ * and ops, with production defaults of 2.5s / 9s.
+ */
+export const CHAT_EMBED_TIMEOUT_MS = Number(process.env.CHAT_EMBED_TIMEOUT_MS ?? 2_500);
+export const CHAT_TURN_DEADLINE_MS = Number(process.env.CHAT_TURN_DEADLINE_MS ?? 9_000);
+
+/** Race a promise against a deadline; rejects with a plain Error on timeout
+ *  (the loser keeps running in the background — callers only use this for
+ *  steps whose late result can be safely discarded). */
+function withDeadline<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
 
 /** A knowledge-doc chunk must be at least this related to the message to be
  *  injected — otherwise docs leak into every reply regardless of topic. */
@@ -82,11 +106,22 @@ export async function chat(
    */
   attachments: { name: string; text: string }[] | null = null,
 ): Promise<ChatResponse> {
-  const vec = await deps.embeddings.embed(question);
+  const turnStart = Date.now();
+  // Finding 8: the embedding step is time-boxed. On timeout/failure the turn
+  // proceeds DEGRADED with keyword-only retrieval (vec = null → no vector
+  // seeds, no doc RAG) rather than hanging or failing — and the reply is
+  // flagged so the client can say so (Finding 2).
+  let vec: Float32Array | null = null;
+  let embedFailure: "timeout" | "error" | null = null;
+  try {
+    vec = await withDeadline(deps.embeddings.embed(question), CHAT_EMBED_TIMEOUT_MS, "chat embedding");
+  } catch (err) {
+    embedFailure = err instanceof Error && err.message.includes("timed out") ? "timeout" : "error";
+  }
   // Hybrid seeds: vector KNN fused with BM25 keyword hits (RRF) — questions that
   // name a person/place/thing verbatim now reliably pull the right memories even
   // when the embedding misses them.
-  const vecSeeds = knn(h.sqlite, vec, opts.k, spaceId);
+  const vecSeeds = vec ? knn(h.sqlite, vec, opts.k, spaceId) : [];
   const kwSeeds = keywordSearch(h.sqlite, spaceId, question, opts.k);
   const seedIds = fuseRrf(vecSeeds, kwSeeds, opts.k);
 
@@ -132,7 +167,7 @@ export async function chat(
   // message are injected, so knowledge docs stop bleeding into every reply when
   // they have nothing to do with the topic.
   const knowledgeRepo = new KnowledgeRepo(h, spaceId);
-  const docHits = knnDocs(h.sqlite, vec, opts.kDocs, spaceId).filter(
+  const docHits = (vec ? knnDocs(h.sqlite, vec, opts.kDocs, spaceId) : []).filter(
     (d) => d.similarity >= KNOWLEDGE_THRESHOLD,
   );
   const chunks = knowledgeRepo.chunksByIds(docHits.map((d) => d.chunkId));
@@ -151,7 +186,7 @@ export async function chat(
   // routing), the retrieved id set (bounds the intelligence/emotional
   // snapshots), clarification resolution, and the proactive handoff.
   const { systemExtra, persona, chosenProfiles: chosen } = await buildCompanionContext(h, spaceId, {
-    questionVec: vec,
+    questionVec: vec ?? undefined,
     llm: deps.llm,
     retrievedIds: [...ids],
     clarification: { deps, question },
@@ -198,7 +233,7 @@ export async function chat(
     attachments && attachments.length > 0
       ? attachments.map((a) => `[${a.name}]\n${a.text}`).join("\n\n")
       : undefined;
-  const raw = await deps.llm.answer(question, context, {
+  const answerOpts = {
     soul: soulTextFor(h.sqlite, spaceId) || undefined,
     timezone,
     systemExtra,
@@ -208,8 +243,41 @@ export async function chat(
     history: turns.length > 0 ? turns.join("\n") : undefined,
     justAsked,
     galaxyCandidates: galaxyCandidates.length > 0 ? galaxyCandidates : undefined,
-  });
+  };
+  // Finding 8: the answer call gets whatever remains of the turn deadline.
+  // Past it, the turn completes with the offline heuristic over the SAME
+  // retrieved context (fast, local, deterministic) and is flagged degraded —
+  // the user gets an honest limited reply in ~the deadline instead of a
+  // spinner until the provider's 20s timeout or forever.
+  let raw: AnswerResult;
+  let turnTimedOut = false;
+  const remainingMs = Math.max(1_000, CHAT_TURN_DEADLINE_MS - (Date.now() - turnStart));
+  try {
+    raw = await withDeadline(deps.llm.answer(question, context, answerOpts), remainingMs, "chat turn");
+  } catch {
+    turnTimedOut = true;
+    raw = await new HeuristicProvider().answer(question, context, answerOpts);
+  }
   const { answer, citations, mood } = raw;
+
+  // Finding 2: was THIS reply actually produced by the offline fallback? In
+  // priority order — the turn deadline fired; no cloud key exists at all (the
+  // heuristic IS the provider); the resilient wrapper served this call from
+  // its fallback (per-call record, covers non-cooldown fallbacks); the
+  // provider is in an active cooldown; the embedding step failed and
+  // retrieval was keyword-only. Absent all of those, this was a real cloud
+  // answer and no flag is attached.
+  // NOTE the order: the per-call record is checked BEFORE `available` — a
+  // fatal error trips the resilient cooldown DURING this call, after which
+  // `available` reads false and would misreport the turn as "offline" (no
+  // key) when the truth is the recorded quota/auth/timeout reason.
+  let degradedReason: ChatDegradedReason | undefined;
+  if (turnTimedOut) degradedReason = "timeout";
+  else if (deps.llm.lastAnswerDegradedReason) degradedReason = deps.llm.lastAnswerDegradedReason;
+  else if (deps.llm.degraded) degradedReason = deps.llm.degradedReason ?? "error";
+  else if (deps.llm.available === false) degradedReason = "offline";
+  else if (embedFailure) degradedReason = embedFailure;
+  const degraded = degradedReason ? { reason: degradedReason } : undefined;
 
   // Maya Longitudinal Intelligence, Phase H — record any NEW preference evidence this message
   // just produced. Best-effort, never blocks/breaks the reply; a single mention never changes
@@ -276,5 +344,6 @@ export async function chat(
     appliedRoles,
     appliedDocs,
     navigation,
+    degraded,
   };
 }

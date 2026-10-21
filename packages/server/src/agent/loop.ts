@@ -5,7 +5,7 @@ import { soulTextFor } from "../identity.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 import { AGENT_TOOLS } from "./tools/registry.js";
 import { validateArgs } from "./tools/validation.js";
-import { getPreferences } from "./notify/policy.js"; // space timezone source (quiet hours/digest)
+import { getPreferences, spaceTimezone, validateTimezone, DEFAULT_PREFS } from "./notify/policy.js"; // space timezone sources (quiet hours/digest + the sweep's shared resolver)
 import { buildCompanionContext } from "../chat/companionContext.js"; // Phase 0 parity: shared context builder
 import { composeUserModelBlock } from "./userModel.js"; // W2: user-model context block (§7.2)
 import { maybeRecordStated } from "./userModel.js"; // W2: stated-write trigger (§4.8)
@@ -116,6 +116,25 @@ function toToolDefinitions(): LlmToolDefinition[] {
   }));
 }
 
+/**
+ * Package E1 (owner rule: raw internal error text never reaches the user on
+ * ANY surface — the same defect class as the web-chat banner finding). Error
+ * DETAIL goes here, to the server logs only: the error class/name plus a
+ * bounded, content-safe summary (single line, capped, long token-like runs —
+ * keys / ids / payload fragments — redacted). Never log the user's message.
+ * User-facing replies built from a failure use clean generic copy at the
+ * construction site instead of interpolating `err.message`.
+ */
+export function logLoopError(scope: string, err: unknown): void {
+  const name = err instanceof Error ? err.name : "error";
+  const raw = err instanceof Error ? err.message : String(err);
+  const summary = raw
+    .replace(/\s+/g, " ")
+    .replace(/[A-Za-z0-9_\-./+=]{32,}/g, "[redacted]")
+    .slice(0, 120);
+  console.error(`[agent] ${scope} failed (${name}): ${summary}`);
+}
+
 function outcomeText(o: CallOutcome): string {
   switch (o.status) {
     case "executed":
@@ -154,6 +173,13 @@ export async function maybeConfirmPending(
   const pending = findPendingApproval(ctx, spaceId, principal);
   if (!pending) return null;
 
+  // NOTE on the deny/confirm branches: d.error / c.error are NOT exception
+  // text — approvals.ts returns only curated plain-language state strings
+  // there ("approval not found", "approval expired", "approval is denied,
+  // not pending"), written for the user. Those stay. The EXECUTION branch
+  // below is different: exec.error can carry a raw tool exception
+  // (executeApproval's failApproval embeds `tool threw: ${err.message}`),
+  // so it is logged server-side and the user gets clean generic copy (E1).
   if (isDeny) {
     const d = denyApproval(ctx, spaceId, principal, pending.id, tc.now);
     return d.ok ? "Got it — I won't do that." : `I couldn't cancel that (${d.error}).`;
@@ -166,7 +192,57 @@ export async function maybeConfirmPending(
   if (exec.ok && exec.result) {
     return exec.result.message ?? exec.result.summary;
   }
-  return `I tried, but it didn't go through: ${exec.error ?? "unknown error"}.`;
+  logLoopError("approval execution", exec.error ?? "unknown error");
+  return "I tried, but it didn't go through. Try again in a moment.";
+}
+
+/**
+ * E2 — resolve the timezone that grounds this turn's "now" (owner rule:
+ * time grounding is ALWAYS the space's own zone; UTC is never a silent
+ * fallback, and neither is an assumed zone when storage itself failed).
+ *
+ * Chain — precedence follows the sweep's shared resolver (stored zone
+ * first, then the shared default):
+ *  1. `getPreferences()` — the space's stored zone, or the shared default
+ *     (DEFAULT_PREFS.timezone) when the space has none set and storage is
+ *     reachable. This is exactly the value the shared resolver returns on
+ *     the happy path.
+ *  2. A direct single-column read of the stored `space_meta.timezone` —
+ *     survives a failure of the wider preferences read (e.g. a lagging
+ *     preferences column), so a preferences failure ALONE can no longer
+ *     lose the stored zone (pre-fix it landed on the UTC rendering).
+ *  3. The sweep's shared `spaceTimezone()` resolver — its signed-off
+ *     default for a reachable-but-unset space whose reads above failed.
+ * Returns null when no step yields a VALID zone — including when both
+ * storage reads hard-failed (step 3's result is then the bare default, a
+ * pure assumption rather than a resolution). The caller passes null to
+ * composeSystem, which renders the time context as UNAVAILABLE for the
+ * turn — never the UTC rendering.
+ */
+export function resolveAgentTimezone(sqlite: AppContext["handle"]["sqlite"], spaceId: string): string | null {
+  let prefsThrew = false;
+  try {
+    const tz = getPreferences(sqlite, spaceId).timezone;
+    if (tz && validateTimezone(tz)) return tz;
+  } catch {
+    prefsThrew = true;
+  }
+  let storedThrew = false;
+  try {
+    const row = sqlite
+      .prepare(`SELECT timezone FROM space_meta WHERE space_id = ?`)
+      .get(spaceId) as { timezone?: unknown } | undefined;
+    const tz = typeof row?.timezone === "string" ? row.timezone : undefined;
+    if (tz && validateTimezone(tz)) return tz;
+  } catch {
+    storedThrew = true;
+  }
+  const resolved = spaceTimezone(sqlite, spaceId);
+  if (resolved && validateTimezone(resolved)) {
+    if (prefsThrew && storedThrew && resolved === DEFAULT_PREFS.timezone) return null;
+    return resolved;
+  }
+  return null;
 }
 
 export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
@@ -217,16 +293,14 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   // context. composeUserModelBlock() fails OPEN by contract: it returns "" when
   // the user model is unavailable or any read fails, and it never throws.
   const userModelBlock = composeUserModelBlock(ctx.handle, spaceId);
-  // Date/time accuracy (audit gap #10): the loop previously injected NO current
-  // time/timezone at all, and composeSystem's "now" was UTC-only. Ground it in
-  // the space's timezone (space_meta.timezone — the one quiet hours and the
-  // digest already use) at the turn's own clock, fail-open to the UTC rendering.
-  let spaceTimezone: string | undefined;
-  try {
-    spaceTimezone = getPreferences(ctx.handle.sqlite, spaceId).timezone;
-  } catch {
-    spaceTimezone = undefined;
-  }
+  // Date/time accuracy (audit gap #10) + Package E2: ground the turn's "now"
+  // in the space's timezone (space_meta.timezone — the one quiet hours and
+  // the digest already use) at the turn's own clock. Resolution goes through
+  // resolveAgentTimezone() (preferences → stored space_meta → the sweep's
+  // shared resolver); when no valid zone is resolvable it yields null and
+  // composeSystem renders the time context as UNAVAILABLE — a preferences
+  // failure can NO LONGER fail-open to the UTC rendering.
+  const resolvedTimezone = resolveAgentTimezone(ctx.handle.sqlite, spaceId);
   // System-instruction layout (Phase 0): the loop's own tool list + rules
   // first, then the shared companion stack (whose instruction profiles sit
   // last among ITS blocks, mirroring web), then the W2 user-model block,
@@ -236,7 +310,7 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
   const systemInstruction = composeSystem({
     soul: soul ?? undefined,
     persona: companion.persona,
-    timezone: spaceTimezone,
+    timezone: resolvedTimezone,
     nowMs: now,
     systemExtra:
       buildSystemExtra() +
@@ -271,7 +345,12 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
         signal: input.signal,
       });
     } catch (err) {
-      const text = `I hit a snag reaching my tools (${(err as Error).message.slice(0, 120)}). Try again in a moment.`;
+      // E1: the provider error's message is internal detail — log it
+      // (bounded/redacted), never paste it into the user-facing reply. The
+      // reply below is also what captureTurnEpisode stores, so the captured
+      // episode carries the clean version too.
+      logLoopError("llm callWithTools", err);
+      const text = "I hit a snag reaching my tools. Try again in a moment.";
       // Capture even on LLM failure — the user saw a reply, so the turn was
       // substantive. Matches every other return path (no silent gaps).
       captureTurnEpisode(ctx, spaceId, input.userMessage, text, {
@@ -369,7 +448,12 @@ export async function agentLoop(input: AgentLoopInput): Promise<AgentLoopResult>
         // model only — never to agent_logs.
         auditToolRun(ctx, spaceId, tool.name, r.ok);
       } catch (err) {
-        toolResult = `error: ${(err as Error).message.slice(0, 200)}`;
+        // E1 sibling: this string is fed back to the model as the tool
+        // result, and the model's next message is user-facing — a raw
+        // exception message here could be quoted straight to the user.
+        // Log the detail server-side; give the model a clean generic error.
+        logLoopError(`tool ${tool.name} run`, err);
+        toolResult = "error: that tool hit a snag and couldn't finish — treat it as unavailable for this turn, and don't quote any technical detail to the user.";
         auditToolRun(ctx, spaceId, tool.name, false);
       }
       outcomes.push({ status: "executed", callId: call.id, name: call.name, result: toolResult });

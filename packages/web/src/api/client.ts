@@ -2,7 +2,10 @@ import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, 
 import { useState, useEffect } from "react";
 // Transport primitives live in http.ts (Post-MVP D4 split); re-export the public ones
 // so existing `import { getSpaceId, BOOT_TIMEOUT_MS } from "../api/client"` keep working.
-import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } from "./http.js";
+import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS } from "./http.js";
+import { CHAT_TIMEOUT_MS, ChatRequestError, chatErrorForStatus, chatTimeoutError, sanitizeChatPayload } from "./chatSend.js";
+
+export * from "./chatSend.js";
 export { getSpaceId, getSpaceName, BOOT_TIMEOUT_MS } from "./http.js";
 // The "AI is working" activity signal lives in activity.ts (D4 split); re-export the hook.
 import { tracked } from "./activity.js";
@@ -925,38 +928,65 @@ export async function askChat(
 ): Promise<ChatResponse> {
   return tracked(
     (async () => {
+      // Finding 1: EVERY send (fresh or retry — retries call askChat again)
+      // is sanitized to the server contract here, so the payload shapes the
+      // server rejects (history text >4000, >16 entries, empty/oversized
+      // attachments, question >2000) can no longer be produced by this
+      // client. The client's own history window (last 8) is unchanged.
+      const payload = sanitizeChatPayload({
+        question,
+        history: history.slice(-8),
+        attachments,
+      });
       // afetch skips its own timeout when the caller passes a signal, so link
-      // the caller's signal with an equivalent timeout here.
+      // the caller's signal with the chat timeout here. Finding 8: the cap is
+      // CHAT_TIMEOUT_MS (15s — server turn deadline 9s + network slack), not
+      // the generic 60s, so a hung turn surfaces while the user is looking.
       let effectiveSignal = signal;
       let timer: number | undefined;
+      let timedOut = false;
       if (signal) {
         const linked = new AbortController();
-        timer = window.setTimeout(() => linked.abort(), DEFAULT_TIMEOUT_MS);
+        timer = window.setTimeout(() => {
+          timedOut = true;
+          linked.abort();
+        }, CHAT_TIMEOUT_MS);
         if (signal.aborted) linked.abort();
         else signal.addEventListener("abort", () => linked.abort(), { once: true });
         effectiveSignal = linked.signal;
       }
       try {
-        const res = await afetch(`${API}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            history: history.slice(-8),
-            ...(journeyId ? { journeyId } : {}),
-            ...(proactiveContext ? { proactiveContext } : {}),
-            ...(attachments && attachments.length > 0 ? { attachments } : {}),
-          }),
-          ...(effectiveSignal ? { signal: effectiveSignal } : {}),
-        });
+        const res = await afetch(
+          `${API}/chat`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: payload.question,
+              history: payload.history,
+              ...(journeyId ? { journeyId } : {}),
+              ...(proactiveContext ? { proactiveContext } : {}),
+              ...(payload.attachments.length > 0 ? { attachments: payload.attachments } : {}),
+            }),
+            ...(effectiveSignal ? { signal: effectiveSignal } : {}),
+          },
+          CHAT_TIMEOUT_MS,
+        );
         // IM-108: an HTTP failure used to be cast to ChatResponse anyway, so a
         // 400/500 body ({error}) surfaced as a phantom "(no answer)" reply in
         // her voice. Throw so the caller can show a real error surface.
-        if (!res.ok) {
-          const b = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(b.error ?? `Chat failed (${res.status})`);
-        }
+        // Finding 1: the thrown error carries PLAIN-LANGUAGE copy mapped from
+        // the status — the server's raw error string is read by NO ONE here
+        // and never reaches the UI (it belongs in server logs).
+        if (!res.ok) throw chatErrorForStatus(res.status);
         return (await res.json()) as ChatResponse;
+      } catch (err) {
+        if (err instanceof ChatRequestError) throw err;
+        // Our own timeout aborts the linked signal (the caller's signal is
+        // untouched) — translate that into the honest timeout copy. A caller
+        // abort (Stop) rethrows as-is so ChatDock can tell the difference.
+        if (timedOut) throw chatTimeoutError();
+        throw err;
       } finally {
         if (timer !== undefined) window.clearTimeout(timer);
       }
