@@ -1,6 +1,6 @@
 # ADR-018 — Global notification cap and per-space TTS cache ownership
 
-**Status:** APPROVED DESIGN — implementation not started  
+**Status:** APPROVED DESIGN — implementation not started. **Phase A closure amendment applied** (see "Phase A — closure amendment" below): blocker B1 and closure questions Q1–Q5 from the independent Phase A design review are resolved in the normative text; independent verification of the amendment is the next gate.  
 **Approved by:** Project owner  
 **Date:** 2026-10-21  
 **Design baseline:** deploy branch HEAD `15be567a84ca985e93d03772c4f4b2385f91ea76`  
@@ -67,18 +67,21 @@ For every new or changed table definition:
 ### 2.4 Notification lifecycle and retry correctness
 
 Alongside the global ledger, correct the audited retry defects:
-- Persist the original reminder due time separately from queue creation time, or derive it from validated immutable occurrence metadata.
-- On every drain/retry, recalculate freshness against the original due time. A persisted `is_urgent` bit is not authority to bypass policy forever.
+- Persist the original reminder due time in an explicit column on each channel's outbox record — `remind_at` on `notification_outbox` (B1, closure amendment) and `remind_at`/`bill_due_at` on `push_outbox` (A2b) — populated from `NotifyMeta` at enqueue and immutable thereafter. Deriving due time by parsing `occurrence_id` is **not** a source: it is foreclosed as a durable contract (A2b), because `remind_at` is now the persisted source on both channels.
+- On every drain/retry, recalculate freshness against the persisted original due time. A persisted `is_urgent` bit is not authority to bypass policy forever.
 - Re-evaluate quiet hours, local-day cap availability, and stale/drop policy at delivery time.
 - If an urgent reminder becomes stale, it loses both the quiet-hours and cap exceptions. Fresh, qualifying urgent deliveries are explicitly cap-exempt; all other deliveries use the shared global ledger.
+- **Legacy rows fail closed:** a queued row whose original due time cannot be recovered (no persisted due-time value) receives **no urgency exemption**. Do not invent a timestamp and do not trust a persisted urgency flag; treat the delivery as ordinary — global cap and quiet hours enforced. Rows whose original due time is available and verifiable keep the existing reclassification behavior.
 - Preserve the current rule that uncertain send outcome is terminal/ambiguous to avoid duplicates.
 
 ## 3. Required files and boundaries (implementation targets)
 
-Likely touch points, to be confirmed by the Builder against the architecture and current task before implementation:
+Touch points (Telegram/push integration sites confirmed against the source in the Phase A closure amendment):
 
 - `packages/server/src/agent/notify/policy.ts` — shared local-day and urgency policy semantics.
-- `packages/server/src/telegram/*outbox*.ts` (exact current path/function to be verified) — global claim integration for Telegram.
+- `packages/server/src/agent/notify/` (new sibling module, e.g. `capClaims.ts`) — the shared cap-claim service (placement per closure amendment A1/§7: imports only the `RawDb` type and policy helpers; called from within each channel's claim path; never imports either channel's outbox).
+- `packages/server/src/agent/notify/boundary.ts` — **the Telegram claim-integration site**: both Telegram claim call sites live here (`deliverNow` claim choice, `sweepNotifications` claim choice), together with the sweep's staleness and urgency reclassification. This is where the claim transaction and the B1 downgrade integrate for Telegram.
+- `packages/server/src/agent/notify/outbox.ts` — Telegram outbox lifecycle and claim primitives (`claimForSend` / `claimUrgentForSend`, lease recovery); the enqueue INSERT gains `remind_at` (B1).
 - `packages/server/src/push/outbox.ts` — global claim integration and retry-time due-date revalidation.
 - `packages/server/src/push/service.ts` and `packages/server/src/index.ts` — ensure push drain uses the shared ledger without depending on Telegram credentials.
 - `packages/server/src/telegram/tts.ts`, `packages/server/src/telegram/ttsCache.ts`, and the bot's cache construction — pass space ownership into cache operations.
@@ -105,7 +108,7 @@ Do not rename or reorganize unrelated modules just for this increment. Confirm e
 10. After the freshness window expires, retry reclassification removes the urgent exception; normal quiet-hours and global-cap rules apply, and stale reminders are dropped using original due time.
 11. A fresh bill-risk notification may use its existing urgency exception only while the bill remains within the classifier's original due-in window and existing per-bill dedup rules permit it; a retry after the due time is not urgent.
 12. Every retry decision is based on immutable original event timing, not `created_at`, `deliver_after`, or a persisted `is_urgent` bit.
-13. Telegram and push claim operations share one transaction-safe cap predicate; a test with synchronized concurrent workers demonstrates no oversubscription.
+13. Telegram and push claim operations share one transaction-safe cap predicate; the demonstrating test is defined as **two interleaved drain loops in one process on one SQLite handle, with coordination barriers at the send await**, asserting the ledger count after both complete shows at most one claim of the final slot. A sequential simulation is insufficient evidence for this criterion.
 14. Push-only spaces still drain without a Telegram token. Missing VAPID configuration creates no push rows and sends nothing.
 
 ### Per-space TTS cache and deletion
@@ -123,7 +126,7 @@ Do not rename or reorganize unrelated modules just for this increment. Confirm e
 
 ### Schema, regression, and documentation
 
-25. `BOOTSTRAP_SQL` and migration result converge on the same table/index contract; bootstrap never uses migration-only columns.
+25. `BOOTSTRAP_SQL` and migration result converge on the same table/index contract; bootstrap never uses migration-only columns. Parity fixtures follow the repository's **table-level legacy-fixture pattern** — construct the legacy table shape in a scratch database, run the migration, assert the final contract — because a full migrated-database fixture is documented as unavailable in this environment.
 26. Run migration twice and verify no data/schema drift on the second run.
 27. Run server tests, web tests, typecheck, and build; perform stash-and-fail checks for the global cap concurrency assertion, cache ownership isolation, and deletion rollback/census.
 28. Update architecture and project state with actual outcomes only; report separately whether tests were executed, merged, or deployed.
@@ -146,6 +149,8 @@ Do not rename or reorganize unrelated modules just for this increment. Confirm e
 - Push: `packages/server/src/push/outbox.ts`; `claimPushForSend` counts only `push_outbox`, while `claimUrgentPushForSend` has no cap interaction. Failure/recovery clears `cap_day`; ambiguity retains a terminal row. `push_outbox` currently has no original due-time columns and the sweep uses `created_at` for staleness.
 - Both implementations use the same SQLite handle, but the asynchronous network send occurs after the synchronous claim. Therefore the cap reservation and outbox status transition must be atomic before the network call; a network call cannot be enclosed in the SQLite transaction.
 - TTS: `packages/server/src/telegram/ttsCache.ts`; `DbSpeechCache` currently has no space ID and global-keyed get/put/size. The DDL is duplicated in `db/schemaSql.ts` and `db/client.ts`. `auth/spaces.ts` performs the deletion census inside one SQLite transaction, but the cache is absent from its space-scoped list.
+- Telegram claim integration site (confirmed in the closure amendment; corrects the earlier §3 map): both Telegram claim call sites live in `packages/server/src/agent/notify/boundary.ts` — the `deliverNow` claim choice and the `sweepNotifications` claim choice — and the sweep's staleness check and one-way `billRisk` upgrade live there as well. The claim transaction and the B1 reclassification integrate at that boundary; `agent/notify/outbox.ts` supplies the claim primitives and lifecycle transitions it calls.
+- Claim-service placement (G1, resolved in the closure amendment): a sibling module in `agent/notify/` importing only the `RawDb` type and, if needed, policy helpers, exposing ledger claim/release/transition primitives over primitives (`spaceId`, `channel`, `deliveryKey`, `localDay`, `capExempt`), called from within each channel's claim path. `policy.ts` is a leaf imported by both channels' neighborhoods, and `push/outbox.ts` already imports from the notify layer in the same direction, so this placement creates no import cycle and no layering violation. The two placements that would violate are inside `push/` (it would invert the dependency direction for Telegram) and inside one channel's outbox (it would couple the channels to each other).
 
 #### A2 — Final ledger schema and invariants
 
@@ -174,20 +179,24 @@ CREATE INDEX notification_cap_claims_count_idx
 - Confirmed success transitions `reserved → sent`. Definite failure before any possible delivery transitions `reserved → released` atomically with outbox retry/terminal failure. Definite no-recipient/drop releases the reservation. If the process crashes before send starts, recovery releases the claim and requeues; if send may have started, recovery transitions to `ambiguous` and retains the claim. Ambiguous is terminal and counts toward cap only when non-exempt.
 - Never delete current-day claims as a cleanup shortcut. Retain active claims and all ambiguous claims; historical terminal rows may be pruned only after their local day is past and no outbox recovery path can refer to them. Initial implementation may retain the ledger indefinitely; bounded cleanup is not required for correctness.
 - Cap preference changes are applied at claim time. Lowering the cap below already retained claims blocks additional ordinary sends until the count falls below the new value; it does not revoke sent/ambiguous history.
+- Due-time columns (B1/A2b) and the lifecycle columns play different roles: `remind_at` / `bill_due_at` are immutable classification inputs — the timestamps freshness and staleness reclassification read — while `deliver_after` remains a mutable lifecycle value the policy sets and resets as a row defers, is requeued, or is recovered. Classification never reads `deliver_after`, and delivery scheduling never rewrites the due-time columns.
+- **Migration transition (Q1):** from the moment the ledger lands, it is the **sole cap-counting authority**; the per-channel `cap_day` predicates inside the legacy claim functions stop being consulted as a counting source. Rows in `sending` at migration hold a `cap_day` reservation and have no ledger row: their post-migration lifecycle transitions (`markSent` / `markFailed` / lease recovery) proceed as outbox state transitions with **no ledger counterpart — ledger transitions for such rows are no-ops** — and they are never retroactively granted a claim. The bounded consequence is one lease window (`LEASE_MS` = 5 minutes per channel) in which in-flight legacy rows are not ledger-counted. This cannot oversubscribe the global cap in steady state: the ledger count for a space-day is always greater than or equal to either channel's own retained count, so once every live row carries a claim, the global predicate dominates either legacy predicate.
 
 #### A2b — Retry-time event timing and urgency
 
-- Add nullable immutable `remind_at` and `bill_due_at` fields to `push_outbox`, populated from `NotifyMeta` on first enqueue and preserved on retries. Existing rows with no recoverable due metadata are treated as non-urgent; they cannot inherit an old `is_urgent` bypass.
-- On every immediate send, sweeper attempt, and crash-lease requeue, recompute urgency using the shared `classifyUrgency` rules: reminder due time within 60 minutes in the past; bill due time within the existing 6-hour future window and per-bill dedup eligibility. The persisted bit is a hint for ordering only, never authority.
-- Recompute staleness against the original reminder due time (3-day reminder limit), not row creation time. Run `decidePolicy` at delivery time. Non-urgent items in quiet hours are re-deferred; non-urgent cap-exhausted items are deferred. Stale items are dropped. Fresh qualifying urgent items bypass both quiet hours and the cap per owner-approved Option A.
-- If a push row cannot safely reconstruct its original timing, fail closed to non-urgent policy. Do not parse `occurrence_id` as the primary timing source; explicit columns are the durable contract.
+- **Push:** add nullable immutable `remind_at` and `bill_due_at` fields to `push_outbox`, populated from `NotifyMeta` on first enqueue and preserved on retries. Placement is normative (Q3, closure amendment): these are columns on an existing table, so they are added as **migrateSchema-only PRAGMA-guarded ALTERs and are never added to BOOTSTRAP_SQL** — the repository's placement convention for existing-table columns, and the v252 rule (bootstrap runs before migrateSchema, so a bootstrap reference to a migration-only column crashes fresh-volume boot). `push_outbox` is created by BOOTSTRAP_SQL without the new columns; fresh volumes converge because `migrateSchema` runs after bootstrap on every boot and adds them.
+- **Telegram (B1, closure amendment):** add a nullable immutable `remind_at TEXT` column to `notification_outbox`, on the literal `bill_due_at` precedent already in `db/client.ts`: the column is present in the migrateSchema `CREATE TABLE` (which covers volumes created after the change) **and** added to pre-existing volumes by a PRAGMA-guarded ALTER of the same shape as the existing `bill_due_at` guard. `notification_outbox` is defined only in migrateSchema today — it has no BOOTSTRAP_SQL definition — so this table's convergence point is the migrateSchema CREATE plus the guarded ALTER; nothing for this column goes into BOOTSTRAP_SQL, consistent with the placement rule above. Populate the column from `meta.remindAt` in the `enqueue` INSERT in `agent/notify/outbox.ts`, alongside the existing `bill_due_at` threading (`NotifyMeta.remindAt` already exists and is what `classifyUrgency` / `decidePolicy` read at first classification). The column is written once at enqueue and never updated.
+- **Downgrade on every attempt, both channels:** on every immediate send, sweeper attempt, and crash-lease requeue, recompute urgency from the persisted original due-time columns using the shared `classifyUrgency` rules: reminder due time within 60 minutes in the past; bill due time within the existing 6-hour future window and per-bill dedup eligibility. The recomputation runs in both directions: the existing one-way `billRisk` upgrade in the Telegram sweep is preserved as the upward direction of this same reclassification, and a row whose freshness window has expired is **downgraded** — it reverts to ordinary policy evaluation and loses the quiet-hours and cap exemptions. A persisted `is_urgent` bit never authorizes a bypass by itself; it remains a hint for ordering only, never authority.
+- Recompute staleness against the original reminder due time (3-day reminder limit), not row creation time, on both channels — the Telegram sweep's creation-time aging is replaced by due-time aging from `remind_at`. Run `decidePolicy` at delivery time. Non-urgent items in quiet hours are re-deferred; non-urgent cap-exhausted items are deferred. Stale items are dropped. Fresh qualifying urgent items bypass both quiet hours and the cap per owner-approved Option A.
+- **Legacy rows fail closed (owner rule):** a row whose original due time cannot be recovered — no persisted due-time value, as for any row enqueued before these columns existed — receives **no urgency exemption**. Do not invent a timestamp and do not trust a persisted `is_urgent` flag; treat the delivery as ordinary, with the global cap and quiet hours enforced. Rows whose original due time is available and verifiable keep the existing reclassification behavior above.
+- **Occurrence parsing is foreclosed:** do not parse `occurrence_id` as a timing source — not as the primary source and not as a fallback. With `remind_at` persisted on both channels, the explicit columns are the durable contract, and the earlier draft option of deriving due time from occurrence metadata is withdrawn.
 
 #### A3 — TTS migration and deletion contract
 
 - Rebuild `tts_audio_cache` in both migration/bootstrap-compatible schema definitions to add `space_id TEXT NOT NULL`, change primary/unique identity to `(space_id, cache_key)`, and add `tts_audio_cache_space_created_idx(space_id, created_at)` plus the global-prune index/order needed for the 500-row bound.
 - Migration is a single transaction: rename the legacy table, create the owned table, intentionally copy **zero** legacy rows, drop the legacy table, recreate indexes, and assert the final column/constraint/index contract. This intentionally discards unowned audio. On failure, rollback leaves the legacy table intact. Rerunning after success is a no-op.
 - `DbSpeechCache` construction requires a trusted current `spaceId`; get/put/size and pruning remain ownership-aware, except pruning enforces the 500-row cap globally using `created_at DESC, rowid DESC`. The cache key itself remains unchanged; ownership is an additional namespace.
-- Add `tts_audio_cache` to the deletion census and delete by `space_id` inside the existing `deleteSpace` transaction. Failure anywhere rolls back cache deletion with the rest of brain deletion. Update the census test because its existing discovery rule only sees tables that already have a `space_id` column.
+- Add `tts_audio_cache` to the deletion census (`SPACE_SCOPED_TABLES` in `auth/spaces.ts`) and delete by `space_id` inside the existing `deleteSpace` transaction. Failure anywhere rolls back cache deletion with the rest of brain deletion. The census test needs no update: its independent discovery rule finds every table carrying a `space_id`, so it cannot see the table today and **will** see it the moment the migration adds `space_id` — failing until the census includes it. The implementation change is in `auth/spaces.ts`; the guard is the forcing function for its own fix.
 
 #### A4 — Acceptance additions / design exit
 
@@ -203,7 +212,7 @@ CREATE INDEX notification_cap_claims_count_idx
 - [ ] **B2. Implement one atomic global claim/release service.** Acceptance: unit tests for cap boundary, local day, idempotency, release, sent, and ambiguous states.
 - [ ] **B3. Integrate Telegram outbox with shared claims.** Acceptance: existing Telegram lifecycle passes plus ledger consistency assertions.
 - [ ] **B4. Integrate push outbox with shared claims.** Acceptance: cross-channel concurrent test proves cap cannot oversubscribe.
-- [ ] **B5. Revalidate due time/urgency and staleness on every push retry.** Acceptance: failed fresh reminder aged past threshold loses urgency exception; cap still applies.
+- [ ] **B5. Revalidate due time/urgency and staleness on every retry, both channels.** Acceptance: failed fresh reminder aged past threshold loses urgency exception on push and on Telegram (B1 downgrade); cap still applies.
 - [ ] **B6. Verify push-only drain and no-VAPID zero-row behavior.** Acceptance: tests prove no Telegram token dependency and no row/send when VAPID is absent.
 
 ### Phase C — per-space TTS cache
@@ -213,7 +222,7 @@ CREATE INDEX notification_cap_claims_count_idx
 - [ ] **C4. Update cache documentation and tests to say “free while cached.”** Acceptance: eviction, concurrent misses, and cache-write failure are tested without lifetime exactly-once claims.
 
 ### Phase D — integration gate and review
-- [ ] **D1. Schema parity + migration fixture suite.** Acceptance: fresh bootstrap versus upgraded legacy schema matches the intended contract.
+- [ ] **D1. Schema parity + migration fixture suite.** Acceptance: fresh bootstrap versus upgraded legacy schema matches the intended contract. Fixtures use the repository's table-level legacy-fixture pattern (legacy table shape in a scratch database → run the migration → assert the final contract), per criterion 25; no full migrated-database fixture exists in this environment.
 - [ ] **D2. Full server/web/typecheck/build gate.** Acceptance: all gates green on the combined implementation branch.
 - [ ] **D3. Stash-and-fail test-falsification sample.** Acceptance: temporarily remove/bypass global claim enforcement, cache scoping, and deletion census; each corresponding test fails, then restore and rerun.
 - [ ] **D4. Independent Reviewer audit.** Acceptance: review confirms global cap across both channels, deletion isolation, no silent UTC fallback, no raw error leakage introduced, no unrelated behavior drift.
@@ -225,9 +234,25 @@ Order: Phase A design closure → Phase B global cap → Phase C cache ownership
 
 ## 7. Risks and unresolved implementation details
 
-- Implementation must verify the chosen shared claim-service placement against the current import graph before coding; if the transaction contract cannot be implemented without an import cycle or non-atomic split, stop and return to design review.
+- Claim-service placement was verified against the current import graph in the Phase A closure amendment (A1): a sibling module in `agent/notify/` (see §3) implements the transaction contract without an import cycle or non-atomic split, so the stop-condition is not triggered. If implementation uncovers import-graph facts that contradict A1's evidence, stop and return to design review.
 - The ledger's retention/cleanup policy must not erase claims for the current local day or ambiguous outcomes before they stop counting.
+- At migration, in-flight `sending` rows hold only a legacy `cap_day` reservation; their accepted window is bounded by one lease (`LEASE_MS` = 5 minutes) per channel (A2). After that window every live row carries a ledger claim and the legacy counting source is never consulted again.
 - Day-boundary races must use the same resolved timezone and a single captured `now` per claim decision.
 - The cache's global 500-row bound preserves storage boundedness but means one busy space may evict another space's cache entries; it must never permit cross-space cache hits.
 - Legacy unowned audio will be discarded during migration. This is an intentional privacy-first cache loss; audio can be regenerated later if/when TTS is enabled.
 - No production code, secret configuration, provider spend, merge, or deploy is authorized by this ADR.
+
+## Phase A — closure amendment (2026-10-21)
+
+Authored after the independent Phase A design review of this ADR at `e3e5508ab5a9000d508d22d584c4545905b979d8` (deploy baseline `15be567a84ca985e93d03772c4f4b2385f91ea76`). The review's verdict: architecture sound, mandatory gates G1/G2 resolved; one blocker and five closure questions outstanding. This amendment resolves them **in the normative text above**; nothing in this section is normative on its own. The amendment itself is documentation only — no production code changed — and it does not authorize implementation.
+
+- **B1 (blocker) — Telegram retry reclassification had no due-time source.** `notification_outbox` carried `bill_due_at` but no `remind_at`, so Telegram reminder retries could not reclassify from original due time, and expired Telegram urgency could persist exactly as on push. Resolved in §2.4, A1, and A2b: `notification_outbox` gains `remind_at` on the `bill_due_at` precedent (migrateSchema CREATE + PRAGMA-guarded ALTER, populated from `meta.remindAt` at enqueue); the Telegram sweep gains the **downgrade** (reclassification runs both directions on every attempt, both channels); and the draft's occurrence-parsing fallback is **withdrawn** — `occurrence_id` is foreclosed as a timing source, resolving the closure's self-contradiction.
+- **Legacy-row rule (owner).** Stated in §2.4 and A2b: no recoverable original due time ⇒ no urgency exemption; no invented timestamp; no trust in a persisted urgency flag; the delivery is treated as ordinary (global cap and quiet hours enforced). Rows with an available, verifiable due time keep the existing behavior.
+- **Q1 — migration boundary.** Resolved in A2: the ledger is the sole counting authority from the moment it lands; legacy in-flight `sending` rows transition with no ledger counterpart (no-ops) and are never retroactively claimed; the accepted window is one lease per channel; `cap_day` stops being consulted as a counting source.
+- **Q2 — criterion 13 harness.** Resolved in §4 criterion 13: two interleaved drain loops, one process, one handle, barriers at the send await; sequential simulation explicitly insufficient.
+- **Q3 — column placement.** Resolved in A2b: A2b's new `push_outbox` columns are migrateSchema-only PRAGMA-guarded ALTERs, never in BOOTSTRAP_SQL (v252 rule stated); the same placement reasoning is stated for B1's `remind_at`, whose table is migrateSchema-defined.
+- **Q4 — file map.** Resolved in §3 and A1: `agent/notify/boundary.ts` is named as the Telegram claim-integration site (both claim call sites); the nonexistent `telegram/*outbox*.ts` reference is removed; the confirmed claim-service placement is recorded.
+- **Q5 — fixture pattern.** Resolved in §4 criterion 25 and Phase D1: parity fixtures follow the repository's table-level legacy-fixture pattern; no full migrated-database fixture exists in this environment.
+- **Gate resolutions recorded:** G1 (claim-service placement vs import graph) — cleared, placement recorded in §3/A1 and §7 updated to match. G2 (migration + fixture conventions) — cleared with the specification notes now written into A2b, criterion 25, and D1.
+
+**Next gate:** independent verification of this amendment against the source and the acceptance criteria, then the owner's design-gate decision. Implementation, merge, and deployment remain unauthorized.
