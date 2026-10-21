@@ -50,6 +50,23 @@ export function linkDrawWidth(render: boolean, weight: number | undefined, activ
   return 0.7 + (weight ?? 0.4) * 0.9 + activity * activity * 5;
 }
 
+/**
+ * Galaxy fluidity (2026-10-21): the selection-lighting predicate, extracted
+ * pure from Graph3D's `isLit` closure so the `[]`-stable `linkWidthCb` can
+ * evaluate it against ref-mirrored (activeId, adjacency) inputs instead of a
+ * render closure — see Graph3D.tsx's perf comment at `linkWidthCb`. A node is
+ * lit when nothing is active, when it IS the active node, or when it is a
+ * direct neighbor of the active node. Byte-identical to the closure it
+ * replaces; pinned by graph3dHelpers.test.ts.
+ */
+export function isNodeLit(
+  id: number,
+  activeId: number | null,
+  adjacency: Map<number, Set<number>>,
+): boolean {
+  return activeId === null || id === activeId || (adjacency.get(activeId)?.has(id) ?? false);
+}
+
 export const linkEnd = (v: any): number => (typeof v === "object" && v !== null ? v.id : v);
 /** Stable key for a connection (undirected) so we can track which are already drawn. */
 export const linkKey = (l: any): string => {
