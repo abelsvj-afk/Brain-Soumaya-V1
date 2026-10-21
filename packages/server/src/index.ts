@@ -5,6 +5,7 @@ import { setTelegramWebhook, sendDailyDigests, tgSend } from "./telegram/bot.js"
 import { TelegramLinksRepo } from "./telegram/links.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
+import { sweepPendingPushes } from "./push/outbox.js";
 import { captureEpisode } from "./agent/episodic.js"; // W2: job_run capture (§5.1)
 import { selectJob, executeJob, researchEnabled } from "./maintenance/agent.js";
 import { nextAutonomyBatch } from "./maintenance/autonomyBatch.js";
@@ -216,6 +217,19 @@ setInterval(() => {
         if (sweep.sent > 0 || sweep.ambiguous > 0) {
           console.log(`[notify] sweep: ${sweep.sent} sent, ${sweep.ambiguous} ambiguous`);
         }
+      }
+      // Web push (Round 3 policy follow-up): drain policy-deferred pushes
+      // on the same tick — deliberately OUTSIDE the tgToken gate above, so
+      // push-only brains (no Telegram configured) still receive pushes
+      // the policy held back for quiet hours / the daily cap. Strict
+      // no-op when VAPID is unconfigured.
+      try {
+        const pushSweep = await sweepPendingPushes(ctx.handle, { workerId: `push-sweep-${process.pid}` });
+        if (pushSweep.sent > 0 || pushSweep.ambiguous > 0) {
+          console.log(`[push] sweep: ${pushSweep.sent} sent, ${pushSweep.ambiguous} ambiguous`);
+        }
+      } catch (err) {
+        console.error("[push] sweep error:", err);
       }
     } catch (err) {
       console.error("[tools] router sweep error:", err);

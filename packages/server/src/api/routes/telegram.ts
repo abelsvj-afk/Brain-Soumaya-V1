@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { timingSafeEqual } from "node:crypto";
 import type { AppContext } from "../../context.js";
-import { handleTelegramUpdate, tgSend } from "../../telegram/bot.js";
+import { handleTelegramUpdate, tgSend, tgSendVoice } from "../../telegram/bot.js";
 
 /** Constant-time string compare (length-safe) — avoids leaking the secret via timing. */
 function secretEq(a: string | undefined, b: string | undefined): boolean {
@@ -34,9 +34,12 @@ export function telegramRoutes(ctx: AppContext): Router {
     }
     // Ack right away (Telegram retries on any non-200), then handle off the response.
     res.json({ ok: true });
-    void handleTelegramUpdate(ctx, req.body, (chatId, text) => tgSend(token, chatId, text)).catch(
-      (err) => console.error("[telegram] handler error:", err),
-    );
+    // Voice replies (Phase D) ride along as an injected sender; the
+    // TELEGRAM_TTS_* gate in telegram/tts.ts decides whether they're ever
+    // used — with the gate off this sender is never called.
+    void handleTelegramUpdate(ctx, req.body, (chatId, text) => tgSend(token, chatId, text), {
+      sendVoice: (chatId, speech) => tgSendVoice(token, chatId, speech),
+    }).catch((err) => console.error("[telegram] handler error:", err));
   });
 
   return r;

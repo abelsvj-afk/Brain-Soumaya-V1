@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AwayDigest, GraphNode, Constellation, Insight } from "@brain/shared";
 import {
   getConstellationsResult,
@@ -9,7 +9,13 @@ import {
   type DailyContact,
   type DueReview,
 } from "../api/client.js";
-import { dailyQuests } from "./quests.js";
+import {
+  allQuestsDone,
+  loadQuestDayState,
+  questDayStorageKey,
+  resolveDailyQuests,
+  saveQuestDayState,
+} from "./quests.js";
 import { playSfx } from "../graph/sfx.js";
 import { pushToast } from "./Toasts.js";
 import { SoumayaEye } from "./SoumayaEye.js";
@@ -140,6 +146,7 @@ const INSIGHT_TIER_LABEL: Record<number, string> = {
  */
 export function Observatory({
   spaceName,
+  spaceId,
   memories,
   streak,
   fedToday,
@@ -153,6 +160,8 @@ export function Observatory({
   actionCount = 0,
 }: {
   spaceName: string;
+  /** Brain id — scopes the persisted quest day state (per-brain localStorage). */
+  spaceId?: string;
   memories: GraphNode[]; // non-action nodes
   streak: number;
   fedToday: boolean;
@@ -307,6 +316,18 @@ export function Observatory({
     // Mount-only: the loaders are stable setters + imported fetchers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Today's tending (CL1): the day's quest targets are baselined once per
+  // space-local day and persisted per brain, so a quest can truthfully show
+  // itself complete (see quests.ts) instead of vanishing or treadmilling.
+  const questKey = questDayStorageKey(spaceId ?? spaceName);
+  const questResult = useMemo(
+    () => resolveDailyQuests(memories, fedToday, { dayState: loadQuestDayState(questKey) }),
+    [memories, fedToday, questKey],
+  );
+  useEffect(() => {
+    saveQuestDayState(questKey, questResult.dayState);
+  }, [questKey, questResult.dayState]);
 
   const failedSources = (Object.keys(sourceStatus) as SourceKey[]).filter((k) => sourceStatus[k] === "error");
   const anyLoading = (Object.keys(sourceStatus) as SourceKey[]).some((k) => sourceStatus[k] === "loading");
@@ -697,25 +718,35 @@ export function Observatory({
         </button>
 
         {(() => {
-          const quests = dailyQuests(memories, fedToday);
+          const quests = questResult.quests;
+          const doneCount = quests.filter((q) => q.done).length;
+          const allDone = allQuestsDone(quests);
           return (
             <div className="obs-card obs-quests">
               <span className="obs-ic">🎯</span>
               <span className="obs-body">
                 <span className="obs-title">Today's tending</span>
-                <span className="obs-questlist">
-                  {quests.map((q) => (
-                    <button
-                      key={q.id}
-                      className={`obs-quest ${q.done ? "done" : ""}`}
-                      onClick={() => (q.action === "capture" ? onCapture() : q.focusId != null ? onFocus(q.focusId) : onOpenInsights())}
-                      disabled={q.done && q.action === "capture"}
-                    >
-                      <span className="obs-quest-ic">{q.done ? "✓" : q.icon}</span>
-                      {q.text}
-                    </button>
-                  ))}
-                </span>
+                {quests.length > 0 && (
+                  <span className="obs-line obs-quest-progress">{`${doneCount}/${quests.length} done`}</span>
+                )}
+                {quests.length === 0 ? (
+                  <span className="obs-line">Nothing needs tending right now.</span>
+                ) : (
+                  <span className="obs-questlist">
+                    {quests.map((q) => (
+                      <button
+                        key={q.id}
+                        className={`obs-quest ${q.done ? "done" : ""}`}
+                        onClick={() => (q.action === "capture" ? onCapture() : q.focusId != null ? onFocus(q.focusId) : onOpenInsights())}
+                        disabled={q.done}
+                      >
+                        <span className="obs-quest-ic">{q.done ? "✓" : q.icon}</span>
+                        {q.text}
+                      </button>
+                    ))}
+                  </span>
+                )}
+                {allDone && <span className="obs-line obs-quests-done">All tended for today ✓</span>}
               </span>
             </div>
           );

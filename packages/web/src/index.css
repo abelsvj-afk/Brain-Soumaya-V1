@@ -3649,6 +3649,7 @@ button {
 .obs-quest:hover { background: rgba(91, 214, 255, 0.18); }
 .obs-quest.done { opacity: 0.6; color: #9fe0b8; cursor: default; }
 .obs-quest-ic { flex: 0 0 auto; font-size: 0.95rem; }
+.obs-quests-done { color: #9fe0b8; margin-top: 6px; }
 
 /* Companion: collapsible instruction items + tidier controls. */
 .companion-expand {
