@@ -42,7 +42,13 @@ export function CodexPanel({
   const [tab, setTab] = useState<CodexCategory>("sectors");
   const seenRef = useRef<Set<string>>(new Set());
 
+  const claimingRef = useRef<Set<string>>(new Set());
+
   // Fire a discovery toast + claim the reward once per newly-discovered entry.
+  // IM-93: an entry is marked seen ONLY once its claim has settled successfully —
+  // a failed claim (server rejection, offline) leaves it fresh so the fuel can
+  // still be claimed on a later visit, and the failure surfaces as a toast
+  // instead of being swallowed.
   useEffect(() => {
     if (!spaceId) return;
     const key = `codex.seen.${spaceId}`;
@@ -53,29 +59,53 @@ export function CodexPanel({
       seen = new Set();
     }
     seenRef.current = seen;
-    const fresh = entries.filter((e) => e.discovered && !seen.has(e.id));
+    const fresh = entries.filter((e) => e.discovered && !seen.has(e.id) && !claimingRef.current.has(e.id));
     if (fresh.length === 0) return;
+    for (const e of fresh) claimingRef.current.add(e.id);
     for (const e of fresh.slice(0, 4)) {
-      seen.add(e.id);
       pushToast(`Codex: discovered “${e.title}”`, "📖", 6000, "high");
-      claimCodexReward(e.id)
-        .then((r) => {
-          // `claimCodexReward` is async, so the chime has to fire from inside this
-          // callback — checking a flag synchronously after the loop (as before) always
-          // read it as false, since none of these promises can have resolved yet.
-          if (r?.awarded) {
-            onReward?.();
-            playSfx("achievement");
+    }
+    let cancelled = false;
+    void (async () => {
+      let failed = 0;
+      for (const e of fresh) {
+        try {
+          const r = await claimCodexReward(e.id);
+          if (r?.failed) {
+            failed++;
+          } else {
+            seen.add(e.id);
+            // `claimCodexReward` is async, so the chime has to fire from inside
+            // this callback — checking a flag synchronously after the loop (as
+            // before) always read it as false.
+            if (r?.awarded) {
+              onReward?.();
+              playSfx("achievement");
+            }
           }
-        })
-        .catch(() => {});
-    }
-    for (const e of fresh) seen.add(e.id); // mark the rest seen even if not toasted
-    try {
-      localStorage.setItem(key, JSON.stringify([...seen]));
-    } catch {
-      /* ignore */
-    }
+        } catch {
+          failed++;
+        } finally {
+          claimingRef.current.delete(e.id);
+        }
+      }
+      try {
+        localStorage.setItem(key, JSON.stringify([...seen]));
+      } catch {
+        /* ignore */
+      }
+      if (!cancelled && failed > 0) {
+        pushToast(
+          `Codex: ${failed} reward claim${failed === 1 ? "" : "s"} didn't go through — will retry on your next visit`,
+          "⛽",
+          6000,
+          "high",
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, spaceId]);
 

@@ -3245,6 +3245,29 @@ button {
   font-size: 0.95rem;
   cursor: pointer;
 }
+/* IM-124: truthful loading / error treatments for the fetched sections. */
+.obs-loading { cursor: default; }
+.obs-loading:hover { transform: none; border-color: rgba(122, 200, 255, 0.18); }
+.obs-skel-bar {
+  display: block;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.obs-error { cursor: default; border-color: rgba(255, 170, 90, 0.45); }
+.obs-error:hover { transform: none; border-color: rgba(255, 170, 90, 0.65); }
+.obs-retry {
+  margin-top: 4px;
+  padding: 5px 16px;
+  border-radius: 999px;
+  background: rgba(255, 170, 90, 0.14);
+  border: 1px solid rgba(255, 170, 90, 0.5);
+  color: #ffd9ae;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.obs-retry:hover { background: rgba(255, 170, 90, 0.28); }
 
 /* Node-kind legend / quick filter (Stage 0 taxonomy). */
 .kind-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
@@ -4572,6 +4595,11 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
 .rv-btn.reveal { background: rgba(150, 134, 255, 0.16); border-color: rgba(150, 134, 255, 0.5); color: #dcd6ff; width: 100%; }
 .rv-btn.reveal:hover { background: rgba(150, 134, 255, 0.3); }
 .rv-grade { display: flex; gap: 10px; }
+.rv-content {
+  text-align: left; font-size: 0.92rem; line-height: 1.5; color: #e8edf9; white-space: pre-wrap;
+  background: rgba(150, 134, 255, 0.08); border: 1px solid rgba(150, 134, 255, 0.25); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 14px; max-height: 220px; overflow-y: auto;
+}
 .rv-btn.forgot { flex: 1; background: rgba(255, 120, 120, 0.12); border-color: rgba(255, 120, 120, 0.4); color: #ffb3b3; }
 .rv-btn.forgot:hover { background: rgba(255, 90, 90, 0.24); }
 .rv-btn.primary { flex: 1; background: rgba(70, 245, 140, 0.14); border-color: rgba(70, 245, 140, 0.45); color: #b6ffcf; }
@@ -4793,6 +4821,8 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
 .fin-shortfall { margin-top: 6px; font-size: 0.9rem; font-weight: 700; color: #ffd27a;
   display: inline-flex; gap: 6px; align-items: center; }
 .fin-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fin-buffer { display: flex; flex-direction: column; gap: 6px; }
+.fin-buffer p { margin: 0; }
 .fin-stat { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
   padding: 10px; display: flex; flex-direction: column; gap: 2px; }
 .fin-stat span { color: var(--muted); font-size: 0.75rem; }

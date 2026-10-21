@@ -63,6 +63,50 @@ describe("HelpPanel — zero search results is no longer a dead end", () => {
   });
 });
 
+describe("HelpPanel — IM-131 accuracy: cards must describe the UI that actually exists", () => {
+  // Help is the trust surface; these pins keep the three documented false
+  // cards (plus the Settings understatement) from creeping back. Each claim
+  // was verified against the code cited in the IM-131 commit.
+  const search = (q: string) => {
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: q } });
+  };
+
+  it("About Me is described as auto-derived, not hand-filled", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    search("About Me");
+    expect(screen.getByText(/derives it from your memories herself/)).toBeTruthy();
+    expect(screen.getByText(/isn't edited by hand/)).toBeTruthy();
+    expect(screen.queryByText(/Fill in 'About Me'/)).toBeNull();
+  });
+
+  it("Grounded Insight is located in the Companion panel inside Chat (🎭), not a 'Companion tab'", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    search("Grounded insight");
+    expect(screen.getByText(/Tap 🎭 inside the chat/)).toBeTruthy();
+  });
+
+  it("no card points at a 'Companion tab' or a 'List tab' — neither exists", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    search("Companion tab");
+    expect(screen.getByText(/No guides match/)).toBeTruthy();
+    search("List tab");
+    expect(screen.getByText(/No guides match/)).toBeTruthy();
+  });
+
+  it("Drifting orphans are filtered in Browse (📚), via the '🪐 drifting' chip", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    search("drifting");
+    expect(screen.getByText(/filter for them in the Browse tab \(📚\)/)).toBeTruthy();
+    expect(screen.getByText(/'🪐 drifting' chip/)).toBeTruthy();
+  });
+
+  it("the Settings card names the panel's real sections, not just account/voice/sounds", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    search("Settings & preferences");
+    expect(screen.getByText(/Graphics & performance section and a Diagnostics area/)).toBeTruthy();
+  });
+});
+
 describe("HelpPanel — reading the whole manual is finally rewarded", () => {
   it("celebrates only once every category has actually been visited", () => {
     render(<HelpPanel onClose={() => {}} />);

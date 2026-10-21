@@ -21,11 +21,17 @@ vi.mock("../graph/sfx.js", () => ({ playSfx: (...a: unknown[]) => playSfx(...a) 
 
 import { JourneysPanel } from "./JourneysPanel.js";
 
+// IM-87: journeyLinks returns a JourneyLinksDetail (display-capped links + true
+// totals/counts), not a bare array.
+const linksDetail = (links: unknown[], over: Record<string, unknown> = {}) => ({
+  links, totalCount: links.length, earnedCents: 0, spentCents: 0, displayLimit: 20, unshownByKind: {}, ...over,
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   // Sane default so opening a card never crashes a test that isn't specifically
   // exercising the links-loading behavior.
-  journeyLinks.mockResolvedValue([]);
+  journeyLinks.mockResolvedValue(linksDetail([]));
 });
 
 afterEach(() => {
@@ -145,7 +151,7 @@ describe("JourneysPanel — links race guard", () => {
     act(() => head.click()); // close before the fetch resolves
 
     await act(async () => {
-      resolveLinks([{ kind: "node", refId: 1, label: "should not appear" }]);
+      resolveLinks(linksDetail([{ kind: "node", refId: 1, label: "should not appear" }]));
       await Promise.resolve();
     });
     expect(screen.queryByText("should not appear")).toBeNull();
@@ -164,7 +170,7 @@ describe("JourneysPanel — links race guard", () => {
 describe("JourneysPanel — an empty links list is no longer a dead end", () => {
   it("offers a way to capture a thought right from the empty-links hint", async () => {
     getJourneys.mockResolvedValue([journey({ id: 1 })]);
-    journeyLinks.mockResolvedValue([]);
+    journeyLinks.mockResolvedValue(linksDetail([]));
     const onAction = vi.fn();
     window.addEventListener("brain-toast-action", onAction);
     render(<JourneysPanel />);
@@ -177,10 +183,61 @@ describe("JourneysPanel — an empty links list is no longer a dead end", () => 
   });
 });
 
+describe("JourneysPanel — IM-87 true totals + cap disclosure", () => {
+  it("renders the server's totals over ALL links, not the sum of the shown rows, and discloses the cap", async () => {
+    getJourneys.mockResolvedValue([journey({ id: 1, linkCount: 25 })]);
+    // Only 2 rows are shown, worth $10 each — but the journey's true totals over
+    // all 25 links are $150 earned / $70 spent. Pre-fix the panel summed the
+    // shown rows and presented $20.00 as the journey's total.
+    journeyLinks.mockResolvedValue(linksDetail(
+      [
+        { kind: "income", refId: 1, label: "Gig", amount: 1000 },
+        { kind: "income", refId: 2, label: "Gig", amount: 1000 },
+      ],
+      { totalCount: 25, earnedCents: 15000, spentCents: 7000 },
+    ));
+    render(<JourneysPanel />);
+    const head = await screen.findByText("Recover Financially");
+    act(() => head.click());
+    await screen.findByText(/Showing 2 of 25 linked/);
+    expect(screen.getByText(/\+\$150\.00 earned/)).toBeTruthy();
+    expect(screen.getByText(/-\$70\.00 spent/)).toBeTruthy();
+    expect(screen.queryByText(/\+\$20\.00 earned/)).toBeNull();
+  });
+});
+
+describe("JourneysPanel — IM-86 header/detail never contradict", () => {
+  it("a goal-only journey shows the goal in detail, agreeing with its '1 linked' header", async () => {
+    getJourneys.mockResolvedValue([journey({ id: 1, linkCount: 1 })]);
+    // The server hydrates goals (fin_goal name); the panel used to group only
+    // node/insight/doc + money kinds, so this summary rendered NOTHING in detail.
+    journeyLinks.mockResolvedValue(linksDetail([{ kind: "goal", refId: 9, label: "First Truck" }]));
+    render(<JourneysPanel />);
+    const head = await screen.findByText("Recover Financially");
+    expect(screen.getByText("1 linked")).toBeTruthy();
+    act(() => head.click());
+    await screen.findByText("First Truck");
+    expect(screen.queryByText(/Nothing linked yet/)).toBeNull();
+  });
+
+  it("a task-only journey states the link truthfully instead of 'Nothing linked yet'", async () => {
+    getJourneys.mockResolvedValue([journey({ id: 1, linkCount: 1 })]);
+    // task has no source table to hydrate from — the server counts it in
+    // unshownByKind instead of dropping it, and the panel must say so.
+    journeyLinks.mockResolvedValue(linksDetail([], { totalCount: 1, unshownByKind: { task: 1 } }));
+    render(<JourneysPanel />);
+    const head = await screen.findByText("Recover Financially");
+    expect(screen.getByText("1 linked")).toBeTruthy();
+    act(() => head.click());
+    await screen.findByText(/Also linked but not shown in detail here: 1 task\./);
+    expect(screen.queryByText(/Nothing linked yet/)).toBeNull();
+  });
+});
+
 describe("JourneysPanel — linked recurring bills lead somewhere", () => {
   it("opens the Money tab when the recurring-bills note is clicked", async () => {
     getJourneys.mockResolvedValue([journey({ id: 1 })]);
-    journeyLinks.mockResolvedValue([{ kind: "bill", refId: 7, label: "Rent" }]);
+    journeyLinks.mockResolvedValue(linksDetail([{ kind: "bill", refId: 7, label: "Rent" }]));
     const onAction = vi.fn();
     window.addEventListener("brain-toast-action", onAction);
     render(<JourneysPanel />);

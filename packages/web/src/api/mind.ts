@@ -243,13 +243,16 @@ export interface Candidate {
   createdAt: string;
 }
 export async function getCandidates(): Promise<{ candidates: Candidate[]; count: number }> {
-  try {
-    const res = await afetch(`${API}/candidates`);
-    const d = await res.json().catch(() => null);
-    return d && Array.isArray(d.candidates) ? d : { candidates: [], count: 0 };
-  } catch {
-    return { candidates: [], count: 0 };
-  }
+  // IM-120 (honesty subset): failures must be DISTINGUISHABLE from a true empty
+  // queue. This used to swallow every error into `{ candidates: [] }`, so the
+  // Connections panel's "Nothing waiting" simultaneously meant loading, error,
+  // and empty. It now throws; callers that only need a count (App's polled
+  // badge) already catch rejections, and the panel renders an error state.
+  const res = await afetch(`${API}/candidates`);
+  if (!res.ok) throw new Error(`candidates fetch failed (${res.status})`);
+  const d = await res.json().catch(() => null);
+  if (!d || !Array.isArray(d.candidates)) throw new Error("candidates fetch returned a malformed payload");
+  return d;
 }
 export async function acceptCandidate(id: number): Promise<boolean> {
   try {

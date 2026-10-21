@@ -646,6 +646,27 @@ export interface JourneyLinkSummary {
   occurredAt?: string;
 }
 
+/** Response of GET /journeys/:id/links — the detail view's data (IM-87/IM-86).
+ *  `links` is DISPLAY-capped (see `displayLimit`); `totalCount`, `earnedCents` and
+ *  `spentCents` are always computed over ALL of the journey's links, never over the
+ *  displayed subset — the totals a user reads are the journey's true totals.
+ *  `unshownByKind` counts linked items (within the display window) that exist but
+ *  produced no displayable summary — kinds with no source table to hydrate from
+ *  (task/chat/achievement) and dangling refs whose target row is gone — so the UI
+ *  can say they are linked instead of claiming nothing is. */
+export interface JourneyLinksDetail {
+  links: JourneyLinkSummary[];
+  /** Every journey_link row for this journey (matches the header's linkCount). */
+  totalCount: number;
+  /** True total over ALL linked income rows, in cents. */
+  earnedCents: number;
+  /** True total over ALL linked expense rows, in cents. */
+  spentCents: number;
+  /** Max number of raw links hydrated into `links` for display. */
+  displayLimit: number;
+  unshownByKind: Partial<Record<JourneyLinkKind, number>>;
+}
+
 /** One candidate Journey to link a captured object to, with the confidence tier that
  *  decides whether it's silently auto-linked or offered as a one-tap suggestion. */
 export interface JourneySuggestion {

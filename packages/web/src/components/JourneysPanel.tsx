@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Journey, JourneyLinkSummary } from "@brain/shared";
+import type { Journey, JourneyLinksDetail } from "@brain/shared";
 import { getJourneys, createJourney, patchJourney, deleteJourney, journeyLinks } from "../api/journeys.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
@@ -159,7 +159,7 @@ function JourneyCard({
   onAskJourney?: (journey: { id: number; title: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [links, setLinks] = useState<JourneyLinkSummary[] | null>(null);
+  const [links, setLinks] = useState<JourneyLinksDetail | null>(null);
   const [linksError, setLinksError] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
@@ -191,7 +191,7 @@ function JourneyCard({
       void journeyLinks(j.id).then((result) => {
         if (cancelled) return; // this journey closed (or another opened) before it resolved
         if (result) setLinks(result);
-        else { setLinks([]); setLinksError(true); }
+        else { setLinks(null); setLinksError(true); }
       });
     } else {
       // Reset so re-opening shows "Loading…" rather than a stale list from last time.
@@ -283,7 +283,7 @@ function JourneyCard({
             ) : null}
             <button className="jn-danger" onClick={() => void remove()}>Delete</button>
           </div>
-          <JourneyLinksSection links={links} linksError={linksError} onFocus={onFocus} />
+          <JourneyLinksSection detail={links} linksError={linksError} onFocus={onFocus} />
         </div>
       )}
     </div>
@@ -292,21 +292,24 @@ function JourneyCard({
 
 const fmt = (cents: number): string => (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-/** Everything linked to a Journey — memories/tasks with fly-to, transactions with a
- *  running +earned/-spent total. A linked bill shows as a separate note rather than
- *  folding into the total: it's a recurring schedule, not a dated transaction. */
+/** Everything linked to a Journey — memories/tasks with fly-to, transactions with
+ *  earned/spent totals. The totals come from the server's aggregate over ALL links
+ *  (IM-87), never from summing the display-capped rows shown here. A linked bill
+ *  shows as a separate note rather than folding into the total: it's a recurring
+ *  schedule, not a dated transaction. */
 function JourneyLinksSection({
-  links,
+  detail,
   linksError,
   onFocus,
 }: {
-  links: JourneyLinkSummary[] | null;
+  detail: JourneyLinksDetail | null;
   linksError?: boolean;
   onFocus?: (id: number) => void;
 }) {
-  if (links === null) return <p className="jn-hint">Loading what's linked…</p>;
   if (linksError) return <p className="jn-hint">⚠️ Couldn't load what's linked — try reopening this Journey.</p>;
-  if (links.length === 0) {
+  if (detail === null) return <p className="jn-hint">Loading what's linked…</p>;
+  const { links } = detail;
+  if (detail.totalCount === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-start" }}>
         <p className="jn-hint" style={{ margin: 0 }}>
@@ -322,11 +325,19 @@ function JourneyLinksSection({
     );
   }
   const memories = links.filter((l) => l.kind === "node" || l.kind === "insight" || l.kind === "doc");
+  // Goals ARE hydrated server-side (fin_goal name) — the panel used to drop them
+  // on the floor, so a goal-only journey showed an empty detail under an
+  // "N linked" header (IM-86). Rendered as plain rows: a goal's refId is a
+  // fin_goal id, not a node id, so the fly-to onFocus must NOT be wired to it.
+  const goals = links.filter((l) => l.kind === "goal");
   const income = links.filter((l) => l.kind === "income");
   const expense = links.filter((l) => l.kind === "expense");
   const bills = links.filter((l) => l.kind === "bill");
-  const earned = income.reduce((sum, l) => sum + (l.amount ?? 0), 0);
-  const spent = expense.reduce((sum, l) => sum + (l.amount ?? 0), 0);
+  // True totals over every linked transaction (server aggregate), not the shown subset.
+  const earned = detail.earnedCents;
+  const spent = detail.spentCents;
+  const hasTxnTotals = earned !== 0 || spent !== 0;
+  const unshown = unshownText(detail);
 
   return (
     <div className="jn-links">
@@ -340,7 +351,17 @@ function JourneyLinksSection({
           ))}
         </div>
       )}
-      {(income.length > 0 || expense.length > 0) && (
+      {goals.length > 0 && (
+        <div className="jn-links-group">
+          <div className="jn-links-label">🎯 Goals</div>
+          {goals.map((l) => (
+            <div key={`goal-${l.refId}`} className="jn-link-row">
+              {l.label}
+            </div>
+          ))}
+        </div>
+      )}
+      {(income.length > 0 || expense.length > 0 || hasTxnTotals) && (
         <div className="jn-links-group">
           <div className="jn-links-label">💵 Transactions</div>
           {[...income, ...expense].map((l) => (
@@ -366,6 +387,38 @@ function JourneyLinksSection({
           📅 {bills.length} recurring bill{bills.length !== 1 ? "s" : ""} linked
         </button>
       )}
+      {unshown && <p className="jn-hint">{unshown}</p>}
+      {links.length > 0 && links.length < detail.totalCount && (
+        <p className="jn-hint">Showing {links.length} of {detail.totalCount} linked</p>
+      )}
     </div>
   );
+}
+
+const KIND_NOUN: Record<string, [string, string]> = {
+  task: ["task", "tasks"],
+  chat: ["chat", "chats"],
+  achievement: ["achievement", "achievements"],
+  node: ["memory", "memories"],
+  goal: ["goal", "goals"],
+  insight: ["insight", "insights"],
+  doc: ["document", "documents"],
+  income: ["income entry", "income entries"],
+  expense: ["expense entry", "expense entries"],
+  bill: ["bill", "bills"],
+};
+
+/** IM-86: links that exist but produced no displayable summary (kinds with no
+ *  source table to hydrate from — task/chat/achievement — and dangling refs) are
+ *  stated plainly, so the detail never reads "nothing here" while the header
+ *  counts them. Returns null when everything linked is shown. */
+function unshownText(detail: JourneyLinksDetail): string | null {
+  const parts = Object.entries(detail.unshownByKind)
+    .filter(([, n]) => (n ?? 0) > 0)
+    .map(([kind, n]) => {
+      const count = n as number;
+      const noun = KIND_NOUN[kind];
+      return `${count} ${noun ? (count === 1 ? noun[0] : noun[1]) : kind}`;
+    });
+  return parts.length > 0 ? `Also linked but not shown in detail here: ${parts.join(", ")}.` : null;
 }

@@ -3,7 +3,7 @@ import type { FinBill, BillFrequency, FinIncome, FinExpense, FinPaystub, Paystub
 import type { FinExtractionResult } from "@brain/shared";
 import { useCountUp } from "../hooks/useCountUp.js";
 import {
-  getFinanceSummary, setBalance, addIncome, addExpense, createBill, deleteBill, markOccurrencePaid, listBills,
+  getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, deleteBill, markOccurrencePaid, listBills,
   ingestPaste, ingestImage, confirmIngest,
   listIncome, listExpense, editIncome, deleteIncome, editExpense, deleteExpense,
   getAfford, getWealthSummary,
@@ -146,6 +146,20 @@ export function FinancePanel({
         <div className="fin-stat"><span>Earned this week</span><Money cents={b.weekEarnedCents} className="fin-stat-num" /></div>
         <div className="fin-stat"><span>Balance</span><Money cents={b.balanceCents} className="fin-stat-num" /></div>
       </div>
+
+      {/* ---- Safety buffer (IM-78): bufferCents is subtracted, together with reserved
+          bills, before Safe to Spend (shared BudgetSummary: balance − reserved − buffer).
+          It used to be invisible and un-settable, so a hero number that looked "wrong"
+          had no discoverable explanation. Render it, explain it, and let the user set it
+          via the existing PUT /finance/account/buffer (setBuffer). ---- */}
+      <section className="fin-buffer">
+        <div className="fin-stat"><span>Safety buffer</span><MoneyC cents={b.bufferCents} className="fin-stat-num" /></div>
+        <p className="fin-muted">
+          Safe to Spend is your balance minus bills reserved and this buffer — the buffer
+          stays untouched for surprises, so it never counts as spendable.
+        </p>
+        <BufferEditor current={b.bufferCents} onSet={async (c) => { const r = await setBuffer(c); await refresh(); return !!r; }} />
+      </section>
 
       {/* ---- Reserved (collapsible, itemized) ---- */}
       <button className="fin-reserved-head" onClick={() => setReservedOpen((v) => !v)} aria-expanded={reservedOpen}>
@@ -330,6 +344,36 @@ function BalanceEditor({ current, onSet }: { current: number; onSet: (cents: num
           <button className="fin-secondary" onClick={() => setOpen(false)}>Cancel</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- Safety buffer editor (IM-78): same quick-set shape as BalanceEditor, plus
+// explicit success/failure feedback — a silent save here would leave the user unsure
+// whether the number behind Safe to Spend actually changed. ----
+function BufferEditor({ current, onSet }: { current: number; onSet: (cents: number) => Promise<boolean> }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const save = async () => {
+    const c = toCents(val);
+    if (c == null || c < 0) { setFeedback("Enter an amount of $0 or more."); return; }
+    const ok = await onSet(c);
+    setFeedback(ok ? "Safety buffer updated." : "Couldn't save the safety buffer — try again.");
+    if (ok) setOpen(false);
+  };
+  return (
+    <div className="fin-balance-edit">
+      {!open ? (
+        <button className="fin-secondary" onClick={() => { setVal((current / 100).toFixed(2)); setFeedback(null); setOpen(true); }}>Set safety buffer</button>
+      ) : (
+        <div className="fin-inline-form">
+          <input inputMode="decimal" placeholder="0.00" value={val} onChange={(e) => setVal(e.target.value)} aria-label="Safety buffer in dollars" />
+          <button onClick={() => void save()}>Save buffer</button>
+          <button className="fin-secondary" onClick={() => setOpen(false)}>Cancel</button>
+        </div>
+      )}
+      {feedback && <div className="fin-msg" role="status">{feedback}</div>}
     </div>
   );
 }

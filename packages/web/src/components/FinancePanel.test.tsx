@@ -11,9 +11,11 @@ const listAssets = vi.fn();
 const getIncomeTrend = vi.fn();
 const getNetWorthTrend = vi.fn();
 const listBills = vi.fn();
+const setBuffer = vi.fn();
 vi.mock("../api/finance.js", () => ({
   getFinanceSummary: (...a: unknown[]) => getFinanceSummary(...a),
   getWealthSummary: (...a: unknown[]) => getWealthSummary(...a),
+  setBuffer: (...a: unknown[]) => setBuffer(...a),
   setBalance: vi.fn(), addIncome: vi.fn(), addExpense: vi.fn(), createBill: vi.fn(), deleteBill: vi.fn(),
   listBills: (...a: unknown[]) => listBills(...a),
   markOccurrencePaid: vi.fn(), ingestPaste: vi.fn(), ingestImage: vi.fn(), confirmIngest: vi.fn(),
@@ -289,6 +291,51 @@ describe("FinancePanel — Galaxy entity detail focus for a Bill (Phase AC.1)", 
     await screen.findByText("Safe to Spend");
     expect(screen.queryByText("Rent")).toBeNull();
     expect(listBills).not.toHaveBeenCalled();
+  });
+});
+
+describe("FinancePanel — safety buffer (IM-78)", () => {
+  it("renders bufferCents in the summary and explains its effect on Safe to Spend", async () => {
+    getFinanceSummary.mockResolvedValue({
+      budget: budget({ balanceCents: 100000, bufferCents: 2500, safeToSpendCents: 97500 }),
+      account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 2500, updatedAt: "x" },
+      upcoming: [],
+    });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    expect(screen.getByText("Safety buffer")).toBeTruthy();
+    // The actual buffer figure is rendered (not just a label)…
+    await waitFor(() => expect(screen.getByText("$25.00")).toBeTruthy());
+    // …and the copy explains WHY the hero is lower than the balance.
+    expect(screen.getByText(/balance minus bills reserved and this buffer/)).toBeTruthy();
+  });
+
+  it("the set-buffer control calls setBuffer with integer cents and confirms success", async () => {
+    setBuffer.mockResolvedValue({ id: 1, bufferCents: 4000 });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+
+    fireEvent.click(screen.getByText("Set safety buffer"));
+    fireEvent.change(screen.getByLabelText("Safety buffer in dollars"), { target: { value: "40" } });
+    fireEvent.click(screen.getByText("Save buffer"));
+
+    await waitFor(() => expect(setBuffer).toHaveBeenCalledWith(4000));
+    await screen.findByText("Safety buffer updated.");
+  });
+
+  it("surfaces a failure instead of silently closing when setBuffer fails", async () => {
+    setBuffer.mockResolvedValue(null); // api/finance send() collapses a failed PUT to null
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+
+    fireEvent.click(screen.getByText("Set safety buffer"));
+    fireEvent.change(screen.getByLabelText("Safety buffer in dollars"), { target: { value: "40" } });
+    fireEvent.click(screen.getByText("Save buffer"));
+
+    await screen.findByText(/Couldn't save the safety buffer/);
+    expect(setBuffer).toHaveBeenCalledWith(4000);
+    // The editor stays open so the user can retry — the value is not lost.
+    expect((screen.getByLabelText("Safety buffer in dollars") as HTMLInputElement).value).toBe("40");
   });
 });
 

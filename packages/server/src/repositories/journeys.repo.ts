@@ -107,6 +107,23 @@ export class JourneysRepo {
       .run(this.spaceId, journeyId, kind, refId).changes > 0;
   }
 
+  /** True earned/spent totals over ALL of a journey's income/expense links (IM-87).
+   *  Aggregated in SQL over the full link set — never over a display-capped subset —
+   *  joining each link to its own finance row in the same space. A dangling link
+   *  (target row deleted) contributes nothing, exactly as hydration skips it. */
+  linkTotals(journeyId: number): { earnedCents: number; spentCents: number } {
+    const row = this.handle.sqlite
+      .prepare(`SELECT
+                  (SELECT COALESCE(SUM(i.net_cents), 0) FROM journey_link l
+                     JOIN fin_income i ON i.id = l.ref_id AND i.space_id = l.space_id
+                    WHERE l.space_id = ? AND l.journey_id = ? AND l.kind = 'income') AS earned,
+                  (SELECT COALESCE(SUM(e.amount_cents), 0) FROM journey_link l
+                     JOIN fin_expense e ON e.id = l.ref_id AND e.space_id = l.space_id
+                    WHERE l.space_id = ? AND l.journey_id = ? AND l.kind = 'expense') AS spent`)
+      .get(this.spaceId, journeyId, this.spaceId, journeyId) as { earned: number; spent: number };
+    return { earnedCents: Number(row.earned), spentCents: Number(row.spent) };
+  }
+
   links(journeyId: number): JourneyLink[] {
     const rows = this.handle.sqlite
       .prepare(`SELECT * FROM journey_link WHERE space_id = ? AND journey_id = ? ORDER BY created_at DESC`)

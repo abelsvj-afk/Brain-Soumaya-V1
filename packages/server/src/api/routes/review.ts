@@ -18,6 +18,10 @@ export function reviewRoutes(ctx: AppContext): Router {
     const due = dueForReview(ctx, spaceOf(res), now, 20).map((m) => ({
       id: m.id,
       label: m.label,
+      // IM-111: the memory's actual content — Reveal in the Recall panel shows
+      // this so the user grades recall of something they were actually shown.
+      // (dueForReview already selects `content` from nodes.)
+      content: m.content,
       strength: Math.round(memoryStrength(m, now) * 100) / 100,
       reviewCount: m.review_count,
     }));
