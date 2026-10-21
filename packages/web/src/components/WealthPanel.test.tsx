@@ -7,18 +7,24 @@ const createBucket = vi.fn();
 const patchBucket = vi.fn();
 const archiveBucket = vi.fn();
 const createGoal = vi.fn();
+const patchGoal = vi.fn();
 const archiveGoal = vi.fn();
 const listAllocations = vi.fn();
 const allocate = vi.fn();
+const getCognitive = vi.fn();
 vi.mock("../api/finance.js", () => ({
   getWealthSummary: (...a: unknown[]) => getWealthSummary(...a),
   createBucket: (...a: unknown[]) => createBucket(...a),
   patchBucket: (...a: unknown[]) => patchBucket(...a),
   archiveBucket: (...a: unknown[]) => archiveBucket(...a),
   createGoal: (...a: unknown[]) => createGoal(...a),
+  patchGoal: (...a: unknown[]) => patchGoal(...a),
   archiveGoal: (...a: unknown[]) => archiveGoal(...a),
   listAllocations: (...a: unknown[]) => listAllocations(...a),
   allocate: (...a: unknown[]) => allocate(...a),
+}));
+vi.mock("../api/mind.js", () => ({
+  getCognitive: (...a: unknown[]) => getCognitive(...a),
 }));
 vi.mock("../api/journeys.js", () => ({
   getJourneys: vi.fn().mockResolvedValue([]),
@@ -45,6 +51,7 @@ function summary(over: Partial<WealthSummary>): WealthSummary {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  getCognitive.mockResolvedValue([]);
 });
 afterEach(() => cleanup());
 
@@ -128,13 +135,11 @@ describe("WealthPanel — a goal shows progress and can be allocated to", () => 
   });
 });
 
-describe("WealthPanel — point-of-action warning", () => {
+describe("WealthPanel — point-of-action warning (IM-84: shared ConfirmDialog, not native confirm())", () => {
   it("asks for confirmation before allocating past Deployable, and proceeds only if confirmed", async () => {
     const g = goal({ totalCents: 0, fillPct: 0 });
     getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [g], allocatedCents: 0, deployableCents: 1000 })); // $10 deployable
     allocate.mockResolvedValue({ allocation: {} as FinAllocation, wealth: summary({}) });
-    const confirmMock = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-    (window as unknown as { confirm: typeof confirmMock }).confirm = confirmMock;
 
     render(<WealthPanel />);
     fireEvent.click(await screen.findByText("Trucking"));
@@ -142,10 +147,15 @@ describe("WealthPanel — point-of-action warning", () => {
 
     fireEvent.change(screen.getByPlaceholderText("Amount $"), { target: { value: "50" } }); // $50 > $10 deployable
     await act(async () => { screen.getByText("+ Allocate").click(); });
-    expect(confirmMock).toHaveBeenCalledWith(expect.stringContaining("past what's currently deployable"));
-    expect(allocate).not.toHaveBeenCalled(); // declined the warning — write never happens
+    // The in-app dialog carries the warning — no native confirm() involved.
+    await screen.findByText(/past what's currently deployable/);
+    expect(allocate).not.toHaveBeenCalled(); // dialog open — write hasn't happened
+
+    await act(async () => { screen.getByText("Cancel").click(); });
+    expect(allocate).not.toHaveBeenCalled(); // cancelled — write never happens
 
     await act(async () => { screen.getByText("+ Allocate").click(); });
+    await act(async () => { screen.getByText("Allocate anyway").click(); });
     expect(allocate).toHaveBeenCalledWith(1, 5000);
   });
 
@@ -153,33 +163,136 @@ describe("WealthPanel — point-of-action warning", () => {
     const g = goal({ totalCents: 50000, fillPct: 0.5 });
     getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [g], allocatedCents: 50000, deployableCents: 0 }));
     allocate.mockResolvedValue({ allocation: {} as FinAllocation, wealth: summary({}) });
-    const confirmMock = vi.fn().mockReturnValue(true);
-    (window as unknown as { confirm: typeof confirmMock }).confirm = confirmMock;
 
     render(<WealthPanel />);
     fireEvent.click(await screen.findByText("Trucking"));
     await screen.findByText("First Truck");
     fireEvent.change(screen.getByPlaceholderText("Amount $"), { target: { value: "50" } });
     await act(async () => { screen.getByText("− Withdraw").click(); });
-    expect(confirmMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/past what's currently deployable/)).toBeNull();
     expect(allocate).toHaveBeenCalledWith(1, -5000);
   });
 });
 
-describe("WealthPanel — a rejected withdrawal surfaces an error, not a silent no-op", () => {
-  it("alerts when allocate() returns null (server rejected an over-withdrawal)", async () => {
+describe("WealthPanel — a rejected withdrawal surfaces an error, not a silent no-op (IM-84: inline, not alert())", () => {
+  it("shows an inline error when allocate() returns null (server rejected an over-withdrawal)", async () => {
     const g = goal({ totalCents: 10000, fillPct: 0.1 });
     getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [g] }));
     allocate.mockResolvedValue(null);
-    const alertMock = vi.fn();
-    (window as unknown as { alert: typeof alertMock }).alert = alertMock;
 
     render(<WealthPanel />);
     fireEvent.click(await screen.findByText("Trucking"));
     await screen.findByText("First Truck");
     fireEvent.change(screen.getByPlaceholderText("Amount $"), { target: { value: "500" } });
     await act(async () => { screen.getByText("− Withdraw").click(); });
-    expect(alertMock).toHaveBeenCalledWith(expect.stringContaining("below zero"));
+    const err = await screen.findByRole("alert");
+    expect(err.textContent).toContain("below zero");
+  });
+});
+
+describe("WealthPanel — bucket category + edit (IM-82/IM-84)", () => {
+  it("creates a bucket WITH its category when one is typed", async () => {
+    getWealthSummary.mockResolvedValue(summary({}));
+    createBucket.mockResolvedValue(bucket({}));
+    render(<WealthPanel />);
+    await screen.findByText(/No buckets yet/);
+
+    fireEvent.change(screen.getByPlaceholderText(/New bucket name/), { target: { value: "Safety" } });
+    fireEvent.change(screen.getByLabelText("New bucket category"), { target: { value: "emergency" } });
+    await act(async () => { screen.getByText("➕ New bucket").click(); });
+    expect(createBucket).toHaveBeenCalledWith({ name: "Safety", category: "emergency" });
+  });
+
+  it("edits a bucket's name + category inline via patchBucket — no native prompt()", async () => {
+    const promptSpy = vi.fn();
+    (window as unknown as { prompt: typeof promptSpy }).prompt = promptSpy;
+    getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [] }));
+    patchBucket.mockResolvedValue(bucket({ name: "Trucking Co", category: "fleet" }));
+    render(<WealthPanel />);
+    fireEvent.click(await screen.findByText("Trucking"));
+
+    await act(async () => { screen.getByText("✏️ Edit").click(); });
+    fireEvent.change(screen.getByLabelText("Bucket name"), { target: { value: "Trucking Co" } });
+    fireEvent.change(screen.getByLabelText("Bucket category"), { target: { value: "fleet" } });
+    await act(async () => { screen.getByText("Save bucket").click(); });
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(patchBucket).toHaveBeenCalledWith(1, { name: "Trucking Co", category: "fleet" });
+  });
+
+  it("archives a bucket only after the shared ConfirmDialog is confirmed", async () => {
+    getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [] }));
+    archiveBucket.mockResolvedValue({ ok: true });
+    render(<WealthPanel />);
+    fireEvent.click(await screen.findByText("Trucking"));
+
+    await act(async () => { screen.getByText("📥 Archive").click(); });
+    await screen.findByText(/Its goals stay, just tucked away/);
+    expect(archiveBucket).not.toHaveBeenCalled();
+    await act(async () => { screen.getByText("Archive").click(); });
+    expect(archiveBucket).toHaveBeenCalledWith(1);
+  });
+});
+
+describe("WealthPanel — goal create/edit with date + Vision (IM-82)", () => {
+  it("creates a goal with a target date and a Life Vision link", async () => {
+    getCognitive.mockResolvedValue([{ id: 42, kind: "life_vision", label: "Own a home", content: "", progress: null, completedAt: null, degree: 0, aliases: [], createdAt: "x", remindAt: null }]);
+    getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [] }));
+    createGoal.mockResolvedValue(goal({}));
+    render(<WealthPanel />);
+    fireEvent.click(await screen.findByText("Trucking"));
+
+    fireEvent.change(screen.getByPlaceholderText(/New goal/), { target: { value: "Down payment" } });
+    fireEvent.change(screen.getByLabelText("Goal target date"), { target: { value: "2027-06-01" } });
+    fireEvent.change(await screen.findByLabelText("Life Vision"), { target: { value: "42" } });
+    await act(async () => { screen.getByText("➕ Add goal").click(); });
+    expect(createGoal).toHaveBeenCalledWith(expect.objectContaining({ bucketId: 1, name: "Down payment", targetDate: "2027-06-01", visionNodeId: 42 }));
+  });
+
+  it("edits an existing goal's name/target/date/Vision via patchGoal", async () => {
+    getCognitive.mockResolvedValue([{ id: 42, kind: "life_vision", label: "Own a home", content: "", progress: null, completedAt: null, degree: 0, aliases: [], createdAt: "x", remindAt: null }]);
+    const g = goal({});
+    getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [g] }));
+    patchGoal.mockResolvedValue({ ...g, name: "First Truck XL" });
+    render(<WealthPanel />);
+    fireEvent.click(await screen.findByText("Trucking"));
+    await screen.findByText("First Truck");
+
+    // Two "✏️ Edit" buttons exist (goal card + bucket actions) — the goal's renders first.
+    const edits = screen.getAllByText("✏️ Edit");
+    await act(async () => { edits[0]!.click(); });
+    fireEvent.change(screen.getByLabelText("Goal name"), { target: { value: "First Truck XL" } });
+    // Two date inputs + two Vision selects exist (goal edit form + new-goal form);
+    // the GoalCard (and its edit form) renders BEFORE the new-goal form in the bucket body.
+    const dateInputs = screen.getAllByLabelText("Goal target date");
+    fireEvent.change(dateInputs[0]!, { target: { value: "2027-01-15" } });
+    const visionSelects = await screen.findAllByLabelText("Life Vision");
+    fireEvent.change(visionSelects[0]!, { target: { value: "42" } });
+    await act(async () => { screen.getByText("Save goal").click(); });
+    expect(patchGoal).toHaveBeenCalledWith(1, expect.objectContaining({ name: "First Truck XL", targetDate: "2027-01-15", visionNodeId: 42 }));
+  });
+
+  it("shows the linked Vision's label on the goal card", async () => {
+    getCognitive.mockResolvedValue([{ id: 42, kind: "life_vision", label: "Own a home", content: "", progress: null, completedAt: null, degree: 0, aliases: [], createdAt: "x", remindAt: null }]);
+    const g = goal({ visionNodeId: 42 });
+    getWealthSummary.mockResolvedValue(summary({ buckets: [bucket({})], goals: [g] }));
+    render(<WealthPanel />);
+    fireEvent.click(await screen.findByText("Trucking"));
+    // The label shows on the goal card (🌅 line) AND in the vision picker options.
+    const matches = await screen.findAllByText(/Own a home/);
+    expect(matches.some((el) => el.textContent?.includes("🌅"))).toBe(true);
+  });
+});
+
+describe("WealthPanel — load error retry + Deployable motion (IM-84)", () => {
+  it("offers Retry on the load-error state and recovers when it succeeds", async () => {
+    getWealthSummary.mockResolvedValueOnce(null).mockResolvedValue(summary({ deployableCents: 5000 }));
+    render(<WealthPanel />);
+    await screen.findByText(/Couldn't reach Wealth/);
+    await act(async () => { screen.getByText("Retry").click(); });
+    await screen.findByText("Deployable");
+    // IM-84: Deployable now counts up via the shared useCountUp hook (same motion
+    // standard as the Money hero) — wait for the animation to land on the figure.
+    await waitFor(() => expect(screen.getByText("$50.00")).toBeTruthy());
   });
 });
 

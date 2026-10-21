@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { TYPE_COLORS, emotionHex, isColorblind } from "../graph/theme.js";
 import { FLEET } from "../graph/fleet.js";
+import { THOUGHT_SOURCE_COLOR } from "@brain/shared";
 
 /**
  * The Living Legend — a glanceable visual key to the galaxy's language, so you
@@ -203,6 +204,46 @@ export function Legend({ onClose }: { onClose: () => void }) {
               <li><span className="legend-glyph">❄</span><span className="legend-name">Cooling</span><span className="legend-meaning">you can't cover it yet — turns blue</span></li>
               <li><span className="legend-glyph">•</span><span className="legend-name">Calm</span><span className="legend-meaning">funded, not due soon — soft gold</span></li>
               <li><span className="legend-glyph">✓</span><span className="legend-name">Paid</span><span className="legend-meaning">settled — calm green</span></li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>Fuel, streaks & shields</h3>
+            <ul className="legend-list">
+              <li><span className="legend-glyph">⛽</span><span className="legend-name">Fuel</span><span className="legend-meaning">energy for her deep jobs — the gauge shows Fuel / capacity and the cost per job</span></li>
+              <li><span className="legend-glyph">🔥</span><span className="legend-name">Streak</span><span className="legend-meaning">days in a row you've fed your brain; the ember also shows your best streak</span></li>
+              <li><span className="legend-glyph">🛡️</span><span className="legend-name">Nebula shields ×N</span><span className="legend-meaning">each shield forgives one missed day — the number is the true count banked</span></li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>MindSpace motes (drifting thoughts)</h3>
+            <ul className="legend-list">
+              {Object.entries(THOUGHT_SOURCE_COLOR).map(([source, rgb]) => (
+                <li key={source}>
+                  <Swatch color={`rgb(${rgb})`} />
+                  <span className="legend-name">{source === "manual" ? "Spontaneous" : source === "chat" ? "From chat" : source === "goal" ? "Goal pull" : source === "priority" ? "Urgent drive" : "Feeling"}</span>
+                  <span className="legend-meaning">a thought from {source === "manual" ? "you, captured directly" : source}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section>
+            <h3>Her ship & the beacon beam</h3>
+            <ul className="legend-list">
+              <li><span className="legend-glyph">🏷️</span><span className="legend-name">Ship task label</span><span className="legend-meaning">the floating label over her ship names the job she's running, in plain words</span></li>
+              <li><span className="legend-glyph">📡</span><span className="legend-name">Beacon beam</span><span className="legend-meaning">takes on the emotional colour of the cold memory it guards — gold warm, green calm, indigo heavy</span></li>
+              <li><span className="legend-glyph">🛡️</span><span className="legend-name">Guard</span><span className="legend-meaning">the Defender holds station over your heaviest hub and intercepts hostile drifters</span></li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>Moments & modes</h3>
+            <ul className="legend-list">
+              <li><span className="legend-glyph">☄️</span><span className="legend-name">Flashback</span><span className="legend-meaning">a flight back to an old, weighty memory — tap its toast to fly there</span></li>
+              <li><span className="legend-glyph">🎯</span><span className="legend-name">Focus mode</span><span className="legend-meaning">dims the chrome — header, alerts, chips, HUD — for a calm reading session; entry and exit are announced</span></li>
+              <li><span className="legend-glyph">🌌</span><span className="legend-name">Views vs Lens</span><span className="legend-meaning">a View is a fixed, instant category glance; a Lens is your own saved filter that keeps matching new memories</span></li>
             </ul>
           </section>
 

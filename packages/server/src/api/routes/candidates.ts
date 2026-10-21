@@ -6,6 +6,7 @@ import {
   countCandidates,
   acceptCandidate,
   dismissCandidate,
+  restoreCandidate,
   manualLink,
   declutterGraph,
 } from "../../analysis/candidates.js";
@@ -62,6 +63,20 @@ export function candidateRoutes(ctx: AppContext): Router {
       return;
     }
     res.json({ ok: true, pair });
+  });
+
+  // POST /api/candidates/:id/restore -> undo an accept/dismiss (IM-120).
+  r.post("/:id/restore", (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    if (!restoreCandidate(ctx.handle, spaceOf(res), id)) {
+      res.status(404).json({ error: "Not found or already pending" });
+      return;
+    }
+    res.json({ ok: true });
   });
 
   // POST /api/candidates/:id/dismiss -> not a real connection; never suggest it again.

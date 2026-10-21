@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { gltfLoader } from "./gltf.js";
+import { gltfLoader, noteModelFallback } from "./gltf.js";
 
 /**
  * Module-scope helpers extracted from the large Graph3D.tsx (Post-MVP D4 refactor):
@@ -362,6 +362,7 @@ export function updateFigurine(
     undefined,
     (err) => {
       console.warn(`[figurine] failed to load '${modelPath}'; using procedural fallback`, err);
+      noteModelFallback("A figurine model");
     }
   );
 }

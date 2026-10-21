@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { GraphNode, TimelineChapter, ChapterTrend } from "@brain/shared";
-import { getTimeline, addTimelineChapter, deleteTimelineChapter, listAttachments, attachmentObjectUrl } from "../api/client.js";
+import type { GraphNode, LifeSeasonsTimeline, TimelineChapter, ChapterTrend } from "@brain/shared";
+import {
+  getTimeline,
+  getLifeSeasons,
+  addTimelineChapter,
+  deleteTimelineChapter,
+  listAttachments,
+  attachmentObjectUrl,
+  getUpcomingEventsResult,
+  type UpcomingEvent,
+} from "../api/client.js";
+import { LifeSeasonsBand } from "./LifeSeasonsBand.js";
+import { pushToast } from "./Toasts.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
 
 /**
  * The Chronicle — a chronological vertical timeline of your life. Chapters (written
@@ -63,6 +75,33 @@ export function gapFor(days: number): number {
   return Math.min(MAX_GAP, MIN_GAP + Math.sqrt(days) * GAP_PER_SQRT_DAY);
 }
 
+/** IM-121: a chapter's `score` is its blended change magnitude 0..1 — render
+ *  it as the percentage of change the chapter represents. Clamped so a
+ *  malformed score can never print nonsense like "140%". */
+export function changeMagnitudePct(score: number): number {
+  if (!Number.isFinite(score)) return 0;
+  return Math.round(Math.min(1, Math.max(0, score)) * 100);
+}
+
+/** IM-122: does a chapter match the search box? Title, summary and theme. */
+export function chapterMatches(ch: TimelineChapter, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    ch.title.toLowerCase().includes(q) ||
+    ch.summary.toLowerCase().includes(q) ||
+    ch.theme.toLowerCase().includes(q)
+  );
+}
+
+/** IM-137: "today" / "in 3d" / "overdue 2d" for a future event's day offset
+ *  (same idiom the Mind panel uses for the same server field). */
+export function eventWhenLabel(ev: UpcomingEvent): string {
+  if (ev.inDays < 0) return `overdue ${-ev.inDays}d`;
+  if (ev.inDays === 0) return "today";
+  return `in ${ev.inDays}d`;
+}
+
 type Row =
   | { type: "header"; key: string; label: string; gapBefore: number }
   | { type: "chapter"; key: string; chapter: TimelineChapter; index: number; gapBefore: number };
@@ -97,10 +136,25 @@ export function buildRows(chapters: TimelineChapter[]): Row[] {
 
 export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
   const [chapters, setChapters] = useState<TimelineChapter[] | null>(null);
+  const [seasonsData, setSeasonsData] = useState<LifeSeasonsTimeline | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [images, setImages] = useState<Record<number, string>>({});
+  // IM-122: chapter search text.
+  const [search, setSearch] = useState("");
+  // IM-122: chapter awaiting delete confirmation (shared ConfirmDialog).
+  const [confirmDelete, setConfirmDelete] = useState<TimelineChapter | null>(null);
+  // IM-122: chapter ids whose photo fetch has SETTLED — a photo slot whose
+  // fetch finished with no image is "no photo", not a forever-loading 📷.
+  const [photosSettled, setPhotosSettled] = useState<ReadonlySet<number>>(new Set());
+  // IM-137: the future-events overlay section (existing future_event kind).
+  const [events, setEvents] = useState<UpcomingEvent[] | null>(null);
+  const [eventsError, setEventsError] = useState(false);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  // IM-122: auto-scroll to the latest chapter ONCE per open — a long-lived
+  // brain used to open on its OLDEST chapter every time.
+  const scrolledOnceRef = useRef(false);
   // Photo ids currently held in `images` for whichever chapter is open — lets a
   // chapter switch revoke the PREVIOUS chapter's blob URLs instead of only doing so
   // on unmount (they'd otherwise accumulate for the whole session).
@@ -117,7 +171,39 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
 
   useEffect(() => {
     loadChapters();
+    // Life Seasons + Journey spans (IM-132) — additive section; a failure here
+    // leaves seasonsData null and never disturbs the chapters list.
+    void getLifeSeasons().then(setSeasonsData).catch(() => setSeasonsData(null));
   }, []);
+
+  // IM-137: load the future-events section (strict Result variant — a failed
+  // fetch shows an honest note + retry, never a fake "nothing ahead").
+  const loadEvents = () => {
+    setEventsError(false);
+    void getUpcomingEventsResult().then((r) => {
+      if (r.ok) setEvents(r.events);
+      else setEventsError(true);
+    });
+  };
+  useEffect(() => {
+    loadEvents();
+  }, []);
+
+  // IM-122: once chapters first arrive, land on the LATEST chapter (the
+  // track is oldest→newest, so "now" is the bottom), not the oldest.
+  useEffect(() => {
+    if (!chapters || chapters.length === 0 || scrolledOnceRef.current) return;
+    scrolledOnceRef.current = true;
+    const el = trackRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chapters]);
+
+  const jumpToLatest = () => {
+    if (!chapters || chapters.length === 0) return;
+    setSelected(chapters.length - 1);
+    const el = trackRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
 
   const reload = async () => {
     setChapters(await getTimeline());
@@ -131,10 +217,19 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
     if (ch) {
       const idx = fresh.findIndex((c) => c.id === ch.id);
       if (idx >= 0) setSelected(idx);
+    } else {
+      // IM-122: add failures were silent — the button just stopped spinning.
+      pushToast("Couldn't mark this moment — nothing was saved. Try again in a moment.", "⚠️", 4500);
     }
   };
   const removeChapter = async (id: number) => {
-    await deleteTimelineChapter(id);
+    const ok = await deleteTimelineChapter(id);
+    setConfirmDelete(null);
+    if (!ok) {
+      // IM-122: delete failures were silent AND the chapter quietly stayed.
+      pushToast("Couldn't delete that chapter — it's still on your timeline.", "⚠️", 4500);
+      return;
+    }
     setSelected(null);
     await reload();
   };
@@ -163,6 +258,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
     }
     loadedPhotoIdsRef.current = nowOpen.photoIds;
     let cancelled = false;
+    const chapterId = nowOpen.id;
     const toFetch = nowOpen.photoIds.filter((id) => !images[id]);
     void Promise.all(
       toFetch.map(async (id) => {
@@ -172,7 +268,13 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
         const url = await attachmentObjectUrl(img);
         if (url && !cancelled) setImages((m) => ({ ...m, [id]: url }));
       }),
-    );
+    ).then(() => {
+      // IM-122: the fetch SETTLED for this chapter — any photo slot still
+      // without an image genuinely has no photo, and renders as such.
+      if (!cancelled) {
+        setPhotosSettled((prev) => (prev.has(chapterId) ? prev : new Set(prev).add(chapterId)));
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -189,16 +291,41 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
   useEffect(() => () => Object.values(imagesRef.current).forEach((u) => URL.revokeObjectURL(u)), []);
 
   const sel = selected != null && selected >= 0 && chapters ? chapters[selected] : null;
-  const rows = chapters && chapters.length > 0 ? buildRows(chapters) : [];
+  // IM-122: search filters the visible chapters; buildRows indexes the
+  // FILTERED list, so row.index maps back through visibleIdx for selection.
+  const visibleIdx = chapters
+    ? chapters.map((c, i) => (chapterMatches(c, search) ? i : -1)).filter((i) => i >= 0)
+    : [];
+  const rows =
+    chapters && visibleIdx.length > 0
+      ? buildRows(visibleIdx.flatMap((i) => { const c = chapters[i]; return c ? [c] : []; }))
+      : [];
 
   return (
     <div className="timeline-overlay">
       <div className="timeline-head">
         <div className="timeline-title">
           <span className="tl-glyph">🌌</span> {spaceName}'s Chronicle
-          <span className="tl-sub">your story, in order</span>
+          {/* IM-123: chapter dates are grouped + shown in UTC (deliberate, for
+              server agreement) — say so, so an 11pm-local chapter landing on
+              the next UTC day doesn't read as a bug. */}
+          <span className="tl-sub">your story, in order · chapter dates in UTC</span>
         </div>
         <div className="timeline-actions">
+          {/* IM-122: search across chapters (title / summary / theme). */}
+          <input
+            className="tl-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search chapters…"
+            aria-label="Search chapters"
+          />
+          {chapters && chapters.length > 0 && (
+            <button className="tl-add" onClick={jumpToLatest}>
+              ↓ Latest
+            </button>
+          )}
           <button className="tl-add" onClick={() => void addNow()} disabled={adding}>
             {adding ? "…" : "✍️ Mark this moment"}
           </button>
@@ -206,8 +333,12 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
         </div>
       </div>
 
+      {seasonsData && (seasonsData.seasons.length > 0 || seasonsData.journeySpans.length > 0) && (
+        <LifeSeasonsBand seasons={seasonsData.seasons} spans={seasonsData.journeySpans} />
+      )}
+
       {rows.length > 0 && (
-        <div className="tl-track" role="list" aria-label="Life chapters, chronological">
+        <div className="tl-track" role="list" aria-label="Life chapters, chronological" ref={trackRef}>
           {rows.map((row) =>
             row.type === "header" ? (
               <div key={row.key} className="tl-group-header" style={{ marginTop: row.gapBefore }}>
@@ -217,9 +348,9 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
               <button
                 key={row.key}
                 role="listitem"
-                className={`tl-node-row${selected === row.index ? " active" : ""}`}
+                className={`tl-node-row${selected === visibleIdx[row.index] ? " active" : ""}`}
                 style={{ marginTop: row.gapBefore, borderColor: TREND_COLOR[row.chapter.trend] }}
-                onClick={() => setSelected(row.index)}
+                onClick={() => setSelected(visibleIdx[row.index]!)}
               >
                 <span className="tl-node-dot" style={{ background: TREND_COLOR[row.chapter.trend] }} aria-hidden="true" />
                 <span className="tl-node-body">
@@ -228,10 +359,27 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
                     {normalizeDate(row.chapter.periodStart).toLocaleDateString(undefined, { timeZone: "UTC" })} – {normalizeDate(row.chapter.periodEnd).toLocaleDateString(undefined, { timeZone: "UTC" })}
                   </span>
                   {row.chapter.summary && <span className="tl-node-summary">{row.chapter.summary}</span>}
+                  {/* IM-121: the chapter's theme + change magnitude were
+                      fetched and rendered NOWHERE. */}
+                  {(row.chapter.theme || row.chapter.score > 0) && (
+                    <span className="tl-node-meta">
+                      {row.chapter.theme && <span className="tl-node-theme">✦ {row.chapter.theme}</span>}
+                      {row.chapter.score > 0 && (
+                        <span className="tl-node-score">change {changeMagnitudePct(row.chapter.score)}%</span>
+                      )}
+                    </span>
+                  )}
                 </span>
               </button>
             ),
           )}
+        </div>
+      )}
+
+      {chapters && chapters.length > 0 && visibleIdx.length === 0 && (
+        <div className="timeline-empty">
+          <p>No chapters match “{search.trim()}”.</p>
+          <button className="tl-add" onClick={() => setSearch("")}>Clear search</button>
         </div>
       )}
 
@@ -253,6 +401,36 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
       )}
       {chapters === null && !loadError && <div className="timeline-empty"><p>Unspooling your timeline…</p></div>}
 
+      {/* IM-137 (future-events portion of Cognitive Layer Phase 7): the
+          story so far runs oldest→newest above; this section is what's
+          AHEAD — the existing `future_event` cognitive kind + their dates,
+          soonest first (server order). Persona activation / imagination
+          region / gravity wells are NOT built here — blocked on an owner
+          question (Q2). */}
+      {(eventsError || (events && events.length > 0)) && (
+        <div className="tl-ahead">
+          <div className="tl-ahead-head">🔭 Ahead — future events</div>
+          {eventsError && (
+            <div className="tl-ahead-error">
+              <span>Couldn't load your future events.</span>
+              <button className="tl-add" onClick={loadEvents}>↻ Try again</button>
+            </div>
+          )}
+          {events && events.length > 0 && (
+            <div className="tl-ahead-list">
+              {events.map((ev) => (
+                <button key={ev.id} className="tl-ahead-row" onClick={() => onFocus?.(ev.id)} title="Find it in the galaxy">
+                  <span className="tl-ahead-label">{ev.label}</span>
+                  <span className="tl-ahead-when">
+                    {normalizeDate(ev.date).toLocaleDateString(undefined, { timeZone: "UTC" })} · {eventWhenLabel(ev)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {sel && (
         <div className="timeline-card" style={{ borderColor: TREND_COLOR[sel.trend] }}>
           <button className="tl-card-x" onClick={() => setSelected(null)} aria-label="Close">×</button>
@@ -260,8 +438,17 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
           <h3>{sel.title}</h3>
           <div className="tl-card-when">
             {normalizeDate(sel.periodStart).toLocaleDateString(undefined, { timeZone: "UTC" })} → {normalizeDate(sel.periodEnd).toLocaleDateString(undefined, { timeZone: "UTC" })}
+            {/* IM-123: name the basis right where the date is read. */}
+            <span className="tl-origin"> · UTC</span>
             {sel.origin === "user" && <span className="tl-origin"> · you marked this</span>}
           </div>
+          {/* IM-121: theme + change magnitude, on the card as on the row. */}
+          {(sel.theme || sel.score > 0) && (
+            <div className="tl-card-meta">
+              {sel.theme && <span>✦ {sel.theme}</span>}
+              {sel.score > 0 && <span>change magnitude {changeMagnitudePct(sel.score)}%</span>}
+            </div>
+          )}
           <p className="tl-card-summary">{sel.summary}</p>
           {sel.threads.length > 0 && (
             <div className="tl-threads">
@@ -277,8 +464,20 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
               {sel.photoIds.map((id) =>
                 images[id] ? (
                   <img key={id} src={images[id]} alt={labelOf(id)} title={labelOf(id)} onClick={() => onFocus?.(id)} />
+                ) : photosSettled.has(sel.id) ? (
+                  // IM-122: the fetch settled and there IS no image — say so
+                  // (and link the memory) instead of a 📷 chip that reads as
+                  // forever-loading.
+                  <button
+                    key={id}
+                    className="tl-photo-missing"
+                    onClick={() => onFocus?.(id)}
+                    title="This memory has no photo — open it in the galaxy"
+                  >
+                    🖼 no photo · {labelOf(id)}
+                  </button>
                 ) : (
-                  <span key={id} className="tl-photo-load">📷</span>
+                  <span key={id} className="tl-photo-load" aria-label="Loading photo">📷…</span>
                 ),
               )}
             </div>
@@ -293,8 +492,20 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
               ))}
             </div>
           )}
-          <button className="tl-del" onClick={() => void removeChapter(sel.id)}>Delete chapter</button>
+          {/* IM-122: deletion goes through the shared ConfirmDialog — it
+              used to fire instantly with no confirm and no feedback. */}
+          <button className="tl-del" onClick={() => setConfirmDelete(sel)}>Delete chapter</button>
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this chapter?"
+          message={`“${confirmDelete.title}” will be removed from your Chronicle. The memories themselves stay in your galaxy.`}
+          confirmLabel="Delete chapter"
+          onConfirm={() => void removeChapter(confirmDelete.id)}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );

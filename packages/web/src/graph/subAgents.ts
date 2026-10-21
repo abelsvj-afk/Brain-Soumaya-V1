@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as THREE from "three";
-import { gltfLoader } from "./gltf.js";
+import { gltfLoader, fadeSwapIn, noteModelFallback } from "./gltf.js";
 
 // ---- Shared E-45 fleet model (real hull, loaded once, cloned per craft) ----
 // The procedural cone below stays as the offline / load-failure fallback so the fleet is
@@ -47,7 +47,11 @@ function loadFleetModel(onReady: (proto: THREE.Object3D) => void): void {
       fleetWaiters.length = 0;
     },
     undefined,
-    () => { fleetWaiters.length = 0; fleetLoading = false; /* keep the procedural cone */ },
+    () => {
+      fleetWaiters.length = 0;
+      fleetLoading = false; /* keep the procedural cone */
+      noteModelFallback("The fleet craft model");
+    },
   );
 }
 
@@ -143,8 +147,17 @@ function makeCraft(hull: string, glow: string): THREE.Group {
   // prototype — geometry/materials are shared across all craft, so it's cheap per unit).
   loadFleetModel((proto) => {
     const model = proto.clone(true);
+    // Clones share the prototype's materials — give this craft its own copies
+    // so the IM-24 fade-in doesn't fade every fleet craft at once.
+    model.traverse((o: any) => {
+      if (o.isMesh && o.material) {
+        o.material = Array.isArray(o.material) ? o.material.map((m: any) => m.clone()) : o.material.clone();
+      }
+    });
     group.add(model);
-    body.visible = false; // retire the placeholder cone
+    fadeSwapIn(model, () => {
+      body.visible = false; // retire the placeholder cone once the hull has faded in
+    });
   });
   return group;
 }
@@ -343,7 +356,9 @@ export function makeSubAgents(): SubAgentSystem {
       active: u.craft.visible && u.target != null,
       detail: u.status,
       targetLabel: u.targetLabel,
-      targetId: (u.target as any)?.id ?? null,
+      // IM-19 fix: u.target IS the numeric id — reading `.id` off it always
+      // yielded null, so fleet statuses never carried a fly-to target id.
+      targetId: u.target ?? null,
     }));
     // One aggregate line for the whole Tender squadron (grows with the galaxy).
     base.push({

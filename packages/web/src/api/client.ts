@@ -1,8 +1,8 @@
-import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, DormantItem, EmotionalTrajectory, EvolutionLink, Fuel, GraphData, GraphEdge, GraphNode, Insight, LifeAreaCount, LoreEntry, LoreSubjectType, SelfReviewItem, Streak } from "@brain/shared";
+import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, DormantItem, EmotionalTrajectory, EvolutionLink, Fuel, GraphData, GraphEdge, GraphNode, Insight, InvestigationReport, LifeAreaCount, LoreEntry, LoreSubjectType, SelfReviewItem, Streak } from "@brain/shared";
 import { useState, useEffect } from "react";
 // Transport primitives live in http.ts (Post-MVP D4 split); re-export the public ones
 // so existing `import { getSpaceId, BOOT_TIMEOUT_MS } from "../api/client"` keep working.
-import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS } from "./http.js";
+import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } from "./http.js";
 export { getSpaceId, getSpaceName, BOOT_TIMEOUT_MS } from "./http.js";
 // The "AI is working" activity signal lives in activity.ts (D4 split); re-export the hook.
 import { tracked } from "./activity.js";
@@ -34,7 +34,9 @@ export async function authSpace(gamerTag: string, passcode: string, name?: strin
   });
   const body = (await res.json().catch(() => ({}))) as Partial<AuthResult> & { error?: string };
   if (!res.ok || !body.id) {
-    throw new Error(body.error ?? `Couldn't open that brain (${res.status})`);
+    // IM-18: never surface the raw HTTP status as user copy — a human
+    // fallback here; LoginScreen humanizes further by category.
+    throw new Error(body.error ?? "Couldn't open that brain. Check your gamer tag and passcode and try again.");
   }
   storeSpace(body.id, body.name);
   return { id: body.id, name: body.name ?? name ?? gamerTag, created: !!body.created };
@@ -430,6 +432,27 @@ export async function setImportance(id: number, importance: number | null): Prom
   return res.json() as Promise<GraphNode>;
 }
 
+/**
+ * Edit a memory's label and/or body via the node PATCH route (IM-26).
+ * Unlike the fail-soft helpers, this THROWS on failure — an edit the server
+ * didn't store must never look saved. Returns the updated (enriched) node.
+ */
+export async function updateNodeDetails(
+  id: number,
+  patch: { label?: string; content?: string },
+): Promise<GraphNode> {
+  const res = await afetch(`${API}/nodes/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Update failed (${res.status})`);
+  }
+  return res.json() as Promise<GraphNode>;
+}
+
 /** Permanently delete a memory. */
 export async function deleteNode(id: number): Promise<void> {
   const res = await afetch(`${API}/nodes/${id}`, { method: "DELETE" });
@@ -469,6 +492,19 @@ export async function getLore(subjectType: LoreSubjectType, subjectId: string): 
   }
 }
 
+/**
+ * Strict variant of getLore for surfaces that must distinguish "no story yet"
+ * from "the story failed to load" (IM-31): THROWS on network/HTTP failure
+ * instead of collapsing it into an empty history. getLore's fail-soft
+ * contract is unchanged for its other callers.
+ */
+export async function getLoreStrict(subjectType: LoreSubjectType, subjectId: string): Promise<LoreEntry[]> {
+  const res = await afetch(`${API}/lore/${subjectType}/${encodeURIComponent(subjectId)}`);
+  if (!res.ok) throw new Error(`Lore failed (${res.status})`);
+  const d = await res.json().catch(() => []);
+  return Array.isArray(d) ? (d as LoreEntry[]) : [];
+}
+
 /** Append the next lore chapter; returns the full updated history. */
 export async function evolveLore(
   subjectType: LoreSubjectType,
@@ -495,6 +531,26 @@ export async function getNeighbors(id: number, depth = 2): Promise<GraphData> {
   }
 }
 
+/**
+ * Run the Investigator's cited deep-dive over one memory (IM-37):
+ * POST /api/investigate { nodeId } — deterministic + offline server-side.
+ * THROWS on failure so the surface can show an honest error, never a
+ * fabricated report. (The endpoint takes the node only — no free-text
+ * question parameter exists in its contract.)
+ */
+export async function investigateNode(nodeId: number): Promise<InvestigationReport> {
+  const res = await afetch(`${API}/investigate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nodeId }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Investigation failed (${res.status})`);
+  }
+  return res.json() as Promise<InvestigationReport>;
+}
+
 export async function getHealth(): Promise<Health> {
   const res = await afetch(`${API}/health`, {}, BOOT_TIMEOUT_MS);
   return res.json() as Promise<Health>;
@@ -507,6 +563,26 @@ export async function getDigest(): Promise<Insight[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * IM-124 residual: the strict sibling of `getDigest` — same endpoint, but
+ * FAILURE (network error, non-OK status, malformed body) returns
+ * `{ ok: false }` instead of collapsing into the same `[]` as a genuine
+ * empty digest. `getDigest` above keeps its fail-soft contract untouched
+ * for every existing caller; only callers that must distinguish "nothing
+ * to report" from "the server didn't answer" (the Observatory) use this.
+ * Same Result-variant pattern as api/mind.ts's `getCognitiveResult`.
+ */
+export async function getDigestResult(): Promise<{ ok: true; insights: Insight[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, insights: d as Insight[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -608,6 +684,23 @@ export async function getConstellations(): Promise<Constellation[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * IM-124 residual: strict sibling of `getConstellations` (see
+ * `getDigestResult`) — `{ ok: false }` on any failure, so a caller that
+ * must not mistake a dead endpoint for "no constellations" can tell the
+ * difference. `getConstellations` keeps its fail-soft contract.
+ */
+export async function getConstellationsResult(): Promise<{ ok: true; constellations: Constellation[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/constellations`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, constellations: d as Constellation[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -816,20 +909,56 @@ export async function askChat(
    * anything, so an invalid/stale/cross-space value here just contributes nothing.
    */
   proactiveContext?: ProactiveContext,
+  /**
+   * In-chat attachments (IM-106): files attached to THIS message, already
+   * extracted to text client-side (lib/extractFileText.ts). One-turn context
+   * for her reply — never stored server-side as documents.
+   */
+  attachments?: { name: string; text: string }[],
+  /**
+   * Caller cancel (IM-103): aborts the in-flight request. Linked with the
+   * standard timeout below so supplying a signal doesn't silently remove the
+   * hang protection afetch normally provides.
+   */
+  signal?: AbortSignal,
 ): Promise<ChatResponse> {
   return tracked(
     (async () => {
-      const res = await afetch(`${API}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question,
-          history: history.slice(-8),
-          ...(journeyId ? { journeyId } : {}),
-          ...(proactiveContext ? { proactiveContext } : {}),
-        }),
-      });
-      return res.json() as Promise<ChatResponse>;
+      // afetch skips its own timeout when the caller passes a signal, so link
+      // the caller's signal with an equivalent timeout here.
+      let effectiveSignal = signal;
+      let timer: number | undefined;
+      if (signal) {
+        const linked = new AbortController();
+        timer = window.setTimeout(() => linked.abort(), DEFAULT_TIMEOUT_MS);
+        if (signal.aborted) linked.abort();
+        else signal.addEventListener("abort", () => linked.abort(), { once: true });
+        effectiveSignal = linked.signal;
+      }
+      try {
+        const res = await afetch(`${API}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            history: history.slice(-8),
+            ...(journeyId ? { journeyId } : {}),
+            ...(proactiveContext ? { proactiveContext } : {}),
+            ...(attachments && attachments.length > 0 ? { attachments } : {}),
+          }),
+          ...(effectiveSignal ? { signal: effectiveSignal } : {}),
+        });
+        // IM-108: an HTTP failure used to be cast to ChatResponse anyway, so a
+        // 400/500 body ({error}) surfaced as a phantom "(no answer)" reply in
+        // her voice. Throw so the caller can show a real error surface.
+        if (!res.ok) {
+          const b = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(b.error ?? `Chat failed (${res.status})`);
+        }
+        return (await res.json()) as ChatResponse;
+      } finally {
+        if (timer !== undefined) window.clearTimeout(timer);
+      }
     })(),
   );
 }
@@ -852,6 +981,18 @@ export async function getUndertaking(): Promise<Undertaking | null> {
     return res.ok ? await res.json() : null;
   } catch {
     return null;
+  }
+}
+
+/** Recent undertakings incl. completed ones, newest first (IM-67). [] on failure. */
+export async function getUndertakingHistory(): Promise<Undertaking[]> {
+  try {
+    const res = await afetch(`${API}/maintenance/undertakings`);
+    if (!res.ok) return [];
+    const d = await res.json().catch(() => []);
+    return Array.isArray(d) ? (d as Undertaking[]) : [];
+  } catch {
+    return [];
   }
 }
 
@@ -880,6 +1021,27 @@ export async function ackReminder(id: number): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Agenda edit/reschedule/snooze patch (IM-51) — additive PATCH /nodes/:id/agenda. */
+export interface AgendaPatch {
+  label?: string;
+  content?: string;
+  remindAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export async function updateAgendaItem(id: number, patch: AgendaPatch): Promise<GraphNode> {
+  const res = await afetch(`${API}/nodes/${id}/agenda`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Agenda update failed (${res.status})`);
+  }
+  return res.json() as Promise<GraphNode>;
 }
 
 /** Resolve/dismiss a surfaced insight (reconciled contradiction, seen connection). */

@@ -37,7 +37,9 @@ describe("HelpPanel — a category's 'Try it' button is reachable, not just read
     window.addEventListener("brain-toast-action", onAction);
     render(<HelpPanel onClose={() => {}} />);
     fireEvent.click(screen.getByText("💬"));
-    const tryBtn = screen.getByText("💬 Open chat");
+    // IM-131 remainder: the category jump AND the Chat card's own per-card
+    // Try-it share this label (both dispatch {kind:"chat"}) — either proves it.
+    const tryBtn = screen.getAllByText("💬 Open chat")[0]!;
     fireEvent.click(tryBtn);
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "chat" } }));
     window.removeEventListener("brain-toast-action", onAction);
@@ -45,7 +47,11 @@ describe("HelpPanel — a category's 'Try it' button is reachable, not just read
 
   it("shows no 'Try it' button for a category with no clean single action", () => {
     render(<HelpPanel onClose={() => {}} />);
-    // Default tab is "navigation", which has no CATEGORY_TRY_IT entry.
+    // IM-131 remainder: the default tab is now "start" (Getting Started);
+    // "navigation" is the category with no CATEGORY_TRY_IT entry — open it
+    // explicitly. (Its cards DO carry some per-card Try-its, none of which
+    // start with "Open " in this category.)
+    fireEvent.click(screen.getByText("Controls & Flight"));
     expect(screen.queryByText(/^Open /)).toBeNull();
   });
 });
@@ -126,5 +132,52 @@ describe("HelpPanel — reading the whole manual is finally rewarded", () => {
     );
     render(<HelpPanel onClose={() => {}} />);
     expect(playSfx).not.toHaveBeenCalled();
+  });
+});
+
+describe("HelpPanel — IM-131 remainder: Connections card, Getting Started landing, per-card Try-it", () => {
+  it("lands on Getting Started by default", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    // The Getting Started cards are visible without touching the sidebar.
+    expect(screen.getByText("Your private brain")).toBeTruthy();
+    expect(screen.getByText("Dump a thought")).toBeTruthy();
+  });
+
+  it("has a Help card for the Connections panel", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "Connections (suggested" } });
+    expect(screen.getByText("Connections (suggested links)")).toBeTruthy();
+    expect(screen.getByText(/held back/)).toBeTruthy();
+    expect(screen.getByText(/Declutter weak links/)).toBeTruthy();
+  });
+
+  it("the Lenses card's own Try-it opens Lenses (not the category's Insights jump)", () => {
+    const onOpen = vi.fn();
+    window.addEventListener("brain-open-lenses", onOpen);
+    render(<HelpPanel onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "Smart Lenses" } });
+    fireEvent.click(screen.getByText("⧉ Open Lenses"));
+    expect(onOpen).toHaveBeenCalled();
+    window.removeEventListener("brain-open-lenses", onOpen);
+  });
+
+  it("the Connections card's own Try-it opens Connections", () => {
+    const onOpen = vi.fn();
+    window.addEventListener("brain-open-connections", onOpen);
+    render(<HelpPanel onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "Connections (suggested" } });
+    fireEvent.click(screen.getByText("🔗 Open Connections"));
+    expect(onOpen).toHaveBeenCalled();
+    window.removeEventListener("brain-open-connections", onOpen);
+  });
+
+  it("a card-level tab target rides brain-toast-action with that feature's tab", () => {
+    const onAction = vi.fn();
+    window.addEventListener("brain-toast-action", onAction);
+    render(<HelpPanel onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "Safe to Spend" } });
+    fireEvent.click(screen.getByText("💵 Open Money"));
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "tab", value: "money" } }));
+    window.removeEventListener("brain-toast-action", onAction);
   });
 });

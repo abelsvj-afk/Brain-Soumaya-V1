@@ -16,6 +16,16 @@ vi.mock("./Toasts.js", async (importOriginal) => {
 });
 const playSfx = vi.fn();
 vi.mock("../graph/sfx.js", () => ({ playSfx: (...a: unknown[]) => playSfx(...a) }));
+// IM-74: the panel also reads the server inbox — empty + healthy by default here.
+vi.mock("../api/notifications.js", () => ({
+  SERVER_INBOX_CAP: 500,
+  listServerNotifications: vi.fn(async () => []),
+  markServerNotificationSeen: vi.fn(async () => ({ ok: true })),
+  markAllServerNotificationsSeen: vi.fn(async () => ({ ok: true, marked: 0 })),
+  clearSeenServerNotifications: vi.fn(async () => ({ ok: true, cleared: 0 })),
+  deleteServerNotification: vi.fn(async () => ({ ok: true })),
+  snoozeServerNotification: vi.fn(async () => ({ ok: true })),
+}));
 
 import { InboxPanel } from "./InboxPanel.js";
 

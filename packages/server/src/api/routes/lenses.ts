@@ -45,6 +45,19 @@ export function lensesRoutes(ctx: AppContext): Router {
     res.json(lenses.map((l) => ({ ...l, count: evalLens(ctx, spaceId, l.query).length })));
   });
 
+  // POST /api/lenses/preview { query } -> live match count for an UNSAVED query
+  // (IM-118: the builder used to save blind — the API could only evaluate a
+  // lens after it existed). Additive; evaluates exactly like a saved lens.
+  r.post("/preview", (req, res) => {
+    const parsed = z.object({ query: QuerySchema }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Body must be { query }", issues: parsed.error.issues });
+      return;
+    }
+    const spaceId = spaceOf(res);
+    res.json({ count: evalLens(ctx, spaceId, parsed.data.query).length });
+  });
+
   // POST /api/lenses { name, query, pinned? } -> create.
   r.post("/", (req, res) => {
     const parsed = CreateBody.safeParse(req.body);

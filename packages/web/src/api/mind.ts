@@ -92,14 +92,24 @@ export async function confirmInquiry(id: number): Promise<{ ok: boolean; hubId?:
   }
 }
 export interface UpcomingEvent { id: number; label: string; date: string; inDays: number }
-export async function getUpcomingEvents(): Promise<UpcomingEvent[]> {
+/**
+ * IM-45: same truthful-state contract as getCognitiveResult — failure is
+ * `{ ok: false }`, never a fake empty list. getUpcomingEvents below keeps the
+ * old fail-soft contract for callers that don't distinguish.
+ */
+export async function getUpcomingEventsResult(): Promise<{ ok: true; events: UpcomingEvent[] } | { ok: false }> {
   try {
     const res = await afetch(`${API}/cognitive/events/upcoming`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, events: d as UpcomingEvent[] } : { ok: false };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+export async function getUpcomingEvents(): Promise<UpcomingEvent[]> {
+  const r = await getUpcomingEventsResult();
+  return r.ok ? r.events : [];
 }
 export async function setCognitiveProgress(id: number, value: number): Promise<boolean> {
   try {
@@ -140,14 +150,20 @@ export async function getPersonProfile(id: number): Promise<PersonProfile | null
     return null;
   }
 }
-export async function getPersonSuggestions(): Promise<{ name: string; count: number }[]> {
+/** IM-45: truthful-state variant of getPersonSuggestions (see getCognitiveResult). */
+export async function getPersonSuggestionsResult(): Promise<{ ok: true; suggestions: { name: string; count: number }[] } | { ok: false }> {
   try {
     const res = await afetch(`${API}/people/suggestions`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, suggestions: d as { name: string; count: number }[] } : { ok: false };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+export async function getPersonSuggestions(): Promise<{ name: string; count: number }[]> {
+  const r = await getPersonSuggestionsResult();
+  return r.ok ? r.suggestions : [];
 }
 /** Tell Soumaya a suggested name is NOT a person, so it never resurfaces. */
 export async function dismissPersonSuggestion(name: string): Promise<boolean> {
@@ -166,6 +182,44 @@ export async function dismissPersonSuggestion(name: string): Promise<boolean> {
 export async function promoteIdea(id: number): Promise<boolean> {
   try {
     const res = await afetch(`${API}/cognitive/${id}/promote`, { method: "POST" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+/**
+ * IM-136 — user-triggered idea split: branch `id` into a new idea named
+ * `newLabel`. The server keeps the original intact, partitions supporting
+ * memories by nearness to the new branch, and deletes nothing. Returns the
+ * new idea's id + how many supporters moved, or null on any failure.
+ */
+export async function splitIdea(id: number, newLabel: string, content?: string): Promise<{ newId: number; moved: number } | null> {
+  try {
+    const res = await afetch(`${API}/cognitive/${id}/split`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newLabel, content }),
+    });
+    if (!res.ok) return null;
+    const d = (await res.json().catch(() => null)) as { id?: unknown; moved?: unknown } | null;
+    return typeof d?.id === "number" ? { newId: d.id, moved: typeof d.moved === "number" ? d.moved : 0 } : null;
+  } catch {
+    return null;
+  }
+}
+/**
+ * IM-136 — user-triggered idea merge: fold `dropId` into `keepId`. The server
+ * unions every link onto the survivor, keeps the folded idea's label as an
+ * alias on it, and soft-deletes the folded node (recoverable) — nothing is
+ * hard-deleted. False on any failure (including non-idea ids).
+ */
+export async function mergeIdeas(keepId: number, dropId: number): Promise<boolean> {
+  try {
+    const res = await afetch(`${API}/cognitive/merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keepId, dropId }),
+    });
     return res.ok;
   } catch {
     return false;
@@ -192,14 +246,20 @@ export interface Inquiry {
   nodes: { id: number; label: string }[];
   createdAt: string;
 }
-export async function getInquiries(): Promise<Inquiry[]> {
+/** IM-45: truthful-state variant of getInquiries (see getCognitiveResult). */
+export async function getInquiriesResult(): Promise<{ ok: true; inquiries: Inquiry[] } | { ok: false }> {
   try {
     const res = await afetch(`${API}/inquiries`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, inquiries: d as Inquiry[] } : { ok: false };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+export async function getInquiries(): Promise<Inquiry[]> {
+  const r = await getInquiriesResult();
+  return r.ok ? r.inquiries : [];
 }
 export async function answerInquiry(id: number, text: string): Promise<{ nodeIds: number[]; fuelEarned: number } | null> {
   try {
@@ -241,6 +301,11 @@ export interface Candidate {
   score: number;
   origin: string; // withheld | pruned | suggested
   createdAt: string;
+  /** IM-120 (additive, optional for older payloads): context preview data. */
+  aContent?: string;
+  bContent?: string;
+  aCreatedAt?: string;
+  bCreatedAt?: string;
 }
 export async function getCandidates(): Promise<{ candidates: Candidate[]; count: number }> {
   // IM-120 (honesty subset): failures must be DISTINGUISHABLE from a true empty
@@ -264,6 +329,15 @@ export async function acceptCandidate(id: number): Promise<boolean> {
 export async function dismissCandidate(id: number): Promise<boolean> {
   try {
     return (await afetch(`${API}/candidates/${id}/dismiss`, { method: "POST" })).ok;
+  } catch {
+    return false;
+  }
+}
+/** IM-120: undo an accept/dismiss — the server re-pends the candidate,
+ *  removes an accept's edge, or clears a dismiss's rejection. */
+export async function restoreCandidate(id: number): Promise<boolean> {
+  try {
+    return (await afetch(`${API}/candidates/${id}/restore`, { method: "POST" })).ok;
   } catch {
     return false;
   }
@@ -305,14 +379,20 @@ export interface Thought {
   reinforceCount: number;
   createdAt: string;
 }
-export async function getThoughts(): Promise<Thought[]> {
+/** IM-45: truthful-state variant of getThoughts (see getCognitiveResult). */
+export async function getThoughtsResult(): Promise<{ ok: true; thoughts: Thought[] } | { ok: false }> {
   try {
     const res = await afetch(`${API}/working`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, thoughts: d as Thought[] } : { ok: false };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+export async function getThoughts(): Promise<Thought[]> {
+  const r = await getThoughtsResult();
+  return r.ok ? r.thoughts : [];
 }
 export async function addThought(text: string, source?: string): Promise<{ id: number } | null> {
   try {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as THREE from "three";
 import { COOLING_ENTROPY } from "@brain/shared";
-import { gltfLoader } from "./gltf.js";
+import { gltfLoader, fadeSwapIn, noteModelFallback } from "./gltf.js";
 import { emotionColorHex } from "./theme.js";
 
 /**
@@ -156,11 +156,17 @@ function makeProbe(): { group: THREE.Group; light: THREE.Sprite; fallback: THREE
       const center = new THREE.Vector3();
       box.getCenter(center);
       model.position.copy(center.multiplyScalar(-k));
-      fallback.visible = false;
       group.add(model);
+      // IM-24: crossfade the real model in over the procedural probe.
+      fadeSwapIn(model, () => {
+        fallback.visible = false;
+      });
     },
     undefined,
-    (err) => console.warn("[satellites] model failed to load; using procedural probe", err),
+    (err) => {
+      console.warn("[satellites] model failed to load; using procedural probe", err);
+      noteModelFallback("The Aura beacon model");
+    },
   );
 
   return { group, light, fallback };

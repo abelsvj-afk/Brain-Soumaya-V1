@@ -33,7 +33,11 @@ describe("hydrateJourneyLinks — goal kind", () => {
     const link = journeys.link(journey.id, "goal", goal.id)!;
 
     const out = hydrateJourneyLinks(ctx, "s1", [link]);
-    expect(out).toEqual([{ kind: "goal", refId: goal.id, label: "First Truck" }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: "goal", refId: goal.id, label: "First Truck" });
+    expect(out[0]?.amount).toBeUndefined();
+    expect(out[0]?.occurredAt).toBeUndefined();
+    expect(out[0]?.linkedAt).toBe(link.createdAt); // CL-10: link date rides along
   });
 
   it("silently skips a dangling goal link (the goal was archived/deleted's row removed since linking)", () => {

@@ -29,6 +29,15 @@ const ChatBody = z.object({
   // enum is the ONLY per-source surface this contract needs — {source, targetId}
   // itself is unchanged from Phase Y.
   proactiveContext: z.object({ source: z.enum(["goal_trend", "bill_risk"]), targetId: z.number().int().positive() }).optional(),
+  // In-chat attachments (IM-106): files attached to THIS message, extracted to
+  // text in the browser (lib/extractFileText.ts — the same pipeline Knowledge
+  // upload uses). Bounded hard: a chat turn is not a document store; anything
+  // bigger belongs in Knowledge. Additive + optional — existing clients
+  // (Telegram, the agent route below) never send it and are unaffected.
+  attachments: z
+    .array(z.object({ name: z.string().min(1).max(200), text: z.string().min(1).max(20000) }))
+    .max(3)
+    .optional(),
 });
 
 const DistillBody = z.object({
@@ -97,6 +106,7 @@ export function chatRoutes(ctx: AppContext): Router {
       parsed.data.history ?? [],
       parsed.data.journeyId ?? null,
       parsed.data.proactiveContext ?? null,
+      parsed.data.attachments ?? null,
     );
     // Phase AB (docs/specs/soumaya-proactive-discussion-occurrence.md): only reached once
     // chat() has already returned a real answer for this turn — the smallest defensible

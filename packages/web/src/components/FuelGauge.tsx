@@ -74,7 +74,7 @@ export function FuelGauge({
       aria-valuenow={isMeter ? Math.round(fuel.fuel) : undefined}
       aria-valuemin={isMeter ? 0 : undefined}
       aria-valuemax={isMeter ? fuel.capacity : undefined}
-      title={`⛽ Fuel ${Math.round(fuel.fuel)}/${fuel.capacity} — tap for ways to earn it. Soumaya spends it on deep-dive research & sector charting (${fuel.jobCost}/job). Earn it by logging memories, building your Mind & clearing action items; it also slowly refills. Her core upkeep + the living galaxy never need fuel.`}
+      title={`⛽ Fuel ${Math.round(fuel.fuel)}/${fuel.capacity} — tap for ways to earn it.`}
     >
       <span className="fg-ic">⛽</span>
       <div className="fg-tube">
@@ -83,6 +83,10 @@ export function FuelGauge({
         </div>
       </div>
       <span className="fg-val">{Math.round(fuel.fuel)}</span>
+      {/* IM-09: capacity + per-job cost, visible — they used to live only in a
+          60-word hover title (undiscoverable on touch). */}
+      <span className="fg-meta">of {fuel.capacity}</span>
+      <span className="fg-meta fg-cost">{fuel.jobCost}/job</span>
       <div className="fg-pops">
         {pops.map((p) => (
           <span key={p.id} className={`fg-pop ${p.spend ? "spend" : "gain"}`}>

@@ -2,7 +2,9 @@ import { COGNITIVE_META, IDEA_PROMOTE_SUPPORT } from "@brain/shared";
 import type { AppContext } from "../context.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
-import { knn, getEmbedding } from "../db/vec.js";
+import { knn, getEmbedding, upsertEmbedding } from "../db/vec.js";
+import { ftsUpsert } from "../db/fts.js";
+import { cleanAliases } from "./cognitiveTokens.js";
 
 /**
  * Ideas lifecycle (Cognitive Layer Phase 3, docs/COGNITIVE_LAYER.md). An `idea` is
@@ -272,6 +274,171 @@ export async function splitRipeIdea(ctx: AppContext, spaceId: string): Promise<n
     return branch.id; // one split per run
   }
   return null;
+}
+
+/**
+ * USER-TRIGGERED idea split / merge (IM-136, docs/COGNITIVE_LAYER.md Phase 3).
+ * The autonomy loop above already grows/fades ideas and merges/splits them on
+ * its own judgement; these are the MANUAL counterparts the Mind tab drives —
+ * the user decides, so there is no similarity/budget gate, and the semantics
+ * are deliberately conservative and least-destructive:
+ *
+ * SPLIT — the original idea keeps its label, content, and identity. A NEW idea
+ * is created for the branch the user names. Supporting memories are partitioned
+ * by embedding nearness: a backer moves to the new branch only when it is
+ * strictly nearer the new branch's embedding than the original's; backers with
+ * no embedding stay with the original. Nothing is deleted and no support is
+ * lost — the union of both ideas' backers equals the original's.
+ *
+ * MERGE — the survivor (keepId, chosen by the user) absorbs the other idea:
+ * every edge touching the dropped idea is re-pointed at the survivor (same
+ * relationship + weight; an exact duplicate is skipped, never doubled), the
+ * dropped idea's content is appended to the survivor's when it isn't already
+ * there, and the dropped idea's LABEL is kept on the survivor as an alias (plus
+ * the union of both alias lists) so the folded idea stays discoverable by its
+ * old name. The dropped idea itself is SOFT-deleted (deleted_at + merged_into,
+ * the recoverable NodesRepo path) — never hard-deleted. Edges BETWEEN the pair,
+ * self-loops, and duplicate leftovers touching the dropped idea are removed as
+ * subsumed by the merge. The survivor keeps its own progress/importance.
+ */
+export async function splitIdeaManual(
+  ctx: AppContext,
+  spaceId: string,
+  id: number,
+  opts: { newLabel: string; content?: string },
+): Promise<{ newId: number; moved: number } | null> {
+  const s = ctx.handle.sqlite;
+  const orig = s
+    .prepare(`SELECT label, content FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL AND kind = 'idea'`)
+    .get(id, spaceId) as { label: string; content: string } | undefined;
+  if (!orig) return null;
+  const newLabel = opts.newLabel.trim().slice(0, 200);
+  if (!newLabel) return null;
+  // The branch inherits the original's content unless the user wrote its own —
+  // splitting a thought shouldn't silently discard what the thought said.
+  const newContent = (opts.content?.trim() ? opts.content : orig.content).slice(0, 4000);
+
+  const repo = new NodesRepo(ctx.handle, spaceId);
+  const meta = COGNITIVE_META.idea;
+  const embB = await ctx.embeddings.embed(`${newLabel}. ${newContent}`);
+  const branch = repo.create(
+    { label: newLabel, type: "concept", kind: "idea", content: newContent || newLabel, importance: meta.importance, color: meta.color, origin: "user" },
+    embB,
+  );
+
+  // Partition the supporting memories by nearness to each branch's embedding.
+  const embA = getEmbedding(s, id);
+  const backers = s
+    .prepare(`SELECT source, weight FROM edges WHERE space_id = ? AND target = ? AND relationship = 'supports'`)
+    .all(spaceId, id) as { source: number; weight: number }[];
+  const edges = new EdgesRepo(ctx.handle, spaceId);
+  let moved = 0;
+  if (embA) {
+    for (const b of backers) {
+      const be = getEmbedding(s, b.source);
+      if (!be) continue; // no embedding → stays with the original (nothing lost)
+      if (cosine(be, embB) <= cosine(be, embA)) continue; // nearer (or tied) → stays
+      s.prepare(`DELETE FROM edges WHERE space_id = ? AND source = ? AND target = ? AND relationship = 'supports'`).run(spaceId, b.source, id);
+      if (!edges.exists(b.source, branch.id)) {
+        s.prepare(`INSERT INTO edges (space_id, source, target, relationship, weight) VALUES (?, ?, ?, 'supports', ?)`).run(spaceId, b.source, branch.id, b.weight);
+      }
+      moved++;
+    }
+  }
+  try {
+    s.prepare(`INSERT INTO agent_logs (space_id, action, description, targets) VALUES (?, 'idea_split_manual', ?, ?)`).run(
+      spaceId,
+      `You split "${orig.label}" — "${newLabel}" branched off with ${moved} supporting memor${moved === 1 ? "y" : "ies"}.`,
+      JSON.stringify([id, branch.id]),
+    );
+  } catch {
+    /* best-effort */
+  }
+  return { newId: branch.id, moved };
+}
+
+/** User-triggered merge of two ideas: dropId folds into keepId. See block above. */
+export async function mergeIdeasManual(
+  ctx: AppContext,
+  spaceId: string,
+  keepId: number,
+  dropId: number,
+): Promise<boolean> {
+  if (keepId === dropId) return false;
+  const s = ctx.handle.sqlite;
+  const read = (nid: number) =>
+    s
+      .prepare(`SELECT label, content, aliases FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL AND kind = 'idea'`)
+      .get(nid, spaceId) as { label: string; content: string; aliases: string | null } | undefined;
+  const keep = read(keepId);
+  const drop = read(dropId);
+  if (!keep || !drop) return false;
+
+  const parseAliases = (raw: string | null): string[] => {
+    if (!raw) return [];
+    try {
+      const p: unknown = JSON.parse(raw);
+      return Array.isArray(p) ? p.map(String) : [];
+    } catch {
+      return [];
+    }
+  };
+  // The folded idea's label stays discoverable as an alias on the survivor.
+  const mergedAliases = cleanAliases([...parseAliases(keep.aliases), ...parseAliases(drop.aliases), drop.label]);
+  const mergedContent =
+    drop.content && drop.content !== keep.content && !keep.content.includes(drop.content)
+      ? `${keep.content}\n\n${drop.content}`.slice(0, 4000)
+      : keep.content;
+
+  const tx = s.transaction(() => {
+    // Union every edge touching the dropped idea onto the survivor.
+    const touching = s
+      .prepare(`SELECT source, target, relationship, weight FROM edges WHERE space_id = ? AND (source = ? OR target = ?)`)
+      .all(spaceId, dropId, dropId) as { source: number; target: number; relationship: string; weight: number }[];
+    const existsEdge = s.prepare(
+      `SELECT 1 FROM edges WHERE space_id = ? AND source = ? AND target = ? AND relationship = ?`,
+    );
+    const insertEdge = s.prepare(
+      `INSERT INTO edges (space_id, source, target, relationship, weight) VALUES (?, ?, ?, ?, ?)`,
+    );
+    for (const e of touching) {
+      const other = e.source === dropId ? e.target : e.source;
+      if (other === keepId || other === dropId) continue; // pair/self edges are subsumed
+      const src = e.source === dropId ? keepId : other;
+      const tgt = e.target === dropId ? keepId : other;
+      if (src === tgt) continue;
+      if (existsEdge.get(spaceId, src, tgt, e.relationship)) continue; // never double an edge
+      insertEdge.run(spaceId, src, tgt, e.relationship, e.weight);
+    }
+    // Whatever still touches the dropped idea is a duplicate of an edge the
+    // survivor already holds (or the pair's own edge) — subsumed, so removed.
+    s.prepare(`DELETE FROM edges WHERE space_id = ? AND (source = ? OR target = ?)`).run(spaceId, dropId, dropId);
+    s.prepare(`UPDATE nodes SET content = ?, aliases = ? WHERE id = ? AND space_id = ?`).run(
+      mergedContent,
+      mergedAliases ? JSON.stringify(mergedAliases) : null,
+      keepId,
+      spaceId,
+    );
+  });
+  tx();
+
+  // Refresh the survivor's search/vector presence for its grown content, exactly
+  // like updateCognitive does after an edit (no gravity re-link — the union above
+  // already placed every link deliberately).
+  const emb = await ctx.embeddings.embed(`${keep.label}. ${mergedContent}`);
+  upsertEmbedding(s, keepId, emb);
+  ftsUpsert(s, keepId, keep.label, mergedContent);
+  new NodesRepo(ctx.handle, spaceId).softDelete(dropId, keepId);
+  try {
+    s.prepare(`INSERT INTO agent_logs (space_id, action, description, targets) VALUES (?, 'idea_merged_manual', ?, ?)`).run(
+      spaceId,
+      `You merged "${drop.label}" into "${keep.label}" — links and evidence were unioned, nothing was deleted.`,
+      JSON.stringify([keepId, dropId]),
+    );
+  } catch {
+    /* best-effort */
+  }
+  return true;
 }
 
 /** Ids of ideas ripe to become goals (enough support), for a nudge / UI hint. */

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getDueReviews, gradeReview, type DueReview } from "../api/client.js";
+import { getDueReviews, gradeReviewDetailed, type DueReview } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 
@@ -67,6 +67,9 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
   const [why, setWhy] = useState(false);
   const [cappedForToday, setCappedForToday] = useState(false);
   const [grading, setGrading] = useState(false);
+  // IM-114: after a grade, when this memory comes back ("next review in ~N
+  // days") — the reschedule used to be invisible, so grading felt consequence-free.
+  const [lastFeedback, setLastFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     pruneOldDoneTodayKeys();
@@ -89,10 +92,19 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
       // Honour that: a failed grade must NOT advance the session, bump the
       // daily count, or earn the streak nudge. It gets the same toast + retry
       // posture as a thrown error (previously unreachable for HTTP failures).
-      const saved = await gradeReview(current.id, remembered);
-      if (!saved) {
+      const result = await gradeReviewDetailed(current.id, remembered);
+      if (!result.ok) {
         pushToast("Couldn't save that — try again.", "⚠️", 3500);
         return;
+      }
+      if (typeof result.nextIntervalDays === "number") {
+        const n = result.nextIntervalDays;
+        setLastFeedback(n <= 0 ? "Next review tomorrow." : n === 1 ? "Next review in ~1 day." : `Next review in ~${n} days.`);
+      } else if (result.nextReviewAt) {
+        const days = Math.max(0, Math.round((Date.parse(result.nextReviewAt) - Date.now()) / 86_400_000));
+        setLastFeedback(days <= 1 ? "Next review in ~1 day." : `Next review in ~${days} days.`);
+      } else {
+        setLastFeedback(null);
       }
       bumpToday();
       // A recall earns Fuel + keeps the streak alive — nudge the HUD to refresh.
@@ -157,6 +169,7 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
         {!cappedForToday && due && due.length > 0 && !current && (
           <div className="rv-empty">
             <p>Session complete — you revisited {done} memor{done === 1 ? "y" : "ies"}. ✨</p>
+            {lastFeedback && <p className="rv-feedback" role="status">{lastFeedback}</p>}
             <p className="rv-empty-sub">That's a good session. Come back later for the next few.</p>
             <button className="rv-btn primary" onClick={onClose}>Done</button>
           </div>
@@ -165,7 +178,13 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
         {current && (
           <div className="rv-body" aria-live="polite">
             <div className="rv-progress">{idx + 1} of {due!.length} this session</div>
+            {lastFeedback && idx > 0 && <div className="rv-feedback" role="status">{lastFeedback}</div>}
             <div className="rv-prompt">Do you remember this one?</div>
+            {/* IM-114: strength + review count were fetched but never shown —
+                they are the context that makes a grade feel consequential. */}
+            <div className="rv-meta" data-testid="rv-meta">
+              Strength {Math.round(current.strength * 100)}% · reviewed {current.reviewCount}×
+            </div>
             <button className="rv-label" onClick={() => current && onFocus?.(current.id)} title="Find it in the galaxy">
               {current.label}
             </button>

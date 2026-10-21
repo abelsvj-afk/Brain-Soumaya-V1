@@ -216,6 +216,16 @@ export interface Streak {
   today: boolean;
   /** "Nebula shields" left — each forgives one missed day so a streak isn't lost. */
   shields?: number;
+  /** Space-local day (YYYY-MM-DD) the brain was last tended, or null if never. (IM-64) */
+  lastActiveDate?: string | null;
+  /**
+   * Per-day tending record for the last 14 space-local days, oldest first (IM-64).
+   * `tended: true` = the brain was tended that day; `false` = it was not (only
+   * asserted for days inside the recorded era — see server StreakRepo.history);
+   * `null` = no record (before day-tracking began and not derivable from the
+   * current streak) — UIs must render this distinctly from a missed day.
+   */
+  history?: { date: string; tended: boolean | null }[];
 }
 
 export interface GraphEdge {
@@ -273,6 +283,32 @@ export interface Insight {
   /** Significance tier (#10): 1 = identity-shaping, 2 = behavioral pattern, 3 = situational.
    *  Derived on read from the involved memories; lower number = surfaced first. */
   tier?: 1 | 2 | 3;
+}
+
+/** Where a server-backed Inbox notification came from (IM-74). Each value is a
+ *  real server-side event that produced the notification while the user may
+ *  have been away: a delivered daily digest, a synthesized insight, a charted
+ *  Codex discovery, or a bill-risk warning. */
+export type NotificationSource = "digest" | "insight" | "discovery" | "bill-risk";
+
+/** A notification in the server-backed Inbox store (IM-74). Unlike the local
+ *  toast log (device-only, capped at 100), these persist server-side per space
+ *  until the user clears them, subject to a disclosed high count cap.
+ *  Retention (Q7 interim default): keep until cleared; oldest dropped only
+ *  past the cap, and the panel copy says so. */
+export interface ServerNotification {
+  id: number;
+  source: NotificationSource;
+  text: string;
+  icon: string;
+  priority: "low" | "normal" | "high";
+  /** Stable per-event key; a second record attempt for the same event is a no-op. */
+  dedupeKey: string | null;
+  seen: boolean;
+  seenAt: string | null;
+  /** ISO instant until which the item is snoozed (hidden from Unseen), or null. */
+  snoozedUntil: string | null;
+  createdAt: string;
 }
 
 /** One point on the emotional trajectory: a time bucket's average valence (−1..1). */
@@ -620,10 +656,69 @@ export interface Journey {
   icon?: string;
   /** 0..1 progress (user-set or derived); drives the Living-Galaxy hub brightness. */
   progress: number;
+  /** Count of linked missions completed (IM-140 auto-credit), enriched on read. */
+  missionsCompleted?: number;
   createdAt: string;
   updatedAt: string;
   /** Count of linked objects (enriched on read). */
   linkCount?: number;
+  /** Explicit span start (ISO/datetime), IM-132 hybrid span derivation: when set it
+   *  overrides the link-inferred start. Migration-only column (migrateSchema). */
+  startedAt?: string;
+  /** Explicit span end; null/absent while the Journey is still unfolding. */
+  endedAt?: string;
+}
+
+/** One auto-detected Life Season (IM-132): an identity era derived from an
+ *  auto-detected timeline chapter by the existing Chronicle heuristic
+ *  (docs/specs/timeline-life-seasons.md — chapters are the detection INPUT,
+ *  seasons are the band rendered behind Journey spans, never a competing
+ *  timeline entry). Dates are UTC calendar dates (YYYY-MM-DD): chapter dates
+ *  are fixed calendar dates, so a season boundary is the UTC calendar day of
+ *  the stored period instant, independent of the viewer's timezone. */
+export interface LifeSeason {
+  /** The source auto chapter's id ( seasons are derived, not separately stored). */
+  id: number;
+  chapterId: number;
+  /** Era label, e.g. "Recovery Era" (from the chapter theme) or the chapter title. */
+  label: string;
+  theme: string;
+  trend: ChapterTrend;
+  /** Detection confidence = the source chapter's blended change score (0..1). */
+  confidence: number;
+  /** Raw stored period instants of the source chapter. */
+  periodStart: string;
+  periodEnd: string;
+  /** UTC calendar dates (YYYY-MM-DD) of periodStart / periodEnd — the band's
+   *  fixed-calendar-date boundaries. */
+  startDate: string;
+  endDate: string;
+}
+
+/** A Journey plotted on the real time axis (IM-132, hybrid derivation):
+ *  explicit startedAt/endedAt win; otherwise the span is inferred from the
+ *  dates of linked items; a link-less, dateless Journey falls back to its
+ *  createdAt (start) and, when done, its updatedAt (end). */
+export interface JourneySpan {
+  journey: Journey;
+  /** Effective span start (stored instant string). */
+  start: string;
+  /** Effective span end, or null while ongoing (status != done, no explicit end). */
+  end: string | null;
+  ongoing: boolean;
+  /** UTC calendar dates (YYYY-MM-DD) of start / end (end null when ongoing). */
+  startDate: string;
+  endDate: string | null;
+  startSource: "explicit" | "links" | "created";
+  endSource: "explicit" | "links" | "updated" | "open";
+}
+
+/** Response of GET /api/timeline/seasons (IM-132). Windowed via limit/offset. */
+export interface LifeSeasonsTimeline {
+  seasons: LifeSeason[];
+  journeySpans: JourneySpan[];
+  totalSeasons: number;
+  totalJourneySpans: number;
 }
 
 export interface JourneyLink {
@@ -642,8 +737,17 @@ export interface JourneyLinkSummary {
   label: string;
   /** Cents, for income/expense/bill links only. */
   amount?: number;
-  /** Absent for a bill link (a recurring schedule, not a dated transaction). */
+  /** The linked item's own date where it has one (a transaction's date; a task
+   *  node's occurred/created date). Absent for a bill link (a recurring schedule,
+   *  not a dated transaction) and for kinds with no dated source row. */
   occurredAt?: string;
+  /** When this link itself was created (the journey_link row's created_at) —
+   *  the one date every link kind truthfully has (IM-86 remainder / IM-88). */
+  linkedAt?: string;
+  /** For a `task` link that resolved to its action node (tasks ARE nodes rows —
+   *  see docs/specs/journeys-connective-tissue.md), the node id the row can fly
+   *  to. Absent on the generic fallback row for an unresolvable task link. */
+  nodeRefId?: number;
 }
 
 /** Response of GET /journeys/:id/links — the detail view's data (IM-87/IM-86).
@@ -651,9 +755,11 @@ export interface JourneyLinkSummary {
  *  `spentCents` are always computed over ALL of the journey's links, never over the
  *  displayed subset — the totals a user reads are the journey's true totals.
  *  `unshownByKind` counts linked items (within the display window) that exist but
- *  produced no displayable summary — kinds with no source table to hydrate from
- *  (task/chat/achievement) and dangling refs whose target row is gone — so the UI
- *  can say they are linked instead of claiming nothing is. */
+ *  produced no displayable summary — after the IM-86 remainder work that is only
+ *  dangling refs of the hydratable kinds whose target row is gone (task/chat/
+ *  achievement now always produce a summary: a real label when a source row
+ *  resolves, otherwise a generic per-link row carrying the link's own date) —
+ *  so the UI can say they are linked instead of claiming nothing is. */
 export interface JourneyLinksDetail {
   links: JourneyLinkSummary[];
   /** Every journey_link row for this journey (matches the header's linkCount). */

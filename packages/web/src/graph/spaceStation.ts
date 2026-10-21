@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { gltfLoader } from "./gltf.js";
+import { gltfLoader, fadeSwapIn, noteModelFallback } from "./gltf.js";
+import { STATION_NAME } from "./sceneIdentity.js";
 
 /**
  * Distance-gated fidelity for the station's loaded glTF (perf experiment, targeting the
@@ -65,6 +66,43 @@ export function makeSpaceStation(): THREE.Object3D {
   group.add(aura);
   group.add(new THREE.PointLight(new THREE.Color("#9fc0ff"), 1.0, 1400, 2));
 
+  // IM-22: an in-scene name label. The station is the largest object in the
+  // scene and was the only one with no name where it's seen — its name lived
+  // only in the follow card / Legend. A canvas sprite like the memory-body
+  // labels (nodeObject.ts); update() keeps it above the hull by counteracting
+  // the group's own rotation (a sprite's position would otherwise swing
+  // around with the barrel roll). Failure to build it must never break the
+  // station itself, hence the guard.
+  let nameLabel: THREE.Sprite | null = null;
+  try {
+    const canvas = document.createElement("canvas");
+    const probe = canvas.getContext("2d");
+    if (probe) {
+      const FS = 44;
+      const font = `600 ${FS}px Inter, system-ui, sans-serif`;
+      probe.font = font;
+      const w = Math.ceil(probe.measureText(STATION_NAME).width) + 28;
+      canvas.width = w;
+      canvas.height = FS + 28;
+      const ctx = canvas.getContext("2d")!;
+      ctx.font = font;
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.85)";
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fillText(STATION_NAME, 14, canvas.height / 2);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearFilter;
+      nameLabel = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.9 }),
+      );
+      nameLabel.scale.set(w * 0.35, canvas.height * 0.35, 1);
+      group.add(nameLabel);
+    }
+  } catch {
+    nameLabel = null;
+  }
+
   let mixer: THREE.AnimationMixer | null = null;
   let lastTime = 0;
   let selfSpin = 0;
@@ -94,12 +132,18 @@ export function makeSpaceStation(): THREE.Object3D {
       }
 
       // Default to visible (close/no-distance-info state); update() re-gates this every
-      // frame once a camera position is supplied.
-      fallback.visible = false;
+      // frame once a camera position is supplied. IM-24: fade in over the
+      // procedural fallback instead of popping it out.
       group.add(model);
+      fadeSwapIn(model, () => {
+        fallback.visible = false;
+      });
     },
     undefined,
-    (err) => console.warn("[space-station] model failed to load", err),
+    (err) => {
+      console.warn("[space-station] model failed to load", err);
+      noteModelFallback("The Waystation model");
+    },
   );
 
   // Orbit just beyond the memory cluster so planets can never pass through it.
@@ -138,6 +182,14 @@ export function makeSpaceStation(): THREE.Object3D {
     );
     selfSpin += dt * 0.08; // slow, smooth barrel roll (was an erratic fast spin)
     group.rotateZ(selfSpin);
+
+    // Keep the name label above the hull in WORLD space: undo the group's
+    // rotation for the label's local offset (sprites always face the camera,
+    // so only the anchor position needs this).
+    if (nameLabel) {
+      const up = new THREE.Vector3(0, 310, 0).applyQuaternion(group.quaternion.clone().invert());
+      nameLabel.position.copy(up);
+    }
 
     if (model && cameraPos) {
       const dist = group.position.distanceTo(cameraPos);

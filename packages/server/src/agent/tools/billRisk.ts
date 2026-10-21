@@ -3,6 +3,7 @@ import { getBudgetSummary } from "../../finance/summary.js";
 import { FinBillRepo } from "../../repositories/finBill.repo.js";
 import { parseDay } from "../../finance/bills.js";
 import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
+import { NotificationsRepo } from "../../repositories/notifications.repo.js";
 
 /**
  * Bill-risk nudge (Financial OS, docs/financial-os/architecture.md §5) — Soumaya's proactive
@@ -173,6 +174,21 @@ export const billRiskTool: Tool = {
       });
       delivered = true;
     } catch { /* router logs it regardless */ }
+    if (delivered) {
+      // IM-74 producer: the warning was issued — mirror it into the server
+      // Inbox so it survives even when the Telegram send was the only copy.
+      // Deduped per bill per UTC day, matching detect()'s once-a-day guard.
+      // Best-effort: the nudge itself already happened.
+      try {
+        new NotificationsRepo(tc.ctx.handle, tc.spaceId).record({
+          source: "bill-risk",
+          text: msg,
+          icon: "💸",
+          priority: "high",
+          dedupeKey: `bill-risk:${billId}:${new Date(tc.now).toISOString().slice(0, 10)}`,
+        });
+      } catch { /* inbox is a mirror, never a gate */ }
+    }
     // Phase Z: the same `agent_logs.targets` convention Phase X established for goal_trend —
     // lets the Proactive → Chat handoff (analysis/proactiveContext.ts) resolve exactly which
     // bill this nudge concerned. Purely additive: detect()'s own once-a-day dedup gate is

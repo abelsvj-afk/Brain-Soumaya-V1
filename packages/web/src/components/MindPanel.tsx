@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   COGNITIVE_KINDS,
   COGNITIVE_META,
@@ -15,21 +15,23 @@ import { parseTolerantMs } from "../utils/dueReminders.js";
 import {
   getCognitiveResult,
   createCognitive,
-  getUpcomingEvents,
+  getUpcomingEventsResult,
   type UpcomingEvent,
   setCognitiveProgress,
   updateCognitive,
   promoteIdea,
+  splitIdea,
+  mergeIdeas,
   unlinkCognitive,
   pruneCognitive,
   getCognitiveEvidence,
   getPersonProfile,
-  getPersonSuggestions,
+  getPersonSuggestionsResult,
   dismissPersonSuggestion,
   type CognitiveEvidence,
   type PersonProfile,
   type CognitiveItem,
-  getThoughts,
+  getThoughtsResult,
   addThought,
   reinforceThought,
   promoteThought,
@@ -38,6 +40,8 @@ import {
   deleteNode,
   type Thought,
 } from "../api/client.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
+import { fmtBrowseDate, emotionBucketOf, BROWSE_EMOTION_LABEL } from "../utils/browseFormat.js";
 import { pushToast } from "./Toasts.js";
 import { playSfx } from "../graph/sfx.js";
 import { mindSpaceEnabled, setMindSpaceEnabled } from "./MindSpace.js";
@@ -46,6 +50,26 @@ import { MemoryAttachments } from "./MemoryAttachments.js";
 /** Same formatting convention as WealthPanel.tsx's own local `fmt` — kept local here
  *  too rather than extracted, since it's a one-line wrapper around Intl formatting. */
 const fmt = (cents: number): string => (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
+
+/** IM-48: a future event's absolute local date ("Fri, Nov 6, 2026") — the card used
+ *  to show ONLY the relative "in Nd / overdue Nd", so the actual day was nowhere in
+ *  the tab. Parsed via the shared tolerant parser; "" when unparseable (never raw). */
+const fmtEventDate = (raw?: string | null): string => {
+  if (!raw) return "";
+  const t = parseTolerantMs(raw);
+  if (Number.isNaN(t)) return "";
+  return new Date(t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+};
+
+/** IM-49: human names for the working-memory source colours (THOUGHT_SOURCE_COLOR).
+ *  The dot colour was the ONLY encoding and it was explained nowhere in the tab. */
+const THOUGHT_SOURCE_LABEL: Record<string, string> = {
+  manual: "held by you",
+  chat: "surfaced in chat",
+  goal: "goal-driven",
+  priority: "a priority",
+  emotion: "a feeling",
+};
 
 /**
  * The Mind tab — the COGNITIVE LAYER. Beyond what you've remembered, this is what
@@ -70,6 +94,30 @@ export function MindPanel({
   // masquerade as an empty mind. Only the cognitive list tracks this; the
   // panel's optional sources (thoughts, suggestions, events) stay fail-soft.
   const [loadError, setLoadError] = useState(false);
+  // IM-45: the same truthful-state treatment for the panel's OTHER refreshes —
+  // working memory, people suggestions, and upcoming events each track their own
+  // failure so a dead server can't render as a clear mind space / no suggestions
+  // / dateless events. `loading` covers the first cognitive fetch (no skeleton
+  // existed at all: first paint was indistinguishable from an empty mind).
+  const [loading, setLoading] = useState(true);
+  const [thoughtsError, setThoughtsError] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState(false);
+  const [eventsError, setEventsError] = useState(false);
+  // IM-47: search + kind filter + sort across the cognitive list (Browse→All pattern).
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<CognitiveKind | "all">("all");
+  const [sortBy, setSortBy] = useState<"recent" | "name" | "progress" | "links">("recent");
+  // IM-48: which capped evidence/interaction lists are expanded ("+N more").
+  const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
+  // IM-50: delete goes through the shared ConfirmDialog, never window.confirm.
+  const [pendingDelete, setPendingDelete] = useState<CognitiveItem | null>(null);
+  // IM-136: idea split (per-idea inline form) + merge (two-idea selection).
+  const [splitFor, setSplitFor] = useState<number | null>(null);
+  const [splitLabel, setSplitLabel] = useState("");
+  const [splitContent, setSplitContent] = useState("");
+  const [pendingSplit, setPendingSplit] = useState<CognitiveItem | null>(null);
+  const [mergeSelection, setMergeSelection] = useState<number[]>([]);
+  const [pendingMerge, setPendingMerge] = useState(false);
   const [kind, setKind] = useState<CognitiveKind>("goal");
   const [label, setLabel] = useState("");
   const [content, setContent] = useState("");
@@ -137,13 +185,37 @@ export function MindPanel({
           setLoadError(true);
         }
       })
-      .catch(() => setLoadError(true));
-  const refreshThoughts = () => getThoughts().then(setThoughts).catch(() => {});
-  const refreshSuggestions = () => getPersonSuggestions().then(setSuggestions).catch(() => {});
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  // IM-45: working memory / suggestions / events keep their last good data on
+  // failure and flag it (error + Retry in the render) — never fail-soft to empty.
+  const refreshThoughts = () =>
+    getThoughtsResult()
+      .then((r) => {
+        if (r.ok) {
+          setThoughts(r.thoughts);
+          setThoughtsError(false);
+        } else setThoughtsError(true);
+      })
+      .catch(() => setThoughtsError(true));
+  const refreshSuggestions = () =>
+    getPersonSuggestionsResult()
+      .then((r) => {
+        if (r.ok) {
+          setSuggestions(r.suggestions);
+          setSuggestionsError(false);
+        } else setSuggestionsError(true);
+      })
+      .catch(() => setSuggestionsError(true));
   const refreshEvents = () =>
-    getUpcomingEvents()
-      .then((es) => setEvents(Object.fromEntries(es.map((e) => [e.id, e]))))
-      .catch(() => {});
+    getUpcomingEventsResult()
+      .then((r) => {
+        if (r.ok) {
+          setEvents(Object.fromEntries(r.events.map((e) => [e.id, e])));
+          setEventsError(false);
+        } else setEventsError(true);
+      })
+      .catch(() => setEventsError(true));
   useEffect(() => {
     refresh();
     refreshThoughts();
@@ -181,9 +253,16 @@ export function MindPanel({
   };
 
   const bumpProgress = async (it: CognitiveItem, delta: number) => {
-    const next = Math.max(0, Math.min(1, (it.progress ?? 0) + delta));
+    const prev = it.progress ?? 0;
+    const next = Math.max(0, Math.min(1, prev + delta));
     setItems((xs) => xs.map((x) => (x.id === it.id ? { ...x, progress: next } : x)));
-    await setCognitiveProgress(it.id, next);
+    // IM-50: honour the save result — the bar used to keep showing a value the
+    // server never stored when the write failed. Roll back + say so.
+    const ok = await setCognitiveProgress(it.id, next);
+    if (!ok) {
+      setItems((xs) => xs.map((x) => (x.id === it.id ? { ...x, progress: prev } : x)));
+      pushToast("Couldn't save that progress — the bar is back where it was.", "⚠️", 3500);
+    }
   };
 
   const startEdit = (it: CognitiveItem) => {
@@ -339,12 +418,70 @@ export function MindPanel({
     await refresh();
     onChanged?.();
   };
-  const removeItem = async (it: CognitiveItem) => {
-    if (!window.confirm(`Delete "${it.label}"? It leaves your galaxy — your memories stay, they just stop orbiting it.`)) return;
+  // IM-50: deletion is confirmed via the shared ConfirmDialog (never the native
+  // window.confirm) and the optimistic removal is ROLLED BACK when the delete
+  // fails — deleteNode throws on failure, and the old code let that rejection
+  // escape after already announcing "Removed".
+  const confirmRemoveItem = async (it: CognitiveItem) => {
+    setPendingDelete(null);
     setItems((xs) => xs.filter((x) => x.id !== it.id));
-    await deleteNode(it.id);
-    pushToast(`Removed "${it.label}"`, "🗑️", 3000);
-    onChanged?.();
+    try {
+      await deleteNode(it.id);
+      pushToast(`Removed "${it.label}"`, "🗑️", 3000);
+      onChanged?.();
+    } catch {
+      setItems((xs) => (xs.some((x) => x.id === it.id) ? xs : [...xs, it]));
+      pushToast(`Couldn't remove "${it.label}" — it's still in your mind.`, "⚠️", 3500);
+    }
+  };
+  // IM-136: idea split/merge (user-triggered; the server ops delete nothing —
+  // split partitions support by nearness, merge unions links and folds the
+  // dropped idea into an alias on the survivor, soft-deleted recoverably).
+  const toggleMergeSelect = (it: CognitiveItem) => {
+    setMergeSelection((sel) => {
+      if (sel.includes(it.id)) return sel.filter((x) => x !== it.id);
+      if (sel.length >= 2) {
+        pushToast("Two ideas is a merge — deselect one first.", "💡", 3000);
+        return sel;
+      }
+      return [...sel, it.id];
+    });
+  };
+  const confirmSplit = async (it: CognitiveItem) => {
+    setPendingSplit(null);
+    const r = await splitIdea(it.id, splitLabel.trim(), splitContent.trim() || undefined);
+    if (r) {
+      playSfx("achievement");
+      pushToast(
+        `💡 "${it.label}" split — "${splitLabel.trim()}" branched off${r.moved > 0 ? ` with ${r.moved} supporting memor${r.moved === 1 ? "y" : "ies"}` : ""}. Nothing was deleted.`,
+        "🧠",
+        4500,
+      );
+      setSplitFor(null);
+      setSplitLabel("");
+      setSplitContent("");
+      await refresh();
+      onChanged?.();
+    } else {
+      pushToast("Couldn't split that idea — try again.", "⚠️", 3500);
+    }
+  };
+  const confirmMerge = async () => {
+    setPendingMerge(false);
+    const [keepId, dropId] = mergeSelection;
+    if (keepId == null || dropId == null) return;
+    const keep = items.find((x) => x.id === keepId);
+    const drop = items.find((x) => x.id === dropId);
+    const ok = await mergeIdeas(keepId, dropId);
+    if (ok) {
+      playSfx("achievement");
+      pushToast(`💡 "${drop?.label ?? "Idea"}" merged into "${keep?.label ?? "the other idea"}" — links unioned, nothing deleted.`, "🧠", 4500);
+      setMergeSelection([]);
+      await refresh();
+      onChanged?.();
+    } else {
+      pushToast("Couldn't merge those ideas — try again.", "⚠️", 3500);
+    }
   };
   const addPerson = async (name: string) => {
     const r = await createCognitive("person_entity", name);
@@ -389,14 +526,62 @@ export function MindPanel({
     return passed ? `target date passed · ${date}` : `target: ${date}`;
   };
 
+  // IM-47: apply the search text + kind filter, then the chosen sort, before
+  // grouping. Search matches label, content, and aliases (what the card shows).
+  const visibleItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const out = items.filter((it) => {
+      if (kindFilter !== "all" && it.kind !== kindFilter) return false;
+      if (!q) return true;
+      return (
+        it.label.toLowerCase().includes(q) ||
+        (it.content ?? "").toLowerCase().includes(q) ||
+        (it.aliases ?? []).some((a) => a.toLowerCase().includes(q))
+      );
+    });
+    switch (sortBy) {
+      case "name":
+        out.sort((a, b) => a.label.localeCompare(b.label));
+        break;
+      case "progress":
+        out.sort((a, b) => (b.progress ?? -1) - (a.progress ?? -1));
+        break;
+      case "links":
+        out.sort((a, b) => b.degree - a.degree);
+        break;
+      default:
+        out.sort((a, b) => b.id - a.id); // "recent" — the server's newest-first order
+    }
+    return out;
+  }, [items, query, kindFilter, sortBy]);
+  const filtersActive = query.trim() !== "" || kindFilter !== "all";
+
+  // IM-48: capped lists (evidence 8/side, applied-to 10, interactions 12) used
+  // to cut silently. `capped` returns the visible slice + the hidden count, and
+  // the render pairs it with a "+N more" toggle so the overflow is reachable.
+  const capped = <T,>(key: string, arr: T[], cap: number): { shown: T[]; overflow: number; expanded: boolean } => {
+    const expanded = !!expandedLists[key];
+    return { shown: expanded ? arr : arr.slice(0, cap), overflow: arr.length - cap, expanded };
+  };
+  const moreToggle = (key: string, overflow: number, expanded: boolean) =>
+    overflow > 0 ? (
+      <button
+        className="mini ghost"
+        onClick={() => setExpandedLists((m) => ({ ...m, [key]: !expanded }))}
+      >
+        {expanded ? "Show less" : `+${overflow} more`}
+      </button>
+    ) : null;
+
   // Group by kind, in the canonical order.
   const byKind = new Map<CognitiveKind, CognitiveItem[]>();
-  for (const it of items) {
+  for (const it of visibleItems) {
     const k = it.kind as CognitiveKind;
     if (!COGNITIVE_META[k]) continue;
     if (!byKind.has(k)) byKind.set(k, []);
     byKind.get(k)!.push(it);
   }
+  const visionCount = items.filter((it) => it.kind === "life_vision").length;
 
   return (
     <div className="dock-body mind-panel">
@@ -434,9 +619,28 @@ export function MindPanel({
             Hold
           </button>
         </div>
-        {thoughts.length === 0 ? (
+        {/* IM-49: legend for the mote source colours — the colour was the only
+            encoding and it was explained nowhere in this tab. */}
+        {thoughts.length > 0 && (
+          <div className="mind-ws-legend" aria-label="Thought source colours">
+            {Object.entries(THOUGHT_SOURCE_COLOR).map(([src, rgb]) => (
+              <span key={src} className="mind-ws-legend-item">
+                <span className="mind-mote-dot" style={{ background: `rgb(${rgb})` }} />
+                {THOUGHT_SOURCE_LABEL[src] ?? src}
+              </span>
+            ))}
+          </div>
+        )}
+        {thoughtsError && (
+          <p className="empty small">
+            ⚠️ Couldn't {thoughts.length > 0 ? "refresh" : "load"} your working memory —{" "}
+            {thoughts.length > 0 ? "showing the last copy that loaded." : "your held thoughts aren't gone; they just didn't arrive."}{" "}
+            <button className="mini" onClick={() => void refreshThoughts()}>Retry</button>
+          </p>
+        )}
+        {thoughts.length === 0 && !thoughtsError ? (
           <p className="empty small">Your mind space is clear. Hold a thought and watch it glow — reinforce the ones that matter and Soumaya carries them into your galaxy.</p>
-        ) : (
+        ) : thoughts.length === 0 ? null : (
           <ul className="mind-ws-list">
             {thoughts.map((t) => (
               <li
@@ -524,7 +728,7 @@ export function MindPanel({
           without a new tab, route, or data source — it only sets the SAME `kind`/`adding` state
           the existing picker already uses, or scrolls to the SAME section already rendered below. */}
       <div className="mind-vision-entry">
-        {(byKind.get("life_vision")?.length ?? 0) > 0 ? (
+        {visionCount > 0 ? (
           <button
             className="mind-vision-card"
             onClick={() => document.getElementById("mind-section-life_vision")?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -532,7 +736,7 @@ export function MindPanel({
             <span className="mind-vision-icon">{COGNITIVE_META.life_vision.icon}</span>
             <span className="mind-vision-text">
               <b>Your Life Vision</b>
-              <span>{byKind.get("life_vision")!.length === 1 ? "See it and its funding progress" : `${byKind.get("life_vision")!.length} visions — see them below`}</span>
+              <span>{visionCount === 1 ? "See it and its funding progress" : `${visionCount} visions — see them below`}</span>
             </span>
             <span className="mind-vision-go" aria-hidden="true">↓</span>
           </button>
@@ -553,6 +757,13 @@ export function MindPanel({
           </button>
         )}
       </div>
+
+      {suggestionsError && (
+        <p className="empty small">
+          ⚠️ Couldn't load people suggestions — Soumaya may be unreachable.{" "}
+          <button className="mini" onClick={() => void refreshSuggestions()}>Retry</button>
+        </p>
+      )}
 
       {suggestions.length > 0 && (
         <div className="mind-suggest">
@@ -638,8 +849,79 @@ export function MindPanel({
         <button className="companion-add-btn" onClick={() => setAdding(true)}>+ Map something in your mind</button>
       )}
 
-      {items.length === 0 && !adding && !loadError && (
+      {/* IM-47: search + kind filter + sort (the Browse→All discovery pattern),
+          so up to 100 items in 10 kinds stay findable. */}
+      {items.length > 0 && (
+        <div className="mind-search">
+          <input
+            className="tag-input wide"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${items.length} mapped item${items.length === 1 ? "" : "s"}…`}
+            aria-label="Search your mind"
+          />
+          <div className="mind-search-row">
+            <select
+              className="tag-input"
+              value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value as CognitiveKind | "all")}
+              aria-label="Filter by kind"
+            >
+              <option value="all">all kinds</option>
+              {COGNITIVE_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {COGNITIVE_META[k].icon} {COGNITIVE_META[k].label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="tag-input"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              aria-label="Sort by"
+            >
+              <option value="recent">most recent</option>
+              <option value="name">name A–Z</option>
+              <option value="progress">progress</option>
+              <option value="links">most linked</option>
+            </select>
+            {filtersActive && (
+              <button
+                className="mini ghost"
+                onClick={() => {
+                  setQuery("");
+                  setKindFilter("all");
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {filtersActive && (
+            <p className="mind-search-count">
+              Showing {visibleItems.length} of {items.length}
+            </p>
+          )}
+        </div>
+      )}
+
+      {eventsError && (
+        <p className="empty small">
+          ⚠️ Couldn't load event dates — future events show their stored date instead.{" "}
+          <button className="mini" onClick={() => void refreshEvents()}>Retry</button>
+        </p>
+      )}
+
+      {loading && items.length === 0 && !loadError && (
+        <p className="empty small">Loading your mind…</p>
+      )}
+
+      {items.length === 0 && !adding && !loadError && !loading && (
         <p className="empty small">Nothing mapped yet. Start with a goal you're working toward.</p>
+      )}
+
+      {items.length > 0 && visibleItems.length === 0 && (
+        <p className="empty small">No matches — loosen the search or filters.</p>
       )}
 
       {loadError && items.length === 0 && !adding && (
@@ -710,20 +992,40 @@ export function MindPanel({
                         {it.aliases && it.aliases.length > 0 && <span className="mind-card-aka"> · aka {it.aliases.join(", ")}</span>}
                       </span>
                       <span className="mind-card-sub">
-                        {k === "future_event" && events[it.id]
-                          ? events[it.id]!.inDays < 0
-                            ? `overdue ${-events[it.id]!.inDays}d`
-                            : events[it.id]!.inDays === 0
-                              ? "today"
-                              : `in ${events[it.id]!.inDays}d`
+                        {k === "future_event"
+                          ? // IM-48: relative countdown AND the absolute local date —
+                            // "in 3d" alone never said which day. Falls back to the
+                            // item's own stored date when the events feed is missing.
+                            (() => {
+                              const ev = events[it.id];
+                              const abs = fmtEventDate(ev?.date ?? it.remindAt);
+                              const rel = ev
+                                ? ev.inDays < 0
+                                  ? `overdue ${-ev.inDays}d`
+                                  : ev.inDays === 0
+                                    ? "today"
+                                    : `in ${ev.inDays}d`
+                                : "";
+                              return [rel, abs].filter(Boolean).join(" · ") || "date unavailable";
+                            })()
                           : k === "life_vision"
                             ? (visionDateLabel(it) ?? "no target date")
                             : `${it.degree} linked`}
                       </span>
                     </button>
                     <button className="mini ghost" onClick={() => startEdit(it)} title="Edit">✎</button>
-                    <button className="mini ghost" onClick={() => void removeItem(it)} title="Delete">🗑️</button>
+                    <button className="mini ghost" onClick={() => setPendingDelete(it)} title="Delete">🗑️</button>
                   </div>
+                )}
+                {/* IM-46 + IM-48: the item's own words and when it was mapped —
+                    both were fetched but never rendered on the card. The snippet
+                    is skipped when content just repeats the label (the server's
+                    create fallback stores the label as content). */}
+                {editId !== it.id && it.content?.trim() && it.content.trim() !== it.label.trim() && (
+                  <p className="mind-card-content">{it.content.trim()}</p>
+                )}
+                {editId !== it.id && fmtBrowseDate(it.createdAt) && (
+                  <p className="mind-card-meta">Added {fmtBrowseDate(it.createdAt)}</p>
                 )}
                 {editId !== it.id && k === "goal" && it.completedAt && (
                   <div className="mind-achieved" title={`Achieved ${new Date(it.completedAt).toLocaleDateString()}`}>
@@ -754,6 +1056,63 @@ export function MindPanel({
                     {it.degree >= IDEA_PROMOTE_SUPPORT ? "✨ Ripe — promote to Goal" : "💡→🎯 Promote to Goal"}
                   </button>
                 )}
+                {/* IM-136: split / merge — the rest of the idea lifecycle. Split
+                    branches this idea under a name you give it; merge folds two
+                    ideas together (pick two, the FIRST picked survives). Both
+                    are confirmed via ConfirmDialog and delete nothing. */}
+                {editId !== it.id && k === "idea" && (
+                  <div className="mind-idea-actions">
+                    <button
+                      className="mini ghost"
+                      onClick={() => {
+                        setSplitFor(splitFor === it.id ? null : it.id);
+                        setSplitLabel("");
+                        setSplitContent("");
+                      }}
+                      title="Branch this idea into two"
+                    >
+                      ✂ Split
+                    </button>
+                    <button
+                      className={`mini ghost ${mergeSelection.includes(it.id) ? "on" : ""}`}
+                      aria-pressed={mergeSelection.includes(it.id)}
+                      onClick={() => toggleMergeSelect(it)}
+                      title="Select two ideas to merge them"
+                    >
+                      {mergeSelection.includes(it.id) ? "✓ Selected for merge" : "⇄ Select for merge"}
+                    </button>
+                  </div>
+                )}
+                {editId !== it.id && k === "idea" && splitFor === it.id && (
+                  <div className="mind-edit mind-split-form">
+                    <input
+                      className="tag-input wide"
+                      autoFocus
+                      value={splitLabel}
+                      onChange={(e) => setSplitLabel(e.target.value)}
+                      placeholder="Name the branch that splits off…"
+                      aria-label="Name the branch that splits off"
+                    />
+                    <textarea
+                      className="companion-textarea"
+                      rows={2}
+                      value={splitContent}
+                      onChange={(e) => setSplitContent(e.target.value)}
+                      placeholder="Its own words (optional — blank keeps the original's)"
+                    />
+                    <p className="mind-card-meta">
+                      Supporting memories closest to the new branch move to it; the rest stay. Nothing is deleted.
+                    </p>
+                    <div className="row">
+                      <button className="mini" disabled={!splitLabel.trim()} onClick={() => setPendingSplit(it)}>
+                        Split…
+                      </button>
+                      <button className="mini ghost" onClick={() => setSplitFor(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {editId !== it.id && k === "identity" && (
                   <div className="mind-evidence">
                     <button className="mind-ev-toggle" onClick={() => void toggleEvidence(it)}>
@@ -773,17 +1132,19 @@ export function MindPanel({
                         {evidence[it.id]!.for.length > 0 && (
                           <div className="mind-ev-group">
                             <span className="ev-for">▲ Affirming</span>
-                            {evidence[it.id]!.for.slice(0, 8).map((n) => (
+                            {capped(`ev-for-${it.id}`, evidence[it.id]!.for, 8).shown.map((n) => (
                               <button key={n.id} className="mind-ev-chip" onClick={() => onFocus(n.id)}>{n.label}</button>
                             ))}
+                            {moreToggle(`ev-for-${it.id}`, evidence[it.id]!.for.length - 8, !!expandedLists[`ev-for-${it.id}`])}
                           </div>
                         )}
                         {evidence[it.id]!.against.length > 0 && (
                           <div className="mind-ev-group">
                             <span className="ev-against">▼ Contesting</span>
-                            {evidence[it.id]!.against.slice(0, 8).map((n) => (
+                            {capped(`ev-against-${it.id}`, evidence[it.id]!.against, 8).shown.map((n) => (
                               <button key={n.id} className="mind-ev-chip contra" onClick={() => onFocus(n.id)}>{n.label}</button>
                             ))}
+                            {moreToggle(`ev-against-${it.id}`, evidence[it.id]!.against.length - 8, !!expandedLists[`ev-against-${it.id}`])}
                           </div>
                         )}
                         {evidence[it.id]!.for.length === 0 && evidence[it.id]!.against.length === 0 && (
@@ -802,9 +1163,10 @@ export function MindPanel({
                     {evidenceOpen === it.id && evidence[it.id] && (
                       <div className="mind-ev-body">
                         <div className="mind-ev-group">
-                          {evidence[it.id]!.for.slice(0, 10).map((n) => (
+                          {capped(`ev-applied-${it.id}`, evidence[it.id]!.for, 10).shown.map((n) => (
                             <button key={n.id} className="mind-ev-chip" onClick={() => onFocus(n.id)}>{n.label}</button>
                           ))}
+                          {moreToggle(`ev-applied-${it.id}`, evidence[it.id]!.for.length - 10, !!expandedLists[`ev-applied-${it.id}`])}
                           {evidence[it.id]!.for.length === 0 && <p className="empty small">Nothing linked yet.</p>}
                         </div>
                       </div>
@@ -832,12 +1194,19 @@ export function MindPanel({
                         {profiles[it.id]!.interactions.length > 0 ? (
                           <>
                             <div className="mind-ev-group">
-                              {profiles[it.id]!.interactions.slice(0, 12).map((n) => (
+                              {capped(`person-${it.id}`, profiles[it.id]!.interactions, 12).shown.map((n) => (
                                 <span key={n.id} className="mind-ev-chip removable">
                                   <button className="mind-ev-chip-label" onClick={() => onFocus(n.id)}>{n.label}</button>
+                                  {/* IM-49: each interaction's own date + emotional
+                                      tone were fetched but never rendered. */}
+                                  <span className="mind-ev-chip-meta">
+                                    {fmtBrowseDate(n.createdAt)}
+                                    {n.emotionalWeight != null && ` · ${BROWSE_EMOTION_LABEL[emotionBucketOf(n.emotionalWeight)]}`}
+                                  </span>
                                   <button className="mind-ev-chip-x" title="Not related — unlink" onClick={() => void unlinkOne(it.id, n.id)}>×</button>
                                 </span>
                               ))}
+                              {moreToggle(`person-${it.id}`, profiles[it.id]!.interactions.length - 12, !!expandedLists[`person-${it.id}`])}
                             </div>
                             <button className="mind-prune" onClick={() => void pruneLinks(it)} title="Sever every link that doesn't actually name this person">
                               🧹 Clean up links that don't name {it.label}
@@ -949,8 +1318,55 @@ export function MindPanel({
               </li>
             ))}
           </ul>
+          {/* IM-136: the merge bar — appears in the Ideas section once two
+              ideas are selected. The first selected survives; the second folds
+              into it (label kept as an alias, links unioned, soft-deleted). */}
+          {k === "idea" && mergeSelection.length === 2 && (
+            <div className="mind-merge-bar">
+              <span>
+                Merge <b>{items.find((x) => x.id === mergeSelection[1])?.label}</b> into{" "}
+                <b>{items.find((x) => x.id === mergeSelection[0])?.label}</b> (first selected survives; nothing is deleted)
+              </span>
+              <button className="mini" onClick={() => setPendingMerge(true)}>
+                Merge…
+              </button>
+              <button className="mini ghost" onClick={() => setMergeSelection([])}>
+                Clear
+              </button>
+            </div>
+          )}
         </section>
       ))}
+
+      {/* IM-50 / IM-136: every destructive or lifecycle action in this tab
+          confirms through the shared dialog — no native window.confirm. */}
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete this from your mind?"
+          message={`Delete "${pendingDelete.label}"? It leaves your galaxy — your memories stay, they just stop orbiting it.`}
+          confirmLabel="Delete"
+          onConfirm={() => void confirmRemoveItem(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {pendingSplit && (
+        <ConfirmDialog
+          title="Split this idea?"
+          message={`"${pendingSplit.label}" stays, and "${splitLabel.trim()}" branches off as its own idea. Supporting memories closest to the new branch move to it. Nothing is deleted.`}
+          confirmLabel="Split"
+          onConfirm={() => void confirmSplit(pendingSplit)}
+          onCancel={() => setPendingSplit(null)}
+        />
+      )}
+      {pendingMerge && mergeSelection.length === 2 && (
+        <ConfirmDialog
+          title="Merge these ideas?"
+          message={`"${items.find((x) => x.id === mergeSelection[1])?.label}" folds into "${items.find((x) => x.id === mergeSelection[0])?.label}". Every link and piece of evidence is unioned onto the survivor, and the folded idea's name stays as an alias — nothing is deleted.`}
+          confirmLabel="Merge"
+          onConfirm={() => void confirmMerge()}
+          onCancel={() => setPendingMerge(false)}
+        />
+      )}
     </div>
   );
 }

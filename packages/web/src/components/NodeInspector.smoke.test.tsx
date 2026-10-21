@@ -10,6 +10,10 @@ vi.mock("../api/client.js", () => ({
   answerResearch: vi.fn(),
   requestMaintenance: vi.fn(),
   ingestText: vi.fn(),
+  // CL-2 (IM-26/IM-28): the inspector now also PATCHes details and calls the
+  // neighbors endpoint on mount.
+  updateNodeDetails: vi.fn(),
+  getNeighbors: vi.fn(async () => ({ nodes: [], links: [] })),
 }));
 const playSfx = vi.fn();
 vi.mock("../graph/sfx.js", () => ({ playSfx: (...a: unknown[]) => playSfx(...a) }));

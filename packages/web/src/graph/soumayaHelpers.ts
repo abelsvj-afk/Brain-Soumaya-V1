@@ -83,6 +83,99 @@ export function makeTaskLabel() {
   return { sprite, draw, tick };
 }
 
+/** Wrap text for the speech bubble: greedy word wrap at `maxChars`, hard-split
+ *  for over-long words, capped at `maxLines` with an ellipsis. Pure (IM-139). */
+export function wrapBubbleText(text: string, maxChars = 34, maxLines = 3): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const word = w.length > maxChars ? `${w.slice(0, maxChars - 1)}…` : w;
+    if (!cur) cur = word;
+    else if ((cur + " " + word).length <= maxChars) cur += " " + word;
+    else {
+      lines.push(cur);
+      cur = word;
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (lines.length < maxLines && cur && (lines.length === 0 || lines[lines.length - 1] !== cur)) lines.push(cur);
+  if (lines.length > maxLines) lines.length = maxLines;
+  // If we stopped early, mark the truncation on the last visible line.
+  const joined = lines.join(" ");
+  if (joined.replace(/…$/, "") !== words.join(" ") && lines.length > 0) {
+    const last = lines[lines.length - 1]!;
+    lines[lines.length - 1] = last.endsWith("…") ? last : `${last.slice(0, maxChars - 1)}…`;
+  }
+  return lines;
+}
+
+/**
+ * An in-world SPEECH BUBBLE (IM-139) — a rounded bubble with a little tail,
+ * billboarded above Soumaya's ship (added to the scene by Graph3D like the
+ * task label, so the ship's banking never tilts it). This is her reaction
+ * surface in the world itself, distinct from the flat "current task" pill:
+ * connection reactions and the mass-cooling concern are spoken here.
+ */
+export function makeSpeechBubble() {
+  const canvas = document.createElement("canvas");
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.visible = false;
+  const HU = 11; // world height for a 1-line bubble; grows per line
+
+  const draw = (text: string) => {
+    const lines = wrapBubbleText(text);
+    const FS = 30;
+    const padX = 26;
+    const padY = 18;
+    const lineH = 38;
+    const tail = 16;
+    const ctx0 = canvas.getContext("2d")!;
+    ctx0.font = `600 ${FS}px system-ui, -apple-system, sans-serif`;
+    const textW = Math.max(...lines.map((l) => ctx0.measureText(l).width), 40);
+    const w = Math.ceil(textW) + padX * 2;
+    const h = lines.length * lineH + padY * 2 + tail;
+    canvas.width = Math.max(64, w);
+    canvas.height = h;
+    const c = canvas.getContext("2d")!;
+    c.clearRect(0, 0, canvas.width, h);
+    // Bubble body (rounded rect) + tail pointing down toward the ship.
+    const r = 22;
+    const bw = canvas.width;
+    const bh = h - tail;
+    c.beginPath();
+    c.moveTo(r, 2);
+    c.lineTo(bw - r, 2);
+    c.arcTo(bw - 2, 2, bw - 2, r, r);
+    c.lineTo(bw - 2, bh - r);
+    c.arcTo(bw - 2, bh - 2, bw - r, bh - 2, r);
+    c.lineTo(bw / 2 + 14, bh - 2);
+    c.lineTo(bw / 2, h - 2); // tail tip
+    c.lineTo(bw / 2 - 14, bh - 2);
+    c.lineTo(r, bh - 2);
+    c.arcTo(2, bh - 2, 2, bh - r, r);
+    c.lineTo(2, r);
+    c.arcTo(2, 2, r, 2, r);
+    c.closePath();
+    c.fillStyle = "rgba(16,20,44,0.92)";
+    c.fill();
+    c.strokeStyle = "rgba(150,190,255,0.85)";
+    c.lineWidth = 2.5;
+    c.stroke();
+    c.font = `600 ${FS}px system-ui, -apple-system, sans-serif`;
+    c.textBaseline = "middle";
+    c.fillStyle = "#eaf2ff";
+    lines.forEach((l, i) => c.fillText(l, padX, padY + lineH * (i + 0.5)));
+    tex.needsUpdate = true;
+    const worldH = HU * (h / 120);
+    sprite.scale.set((canvas.width / h) * worldH, worldH, 1);
+  };
+
+  return { sprite, draw };
+}
+
 /** Approximate a body's visual radius (mirrors nodeObject sizing) for standoff. */
 export const bodyRadius = (n: any): number => {
   const m = n.mass ?? 0.3;

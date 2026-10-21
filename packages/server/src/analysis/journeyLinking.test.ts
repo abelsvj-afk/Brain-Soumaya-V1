@@ -144,7 +144,10 @@ describe("hydrateJourneyLinks", () => {
     const nodeId = makeNode("s1"); // label = 'n'
     repo.link(j.id, "node", nodeId);
 
-    expect(hydrateJourneyLinks(ctx, "s1", repo.links(j.id))).toEqual([{ kind: "node", refId: nodeId, label: "n" }]);
+    const out = hydrateJourneyLinks(ctx, "s1", repo.links(j.id));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: "node", refId: nodeId, label: "n" });
+    expect(out[0]?.linkedAt).toBe(repo.links(j.id)[0]!.createdAt); // CL-10: link date rides along
   });
 
   it("hydrates income/expense with label+amount+occurredAt, and bill with no occurredAt", () => {
@@ -181,5 +184,53 @@ describe("hydrateJourneyLinks", () => {
     repo.link(j.id, "node", nodeId);
 
     expect(hydrateJourneyLinks(ctx, "bob", repo.links(j.id))).toHaveLength(0);
+  });
+});
+
+describe("hydrateJourneyLinks — IM-86 remainder (task/chat/achievement)", () => {
+  it("hydrates a task link from its action node: real label, node date, fly-to id, link date", () => {
+    const repo = new JourneysRepo(handle, "s1");
+    const j = repo.create({ title: "J" });
+    const nodeId = makeNode("s1"); // label = 'n'
+    repo.link(j.id, "task", nodeId);
+
+    const [summary] = hydrateJourneyLinks(ctx, "s1", repo.links(j.id));
+    expect(summary).toMatchObject({ kind: "task", refId: nodeId, label: "n", nodeRefId: nodeId });
+    expect(summary?.occurredAt).toBeTruthy(); // the node's created_at (makeNode sets no occurred_at)
+    expect(summary?.linkedAt).toBe(repo.links(j.id)[0]!.createdAt);
+  });
+
+  it("an unresolvable task link still renders as a per-link row — generic label, link date, no fabricated title", () => {
+    const repo = new JourneysRepo(handle, "s1");
+    const j = repo.create({ title: "J" });
+    repo.link(j.id, "task", 4242); // no such node
+
+    const [summary] = hydrateJourneyLinks(ctx, "s1", repo.links(j.id));
+    expect(summary).toMatchObject({ kind: "task", refId: 4242, label: "Linked task" });
+    expect(summary?.nodeRefId).toBeUndefined();
+    expect(summary?.linkedAt).toBeTruthy();
+  });
+
+  it("chat and achievement links render as per-link rows with the link's own date", () => {
+    const repo = new JourneysRepo(handle, "s1");
+    const j = repo.create({ title: "J" });
+    repo.link(j.id, "chat", 11);
+    repo.link(j.id, "achievement", 12);
+
+    const byKind = Object.fromEntries(hydrateJourneyLinks(ctx, "s1", repo.links(j.id)).map((r) => [r.kind, r]));
+    expect(byKind.chat).toMatchObject({ label: "Linked chat", refId: 11 });
+    expect(byKind.achievement).toMatchObject({ label: "Linked achievement", refId: 12 });
+    expect(byKind.chat?.linkedAt).toBeTruthy();
+    expect(byKind.achievement?.linkedAt).toBeTruthy();
+  });
+
+  it("every hydrated summary carries the link's own created_at as linkedAt", () => {
+    const repo = new JourneysRepo(handle, "s1");
+    const j = repo.create({ title: "J" });
+    const nodeId = makeNode("s1");
+    repo.link(j.id, "node", nodeId);
+
+    const [summary] = hydrateJourneyLinks(ctx, "s1", repo.links(j.id));
+    expect(summary?.linkedAt).toBe(repo.links(j.id)[0]!.createdAt);
   });
 });

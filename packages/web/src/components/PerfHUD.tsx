@@ -197,6 +197,11 @@ export function PerfHUD({ nodeCount }: { nodeCount?: number }) {
         {/* Never colour alone — the state is spelled out in words too. */}
         <span className={`ph-bound ph-${boundKey}`}>{bound}</span>
       </div>
+      <p className="ph-human">In plain terms: this shows how smoothly your galaxy is running and what is slowing it down, if anything.</p>
+      <p className="ph-offramp">
+        On because a link (?perf=1) or Settings turned it on — and it sticks on this device. Tap × below to hide it,
+        or remove <code>perf</code> from the address-bar link. Nothing else about your galaxy changes.
+      </p>
       {isComposerBypassEnabled() && (
         <Row
           k="⚠ bypass"

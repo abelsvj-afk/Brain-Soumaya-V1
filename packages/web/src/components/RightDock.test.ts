@@ -17,43 +17,52 @@ const ALL: { id: DockTab }[] = [
 
 describe("visibleTabIds (Progressive Discovery gating)", () => {
   it("hides insights/awards/hangar for a brand-new, empty brain", () => {
-    const shown = visibleTabIds(ALL, "details", { hasInsights: false, hasRealMemory: false });
+    const shown = visibleTabIds(ALL, "details", { hasRealMemory: false });
     expect(shown).not.toContain("insights");
     expect(shown).not.toContain("awards");
     expect(shown).not.toContain("hangar");
   });
 
   it("never hides journeys, even with no data at all — no other UI can create the first one", () => {
-    const shown = visibleTabIds(ALL, "details", { hasInsights: false, hasRealMemory: false });
+    const shown = visibleTabIds(ALL, "details", { hasRealMemory: false });
     expect(shown).toContain("journeys");
   });
 
   it("keeps the always-core tabs regardless of readiness signals", () => {
-    const shown = visibleTabIds(ALL, "details", { hasInsights: false, hasRealMemory: false });
+    const shown = visibleTabIds(ALL, "details", { hasRealMemory: false });
     for (const id of ["details", "list", "mind", "actions", "soumaya", "inbox", "money"] as const) {
       expect(shown).toContain(id);
     }
   });
 
   it("reveals awards and hangar once there's a real (non-action) memory", () => {
-    const shown = visibleTabIds(ALL, "details", { hasInsights: false, hasRealMemory: true });
+    const shown = visibleTabIds(ALL, "details", { hasRealMemory: true });
     expect(shown).toContain("awards");
     expect(shown).toContain("hangar");
-    expect(shown).not.toContain("insights");
   });
 
-  it("reveals insights once at least one has been synthesized", () => {
-    const shown = visibleTabIds(ALL, "details", { hasInsights: true, hasRealMemory: false });
-    expect(shown).toContain("insights");
+  // IM-62: Insights used to require an already-synthesized insight, which
+  // hid the tab's own scans — the only way to create the first insight —
+  // from every new user. It now shares the has-memories gate: reachable as
+  // soon as there is a real memory to scan, before any insight exists.
+  it("reveals insights on the same has-memories condition as awards/hangar (IM-62)", () => {
+    const withMemory = visibleTabIds(ALL, "details", { hasRealMemory: true });
+    expect(withMemory).toContain("insights");
+    expect(withMemory).toContain("awards");
+    expect(withMemory).toContain("hangar");
+    const empty = visibleTabIds(ALL, "details", { hasRealMemory: false });
+    expect(empty).not.toContain("insights");
+    expect(empty).not.toContain("awards");
+    expect(empty).not.toContain("hangar");
   });
 
   it("never hides the currently active tab, even if its gate isn't earned yet", () => {
-    const shown = visibleTabIds(ALL, "insights", { hasInsights: false, hasRealMemory: false });
+    const shown = visibleTabIds(ALL, "insights", { hasRealMemory: false });
     expect(shown).toContain("insights");
   });
 
-  it("shows every tab once all signals are true", () => {
-    const shown = visibleTabIds(ALL, "details", { hasInsights: true, hasRealMemory: true });
+  it("shows every tab once the has-memories signal is true", () => {
+    const shown = visibleTabIds(ALL, "details", { hasRealMemory: true });
     expect(shown).toHaveLength(ALL.length);
   });
 });

@@ -116,15 +116,52 @@ export function suggestJourneys(
 
 /** Hydrate raw {kind, refId} link rows into something a detail view can render directly —
  *  a dangling ref (the linked row was deleted since linking) is silently skipped rather
- *  than shown as a broken row. */
+ *  than shown as a broken row.
+ *
+ *  IM-86 remainder: task/chat/achievement used to be skipped wholesale because they
+ *  have no dedicated source table (see JourneysRepo.REF_TABLE). What the data
+ *  actually allows, without inventing titles:
+ *  - `task`: tasks ARE nodes rows (action items — docs/specs/journeys-connective-
+ *    tissue.md; NodeInspector renders JourneyChips for actions as nodes), so a
+ *    task ref that resolves to a live node hydrates with that node's real label
+ *    + its occurred/created date, and carries `nodeRefId` for fly-to.
+ *  - `task` (unresolvable), `chat`, `achievement`: no source row exists to take
+ *    a label from (chats are not persisted as rows; achievements are a client-side
+ *    string-id catalog, so a numeric refId cannot map to one). These still render
+ *    as per-link rows with a truthful generic label ("Linked chat") and the
+ *    link's own created_at as `linkedAt` — grouped items, never fabricated
+ *    titles, and no longer collapsed into a single counted line. */
 export function hydrateJourneyLinks(ctx: AppContext, spaceId: string, links: JourneyLink[]): JourneyLinkSummary[] {
   const out: JourneyLinkSummary[] = [];
   for (const link of links) {
+    const linkedAt = link.createdAt ? { linkedAt: link.createdAt } : {};
+    if (link.kind === "task") {
+      const row = ctx.handle.sqlite
+        .prepare(`SELECT label, occurred_at, created_at FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
+        .get(link.refId, spaceId) as { label: string; occurred_at: string | null; created_at: string } | undefined;
+      if (row) {
+        out.push({
+          kind: "task", refId: link.refId, label: row.label, nodeRefId: link.refId,
+          occurredAt: row.occurred_at ?? row.created_at, ...linkedAt,
+        });
+      } else {
+        out.push({ kind: "task", refId: link.refId, label: "Linked task", ...linkedAt });
+      }
+      continue;
+    }
+    if (link.kind === "chat" || link.kind === "achievement") {
+      out.push({
+        kind: link.kind, refId: link.refId,
+        label: link.kind === "chat" ? "Linked chat" : "Linked achievement",
+        ...linkedAt,
+      });
+      continue;
+    }
     if (link.kind === "node") {
       const row = ctx.handle.sqlite
         .prepare(`SELECT label FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
         .get(link.refId, spaceId) as { label: string } | undefined;
-      if (row) out.push({ kind: "node", refId: link.refId, label: row.label });
+      if (row) out.push({ kind: "node", refId: link.refId, label: row.label, ...linkedAt });
       continue;
     }
     const fin = FINANCE_TABLE[link.kind];
@@ -143,6 +180,7 @@ export function hydrateJourneyLinks(ctx: AppContext, spaceId: string, links: Jou
           label: row.label || fallback,
           amount: row.amount,
           ...(row.occurredAt ? { occurredAt: row.occurredAt } : {}),
+          ...linkedAt,
         });
       }
       continue;
@@ -152,10 +190,10 @@ export function hydrateJourneyLinks(ctx: AppContext, spaceId: string, links: Jou
       const row = ctx.handle.sqlite
         .prepare(`SELECT ${lbl.labelCol} AS label FROM ${lbl.table} WHERE id = ? AND space_id = ?`)
         .get(link.refId, spaceId) as { label: string } | undefined;
-      if (row) out.push({ kind: link.kind, refId: link.refId, label: row.label });
+      if (row) out.push({ kind: link.kind, refId: link.refId, label: row.label, ...linkedAt });
     }
-    // Kinds with no known table (task/chat/achievement) — nothing to hydrate from yet;
-    // skip rather than guess.
+    // Every other kind is handled above (node/finance/task/chat/achievement);
+    // anything left is a kind with no hydration path at all — skip rather than guess.
   }
   return out;
 }

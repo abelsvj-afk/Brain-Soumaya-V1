@@ -10,7 +10,7 @@ import { agentLogs, dailyLogs } from "../../db/schema.js";
 import { spaceOf } from "../middleware.js";
 import { eq, desc } from "drizzle-orm";
 import { selectJob, executeJob, researchEnabled, setResearchEnabled } from "../../maintenance/agent.js";
-import { activeUndertaking } from "../../analysis/undertakings.js";
+import { activeUndertaking, recentUndertakings } from "../../analysis/undertakings.js";
 import { toolHealthSummary } from "../../agent/tools/health.js";
 
 const CompleteJobSchema = z.object({
@@ -218,6 +218,14 @@ export function maintenanceRoutes(ctx: AppContext): Router {
    */
   r.get("/undertaking", (_req, res) => {
     res.json(activeUndertaking(ctx, spaceOf(res)));
+  });
+
+  /**
+   * GET /api/maintenance/undertakings -> recent undertakings incl. completed
+   * ones, newest first (IM-67 — history/celebration in the Soumaya tab).
+   */
+  r.get("/undertakings", (_req, res) => {
+    res.json(recentUndertakings(ctx, spaceOf(res)));
   });
 
   /**

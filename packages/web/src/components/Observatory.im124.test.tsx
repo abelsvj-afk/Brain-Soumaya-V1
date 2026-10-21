@@ -30,9 +30,33 @@ const getJourneys = vi.fn();
 vi.mock("../api/client.js", () => ({
   getConstellations: (...a: unknown[]) => getConstellations(...a),
   getDigest: (...a: unknown[]) => getDigest(...a),
+  // IM-124 residual: Observatory now consumes the strict Result variants.
+  // These delegate to the same vi.fns above so every scenario below keeps
+  // its meaning — a rejection becomes { ok: false }, a resolution { ok: true }.
+  getConstellationsResult: async (...a: unknown[]) => {
+    try {
+      return { ok: true as const, constellations: await getConstellations(...a) };
+    } catch {
+      return { ok: false as const };
+    }
+  },
+  getDigestResult: async (...a: unknown[]) => {
+    try {
+      return { ok: true as const, insights: await getDigest(...a) };
+    } catch {
+      return { ok: false as const };
+    }
+  },
   getDailyContact: (...a: unknown[]) => getDailyContact(...a),
   answerDailyContact: (...a: unknown[]) => answerDailyContact(...a),
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
+  getDueReviewsResult: async (...a: unknown[]) => {
+    try {
+      return { ok: true as const, reviews: await getDueReviews(...a) };
+    } catch {
+      return { ok: false as const };
+    }
+  },
 }));
 vi.mock("../api/finance.js", () => ({
   getFinanceSummary: (...a: unknown[]) => getFinanceSummary(...a),

@@ -37,15 +37,26 @@ export class FinIncomeRepo {
     return r ? this.map(r) : null;
   }
 
-  update(id: number, patch: { date?: string; netCents?: number; platform?: string | null }): FinIncome | null {
+  update(
+    id: number,
+    patch: {
+      date?: string; netCents?: number; platform?: string | null;
+      grossCents?: number | null; taxCents?: number | null; hours?: number | null;
+    },
+  ): FinIncome | null {
     const cur = this.get(id);
     if (!cur) return null;
     const date = (patch.date ?? cur.date).slice(0, 10);
     const net = patch.netCents != null ? Math.round(patch.netCents) : cur.netCents;
     const platform = patch.platform !== undefined ? patch.platform : cur.platform;
+    // IM-82: gross/tax/hours were capturable at creation (IncomeBody) and via pay stubs,
+    // but the edit path silently dropped them — a recorded row could never be corrected.
+    const gross = patch.grossCents !== undefined ? (patch.grossCents != null ? Math.round(patch.grossCents) : null) : cur.grossCents;
+    const tax = patch.taxCents !== undefined ? (patch.taxCents != null ? Math.round(patch.taxCents) : null) : cur.taxCents;
+    const hours = patch.hours !== undefined ? patch.hours : cur.hours;
     this.handle.sqlite
-      .prepare(`UPDATE fin_income SET date = ?, net_cents = ?, platform = ? WHERE id = ? AND space_id = ?`)
-      .run(date, net, platform ?? null, id, this.spaceId);
+      .prepare(`UPDATE fin_income SET date = ?, net_cents = ?, platform = ?, gross_cents = ?, tax_cents = ?, hours = ? WHERE id = ? AND space_id = ?`)
+      .run(date, net, platform ?? null, gross, tax, hours ?? null, id, this.spaceId);
     return this.get(id);
   }
 

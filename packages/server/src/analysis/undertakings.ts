@@ -80,6 +80,18 @@ const rowToUndertaking = (r: any): Undertaking => ({
   endsAt: r.ends_at ?? null,
 });
 
+/**
+ * Recent undertakings for a space, newest first — active first-class, completed
+ * included (IM-67: the Soumaya tab shows history + a celebration state for
+ * finished arcs instead of the undertaking vanishing the moment it ends).
+ */
+export function recentUndertakings(ctx: AppContext, spaceId: string, limit = 5): Undertaking[] {
+  const rows = ctx.handle.sqlite
+    .prepare(`SELECT * FROM undertakings WHERE space_id = ? ORDER BY id DESC LIMIT ?`)
+    .all(spaceId, limit) as any[];
+  return rows.map(rowToUndertaking);
+}
+
 /** The current active undertaking for a space, if any. */
 export function activeUndertaking(ctx: AppContext, spaceId: string): Undertaking | null {
   const r = ctx.handle.sqlite

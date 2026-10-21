@@ -1,7 +1,7 @@
 import { COOLING_ENTROPY, type GraphData } from "@brain/shared";
 
 /** Lore-bearing non-memory objects in the galaxy. */
-export type LoreObjectKind = "station" | "ship" | "satellite";
+export type LoreObjectKind = "station" | "ship" | "satellite" | "visitor" | "fleet";
 
 interface BrainSignals {
   count: number; // memories
@@ -11,6 +11,8 @@ interface BrainSignals {
   hub?: string; // biggest hub's label
   cooling: number; // memories going cold (entropy >= threshold)
   coldest?: string; // label of the coldest memory (only if actually cold)
+  coldestId?: number; // id of that memory, so the card can offer a fly-to
+  watchId?: number;
   watch?: string; // label of the most-neglected memory (always set if any exist)
 }
 
@@ -135,7 +137,9 @@ function readSignals(graph: GraphData): BrainSignals {
     hub: hub?.label,
     cooling,
     coldest: (coldest?.entropy ?? 0) >= COOLING_ENTROPY ? coldest?.label : undefined,
+    coldestId: (coldest?.entropy ?? 0) >= COOLING_ENTROPY ? coldest?.id : undefined,
     watch: coldest?.label,
+    watchId: coldest?.id,
   };
 }
 
@@ -169,13 +173,14 @@ function band(count: number): "nascent" | "growing" | "rich" | "vast" {
 export function objectLoreFor(
   kind: LoreObjectKind,
   graph: GraphData,
-): { title: string; log: string } {
+): { title: string; log: string; stats: { memories: number; links: number; cooling: number; coldest?: string; coldestId?: number } } {
   const s = readSignals(graph);
   const b = band(s.count);
   const age = agePhrase(s.ageDays);
   const tone = toneWord(s.tone);
   const hub = s.hub ? `“${s.hub}”` : "an unnamed first light";
 
+  const stats = { memories: s.count, links: s.links, cooling: s.cooling, coldest: s.coldest, coldestId: s.coldestId };
   const arcs = findStoryArcs(graph);
   const arcIndex = (s.count + s.links) % (arcs.length || 1);
   const arc = arcs.length > 0 ? arcs[arcIndex] : null;
@@ -208,7 +213,7 @@ export function objectLoreFor(
       }
     }
     
-    return { title, log: `${intro} ${state} ${mood}${arcStory}` };
+    return { title, log: `${intro} ${state} ${mood}${arcStory}`, stats };
   }
 
   if (kind === "satellite") {
@@ -223,7 +228,21 @@ export function objectLoreFor(
           ? `${s.cooling} ${s.cooling === 1 ? "memory is" : "memories are"} going cold — I've pinned my beam to “${s.coldest}” so it won't fade unseen. I can't rekindle it; that's yours to do. Come back to it and I'll move on.`
           : `${s.cooling} ${s.cooling === 1 ? "memory is" : "memories are"} cooling; I'm holding a beam over the dimmest of them until you return.`;
     const aside = `The drifters keep their distance — my beam fouls their bearings, and they've learned to fear it.`;
-    return { title, log: `${intro} ${duty} ${aside}` };
+    return { title, log: `${intro} ${duty} ${aside}`, stats };
+  }
+
+  if (kind === "visitor") {
+    const title = "Visitor craft";
+    const log = s.count === 0
+      ? `A drifter on the edge of an empty sky, ${age}. Nothing here draws it yet — the first memory you log will.`
+      : `A visitor drawn to your most interesting memories, ${age}. It loiters near ${hub}, riding ${tone}. Warm memories draw luminous travellers; heavy ones draw darker wanderers.`;
+    return { title, log, stats };
+  }
+
+  if (kind === "fleet") {
+    const title = "Soumaya's fleet";
+    const log = `Her support craft, ${age}: beacons pin a warm beam on ${s.cooling > 0 ? `${s.cooling} cooling ${s.cooling === 1 ? "memory" : "memories"}` : "whatever drifts closest to cold"}, the Defender guards ${hub}, and the Tender wing grows with your galaxy — ${s.count} worlds tended along ${s.links} routes so far.`;
+    return { title, log, stats };
   }
 
   // station
@@ -246,7 +265,10 @@ export function objectLoreFor(
     } else if (arc.type === "muse") {
       arcStory = ` Waystation logs show heavy traffic between the presence of “${arc.sourceLabel}” and the idea of “${arc.targetLabel}” — a highly productive resonance corridor.`;
     } else if (arc.type === "resolution") {
-      arcStory = ` A resolution alert: “${arc.sourceLabel}” has settled the node of “${arc.targetLabel}”. Core stability index is up 12%.`;
+      // IM-12: this arc used to assert a fabricated "Core stability index is
+      // up 12%" — an invented number presented as a sensor reading. Replaced
+      // with the real signal only: the resolution link itself.
+      arcStory = ` A resolution alert: “${arc.sourceLabel}” has settled the node of “${arc.targetLabel}”. That link is real, logged in the lanes between them.`;
     } else if (arc.type === "complication") {
       arcStory = ` Lanes between “${arc.sourceLabel}” and “${arc.targetLabel}” are flagged with warning beacons; the relationship is complicated and congesting traffic.`;
     } else if (arc.type === "analogy") {
@@ -254,5 +276,5 @@ export function objectLoreFor(
     }
   }
 
-  return { title, log: `${intro} ${purpose} ${mood}${arcStory}` };
+  return { title, log: `${intro} ${purpose} ${mood}${arcStory}`, stats };
 }

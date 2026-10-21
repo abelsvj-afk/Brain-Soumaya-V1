@@ -50,6 +50,22 @@ describe("balance-aware edit / delete (D3)", () => {
     expect(deleteIncome(handle, "s", 999)).toBeNull();
     expect(editExpense(handle, "s", 999, { amountCents: 1 })).toBeNull();
   });
+
+  it("IM-82: editing income can set and clear gross/tax/hours, not just net", () => {
+    new FinAccountRepo(handle, "s").setBalance(10000);
+    const inc = new FinIncomeRepo(handle, "s").create({ date: "2026-01-10", netCents: 5000 });
+    editIncome(handle, "s", inc.id, { grossCents: 6500, taxCents: 900, hours: 40 });
+    const after = new FinIncomeRepo(handle, "s").get(inc.id)!;
+    expect(after.grossCents).toBe(6500);
+    expect(after.taxCents).toBe(900);
+    expect(after.hours).toBe(40);
+    expect(after.netCents).toBe(5000); // untouched fields survive the patch
+    editIncome(handle, "s", inc.id, { grossCents: null, hours: null });
+    const cleared = new FinIncomeRepo(handle, "s").get(inc.id)!;
+    expect(cleared.grossCents).toBeNull();
+    expect(cleared.hours).toBeNull();
+    expect(cleared.taxCents).toBe(900);
+  });
 });
 
 describe("financial snapshot (Stage 2)", () => {

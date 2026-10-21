@@ -423,4 +423,35 @@ describe("REST API", () => {
     const tomorrow = await get("/api/contact");
     expect(tomorrow.body.question?.text ?? "").not.toBe(c.body.question.text);
   });
+  // IM-26: the node PATCH route also edits label + body (the Details tab's
+  // edit flow), not just importance.
+  it("PATCH /api/nodes/:id edits label and content, and search finds the new text", async () => {
+    // Use an existing node (this shared suite's ingest extractor dedupes fresh
+    // seed texts unpredictably late in the run — the graph is the stable source).
+    const graph = (await get("/api/graph")).body as GraphData;
+    const id = graph.nodes[0]!.id;
+    const patched = await patchReq(`/api/nodes/${id}`, { label: "Renamed by edit", content: "a body about zebrafish taxonomy" });
+    expect(patched.status).toBe(200);
+    expect(patched.body.label).toBe("Renamed by edit");
+    expect(patched.body.content).toBe("a body about zebrafish taxonomy");
+    // The stored row really changed (not just the response echo).
+    const fetched = await get(`/api/nodes/${id}`);
+    expect(fetched.body.label).toBe("Renamed by edit");
+    // FTS was refreshed: the new body text is searchable, the old isn't the hit.
+    const hits = await get(`/api/search?q=${encodeURIComponent("zebrafish")}`);
+    expect(hits.body.some((n: { id: number }) => n.id === id)).toBe(true);
+  });
+
+  it("PATCH /api/nodes/:id still adjusts importance alone, and rejects an empty patch", async () => {
+    const graph = (await get("/api/graph")).body as GraphData;
+    const id = graph.nodes[0]!.id;
+    const patched = await patchReq(`/api/nodes/${id}`, { importance: 0.9 });
+    expect(patched.status).toBe(200);
+    expect(patched.body.importance).toBe(0.9);
+    const empty = await patchReq(`/api/nodes/${id}`, {});
+    expect(empty.status).toBe(400);
+    const missing = await patchReq(`/api/nodes/999999`, { label: "nope" });
+    expect(missing.status).toBe(404);
+  });
+
 });

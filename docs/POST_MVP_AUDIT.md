@@ -40,7 +40,7 @@ Performance → Scalability → UX → New Features*; small tuning/copy/UX refin
   `review_nudge`, `check_in`, `web_lookup` (Gemini grounding, gated) + the two-phase agentic router.
 - **Neuro-aligned (new):** spaced repetition + active recall (SRS engine, review UI, star-dimming),
   forgiving streak-freeze (nebula shields), `prefers-reduced-motion` (HUD), orphan surfacing.
-- **Surfaces:** the Chronicle 3D life timeline; Observatory home; Browse (All/Folders/Hubs); Codex;
+- **Surfaces:** the Chronicle life timeline (2D vertical track — the 3D river design was superseded; see docs/TIMELINE_CONSOLIDATION.md); Observatory home; Browse (All/Folders/Hubs); Codex;
   Awards/ranks; Hangar; fuel economy + "Ways to earn" sheet; Telegram bridge.
 
 ### Known Issues / Initial Bug Inventory

@@ -1,16 +1,1 @@
-{
-  "name": "Soumaya · Second Brain",
-  "short_name": "Soumaya",
-  "description": "Your thoughts become a living galaxy you can talk to.",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#080514",
-  "theme_color": "#080514",
-  "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
-}
+{"background_color":"#080514","description":"Your thoughts become a living galaxy you can talk to.","display":"standalone","icons":[{"purpose":"any","sizes":"192x192","src":"/icon-192.png","type":"image/png"},{"purpose":"any","sizes":"512x512","src":"/icon-512.png","type":"image/png"},{"purpose":"maskable","sizes":"512x512","src":"/icon-512.png","type":"image/png"}],"name":"Soumaya · Second Brain","orientation":"any","scope":"/","share_target":{"action":"/share","enctype":"application/x-www-form-urlencoded","method":"GET","params":{"text":"text","title":"title","url":"url"}},"short_name":"Soumaya","shortcuts":[{"description":"Dump a thought straight into your brain","icons":[{"sizes":"192x192","src":"/icon-192.png","type":"image/png"}],"name":"Capture a thought","short_name":"Capture","url":"/share?capture=1"}],"start_url":"/","theme_color":"#080514"}

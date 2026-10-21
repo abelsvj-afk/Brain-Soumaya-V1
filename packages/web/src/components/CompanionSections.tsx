@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { extractFileText } from "../lib/extractFileText.js";
 import {
-  getPersona,
-  refreshPersona,
-  getInstructions,
+  getPersonaStrict,
+  refreshPersonaStrict,
+  getInstructionsStrict,
   createInstruction,
   updateInstruction,
   deleteInstruction,
-  getDocuments,
+  getDocumentsStrict,
   uploadDocument,
   renameDocument,
   deleteDocument,
-  getSoul,
+  getSoulStrict,
   setSoul,
-  getGroundedInsight,
+  getGroundedInsightStrict,
   setGroundedInsight,
   type InstructionProfile,
   type KnowledgeDoc,
@@ -76,13 +76,31 @@ const ROLE_TEMPLATES: { name: string; blurb: string; body: string }[] = [
 export function AboutMe() {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  // IM-110: truthful load state — a failed fetch must not pose as "she's
+  // still getting to know you" (the fail-soft getPersona made a dead server,
+  // a slow load, and a genuinely new user indistinguishable).
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshError, setRefreshError] = useState(false);
+  const load = async () => {
+    setLoadState("loading");
+    try {
+      setBody(await getPersonaStrict());
+      setLoadState("ready");
+    } catch {
+      setLoadState("error");
+    }
+  };
   useEffect(() => {
-    getPersona().then(setBody);
+    void load();
   }, []);
   const refresh = async () => {
     setBusy(true);
+    setRefreshError(false);
     try {
-      setBody(await refreshPersona());
+      setBody(await refreshPersonaStrict());
+      setLoadState("ready");
+    } catch {
+      setRefreshError(true);
     } finally {
       setBusy(false);
     }
@@ -94,11 +112,29 @@ export function AboutMe() {
         What Soumaya has learned about you from your galaxy. She keeps this current on her own
         and stays aware of it when she talks to you — it isn't edited by hand.
       </p>
-      <div className="companion-persona">
-        {body ? body : "Soumaya is still getting to know you — add a few more memories."}
-      </div>
+      {loadState === "error" ? (
+        <div className="companion-error" role="alert">
+          <span>⚠️ Couldn't load what she's learned about you — this isn't an empty profile, it's a failed connection.</span>
+          <button className="mini" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="companion-persona">
+          {loadState === "loading"
+            ? "Loading what she's learned…"
+            : body
+              ? body
+              : "Soumaya is still getting to know you — add a few more memories."}
+        </div>
+      )}
+      {refreshError && (
+        <p className="companion-hint" role="alert" style={{ margin: "6px 0 0" }}>
+          ⚠️ Couldn't update just now — what's shown above is the last version she had.
+        </p>
+      )}
       <div className="row">
-        <button onClick={refresh} disabled={busy} title="Re-derive from your latest memories">
+        <button onClick={refresh} disabled={busy || loadState !== "ready"} title="Re-derive from your latest memories">
           {busy ? "Updating…" : "↻ Update now"}
         </button>
       </div>
@@ -109,13 +145,23 @@ export function AboutMe() {
 export function Soul() {
   const [body, setBody] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  useEffect(() => {
-    void getSoul().then((b) => {
-      setBody(b);
+  const load = async () => {
+    setLoadError(false);
+    try {
+      // IM-110: strict load — a failed fetch used to leave an EMPTY editor
+      // that looked exactly like "no custom soul set", one Save away from
+      // wiping the real one.
+      setBody(await getSoulStrict());
       setLoaded(true);
-    });
+    } catch {
+      setLoadError(true);
+    }
+  };
+  useEffect(() => {
+    void load();
   }, []);
   const save = async () => {
     setBusy(true);
@@ -131,6 +177,14 @@ export function Soul() {
         Her deeper character — voice, values, the way she carries herself. This refines who she is to
         YOU (it never overrides her safety rules). Leave it empty to use her default soul.
       </p>
+      {loadError && (
+        <div className="companion-error" role="alert">
+          <span>⚠️ Couldn't load her current soul — editing is paused so a failed load can't overwrite it.</span>
+          <button className="mini" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      )}
       <textarea
         className="companion-textarea"
         rows={6}
@@ -152,11 +206,20 @@ export function Soul() {
 export function GroundedInsight() {
   const [on, setOn] = useState(true);
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    void getGroundedInsight().then((v) => {
-      setOn(v);
+  const [loadError, setLoadError] = useState(false);
+  const load = async () => {
+    setLoadError(false);
+    try {
+      // IM-110: strict load — the fail-soft default (ON) used to render even
+      // when the fetch died, presenting a guessed state as her real setting.
+      setOn(await getGroundedInsightStrict());
       setLoaded(true);
-    });
+    } catch {
+      setLoadError(true);
+    }
+  };
+  useEffect(() => {
+    void load();
   }, []);
   const toggle = async () => {
     const next = !on;
@@ -186,6 +249,14 @@ export function GroundedInsight() {
           <span className="knob" />
         </button>
       </div>
+      {loadError && (
+        <div className="companion-error" role="alert">
+          <span>⚠️ Couldn't check this setting — the switch above isn't showing her real state.</span>
+          <button className="mini" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -195,19 +266,31 @@ export function Instructions() {
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
   const [mode, setMode] = useState<"always" | "auto">("always");
+  const [priority, setPriority] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [adding, setAdding] = useState(false); // the "new profile" form is collapsed by default
   const [expandedId, setExpandedId] = useState<number | null>(null); // which item shows its full body
+  // IM-110: truthful load state — "No profiles yet" may only render after a
+  // SUCCESSFUL empty load, never while loading or after a failure.
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   // Inline edit state.
   const [editId, setEditId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editMode, setEditMode] = useState<"always" | "auto">("always");
+  const [editPriority, setEditPriority] = useState(0);
 
-  const refresh = () => getInstructions().then(setList);
+  const refresh = async () => {
+    try {
+      setList(await getInstructionsStrict());
+      setLoadState("ready");
+    } catch {
+      setLoadState("error");
+    }
+  };
   useEffect(() => {
-    refresh();
+    void refresh();
   }, []);
 
   const add = async () => {
@@ -218,10 +301,11 @@ export function Instructions() {
     setBusy(true);
     setMsg("");
     try {
-      await createInstruction({ name: name.trim(), body: body.trim(), mode });
+      await createInstruction({ name: name.trim(), body: body.trim(), mode, priority });
       setName("");
       setBody("");
       setMode("always");
+      setPriority(0);
       setAdding(false);
       await refresh();
       setMsg("Added.");
@@ -237,21 +321,22 @@ export function Instructions() {
     setEditName(p.name);
     setEditBody(p.body);
     setEditMode(p.mode === "auto" ? "auto" : "always");
+    setEditPriority(p.priority ?? 0);
   };
   const saveEdit = async () => {
     if (editId == null) return;
     try {
-      await updateInstruction(editId, { name: editName.trim(), body: editBody.trim(), mode: editMode });
+      await updateInstruction(editId, { name: editName.trim(), body: editBody.trim(), mode: editMode, priority: editPriority });
       setEditId(null);
-      refresh();
+      void refresh();
     } catch (err) {
       setMsg((err as Error).message);
     }
   };
   const toggle = (p: InstructionProfile) =>
-    updateInstruction(p.id, { enabled: !p.enabled }).then(refresh).catch(() => setMsg("Couldn't update that — try again."));
+    updateInstruction(p.id, { enabled: !p.enabled }).then(() => void refresh()).catch(() => setMsg("Couldn't update that — try again."));
   const remove = (p: InstructionProfile) =>
-    deleteInstruction(p.id).then(refresh).catch(() => setMsg("Couldn't remove that — try again."));
+    deleteInstruction(p.id).then(() => void refresh()).catch(() => setMsg("Couldn't remove that — try again."));
 
   const useTemplate = (t: { name: string; body: string }) => {
     setName(t.name);
@@ -309,6 +394,16 @@ export function Instructions() {
                   <option value="always">always on</option>
                   <option value="auto">auto (route by topic)</option>
                 </select>
+                <label className="companion-priority" title="When several roles fit, higher priority shapes her reply first (0–100)">
+                  Priority
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                  />
+                </label>
                 <button onClick={saveEdit}>Save</button>
                 <button className="mini" onClick={() => setEditId(null)}>
                   Cancel
@@ -334,6 +429,11 @@ export function Instructions() {
                   {p.enabled ? "●" : "○"} {p.name}
                 </button>
                 <span className="companion-mode-tag" title={`${p.mode} mode`}>{p.mode}</span>
+                {/* IM-109: priority was accepted by the API but invisible —
+                    it's what orders her roles when several fit a message. */}
+                <span className="companion-mode-tag" title="Priority — when several roles fit, higher applies first">
+                  ⇡ {p.priority ?? 0}
+                </span>
                 <button className="companion-edit" onClick={() => beginEdit(p)} aria-label="Edit">
                   ✎
                 </button>
@@ -347,7 +447,16 @@ export function Instructions() {
             </li>
           ),
         )}
-        {list.length === 0 && <li className="empty small">No profiles yet — add one below.</li>}
+        {loadState === "loading" && <li className="empty small">Loading your roles…</li>}
+        {loadState === "error" && (
+          <li className="companion-error" role="alert">
+            <span>⚠️ Couldn't load your roles — this isn't an empty list, it's a failed connection.</span>
+            <button className="mini" onClick={() => void refresh()}>
+              Retry
+            </button>
+          </li>
+        )}
+        {loadState === "ready" && list.length === 0 && <li className="empty small">No profiles yet — add one below.</li>}
       </ul>
 
       {adding ? (
@@ -371,6 +480,16 @@ export function Instructions() {
               <option value="always">always on</option>
               <option value="auto">auto (route by topic)</option>
             </select>
+            <label className="companion-priority" title="When several roles fit, higher priority shapes her reply first (0–100)">
+              Priority
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={priority}
+                onChange={(e) => setPriority(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+              />
+            </label>
             <button onClick={add} disabled={busy}>
               {busy ? "Adding…" : "Save profile"}
             </button>
@@ -398,9 +517,19 @@ export function Knowledge() {
   const [renameId, setRenameId] = useState<number | null>(null);
   const [renameVal, setRenameVal] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  const refresh = () => getDocuments().then(setDocs);
+  // IM-110: truthful load state — "No documents yet" only after a successful
+  // empty load.
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const refresh = async () => {
+    try {
+      setDocs(await getDocumentsStrict());
+      setLoadState("ready");
+    } catch {
+      setLoadState("error");
+    }
+  };
   useEffect(() => {
-    refresh();
+    void refresh();
   }, []);
 
   const onFile = async (file: File) => {
@@ -443,7 +572,7 @@ export function Knowledge() {
     }
     setRenameId(null);
   };
-  const remove = (d: KnowledgeDoc) => deleteDocument(d.id).then(refresh);
+  const remove = (d: KnowledgeDoc) => deleteDocument(d.id).then(() => void refresh());
 
   return (
     <section className="companion-section">
@@ -470,7 +599,15 @@ export function Knowledge() {
             ) : (
               <div className="companion-item-head">
                 <span className="companion-doc-name">📄 {d.name}</span>
-                <span className="companion-doc-meta">{d.chunks ?? 0} chunks</span>
+                {/* IM-109: charCount/mime/createdAt were fetched all along
+                    but never shown — surface the doc's real metadata. */}
+                <span className="companion-doc-meta">
+                  {d.chunks ?? 0} chunks · {(d.charCount ?? 0).toLocaleString()} chars
+                  {d.mime ? ` · ${d.mime}` : ""}
+                  {d.createdAt
+                    ? ` · added ${new Date(d.createdAt).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}`
+                    : ""}
+                </span>
                 <button
                   className="companion-edit"
                   onClick={() => { setRenameId(d.id); setRenameVal(d.name); }}
@@ -485,7 +622,16 @@ export function Knowledge() {
             )}
           </li>
         ))}
-        {docs.length === 0 && <li className="empty small">No documents yet.</li>}
+        {loadState === "loading" && <li className="empty small">Loading your documents…</li>}
+        {loadState === "error" && (
+          <li className="companion-error" role="alert">
+            <span>⚠️ Couldn't load your documents — this isn't an empty library, it's a failed connection.</span>
+            <button className="mini" onClick={() => void refresh()}>
+              Retry
+            </button>
+          </li>
+        )}
+        {loadState === "ready" && docs.length === 0 && <li className="empty small">No documents yet.</li>}
       </ul>
       <div className="companion-new">
         <input

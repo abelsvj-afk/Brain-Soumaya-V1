@@ -55,6 +55,11 @@ export interface AnswerOptions {
   timezone?: string;
   /** Retrieved knowledge-document chunks, pre-formatted with doc names. */
   knowledge?: string;
+  /** Text the user attached to THIS chat message (in-chat attachment, IM-106),
+   *  pre-formatted with file names. One-turn only: never stored, never part of
+   *  the knowledge library — it grounds this reply the way a shown document
+   *  would. Absent on every non-web-chat caller (agent loop, Telegram). */
+  attachments?: string;
   /** Recent conversation turns, pre-formatted ("User: …\nSoumaya: …") — WITHOUT
    *  this every reply is an amnesiac one-shot, which read as "generic chatbot". */
   history?: string;

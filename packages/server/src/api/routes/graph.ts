@@ -3,6 +3,7 @@ import type { GalaxyEntityKind } from "@brain/shared";
 import type { AppContext } from "../../context.js";
 import { GraphService, INCLUDE_IDS_CAP, MAX_UNION_IDS } from "../../graph/service.js";
 import { resolveGalaxyEntity, navigationIntentFor } from "../../analysis/galaxyEntity.js";
+import { GraphExportRepo } from "../../repositories/graphExport.repo.js";
 import { spaceOf } from "../middleware.js";
 
 const GALAXY_ENTITY_KINDS: readonly GalaxyEntityKind[] = ["node", "journey", "bill", "goal"];
@@ -56,6 +57,12 @@ export function graphRoutes(ctx: AppContext): Router {
       return res.status(400).json({ error: "cursor must be a non-negative integer edge id" });
     }
     res.json(new GraphService(ctx.handle, spaceOf(res)).incidentEdges(ids, cursor));
+  });
+  // GET /api/graph/export -> this space's whole graph as JSON (IM-129c) —
+  // the Settings "Download your brain (JSON)" button. Repository-owned and
+  // space-scoped; see GraphExportRepo for the payload contract.
+  r.get("/export", (_req, res) => {
+    res.json(new GraphExportRepo(ctx.handle, spaceOf(res)).exportGraph());
   });
   // GET /api/graph/entity/:kind/:id -> GalaxyEntityDescriptor (Maya Intelligence Part I3:
   // "what's that star?"). One bounded, deterministic lookup per Galaxy body kind — no

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { playSfx } from "../graph/sfx.js";
+import { formatToastTime, toastPriorityLabel } from "./cl1a.helpers.js";
 
 /**
  * Lightweight celebratory toast system (gamification Wave 1). Fire from anywhere
@@ -19,6 +20,8 @@ export interface Toast {
   ttl: number;
   priority?: "low" | "normal" | "high";
   action?: ToastAction;
+  /** IM-05: when the toast fired — rendered as a local time on the live toast. */
+  createdAt: number;
 }
 
 export interface InboxNotification {
@@ -33,6 +36,8 @@ export interface InboxNotification {
    *  you — the transient Toast carries this, but it used to be dropped the moment
    *  a toast was logged, making every archived notification permanently unclickable. */
   action?: ToastAction;
+  /** IM-75: snoozed until this epoch-ms instant — hidden from Unseen until then. */
+  snoozedUntil?: number | null;
 }
 
 /** How many notifications the inbox log keeps. Defined once — InboxPanel used to
@@ -124,30 +129,24 @@ export function writeNotifications(list: InboxNotification[], spaceId?: string):
   }
 }
 
-/** Prune notifications: seen items > 5 minutes, normal unseen items > 24 hours. Important ones are kept. */
+/**
+ * Retention (IM-73, honest policy): notifications are NEVER deleted by age —
+ * seen or unseen, they persist until the user clears them. The only bound is
+ * INBOX_CAP: the log keeps the most recent INBOX_CAP entries (enforced on every
+ * write by writeNotifications). This used to delete seen items 5 minutes after
+ * they were read and unseen normal items after 24h, so "History" was a
+ * ≤5-minute window the panel copy never disclosed. Cleanup now only trims an
+ * over-cap log (e.g. one written before the cap, or by an older build).
+ */
 export function cleanupNotifications(spaceId: string): void {
   try {
     const list = readNotifications(spaceId);
-    if (list.length === 0) return;
-    const now = Date.now();
-    const fiveMinutes = 5 * 60 * 1000;
-    const oneDay = 24 * 60 * 60 * 1000;
-
-    const filtered = list.filter((item) => {
-      if (item.seen) {
-        return item.seenAt ? (now - item.seenAt < fiveMinutes) : false;
-      }
-      if (item.priority === "high") {
-        return true;
-      }
-      return (now - item.timestamp < oneDay);
-    });
-
+    if (list.length <= INBOX_CAP) return;
     // Only write + announce when something actually changed. Cleanup used to write
     // silently, so a panel that had already loaded kept stale rows in state — and the
     // next Mark-All-Read/Clear-History wrote that stale array straight back, RESURRECTING
-    // everything cleanup had just pruned. Announcing makes readers re-sync.
-    if (filtered.length !== list.length) writeNotifications(filtered, spaceId);
+    // everything cleanup had just trimmed. Announcing makes readers re-sync.
+    writeNotifications(list, spaceId); // writeNotifications applies the cap
   } catch (e) {
     console.error("Failed to cleanup notifications", e);
   }
@@ -174,7 +173,7 @@ export function pushToast(
     list = [];
   }
 
-  const t: Toast = { id: nextId++, text, icon, ttl, priority, action };
+  const t: Toast = { id: nextId++, text, icon, ttl, priority, action, createdAt: Date.now() };
   // Buffer when paused, or when quieted (focus mode) unless it's high-priority.
   if (paused || (quiet && priority !== "high")) {
     buffer.push(t); // still logged to inbox below
@@ -312,6 +311,10 @@ export function Toasts() {
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
             <span className="toast-ic">{t.icon}</span>
             <span className="toast-msg">{t.text}</span>
+            {toastPriorityLabel(t.priority) && (
+              <span className={`toast-priority priority-${t.priority}`}>{toastPriorityLabel(t.priority)}</span>
+            )}
+            <time className="toast-time" dateTime={new Date(t.createdAt).toISOString()}>{formatToastTime(t.createdAt)}</time>
             {t.action && <span className="toast-go" aria-hidden>›</span>}
           </div>
           <button
