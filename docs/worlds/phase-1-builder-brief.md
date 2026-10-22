@@ -52,11 +52,15 @@ Each mockup produces a record file in `docs/worlds/` — `mockup-result-station.
 - Time labels, if any appear, use the viewer's local timezone — **never UTC**.
 - The brain's chosen display name is used where a name is needed — never a hardcoded product name in captions.
 
-## 7. Reporting
+## 7. The review standard (owner-set, 2026-10-22 — read before you claim anything)
 
-After each mockup: push its result record, update this brief's status table (§8), and report to the owner in the worlds chat (or the channel the owner directs): verdict, headline numbers, failure class if any, and the evidence locations. **Do not start the next mockup until the previous one's PASS is recorded** — and the owner may still pause the sequence at any point; a recorded PASS is a gate condition, not an obligation to continue.
+**A builder's claimed PASS is not an independently supported PASS.** The record is reviewed criterion by criterion against §11: each criterion is checked against the *actual evidence in the record* — reproducible build details, full performance measurements, visual evidence, seed traceability, reduced-motion results, behavioral results kept separate. **Missing or contradictory proof leaves that criterion unresolved** — unresolved is not a pass, and a mockup does not advance the sequence on unresolved criteria. The builder supplies evidence; **the owner retains the V6 pass/fail decision and design-gate closure.** Write the record expecting this review: claims without evidence will be returned, not rounded up.
 
-## 8. Status
+## 8. Reporting
+
+After each mockup: push its result record, update this brief's status table (§9), and report to the owner in the worlds chat (or the channel the owner directs): verdict, headline numbers, failure class if any, and the evidence locations. **Do not start the next mockup until the previous one's PASS is recorded *and supported under §7's review*** — and the owner may still pause the sequence at any point; a recorded PASS is a gate condition, not an obligation to continue.
+
+## 9. Status
 
 | Mockup | State | Record |
 |---|---|---|

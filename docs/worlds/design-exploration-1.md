@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 25 — **Phase 1 AUTHORIZED (D-27):** the owner authorized throwaway mockup construction only (Station → Growing Place → Deep Past, sequentially gated), under the binding conditions recorded in D-27, with a builder brief issued (`phase-1-builder-brief.md`). Product implementation, merging, deployment, and later phases remain **unauthorized**. **Design gate: OPEN.**
+**Revision:** 26 — **Phase 1 review standard recorded** (owner-set): claimed PASS ≠ supported PASS; criterion-by-criterion evidence review; unresolved criteria block advancement. Brief §7 + register carry it. Phase 1 execution: **not yet begun**. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -819,10 +819,10 @@ Phase 0 (§19 A3) is the three environment recipes on paper, each a standalone d
 | The Deep Past | `recipe-deep-past.md` | ✅ **SETTLED** (owner, 2026-10-22: R-D1–R-D4 as recommended, monotonicity constraint included; **A21/A22 ratified into §14**) |
 
 **Phase 0 status: ✅ COMPLETE (2026-10-22, D-26)** — all three recipes settled on paper.
-**Phase 1 status: ✅ AUTHORIZED (owner, 2026-10-22, D-27)** — throwaway mockups only, in the order Station → Growing Place → Deep Past, each gated on the previous one's pass; builder brief: `phase-1-builder-brief.md`. Execution status: **not yet begun** (builder reads governing docs + brief first). The design gate remains OPEN until mockup results are reviewed and the owner closes it.
+**Phase 1 status: ✅ AUTHORIZED (owner, 2026-10-22, D-27)** — throwaway mockups only, in the order Station → Growing Place → Deep Past, each gated on the previous one's pass; builder brief: `phase-1-builder-brief.md`. Execution status: **not yet begun** (builder reads governing docs + brief first). **Review standard (owner-set, 2026-10-22):** a builder's claimed PASS is not an independently supported PASS — each §11 criterion is checked against the record's actual evidence; missing or contradictory proof leaves the criterion **unresolved**, and the sequence does not advance on unresolved criteria; V6 and design-gate closure remain the owner's alone. The design gate remains OPEN until mockup results are reviewed and the owner closes it.
 
 The draft Station recipe follows §18's minimum contents: identity (crown-and-stem megastructure; amber harbor in indigo dark), the three-stage approach composition with its named dual-layer handoff risk, honest content (journeys real, traffic atmosphere, no memories), a budget allocation inside §11.2's ceilings, the A13/A17/A11/A12/A15/A16/A19/A20 animation slice with combined load and fallback ladder, shared-vs-distinct elements, a seed parameter table for V4 traceability, and the D-13 evidence the mockup must produce.
 
 ---
 
-*End of Exploration 1, Revision 25. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 26. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
