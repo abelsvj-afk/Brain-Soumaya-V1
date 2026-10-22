@@ -33,11 +33,28 @@ export interface TelegramReplyDeps {
   synthesizer?: SpeechSynthesizer | null;
   /** Audio cache override. `undefined` in the handler = the persistent DB cache. */
   cache?: SpeechAudioCache;
+  /**
+   * The reply's authenticated space (ADR-018 D2). Required to construct
+   * the production DbSpeechCache: the cache is owned by one space, so
+   * there is no unscoped production cache.
+   */
+  spaceId?: string;
 }
 
-/** Fill in the production defaults for a handler call (persistent DB cache). */
+/**
+ * Fill in the production defaults for a handler call (persistent DB cache).
+ *
+ * The production cache is bound ONLY when `deps.cache` is undefined AND
+ * `deps.spaceId` is present — it is always constructed with the reply's
+ * authenticated space. When no spaceId is available the cache stays
+ * undefined — NEVER construct an unscoped cache as a fallback (the
+ * synthesizer then runs cacheless; TTS-off default behavior is unchanged).
+ * Injected caches (test doubles) are preserved unchanged.
+ */
 export function resolveReplyDeps(handle: DbHandle, deps: TelegramReplyDeps): TelegramReplyDeps {
-  return { ...deps, cache: deps.cache ?? new DbSpeechCache(handle) };
+  if (deps.cache !== undefined) return { ...deps };
+  if (deps.spaceId) return { ...deps, cache: new DbSpeechCache(handle, deps.spaceId) };
+  return { ...deps, cache: undefined };
 }
 
 // ---------------------------------------------------------------------------

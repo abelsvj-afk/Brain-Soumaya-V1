@@ -306,7 +306,11 @@ export async function handleTelegramUpdate(
   const isVoiceMessage = msg?.voice != null;
   if (chatId == null || (!text && !isVoiceMessage)) return;
 
-  // Phase D: resolve voice-reply deps (persistent audio cache by default).
+  // Phase D / ADR-018: resolve voice-reply deps. The trusted space is not
+  // known yet (the chat may not even be linked), so this early resolution
+  // can only preserve an injected cache — it NEVER constructs a
+  // DbSpeechCache. The scoped resolution happens below, once `link.spaceId`
+  // is known, and every delivery path uses that scoped value.
   const replyDeps = resolveReplyDeps(ctx.handle, deps);
 
   const links = new TelegramLinksRepo(ctx.handle);
@@ -372,6 +376,12 @@ export async function handleTelegramUpdate(
   }
   const spaceId = link.spaceId;
 
+  // ADR-018 D2: re-resolve WITH the handler's trusted spaceId before any
+  // delivery — the production DbSpeechCache exists only scoped to this
+  // space. An injected cache (test double) is preserved by resolveReplyDeps;
+  // otherwise this binds `new DbSpeechCache(handle, spaceId)`.
+  const scopedReplyDeps = resolveReplyDeps(ctx.handle, { ...replyDeps, spaceId });
+
   // Note expiry (Phase 3): a draft idle >24h is discarded on next contact,
   // whatever this message turns out to be — warn first, then let the message
   // flow on normally (the draft is gone, so nothing below can append to it).
@@ -382,7 +392,7 @@ export async function handleTelegramUpdate(
 
   // Phase D call sites — the logic lives in voiceReply.ts.
   if (isVoiceMessage) {
-    await handleVoiceMessage(send, replyDeps, chatId, spaceId);
+    await handleVoiceMessage(send, scopedReplyDeps, chatId, spaceId);
     return;
   }
 
@@ -558,7 +568,7 @@ export async function handleTelegramUpdate(
     // Voice note when TTS is on + triggered (Phase D); text otherwise / on
     // any failure. History records the reply TEXT either way — the thread is
     // the words, not the medium they were delivered in.
-    await deliverReply(send, replyDeps, chatId, sentText, {
+    await deliverReply(send, scopedReplyDeps, chatId, sentText, {
       chatOptedIn: isChatVoiceEnabled(spaceId, chatId),
     });
     appendTelegramTurn(spaceId, chatId, text, sentText);
@@ -569,7 +579,7 @@ export async function handleTelegramUpdate(
     if (answer.citations.length > 0) {
       reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
     }
-    await deliverReply(send, replyDeps, chatId, reply, {
+    await deliverReply(send, scopedReplyDeps, chatId, reply, {
       chatOptedIn: isChatVoiceEnabled(spaceId, chatId),
     });
     appendTelegramTurn(spaceId, chatId, text, reply);

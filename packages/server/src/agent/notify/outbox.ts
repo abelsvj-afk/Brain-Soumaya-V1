@@ -6,10 +6,13 @@
  *
  * Key safety properties (all signed off):
  * - notif_key UNIQUE: same logical notification never queued twice.
- * - Atomic claim: UPDATE ... WHERE status='queued' AND cap-check. One winner.
- * - Cap derived from outbox rows (status IN ('sending','sent','ambiguous')
- *   with cap_day — ambiguous rows retain their slot, see markAmbiguous).
- *   No separate counter; crash recovery self-corrects.
+ * - Atomic claim: the shared cap-claim ledger (capClaims.ts) reserves the
+ *   slot and flips the row to 'sending' in ONE transaction. One winner.
+ * - Cap counting lives ONLY in the shared ledger (ADR-018 D1/A2):
+ *   `notification_cap_claims` rows in reserved|sent|ambiguous with
+ *   cap_exempt = 0, shared across Telegram + push. This outbox's `cap_day`
+ *   column is inert legacy — never written by claim paths, never read for
+ *   counting. Ambiguous outcomes retain their ledger slot (markAmbiguous).
  * - send_started_at distinguishes definite non-delivery (NULL on recovery)
  *   from ambiguous outcome (set on recovery) — see recoverExpiredLeases.
  * - ambiguous is terminal: cap retained, never auto-retried. Telegram has no
@@ -18,6 +21,7 @@
 
 import type { RawDb } from "../../db/vec.js";
 import { notifKey, type NotifyMeta, type Urgency } from "./policy.js";
+import { tryClaim, transitionClaim } from "./capClaims.js";
 
 /** Lease duration: a 'sending' row older than this is considered crashed. */
 export const LEASE_MS = 5 * 60 * 1000;
@@ -39,6 +43,10 @@ export interface OutboxRow {
   lastError: string | null;
   deliverAfter: string;
   billDueAt: string | null;
+  /** ADR-018 B1: immutable original reminder due time (meta.remindAt at
+   *  enqueue; NULL on pre-migration legacy rows). Retry reclassification
+   *  reads this — never created_at, never occurrence_id. */
+  remindAt: string | null;
   capDay: string | null;
   sendStartedAt: string | null;
   claimedBy: string | null;
@@ -63,6 +71,7 @@ interface RawOutboxRow {
   last_error: string | null;
   deliver_after: string;
   bill_due_at: string | null;
+  remind_at: string | null;
   cap_day: string | null;
   send_started_at: string | null;
   claimed_by: string | null;
@@ -88,6 +97,7 @@ function mapRow(r: RawOutboxRow): OutboxRow {
     lastError: r.last_error,
     deliverAfter: r.deliver_after,
     billDueAt: r.bill_due_at,
+    remindAt: r.remind_at ?? null,
     capDay: r.cap_day,
     sendStartedAt: r.send_started_at,
     claimedBy: r.claimed_by,
@@ -118,8 +128,8 @@ export function enqueue(sqlite: RawDb, input: EnqueueInput): { id: number; dedup
   const r = sqlite
     .prepare(
       `INSERT INTO notification_outbox
-       (notif_key, space_id, tool, occurrence_id, message, priority, is_urgent, urgent_reason, status, deliver_after, bill_due_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+       (notif_key, space_id, tool, occurrence_id, message, priority, is_urgent, urgent_reason, status, deliver_after, bill_due_at, remind_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)`
     )
     .run(
       key,
@@ -131,15 +141,19 @@ export function enqueue(sqlite: RawDb, input: EnqueueInput): { id: number; dedup
       input.urgency.isUrgent ? 1 : 0,
       input.urgency.reason ?? null,
       input.deliverAfter,
-      input.meta.billDueAt ?? null
+      input.meta.billDueAt ?? null,
+      // ADR-018 B1: written once here; the dedup path above never updates it.
+      input.meta.remindAt ?? null
     );
   return { id: Number(r.lastInsertRowid), deduped: false };
 }
 
 /**
- * Atomically claim a queued row for sending AND reserve a cap slot.
- * Returns true iff this caller won both. Urgent rows bypass the cap
- * (cap_day stays NULL) but still need the atomic status claim.
+ * Atomically claim a queued row for sending AND reserve a cap slot in the
+ * shared ledger (ADR-018 D1/A2). Returns true iff this caller won both.
+ * The ledger is the only counting authority: no cap subquery here and no
+ * cap_day write (the column stays in place for legacy rows, inert).
+ * `capDay` is the space-local day the claim counts against.
  */
 export function claimForSend(
   sqlite: RawDb,
@@ -150,28 +164,58 @@ export function claimForSend(
   workerId: string,
   nowIso: string
 ): boolean {
-  const r = sqlite
-    .prepare(
-      `UPDATE notification_outbox
-       SET status = 'sending', cap_day = ?, claimed_by = ?, claimed_at = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND status = 'queued'
-         AND (SELECT COUNT(*) FROM notification_outbox
-              WHERE space_id = ? AND cap_day = ? AND status IN ('sending', 'sent', 'ambiguous')) < ?`
-    )
-    .run(capDay, workerId, nowIso, id, spaceId, capDay, cap);
-  return r.changes === 1;
+  const row = sqlite.prepare(`SELECT notif_key FROM notification_outbox WHERE id = ?`).get(id) as
+    | { notif_key: string }
+    | undefined;
+  if (!row) return false;
+  return tryClaim(
+    sqlite,
+    { spaceId, channel: "telegram", deliveryKey: row.notif_key, localDay: capDay, cap, capExempt: false },
+    () => {
+      const r = sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'sending', claimed_by = ?, claimed_at = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND status = 'queued'`
+        )
+        .run(workerId, nowIso, id);
+      return r.changes === 1;
+    }
+  );
 }
 
-/** Atomic claim for urgent rows: status flip only, no cap interaction. */
-export function claimUrgentForSend(sqlite: RawDb, id: number, workerId: string, nowIso: string): boolean {
-  const r = sqlite
-    .prepare(
-      `UPDATE notification_outbox
-       SET status = 'sending', claimed_by = ?, claimed_at = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND status = 'queued'`
-    )
-    .run(workerId, nowIso, id);
-  return r.changes === 1;
+/**
+ * Atomic claim for urgent rows: same ledger claim with capExempt — the
+ * delivery is recorded (idempotency/audit) but consumes no cap slot and
+ * is never blocked by the cap (ADR-018 Option A). Still exactly one
+ * winner via the conditional status flip.
+ */
+export function claimUrgentForSend(
+  sqlite: RawDb,
+  id: number,
+  spaceId: string,
+  localDay: string,
+  workerId: string,
+  nowIso: string
+): boolean {
+  const row = sqlite.prepare(`SELECT notif_key FROM notification_outbox WHERE id = ?`).get(id) as
+    | { notif_key: string }
+    | undefined;
+  if (!row) return false;
+  return tryClaim(
+    sqlite,
+    { spaceId, channel: "telegram", deliveryKey: row.notif_key, localDay, cap: 0, capExempt: true },
+    () => {
+      const r = sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'sending', claimed_by = ?, claimed_at = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND status = 'queued'`
+        )
+        .run(workerId, nowIso, id);
+      return r.changes === 1;
+    }
+  );
 }
 
 /** Atomically upgrade a queued billRisk row to urgent. One winner. */
@@ -185,63 +229,106 @@ export function tryUpgradeToUrgent(sqlite: RawDb, id: number, reason: string): b
   return r.changes === 1;
 }
 
+/**
+ * Persist a delivery-time reclassification (ADR-018 A2b): BIDIRECTIONAL —
+ * the sweep's downgrade AND upgrade path are this one mechanism. The
+ * persisted bit is only an ordering hint for dueRows; authority is the
+ * fresh classifyUrgency result the caller computed from the persisted
+ * due-time columns. Only queued rows can be reclassified.
+ */
+export function setUrgency(sqlite: RawDb, id: number, isUrgent: boolean, reason: string | null): boolean {
+  const r = sqlite
+    .prepare(
+      `UPDATE notification_outbox SET is_urgent = ?, urgent_reason = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'queued'`
+    )
+    .run(isUrgent ? 1 : 0, reason, id);
+  return r.changes === 1;
+}
+
+/**
+ * Transition this row's ledger claim inside the caller's transaction.
+ * Legacy in-flight rows (no ledger claim) no-op silently (A2/Q1).
+ */
+function transitionClaimForRow(sqlite: RawDb, id: number, to: "sent" | "released" | "ambiguous"): void {
+  const row = sqlite.prepare(`SELECT space_id, notif_key FROM notification_outbox WHERE id = ?`).get(id) as
+    | { space_id: string; notif_key: string }
+    | undefined;
+  if (!row) return;
+  transitionClaim(sqlite, { spaceId: row.space_id, channel: "telegram", deliveryKey: row.notif_key }, to);
+}
+
 /** Set immediately BEFORE the Telegram HTTP request. */
 export function markSendStarted(sqlite: RawDb, id: number, nowIso: string): void {
   sqlite.prepare(`UPDATE notification_outbox SET send_started_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(nowIso, id);
 }
 
-/** Definite success: record immediately after the API returns. */
+/** Definite success: record immediately after the API returns. The ledger
+ *  claim transitions reserved → sent in the SAME transaction (A2). */
 export function markSent(sqlite: RawDb, id: number): void {
-  sqlite.prepare(`UPDATE notification_outbox SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+  sqlite.transaction(() => {
+    sqlite.prepare(`UPDATE notification_outbox SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+    transitionClaimForRow(sqlite, id, "sent");
+  })();
 }
 
 /**
- * Definite failure (API error). Releases the cap slot (cap_day=NULL) and either
- * re-queues with backoff or marks terminal 'failed' after MAX_ATTEMPTS.
+ * Definite failure (API error). Releases the ledger slot (claim →
+ * released, atomically with the outbox update) and either re-queues with
+ * backoff or marks terminal 'failed' after MAX_ATTEMPTS.
  */
 export function markFailed(sqlite: RawDb, id: number, error: string, retryAfterIso: string | null): void {
-  if (retryAfterIso) {
-    sqlite
-      .prepare(
-        `UPDATE notification_outbox
-         SET status = 'queued', cap_day = NULL, send_started_at = NULL,
-             attempts = attempts + 1, last_error = ?, deliver_after = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`
-      )
-      .run(error, retryAfterIso, id);
-  } else {
-    sqlite
-      .prepare(
-        `UPDATE notification_outbox
-         SET status = 'failed', cap_day = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`
-      )
-      .run(error, id);
-  }
+  sqlite.transaction(() => {
+    if (retryAfterIso) {
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'queued', cap_day = NULL, send_started_at = NULL,
+               attempts = attempts + 1, last_error = ?, deliver_after = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        )
+        .run(error, retryAfterIso, id);
+    } else {
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'failed', cap_day = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        )
+        .run(error, id);
+    }
+    transitionClaimForRow(sqlite, id, "released");
+  })();
 }
 
-/** Stale or otherwise intentionally not delivered. Releases the cap slot. */
+/** Stale or otherwise intentionally not delivered. Releases the ledger slot. */
 export function markDropped(sqlite: RawDb, id: number, reason: string): void {
-  sqlite
-    .prepare(
-      `UPDATE notification_outbox SET status = 'dropped', cap_day = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-    )
-    .run(reason, id);
+  sqlite.transaction(() => {
+    sqlite
+      .prepare(
+        `UPDATE notification_outbox SET status = 'dropped', cap_day = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      )
+      .run(reason, id);
+    transitionClaimForRow(sqlite, id, "released");
+  })();
 }
 
 /**
- * Ambiguous outcome: send may have succeeded. Terminal. Cap slot RETAINED
- * (cap_day untouched) — the daily cap contract takes precedence over
- * delivery completeness. Never auto-retried.
+ * Ambiguous outcome: send may have succeeded. Terminal. Ledger slot
+ * RETAINED (claim → ambiguous) — the daily cap contract takes precedence
+ * over delivery completeness. Never auto-retried.
  */
 export function markAmbiguous(sqlite: RawDb, id: number): void {
-  sqlite
-    .prepare(
-      `UPDATE notification_outbox
-       SET status = 'ambiguous', last_error = 'send outcome unknown after crash; not retried to avoid duplicate', updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    )
-    .run(id);
+  sqlite.transaction(() => {
+    sqlite
+      .prepare(
+        `UPDATE notification_outbox
+         SET status = 'ambiguous', last_error = 'send outcome unknown after crash; not retried to avoid duplicate', updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      )
+      .run(id);
+    transitionClaimForRow(sqlite, id, "ambiguous");
+  })();
 }
 
 export interface RecoveryStats {
@@ -267,13 +354,19 @@ export function recoverExpiredLeases(sqlite: RawDb, now: Date): RecoveryStats {
       markAmbiguous(sqlite, row.id);
       ambiguous++;
     } else {
-      sqlite
-        .prepare(
-          `UPDATE notification_outbox
-           SET status = 'queued', cap_day = NULL, claimed_by = NULL, claimed_at = NULL, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`
-        )
-        .run(row.id);
+      // Pre-send crash: definite non-delivery — requeue and release the
+      // ledger claim in ONE transaction (A2). Legacy rows without a claim
+      // no-op in transitionClaimForRow (Q1).
+      sqlite.transaction(() => {
+        sqlite
+          .prepare(
+            `UPDATE notification_outbox
+             SET status = 'queued', cap_day = NULL, claimed_by = NULL, claimed_at = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          )
+          .run(row.id);
+        transitionClaimForRow(sqlite, row.id, "released");
+      })();
       requeued++;
     }
   }

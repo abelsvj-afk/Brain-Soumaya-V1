@@ -69,6 +69,7 @@ function testDb() {
       last_error TEXT,
       deliver_after TEXT NOT NULL,
       bill_due_at TEXT,
+      remind_at TEXT,
       cap_day TEXT,
       send_started_at TEXT,
       claimed_by TEXT,
@@ -76,6 +77,21 @@ function testDb() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    -- ADR-018 A2: shared cap-claim ledger — mirrors the real DDL in
+    -- db/schemaSql.ts / db/client.ts (the sole cap-counting authority).
+    CREATE TABLE notification_cap_claims (
+      space_id TEXT NOT NULL,
+      local_day TEXT NOT NULL CHECK (local_day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+      channel TEXT NOT NULL CHECK (channel IN ('telegram', 'push')),
+      delivery_key TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('reserved', 'sent', 'ambiguous', 'released')),
+      cap_exempt INTEGER NOT NULL DEFAULT 0 CHECK (cap_exempt IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, channel, delivery_key, local_day)
+    );
+    CREATE INDEX notification_cap_claims_count_idx
+      ON notification_cap_claims(space_id, local_day, state, cap_exempt);
     CREATE TABLE agent_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       space_id TEXT NOT NULL,
@@ -312,9 +328,17 @@ describe("atomic cap claim", () => {
     const sqlite = testDb();
     const now = new Date().toISOString();
     const { id } = enqueue(sqlite, { spaceId: "s1", meta: { tool: "fire_reminder", occurrenceId: "x" }, message: "u", urgency: { isUrgent: true, reason: "fresh" }, deliverAfter: now, queueReason: "t" });
-    expect(claimUrgentForSend(sqlite, id, "w1", now)).toBe(true);
+    // ADR-018: claimUrgentForSend takes (spaceId, localDay) and records a
+    // cap-exempt ledger claim instead of touching cap_day.
+    expect(claimUrgentForSend(sqlite, id, "s1", "2026-10-19", "w1", now)).toBe(true);
     const row = getRow(sqlite, id);
-    expect(row?.capDay).toBeNull(); // not counted
+    expect(row?.capDay).toBeNull(); // inert legacy column — never written by claims (ADR-018 A2/Q1)
+    // The delivery IS recorded in the shared ledger with cap_exempt = 1
+    // and does not consume a cap slot (ADR-018 D1 / A2).
+    const claim = sqlite
+      .prepare(`SELECT state, cap_exempt FROM notification_cap_claims WHERE space_id = 's1' AND channel = 'telegram' AND delivery_key = ?`)
+      .get(row!.notifKey) as { state: string; cap_exempt: number };
+    expect(claim).toEqual({ state: "reserved", cap_exempt: 1 });
   });
 
   it("failed send releases the slot", () => {
@@ -344,6 +368,11 @@ describe("crash recovery: two cases", () => {
     const row = getRow(sqlite, id)!;
     expect(row.status).toBe("queued");
     expect(row.capDay).toBeNull();
+    // ADR-018 A2: the ledger claim was released atomically with the requeue.
+    const claim = sqlite
+      .prepare(`SELECT state FROM notification_cap_claims WHERE delivery_key = ?`)
+      .get(row.notifKey) as { state: string };
+    expect(claim.state).toBe("released");
   });
 
   it("crashed AFTER send_started_at → ambiguous, cap RETAINED, never retried", () => {
@@ -357,7 +386,13 @@ describe("crash recovery: two cases", () => {
     expect(stats.ambiguous).toBe(1);
     const row = getRow(sqlite, id)!;
     expect(row.status).toBe("ambiguous");
-    expect(row.capDay).toBe("2026-10-19"); // retained
+    // ADR-018 A2: the retained slot now lives in the shared ledger, not in
+    // the outbox cap_day column (claims no longer write cap_day — it stays
+    // NULL and inert). The ambiguous claim still counts toward the cap.
+    const claim = sqlite
+      .prepare(`SELECT state, cap_exempt FROM notification_cap_claims WHERE delivery_key = ?`)
+      .get(row.notifKey) as { state: string; cap_exempt: number };
+    expect(claim).toEqual({ state: "ambiguous", cap_exempt: 0 });
     // Sweep must not pick it up again.
     expect(dueRows(sqlite, now.toISOString()).map((r) => r.id)).not.toContain(id);
   });
@@ -421,7 +456,11 @@ describe("boundary: end-to-end", () => {
     }
     const { id } = enqueue(sqlite, {
       spaceId: "s1",
-      meta: { tool: "fire_reminder", occurrenceId: "node:1:at:x" },
+      // ADR-018 B1/D-1: the sweep reclassifies from the persisted
+      // remind_at — a fire_reminder without one is dropped as
+      // unverifiable, so the fixture carries a fresh due time (10m
+      // before the sweep instant below).
+      meta: { tool: "fire_reminder", occurrenceId: "node:1:at:x", remindAt: "2026-10-20T06:50:00.000Z" },
       message: "urgent!",
       urgency: { isUrgent: true, reason: "fresh reminder" },
       // Due at the sweep instant below. (Wall-clock "now" made this test a

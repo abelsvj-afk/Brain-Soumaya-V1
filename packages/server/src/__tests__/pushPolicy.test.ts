@@ -109,6 +109,11 @@ describe("push_outbox schema", () => {
       "claimed_at",
       "created_at",
       "updated_at",
+      // ADR-018 A2b: remind_at + bill_due_at are migrateSchema-only
+      // PRAGMA-guarded ALTERs (never in BOOTSTRAP_SQL), so on a fresh
+      // volume they land after the bootstrap columns, in ALTER order.
+      "remind_at",
+      "bill_due_at",
     ]);
   });
 

@@ -21,7 +21,6 @@ import {
   deliverAfterCapReached,
   localDay,
   stalenessLimitMs,
-  URGENT_BILL_HOURS,
   type NotifyMeta,
   type PolicyDecision,
 } from "./policy.js";
@@ -29,7 +28,7 @@ import {
   enqueue,
   claimForSend,
   claimUrgentForSend,
-  tryUpgradeToUrgent,
+  setUrgency,
   markSendStarted,
   markSent,
   markFailed,
@@ -39,6 +38,7 @@ import {
   getRow,
   retryAfter,
   MAX_ATTEMPTS,
+  type OutboxRow,
 } from "./outbox.js";
 
 export interface BoundaryDeps {
@@ -127,7 +127,7 @@ async function deliverNow(
   }
 
   const claimed = urgency.isUrgent
-    ? claimUrgentForSend(sqlite, id, deps.workerId, nowIso(now))
+    ? claimUrgentForSend(sqlite, id, spaceId, day, deps.workerId, nowIso(now))
     : claimForSend(sqlite, id, spaceId, day, prefs.dailyProactiveCap, deps.workerId, nowIso(now));
 
   if (!claimed) {
@@ -192,43 +192,90 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
     deps.audit("system", "notify:ambiguous", `${recovered.ambiguous} row(s) outcome unknown, cap retained`);
   }
 
-  // 2. Deliver due rows.
+  // 2. Deliver due rows. ADR-018 A2b: EVERY attempt fully reclassifies
+  // from the persisted immutable due-time columns (remind_at / bill_due_at)
+  // — never from created_at, deliver_after, or the persisted is_urgent bit
+  // (an ordering hint only). Reclassification runs in both directions: a
+  // row whose freshness window expired is downgraded and loses both the
+  // quiet-hours and cap exemptions; quiet hours and the global cap are
+  // re-evaluated at delivery time via decidePolicy.
   const due = dueRows(sqlite, nowIso(now));
   for (const row of due) {
     const prefs = getPreferences(sqlite, row.spaceId);
     const day = localDay(now, prefs.timezone);
+    const meta = metaFromRow(row);
 
-    // Staleness at delivery time: drop if the underlying event is too old.
-    // (decidePolicy checks this at enqueue; the sweeper re-checks for rows
-    // that waited a long time, e.g. through an outage.)
-    const limit = stalenessLimitMs(row.tool);
-    if (limit !== null) {
-      const age = now.getTime() - new Date(row.createdAt).getTime();
-      if (age > limit) {
-        markDropped(sqlite, row.id, `stale at delivery (${Math.round(age / 3600000)}h old)`);
-        deps.audit(row.spaceId, "notify:dropped", `${row.tool} stale at delivery`);
-        continue;
-      }
+    // D-1 (verbatim contract): a legacy fire_reminder with no persisted
+    // due time is unverifiable — drop it, never send it. created_at,
+    // occurrence_id, and the persisted urgency flag are all forbidden as
+    // freshness sources.
+    if (row.tool === "fire_reminder" && row.remindAt === null) {
+      markDropped(sqlite, row.id, "unverifiable legacy reminder: no persisted due time");
+      deps.audit(row.spaceId, "notify:dropped", `${row.tool} unverifiable legacy reminder`);
+      continue;
     }
 
-    // Re-evaluate urgency for queued billRisk rows: the bill may have entered
-    // the 6h window while waiting. Atomic upgrade — exactly one winner.
-    let isUrgent = row.isUrgent === 1;
-    if (row.tool === "billRisk" && !isUrgent && row.billDueAt) {
-      const dueIn = new Date(row.billDueAt).getTime() - now.getTime();
-      if (dueIn >= 0 && dueIn <= URGENT_BILL_HOURS * 3600 * 1000) {
-        if (tryUpgradeToUrgent(sqlite, row.id, `bill due in ${Math.round(dueIn / 3600000)}h`)) {
-          isUrgent = true;
-          deps.audit(row.spaceId, "notify:urgent", `billRisk upgraded at delivery`);
+    // Staleness at delivery time. fire_reminder ages from remind_at inside
+    // decidePolicy below (no created_at pre-check). billRisk WITH a
+    // persisted due time ages explicitly from bill_due_at (decidePolicy's
+    // staleness reads remindAt only). All other tools — and legacy
+    // billRisk rows lacking bill_due_at — keep the created_at aging check.
+    if (row.tool === "billRisk" && row.billDueAt) {
+      const limit = stalenessLimitMs("billRisk");
+      if (limit !== null) {
+        const age = now.getTime() - new Date(row.billDueAt).getTime();
+        if (age > limit) {
+          markDropped(sqlite, row.id, `stale at delivery (${Math.round(age / 3600000)}h old)`);
+          deps.audit(row.spaceId, "notify:dropped", `${row.tool} stale at delivery`);
+          continue;
+        }
+      }
+    } else if (row.tool !== "fire_reminder") {
+      const limit = stalenessLimitMs(row.tool);
+      if (limit !== null) {
+        const age = now.getTime() - new Date(row.createdAt).getTime();
+        if (age > limit) {
+          markDropped(sqlite, row.id, `stale at delivery (${Math.round(age / 3600000)}h old)`);
+          deps.audit(row.spaceId, "notify:dropped", `${row.tool} stale at delivery`);
+          continue;
         }
       }
     }
 
-    const claimed = isUrgent
-      ? claimUrgentForSend(sqlite, row.id, deps.workerId, nowIso(now))
+    const urgency = classifyUrgency(sqlite, row.spaceId, meta, now);
+    const decision = decidePolicy(sqlite, row.spaceId, meta, urgency, now);
+
+    if (decision.action === "drop") {
+      markDropped(sqlite, row.id, decision.reason);
+      deps.audit(row.spaceId, "notify:dropped", `${row.tool} ${decision.reason}`);
+      continue;
+    }
+    if (decision.action === "queue") {
+      // Quiet hours re-deferral at delivery time (A2b): a row that lost its
+      // urgency exemption while waiting is held until quiet hours end.
+      sqlite
+        .prepare(`UPDATE notification_outbox SET deliver_after = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(decision.deliverAfter, row.id);
+      stats.queued++;
+      continue;
+    }
+
+    // action === "send": persist the reclassification if it changed (one
+    // mechanism, both directions), then claim through the shared ledger.
+    if (urgency.isUrgent !== (row.isUrgent === 1)) {
+      setUrgency(sqlite, row.id, urgency.isUrgent, urgency.reason ?? null);
+      deps.audit(
+        row.spaceId,
+        "notify:reclassified",
+        `${row.tool} ${urgency.isUrgent ? "ordinary->urgent" : "urgent->ordinary"}`
+      );
+    }
+
+    const claimed = urgency.isUrgent
+      ? claimUrgentForSend(sqlite, row.id, row.spaceId, day, deps.workerId, nowIso(now))
       : claimForSend(sqlite, row.id, row.spaceId, day, prefs.dailyProactiveCap, deps.workerId, nowIso(now));
     if (!claimed) {
-      // Lost race or cap full: push to next allowed time.
+      // Lost race or cap full: defer, never drop (D1).
       const deliverAfter = deliverAfterCapReached(now, prefs);
       sqlite.prepare(`UPDATE notification_outbox SET deliver_after = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(deliverAfter, row.id);
       stats.queued++;
@@ -238,4 +285,29 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
     stats.sent++;
   }
   return stats;
+}
+
+/**
+ * Rebuild the classification meta from a persisted outbox row (ADR-018
+ * A2b). Timing comes ONLY from the persisted due-time columns. The billId
+ * parsed out of occurrence_id ('bill:<id>:…') is IDENTITY ONLY — it feeds
+ * classifyUrgency's per-bill dedup query; occurrence_id is never parsed
+ * for timing.
+ */
+function metaFromRow(row: OutboxRow): NotifyMeta {
+  let billId: number | undefined;
+  if (row.tool === "billRisk") {
+    const parts = row.occurrenceId.split(":");
+    if (parts[0] === "bill" && parts[1]) {
+      const n = Number(parts[1]);
+      if (Number.isInteger(n)) billId = n;
+    }
+  }
+  return {
+    tool: row.tool,
+    occurrenceId: row.occurrenceId,
+    remindAt: row.remindAt ?? undefined,
+    billDueAt: row.billDueAt ?? undefined,
+    billId,
+  };
 }

@@ -234,6 +234,128 @@ export function migrateUserModelInvalidReasonCheck(sqlite: RawDb): { migrated: b
   return { migrated: true };
 }
 
+/** Owned TTS cache DDL (ADR-018 A3) — identical to BOOTSTRAP_SQL in schemaSql.ts. */
+export const TTS_AUDIO_CACHE_OWNED_DDL = `
+  CREATE TABLE tts_audio_cache (
+    space_id TEXT NOT NULL,
+    cache_key TEXT NOT NULL,
+    audio BLOB NOT NULL,
+    content_type TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (space_id, cache_key)
+  );
+  CREATE INDEX tts_audio_cache_space_created_idx ON tts_audio_cache(space_id, created_at);
+`;
+
+const TTS_AUDIO_CACHE_LEGACY_COLUMNS = [
+  "cache_key",
+  "audio",
+  "content_type",
+  "filename",
+  "created_at",
+] as const;
+
+interface TtsTableInfoRow {
+  name: string;
+  type: string;
+  notnull: number;
+  pk: number;
+}
+
+/**
+ * ADR-018 A3 — rebuild `tts_audio_cache` to the space-owned shape.
+ * Follows the `migrateUserModelInvalidReasonCheck` precedent: idempotent,
+ * transactional, fails closed.
+ * - Table absent → create the owned shape + index.
+ * - `space_id` already present → ensure the index exists, no-op.
+ * - Legacy shape → validate it is exactly the known legacy column set;
+ *   any other shape throws (source data untouched). A known legacy table
+ *   is rebuilt in ONE transaction: rename, create owned table, copy ZERO
+ *   rows (intentional purge — legacy rows have no trustworthy owner,
+ *   ADR D2), drop the legacy table, create the index, then assert the
+ *   final contract; any failure rolls back leaving the legacy table intact.
+ */
+export function migrateTtsAudioCacheOwned(sqlite: RawDb): { migrated: boolean } {
+  const cols = sqlite.prepare(`PRAGMA table_info(tts_audio_cache)`).all() as TtsTableInfoRow[];
+  if (cols.length === 0) {
+    // Table (and therefore its index) absent — plain CREATE is safe.
+    sqlite.exec(TTS_AUDIO_CACHE_OWNED_DDL);
+    return { migrated: true };
+  }
+  if (cols.some((c) => c.name === "space_id")) {
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS tts_audio_cache_space_created_idx ON tts_audio_cache(space_id, created_at)`,
+    );
+    return { migrated: false };
+  }
+  const names = cols.map((c) => c.name);
+  const isKnownLegacy =
+    names.length === TTS_AUDIO_CACHE_LEGACY_COLUMNS.length &&
+    TTS_AUDIO_CACHE_LEGACY_COLUMNS.every((n) => names.includes(n));
+  if (!isKnownLegacy) {
+    throw new Error(
+      `ADR-018 migration: unexpected tts_audio_cache column set [${names.join(", ")}] — ` +
+        `expected the known legacy set [${TTS_AUDIO_CACHE_LEGACY_COLUMNS.join(", ")}] ` +
+        `or the owned shape with space_id; failing closed (source data untouched).`,
+    );
+  }
+  if (sqlite.inTransaction) {
+    throw new Error(
+      "ADR-018 migration: tts_audio_cache rebuild requires no enclosing transaction " +
+        "(sqlite.inTransaction is true) — failing closed.",
+    );
+  }
+  const prevFk = Number(sqlite.pragma("foreign_keys", { simple: true })) === 1;
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    sqlite.exec("BEGIN IMMEDIATE");
+    try {
+      sqlite.exec(`ALTER TABLE tts_audio_cache RENAME TO tts_audio_cache_legacy_unowned`);
+      sqlite.exec(TTS_AUDIO_CACHE_OWNED_DDL);
+      // Intentional purge (ADR D2): copy ZERO rows from the legacy table.
+      sqlite.exec(`DROP TABLE tts_audio_cache_legacy_unowned`);
+      // Assert the final contract before COMMIT.
+      const after = sqlite.prepare(`PRAGMA table_info(tts_audio_cache)`).all() as TtsTableInfoRow[];
+      const spaceId = after.find((c) => c.name === "space_id");
+      const cacheKey = after.find((c) => c.name === "cache_key");
+      if (!spaceId || spaceId.notnull !== 1 || spaceId.pk !== 1 || !cacheKey || cacheKey.pk !== 2) {
+        throw new Error(
+          "ADR-018 migration: rebuilt tts_audio_cache does not match the owned contract " +
+            "(space_id NOT NULL + PRIMARY KEY (space_id, cache_key)) — rolling back.",
+        );
+      }
+      const idxRows = sqlite
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'tts_audio_cache'`,
+        )
+        .all() as { name: string }[];
+      if (!idxRows.some((r) => r.name === "tts_audio_cache_space_created_idx")) {
+        throw new Error(
+          "ADR-018 migration: rebuilt tts_audio_cache is missing tts_audio_cache_space_created_idx — rolling back.",
+        );
+      }
+      const fkViolations = sqlite.pragma("foreign_key_check") as unknown[];
+      if (fkViolations.length > 0) {
+        throw new Error(
+          `ADR-018 migration: foreign_key_check returned ${fkViolations.length} row(s) after rebuild — rolling back.`,
+        );
+      }
+      sqlite.exec("COMMIT");
+    } catch (err) {
+      if (sqlite.inTransaction) sqlite.exec("ROLLBACK");
+      throw err;
+    }
+  } finally {
+    sqlite.pragma(`foreign_keys = ${prevFk ? "ON" : "OFF"}`);
+    const restored = Number(sqlite.pragma("foreign_keys", { simple: true })) === 1;
+    if (restored !== prevFk) {
+      throw new Error("ADR-018 migration: failed to restore PRAGMA foreign_keys to its recorded value.");
+    }
+  }
+  return { migrated: true };
+}
+
 /**
  * Lightweight additive migrations for databases created before a column existed
  * (e.g. an existing volume on Fly). CREATE TABLE IF NOT EXISTS won't add new
@@ -506,6 +628,7 @@ function migrateSchema(sqlite: RawDb): void {
       last_error TEXT,
       deliver_after TEXT NOT NULL,
       bill_due_at TEXT,
+      remind_at TEXT,
       cap_day TEXT,
       send_started_at TEXT,
       claimed_by TEXT,
@@ -521,6 +644,11 @@ function migrateSchema(sqlite: RawDb): void {
   const outboxCols = sqlite.prepare(`PRAGMA table_info(notification_outbox)`).all() as { name: string }[];
   if (outboxCols.length > 0 && !outboxCols.some((c) => c.name === "bill_due_at")) {
     sqlite.exec(`ALTER TABLE notification_outbox ADD COLUMN bill_due_at TEXT`);
+  }
+  // ADR-018 A2b/B1: immutable original reminder due time, persisted at enqueue
+  // and read on every retry for urgency/staleness reclassification.
+  if (outboxCols.length > 0 && !outboxCols.some((c) => c.name === "remind_at")) {
+    sqlite.exec(`ALTER TABLE notification_outbox ADD COLUMN remind_at TEXT`);
   }
   // Server-backed Inbox notifications (IM-74): same DDL as BOOTSTRAP_SQL —
   // CREATE TABLE IF NOT EXISTS makes this a no-op on fresh volumes and the
@@ -960,16 +1088,6 @@ function migrateSchema(sqlite: RawDb): void {
       PRIMARY KEY (space_id, consolidated_id, stated_id)
     );
 
-    -- Telegram TTS (Phase D) — same column set as BOOTSTRAP_SQL in
-    -- db/schemaSql.ts. Cached voice-note audio keyed by content hash;
-    -- see telegram/ttsCache.ts.
-    CREATE TABLE IF NOT EXISTS tts_audio_cache (
-      cache_key TEXT PRIMARY KEY,
-      audio BLOB NOT NULL,
-      content_type TEXT NOT NULL,
-      filename TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
     -- Living Galaxy (IM-140): journey mission completions — identical DDL to
     -- BOOTSTRAP_SQL in db/schemaSql.ts (new table, both paths).
     CREATE TABLE IF NOT EXISTS journey_mission_completions (
@@ -982,6 +1100,30 @@ function migrateSchema(sqlite: RawDb): void {
     CREATE UNIQUE INDEX IF NOT EXISTS journey_mission_completions_unique
       ON journey_mission_completions(space_id, journey_id, task_ref_id);
   `);
+  // ADR-018: shared atomic delivery ledger — the sole cap-counting authority
+  // for proactive notifications across Telegram + web push. New table, both
+  // paths: identical DDL to BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs
+  // already have it; this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS notification_cap_claims (
+      space_id TEXT NOT NULL,
+      local_day TEXT NOT NULL CHECK (local_day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+      channel TEXT NOT NULL CHECK (channel IN ('telegram', 'push')),
+      delivery_key TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('reserved', 'sent', 'ambiguous', 'released')),
+      cap_exempt INTEGER NOT NULL DEFAULT 0 CHECK (cap_exempt IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, channel, delivery_key, local_day)
+    );
+    CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
+      ON notification_cap_claims(space_id, local_day, state, cap_exempt);
+  `);
+  // ADR-018 A3: rebuild tts_audio_cache to the space-owned shape (legacy
+  // unowned rows purged; see migrateTtsAudioCacheOwned). Runs here rather
+  // than as a plain CREATE because an existing legacy table must be
+  // rebuilt, not merely created-if-absent.
+  migrateTtsAudioCacheOwned(sqlite);
   // W3 columns on EXISTING tables — migrateSchema ONLY (PRAGMA-guarded
   // ALTERs). These must never appear in BOOTSTRAP_SQL (the v252 precedent:
   // bootstrap runs before migrateSchema, so a bootstrap reference to a
@@ -1168,6 +1310,21 @@ function migrateSchema(sqlite: RawDb): void {
     );
     CREATE INDEX IF NOT EXISTS push_outbox_pending_idx ON push_outbox(status, deliver_after);
   `);
+  // ADR-018 A2b: immutable original due-time columns on push_outbox —
+  // migrateSchema-only PRAGMA-guarded ALTERs, NEVER in BOOTSTRAP_SQL
+  // (v252 rule: bootstrap runs before migrateSchema, so a bootstrap
+  // reference to a migration-only column crashes fresh-volume boot).
+  // Populated from NotifyMeta at enqueue; read on every retry for
+  // urgency/staleness reclassification.
+  const pushOutboxCols = sqlite.prepare(`PRAGMA table_info(push_outbox)`).all() as { name: string }[];
+  if (pushOutboxCols.length > 0) {
+    if (!pushOutboxCols.some((c) => c.name === "remind_at")) {
+      sqlite.exec(`ALTER TABLE push_outbox ADD COLUMN remind_at TEXT`);
+    }
+    if (!pushOutboxCols.some((c) => c.name === "bill_due_at")) {
+      sqlite.exec(`ALTER TABLE push_outbox ADD COLUMN bill_due_at TEXT`);
+    }
+  }
 }
 
 /**
@@ -1197,6 +1354,14 @@ export function createDb(path: string = process.env.DB_PATH ?? "./brain.db"): Db
     sqlite.pragma("journal_mode = WAL");
   }
   sqlite.pragma("foreign_keys = ON");
+  // ADR-018 A3: a legacy (unowned) tts_audio_cache must be rebuilt BEFORE
+  // bootstrapSchema — BOOTSTRAP_SQL's owned CREATE is a no-op on an existing
+  // legacy table, and its space_created index (on the new space_id column)
+  // would fail with "no such column: space_id" and abort the rest of
+  // bootstrap. The rebuild is idempotent; migrateSchema calls it again as
+  // a no-op. On an unexpected legacy shape this throws here, before any
+  // bootstrap statement runs, leaving the source table untouched.
+  migrateTtsAudioCacheOwned(sqlite);
   bootstrapSchema(sqlite);
   migrateSchema(sqlite);
   bootstrapVec(sqlite);

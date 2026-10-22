@@ -149,6 +149,51 @@ heuristically.
   relational table — similarity search can never cross brains. Same pattern for
   `knnDocs` / `knnProfiles`.
 
+## Proactive notifications + voice cache — ADR-018 (implemented 2026-10-21, branch `adr018-impl`)
+
+- **One global daily cap.** The per-space `dailyProactiveCap` is a single
+  allowance across Telegram + web push for the space-local day (space's IANA
+  timezone — never a UTC date slice). The sole counting authority is the
+  `notification_cap_claims` ledger (`agent/notify/capClaims.ts`, a sibling of
+  `policy.ts` importing only the `RawDb` type): each channel's claim path
+  atomically flips its outbox row AND inserts/reactivates its ledger claim in
+  one SQLite transaction; the network send starts only after commit. Claim
+  states: `reserved` (in flight) → `sent` (retained) | `ambiguous` (outcome
+  unknown — retained, terminal, never auto-retried) | `released` (definite
+  failure / drop / pre-send lease recovery — frees the slot; a same-day retry
+  reactivates the same row, a cross-day retry claims the new day). Deferred
+  items hold no claim until claimed. The outboxes' legacy `cap_day` columns
+  are inert — never read for counting; rows in flight at migration transition
+  with no ledger counterpart (bounded to one 5-minute lease window).
+- **Option A urgency.** A genuinely fresh qualifying urgent notification
+  (reminder ≤60 min past due; bill within the 6-hour window + per-bill dedup,
+  per `classifyUrgency`) may bypass quiet hours and the cap — and is recorded
+  in the ledger with `cap_exempt = 1` (tracked, excluded from the count).
+  Every retry **reclassifies** from the immutable persisted due-time columns
+  (`remind_at` on `notification_outbox`; `remind_at`/`bill_due_at` on
+  `push_outbox`, populated at enqueue, never rewritten) and re-runs
+  `decidePolicy` at delivery time: expired urgency is downgraded (quiet hours
+  and cap apply again), staleness is aged from the original due time (3-day
+  reminder limit), and a persisted `is_urgent` bit is an ordering hint only —
+  never authority. Legacy rows fail closed: no recoverable due time ⇒ no
+  exemption; a pre-migration reminder with `remind_at IS NULL` is dropped as
+  unverifiable, never sent (no `created_at` substitute, no `occurrence_id`
+  parsing — occurrence parsing is foreclosed as a timing source on both
+  channels).
+- **Per-space TTS cache.** `tts_audio_cache` is owned: `space_id NOT NULL`,
+  uniqueness `(space_id, cache_key)`; `DbSpeechCache` is constructed with the
+  reply's authenticated space and every query is ownership-scoped (no
+  unscoped production cache exists — no space ⇒ no DB cache). The 500-row
+  bound stays global (prune `created_at DESC, rowid DESC`); the guarantee is
+  "free while cached", not exactly-once. Migration rebuilds the table and
+  **purges** legacy unowned rows (ownership is unrecoverable; audio is
+  regenerable), failing closed on an unrecognized legacy shape. The table is
+  in the `SPACE_SCOPED_TABLES` deletion census — brain deletion removes that
+  space's audio (and its cap claims) in the same transaction.
+- **Release guard unchanged:** TTS (`TELEGRAM_TTS_*`) and web push (VAPID)
+  remain unarmed; this increment configures no secrets and changes no
+  unconfigured-state behavior (no VAPID ⇒ zero push rows and zero claims).
+
 ## Ingestion pipeline — `ingestion/pipeline.ts`
 
 ```
