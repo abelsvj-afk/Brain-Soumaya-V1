@@ -1,3 +1,30 @@
+## 2026-10-22 — ADR-018 implemented, independently accepted, and merged (PR #91)
+
+**Current phase:** ADR-018 implementation (Phases B–D) is **complete** and **independently accepted (28/28 criteria)**; branch `adr018-impl` was **merged** into the deploy branch as **PR #91** (owner-authorized 2026-10-22), new deploy HEAD `e297208ea3fec6fb968dad5d0e2756e1a12cdd3f`. **Deployment and feature arming (TTS/VAPID) remain separate and unauthorized** — the merged code is not deployed, and neither feature is armed.  
+**Branch:** `design/global-notify-cap-space-tts-cache` (this record); implementation merged from `adr018-impl`  
+**Design record:** [ADR-018](./docs/ADR-018-global-notification-cap-and-space-owned-tts-cache.md)  
+**Review record:** `adr018-implementation-review-2026-10-21.md` — first verdict NOT ACCEPTED on one test-coverage item (criterion 23, cache-write failure); the fix was added, falsified, and independently confirmed: **B-1 CLOSED — implementation ACCEPTED (28/28)**.
+
+**What landed**
+- Phase B: shared cap-claims ledger — one global cap per space-local day across Telegram + push; claim + outbox transition atomic in one transaction; exempt urgent sends recorded (`cap_exempt=1`), not invisible; retry-time urgency/staleness reclassification from persisted due times on both channels (`remind_at` on `notification_outbox`; due-time columns on `push_outbox`); `cap_day` no longer consulted as a counting source.
+- Phase C: `tts_audio_cache` rebuilt space-owned (`space_id NOT NULL`, PK `(space_id, cache_key)`), legacy unowned rows purged on migration, table added to the brain-deletion census (`SPACE_SCOPED_TABLES`); the global 500-row bound is preserved — the honest guarantee is "free while cached."
+- Phase D: all 28 acceptance criteria covered by named tests, including criterion 13's interleaved-drain harness as defined (two loops, one process, one handle, barriers at the send await) and the legacy-fixture migration tests; independent review accepted per above.
+
+**Ratification (owner, 2026-10-22)** — the implementation applied D-1's drop to legacy push reminders as a symmetric extension of the ADR's Telegram sentence; the owner ratified that extension explicitly, in these exact words:
+> Ratified: D-1 applies to both legacy Telegram and legacy push reminders. If a legacy reminder has no persisted due time, drop it as unverifiable. Do not infer freshness from `created_at`, `occurrence_id`, or a persisted urgency flag. This extension does not change the treatment of other notification types.
+
+**Verification status**
+- Post-merge tree proof (from commit objects): the merged deploy tree differs from the `adr018-impl` tree by exactly PR #90's 10 web files, and from the pre-merge deploy tree by exactly the implementation's 21 files; the two deltas have zero overlap and every composed blob matches its source branch.
+- Combined-tree re-gate on merged HEAD `e297208ea3fec6fb968dad5d0e2756e1a12cdd3f`: typecheck 0; web 1,371/1,371 under both TZ=America/New_York and TZ=Pacific/Kiritimati; build 0; server 1,857/1,859 (TZ=America/New_York) — the only two failures are the daily-digest pair (`notifications`, `telegram`), reproduced identically (2 failed / 17 passed in those files) on the pre-merge base `11cbd7418a87eab3ba57ed485c64d43ca23c54af`: the known pre-existing date-sensitive fixture family, not this implementation or the composition. (`parityPhase4` passed in this run; the family flips at the local-day rollover.)
+- No deployment performed; no secrets changed; TTS and web push remain unarmed.
+
+**Next tasks**
+1. Owner's separate deployment decision for the merged deploy HEAD (the Fly redeploy remains the owner's manual action).
+2. Only after deployment and post-deploy verification: the owner's separate feature-arming decisions (`TELEGRAM_TTS_*`, `VAPID_*` secrets) — the ADR-018 release guard.
+3. The date-sensitive test-fixture family (digest pair + `parityPhase4`) still wants its own small repair so future gates can read fully green.
+
+---
+
 ## 2026-10-21 — ADR-018 Phase A design closure
 
 **Current phase:** Phase A CLOSED — closure amendment (blocker B1 + questions Q1–Q5) applied and independently verified; the verification's single discrepancy (D-1, legacy reminder staleness) was resolved by the owner's drop-as-unverifiable rule, and the verifier's single-item confirmation of it has completed (verified). By the owner's design-gate decision (2026-10-21), Phase A is closed and ADR-018 is approved as the implementation contract. Implementation (Phases B–D) has not started and is **not yet authorized** — it awaits the owner's separate explicit authorization; merge, deployment, and feature arming (TTS/VAPID) remain unauthorized and on hold.  
