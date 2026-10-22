@@ -28,6 +28,7 @@
 20. **`chatgpt-review-11-2026-10-22.md`** — the record of ChatGPT's Revision 28 review (verdict UNRESOLVED) with dispositions: session-peak render counts tracked; behavioral checks upgraded from scripted logs to verified before/after assertions (overlap case closed); the scripted-log vs verified-assertion distinction now carried by the record.
 21. **`chatgpt-review-12-2026-10-22.md`** — the record of ChatGPT's Revision 29 review (verdict UNRESOLVED) with the final code-level disposition: an armed-departure policy enforced across all controls (only Cancel live during the window) and fuel floored at 0. The code-level list is closed; remaining Station acceptance work is device-side only.
 22. **`chatgpt-review-13-2026-10-22.md`** — the record of ChatGPT's Revision 30 review: Review 12's fix verified closed; one added caution (frame-count animation timing) fixed by converting camera/cargo animation to measured elapsed time. No known code-level items remain.
+23. **`chatgpt-review-14-2026-10-22.md`** — the verification closure of the mockup review series: the reviewer inspected the Rev 31 commit itself (timing fix correct; the 100 ms-cap stall-stretch behavior recorded as a grading note) — **no new code-level blocker**. Next step is the owner's phone evidence run; Growing Place stays parked; V6 is the owner's alone.
 
 ## The most important instruction
 

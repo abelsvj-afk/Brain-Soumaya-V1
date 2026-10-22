@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 31 — **Station mockup review 13 absorbed + fix applied** (record: `chatgpt-review-13-2026-10-22.md`): Review 12's race fix verified closed by the reviewer; animation timing converted to measured elapsed time. No known code-level items remain; verdict **UNRESOLVED** pending the owner's phone run. **Design gate: OPEN.**
+**Revision:** 32 — **Station mockup review 14: verification closure** (record: `chatgpt-review-14-2026-10-22.md`): the reviewer inspected the Rev 31 commit itself — timing fix correct, **no new code-level blocker**; the 100 ms-cap stall behavior recorded as a grading note. The mockup review series (10–14) is closed on the code side; verdict **UNRESOLVED** pending the owner's phone evidence run. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -825,4 +825,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 31. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 32. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
