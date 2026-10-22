@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 5 — Revision 4 accepted by the owner as the **current design baseline** (2026-10-22); §11.2 supplemented with test-record requirements; §12 opens settlement step 1 (roster & purpose) with King's proposal for the owner to settle. Records: `chatgpt-review-1-2026-10-22.md` (§9), `gemini-research-1-2026-10-22.md` (§10) in this folder. **Design gate: OPEN.**
+**Revision:** 6 — Roster **settled** by the owner as proposed (D-4/D-5/D-6, §11.1; step 1 closed). §13 opens step 2 (information model, proposal). §14 adds the owner-directed **Animation Gate** with the initial animation inventory. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -464,6 +464,9 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-1 — Fuel (settled 2026-10-22, §9.10):** warp costs fuel; coming home is always free; a slow free drift always exists and, with no fuel, is slower and less entertaining. Fuel governs warp, never access to memories. Q27 (what earns fuel) remains open.
 - **D-2 — Q29, Great Station form (settled 2026-10-22):** **Fictional megastructure** for the Great Station — a designed silhouette delivering the monumental, awe-inspiring presence the vision calls for (EVE is the touchstone, not a copy). The **real NASA ISS model is reserved for the scale-focused space**, where authenticity is the advantage. Rationale (owner's decision, King's dissent in §10.3 aligned): the ISS wins on efficiency but its recognizable real-world identity and thin truss silhouette fight the fiction and the monumentality; in the scale space, "this is real" is precisely the emotional payload, so the ISS earns more there.
 - **D-3 — Q25, scenery technique stack (conditionally ratified 2026-10-22):** the §10.1 stack — seeded palette math, instanced fields, palette-matched fog, dual-layer compositing, HYG stars, baked-in glow — is **ratified conditional on passing the three-mockup test** defined below. Pre-test requirement (owner's): the performance and visual acceptance criteria are documented **before** any test runs (§11.2–11.3). Until test results are reviewed, the stack is a ratified *hypothesis*, **not implementation-approved**.
+- **D-4 — Roster (settled 2026-10-22, as proposed in §12):** six destinations beyond the home galaxy — **the Great Station, the Scale Space, the Deep Past, the Growing Place, People, the Quiet/Archive** (Archive built last) — seven worlds including home. **Settlement step 1 is CLOSED.**
+- **D-5 — Great Station purpose (settled 2026-10-22, as proposed):** **home port** — orientation, departure, and discovery of destinations; it surfaces journeys and routes, not memories, and takes on no social/ship-upgrade duties without a separately proven need.
+- **D-6 — Dispositions (settled 2026-10-22, as proposed):** **Chronicle Path is a guided mode of the Deep Past**, not a separate destination. **Workbench Shore is cut as a space**; capture/sorting stays in the core app, with the "send a sorted memory through a gate to its space" moment preserved in the capture flow — which makes that moment an animation-gate item (§14).
 
 **Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
 
@@ -525,16 +528,92 @@ Baseline accepted (owner, 2026-10-22): Revision 4 is the current design baseline
 **H. The Great Station — PROPOSE: KEEP (initial roster); purpose proposed, owner to confirm.**
 ① Proposed purpose (from §9.2's leading hypothesis, still the owner's to settle in this step): **home port of the worlds** — where journeys begin and end, where destinations are discovered, where the user orients before setting out. ② The only space whose outcome is *orientation and departure*: the map made into a place. It must not own memories, social features, or ship upgrades unless a separate need is proven (the glorified-menu counterargument, §9.2, stands guard). ③ It surfaces *destinations and journeys themselves* (routes, gates, tours) — meta-content, no memory duplication. ④ The strongest navigation value in the roster: the monumental approach (fictional megastructure per D-2) is the signature journey of the whole expansion. ⑤ Yes — and it anchors the travel system the other spaces hang from. It is the third §10 mockup environment.
 
-### 12.2 Proposed roster (for owner settlement)
+### 12.2 Roster — ✅ SETTLED by the owner as proposed (2026-10-22; D-4/D-5/D-6)
 **Destinations beyond the home galaxy (5):** the Great Station · the Scale Space · the Deep Past (Chronicle as its guided mode) · the Growing Place · People — plus **the Quiet/Archive** as a sixth, built last. **Cut:** Workbench Shore (job stays in core). **Total worlds including home: 7** — small enough that each can be distinct, cared for, and maintained by one person.
 **Mockup trio (§9.3/§11) unchanged:** Great Station, Growing Place, Deep Past — the three most contrasting grammars (monumental / constructed / sparse).
 
-### 12.3 What step 1 still needs from the owner
-1. Ratify, amend, or reject the proposed roster (in whole or candidate-by-candidate).
-2. Confirm or replace the Great Station's proposed purpose (home port / orientation & departure).
-3. Confirm the Chronicle merge (mode of the Deep Past, not a destination) and the Workbench cut (job stays in core).
-Then step 1 closes and step 2 (information model) opens.
+### 12.3 Step 1 closure
+All three queued calls were settled by the owner on 2026-10-22, as proposed (D-4/D-5/D-6): the roster, the Station's home-port purpose, the Chronicle merge, and the Workbench cut. **Step 1 is closed.** Step 2 (information model) opens at §13.
 
 ---
 
-*End of Exploration 1, Revision 5. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 13. Settlement step 2 — the information model (King's proposal, owner settles)
+
+How the settled roster (§12) shares one brain without duplicating it. Proposal only.
+
+**P1 — One canonical memory, many surfaces (from §9.6).** A memory exists once. Spaces never hold copies; they *surface* the canonical memory under explicit rules. Editing, archiving, or forgetting a memory anywhere changes it everywhere, instantly and consistently.
+
+**P2 — Every memory has one primary home; appearances elsewhere are visits.** Primary home = where the memory lives by default (home galaxy sector, or a space by its rule below). A memory may *appear* in other spaces when that space's rule calls for it (e.g., a person-linked memory appearing in People). Appearances are views of the same object — same content, same state — never forks.
+
+**P3 — Surfacing rules per space (proposed):**
+- **Home galaxy:** everything active, by category sector — the default view of the whole brain.
+- **Deep Past:** memories past an age/stillness threshold, era-grouped; its guided mode orders them by Chronicle chapter.
+- **Growing Place:** goals, milestones, and the memories linked to them — landmarks are *milestones*, memories appear as the evidence/path between them.
+- **People:** memories linked to a person, clustered per person; commitments and dates ride along.
+- **Scale Space:** almost nothing — a small number of user-confirmed **anchors** only (P5).
+- **Great Station:** no memories at all (D-5): destinations, routes, gates, tours.
+- **Quiet/Archive:** archived items — and *only* there (P4).
+
+**P4 — Archive and privacy are supreme.** Archiving removes a memory from *every* other surface — home, Deep Past, People, tours, resurfacing — no exceptions, no leaks through a "visit." Retrieval happens only by the user's deliberate act in the Archive itself. Anything the user has hidden or restricted anywhere is hidden everywhere.
+
+**P5 — Anchors are chosen, never assigned silently.** A memory becomes a Scale-space anchor (or any space's featured landmark) only by brain proposal + user yes, or by the user's own placement. The user can un-anchor at any time; the memory itself is untouched (§9.4 correction principle).
+
+**P6 — Every surfacing is explainable.** Any appearance can answer "why are you here?" in one plain line ("Linked to Maya · from your chapter 'The Move'"). If a rule can't explain an appearance, the appearance doesn't happen. Mis-surfacings are correctable, and the correction teaches the rule, never punishes the memory.
+
+**P7 — Derived things are derived, never stored as truth.** Clusters, connections, chapter routes, growth landmarks, emotion tones: computed from canonical data under §9.4's categories (structural change needs a real event or a user decision). If a derivation is wrong, fixing the derivation fixes every surface at once.
+
+**Open for the owner in step 2:** (a) the age/stillness threshold idea for the Deep Past — threshold, or brain-judged with explanation? (b) Can an anchor memory keep its primary home elsewhere (P2 says yes — confirm)? (c) Should People clusters exist for *every* linked person, or only people the user marks as significant?
+
+---
+
+## 14. The Animation Gate (owner-directed, 2026-10-22)
+
+The owner directed: *we will need an animation gate* — a standing gate that inventories **what animations each scene and scenario needs** before that scene can be considered design-complete. Movement is how this world communicates; an unanimated state change is a broken promise, and an undesigned animation is how state changes become confusing or dishonest.
+
+### 14.1 The gate rule
+No space, scene, or scenario is design-complete until its animations are inventoried here with, per animation: **trigger** (what starts it) · **actors** (ship / the brain / the user / the world) · **what moves and how** (plain-language description) · **duration class** (moment <2s / sequence 2–15s / journey >15s) · **reduced-motion equivalent** · **cost class** (cheap / moderate / heavy against §11.2 budgets). The per-space template (§9.7) gains a line: *Animations (per the Animation Gate inventory)*. Passing this gate, like every gate here, authorizes nothing to build.
+
+### 14.2 Standing animation rules
+- **Honesty:** an animation may never depict a state that isn't real — no fake traffic pretending to be other users, no growth animation without a real milestone, no "delivery" of a memory that didn't actually move (§9.4, reward honesty).
+- **Never-punish in motion:** no decay, wilting, breaking, or dimming-to-shame animations, ever. Absence changes nothing on screen (§9.4).
+- **Continuity of identity:** when a memory moves, the *same* memory is seen to move — it never vanishes here and pops in there. Travel and placement are shown, not teleported, unless the user explicitly chooses instant travel (§9.5 repeat-visit direct travel), in which case the transition still shows origin → destination context.
+- **Reduced motion is a real equivalent,** not a removal: every animation's calmer version preserves the information the motion carried (§9.5).
+- **Existing intended animations are catalogued, not "fixed":** e.g., the ship's tending **flash** in the home galaxy is intended (owner-confirmed 2026-10-21) and enters the inventory as-is.
+
+### 14.3 Initial inventory (seed — to be completed per space as designs mature)
+**Memory movement & placement (owner's example, first-class):**
+- A1. **Carry-to-gate:** the ship/the brain picks up or escorts a memory and carries it to a warp gate — visible cargo, unhurried, interruptible.
+- A2. **Gate transit with cargo:** the memory travels *with* the ship through transit (§2.3), arriving in the destination space — the user watches it cross, not just arrive.
+- A3. **Placement:** on arrival the memory settles into its place in the new space — gliding to its position, a soft settle/glow as it takes its place (echoing the intended tending flash, not copying it blindly).
+- A4. **Send-off (core capture flow, per D-6):** a newly sorted memory departs through a gate toward its space — the small, satisfying version of A1–A3 inside the everyday app.
+- A5. **Return/retrieval:** the reverse journeys — bringing a memory back home, and the Archive retrieval (deliberate, gentle, unhurried; never a "release" spectacle).
+
+**Mutation made visible (§9.4 — structural change is animated, presentation change is gradual):**
+- A6. **Landmark rising (Growing Place):** a real milestone raises/assembles a landmark — construction as celebration, at journey or sequence length, skippable.
+- A7. **Connection forming:** when the brain finds a real link, a path/bridge draws itself between the memories — in whichever space they meet.
+- A8. **Atmosphere shift:** palette/weather changes crossfade slowly (never a cut, never a jump-scare); the user can ask why (§9.4 explainability) mid-shift.
+- A9. **Cluster bloom (People):** a person's cluster forms/gathers when their memories link up — gentle orbital gathering, not an explosion of nodes.
+- A10. **Laying down (Archive):** a memory being archived settles, dims to restfulness (not darkness-as-death), and comes to stillness — dignity in motion.
+
+**Travel & arrival:**
+- A11. **Warp sequence:** gate approach → entry → transit movement (§2.3) → exit into the destination's light. (Fuel's visible spend lives here — D-1.)
+- A12. **Drift sequence:** the same journey, plainly: slower, quieter, minimal spectacle — genuinely usable, never miserable (D-1, §9.10 addendum).
+- A13. **Station approach:** the long growth of the megastructure, traffic lanes flowing, arrival arc (D-2/D-5) — the signature sequence; interior docking is *not* in this phase (§9.2).
+- A14. **Scale approach:** the sun/landmark that keeps growing (dual-layer, §10.2); endless-approach variant for the never-arrive design (Q10, still open).
+- A15. **First arrival:** a new space's introduction flight — distinctive per space, skippable, never repeated unless requested (§9.5).
+- A16. **Gate reveal:** how a newly discovered gate appears (§2.2) — discovery should feel like finding, not unlocking.
+
+**Ambient & interaction life:**
+- A17. **Station traffic:** ambient ships on approach/departure lanes — atmosphere and scale cueing (§9.7 Q22: ambient first; any meaning attached later must be truthful).
+- A18. **Ship behaviors:** idle, tending (incl. the existing flash), escorting, route-following — the ship reads as alive and purposeful, never frantic.
+- A19. **Route plotting:** selecting a destination draws the route in space (EVE's route projection, §10.1) — the user sees the journey before taking it; cancelling undraws it cleanly.
+- A20. **Focus & selection:** focus shifts, planet/memory selection responses — the small motions that make touch feel answered.
+
+### 14.4 Gate status
+Inventory seeded (§14.3); per-space completion happens as each space's design matures through the settlement sequence. The mockup test (§11) already implicitly exercises A11/A13-class sequences (its criteria measure a warp transit and a full approach); the Animation Gate makes that coverage explicit when mockups are specified.
+
+---
+
+*End of Exploration 1, Revision 6. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
