@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 7 — ChatGPT's review of §13–§14 absorbed: §13 gains the three **Operations** (visit / relocate / archive-retrieve), P4 strengthened to a system-wide invariant, P7 gains confidence tiers; §14 gains operation fidelity, atomicity, truthful-or-atmosphere, seed ≠ passed, and combined-load accounting. Record: `chatgpt-review-2-2026-10-22.md`. Step 2's three questions await the owner's settlement (§13). **Design gate: OPEN.**
+**Revision:** 8 — Step 2 **settled** by the owner (D-7/D-8/D-9: Deep Past rule, anchors, People clusters) and closed. §15 opens step 3 (navigation & scale) with King's proposal and questions Q-N1–Q-N4. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -467,6 +467,9 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-4 — Roster (settled 2026-10-22, as proposed in §12):** six destinations beyond the home galaxy — **the Great Station, the Scale Space, the Deep Past, the Growing Place, People, the Quiet/Archive** (Archive built last) — seven worlds including home. **Settlement step 1 is CLOSED.**
 - **D-5 — Great Station purpose (settled 2026-10-22, as proposed):** **home port** — orientation, departure, and discovery of destinations; it surfaces journeys and routes, not memories, and takes on no social/ship-upgrade duties without a separately proven need.
 - **D-6 — Dispositions (settled 2026-10-22, as proposed):** **Chronicle Path is a guided mode of the Deep Past**, not a separate destination. **Workbench Shore is cut as a space**; capture/sorting stays in the core app, with the "send a sorted memory through a gate to its space" moment preserved in the capture flow — which makes that moment an animation-gate item (§14).
+- **D-7 — Deep Past membership (settled 2026-10-22, as recommended):** an **explainable rule combining age with meaningful resurfacing context**, with user controls — never a silent fixed threshold, and nothing is classified as forgotten merely because it is old (§13).
+- **D-8 — Anchors (settled 2026-10-22, as recommended):** an anchor is a **confirmed cross-space appearance** — the memory's primary home stays wherever it is; anchoring never forces a relocation (§13 P5).
+- **D-9 — People clusters (settled 2026-10-22, as recommended):** clusters exist **only for user-confirmed significant people** (or people the user explicitly chooses to surface); ordinary mentions never auto-create a prominent relationship presence (§13 P3). **Settlement step 2 is CLOSED** (P1–P7 as revised in Rev 7, the Operations trio, D-7/D-8/D-9).
 
 **Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
 
@@ -570,10 +573,11 @@ How the settled roster (§12) shares one brain without duplicating it. Proposal 
 - **Archive / retrieve** — the intentional status change governed by P4's invariant, with its stricter visibility rules and Archive-only retrieval.
 Each operation has its own state transition and its own animation semantics (§14): the A1–A3 carry/transit/placement sequence must *represent the actual operation* — a visit's placement is a surfacing, a relocation's placement is a re-homing — and the user can always tell which one just happened, in plain language.
 
-**Open for the owner in step 2** *(ChatGPT's recommendations recorded; the owner settles)*:
-(a) Deep Past membership: fixed age threshold, or brain-judged? — *ChatGPT recommends: an explainable rule combining age with meaningful resurfacing context, with user controls; never silently classify something as "forgotten" merely because it is old.*
-(b) Can an anchor memory keep its primary home elsewhere (P2/P5)? — *ChatGPT recommends: yes — an anchor is a confirmed cross-space appearance, not a forced relocation.*
-(c) People clusters for every linked person, or only significant people? — *ChatGPT recommends: only user-confirmed significant people, or people the user explicitly chooses to surface; ordinary mentions must not automatically create a prominent relationship presence.*
+**Step 2 questions — ✅ SETTLED by the owner (2026-10-22, all three as recommended; D-7/D-8/D-9):**
+(a) Deep Past membership → the explainable age + resurfacing-context rule, with user controls (D-7).
+(b) Anchors → yes, an anchor keeps its primary home elsewhere; it is a confirmed appearance, not a relocation (D-8).
+(c) People clusters → only user-confirmed significant people (D-9).
+**Step 2 is closed.** Step 3 (navigation & scale) opens at §15.
 
 ---
 
@@ -632,4 +636,32 @@ Inventory seeded (§14.3); per-space completion happens as each space's design m
 
 ---
 
-*End of Exploration 1, Revision 7. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 15. Settlement step 3 — navigation & scale (King's proposal, owner settles)
+
+How the user moves among the seven worlds, and how big things feel. Built only on settled ground: fuel (D-1), the Station as home port (D-5), the Operations trio (§13), the gate rules from §9.5 (first visit scenic and skippable; repeats can go direct; discovery never holds memory access hostage), and the Animation Gate (§14). Proposal only.
+
+**N1 — Topology: routes plot through the Station.** Every destination is reachable home → Station → destination, with the Station as the interchange where journeys begin (D-5: it surfaces journeys, not memories). Home is always one free hop away from anywhere (D-1). Whether *direct* space-to-space gates also exist is left open for the owner (Q-N1) — via-Station travel must always work regardless, so no route is ever gated behind a discovery.
+
+**N2 — Transit is a place, briefly.** Transit (§2.3) is a space you move through, not a loading screen: light interaction only — look around, view/tend a carried memory (A1–A2), read plain route information. No chores, no mini-games, nothing that can fail an arrival. Duration by distance class (proposal: short hop ≈10–20 s, long leg ≈30–60 s at warp), always skippable after the first traversal of that route (§9.5); interruption follows §14 atomicity — you arrive, or the departure visibly didn't happen.
+
+**N3 — Two gaits, one route (D-1 made visible).** **Warp**: fast, spectacular, fuel spend shown before departure and in the sequence (A11). **Drift**: the same route, slower and plainer (A12), always available, always free. **Return home**: always free, never slower than the drift out — no stranded math, ever.
+
+**N4 — Discovery without hostage-taking.** New destinations and gates are discovered through the Station's discovery function and through use (a memory's affiliations can hint at its space's gate). Discovery is revealed with A16's reveal animation. But discovery governs *travel and presentation only*: every memory remains directly reachable in the core app regardless (§13), and an undiscovered gate never hides a memory.
+
+**N5 — Scale conventions, one per space (§9.3).** **Awe-scale** is the default language: the Great Station is monumental (D-2 — bigger than the home galaxy's current sun, per the owner's vision), distances are *felt* through travel-time classes rather than stated in numbers. **Reference-scale** lives only inside the Scale Space: real objects at honest sizes relative to each other (the real ISS lives there, §10/D-2), where accuracy is the wonder. The two conventions never mix inside one space. Growing the home sun is the owner's separate later call (his words: he may grow it over time) — not assumed here.
+
+**N6 — Navigation aids.** Before departure: route projection in space (A19) plus a plain summary — *from here → destination · warp cost in fuel · time class · drift is free*. Cancel freely before departure; mid-transit exit returns you to the origin (atomicity). "You are here" is always answerable in one glance, in plain words, with the brain's own name — never coordinates or jargon.
+
+**N7 — Tours are saved routes, not new machinery.** A tour = a named sequence of stops across spaces, traveled as visits (§13 Operations — tours never move or re-home memories). The Chronicle guided mode (§12) is the Deep Past instance: its chapter route is tour data over the same machinery (P7). Tours are proposed by the brain and approved by the user (the anchor pattern, P5); narration is optional and off by default until designed.
+
+**Open for the owner in step 3:**
+- **Q-N1** Direct space-to-space gates: (i) never — all routes via the Station; (ii) discovered through use, with via-Station always available; (iii) present from the start. *King's lean: (ii) — discovery stays meaningful, nothing is ever hostage.*
+- **Q-N2** Transit duration classes (N2): do the proposed bands feel right for a phone, or should even first traversals be shorter?
+- **Q-N3** In-transit interaction: look-and-tend only (as proposed), or should transit ever carry a small purposeful act (e.g., sorting the carried memory en route)?
+- **Q-N4** The home sun: leave its size as-is for now (King's lean — the owner earlier reserved this call: "worry about realism more later"), or schedule the growth decision alongside the Station's mockup?
+
+---
+
+*End of Exploration 1, Revision 8. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
