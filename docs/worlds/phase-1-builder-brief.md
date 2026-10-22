@@ -64,7 +64,7 @@ After each mockup: push its result record, update this brief's status table (§9
 
 | Mockup | State | Record |
 |---|---|---|
-| 1 — Great Station (approach + D-13 evidence) | ⬜ Not begun | — |
+| 1 — Great Station (approach + D-13 evidence) | 🟡 Scene built (throwaway, fixtures); **§11 measurement pending owner's device run** — verdict UNRESOLVED, no PASS claimed | `mockup-result-station.md` |
 | 2 — Growing Place (the rising) | ⬜ Blocked on Mockup 1 PASS | — |
 | 3 — Deep Past (the descent; A1–A3, A21/A22) | ⬜ Blocked on Mockup 2 PASS | — |
 
