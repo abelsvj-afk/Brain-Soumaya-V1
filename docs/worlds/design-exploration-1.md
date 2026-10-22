@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 10 — ChatGPT's review of §15 absorbed: **utility-first** governing principle for navigation; **cancel / turn back / return home** distinguished as three acts (N3/N6); recommendations recorded on Q-N1–Q-N4 (all four still the owner's to settle; step 3 open). Record: `chatgpt-review-3-2026-10-22.md`. **Design gate: OPEN.**
+**Revision:** 11 — Step 3 **settled and closed** by the owner's explicit decision (D-10–D-13). §17 opens step 4 (mutation & control), led by the **approval-gated world-change rail** (§16) with proposal M1–M6 and questions Q-M1–Q-M4. Steps 1–3 closed; animation & performance gates open. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -470,6 +470,10 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-7 — Deep Past membership (settled 2026-10-22, as recommended):** an **explainable rule combining age with meaningful resurfacing context**, with user controls — never a silent fixed threshold, and nothing is classified as forgotten merely because it is old (§13).
 - **D-8 — Anchors (settled 2026-10-22, as recommended):** an anchor is a **confirmed cross-space appearance** — the memory's primary home stays wherever it is; anchoring never forces a relocation (§13 P5).
 - **D-9 — People clusters (settled 2026-10-22, as recommended):** clusters exist **only for user-confirmed significant people** (or people the user explicitly chooses to surface); ordinary mentions never auto-create a prominent relationship presence (§13 P3). **Settlement step 2 is CLOSED** (P1–P7 as revised in Rev 7, the Operations trio, D-7/D-8/D-9).
+- **D-10 — Direct gates (settled 2026-10-22 by the owner's explicit decision):** **option (ii)** — direct space-to-space gates may be **discovered through use**; the Great Station route **always remains available** as the universal fallback (§15 N1/N4).
+- **D-11 — Transit duration (settled 2026-10-22):** 10–20 s (short hops) and 30–60 s (long legs) are **upper targets to test, never compulsory waits**; travel is **skippable after the first traversal** of a route (§15 N2).
+- **D-12 — Transit activity (settled 2026-10-22):** **look-and-tend only** for MVP — no chores, no sorting queue, nothing that can obstruct arrival (§15 N2).
+- **D-13 — Home sun (settled 2026-10-22):** **deferred** — no size change committed; relative appearance is assessed visually alongside the Station mockup (§15 N5). **Settlement step 3 is CLOSED**, with §15's safeguards standing unchanged (cancel / turn back / return home, cargo integrity, utility-first principle). This settlement is a design decision, **not** implementation authorization.
 
 **Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
 
@@ -660,7 +664,7 @@ How the user moves among the seven worlds, and how big things feel. Built only o
 
 **N7 — Tours are saved routes, not new machinery.** A tour = a named sequence of stops across spaces, traveled as visits (§13 Operations — tours never move or re-home memories). The Chronicle guided mode (§12) is the Deep Past instance: its chapter route is tour data over the same machinery (P7). Tours are proposed by the brain and approved by the user (the anchor pattern, P5); narration is optional and off by default until designed.
 
-**Open for the owner in step 3** *(King's leans and ChatGPT's recommendations recorded; the owner settles; step 3 stays open until then)*:
+**Step 3 questions — ✅ SETTLED by the owner (2026-10-22, explicit decision; D-10–D-13). Step 3 is CLOSED.** *(The recommendations as recorded before settlement:)*
 - **Q-N1** Direct space-to-space gates: (i) never — all routes via the Station; (ii) discovered through use, with via-Station always available; (iii) present from the start. *King's lean: (ii). ChatGPT recommends: (ii) — exploration gains meaning without the Station becoming a mandatory toll booth; counterargument noted (network complexity) with the guard that route plotting always shows a valid path and no one memorizes the network.*
 - **Q-N2** Transit duration: are N2's bands (short hop ≈10–20 s, long leg ≈30–60 s at warp) right? *ChatGPT recommends: keep the bands as upper design targets to test, never compulsory waits — first arrival scenic but skippable, repeats offer direct travel, drift slower without forcing the user to watch every second; the full experience stays an inviting option, not a mandatory delay.*
 - **Q-N3** In-transit interaction: look-and-tend only, or a small purposeful act? *ChatGPT recommends: look-and-tend only for MVP — capture and sorting belong to the core workflow; transit must not become a chore queue. Revisit only if testing shows the journey feels empty, and then any act is optional, safely cancellable, and incapable of blocking arrival.*
@@ -686,4 +690,30 @@ How the user moves among the seven worlds, and how big things feel. Built only o
 
 ---
 
-*End of Exploration 1, Revision 10. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 17. Settlement step 4 — mutation & control (King's proposal, owner settles)
+
+How the world is allowed to change — and who holds the pen. Led, at the owner's direction, by the **approval-gated world-change rail** queued in §16 (`propose_world_change` / `undo_world_change`). Builds on settled ground only: the mutation categories and never-punish rule (§9.4), world state vs presentation state (§9.4), confidence tiers (P7), explainability (P6), the Animation Gate (§14), and the ship's fence (§16 — she can fly and propose; she cannot touch brain writes). Proposal only.
+
+**M1 — The rail: every structural change, five beats.** (1) **Propose** — the brain or the ship proposes a change with its reason and its evidence, in plain language ("These three memories all mention the move to Jacksonville — should they form a cluster in People?"). (2) **Present as proposal** — the change renders, if at all, in its provisional form (P7 tier ii: visibly a suggestion, never an accomplished fact). (3) **Owner decides** — approve, edit, or reject; silence is not approval, and under notification-cap pressure the correct behavior is to wait quietly (§16 `propose_noticing`). (4) **Apply as one log entry** — an approved change lands atomically (§14) and is written to an **append-only transition log**: what changed, why, on what evidence, when (owner's local time), and what it superseded. (5) **Undo is a new entry, never a rewrite** — `undo_world_change` appends a compensating entry that restores the prior state; the log keeps both, so the world's history is never falsified. **Nothing structural self-applies. Ever.**
+
+**M2 — Structural vs presentation: the line the rail guards.** *Structural* (rail required): landmark creation/removal, confirmed connections, cluster formation, anchors, primary-home changes, chapter/tour route membership, anything §9.4 calls world state. *Presentation* (may adapt without per-change approval, within bounds): ambient expression — palette and weather within the space's recipe, atmosphere (traffic, drift), emphasis and ordering. Presentation adaptation is bounded by four rails of its own: it follows §9.4's categories, it is **explainable on request** ("why does it look like this?"), it is **reversible**, and it obeys never-punish absolutely. The user can ask "what changed?" and get the presentation deltas in plain language — a digest on demand, not an approval queue (guard against approval fatigue).
+
+**M3 — Automation levels (proposal).** Structural: **propose-only**, full stop, at MVP — no structural class is eligible for auto-apply, even with undo waiting. Presentation: automatic within M2's bounds. Revisit either only with real usage evidence, as a new decision.
+
+**M4 — Correction edits the derivation, never the memory.** When the user corrects a mis-inference (§9.4/P7), the correction lands on the interpretation layer and is itself a log entry; every surface updates from the corrected derivation (P1). The underlying memory is untouched — the world may be wrong about a memory; it may never rewrite one.
+
+**M5 — Inferred emotion can move weather, never geography.** Tier-iii inferences (emotion tones) may influence *presentation only* — never structure, never clusters, never landmarks. And the standing test governs every mutation output: **show it to a user in the worst week of their year** — if it could read as loss, decay, falling behind, or shame, it does not ship (§9.4).
+
+**M6 — The log is the world's memory of itself.** The transition log is user-readable in plain language — the answer behind both "why is this here?" (P6) and "what changed?" It is distinct from the Chronicle: the Chronicle tells the user's life; the log tells what the *world* did and why. Entries carry the brain's own naming and the owner's local time — never UTC, never jargon.
+
+**Open for the owner in step 4:**
+- **Q-M1** Presentation bounds: is M2's presentation class list right — anything there you'd want behind the rail (or anything structural you'd let flow freely)?
+- **Q-M2** Proposal cadence: batch proposals into a single calm review moment (e.g., alongside the digest), or surface each as it arises (with silence under cap pressure either way)? *King's lean: batched and calm — proposals should feel like mail, not interruptions.*
+- **Q-M3** Undo horizon: append-only says undo is always possible; is there any change class you'd want to become permanent after some point? *King's lean: none — permanence is how worlds become traps.*
+- **Q-M4** The log's home: a browsable "world changes" view, on-demand explanations only, or both? *King's lean: both — the view is cheap once explanations exist, and some users will want to browse it.*
+
+---
+
+*End of Exploration 1, Revision 11. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
