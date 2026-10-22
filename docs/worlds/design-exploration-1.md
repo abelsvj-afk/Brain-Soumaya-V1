@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 12 — ChatGPT's review of §17 absorbed: presentation boundary **tightened** (four safeguards; saved-sequence rule), **dependency-aware undo**, calm batched cadence specified, dual-door log, and the **failure-atomicity invariant** fixed in M1. Recommendations recorded on Q-M1–Q-M4 — step 4 open for the owner's settlement. Record: `chatgpt-review-4-2026-10-22.md`. **Design gate: OPEN.**
+**Revision:** 13 — Step 4 **settled and closed** by the owner (D-14–D-17). §18 opens step 5 (visual strategy & the mockup specification): the trio's scenes, measurement protocol, build order, distinct-but-one-universe balance — with the explicit note that **settling the spec does not authorize building mockups**. Steps 1–4 closed. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -474,6 +474,10 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-11 — Transit duration (settled 2026-10-22):** 10–20 s (short hops) and 30–60 s (long legs) are **upper targets to test, never compulsory waits**; travel is **skippable after the first traversal** of a route (§15 N2).
 - **D-12 — Transit activity (settled 2026-10-22):** **look-and-tend only** for MVP — no chores, no sorting queue, nothing that can obstruct arrival (§15 N2).
 - **D-13 — Home sun (settled 2026-10-22):** **deferred** — no size change committed; relative appearance is assessed visually alongside the Station mockup (§15 N5). **Settlement step 3 is CLOSED**, with §15's safeguards standing unchanged (cancel / turn back / return home, cargo integrity, utility-first principle). This settlement is a design decision, **not** implementation authorization.
+- **D-14 — Presentation bounds (settled 2026-10-22, as recommended):** M2's tightened boundary stands — presentation flows only within the established recipe, bound by the four safeguards (no hidden structural effects; explainable; reversible and controllable; never-punish), and **rewriting a saved tour/chapter sequence is structural**, not presentation (§17 M2).
+- **D-15 — Proposal cadence (settled 2026-10-22, as recommended):** proposals are **batched into a calm review moment** — no interruptions, no urgency, no approval from silence; approve / edit / reject / defer; under cap pressure they wait quietly, never discarded, never forced (§17 M1).
+- **D-16 — Undo horizon (settled 2026-10-22, as recommended):** **no time-based permanence**; undo works through **dependency-aware compensating entries** — never a blind snapshot restore, never a silent overwrite of newer work; conflicts are explained and resolved by the owner (§17 M1).
+- **D-17 — The log's home (settled 2026-10-22, as recommended):** **both doors, one record** — on-demand explanations at the point of use plus a browsable "World Changes" view over the same append-only log; the view is a reference/control surface, not a notification stream (§17 M6). **Settlement step 4 is CLOSED** (M1–M6 as revised in Rev 12, D-14–D-17).
 
 **Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
 
@@ -711,7 +715,7 @@ How the world is allowed to change — and who holds the pen. Led, at the owner'
 
 **M6 — The log is the world's memory of itself — two doors, one record (per review, 2026-10-22).** The transition log is user-readable in plain language through **both** entry points: **on-demand explanations** at the point of use ("Why is this here?" / "What changed?") and a **browsable "World Changes" view** — the chronological history of proposals and outcomes: approvals, rejections where recorded, applied changes, compensating entries. Both doors read the **same underlying log and the same explanation rules** — never two records that could disagree. The view is a reference and control surface, **not another notification stream** demanding attention. It is distinct from the Chronicle: the Chronicle tells the user's life; the log tells what the *world* did and why. Entries carry the brain's own naming and the owner's local time — never UTC, never jargon.
 
-**Open for the owner in step 4** *(King's leans and ChatGPT's recommendations — settle all four in the proposed direction, with the review's precisions now folded into M1/M2/M6 above; the owner settles)*:
+**Step 4 questions — ✅ SETTLED by the owner (2026-10-22, all four as recommended; D-14–D-17). Step 4 is CLOSED.** *(The recommendations as recorded before settlement:)*
 - **Q-M1** Presentation bounds: is M2's tightened boundary right — anything there you'd want behind the rail (or anything structural you'd let flow freely)? *King + ChatGPT: keep the line, with the four safeguards and the saved-sequence subtlety as written.*
 - **Q-M2** Proposal cadence: batched calm review, or per-proposal surfacing? *King + ChatGPT: batched — mail, not interruptions; defer allowed; cap pressure means quiet waiting, never discard or forced decision.*
 - **Q-M3** Undo horizon: any change class that becomes permanent with time? *King + ChatGPT: no time-based permanence — with dependency-aware compensation, never blind snapshot restoration.*
@@ -719,4 +723,32 @@ How the world is allowed to change — and who holds the pen. Led, at the owner'
 
 ---
 
-*End of Exploration 1, Revision 12. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 18. Settlement step 5 — visual strategy & the mockup specification (King's proposal, owner settles)
+
+Steps 1–4 settled *what the worlds are, what they hold, how the user moves, and how they may change*. Step 5 settles **how they will look — and how that gets proven before anything is built for real**: the three-mockup test that D-3 made the condition of the technique stack (§10.1/§11). This step settles the mockups' *specification*. **Building the mockups is a separate, later authorization** — settling this spec no more starts a build than settling §17 started a mutation engine. Proposal only.
+
+**V1 — The trio, one scene each (each mockup is a proof, not a preview).**
+- **Great Station — the approach.** The signature sequence (A13): gate exit → traffic lanes (A17) → the megastructure growing from silhouette to overwhelming → arrival arc. Proves: dual-layer scale compositing, awe-scale readability (V2 silhouette), traffic at budget, the D-13 sun/Station relative-appearance evidence.
+- **Growing Place — the rising.** A garden-world vista plus one full landmark-rising (A6) with a connection forming (A7). Proves: structural-change animation at budget, seeded-recipe generation of a living landscape, growth that reads as celebration, not gamification chrome.
+- **Deep Past — the descent.** An era-layered vista flown in Chronicle guided mode (§12/D-6): passing era strata, one resurfacing memory placed by A1–A3. Proves: the carry/transit/placement signature end-to-end, era legibility, the calmest palette discipline of the three.
+Each mockup is specified by its **environment recipe** (§9.7: Identity / Spatial composition / Meaningful content / Performance & accessibility) plus its **animation inventory slice** (§14.1 fields, incl. combined load + fallback) — a mockup whose recipe or animation slice is unspecified is not ready to build, whenever building is authorized.
+
+**V2 — Measurement protocol (the §11.2 supplement, made concrete).** Every run records: exact phone model, OS version, browser/runtime + version, build configuration, measurement method/tool, and the **session script** — proposed script, identical for all three mockups: cold load → menu idle 30 s → warp transit → signature sequence (approach / rising / descent) → one A1–A3 placement → 5 minutes free flight → repeat transit via drift. Thresholds are §11.2's, **unchanged and not renegotiable after results**; visual criteria §11.3's (V1 blind distinctness 3/3, V2 silhouette, V3 artifact-free recording, V4 recipe traceability — a hand-tweaked mockup fails, V5 content honesty, V6 owner's explicit pass/fail per mockup). Reduced-motion variants run the same script under the same bar (§11.2).
+
+**V3 — Build order (when authorized): Station → Growing Place → Deep Past.** The Station is the hardest performance case and the signature; its lessons (budgets, compositing, traffic) de-risk the other two. Each mockup is reviewed against §11 before the next begins — a failed mockup stops the sequence and returns the stack question (D-3) to the owner, rather than quietly lowering bars.
+
+**V4 — Distinct, but one universe.** The blind test (V1) demands the spaces be unmistakable — and the owner's vision demands they feel like one brain's worlds, not three unrelated demos. Proposal: distinctness lives in palette, composition, landmark, and light (the recipe's Identity); cohesion lives in the ship, the gate language, the UI voice, and the memory objects themselves — the things that travel *between* worlds are the same, so the worlds can afford to be strangers. (Owner settles the balance in Q-V1.)
+
+**V5 — Placeholder honesty.** Mockups use the §10 verified free assets and procedural generation only; the ISS does **not** appear (reserved to the Scale Space, D-2 — not in the trio). Anything in a mockup that could not ship as-is is listed in its record, so a passing mockup never smuggles in an unshippable beauty (V5 content honesty, §11.3).
+
+**Open for the owner in step 5:**
+- **Q-V1** The distinct/cohesive balance (V4): distinctness in the worlds, cohesion in what travels — right split, or should the worlds share more visual DNA?
+- **Q-V2** Build order (V3): Station first, or a different order?
+- **Q-V3** The session script (V2): does it capture how *you* would actually use these spaces, or is a leg missing (e.g., a return-home under zero fuel)?
+- **Q-V4** Recipe-first discipline: recipes for all three spaces written and settled *before* any mockup build is authorized (King's lean: yes — paper is cheap, and V4 traceability is checked against the recipe), or recipe-per-mockup as each comes up?
+
+---
+
+*End of Exploration 1, Revision 13. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
