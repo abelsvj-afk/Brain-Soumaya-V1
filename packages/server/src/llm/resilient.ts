@@ -43,15 +43,6 @@ export class ResilientLlmProvider implements LlmProvider {
    *  a new cooldown period starts, cleared implicitly since `degradedReason` only
    *  reads it while `disabledUntil` is still in the future. */
   private lastFatalReason: DegradeReason | null = null;
-  /** Why the LAST answer() call was served by the fallback, or null when the
-   *  cloud served it. Per-call (unlike `degradedReason`, which only describes
-   *  an active cooldown) so chat() can flag THAT reply honestly (Finding 2). */
-  private lastAnswerReason: AnswerDegradeReason | null = null;
-
-  get lastAnswerDegradedReason(): AnswerDegradeReason | null {
-    return this.lastAnswerReason;
-  }
-
   constructor(
     private readonly primary: LlmProvider,
     private readonly cooldownMs = Number(process.env.LLM_COOLDOWN_MS ?? 10 * 60_000),
@@ -199,20 +190,32 @@ export class ResilientLlmProvider implements LlmProvider {
     context: ContextNode[],
     opts?: AnswerOptions,
   ): Promise<AnswerResult> {
-    this.lastAnswerReason = null;
+    // Audit-2 item 1: the per-call degraded reason travels WITH this call's
+    // result (`AnswerResult.degradedReason`), never in shared instance
+    // state. This provider is a process-wide singleton, so a mutable
+    // last-call field read after an await races under concurrent turns —
+    // one turn's Limited-mode flag could land on (or vanish from) another
+    // turn's reply. A local + the returned object cannot be swapped.
     if (this.blocked) {
       // Blocked = budget (checked live) or a fatal-error cooldown whose reason
       // was recorded when it tripped; "error" is the honest remainder if a
       // future block source records neither.
-      this.lastAnswerReason = this.isOverBudget?.() ? "budget" : (this.lastFatalReason ?? "error");
-      return this.fallback.answer(question, context, opts);
+      const reason: AnswerDegradeReason = this.isOverBudget?.()
+        ? "budget"
+        : (this.lastFatalReason ?? "error");
+      const result = await this.fallback.answer(question, context, opts);
+      return { ...result, degradedReason: reason };
     }
     try {
-      return await withTimeout(this.primary.answer(question, context, opts), this.timeoutMs, "answer");
+      const result = await withTimeout(this.primary.answer(question, context, opts), this.timeoutMs, "answer");
+      // Explicit null — and a fresh object — so a primary-supplied value can
+      // never masquerade as this wrapper's per-call verdict.
+      return { ...result, degradedReason: null };
     } catch (err) {
       this.note(err, "answer");
-      this.lastAnswerReason = classifyFatalError(err) ?? "error";
-      return this.fallback.answer(question, context, opts);
+      const reason: AnswerDegradeReason = classifyFatalError(err) ?? "error";
+      const result = await this.fallback.answer(question, context, opts);
+      return { ...result, degradedReason: reason };
     }
   }
 

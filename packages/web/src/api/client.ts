@@ -590,10 +590,16 @@ export async function getDigestResult(): Promise<{ ok: true; insights: Insight[]
   }
 }
 
-/** Soumaya's daily digest (free, no LLM). Returns a safe empty shape on error. */
-export async function getDailyDigest(): Promise<DailyDigest> {
-  const empty: DailyDigest = {
-    date: spaceLocalDay(),
+/**
+ * The empty-digest fallback shape. Its `date` is the SPACE-local day
+ * (audit-2 item 2): `spaceLocalDay` defaults to the space's configured
+ * timezone via utils/spaceTimezone.ts — the device zone is only that
+ * accessor's pre-load fallback. Extracted so the fallback date is
+ * testable without a network.
+ */
+export function emptyDailyDigest(now: Date = new Date(), timeZone?: string): DailyDigest {
+  return {
+    date: spaceLocalDay(now, timeZone),
     greeting: "",
     fresh: [],
     connections: [],
@@ -602,6 +608,11 @@ export async function getDailyDigest(): Promise<DailyDigest> {
     reminders: [],
     closing: "",
   };
+}
+
+/** Soumaya's daily digest (free, no LLM). Returns a safe empty shape on error. */
+export async function getDailyDigest(): Promise<DailyDigest> {
+  const empty: DailyDigest = emptyDailyDigest();
   try {
     const res = await afetch(`${API}/digest/daily`);
     const d = await res.json().catch(() => null);

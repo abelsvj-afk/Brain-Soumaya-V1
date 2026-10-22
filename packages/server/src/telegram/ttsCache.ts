@@ -3,12 +3,16 @@ import type { SpeechAudioCache, SynthesizedSpeech } from "./tts.js";
 
 /**
  * Persistent voice-note audio cache (Phase D). Synthesizing costs real money
- * per character against a small monthly quota, so an unchanged reply must
- * NEVER be synthesized twice: audio is stored in `tts_audio_cache` under the
+ * per character against a small monthly quota, so an unchanged reply is
+ * free while cached: audio is stored in `tts_audio_cache` under the
  * content hash from `speechCacheKey` (voice + model + prosody + normalized
  * text) and replays are served from SQLite with zero provider calls — they
  * keep working even when the quota is exhausted, and they survive restarts
- * (Fly redeploys included), unlike an in-memory cache.
+ * (Fly redeploys included), unlike an in-memory cache. That is not a
+ * never-twice guarantee: an entry pruned past the cap below re-synthesizes
+ * (and re-bills) on its next request, concurrent misses have no
+ * single-flight, and a failed cache write (non-fatal in tts.ts) caches
+ * nothing.
  *
  * Bounded: at most MAX_ENTRIES rows; the oldest are pruned on write so the
  * table can't grow without limit on the Fly volume.

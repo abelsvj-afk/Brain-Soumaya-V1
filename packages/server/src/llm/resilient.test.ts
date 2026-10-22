@@ -61,19 +61,20 @@ describe("ResilientLlmProvider — degradedReason categorization", () => {
     expect(provider.degradedReason).toBeNull();
   });
 
-  it("records the per-call fallback reason for answer() (Finding 2 threading)", async () => {
+  it("records the per-call fallback reason on the answer() result (Finding 2 threading)", async () => {
     const provider = new ResilientLlmProvider(makeFakePrimary(new Error("boom, unrelated failure")));
-    await provider.answer("q", []);
+    const result = await provider.answer("q", []);
     // Provider-wide degraded state stays false for a non-fatal error, but the
-    // CALL was served by the fallback — chat() reads this to flag that reply.
+    // CALL was served by the fallback — the reason travels on THIS call's
+    // result, which chat() reads to flag that reply (audit-2 item 1).
     expect(provider.degraded).toBe(false);
-    expect(provider.lastAnswerDegradedReason).toBe("error");
+    expect(result.degradedReason).toBe("error");
   });
 
-  it("clears the per-call record after a healthy answer", async () => {
+  it("carries a null per-call reason on a healthy answer's result", async () => {
     const provider = new ResilientLlmProvider(makeFakePrimary());
-    await provider.answer("q", []);
-    expect(provider.lastAnswerDegradedReason).toBeNull();
+    const result = await provider.answer("q", []);
+    expect(result.degradedReason).toBeNull();
   });
 
   it("'budget' takes precedence over a stale caught-error reason", async () => {

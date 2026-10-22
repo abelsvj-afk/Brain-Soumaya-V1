@@ -1,4 +1,5 @@
 import { COOLING_ENTROPY, type GraphNode } from "@brain/shared";
+import { getSpaceTimeZone } from "../utils/spaceTimezone.js";
 
 /**
  * Daily quests / tend list (gamification Wave 2; completed as a CLIENT-ONLY
@@ -53,12 +54,13 @@ export interface Quest {
 /**
  * Local YYYY-MM-DD in the given IANA timezone. Same algorithm as
  * ReviewPanel's `spaceLocalDay` (IM-113) and the server's `localDay()`:
- * en-CA formatToParts in the target zone; the web falls back to the
- * device's own zone, which is what the space timezone is set from.
+ * en-CA formatToParts in the target zone. The default zone is the SPACE's
+ * configured timezone (utils/spaceTimezone.ts, audit-2 item 2) — the
+ * device zone only as that accessor's pre-load fallback.
  */
 export function questLocalDay(
   d: Date = new Date(),
-  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+  timeZone: string = getSpaceTimeZone(),
 ): string {
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {

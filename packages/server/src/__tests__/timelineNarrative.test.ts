@@ -109,6 +109,37 @@ describe("matchFormulaNarrative — the template signature", () => {
     expect(matchFormulaNarrative("No new memories landed in this stretch.")?.kind).toBe("current");
   });
 
+  it("still matches genuine THEME / PEOPLE clauses (single-sentence bodies)", () => {
+    // Theme + people together, old opening.
+    expect(
+      matchFormulaNarrative("Across about 8 days, you added 19 memories. Much of it circled around nursing. Kehlani kept showing up."),
+    ).toEqual({ kind: "old-span", memoryCount: 19 });
+    // Multi-name people list, current opening, no theme clause.
+    expect(matchFormulaNarrative("You added 5 memories on 3 different days. Ana, Ben, Cyrus kept showing up.")?.kind).toBe("current");
+    // Theme clause on the current opening, no people clause.
+    expect(matchFormulaNarrative("You added 5 memories on 3 different days. Much of it circled around warehouse shifts.")?.kind).toBe("current");
+  });
+
+  it("EXCLUDES prose absorbed by the THEME clause (audit-2 finding #5)", () => {
+    // The THEME body used to be a greedy .+ that crossed the sentence
+    // boundary, swallowing the hand-appended sentence into the "theme".
+    expect(
+      matchFormulaNarrative("Across about 8 days, you added 19 memories. Much of it circled around nursing. This is my own added sentence."),
+    ).toBeNull();
+    // Same absorption shape against the current opening.
+    expect(
+      matchFormulaNarrative("You added 19 memories on 8 different days. Much of it circled around nursing. This is my own added sentence."),
+    ).toBeNull();
+  });
+
+  it("EXCLUDES prose absorbed by the PEOPLE clause (audit-2 finding #5)", () => {
+    // The PEOPLE body likewise swallowed two full prose sentences ahead
+    // of a formula-shaped "kept showing up" closer.
+    expect(
+      matchFormulaNarrative("Across about 3 days, you added 5 memories. I started the warehouse job. Long shifts. Kehlani kept showing up."),
+    ).toBeNull();
+  });
+
   it("EXCLUDES anything with non-formula content", () => {
     // Hand-edited tail after a formula opening.
     expect(matchFormulaNarrative("Across about 3 days, you added 4 memories. Then I rewrote this part myself.")).toBeNull();
@@ -185,6 +216,21 @@ describe("regenerateChapterNarratives — stored-text backfill with exclusion ru
     expect(summaryOf(ch4.id)).toBe(PROSE);
     expect(summaryOf(ch5.id)).toBe(ch5Summary);
     expect(summaryOf(ch6.id)).toBe(WRONG_COUNT);
+  });
+
+  it("never rewrites a narrative whose THEME clause absorbed hand-appended prose (audit-2 #5)", () => {
+    const base = Date.UTC(2026, 1, 1); // Feb 1
+    for (let i = 0; i < 19; i++) mem("absorbed", 0.3, iso(base + (6 + i) * HOUR)); // all on Feb 1 (NY)
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 1, 9)) });
+    // Stated count (19) matches the recomputed window, so under the old
+    // matcher this WAS rewritten — the exclusion guarantee is what broke.
+    const absorbed =
+      "Across about 8 days, you added 19 memories. Much of it circled around nursing. This is my own added sentence.";
+    setSummary(ch.id, absorbed);
+    const report = regenerateChapterNarratives(ctx, "legacy");
+    expect(report.regenerated).toBe(0);
+    expect(report.nonFormula).toBe(1);
+    expect(summaryOf(ch.id)).toBe(absorbed);
   });
 
   it("is idempotent: a second run regenerates nothing", () => {

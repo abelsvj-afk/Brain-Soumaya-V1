@@ -165,12 +165,15 @@ export interface SpeechSynthesizer {
 }
 
 // ---------------------------------------------------------------------------
-// Audio cache — replays are FREE. Synthesized audio is cached under a hash of
-// (voice, model, prosody, normalized text): an unchanged reply synthesizes
-// exactly once, ever. A cache hit makes ZERO provider calls, so repeats keep
-// working even after the monthly quota is exhausted. Two implementations:
-// MemorySpeechCache (tests / no-DB callers) and DbSpeechCache
-// (telegram/ttsCache.ts — the production path, survives restarts).
+// Audio cache — replays are FREE while cached. Synthesized audio is cached
+// under a hash of (voice, model, prosody, normalized text): while an entry
+// stays cached, a hit makes ZERO provider calls, so repeats keep working
+// even after the monthly quota is exhausted. Not once, ever, though: an
+// evicted entry, two concurrent misses (no single-flight), or a failed
+// cache write (non-fatal) each re-synthesize — and re-bill.
+// Two implementations: MemorySpeechCache (tests / no-DB callers) and
+// DbSpeechCache (telegram/ttsCache.ts — the production path, survives
+// restarts).
 // ---------------------------------------------------------------------------
 
 export interface SpeechAudioCache {

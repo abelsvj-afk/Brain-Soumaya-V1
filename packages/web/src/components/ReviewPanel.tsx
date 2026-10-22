@@ -27,8 +27,14 @@ const DAILY_CAP = 15; // enough for a day; the rest keep for tomorrow
  * so existing imports keep working.
  */
 import { spaceLocalDay } from "../utils/localDay.js";
+import { getSpaceTimeZone, useSpaceTimeZone } from "../utils/spaceTimezone.js";
 export { spaceLocalDay };
-const todayKey = () => `review.doneToday.${spaceLocalDay()}`;
+/** The daily recall-cap key. Its day is the SPACE's configured local day
+ *  (audit-2 item 2 — utils/spaceTimezone.ts; device zone only as the
+ *  pre-load fallback). Exported so the key's zone is testable. */
+export function todayKey(now: Date = new Date(), timeZone: string = getSpaceTimeZone()): string {
+  return `review.doneToday.${spaceLocalDay(now, timeZone)}`;
+}
 const doneToday = (): number => {
   try { return parseInt(localStorage.getItem(todayKey()) || "0", 10) || 0; } catch { return 0; }
 };
@@ -49,6 +55,10 @@ const pruneOldDoneTodayKeys = () => {
 };
 
 export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus?: (id: number) => void }) {
+  // Audit-2 item 2: the recall-cap key follows the SPACE's configured
+  // timezone; when that zone loads, the effect below re-runs so the cap
+  // is checked against the correct day's key.
+  const spaceTimeZone = useSpaceTimeZone();
   const [due, setDue] = useState<DueReview[] | null>(null);
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -69,7 +79,9 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
     // rather than leaving `due` null forever — an unhandled rejection here previously left
     // the panel stuck on "Finding memories ready to revisit…" indefinitely.
     void getDueReviews().then((d) => setDue(d.slice(0, room))).catch(() => setDue([]));
-  }, []);
+    // Re-run when the space's configured timezone arrives: the cap key's
+    // day (todayKey) is derived from it, not the device zone.
+  }, [spaceTimeZone]);
 
   const current = due && idx < due.length ? due[idx] : null;
 

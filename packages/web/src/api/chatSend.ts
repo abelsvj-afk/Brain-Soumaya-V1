@@ -57,7 +57,14 @@ export interface SanitizedChatPayload {
  * - question: truncated to 2000 chars (the composer also caps input at
  *   2000 with a visible counter, so this is a backstop for voice input).
  * - history: the LAST 16 entries, each text truncated to 4000 chars —
- *   entries are truncated, not dropped, so the thread still reads.
+ *   entries are truncated, not dropped, so the thread still reads. The
+ *   ONE exception: an entry whose role is not exactly "you" or
+ *   "soumaya" is dropped. History is runtime data (ChatDock persists it
+ *   in localStorage and reloads it with a cast), so corrupted or
+ *   hand-edited storage can carry a role the server's enum rejects —
+ *   left in, it would 400 every send and every retry for the thread.
+ *   The bad role is never REMAPPED onto a person: a misattributed
+ *   message is worse than a missing one.
  * - attachments: at most 3; name truncated to 200 chars; text truncated
  *   to 20000 chars. An attachment whose extracted text is EMPTY is
  *   excluded here as a backstop — the truthful, visible behaviour lives
@@ -71,8 +78,20 @@ export function sanitizeChatPayload(input: {
 }): SanitizedChatPayload {
   const question = (input.question ?? "").slice(0, CHAT_QUESTION_MAX);
   const history = (input.history ?? [])
+    // Role normalization (audit-2 item 5): keep only entries whose role
+    // is exactly one of the two the server accepts. The predicate also
+    // keeps the function total over garbage storage — null / non-object
+    // entries and entries with a missing role have no valid role, so
+    // they are dropped here instead of throwing or poisoning the send.
+    .filter(
+      (m): m is ChatHistoryEntry =>
+        m != null && typeof m === "object" && (m.role === "you" || m.role === "soumaya"),
+    )
     .slice(-CHAT_HISTORY_MAX_ENTRIES)
-    .map((m) => ({ role: m.role, text: (m.text ?? "").slice(0, CHAT_HISTORY_ENTRY_MAX) }));
+    .map((m) => ({
+      role: m.role,
+      text: (typeof m.text === "string" ? m.text : "").slice(0, CHAT_HISTORY_ENTRY_MAX),
+    }));
   const attachments = (input.attachments ?? [])
     .filter((a) => (a.text ?? "").trim().length > 0)
     .slice(0, CHAT_ATTACHMENT_MAX)

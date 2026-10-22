@@ -98,6 +98,19 @@ export interface AnswerResult {
    *  a deterministically-accumulated preference (`analysis/interactionPreferences.ts`); it never
    *  changes behavior directly. null/undefined = no such statement this turn (the common case). */
   interactionPreferenceSignal?: InteractionPreferenceSignal | null;
+  /** WHY this ONE answer() call was served by the offline fallback, or null
+   *  when the cloud served it. Per-call plumbing that travels WITH the
+   *  result (audit-2 item 1): set ONLY by `ResilientLlmProvider` when it
+   *  returns a result — never by a cloud provider itself (Gemini/OpenAI
+   *  construct their results field-by-field and never forward model output
+   *  into it) and never read from shared provider state. Absent on results
+   *  from providers that do not do fallback wrapping (e.g. the bare
+   *  heuristic, whose callers detect "offline" via `available === false`).
+   *  Consumers must read it from THIS result, in the same turn that produced
+   *  it — there is deliberately no provider-level getter for it, because a
+   *  read-after-await of shared mutable state races under concurrent turns
+   *  and swaps one turn's flag onto another's reply. */
+  degradedReason?: AnswerDegradeReason | null;
 }
 
 /**
@@ -113,11 +126,6 @@ export interface LlmProvider {
   readonly degraded?: boolean;
   /** WHY it's degraded, when `degraded` is true — null/undefined otherwise. */
   readonly degradedReason?: DegradeReason | null;
-  /** WHY the most recent answer() call fell back to the offline heuristic, or
-   *  null when it was served by the cloud (or no answer has run yet). Set by
-   *  ResilientLlmProvider per call — including single-call fallbacks that do
-   *  NOT trip the cooldown and so never show up in `degradedReason`. */
-  readonly lastAnswerDegradedReason?: AnswerDegradeReason | null;
   /** Parse raw text into typed nodes + edges, grounded in existing context. */
   extract(text: string, context: ContextNode[]): Promise<ExtractionResult>;
   /** Decide whether a semantic neighbour should become a formal graph edge. */
@@ -277,8 +285,9 @@ export type DegradeReason = "auth" | "quota" | "timeout" | "budget";
 /** Why ONE answer() call was served by the offline fallback (Finding 2):
  *  DegradeReason, plus "error" for a cloud failure that fits no named
  *  category (a non-fatal error degrades a single call without tripping the
- *  provider-wide cooldown, so `degradedReason` stays null for it — this
- *  per-call record is how chat() still learns the truth about THAT turn). */
+ *  provider-wide cooldown, so `degradedReason` stays null for it — carried
+ *  on that call's `AnswerResult.degradedReason`, this is how chat() still
+ *  learns the truth about THAT turn). */
 export type AnswerDegradeReason = DegradeReason | "error";
 
 export interface LlmProviderOptions {

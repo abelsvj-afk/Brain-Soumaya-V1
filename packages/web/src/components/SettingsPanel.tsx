@@ -37,6 +37,7 @@ import {
 import { pushToast } from "./Toasts.js";
 import { getUsage, getToolHealth, getSettings, updateSetting, type Usage, type ToolHealth } from "../api/ops.js";
 import { getSpacePreferences, updateSpacePreferences, getGraphExport, type SpacePreferences } from "../api/preferences.js";
+import { setSpaceTimeZone } from "../utils/spaceTimezone.js";
 import { loadPersistedRung, RUNG_TABLE, ADAPTIVE_MODEL_VERSION } from "../graph/adaptiveController.js";
 import {
   startSweep,
@@ -277,7 +278,12 @@ export function SettingsPanel({
       if (u) setUsage(u);
       setToolHealth(th);
       setResearchOn(st.research_enabled === "true");
-      if (p) setPrefs(p);
+      if (p) {
+        setPrefs(p);
+        // Audit-2 item 2: refresh the shared space-timezone cache from
+        // the store we just read, so every day derivation follows it.
+        setSpaceTimeZone(p.timezone);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -309,6 +315,10 @@ export function SettingsPanel({
     try {
       const saved = await updateSpacePreferences(prefs);
       setPrefs(saved);
+      // Audit-2 item 2: a Settings timezone change refreshes the shared
+      // cache immediately — derivations app-wide follow the new zone
+      // without a reload.
+      setSpaceTimeZone(saved.timezone);
       setPrefsDirty(false);
       setPrefsMsg("Saved ✓");
     } catch (err) {

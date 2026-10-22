@@ -1,7 +1,7 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
-import { SpacesRepo } from "../../auth/spaces.js";
+import { SpacesRepo, UserFacingError } from "../../auth/spaces.js";
 import { requireSpace, spaceOf } from "../middleware.js";
 import { seedWelcomeStar } from "../../analysis/welcome.js";
 import {
@@ -61,6 +61,23 @@ function preferencesPatchError(p: z.infer<typeof PreferencesBody>): string | nul
   return null;
 }
 
+/**
+ * Error-path hardening (audit-2 item 4): a SpacesRepo throw is surfaced
+ * verbatim ONLY when it is a curated UserFacingError, at the catch's own
+ * historical status. Anything else is unexpected — its raw detail (SQLite
+ * / constraint / runtime messages) is logged server-side and the client
+ * gets the centralized handler's sanitized shape (api/server.ts):
+ * 500 { error: "Internal error" }.
+ */
+function sendSpaceError(res: Response, err: unknown, curatedStatus: number): void {
+  if (err instanceof UserFacingError) {
+    res.status(curatedStatus).json({ error: err.message });
+    return;
+  }
+  console.error("[api] space route error:", err);
+  res.status(500).json({ error: "Internal error" });
+}
+
 export function spaceRoutes(ctx: AppContext): Router {
   const r = Router();
   const repo = new SpacesRepo(ctx.handle);
@@ -92,7 +109,7 @@ export function spaceRoutes(ctx: AppContext): Router {
       }
       res.json({ id: result.space.id, name: result.space.name, gamerTag: result.space.gamerTag, created: result.created });
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      sendSpaceError(res, err, 400);
     }
   });
 
@@ -123,7 +140,7 @@ export function spaceRoutes(ctx: AppContext): Router {
     try {
       res.json(repo.updateProfile(id, parsed.data));
     } catch (err) {
-      res.status(409).json({ error: (err as Error).message });
+      sendSpaceError(res, err, 409);
     }
   });
 
@@ -147,7 +164,7 @@ export function spaceRoutes(ctx: AppContext): Router {
       }
       res.json({ ok: true });
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      sendSpaceError(res, err, 400);
     }
   });
 
@@ -171,7 +188,7 @@ export function spaceRoutes(ctx: AppContext): Router {
       }
       res.json({ ok: true, deleted: true });
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      sendSpaceError(res, err, 400);
     }
   });
 
