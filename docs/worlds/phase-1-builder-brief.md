@@ -64,7 +64,7 @@ After each mockup: push its result record, update this brief's status table (§9
 
 | Mockup | State | Record |
 |---|---|---|
-| 1 — Great Station (approach + D-13 evidence) | 🟡 Scene built (throwaway, fixtures); **§11 measurement pending owner's device run** — verdict UNRESOLVED, no PASS claimed | `mockup-result-station.md` |
+| 1 — Great Station (approach + D-13 evidence) | 🟡 Scene built; **review 10 applied** (counter accounting fixed, harness extended to §11 lengths + cold-load, behavioral grammar implemented in-scene at fixture level, V4 table documented); **§11 measurement pending owner's device run** — verdict UNRESOLVED, no PASS claimed | `mockup-result-station.md` · `chatgpt-review-10-2026-10-22.md` |
 | 2 — Growing Place (the rising) | ⬜ Blocked on Mockup 1 PASS | — |
 | 3 — Deep Past (the descent; A1–A3, A21/A22) | ⬜ Blocked on Mockup 2 PASS | — |
 

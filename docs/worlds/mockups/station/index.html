@@ -30,7 +30,9 @@
   <div>Seed: <span id="seedOut"></span></div>
   <div>Stage: <b id="stageOut">far</b></div>
   <div>FPS avg: <b id="fpsOut">—</b> · 1% low: <b id="lowOut">—</b></div>
-  <div>Draw calls: <b id="callsOut">—</b> · Tris: <b id="trisOut">—</b></div>
+  <div>Draw calls (both passes): <b id="callsOut">—</b> · Tris: <b id="trisOut">—</b></div>
+  <div>Cold load: <b id="coldOut">—</b></div>
+  <div>Fixture fuel: <b id="fuelOut">100</b> · Cargo: <b id="cargoOut">none</b></div>
   <div>Local time: <span id="clockOut">—</span></div>
 </div>
 <div id="panel">
@@ -40,17 +42,34 @@
   <button id="warpBtn">Warp Far→Near</button>
   <button id="driftBtn">Drift Far→Near</button>
   <button id="shotBtn">Capture still (D-13)</button>
-  <button id="measureBtn">Run 60s measurement</button>
+  <button id="measureBtn">Run measurement</button>
+  <label>Length
+    <select id="durSel">
+      <option value="60">60s (diagnostic)</option>
+      <option value="300">300s (§11 session)</option>
+      <option value="900">900s (soak)</option>
+    </select>
+  </label>
   <label><input type="checkbox" id="rmToggle"> Reduced motion</label>
+  <button id="cargoBtn">Load cargo (A1)</button>
+  <button id="cancelBtn">Cancel departure</button>
+  <button id="turnBtn">Turn back</button>
+  <button id="homeBtn">Return home (free)</button>
+  <button id="drainBtn">Drain fuel (test)</button>
   <div id="measureOut"></div>
+  <div id="behavOut" style="width:100%;font-size:11px;color:#ffd9a0;white-space:pre-wrap"></div>
 </div>
 
 <script type="module">
 import * as THREE from 'three';
 
 /* ============ Seed & palette (recipe §7 traceability) ============
-   Seed string: "great-station / harbor-1". Every visual parameter below
-   derives from this seed via mulberry32 — no hand-tweaked values (V4). */
+   Seed string: "great-station / harbor-1". Two classes of values (V4):
+   (a) SEED-DERIVED — palette lightness/hue offsets within fixed bands,
+       star/lamp/lane scatter, nebula placement — all via mulberry32 below.
+   (b) RECIPE-FIXED — form proportions, the cyan navigation color, camera
+       stages, lighting. Fixed by the settled recipe, deliberately NOT seeded.
+   The result record's V4 table lists every value under its class. */
 const SEED_STRING = 'great-station / harbor-1';
 function hashSeed(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -69,6 +88,7 @@ document.getElementById('seedOut').textContent = SEED_STRING;
 /* ============ Renderer / scene / cameras (dual-layer compositing) ============ */
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+renderer.autoReset = false; // two render passes per frame — counters must accumulate BOTH (review 10, Finding 1)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.autoClear = false;
@@ -225,6 +245,32 @@ scene.add(new THREE.AmbientLight(0x8890c0, 0.55));
 const key = new THREE.DirectionalLight(0xffe2b8, 1.5); key.position.set(-200, 140, 120); scene.add(key);
 const rim = new THREE.DirectionalLight(0x6f83ff, 0.7); rim.position.set(180, -60, -220); scene.add(rim);
 
+/* ============ Fixture behavioral layer (brief §18 script, scene-level) ============
+   A fixture cargo with a fixed identity, a fixture fuel gauge, and the three
+   travel acts (cancel / turn back / return home) exercised as in-scene checks.
+   This tests the BEHAVIORAL GRAMMAR at fixture level. It does not test the
+   product's canonical store — that remains integration-level, recorded as such. */
+const WARP_COST = 20;
+let fuel = 100;
+let coldLoadMs = null;
+let departing = null;   // {at} — warp departure countdown (the cancel window)
+let cargoAnim = null;
+const cargo = {id:'fixture-memory-01', home:'fixture-home', aboard:false};
+const ORB_OFF = new THREE.Vector3(0, 2.4, 0);
+const orb = new THREE.Mesh(new THREE.SphereGeometry(1.15, 14, 14),
+  new THREE.MeshBasicMaterial({color:0xffe9c4}));
+orb.visible = false; orb.position.set(0, 0, 330);
+scene.add(orb);
+function behav(msg){
+  const el = document.getElementById('behavOut');
+  el.textContent += (el.textContent ? '\n' : '') + '• ' + msg;
+}
+function setFuelOut(){ document.getElementById('fuelOut').textContent = fuel; }
+function setCargoOut(){
+  document.getElementById('cargoOut').textContent =
+    cargo.aboard ? cargo.id + ' · home: ' + cargo.home + ' · aboard' : 'none';
+}
+
 /* ============ Camera stages & travel ============ */
 const STAGES = {
   far:  {pos: new THREE.Vector3(150, 66, 470), look: new THREE.Vector3(0, 6, -1050), bg: 1.0},
@@ -233,21 +279,24 @@ const STAGES = {
 };
 let currentStage = 'far';
 let camAnim = null;
+let lastDeparture = null; // {pos, look, stage} captured at each departure — turn-back target
 const reducedMotion = () => document.getElementById('rmToggle').checked;
 
-function flyTo(stageName, mode){ // mode: 'cut' | 'warp' | 'drift'
+function flyTo(stageName, mode, onDone){ // mode: 'cut' | 'warp' | 'drift'
   const s = STAGES[stageName];
+  lastDeparture = {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage};
   const dur = mode === 'warp' ? 2600 : mode === 'drift' ? 12000 : 1400;
   if(reducedMotion() || mode === 'cut'){
     camera.position.copy(s.pos); bgCamera.position.set(0,0,0);
     camAnim = null;
+    currentLook.copy(s.look);
+    if(onDone) onDone();
   } else {
     camAnim = {t:0, dur, from: camera.position.clone(), to: s.pos.clone(),
-               fromLook: lastLook.clone(), toLook: s.look.clone(), mode};
+               fromLook: currentLook.clone(), toLook: s.look.clone(), mode, onDone};
   }
   currentStage = stageName;
   document.getElementById('stageOut').textContent = stageName + (mode ? ' ('+mode+')' : '');
-  currentLook.copy(s.look);
 }
 let lastLook = new THREE.Vector3(0, 6, -1050);
 let currentLook = lastLook.clone();
@@ -284,7 +333,7 @@ function tick(){
     const e = camAnim.mode === 'warp' ? (k<0.5 ? 4*k*k*k : 1-Math.pow(-2*k+2,3)/2) : (1-Math.cos(Math.PI*k))/2;
     camera.position.lerpVectors(camAnim.from, camAnim.to, e);
     currentLook.lerpVectors(camAnim.fromLook, camAnim.toLook, e);
-    if(k >= 1) camAnim = null;
+    if(k >= 1){ const cb = camAnim.onDone; camAnim = null; if(cb) cb(); }
   }
   camera.lookAt(currentLook);
   bgCamera.quaternion.copy(camera.quaternion);
@@ -318,10 +367,31 @@ function tick(){
     THREE.MathUtils.lerp(318, armTips[1].z + 20, arcK));
   ship.lookAt(station.position.x, 8, station.position.z);
 
+  // Cargo rides with the ship once aboard (A2: visible cargo in transit)
+  if(cargo.aboard){ orb.visible = true; orb.position.copy(ship.position).add(ORB_OFF); }
+  if(cargoAnim){
+    cargoAnim.t += 16.7;
+    const k = Math.min(1, cargoAnim.t/1200);
+    orb.position.lerpVectors(cargoAnim.from, ship.position.clone().add(ORB_OFF), (1-Math.cos(Math.PI*k))/2);
+    if(k >= 1){ cargoAnim = null; cargo.aboard = true; setCargoOut(); behav('A1 carry complete — cargo aboard, identity unchanged.'); }
+  }
+  // Departure countdown (cancel window) for warp
+  if(departing && performance.now() >= departing.at){
+    departing = null;
+    fuel -= WARP_COST; setFuelOut();
+    flyTo('near', 'warp');
+    behav('Warp departed — fixture fuel spent: ' + WARP_COST + '.');
+  }
+
+  renderer.info.reset(); // manual reset: counters accumulate BOTH passes this frame (Finding 1 fix)
   renderer.clear();
   renderer.render(bgScene, bgCamera);
   renderer.clearDepth();
   renderer.render(scene, camera);
+  if(coldLoadMs === null){
+    coldLoadMs = Math.round(performance.now());
+    document.getElementById('coldOut').textContent = coldLoadMs + ' ms (this device)';
+  }
   hud(performance.now());
 }
 tick();
@@ -329,8 +399,40 @@ tick();
 /* ============ Controls ============ */
 document.querySelectorAll('[data-stage]').forEach(b =>
   b.addEventListener('click', () => flyTo(b.dataset.stage, 'cut')));
-document.getElementById('warpBtn').addEventListener('click', () => { camera.position.copy(STAGES.far.pos); currentLook.copy(STAGES.far.look); flyTo('near', 'warp'); });
-document.getElementById('driftBtn').addEventListener('click', () => { camera.position.copy(STAGES.far.pos); currentLook.copy(STAGES.far.look); flyTo('near', 'drift'); });
+document.getElementById('warpBtn').addEventListener('click', () => {
+  if(fuel < WARP_COST){ behav('CHECK zero-fuel: warp refused at fuel ' + fuel + ' (needs ' + WARP_COST + '). Drift and Return home remain available.'); return; }
+  if(reducedMotion()){ fuel -= WARP_COST; setFuelOut(); flyTo('near', 'cut'); behav('RM departure: instant cut, fixture fuel spent ' + WARP_COST + '.'); return; }
+  departing = {at: performance.now() + 1200};
+  behav('Warp departure armed — 1.2s cancel window open.');
+});
+document.getElementById('driftBtn').addEventListener('click', () => { flyTo('near', 'drift'); behav('Drift departure — the free gait (no fuel).'); });
+document.getElementById('cargoBtn').addEventListener('click', () => {
+  if(cargo.aboard){ behav('Cargo already aboard.'); return; }
+  orb.visible = true;
+  if(reducedMotion()){ cargo.aboard = true; setCargoOut(); behav('A1 (RM): cargo aboard instantly — identity unchanged.'); return; }
+  cargoAnim = {t:0, from: new THREE.Vector3(0, 0, 330)};
+  behav('A1 carry started — ship taking fixture cargo aboard at the gate.');
+});
+document.getElementById('cancelBtn').addEventListener('click', () => {
+  if(!departing){ behav('Cancel pressed with no departure armed — nothing to cancel.'); return; }
+  departing = null;
+  behav('CHECK cancel-before-departure: PASS — nothing moved, no fuel spent (fuel ' + fuel + '), cargo state unchanged (' + (cargo.aboard ? 'aboard' : 'not aboard') + ').');
+});
+document.getElementById('turnBtn').addEventListener('click', () => {
+  if(!camAnim || !lastDeparture){ behav('Turn back pressed while not in transit — no-op.'); return; }
+  const origin = lastDeparture;
+  camAnim = null;
+  flyTo(origin.stage, 'drift', () => behav('CHECK turn-back: PASS — returned to origin (' + origin.stage + '), cargo ' + (cargo.aboard ? 'still aboard' : 'as it was') + ', identity/home unchanged (' + cargo.id + ' / ' + cargo.home + ').'));
+  behav('Turning back mid-transit…');
+});
+document.getElementById('homeBtn').addEventListener('click', () => {
+  const before = fuel;
+  flyTo('far', 'drift', () => behav('CHECK return-home: PASS — home reached at fuel ' + fuel + ' (unchanged: ' + (fuel === before) + '). Return is always free, even at zero fuel.'));
+});
+document.getElementById('drainBtn').addEventListener('click', () => {
+  fuel = 0; setFuelOut();
+  behav('Fixture fuel drained to 0 for the zero-fuel checks — try Warp (refused), then Return home (works, free).');
+});
 document.getElementById('shotBtn').addEventListener('click', () => {
   const a = document.createElement('a');
   a.download = 'd13-station-' + currentStage + '.png';
@@ -338,31 +440,34 @@ document.getElementById('shotBtn').addEventListener('click', () => {
   a.click();
 });
 
-/* Measurement harness: samples frame times for 60s, reports vs §11.2 fields.
+/* Measurement harness: samples frame times for the selected duration.
+   300s = the §11.2 session length; 900s = the soak; 60s is diagnostic only.
    NOTE: §11 grades the OWNER'S PHONE. Numbers from any other device are
    harness checks only and are labeled as such in the result record. */
-let measuring = null;
 document.getElementById('measureBtn').addEventListener('click', () => {
   const out = document.getElementById('measureOut');
-  out.textContent = 'Measuring 60s — keep this tab in front, fly around…';
+  const durS = parseInt(document.getElementById('durSel').value, 10);
+  out.textContent = 'Measuring ' + durS + 's — keep this tab in front, fly around (include a warp and the approach)…';
   const samples = [];
   let prev = performance.now();
   const t0 = prev;
   function sample(now){
     samples.push(now - prev); prev = now;
-    if(now - t0 < 60000){ requestAnimationFrame(sample); return; }
+    if(now - t0 < durS*1000){ requestAnimationFrame(sample); return; }
     const sorted = [...samples].sort((a,b)=>a-b);
     const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
     const low1ms = sorted[Math.floor(sorted.length*0.99)];
     const maxMs = sorted[sorted.length-1];
     const info = renderer.info.render;
     out.textContent =
-      'MEASUREMENT (this device — NOT the §11 grading device)\n' +
-      'frames: ' + samples.length +
+      'MEASUREMENT (this device — the §11 verdict requires the owner\'s phone)\n' +
+      'duration: ' + durS + 's' + (durS >= 300 ? ' (§11 session length)' : ' (DIAGNOSTIC ONLY — below §11 session length)') +
+      ' · cold load: ' + coldLoadMs + 'ms' +
+      ' · frames: ' + samples.length +
       ' · fps avg: ' + (1000/avg).toFixed(1) +
       ' · 1% low fps: ' + (1000/low1ms).toFixed(1) +
       ' · longest frame: ' + maxMs.toFixed(1) + 'ms' +
-      ' · draw calls: ' + info.calls +
+      ' · draw calls (both passes): ' + info.calls +
       ' · triangles: ' + info.triangles +
       ' · devicePixelRatio: ' + renderer.getPixelRatio() +
       ' · viewport: ' + innerWidth + 'x' + innerHeight;

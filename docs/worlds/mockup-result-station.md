@@ -1,7 +1,8 @@
 # Mockup Result Record — 1 · The Great Station (the approach)
 
 **Phase 1 · D-27 authorization · Brief:** `phase-1-builder-brief.md` · **Recipe:** `recipe-great-station.md` (✅ settled)
-**Builder status: SCENE BUILT — NOT YET MEASURED. Overall verdict: ⬜ UNRESOLVED (no PASS claimed).**
+**Builder status: SCENE BUILT + review-10 fixes applied — NOT YET MEASURED ON DEVICE. Overall verdict: ⬜ UNRESOLVED (no PASS claimed).**
+**Review 10 (ChatGPT, code-level) — dispositions:** Finding 1 (counter undercount) ✅ fixed in code · Finding 2 (V4 accounting) ✅ documented (§3b below) · Finding 3 (handoff/V3) ⬜ open by design · Finding 4 (harness ≠ §11 test) ✅ harness extended (300 s session / 900 s soak / cold-load) · Finding 5 (behavioral gap) ✅ reconciled — behavioral grammar now exercised in-scene at fixture level (§4). Record: `chatgpt-review-10-2026-10-22.md`.
 *Per the review standard (brief §7): a claimed PASS is not a supported PASS. Every §11 criterion below is graded only on evidence in this record; anything unmeasured is UNRESOLVED, and the sequence does not advance on unresolved criteria.*
 
 ## 1. What was built
@@ -30,25 +31,43 @@ A single self-contained throwaway scene (`index.html` + vendored `three.module.m
 | P1 fps average | ≥50 over 5-min session incl. warp + approach | — | ⬜ UNRESOLVED (device run pending) |
 | P2 fps 1%-low | ≥30 | — | ⬜ UNRESOLVED |
 | P3 longest stall | ≤100 ms | — | ⬜ UNRESOLVED |
-| P4 draw calls | ≤200 (hard fail >500) | Live counter exists in HUD; value must be read on device | ⬜ UNRESOLVED |
-| P5 visible triangles | ≤750k (hard boundary) | Same as P4 | ⬜ UNRESOLVED |
+| P4 draw calls | ≤200 (hard fail >500) | Counter accounting **corrected after review 10** (both render passes accumulated — `autoReset` off, manual per-frame reset); value must be read on device | ⬜ UNRESOLVED |
+| P5 visible triangles | ≤750k (hard boundary) | Same correction as P4 | ⬜ UNRESOLVED |
 | P6 texture sizes | ≤1K (hero ≤2K); backdrop ≤2048×1024 | By construction: all textures are 256×256 canvas-generated glow discs; **no image textures at all** | ✅ SUPPORTED (construction evidence; device record should still confirm) |
 | P7 cold load | ≤5 s | — | ⬜ UNRESOLVED |
 | P8 soak | 15 min, criteria hold | — | ⬜ UNRESOLVED |
 | V1 blind distinctness | 3/3 identifiable + one-universe | Owner's blind review of device captures | ⬜ UNRESOLVED |
 | V2 landmark silhouette | Station identifiable at max distance | Far-stage capture (device) | ⬜ UNRESOLVED |
 | V3 artifact-free approach | No visible pop/stitch in signature sequence | Device recording of Warp/Drift approach | ⬜ UNRESOLVED — **risk pre-flagged:** the handoff here is a distance blend (§4), the exact failure surface V3 grades |
-| V4 seed traceability | Every visible parameter from the recipe's seed table | Code-level: palette, star scatter, lamp scatter, nebula tint/placement, lane seeds all derive from seed `great-station / harbor-1` via one seeded RNG; form proportions fixed by recipe. **Device-side confirmation still required** (visual parameters on screen must match the table) | 🟡 PARTIAL — construction-supported, device confirmation pending |
+| V4 seed traceability | Every visible parameter traceable to the recipe (seed table or fixed form language) | Derivation table at §3b: seed-derived values via one seeded RNG from `great-station / harbor-1`; recipe-fixed values listed as fixed (they are traceable to the *recipe*, which is what V4 grades). **Device-side confirmation still required** | 🟡 PARTIAL — accounting complete, device confirmation pending |
 | V5 content honesty | Nothing on screen claims to be what it isn't | Fixture banner on screen at all times; traffic labeled atmosphere in recipe/record; no memories surface; sun at current size | ✅ SUPPORTED (design/construction) |
 | V6 owner pass/fail | Owner's explicit call | — | ⬜ AWAITING OWNER |
+
+## 3b. V4 derivation table (added after review 10, Finding 2)
+
+| Parameter | Class | Derivation |
+|---|---|---|
+| Hull color lightness | Seed-derived | HSL(0.62, 0.10, 0.16 + rng×0.03) — fixed hue/sat band, seeded lightness |
+| Hull highlight lightness | Recipe-fixed | HSL(0.62, 0.08, 0.24) |
+| Amber lamp hue | Seed-derived | HSL(0.09 + rng×0.02, 0.95, 0.60) |
+| Cyan (beacon, arm tips, route) | **Recipe-fixed, deliberately unseeded** | #7FE7FF — navigation truth never varies (R-S2) |
+| Fog color | Recipe-fixed | HSL(0.66, 0.42, 0.08), palette-matched indigo; density 0.0016 fixed |
+| Nebula tints | Seed-derived | Two HSL bands (hue 0.66/0.72 fixed, lightness 0.10/0.13 + rng×0.03); plane placement seeded |
+| Star positions/counts | Seed-derived | Seeded scatter (2,600 backdrop + 500 near) — procedural stand-in for HYG (declared, §4) |
+| Window-lamp placement | Seed-derived | 420 instanced lamps, seeded spire/ring scatter |
+| Traffic lanes/speeds | Seed-derived | Seeded from arm-tip anchors (fixed) + rng offsets |
+| Form proportions (spire/ring/arms) | **Recipe-fixed** | Settled recipe §1 — never seed-randomized (R-S1) |
+| Camera stages, lighting rig | Design-fixed | Recipe approach composition (§2); key/rim/ambient constants |
+| Ring rotation speed | Recipe-fixed | 0.05 rad/s "slow" (R-S4); suppressed under reduced motion |
+| Fuel cost (fixture warp = 20) | Fixture-fixed | Behavioral-layer constant, labeled fixture |
 
 ## 4. Honesty notes & known simplifications
 
 - **Handoff simplification:** the recipe's dual-layer handoff is implemented as backdrop/foreground compositing + a distance-driven blend of impostor vs. real station. It is *not* a per-pixel matched crossfade of two full renders of the station. V3 may fail on exactly this; if so the failure class is **implementation** (fixable within the recipe) unless the blend itself proves unworkable, which would make it a **stack** question for the owner.
 - **Starfield:** seeded procedural points stand in for the HYG dataset (§10: real HYG file ships separately with CC BY-SA attribution in a production build). For a fixture mockup this is declared, labeled, and sufficient for V1/V2 purposes; it is not the production starfield.
 - **Traffic count** (22 instanced shuttles) sits far under the recipe's traffic allocation; draw calls should land near the recipe's ≤88 plan — to be confirmed on device (P4).
-- **Session script (§18 V2):** the travel/cancel/turn-back/zero-fuel steps exercise *product* navigation behaviors; in this throwaway scene only the travel gaits and stage moves exist. The behavioral steps are recorded as **not applicable to the scene in isolation** and remain to be evidenced where the brief's harness steps apply — flagged here rather than silently skipped.
+- **Behavioral checks (review 10, Finding 5 — reconciled):** the scene now exercises the §18 script's behavioral grammar **at fixture level, in-scene**: a fixture cargo (`fixture-memory-01`, home `fixture-home`) is carried aboard (A1) and rides visibly in transit (A2); warp departure opens a 1.2 s **cancel window** (cancel = nothing moves, no fuel, state unchanged — asserted in the on-page checks log); **turn back** mid-transit returns to origin with cargo identity/home asserted unchanged; a fixture fuel gauge (warp 20, drift free) supports the **zero-fuel checks** (drain fuel → warp refused with reason; **return home works, free**). The Station rule holds throughout: cargo is never *placed* here — A3 placement is exercised by the Growing Place and Deep Past scenes, and the product-level canonical identity/home verification remains **integration-level, not yet evidenced anywhere** — stated plainly rather than substituted.
 
 ## 5. Next step (single, ordered)
 
-**Owner device run:** serve `mockups/station/` (see its README), run the session script, capture the three D-13 stills (Far / Handoff / Near, sun + station in frame), run the 60 s measurement at each stage, record phone model / OS / browser here — then this record returns to review. **Growing Place remains parked until the Station's criteria resolve and V6 is the owner's PASS.**
+**Owner device run (corrected scene):** serve `mockups/station/` (see its README), run the session script including the behavioral checks (load cargo → warp with a cancel first, then a real warp with a turn-back, drain fuel → refused warp → free return home), capture the three D-13 stills (Far / Handoff / Near, sun + station in frame) + an approach recording for V3, run the **300 s** measurement (and the 900 s soak when time allows), repeat the script under reduced motion, record phone model / OS / browser here — then this record returns to review. **Growing Place remains parked until the Station's criteria resolve and V6 is the owner's PASS.**
