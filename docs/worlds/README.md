@@ -23,6 +23,7 @@
 15. **`chatgpt-review-9-2026-10-22.md`** — the record of ChatGPT's review of the Deep Past recipe (no blocker with the constraint; R-D1–R-D4 recommendations incl. chronological monotonicity, the rise as derived presentation, and deliberate A21/A22 ratification), absorbed into the recipe. The recipe itself was **settled by the owner** afterward (all four as recommended, constraint included; A21/A22 ratified into §14). **Phase 0 is complete (D-26).**
 16. **`phase-1-builder-brief.md`** — the Phase 1 task brief, issued under the owner's **Phase 1 authorization (D-27, 2026-10-22)**: throwaway mockups only, sequential gates, fixed §11 criteria, per-mockup result records, failure-stop protocol. Product implementation, merging, deployment, and later phases remain unauthorized; the design gate remains open.
 17. **`mockup-result-station.md`** — the Station mockup's result record: scene **built** (throwaway fixture scene in the worlds workspace), verdict **UNRESOLVED** — §11 grading awaits the owner's phone run (device, measurements, D-13 stills, V1–V3/V6); P6 and V5 supported by construction, V4 partial. Growing Place remains parked until the Station resolves.
+18. **`mockups/station/`** (folder on this branch) — the Station mockup's code itself, mirrored here at the owner's decision for implementation review: `index.html` (the scene), `three.module.min.js` (vendored three 0.182.0), `README.md` (how to run it on the grading device). Throwaway fixture code — not the product, not a foundation, merges nowhere.
 
 ## The most important instruction
 

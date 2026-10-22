@@ -6,7 +6,7 @@
 
 ## 1. What was built
 
-A single self-contained throwaway scene (`~/workspace/worlds-vision/mockups/station/index.html` + vendored `three.module.min.js` v0.182.0, the product repo's three version), fixtures only, outside the product build, nothing merged:
+A single self-contained throwaway scene (`index.html` + vendored `three.module.min.js` v0.182.0, the product repo's three version), fixtures only, outside the product build, nothing merged. **Code location:** built in the worlds workspace (`~/workspace/worlds-vision/mockups/station/`) and **mirrored to this branch at `docs/worlds/mockups/station/`** (owner's decision, 2026-10-22) so the implementation itself is reviewable alongside this record:
 - **Crown-and-stem station** at the recipe's fixed proportions: tapered spire + tip + cyan beacon, habitat ring (slow rotation, R-S4; suppressed under reduced motion), four docking arms with cyan guidance lamps at the tips (cyan = navigation truth only), 420 instanced amber window lamps (seeded placement).
 - **Dual-layer compositing:** separate backdrop scene/camera (seeded star points, nebula glow planes, the sun disc, and a dark station **impostor** with amber lamp points) rendered under the foreground scene with a depth clear between layers.
 - **Handoff (simplified — see §4 honesty):** camera distance drives a blend — far stage reads the impostor against the sun; approaching, the real station slides in from the backdrop position and the impostor fades.
