@@ -1,6 +1,6 @@
 # Environment Recipe — The Growing Place (Phase 0 draft)
 
-**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21). Follows the settled Great Station recipe's template. ChatGPT-reviewed 2026-10-22 (no architectural blocker; R-G3 mapping constraint + structural-honesty checks absorbed; recommendations in §9). **Scope:** the Growing Place space and its §18 mockup scene (the rising). **Settled ground it must obey:** roster/purpose (§12/D-4: goals, milestones, and the memories linked to them), §13 P3 surfacing (landmarks are *milestones*; memories appear as the evidence/path between them), §17 rail (landmark creation is **structural** — it happens only on an approved, real milestone), §9.4 never-punish, §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate. Nothing here authorizes a build.
+**Status:** Phase 0 recipe — ✅ **SETTLED by the owner (2026-10-22)**: R-G1 approve form, R-G2 approve palette, **R-G3 approved with the review's constraint** (deterministic, non-ranking landmark mapping; unmapped milestones neutral/unrendered, never guessed — §7), R-G4 approve fixed dawn. ChatGPT-reviewed 2026-10-22 (no architectural blocker). Settlement authorizes **no** mockup construction (D-21). **Scope:** the Growing Place space and its §18 mockup scene (the rising). **Settled ground it must obey:** roster/purpose (§12/D-4: goals, milestones, and the memories linked to them), §13 P3 surfacing (landmarks are *milestones*; memories appear as the evidence/path between them), §17 rail (landmark creation is **structural** — it happens only on an approved, real milestone), §9.4 never-punish, §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate. Nothing here authorizes a build.
 
 ---
 
@@ -89,9 +89,9 @@ Ceilings: ≤200 draw calls · ≤750k triangles (**hard rejection boundary, not
 **In:** arrival vista · one A7 connection forming · one A6 landmark rising (staged milestone, declared as staged in the record — the mockup tests the *animation and budget*, and its record says so, §18 V5) · A1–A3 evidence placement · the §18 V2 script (incl. cancel/turn-back where supported, drift repeat, reduced-motion run).
 **Out:** real goal data (fixtures only, labeled) · seasons/time passage · any decay state (none exists) · the rail's UI (proposals are §17's design; the mockup borrows only its outcome — an approved milestone).
 
-## 9. Open for the owner (recipe settlement)
+## 9. Recipe settlement — ✅ SETTLED by the owner (2026-10-22, all four as recommended, R-G3 with its constraint)
 
-*ChatGPT reviewed this recipe (2026-10-22; record: `chatgpt-review-8-2026-10-22.md`) — no architectural blocker; recommendations below. The owner settles.*
+*ChatGPT reviewed this recipe (2026-10-22; record: `chatgpt-review-8-2026-10-22.md`) — no architectural blocker. Outcomes: **R-G1 approved**, **R-G2 approved**, **R-G3 approved with constraint**, **R-G4 approved**. The recommendations as recorded before settlement:*
 - **R-G1** The form: terraced garden + witness tree — right body for this space? *ChatGPT recommends: approve — proportions fixed, not seed-randomized; the tree must survive every performance fallback (vegetation detail is expendable, the defining shape is not).*
 - **R-G2** The palette: eternal dawn (gold/teal/living green) — right identity, distinct enough from harbor and home? *ChatGPT recommends: approve — with the kindness rule governing the whole palette: no lighting/mist effect may ever accidentally imply fading progress or a disappointed garden.*
 - **R-G3** Landmark grammar: grown forms by milestone kind (arch/tower/gate-stone rule table) — right language for progress? *ChatGPT recommends: approve with the §7 constraint — deterministic, non-ranking, evidence-backed mapping; unmapped milestones render neutral or not at all, never guessed.*

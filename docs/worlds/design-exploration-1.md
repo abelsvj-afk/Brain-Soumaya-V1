@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 21 — Growing Place recipe **reviewed by ChatGPT** (no blocker): R-G3's non-ranking mapping constraint absorbed (§7/§3), performance + structural-honesty checks confirmed against the draft; owner settlement pending. Record: `chatgpt-review-8-2026-10-22.md`. **Design gate: OPEN.**
+**Revision:** 22 — Growing Place recipe **SETTLED** by the owner (R-G1–R-G4 as recommended, R-G3 with its constraint). **Deep Past recipe drafted** (`recipe-deep-past.md`) — the third and final Phase 0 recipe; R-D1–R-D4 await the owner. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -809,11 +809,11 @@ Phase 0 (§19 A3) is the three environment recipes on paper, each a standalone d
 | Recipe | File | Status |
 |---|---|---|
 | The Great Station | `recipe-great-station.md` | ✅ **SETTLED** (owner, 2026-10-22: R-S1/R-S2/R-S4 approved, R-S3 name deferred) |
-| The Growing Place | `recipe-growing-place.md` | **Draft, ChatGPT-reviewed** (2026-10-22, no blocker) — R-G3 constraint absorbed (deterministic, non-ranking mapping; unmapped = neutral/unrendered); R-G1–R-G4 recommendations recorded; awaiting owner settlement |
-| The Deep Past | — | Not yet drafted |
+| The Growing Place | `recipe-growing-place.md` | ✅ **SETTLED** (owner, 2026-10-22: R-G1/R-G2/R-G4 approved, R-G3 approved with the non-ranking constraint) |
+| The Deep Past | `recipe-deep-past.md` | **Draft** (King, 2026-10-22) — descending helix of lit strata; depth = earlier, never neglected; Chronicle descent + full A1–A3; proposes A21/A22 inventory additions; open items R-D1–R-D4; awaiting owner review/settlement — **its settlement completes Phase 0's paper** |
 
 The draft Station recipe follows §18's minimum contents: identity (crown-and-stem megastructure; amber harbor in indigo dark), the three-stage approach composition with its named dual-layer handoff risk, honest content (journeys real, traffic atmosphere, no memories), a budget allocation inside §11.2's ceilings, the A13/A17/A11/A12/A15/A16/A19/A20 animation slice with combined load and fallback ladder, shared-vs-distinct elements, a seed parameter table for V4 traceability, and the D-13 evidence the mockup must produce.
 
 ---
 
-*End of Exploration 1, Revision 21. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 22. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
