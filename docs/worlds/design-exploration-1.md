@@ -1,6 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
+**Revision:** 2 — ChatGPT design review 1 absorbed 2026-10-22 (see §9). Review record: `chatgpt-review-1-2026-10-22.md` in this folder.
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -118,6 +119,7 @@ Candidate elements:
 
 ### 2.4 Fuel and shared systems
 **[RECONCILE]** The ship already has fuel, a streak ember, and status displays in the home galaxy. Whether inter-space travel uses fuel, costs nothing, or uses something else entirely is undecided — and any answer must be reconciled with the audit program's findings on fuel before it is treated as settled. Under no design should a user be *stranded* away from their own memories for lack of fuel.
+**Owner addition (2026-10-22, during Revision 2):** the owner proposes fuel-gated warp — *if the ship doesn't have fuel, she can't warp-travel to the different places.* Recorded in full, with the design tension and reconciliation options, in §9.10. Not yet settled.
 
 ---
 
@@ -306,4 +308,109 @@ Crisp list. Each is a decision for Sajacous, explored with ChatGPT and King, set
 
 ---
 
-*End of Exploration 1. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 9. Revision 2 — ChatGPT design review 1, absorbed (2026-10-22)
+
+ChatGPT read the three pushed documents on GitHub and returned a full design review (record: `chatgpt-review-1-2026-10-22.md` in this folder). **Verdict: strong vision; design gate still open. Approved: continuing the exploration. Not approved: final architecture or any implementation plan.** Everything below is recorded as *recommendation and proposal* — none of it is settled. The owner settles each item.
+
+### 9.1 The unique-outcome test (the review's central recommendation)
+Define each space by its **unique user outcome**, not its visual theme. **Removal test:** if removing a space would not remove a distinct capability or meaningful experience, merge it or cut it — distinct scenery alone does not justify a destination.
+
+Evaluation criteria proposed (not selections):
+- **Deep Past** must justify: rediscover meaningful older memories
+- **Growing Place:** see real progress toward aspirations
+- **People:** remember people, commitments, shared history
+- **Quiet / Archive:** keep information safely without unwanted resurfacing
+- **Scale Space:** experience awe and gain perspective
+- **Workbench Shore:** capture and organize incoming information
+- **Chronicle Space:** explore the narrative of a life over time
+- **Great Station:** undecided — must earn its place through a distinct function
+
+Overlap warnings flagged: Deep Past ↔ Chronicle Space (both life history); Growing Place ↔ Scale Space (both growth/perspective); the Station could swallow everything if unconstrained; Workbench Shore may belong in the core app rather than as a separate world.
+**Counterargument recorded:** atmosphere and exploration are themselves value — don't reduce every space to a productivity screen in a space costume. The review's resolution: require a distinct **emotional and practical** purpose, not a distinct data type.
+
+### 9.2 The Great Station — refinements
+- **The approach is the experience, not dead time before it:** visible growth on approach, traffic, lighting, changing silhouettes; a clear beginning, middle, and arrival — achievable with a modest model.
+- **Provisional hub hypothesis (leading candidate, not a job):** home port — begin journeys, discover destinations, return to meaningful memories. **Counterargument:** a hub can become a glorified menu; if docking adds nothing beyond choosing a destination, the spectacle may not justify its cost. The purpose must be tested before any interior is designed. **Alternative hypothesis worth testing:** a place to review the overall *shape of one's life*.
+- **Scale conventions separated:** perceived scale ≠ physical realism. Proposed rule: the station follows an **awe-scale** convention (fantastical, deliberate); environments built for astronomical scale follow a **reference-scale** convention; the same scene doesn't switch conventions without a clear reason. Any future change to the sun's size is a **separate decision**, not an assumed fix.
+- **Interior:** promise only approach and destination now. Design the exterior/arrival so a future interior *could* attach without promising rooms or activities that don't exist yet.
+
+### 9.3 Scenery — from ingredient list to a production method
+The review judges §7's axes useful but not yet a reproducible method. Proposed: **one shared rendering system, distinct environment recipes** — never a new renderer per space. Each space's recipe has four parts:
+1. **Identity** — palette, lighting, background, atmosphere, motion signature
+2. **Spatial composition** — landmark silhouette, placement, density, distance cues
+3. **Meaningful content** — real brain data (memories, relationships, milestones, connections) per the space's purpose
+4. **Performance & accessibility** — frame rate, loading, memory, touch navigation, reduced-motion, tested on the actual target phone
+
+Visual reference directions offered (references, not assets or palette commitments): Deep Past = sparse, slow, soft blue-violet, few prominent landmarks; Growing Place = constructed forms, connected pathways, landmarks appearing at real milestones, nothing decaying between them; Great Station = industrial and monumental, multiple scales of structure, approach lanes, traffic — identity carried by the station itself, not hundreds of bespoke objects.
+**Validation gate proposed:** build **three environment mockups on the same system** before approving a larger roster. If three cannot be made visually distinct with a manageable rule set, more destinations multiply the problem.
+**EVE / No Man's Sky study — required deliverable sharpened:** per technique — what it is, implementation cost, phone limitations, and the proposed Soumaya approximation. EVE: regional identity, enormous structures, gate silhouettes, approach/scale cues (adapt cues, not asset volume). NMS: palette + object-family + environmental-rule combinations producing variety (adapt the recipe approach, not the full procedural ecosystem). Warning recorded: random colors + random objects make *different* scenes, not *coherent* worlds — procedural variation must operate inside a deliberate identity with a recognizable landmark.
+
+### 9.4 Mutation — tightened
+Three categories proposed:
+- **Ambient expression** — may respond to user-approved preferences and life context; must never imply success or failure
+- **Structural change** — new landmarks/connections require a meaningful underlying event or a user decision
+- **Memory content** — the user controls what is displayed, revisited, hidden, or archived
+
+Plus:
+- **Explainability is a requirement:** if a landmark appears or a palette shifts, the user can learn *why*. Emotion may inform an *optional* aesthetic expression; it must never dictate a judgment (sadness ≠ the world goes darker).
+- **World state vs. presentation state:** world state (structures, places, progress) is stable and never silently erased; presentation state (light, atmosphere, ambient effects) may vary.
+- **Mis-inference correction (new open problem, explicitly owned):** if the system infers an emotion or connection wrongly, the user can correct the interpretation — and correcting it must not destroy the underlying memory.
+- **Counterargument recorded:** a world that never responds feels static. Answer: additions, new connections, user-directed transformations, and discoveries — meaningful change without decay.
+
+### 9.5 Gates, travel, tours — refinements
+- **First visit:** short, distinctive, skippable transit. **Repeat visits:** direct travel allowed, scenic journey optional.
+- **Directed travel:** selecting a destination starts a clear route; user can interrupt or cancel at any time.
+- **Discovery ≠ hostage-taking:** a gate may be *discovered* through exploration, but access to the user's own information must never depend on a gamified achievement.
+- **Fuel:** must not be a prerequisite for accessing the user's own memories; any travel-cost design reconciles with the existing fuel system first. *(See §9.10 — the owner's fuel proposal arrived during this revision and is recorded against this line.)*
+- **Reduced motion:** a genuinely comfortable alternative that preserves navigation and destination context — not a checkbox that strips all feedback.
+- **Tours:** brain-generated, user-created, and Chronicle-based tours stay **separate candidate modes** until each proves value; every tour stop must explain **why it was chosen**, or a tour is an arbitrary slideshow.
+
+### 9.6 Information model + coordination — strengthened
+- **One canonical memory, many surfaces:** never duplicate a memory because it appears in another space. A memory is *surfaced* in multiple contexts under explicit placement rules (why it appears in each). Environments are visual representations of the brain's data, not separate sources of truth.
+- Coordination table extended — required design agreements before build: renderer coexistence; navigation/focus between environments (leaving and returning); fuel (can travel ever prevent access?); Chronicle (read chapters without redefining them); quests/rewards (real, defined, reachable); streak/notifications (no new pressure disguised as mutation or tours); **memory persistence** (canonical, per above); **rendering performance** (new environments must not make existing navigation less responsive on the current phone).
+
+### 9.7 ChatGPT's answers to Q20–25 — recorded as proposals
+- **Q20 (station's job):** leading hypothesis = home-port/navigation hub (orient, launch, connect); alternative = life-shape review place. Ship management/social features only if a separate demonstrated problem demands them.
+- **Q21 (where + scale):** station in its own environment, reached by directed travel from home; two scale conventions (awe vs. reference) kept explicit; exact location open until the travel map is agreed.
+- **Q22 (other ships):** begin as ambient traffic (scale + life). Later, traffic *could* reflect real brain activity (a journey revisited, a memory being organized) — only if truthful and understandable. Do **not** make every ship an interactive character or a memory — state burden explodes.
+- **Q23 (interior promise):** promise approach + destination only; exterior/arrival designed to not contradict a future interior; interior's activities undecided.
+- **Q24 (contents):** decide via a **common per-space template**: unique purpose · what canonical information it surfaces · landmark & composition · how the ship enters/navigates/exits · what the user can do there · what changes over time vs. what stays stable · why it merits being a separate destination. Fill it in for every surviving space before architecture approval.
+- **Q25 (method):** hybrid leads — procedural recipes + shared form kit + per-space light/palette + one distinctive landmark per space; free/public-domain assets selectively, license-checked; real celestial imagery/models selectively, not everywhere. Next research task = the EVE/NMS technique comparison (§9.3).
+
+### 9.8 Settlement sequence (proposed order — later answers depend on earlier ones)
+1. **Space roster & purpose** (incl. the Station's purpose)
+2. **Information model** (canonical memories, placement, archive/privacy respect)
+3. **Navigation & scale** (map, gates, transit, awe vs. reference conventions)
+4. **Mutation & user control** (first meaningful changes, signals, explainability, safeguards)
+5. **Visual production strategy** (EVE/NMS study, three contrasting mockups, recipe system)
+6. **Architecture & roadmap** (shared-system dependencies, persistence, performance, testable tasks)
+Counterargument recorded: visual exploration can *inform* earlier decisions — mockups are evidence for design, not permission to build production functionality.
+
+### 9.9 Gate status after review 1
+**NOT READY for final architecture or implementation. READY for the next design iteration.** Next revision focuses on: distinct purpose per space, the Station's role, the shared information model, and a feasible solo-builder visual system. Nothing in the review authorizes code, a merge, or a deployment.
+
+### 9.10 OWNER ADDITION — fuel-gated warp (2026-10-22, during this revision)
+The owner, thinking it through in the worlds chat: **"If Soumaya doesn't have fuel, she can't warp travel to these different places."** Recorded as the owner's proposed rule: **warp travel between spaces costs fuel; no fuel, no warp.**
+
+The tension, named plainly (this is King's job in the loop, not a veto):
+- ChatGPT's review (§9.5) and Exploration §2.4 both hold: fuel must never lock a user out of their own memories, and no one gets stranded.
+- A strict lockout (no fuel = no travel, full stop) can satisfy both *only if* fuel is reliably earnable through ordinary use of the brain — otherwise a user in a hard week (little activity → little fuel → no travel → less activity) hits exactly the punishment spiral the never-punish rule exists to prevent.
+
+Design shapes that could hold the owner's rule AND the guardrail — **candidates for the owner to settle, none decided:**
+- **(a) Warp costs fuel; drifting is free.** Warp = the fast, full transit experience. Without fuel the ship can still *drift* — slow, quiet, free travel (itself a designed experience, perhaps the meditative mode). Fuel buys speed and spectacle, never access.
+- **(b) Departures cost; coming home is always free.** You can never be stranded away from home or from your memories; the gate is on setting out, never on returning.
+- **(c) Fuel as texture, not wall.** Warp costs fuel, but fuel flows generously from normal brain use (remembering, capturing, revisiting) — the gauge creates rhythm and a reason to tend the brain, while a zero-fuel state is rare and brief by design.
+- **(d) Empty tank = an in-world moment, not a lockout screen.** Running dry triggers something kind: the brain offers a short route, a small real task, or a slow tow home — help arriving, not a door closing.
+Combinations are allowed (e.g., a + b + c together).
+
+New open questions:
+26. Does fuel gate **departure only**, or departure and return? (King's recommendation, for the owner to accept or reject: never the return.)
+27. What **earns** fuel — and can a user in a bad week still reach somewhere meaningful? Fuel rewards must be real (the app has a history here: Codex fuel rewards were once silently broken — reward honesty applies to fuel first).
+28. Is there always **one free slow route** between spaces (drift), or is fuel a hard gate on all inter-space travel, strictly as the owner first stated it?
+**[RECONCILE]** Fuel is a shared system (gauge, Codex rewards, streak ember) under the audit program in the repo chat — any fuel-economy change reconciles there before build.
+
+---
+
+*End of Exploration 1, Revision 2. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
