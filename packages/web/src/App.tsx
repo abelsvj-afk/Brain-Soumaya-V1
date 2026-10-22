@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, measureSafeBottomInset } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanTargetCaption, measureSafeBottomInset } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
@@ -51,6 +51,7 @@ import {
   EmptyGalaxyCue,
   SceneIdentityCard,
   VisitorChip,
+  useShipStatusOpen,
 } from "./components/GalaxyHud.js";
 import type { SceneIdentity } from "./graph/sceneIdentity.js";
 import { triggerHaptic } from "./graph/haptics.js";
@@ -452,6 +453,12 @@ export default function App() {
     },
     [space?.id],
   );
+  // HUD round 3: the ship-status stack is SUMMONABLE — collapsed to a
+  // one-line mini-bar until he brings it up, so the galaxy's centre is
+  // his again. Open state persisted PER BRAIN (ship.status.<id>, the
+  // useShipStatusOpen hook in GalaxyHud); the phone default is collapsed
+  // after a one-time first-run expanded reveal, desktop starts expanded.
+  const [shipStatusOpen, setShipStatusOpen] = useShipStatusOpen(space?.id ?? null);
   const [shipViewMode, setShipViewMode] = useState<"orbit" | "cockpit">("orbit");
   const [tasks, setTasks] = useState<any[]>([]);
   const handleReorderTasks = useCallback((newOrder: any[]) => {
@@ -2251,7 +2258,11 @@ export default function App() {
           that grew through each other. While the noticed card is up, the
           stack docks in its low slot (§6.5.5). */}
       {panel === null && !showObs && (
-        <ShipStatusStack belowNoticing={noticingOpen}>
+        <ShipStatusStack
+          belowNoticing={noticingOpen}
+          collapsed={!shipStatusOpen}
+          onToggle={() => setShipStatusOpen(!shipStatusOpen)}
+        >
           {!followVisitor && activeVisitors.length > 0 && (
             <VisitorChip
               visitors={activeVisitors}
@@ -2359,6 +2370,7 @@ export default function App() {
             title={focusMode ? "Exit deep-space focus mode" : "Deep-space focus mode — dim the chrome for a calm read"}
           >
             {focusMode ? "🌐" : "🌌"}
+            <span className="fab-cap">Focus</span>
           </button>
           {/* Game-style focus cluster: one button that pops up the camera targets. */}
           {(() => {
@@ -2377,6 +2389,9 @@ export default function App() {
               ariaLabel: string;
               title: string;
               icon: string;
+              /** HUD round 3: the in-button caption (fanTargetCaption —
+               *  the ship's is the space's own name, dynamically). */
+              caption: string;
               onClick: () => void;
             };
             const targets: FanTarget[] = [
@@ -2386,6 +2401,7 @@ export default function App() {
                 ariaLabel: `Focus ${space?.name ?? "Soumaya"}`,
                 title: `Focus ${space?.name ?? "Soumaya"}'s ship`,
                 icon: "🛸",
+                caption: fanTargetCaption("ship", space?.name),
                 onClick: () => {
                   setLoreDismissed(false);
                   setFollowShip(graphRef.current?.toggleFollowShip() ?? false);
@@ -2404,6 +2420,7 @@ export default function App() {
                 ariaLabel: "Focus space station",
                 title: "Focus the space station",
                 icon: "🌐",
+                caption: fanTargetCaption("station"),
                 onClick: () => {
                   setLoreDismissed(false);
                   setFollowStation(graphRef.current?.toggleFollowStation() ?? false);
@@ -2422,6 +2439,7 @@ export default function App() {
                 ariaLabel: "Focus the fleet",
                 title: "Jump to her fleet (Escort · Scout · Defender · Tenders)",
                 icon: "🛩️",
+                caption: fanTargetCaption("fleet"),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.cycleFollowFleet() ?? false;
@@ -2442,6 +2460,7 @@ export default function App() {
                 ariaLabel: "Jump to an Aura beacon",
                 title: `Jump to a beacon (${satelliteCount} deployed over cooling memories)`,
                 icon: "🛰️",
+                caption: fanTargetCaption("satellite"),
                 onClick: () => {
                   const on = graphRef.current?.cycleFollowSatellite() ?? false;
                   setFollowSatellite(on);
@@ -2460,6 +2479,7 @@ export default function App() {
                 ariaLabel: "Jump to a visitor",
                 title: `Jump to a visitor (${visitorCount} drifting in)`,
                 icon: "👽",
+                caption: fanTargetCaption("visitor"),
                 onClick: () => {
                   const on = graphRef.current?.cycleFollowVisitor() ?? false;
                   setFollowVisitor(on);
@@ -2478,6 +2498,7 @@ export default function App() {
                 ariaLabel: `Focus ${getFigurineLabel(equippedFig1)}`,
                 title: `Focus ${getFigurineLabel(equippedFig1)}`,
                 icon: getFigurineIcon(equippedFig1),
+                caption: fanTargetCaption("fig1"),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.toggleFollowFig1() ?? false;
@@ -2499,6 +2520,7 @@ export default function App() {
                 ariaLabel: `Focus ${getFigurineLabel(equippedFig2)}`,
                 title: `Focus ${getFigurineLabel(equippedFig2)}`,
                 icon: getFigurineIcon(equippedFig2),
+                caption: fanTargetCaption("fig2"),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.toggleFollowFig2() ?? false;
@@ -2528,6 +2550,7 @@ export default function App() {
                     title={t.title}
                   >
                     {t.icon}
+                    <span className="fab-cap">{t.caption}</span>
                   </button>
                 ))}
                 {layout.folded && (
@@ -2539,6 +2562,7 @@ export default function App() {
                     title="More focus targets"
                   >
                     ⋯
+                    <span className="fab-cap">{fanTargetCaption("more")}</span>
                   </button>
                 )}
                 <button
@@ -2553,6 +2577,7 @@ export default function App() {
                   title="Focus targets (ship · station · beacons · figurines)"
                 >
                   {focusMenuOpen ? "✕" : "🎯"}
+                  <span className="fab-cap">Focus</span>
                 </button>
               </div>
             );
@@ -2567,6 +2592,7 @@ export default function App() {
             title="Click = play/pause · double-click = next · hold = song list"
           >
             {music ? "🔊" : "🔈"}
+            <span className="fab-cap">Music</span>
           </button>
           {/* Radial song menu — dots circling the music button (press-and-hold to open).
               Unlockables gate (IM-133): locked tracks render locked with their

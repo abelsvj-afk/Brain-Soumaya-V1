@@ -68,6 +68,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
         title={alertsTitle}
       >
         🧰
+        <span className="fab-cap">Tools</span>
         {alerts > 0 && !open && <span className="fab-badge">{fmtBadge(alerts)}</span>}
       </button>
       {open && (

@@ -17,16 +17,20 @@ export function NavRail(p: NavRailProps) {
     <>
       <button className="fab fab-dock" onClick={p.onDock} aria-label="Panels">
         ☰
+        <span className="fab-cap">Panels</span>
       </button>
       <button className="fab fab-recenter" onClick={p.onRecenter} aria-label="Recenter galaxy" title="Recenter the galaxy">
         ⊙
+        <span className="fab-cap">Recenter</span>
       </button>
       {/* On-screen zoom (works when pinch/trackpad zoom fails). */}
       <button className="fab fab-zoom-in" onClick={p.onZoomIn} aria-label="Zoom in" title="Zoom in">
         ＋
+        <span className="fab-cap">Zoom +</span>
       </button>
       <button className="fab fab-zoom-out" onClick={p.onZoomOut} aria-label="Zoom out" title="Zoom out">
         －
+        <span className="fab-cap">Zoom −</span>
       </button>
     </>
   );

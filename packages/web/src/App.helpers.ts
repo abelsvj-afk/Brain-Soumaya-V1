@@ -266,6 +266,36 @@ export function fanTopEdge(layout: FanLayout): number {
 }
 
 /**
+ * HUD round 3 — the in-button caption for a focus-fan target. The ship's
+ * caption is the SPACE'S OWN NAME, dynamically: whoever made the brain
+ * named it, and the button reflects whatever they made (never a
+ * hardcoded brain name — the fallback is only the name App itself uses
+ * for an unnamed space). The fan math above is untouched; this is the
+ * fan's labelling seam so the rule is testable without rendering App.
+ */
+export function fanTargetCaption(key: string, spaceName?: string | null): string {
+  switch (key) {
+    case "ship":
+      return spaceName ?? "Soumaya";
+    case "station":
+      return "Station";
+    case "fleet":
+      return "Fleet";
+    case "satellite":
+      return "Beacon";
+    case "visitor":
+      return "Visitor";
+    case "fig1":
+    case "fig2":
+      return "Figurine";
+    case "more":
+      return "More";
+    default:
+      return "";
+  }
+}
+
+/**
  * The device's REAL bottom safe-area inset (px), measured — never
  * assumed — through a hidden probe element whose padding-bottom is
  * `env(safe-area-inset-bottom, 0px)`: the computed style resolves env()

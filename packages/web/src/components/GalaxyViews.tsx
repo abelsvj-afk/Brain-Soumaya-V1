@@ -132,13 +132,14 @@ export function GalaxyViews({
       {/* Package B (finding #6): the toggle is a 46px CIRCLE in the camera
           column (directly below the 🎯), like every neighbour — the old
           oval pill was the widest element in the column and reached under
-          the beacon box. The word "Views" stays as visually-hidden text so
-          the control keeps its name for assistive tech and tests. */}
+          the beacon box. The word "Views" was visually-hidden text through
+          Package B; HUD round 3 un-hides it as the circle's in-button
+          caption (.fab-cap), like every other HUD button's name. */}
       <button className={`gv-toggle ${open ? "open" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label="Galaxy views"
         title="Views — view one category at a time (lighter on your phone)">
         <span aria-hidden="true">🌌</span>
-        <span className="gv-toggle-text">Views</span>
+        <span className="gv-toggle-text fab-cap">Views</span>
         <span className="gv-toggle-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
