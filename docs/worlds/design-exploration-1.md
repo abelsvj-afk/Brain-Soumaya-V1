@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 8 — Step 2 **settled** by the owner (D-7/D-8/D-9: Deep Past rule, anchors, People clusters) and closed. §15 opens step 3 (navigation & scale) with King's proposal and questions Q-N1–Q-N4. **Design gate: OPEN.**
+**Revision:** 9 — §16 records five **ship-agent proposals** from the repo chat's agent-SDK research as design-queue **inputs** (not decisions): `guided_tour`, `fly_to_memory`, `propose_noticing`, `propose_world_change`/`undo_world_change`, `leave_beacon` — under the owner-endorsed framing that the ship is a fenced sub-agent: she can fly and propose, never touch brain writes. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -664,4 +664,22 @@ How the user moves among the seven worlds, and how big things feel. Built only o
 
 ---
 
-*End of Exploration 1, Revision 8. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 16. Design-queue inputs — the ship as agent (from the repo chat, 2026-10-22)
+
+**Status: INPUTS, not decisions.** These five proposals come from the owner's agent-SDK research in the repo chat (`~/workspace/ui-audit/agent-sdk-research-2026-10-22.md`, §4.2; SDK verdict there: *steal patterns, do not adopt Strands*). They are recorded here so the exploration meets them when it reaches ship behavior and travel — the owner-endorsed framing is that they are **inputs to this design, not a parallel architecture imposed on it**. Nothing here displaces settled decisions, the settlement sequence, or any proposal already in flight.
+
+**The framing (owner-endorsed):** the ship is a **sub-agent with a fenced, world-actions-only toolset — she can fly and propose; she cannot touch brain writes.** Every proposal below is consistent with patterns this design already settled: brain-proposes/user-confirms (P5), the Operations trio (§13), truthful-or-atmosphere (§14.2), and the never-punish rule (§9.4).
+
+1. **`guided_tour`** — narrated, interruptible flight through a set of memories/nodes; narration traceable to node content. *Lands at:* §15 N7 (tours as saved routes; the Chronicle guided mode is the Deep Past instance). *Inherits:* narration may only say what the memories actually say (§14.2 truthfulness; P7 confidence tiers apply to anything the narration claims).
+2. **`fly_to_memory`** — fuzzy reference → flight. On ambiguity it returns candidates with **zero movement** — no confident wrong guesses. *Lands at:* §15 N6 (navigation aids). *Inherits:* §14 atomicity — an unresolved reference is a departure that visibly doesn't happen.
+3. **`propose_noticing`** — ambient noticing whose correct output under weak evidence or notification-cap pressure is **silence**. *Lands at:* ship behavior (A18) and resurfacing (P3/P6). **[RECONCILE]** with the audit program's notification work — cap pressure is a shared system, and silence-under-pressure matches the never-punish rule.
+4. **`propose_world_change` + `undo_world_change`** — the mutating-world safety rail: **approval-gated**, **append-only transition log**, nothing applies before the owner's yes. *Lands at:* §9.4 mutation model (world state vs presentation state) and step 4 of the settlement sequence (mutation & control), where this becomes a primary input. *Inherits:* §13 P7 — a proposed change renders as a proposal (tier ii), never as an accomplished fact.
+5. **`leave_beacon`** — verbatim notes pinned to a place/date; ship-authored beacons are **proposals, never self-applied**. *Lands at:* ship behavior and place design (§9.7 templates gain a beacon question when their turn comes). *Inherits:* verbatim means verbatim — a beacon quotes the user or it doesn't exist.
+
+**Queue discipline:** these wait for their settlement steps (tours/navigation → step 3, already open; mutation → step 4; ship behavior → as spaces mature). They do not reopen steps 1–2, and any of them that touches a shared system carries its **[RECONCILE]** flag into the audit program before any build — which remains, as ever, a separate authorization.
+
+---
+
+*End of Exploration 1, Revision 9. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
