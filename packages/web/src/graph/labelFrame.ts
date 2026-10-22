@@ -52,6 +52,60 @@ export interface ClampedCentre {
 }
 
 /**
+ * Camera-space DEPTH of a projected point, from its Euclidean distance
+ * and its NDC (PR #89 follow-up, trace Finding 2). Perspective size
+ * scales with 1/depth, and depth = distCam · cos θ (θ = the point's
+ * angle off the view axis), so sizing anything from the Euclidean
+ * distance understates its screen size by sec θ — up to ~7% at the
+ * safe frame's corners, enough to falsify the clamp's whole-box-inside
+ * guarantee by a few px exactly where the guarantee matters. After a
+ * projection the NDC gives the correction exactly:
+ *   depth = distCam / √(1 + (nx·tanV·aspect)² + (ny·tanV)²)
+ * On-axis (nx = ny = 0) it returns distCam unchanged.
+ */
+export function cameraDepthFromNdc(
+  distCam: number,
+  nx: number,
+  ny: number,
+  tanV: number,
+  aspect: number,
+): number {
+  if (!(distCam > 0)) return distCam;
+  const d = Math.sqrt(1 + (nx * tanV * aspect) ** 2 + (ny * tanV) ** 2);
+  return d > 0 ? distCam / d : distCam;
+}
+
+/**
+ * A label's projected half extents (screen px) from its world size and
+ * its camera-space DEPTH — the same projection Graph3D's label pass
+ * performs, extracted so the math is unit-testable (it previously lived
+ * inline in Graph3D, sized from the Euclidean distance; see
+ * cameraDepthFromNdc for why that broke the frame guarantee).
+ * Degenerate inputs (no depth / no frustum) return infinite extents:
+ * clampLabelCenter then DECLINES and the label keeps its anchor — the
+ * same decline semantics the clamp has always had for un-fittable
+ * labels, never a NaN position.
+ */
+export function labelHalfExtentsPx(
+  worldW: number,
+  worldH: number,
+  depth: number,
+  fovDeg: number,
+  aspect: number,
+  vw: number,
+  vh: number,
+): { halfW: number; halfH: number } {
+  const tanV = Math.tan((fovDeg * Math.PI) / 360);
+  if (!(depth > 0) || !(tanV > 0) || !(aspect > 0)) {
+    return { halfW: Infinity, halfH: Infinity };
+  }
+  return {
+    halfW: ((worldW / 2) * vw) / (2 * depth * tanV * aspect),
+    halfH: ((worldH / 2) * vh) / (2 * depth * tanV),
+  };
+}
+
+/**
  * Clamp a label's projected centre (screen px, y down) so the whole label
  * box (centre ± half extents) stays inside the safe frame. Returns the
  * input unchanged (`clamped: false`) when the label already fits, and

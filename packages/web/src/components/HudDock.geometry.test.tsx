@@ -191,12 +191,28 @@ describe("HUD dock — Views dropdown sheet", () => {
 //
 // The gates above pin the ONE desktop ladder at 390×780. The round-2
 // diagnosis proved the HUD had no phone layout at all — these gates pin
-// the phone-portrait block (the LAST block of index.css) at the two
-// phone viewports the pass is designed for, including the assertions
+// the phone-portrait block (the LAST block of index.css) at the phone
+// viewports the pass is designed for, including the assertions
 // Package B's suite lacked: fan-top vs the header band, gauge vs the
 // camera ladder, legend vs the recenter FAB, stack vs the middle band,
-// labels inside the safe frame. Safe-area insets are modelled as 0,
-// the same convention as the gates above.
+// labels inside the safe frame.
+//
+// PR #89 follow-up (trace: ~/workspace/ui-audit/pr89-review-trace-
+// 2026-10-21.md): the first pass modelled safe-area insets as 0 — a
+// device class that doesn't ship. The CSS anchors add
+// env(safe-area-inset-bottom) (fan cluster, phone stack, the whole
+// camera ladder) while window.innerHeight already includes the
+// gesture strip, so every bottom-anchored guarantee below is now
+// parameterized over insets {0, 16, 24, 34} (0 kept as the regression
+// baseline) at 360×640, 390×780 (the owner's phone class — only 4px of
+// fan slack at inset 0) and 390×844. The models DERIVE each element's
+// inset behaviour from the stylesheet text (does its anchor carry the
+// env term? does its cap shrink?), so an inset-blind tree fails these
+// gates on the numbers, not on a modelling promise. The four elements
+// the trace DISPROVED (Views sheet, legend, streak, dock ladder) are
+// inset-invariant by construction — every anchor in each relation
+// carries the same inset term, so their relative gaps cannot move —
+// and their existing gates stand unchanged.
 
 import {
   fanLayout,
@@ -247,8 +263,39 @@ try {
 }
 const PHONE_VIEWS = [
   { w: 390, h: 844 },
+  { w: 390, h: 780 },
   { w: 360, h: 640 },
 ];
+/** Bottom safe-area insets spanning real gesture hardware (Android
+ *  gesture bar 16–24, iOS home indicator 34); 0 = the baseline. */
+const INSETS = [0, 16, 24, 34];
+
+/** The phone stack's TRUE geometry, derived from the stylesheet: its
+ *  anchor is the low slot PLUS the inset, and its cap is either the
+ *  flat px value (pre-fix tree — the model that broke) or the shrink
+ *  formula min(cap, 50dvh − slot − inset) once the stylesheet carries
+ *  it. Deriving both from the CSS text is what makes the parameterized
+ *  gates below falsify the inset-blind tree. */
+const phoneStackRule = (() => {
+  try {
+    return ruleBodyIn(phoneCss, ".ship-status-stack");
+  } catch {
+    return "";
+  }
+})();
+const STACK_SLOT = hudVar("hud-cam-toggle-bottom"); // 186, the low slot
+const stackCapBase = (() => {
+  const m = /max-height:\s*min\((\d+)px/.exec(phoneStackRule) ?? /max-height:\s*(\d+)px/.exec(phoneStackRule);
+  return m ? parseInt(m[1]!, 10) : 0;
+})();
+const stackCapShrinks =
+  phoneStackRule.includes("50dvh") && phoneStackRule.includes("env(safe-area-inset-bottom");
+const stackBottomAt = (inset: number) => STACK_SLOT + inset;
+const stackCapAt = (viewH: number, inset: number) =>
+  stackCapShrinks
+    ? Math.min(stackCapBase, Math.floor(viewH / 2) - STACK_SLOT - inset)
+    : stackCapBase;
+const stackTopAt = (viewH: number, inset: number) => stackBottomAt(inset) + stackCapAt(viewH, inset);
 
 describe("Mobile HUD — the phone-portrait block exists and is the pass's one breakpoint", () => {
   it("is present (on the base tree this whole section fails: no block exists)", () => {
@@ -264,16 +311,32 @@ describe("Mobile HUD — the phone-portrait block exists and is the pass's one b
 
 describe("Mobile HUD — ship-status stack leaves the middle band (S1)", () => {
   const stack = ruleBodyIn(phoneCss, ".ship-status-stack");
-  const stackBottom = hudVar("hud-cam-toggle-bottom"); // the low slot
-  const stackTop = stackBottom + pxIn(stack, "max-height");
+  const stackBottom = STACK_SLOT; // the low slot (inset-0 anchor)
 
   it("docks in the low (below-noticing) slot with a phone cap", () => {
     expect(stack).toContain("bottom: calc(var(--hud-cam-toggle-bottom)");
     expect(pxIn(stack, "max-height")).toBeLessThan(hudVar("hud-status-max-h"));
   });
-  it("stays in the lower half of the screen at both phone sizes", () => {
+  it("its cap SHRINKS to the true available height instead of modelling the inset as 0", () => {
+    // The formula the lower-half promise now stands on: min(132px,
+    // 50dvh − slot − env(safe-area-inset-bottom)). On the pre-fix tree
+    // the rule is a flat 132px and stackCapShrinks is false.
+    expect(stackCapShrinks).toBe(true);
+    expect(stackCapBase).toBe(132);
+    // The owner's accepted worst case: 640px tall + 34px inset ⇒ ~100px.
+    expect(stackCapAt(640, 34)).toBe(100);
+    // Wherever the room allows, the full 132 still binds.
+    expect(stackCapAt(844, 0)).toBe(132);
+    expect(stackCapAt(780, 24)).toBe(132);
+  });
+  it("stays in the lower half of the screen at every phone size × inset", () => {
     for (const v of PHONE_VIEWS) {
-      expect(stackTop, `stack top at ${v.w}×${v.h}`).toBeLessThanOrEqual(v.h / 2);
+      for (const inset of INSETS) {
+        expect(
+          stackTopAt(v.h, inset),
+          `stack top at ${v.w}×${v.h} inset ${inset}`,
+        ).toBeLessThanOrEqual(v.h / 2);
+      }
     }
   });
   it("clears the right rail: left + width stops before the rail's band", () => {
@@ -289,6 +352,53 @@ describe("Mobile HUD — ship-status stack leaves the middle band (S1)", () => {
     const sheetBottomEdge = hudVar("hud-cam-views-bottom") + pxIn(ruleBody(".gv-sheet"), "bottom");
     const sheetTop = sheetBottomEdge + pxIn(sheet, "max-height");
     expect(sheetTop).toBeLessThanOrEqual(stackBottom - 8);
+  });
+});
+
+describe("Mobile HUD — stack overflow contract under the shrunken cap (PR #89 follow-up)", () => {
+  // The owner's acceptance terms for the shrinking cap: priority is
+  // preserved, nothing overlaps, no control is clipped into
+  // inaccessibility, and essential status is never silently hidden.
+  // The contract is structural (CSS yield order) + one numeric floor.
+  it("the yield order is wired in CSS: targets yield first, hint second, head/chip/pill never", () => {
+    // 1 — the beacon TARGETS are the yielding element.
+    const targets = ruleBody(".beacon-readout-targets");
+    expect(targets).toContain("flex: 0 1 auto");
+    expect(targets).toContain("min-height: 0");
+    expect(targets).toContain("overflow: hidden");
+    // On phones the yield is a whole-line clamp with its ellipsis —
+    // truncation is MARKED, never a silent mid-glyph slice.
+    expect(ruleBodyIn(phoneCss, ".beacon-readout-targets")).toContain("-webkit-line-clamp: 2");
+    // 2 — the HINT yields next, ellipsized on a single line.
+    expect(ruleBodyIn(phoneCss, ".beacon-readout-hint")).toContain("text-overflow: ellipsis");
+    // 3 — the readout HEAD (highest-priority status) never shrinks…
+    expect(ruleBody(".beacon-readout-head")).toContain("flex: none");
+    // …and neither do the stack's header chip or footer pill
+    // (Package B's discipline, restated here because the contract
+    // depends on it: the sounds pill stays whole and tappable).
+    expect(ruleBody(".visitor-chip")).toContain("flex: none");
+    expect(ruleBody(".audio-state-chip")).toContain("flex: none");
+  });
+
+  it("at the worst grid point the essential lines still fit whole inside the shrunken cap", () => {
+    // Priority floor, modelled from the stylesheet's own metrics
+    // (16px rem; line-height at 1.3× font-size — the upper end of
+    // 'normal' for the system sans stack): visitor chip (7+7 padding
+    // + 2 border + 0.72rem line ≈ 31) + two stack gaps (12) + the
+    // footer pill (6+6 + 2 + 0.68rem line ≈ 29) + the readout's head
+    // line with its top padding (8 + 0.72rem line ≈ 23) = 95px of
+    // never-yielding content. The shrunken cap at 640×34 is 100px —
+    // the head text, chip and pill all fit WHOLE; only the targets
+    // and hint ever yield. (Targets+hint fully expanded would take
+    // ~154px — over every phone cap — which is exactly why the yield
+    // order above exists.)
+    const line = (rem: number) => Math.ceil(rem * 16 * 1.3);
+    const essential =
+      (7 + 7 + 2 + line(0.72)) + // visitor chip
+      12 + // two stack gaps
+      (6 + 6 + 2 + line(0.68)) + // audio pill
+      (8 + line(0.72)); // readout top padding + head line
+    expect(essential).toBeLessThanOrEqual(stackCapAt(640, 34));
   });
 });
 
@@ -308,6 +418,33 @@ describe("Mobile HUD — fan top vs the header band (S3, the assertion Package B
     const l = fanLayout(1440, 900, 7);
     expect(l.step).toBe(54);
     expect(l.folded).toBe(false);
+  });
+  it("inset-parameterized: the model's top edge IS the device's top edge, and it clears the header at every size × inset", () => {
+    // Truth, from the stylesheet: the cluster anchor is slot + inset
+    // (index.css .focus-cluster carries env(safe-area-inset-bottom)),
+    // and the fan rises slots×step + item above it. The model must
+    // reproduce that edge exactly — on the pre-fix tree fanLayout
+    // ignores the inset argument, so at every nonzero inset its edge
+    // sits one inset BELOW the truth (and the truth breaks the band
+    // at 640–800px heights: the trace's Finding 1 table).
+    for (const v of PHONE_VIEWS) {
+      for (const inset of INSETS) {
+        const l = fanLayout(v.w, v.h, 7, inset);
+        const slots = l.folded ? l.capacity : l.pageSize;
+        const truth = FAN_CLUSTER_BOTTOM_PX + inset + slots * l.step + CIRCLE;
+        expect(fanTopEdge(l), `model edge at ${v.w}×${v.h} inset ${inset}`).toBe(truth);
+        expect(truth, `true top edge at ${v.w}×${v.h} inset ${inset}`).toBeLessThanOrEqual(
+          v.h - FAN_HEADER_BAND_PX,
+        );
+      }
+    }
+  });
+  it("the owner's 390×780: a 24px gesture inset is what creates the fold (capacity 7 → 6)", () => {
+    expect(fanLayout(390, 780, 7, 0).folded).toBe(false);
+    const l = fanLayout(390, 780, 7, 24);
+    expect(l.folded).toBe(true);
+    expect(l.capacity).toBe(6);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(780 - FAN_HEADER_BAND_PX);
   });
 });
 
@@ -330,13 +467,21 @@ describe("Mobile HUD — fuel gauge vs the camera ladder (S5)", () => {
   const tube = ruleBodyIn(phoneCss, ".fuel-gauge .fg-tube");
   const ICON_ROW = 18;
   const ROW_GAP = 2;
+  // Whether the stylesheet COMPENSATES the gauge's anchor for the
+  // bottom inset (PR #89 follow-up): the gauge hangs from the top and
+  // does not ride the inset; the camera ladder does (+inset on every
+  // anchor). Without the compensation term the ladder re-enters the
+  // gauge's band at 360×640 from inset ≥21 (trace sweep); with it, the
+  // gauge rises exactly with the ladder and holds its band. Derived
+  // from the CSS text so the pre-fix tree fails on the numbers.
+  const gaugeCompensated = /top:\s*calc\(\d+%\s*-\s*env\(safe-area-inset-bottom/.test(gauge);
   // Gauge box: icon row + gap + tube; the meta lines live in the side
   // column INSIDE the tube's band, so the tube band is their superset.
-  const gaugeBand = (viewH: number) => {
-    const topPct = parseInt(/top:\s*(\d+)%/.exec(gauge)![1]!, 10);
+  const gaugeBand = (viewH: number, inset = 0) => {
+    const topPct = parseInt(/top:\s*(?:calc\()?(\d+)%/.exec(gauge)![1]!, 10);
     const tubeH = pxIn(tube, "height");
     const boxH = ICON_ROW + ROW_GAP + tubeH;
-    const centreFromBottom = viewH - (topPct / 100) * viewH;
+    const centreFromBottom = viewH - (topPct / 100) * viewH + (gaugeCompensated ? inset : 0);
     const boxBottom = centreFromBottom - boxH / 2;
     return { tube: { lo: boxBottom, hi: boxBottom + tubeH }, box: { lo: boxBottom, hi: boxBottom + boxH } };
   };
@@ -346,25 +491,37 @@ describe("Mobile HUD — fuel gauge vs the camera ladder (S5)", () => {
     expect(gauge).toContain("display: grid");
     expect(ruleBodyIn(phoneCss, ".fuel-gauge .fg-meta")).toContain("grid-column: 2");
   });
-  it("the meta band clears the 🎯 and Views bands at both phone sizes", () => {
-    const ladder: Array<[number, number]> = [
-      [hudVar("hud-cam-views-bottom") - 8, hudVar("hud-cam-views-bottom") + CIRCLE + 8],
-      [hudVar("hud-cam-focus-bottom") - 8, hudVar("hud-cam-focus-bottom") + 44 + 8],
-    ];
+  it("the gauge's anchor compensates the bottom inset so it holds its band as the ladder rides up", () => {
+    expect(gaugeCompensated).toBe(true);
+  });
+  it("the meta band clears the full 🎯 and Views bands at every phone size × inset (incl. 360×640 at 24 and 34)", () => {
+    // The FULL ladder bands (the circles' own boxes ± the 8px gate
+    // padding), each shifted +inset — every ladder anchor carries
+    // env(safe-area-inset-bottom), so the whole ladder rides up.
     for (const v of PHONE_VIEWS) {
-      const { tube: band } = gaugeBand(v.h);
-      for (const [lo, hi] of ladder) {
-        expect(
-          band.hi <= lo || band.lo >= hi,
-          `gauge tube band [${band.lo}, ${band.hi}] must clear ladder band [${lo}, ${hi}] at ${v.w}×${v.h}`,
-        ).toBe(true);
+      for (const inset of INSETS) {
+        const ladder: Array<[number, number]> = [
+          [hudVar("hud-cam-views-bottom") - 8 + inset, hudVar("hud-cam-views-bottom") + CIRCLE + 8 + inset],
+          [hudVar("hud-cam-focus-bottom") - 8 + inset, hudVar("hud-cam-focus-bottom") + 44 + 8 + inset],
+        ];
+        const { tube: band } = gaugeBand(v.h, inset);
+        for (const [lo, hi] of ladder) {
+          expect(
+            band.hi <= lo || band.lo >= hi,
+            `gauge tube band [${band.lo}, ${band.hi}] must clear ladder band [${lo}, ${hi}] at ${v.w}×${v.h} inset ${inset}`,
+          ).toBe(true);
+        }
       }
     }
   });
-  it("the whole gauge clears the phone stack's band at both phone sizes", () => {
-    const stackTop = hudVar("hud-cam-toggle-bottom") + pxIn(ruleBodyIn(phoneCss, ".ship-status-stack"), "max-height");
+  it("the whole gauge clears the phone stack's band at every phone size × inset", () => {
     for (const v of PHONE_VIEWS) {
-      expect(gaugeBand(v.h).box.lo).toBeGreaterThanOrEqual(stackTop + 8);
+      for (const inset of INSETS) {
+        expect(
+          gaugeBand(v.h, inset).box.lo,
+          `gauge bottom at ${v.w}×${v.h} inset ${inset}`,
+        ).toBeGreaterThanOrEqual(stackTopAt(v.h, inset) + 8);
+      }
     }
   });
 });

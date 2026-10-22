@@ -173,6 +173,21 @@ export function mergeGraphData(prev: GraphData, fresh: GraphData): GraphData {
  * targets. Nothing is removed: every target stays reachable, and off
  * phones the layout is exactly today's (54px step, no fold at any
  * realistic window height).
+ *
+ * PR #89 follow-up (inset-true geometry): the cluster's CSS anchor is
+ * `bottom: calc(var(--hud-cam-focus-bottom) + env(safe-area-inset-bottom))`
+ * (index.css .focus-cluster) — on a real device the whole fan rides the
+ * bottom safe-area inset ABOVE the 298px slot, while the viewport height
+ * App feeds in (window.innerHeight, viewport-fit=cover) already
+ * includes the gesture strip. The first pass modelled the inset as 0,
+ * which left 2px of header clearance at 360×640 and 4px at 390×780 —
+ * any real gesture bar (16–34px) pushed the top fan item into the
+ * header band (verification trace:
+ * ~/workspace/ui-audit/pr89-review-trace-2026-10-21.md, Finding 1). So
+ * the layout now takes the MEASURED inset (measureSafeBottomInset,
+ * threaded from App) and counts it in the cluster bottom: capacity —
+ * and therefore the fold — follows the TRUE available height, and the
+ * fan simply folds one slot earlier on inset devices.
  */
 export const FAN_STEP_DESKTOP = 54;
 export const FAN_STEP_PHONE = 46;
@@ -190,15 +205,36 @@ export interface FanLayout {
   /** Targets per page when folded (capacity minus the "more" slot); all targets when not. */
   pageSize: number;
   pageCount: number;
+  /**
+   * The cluster's TRUE bottom edge (px from the screen bottom): the CSS
+   * slot (298) PLUS the device's bottom safe-area inset, which the
+   * stylesheet's anchor adds and this model must count (PR #89
+   * follow-up — see the section doc above). fanTopEdge measures from
+   * here, so the model's top edge is the device's top edge.
+   */
+  clusterBottomPx: number;
 }
 
-export function fanLayout(viewW: number, viewH: number, total: number): FanLayout {
+export function fanLayout(
+  viewW: number,
+  viewH: number,
+  total: number,
+  safeBottomInsetPx = 0,
+): FanLayout {
   if (!isPhonePortraitViewport(viewW, viewH) || total <= 0) {
-    return { step: FAN_STEP_DESKTOP, capacity: Math.max(total, 1), folded: false, pageSize: Math.max(total, 1), pageCount: 1 };
+    return {
+      step: FAN_STEP_DESKTOP,
+      capacity: Math.max(total, 1),
+      folded: false,
+      pageSize: Math.max(total, 1),
+      pageCount: 1,
+      clusterBottomPx: FAN_CLUSTER_BOTTOM_PX,
+    };
   }
+  const clusterBottomPx = FAN_CLUSTER_BOTTOM_PX + Math.max(0, safeBottomInsetPx);
   const capacity = Math.max(
     2, // a folded fan always shows at least one target beside its "more" item
-    Math.floor((viewH - FAN_HEADER_BAND_PX - FAN_CLUSTER_BOTTOM_PX - FAN_ITEM_PX) / FAN_STEP_PHONE),
+    Math.floor((viewH - FAN_HEADER_BAND_PX - clusterBottomPx - FAN_ITEM_PX) / FAN_STEP_PHONE),
   );
   const folded = total > capacity;
   const pageSize = folded ? capacity - 1 : total;
@@ -208,6 +244,7 @@ export function fanLayout(viewW: number, viewH: number, total: number): FanLayou
     folded,
     pageSize,
     pageCount: folded ? Math.ceil(total / pageSize) : 1,
+    clusterBottomPx,
   };
 }
 
@@ -225,7 +262,36 @@ export function fanWindow(
 /** Top edge (px from the bottom) of the highest fan slot a layout can show. */
 export function fanTopEdge(layout: FanLayout): number {
   const slots = layout.folded ? layout.capacity : layout.pageSize;
-  return FAN_CLUSTER_BOTTOM_PX + slots * layout.step + FAN_ITEM_PX;
+  return layout.clusterBottomPx + slots * layout.step + FAN_ITEM_PX;
+}
+
+/**
+ * The device's REAL bottom safe-area inset (px), measured — never
+ * assumed — through a hidden probe element whose padding-bottom is
+ * `env(safe-area-inset-bottom, 0px)`: the computed style resolves env()
+ * to the used length the CSS anchors (.focus-cluster, the phone
+ * status stack, the camera ladder) actually add. App calls this once
+ * per resize and threads the value into fanLayout (PR #89 follow-up).
+ * Returns 0 wherever env() is unsupported or unresolvable (desktop
+ * browsers, jsdom) — which is the truth there, not a fallback guess:
+ * no gesture strip, no inset.
+ */
+let sabProbeEl: HTMLDivElement | null = null;
+export function measureSafeBottomInset(): number {
+  if (typeof document === "undefined" || typeof getComputedStyle === "undefined" || !document.body) {
+    return 0;
+  }
+  if (!sabProbeEl || !sabProbeEl.isConnected) {
+    sabProbeEl = document.createElement("div");
+    sabProbeEl.setAttribute("aria-hidden", "true");
+    sabProbeEl.style.cssText =
+      "position:fixed;left:0;bottom:0;width:0;height:0;" +
+      "padding-bottom:env(safe-area-inset-bottom,0px);" +
+      "visibility:hidden;pointer-events:none;";
+    document.body.appendChild(sabProbeEl);
+  }
+  const v = parseFloat(getComputedStyle(sabProbeEl).paddingBottom || "");
+  return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
 /** Pop-up offset for an item in the focus cluster (stacks upward when open). */

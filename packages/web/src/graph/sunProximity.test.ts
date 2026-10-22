@@ -14,6 +14,9 @@ import {
   sunContrastOpacityFloor,
   sunProximityFade,
 } from "./sunProximity.js";
+// Namespace access for the PR #89 follow-up export: absent on the
+// pre-fix tree (undefined), so the new test fails individually there.
+import * as labelFrame from "./labelFrame.js";
 
 /**
  * Package D (finding #7): the sun-proximity math behind the sector-title
@@ -245,5 +248,34 @@ describe("sectorTitleWidthCapK — the ~55vw ceiling on phone titles", () => {
     expect(sectorTitleWidthCapK(0, 1000, FOV, 0.5)).toBe(Infinity);
     expect(sectorTitleWidthCapK(100, 0, FOV, 0.5)).toBe(Infinity);
     expect(sectorTitleWidthCapK(100, 1000, 0, 0.5)).toBe(Infinity);
+  });
+  it("the cap's basis is camera-space depth: an off-axis hub gets a tighter cap, and the true span is exactly the max fraction (PR #89 follow-up)", () => {
+    // Graph3D now feeds the cap the hub's depth (via
+    // labelFrame.cameraDepthFromNdc) instead of the Euclidean dist.
+    // Composing the two here pins the contract the call site relies
+    // on: with the depth basis the on-screen span IS 55%; with the
+    // old Euclidean basis it would have been 55% × sec θ (~60% at
+    // this corner) — the trace's Finding 2 title overrun.
+    const { cameraDepthFromNdc } = labelFrame;
+    expect(typeof cameraDepthFromNdc).toBe("function");
+    const base = 129.25;
+    const dist = 3000;
+    const aspect = 390 / 844;
+    const tanV = Math.tan((FOV * Math.PI) / 360);
+    const tanH = tanV * aspect;
+    const nx = 0.82;
+    const ny = -0.86; // frame-corner NDC, same corner as the label tests
+    const secTheta = Math.sqrt(1 + (nx * tanV * aspect) ** 2 + (ny * tanV) ** 2);
+    const depth = cameraDepthFromNdc(dist, nx, ny, tanV, aspect);
+    expect(depth).toBeCloseTo(dist / secTheta, 10);
+    const kDepth = sectorTitleWidthCapK(base, depth, FOV, aspect, 0.55);
+    const kEuclid = sectorTitleWidthCapK(base, dist, FOV, aspect, 0.55);
+    expect(kDepth).toBeLessThan(kEuclid);
+    // True span at the depth-based k: exactly the ceiling.
+    expect((base * kDepth) / (2 * depth * tanH)).toBeCloseTo(0.55, 10);
+    // The span the Euclidean-fed cap would ACTUALLY have produced at
+    // this hub position: the ceiling inflated by sec θ.
+    expect((base * kEuclid) / (2 * depth * tanH)).toBeCloseTo(0.55 * secTheta, 10);
+    expect((base * kEuclid) / (2 * depth * tanH)).toBeGreaterThan(0.58);
   });
 });

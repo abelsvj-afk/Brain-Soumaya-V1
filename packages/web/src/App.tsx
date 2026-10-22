@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, measureSafeBottomInset } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
@@ -466,6 +466,24 @@ export default function App() {
   // phone-portrait screen (Mobile HUD pass, S3) — always 0 (the only
   // page) whenever the fan fits unfolded.
   const [fanPage, setFanPage] = useState(0);
+  // PR #89 follow-up: the fan cluster's CSS anchor rides
+  // env(safe-area-inset-bottom) (index.css .focus-cluster) while
+  // window.innerHeight — the height the fan model is fed — already
+  // includes the gesture strip (viewport-fit=cover). The model's
+  // header-clearance math is only true if it counts the REAL inset, so
+  // it is measured (hidden env() probe, App.helpers) once per resize
+  // and passed to fanLayout below. 0 on inset-free devices.
+  const [safeBottomInset, setSafeBottomInset] = useState(0);
+  useEffect(() => {
+    const apply = () => setSafeBottomInset(measureSafeBottomInset());
+    apply();
+    window.addEventListener("resize", apply);
+    window.visualViewport?.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("resize", apply);
+      window.visualViewport?.removeEventListener("resize", apply);
+    };
+  }, []);
   const [help, setHelp] = useState(false);
   // The visual legend (🗺️) — auto-shows ONCE per brain so new users learn the
   // galaxy's language, then it's a tap away whenever they forget.
@@ -2495,7 +2513,7 @@ export default function App() {
                 },
               });
             }
-            const layout = fanLayout(fanVw, fanVh, targets.length);
+            const layout = fanLayout(fanVw, fanVh, targets.length, safeBottomInset);
             const win = fanWindow(targets.length, layout, fanPage);
             const visible = targets.slice(win.start, win.start + win.count);
             return (
