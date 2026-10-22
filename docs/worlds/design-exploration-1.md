@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 9 — §16 records five **ship-agent proposals** from the repo chat's agent-SDK research as design-queue **inputs** (not decisions): `guided_tour`, `fly_to_memory`, `propose_noticing`, `propose_world_change`/`undo_world_change`, `leave_beacon` — under the owner-endorsed framing that the ship is a fenced sub-agent: she can fly and propose, never touch brain writes. **Design gate: OPEN.**
+**Revision:** 10 — ChatGPT's review of §15 absorbed: **utility-first** governing principle for navigation; **cancel / turn back / return home** distinguished as three acts (N3/N6); recommendations recorded on Q-N1–Q-N4 (all four still the owner's to settle; step 3 open). Record: `chatgpt-review-3-2026-10-22.md`. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -640,7 +640,9 @@ Inventory seeded (§14.3); per-space completion happens as each space's design m
 
 ## 15. Settlement step 3 — navigation & scale (King's proposal, owner settles)
 
-How the user moves among the seven worlds, and how big things feel. Built only on settled ground: fuel (D-1), the Station as home port (D-5), the Operations trio (§13), the gate rules from §9.5 (first visit scenic and skippable; repeats can go direct; discovery never holds memory access hostage), and the Animation Gate (§14). Proposal only.
+How the user moves among the seven worlds, and how big things feel. Built only on settled ground: fuel (D-1), the Station as home port (D-5), the Operations trio (§13), the gate rules from §9.5 (first visit scenic and skippable; repeats can go direct; discovery never holds memory access hostage), and the Animation Gate (§14). Proposal only — revised per ChatGPT's review of §15 (2026-10-22; record: `chatgpt-review-3-2026-10-22.md`).
+
+**Governing principle for step 3 (from the review): navigation is a dependable utility first, a sense of wonder second.** Travel may be meaningful; it must never make reaching the user's own information confusing or unnecessarily difficult. Where wonder and dependability conflict, dependability wins and wonder is offered, not imposed.
 
 **N1 — Topology: routes plot through the Station.** Every destination is reachable home → Station → destination, with the Station as the interchange where journeys begin (D-5: it surfaces journeys, not memories). Home is always one free hop away from anywhere (D-1). Whether *direct* space-to-space gates also exist is left open for the owner (Q-N1) — via-Station travel must always work regardless, so no route is ever gated behind a discovery.
 
@@ -648,19 +650,21 @@ How the user moves among the seven worlds, and how big things feel. Built only o
 
 **N3 — Two gaits, one route (D-1 made visible).** **Warp**: fast, spectacular, fuel spend shown before departure and in the sequence (A11). **Drift**: the same route, slower and plainer (A12), always available, always free. **Return home**: always free, never slower than the drift out — no stranded math, ever.
 
+**Cancel, turn back, return home — three different acts (review distinction, folded into N3/N6).** (i) **Cancel before departure:** nothing moves; no state changes; no fuel spent. (ii) **Turn back during transit:** return to the origin, with the operation's state preserved exactly as it was before departure. (iii) **Return home:** always available and always free, even with zero fuel — a standing guarantee, not a maneuver. The distinction matters most with cargo: a cancelled or turned-back journey must **never** relocate, archive, or duplicate a carried memory (§13 Operations; §14 atomicity).
+
 **N4 — Discovery without hostage-taking.** New destinations and gates are discovered through the Station's discovery function and through use (a memory's affiliations can hint at its space's gate). Discovery is revealed with A16's reveal animation. But discovery governs *travel and presentation only*: every memory remains directly reachable in the core app regardless (§13), and an undiscovered gate never hides a memory.
 
 **N5 — Scale conventions, one per space (§9.3).** **Awe-scale** is the default language: the Great Station is monumental (D-2 — bigger than the home galaxy's current sun, per the owner's vision), distances are *felt* through travel-time classes rather than stated in numbers. **Reference-scale** lives only inside the Scale Space: real objects at honest sizes relative to each other (the real ISS lives there, §10/D-2), where accuracy is the wonder. The two conventions never mix inside one space. Growing the home sun is the owner's separate later call (his words: he may grow it over time) — not assumed here.
 
-**N6 — Navigation aids.** Before departure: route projection in space (A19) plus a plain summary — *from here → destination · warp cost in fuel · time class · drift is free*. Cancel freely before departure; mid-transit exit returns you to the origin (atomicity). "You are here" is always answerable in one glance, in plain words, with the brain's own name — never coordinates or jargon.
+**N6 — Navigation aids.** Before departure: route projection in space (A19) plus a plain summary — *from here → destination · warp cost in fuel · time class · drift is free*. Cancel freely before departure; mid-transit, *turn back* returns you to the origin with state preserved (see N3's three acts; atomicity). "You are here" is always answerable in one glance, in plain words, with the brain's own name — never coordinates or jargon.
 
 **N7 — Tours are saved routes, not new machinery.** A tour = a named sequence of stops across spaces, traveled as visits (§13 Operations — tours never move or re-home memories). The Chronicle guided mode (§12) is the Deep Past instance: its chapter route is tour data over the same machinery (P7). Tours are proposed by the brain and approved by the user (the anchor pattern, P5); narration is optional and off by default until designed.
 
-**Open for the owner in step 3:**
-- **Q-N1** Direct space-to-space gates: (i) never — all routes via the Station; (ii) discovered through use, with via-Station always available; (iii) present from the start. *King's lean: (ii) — discovery stays meaningful, nothing is ever hostage.*
-- **Q-N2** Transit duration classes (N2): do the proposed bands feel right for a phone, or should even first traversals be shorter?
-- **Q-N3** In-transit interaction: look-and-tend only (as proposed), or should transit ever carry a small purposeful act (e.g., sorting the carried memory en route)?
-- **Q-N4** The home sun: leave its size as-is for now (King's lean — the owner earlier reserved this call: "worry about realism more later"), or schedule the growth decision alongside the Station's mockup?
+**Open for the owner in step 3** *(King's leans and ChatGPT's recommendations recorded; the owner settles; step 3 stays open until then)*:
+- **Q-N1** Direct space-to-space gates: (i) never — all routes via the Station; (ii) discovered through use, with via-Station always available; (iii) present from the start. *King's lean: (ii). ChatGPT recommends: (ii) — exploration gains meaning without the Station becoming a mandatory toll booth; counterargument noted (network complexity) with the guard that route plotting always shows a valid path and no one memorizes the network.*
+- **Q-N2** Transit duration: are N2's bands (short hop ≈10–20 s, long leg ≈30–60 s at warp) right? *ChatGPT recommends: keep the bands as upper design targets to test, never compulsory waits — first arrival scenic but skippable, repeats offer direct travel, drift slower without forcing the user to watch every second; the full experience stays an inviting option, not a mandatory delay.*
+- **Q-N3** In-transit interaction: look-and-tend only, or a small purposeful act? *ChatGPT recommends: look-and-tend only for MVP — capture and sorting belong to the core workflow; transit must not become a chore queue. Revisit only if testing shows the journey feels empty, and then any act is optional, safely cancellable, and incapable of blocking arrival.*
+- **Q-N4** The home sun: leave as-is, or decide alongside the Station mockup? *King's lean: leave it (the owner reserved this call). ChatGPT recommends: defer — the settled awe/reference distinction already gives each space its language; the mockup can test the sun and Station's relative appearance without a permanent sun decision.*
 
 ---
 
@@ -682,4 +686,4 @@ How the user moves among the seven worlds, and how big things feel. Built only o
 
 ---
 
-*End of Exploration 1, Revision 9. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 10. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*

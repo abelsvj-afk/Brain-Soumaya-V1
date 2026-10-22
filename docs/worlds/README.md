@@ -11,6 +11,7 @@
 3. **`chatgpt-review-1-2026-10-22.md`** — the record of ChatGPT's first review (verdict: strong vision, design gate still open; ready for the next design iteration, not for architecture or implementation).
 4. **`gemini-research-1-2026-10-22.md`** — Gemini Deep Research (scenery study, asset hunt, celestial data) **with King's verification table**: which claims are confirmed, which are corrected (HYG ShareAlike scope; ESA/Hubble is CC BY 4.0), and which are dropped. Exploration §10 absorbs the verified findings as a proposed technique stack (Q25) and adds Q29 (Great Station form).
 5. **`chatgpt-review-2-2026-10-22.md`** — the record of ChatGPT's second review (§13 information model + §14 Animation Gate; verdicts: strengthen three boundaries, keep the gate), absorbed into Exploration Revision 7.
+6. **`chatgpt-review-3-2026-10-22.md`** — the record of ChatGPT's third review (§15 navigation & scale; utility-first principle, recommendations on Q-N1–Q-N4, the cancel / turn back / return home distinction), absorbed into Exploration Revision 10.
 
 ## The most important instruction
 
