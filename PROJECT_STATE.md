@@ -3,12 +3,15 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
-## 2026-10-22 — ADR-019 bill lifecycle (design settled; gate OPEN)
+## 2026-10-22 — ADR-019 bill lifecycle (design settled; gate CLOSED 2026-10-22)
 
 **Status:** DESIGN — owner settled the four product decisions for design on
 2026-10-22 (financial-os decision **D8**); design recorded on branch
 `design/money-bill-lifecycle` (docs only, base = deploy HEAD `a9ed7c8`).
-**Implementation NOT authorized and NOT started.** Contract of record:
+**Design gate CLOSED by the owner on 2026-10-22** (closure entry below).
+**Implementation NOT authorized and NOT started — the gate closure does not
+authorize it; implementation requires the owner's separate authorization.**
+Contract of record:
 `docs/ADR-019-bill-lifecycle.md` (summaries in `docs/architecture.md`,
 `docs/financial-os/{requirements,architecture,decisions,user-stories,roadmap}.md`).
 
@@ -52,6 +55,28 @@
   the delay even with no user activity). **The gate stays OPEN:** the
   remaining act is the owner's explicit acceptance of that timing behavior
   (new checklist item below) — the R2 specification does not record it.
+- **Gate CLOSED (owner, 2026-10-22):** with the review history complete —
+  design review round 1 (four blocking contract findings: settlement
+  mechanism unspecified; I1 contradicting I5/P2; Mark-paid's guarded flip
+  ordered after the expense/balance writes; I2 too broad for the
+  matched-expense path — all four re-verified, all four confirmed, corrected
+  in R1) and the round-2 precise gate review (five checks against the R1
+  documents: migration + backfill, one-transaction claims with
+  exactly-one-row assertions and retry/concurrency tests, the unified
+  reservation rule, and I2a/I2b consistency verified as written;
+  settlement timing specified in R2) — the owner closed the design gate in
+  two acts: (1) he **explicitly accepts the settlement-timing behavior**
+  specified in ADR-019 §3.6 (as specified by R2) as product behavior —
+  eligibility at the space-local start of an entry's date; settlement
+  effected lazily at the first evaluation at or after that moment over the
+  enumerated trigger set; silent; never backdated; late-evaluation
+  semantics as written — and (2) he **confirms the remaining §7 items**:
+  P1–P4 as the build semantics; corrections §3.1–§3.7 in scope; the §2/§4
+  contract with T1–T20 as the acceptance-test list; §6 staying out of
+  scope; and §8's single additive migration. **This closure does NOT
+  authorize implementation** — implementation requires the owner's
+  separate authorization; merge and deployment remain separate decisions
+  after that.
 - **Migration (revised by R1):** one additive column — `balance_applied_at` on
   `fin_income`/`fin_expense`, migrateSchema-only and PRAGMA-guarded, with a
   legacy backfill — required by the §3.6 settlement mechanism (ADR-019 §8, as
@@ -61,25 +86,26 @@
 - **Out of scope (separate undecided owner items, ADR-019 §6):** zero-based
   budgeting vs Wealth, multi-account, the engagement/rewards system, and the
   documented-but-dead features D12–D16 (status noted only).
-- **Design gate — the owner's design review must confirm before implementation
-  can be authorized:**
-  - [ ] P1–P4 (Paid / Remove / Edit / Skip) as written are the semantics to build.
-  - [ ] Corrections §3.1–§3.7 in scope as written — in particular the
+- **Design gate — CLOSED by the owner on 2026-10-22** (all items confirmed;
+  closure entry above). Implementation is still NOT authorized — it requires
+  the owner's separate authorization:
+  - [x] P1–P4 (Paid / Remove / Edit / Skip) as written are the semantics to build.
+  - [x] Corrections §3.1–§3.7 in scope as written — in particular the
         scheduled-vs-settled rule and its durable settlement mechanism (§3.6,
         as revised by R1) and the backfill window (§3.3).
-  - [ ] Settlement timing explicitly accepted as product behavior (ADR-019
+  - [x] Settlement timing explicitly accepted as product behavior (ADR-019
         §3.6, as specified by R2): eligibility at the space-local start of
         the entry's date; settlement effected lazily at the first evaluation
         at or after that moment (enumerated triggers; bounded by the
         tool-router tick while the server runs); silent and never backdated;
-        late-evaluation semantics as written. This is the owner's remaining
-        act for the gate — specifying the behavior (R2) is not the
-        acceptance.
-  - [ ] Transaction boundaries + invariants (§2/§4, R1 revisions included)
+        late-evaluation semantics as written. Accepted by the owner
+        2026-10-22 — the R2 specification alone was not the acceptance;
+        this act is.
+  - [x] Transaction boundaries + invariants (§2/§4, R1 revisions included)
         accepted as the contract; §5 (T1–T20) accepted as the acceptance-test list.
-  - [ ] §6 stays out of scope — no bundling of engagement, zero-based vs Wealth,
+  - [x] §6 stays out of scope — no bundling of engagement, zero-based vs Wealth,
         multi-account, or D12–D16 features.
-  - [ ] The single additive migration in §8 (as revised by R1) is accepted; any
+  - [x] The single additive migration in §8 (as revised by R1) is accepted; any
         *further* discovered schema need returns to design before implementation
         proceeds.
 
