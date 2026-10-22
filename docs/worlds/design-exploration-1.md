@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 17 — Step 6 **approved by the owner in his own words** and closed (D-22–D-25). **The settlement sequence is complete: steps 1–6 all closed, D-1–D-25 on record.** What remains before the design gate can close: Phase 0 recipes (paper), the mockup trio (separate authorization), results review, and the owner's explicit gate closure (§19 A5). **Design gate: OPEN.**
+**Revision:** 18 — **Phase 0 begun** at the owner's direction: the **Great Station recipe** is drafted (`recipe-great-station.md`; §20 register) and awaits owner review/settlement. Growing Place and Deep Past recipes not yet drafted. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -800,4 +800,20 @@ Sequencing within phases, and any merging of phases, is the owner's call at each
 
 ---
 
-*End of Exploration 1, Revision 17. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 20. Phase 0 register — the recipes (begun 2026-10-22, at the owner's direction)
+
+Phase 0 (§19 A3) is the three environment recipes on paper, each a standalone document in this folder, each settled by the owner before any mockup build can be authorized (D-21).
+
+| Recipe | File | Status |
+|---|---|---|
+| The Great Station | `recipe-great-station.md` | **Draft** (King, 2026-10-22) — awaiting owner review/settlement; open items R-S1–R-S4 |
+| The Growing Place | — | Not yet drafted |
+| The Deep Past | — | Not yet drafted |
+
+The draft Station recipe follows §18's minimum contents: identity (crown-and-stem megastructure; amber harbor in indigo dark), the three-stage approach composition with its named dual-layer handoff risk, honest content (journeys real, traffic atmosphere, no memories), a budget allocation inside §11.2's ceilings, the A13/A17/A11/A12/A15/A16/A19/A20 animation slice with combined load and fallback ladder, shared-vs-distinct elements, a seed parameter table for V4 traceability, and the D-13 evidence the mockup must produce.
+
+---
+
+*End of Exploration 1, Revision 18. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*

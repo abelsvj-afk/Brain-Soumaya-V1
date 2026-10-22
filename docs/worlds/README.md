@@ -15,6 +15,7 @@
 7. **`chatgpt-review-4-2026-10-22.md`** — the record of ChatGPT's fourth review (§17 mutation & control; stricter presentation boundary, dependency-aware undo, calm cadence, dual-door log, failure-atomicity invariant), absorbed into Exploration Revision 12.
 8. **`chatgpt-review-5-2026-10-22.md`** — the record of ChatGPT's fifth review (§18 mockup specification; cohesion tested not assumed, travel-guarantee checks in the session script, failure-diagnosis taxonomy, recipe minimum contents), absorbed into Exploration Revision 14.
 9. **`chatgpt-review-6-2026-10-22.md`** — the record of ChatGPT's sixth review (§19 architecture & roadmap; failure-independence invariant, per-phase authorization separateness, Q27 as a mandatory Phase 2 gate, design gate stays open after step 6), absorbed into Exploration Revision 16.
+10. **`recipe-great-station.md`** — the Phase 0 environment recipe for the Great Station (draft for owner settlement): identity, approach composition, honest content, budget allocation, animation slice, seed traceability table, and the D-13 evidence the mockup must produce.
 
 ## The most important instruction
 
