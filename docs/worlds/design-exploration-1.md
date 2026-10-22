@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 4 — Owner decisions applied 2026-10-22: Q29 settled, Q25 conditionally ratified, three-mockup acceptance criteria defined (see §11). Records: `chatgpt-review-1-2026-10-22.md` (§9), `gemini-research-1-2026-10-22.md` (§10) in this folder.
+**Revision:** 5 — Revision 4 accepted by the owner as the **current design baseline** (2026-10-22); §11.2 supplemented with test-record requirements; §12 opens settlement step 1 (roster & purpose) with King's proposal for the owner to settle. Records: `chatgpt-review-1-2026-10-22.md` (§9), `gemini-research-1-2026-10-22.md` (§10) in this folder. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -465,6 +465,8 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-2 — Q29, Great Station form (settled 2026-10-22):** **Fictional megastructure** for the Great Station — a designed silhouette delivering the monumental, awe-inspiring presence the vision calls for (EVE is the touchstone, not a copy). The **real NASA ISS model is reserved for the scale-focused space**, where authenticity is the advantage. Rationale (owner's decision, King's dissent in §10.3 aligned): the ISS wins on efficiency but its recognizable real-world identity and thin truss silhouette fight the fiction and the monumentality; in the scale space, "this is real" is precisely the emotional payload, so the ISS earns more there.
 - **D-3 — Q25, scenery technique stack (conditionally ratified 2026-10-22):** the §10.1 stack — seeded palette math, instanced fields, palette-matched fog, dual-layer compositing, HYG stars, baked-in glow — is **ratified conditional on passing the three-mockup test** defined below. Pre-test requirement (owner's): the performance and visual acceptance criteria are documented **before** any test runs (§11.2–11.3). Until test results are reviewed, the stack is a ratified *hypothesis*, **not implementation-approved**.
 
+**Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
+
 ### 11.2 Mobile performance thresholds (defined pre-test; measured on the owner's phone)
 The mockups run on the owner's actual Android phone, in the browser, using the §10.1 stack. Hard thresholds — a mockup that misses any one of them fails, and the failure goes back to design, not to tuning-by-hope:
 - **Frame rate:** sustained average **≥ 50 fps** and 1%-low **≥ 30 fps** across a continuous 5-minute session per mockup, including a warp transit and (for the station/scale mockup) a full approach sequence.
@@ -489,4 +491,50 @@ The mockups run on the owner's actual Android phone, in the browser, using the �
 
 ---
 
-*End of Exploration 1, Revision 4. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 12. Settlement step 1 — the roster and each space's purpose (King's proposal, owner settles)
+
+Baseline accepted (owner, 2026-10-22): Revision 4 is the current design baseline; the gate remains open. Work now proceeds in the §9.8 order, starting here. **Everything in this section is King's proposal — nothing is settled until the owner says so.**
+
+**The test (applied uniformly to every candidate):** ① Purpose — what real second-brain job? ② Unique outcome — what can the user understand, decide, or do here that no other space provides? ③ Canonical information — which existing memories/relationships does it surface, without duplicating them (§9.6)? ④ Navigation value — why a distinct *place worth traveling to*, not a view or filter? ⑤ MVP necessity — initial roster, or later?
+
+### 12.1 Candidate-by-candidate
+
+**A. The Deep Past — PROPOSE: KEEP (initial roster).**
+① Long-term rediscovery. ② The only space whose outcome is *finding what you forgot you had* — old memories resurfaced by wandering, not by searching. ③ Older memories + forgotten connections, surfaced in place (canonical, not copied). ④ Distance-as-time is a real place-feeling: quiet, sparse, slow (and a §10 mockup environment). ⑤ Yes — it is the clearest proof that travel adds something home cannot.
+
+**B. The Growing Place — PROPOSE: KEEP (initial roster).**
+① Aspirations and growth made visible. ② The only space that *changes structurally because your life changed* — landmarks at real milestones (§9.4 structural change lives here first). ③ Goals, milestones, habits — surfaced as landmarks/waypoints. ④ A place that is visibly different on every return is the strongest reason to travel at all. ⑤ Yes — it is also the mutation model's home ground, and a §10 mockup environment.
+
+**C. People & Relationships — PROPOSE: KEEP (initial roster).**
+① Remembering people well. ② The only space organized by *who*, not what/when: shared history, open threads, dates that matter, per person. ③ Person-linked memories and commitments, surfaced in their clusters. ④ Flying between people's systems makes relationships' connections spatial in a way no list does. ⑤ Yes — relationships are core second-brain data, and no other candidate covers them.
+
+**D. The Quiet / Archive — PROPOSE: KEEP, but build last in the initial roster.**
+① Intentional rest for memories: kept, safe, not resurfacing uninvited. ② The only space whose outcome is *peace* — putting something down on purpose and trusting it stays put. ③ Archived memories and closed chapters (their canonical home, by the user's own act). ④ Weakest navigation value of the keepers — you travel there rarely, mostly to lay something down or, rarely, to retrieve. It earns its place on emotional purpose (§9.1's emotional + practical test), not frequency. ⑤ Roster yes; build order last — its stillness also makes it the cheapest environment to realize well.
+
+**E. The Scale Space — PROPOSE: KEEP (initial roster), strengthened by D-2.**
+① Perspective: awe, and the felt size of a life in a real universe. ② The only space whose outcome is a *feeling with a function* — the hard day shrinks to its true proportion. No other space does this. ③ Very little canonical content by design: a few anchor memories/aspirations at vast distances; its real content is *real astronomy* — HYG stars, named asteroids, and now (D-2) the **real ISS**, whose authenticity is this space's emotional payload. ④ The approach that never quite ends is an experience no filter can imitate; dual-layer compositing (§10.2) makes it renderable. ⑤ Yes — it carries the "real" pillar of the whole vision.
+
+**F. The Workbench Shore — PROPOSE: CUT as a space; keep the job in the core.**
+① Capture and sorting. ② Fails the unique-outcome test as a *destination*: sorting is a workflow that should come to the user (capture already lives in the core app), not a place to travel to. ③ Unfiled captures — better served where they arrive. ④ Weakest navigation value of all candidates: nobody warps to do inbox chores; making them travel to sort adds friction to the brain's most frequent act — and an unsorted pile rendered as a *place* risks exactly the guilt-pile failure §1F warned about. ⑤ No. Its one good idea — *sending a sorted memory off through a gate to its space* — survives as a moment in the core capture flow, not a world.
+
+**G. The Chronicle Path — PROPOSE: MERGE into the Deep Past as its guided mode (not a separate space).**
+① Travelling your life story chapter by chapter. ② As a destination it fails the removal test against the Deep Past: same canonical content (life history), same era-anchored feeling. What is genuinely distinct is the *mode* — a path vs. free wandering — and modes don't need separate worlds. ③ Chronicle chapters, surfaced as a route through the Deep Past (and, in tours, across spaces). ④ As a tour type it keeps all its value; as a separate space it splits one place into two similar ones — the exact redundancy ChatGPT flagged (§9.1). ⑤ No separate destination. If the Path later proves it needs its own scenery grammar, it can split then, with evidence.
+
+**H. The Great Station — PROPOSE: KEEP (initial roster); purpose proposed, owner to confirm.**
+① Proposed purpose (from §9.2's leading hypothesis, still the owner's to settle in this step): **home port of the worlds** — where journeys begin and end, where destinations are discovered, where the user orients before setting out. ② The only space whose outcome is *orientation and departure*: the map made into a place. It must not own memories, social features, or ship upgrades unless a separate need is proven (the glorified-menu counterargument, §9.2, stands guard). ③ It surfaces *destinations and journeys themselves* (routes, gates, tours) — meta-content, no memory duplication. ④ The strongest navigation value in the roster: the monumental approach (fictional megastructure per D-2) is the signature journey of the whole expansion. ⑤ Yes — and it anchors the travel system the other spaces hang from. It is the third §10 mockup environment.
+
+### 12.2 Proposed roster (for owner settlement)
+**Destinations beyond the home galaxy (5):** the Great Station · the Scale Space · the Deep Past (Chronicle as its guided mode) · the Growing Place · People — plus **the Quiet/Archive** as a sixth, built last. **Cut:** Workbench Shore (job stays in core). **Total worlds including home: 7** — small enough that each can be distinct, cared for, and maintained by one person.
+**Mockup trio (§9.3/§11) unchanged:** Great Station, Growing Place, Deep Past — the three most contrasting grammars (monumental / constructed / sparse).
+
+### 12.3 What step 1 still needs from the owner
+1. Ratify, amend, or reject the proposed roster (in whole or candidate-by-candidate).
+2. Confirm or replace the Great Station's proposed purpose (home port / orientation & departure).
+3. Confirm the Chronicle merge (mode of the Deep Past, not a destination) and the Workbench cut (job stays in core).
+Then step 1 closes and step 2 (information model) opens.
+
+---
+
+*End of Exploration 1, Revision 5. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
