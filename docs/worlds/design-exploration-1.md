@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 3 — Gemini deep research 1 absorbed with King's verification pass 2026-10-22 (see §10). Records: `chatgpt-review-1-2026-10-22.md` (§9), `gemini-research-1-2026-10-22.md` (§10) in this folder.
+**Revision:** 4 — Owner decisions applied 2026-10-22: Q29 settled, Q25 conditionally ratified, three-mockup acceptance criteria defined (see §11). Records: `chatgpt-review-1-2026-10-22.md` (§9), `gemini-research-1-2026-10-22.md` (§10) in this folder.
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -439,7 +439,8 @@ The sun that "keeps growing as you fly toward it" lives in the background layer:
 ### 10.3 The Great Station — asset candidates, with King's dissent noted
 Verified placeholder register (full terms in the research record): **NASA ISS** (public domain; 6,628 polys; GLB variant ~466 KB; textures must be audited and NASA insignia scrubbed before use) · **Poly Haven Boulder 01** (CC0; use a low LOD + 1K textures — the full model is 124K tris) · **Kenney kits** (CC0 as a publisher; exact kit/page confirmed at download time).
 **King's dissent from Gemini's "clear winner":** the ISS is the efficiency winner but may be the *vision* loser — it is a recognizable real station with a thin truss silhouette, and the owner's touchstone is EVE's monumental fictional megastructures. New question:
-29. **Station form:** (i) NASA ISS as-is, massively scaled; (ii) composite — ISS-derived core bulked out with modular kit parts until the silhouette turns monumental; (iii) ISS reserved for the reference-scale space (where *real* is the point) and a fictional megastructure silhouette for the Great Station space. Owner decides; placeholder honesty (§6) means any of the three can be swapped later without redesign.
+29. **Station form:** (i) NASA ISS as-is, massively scaled; (ii) composite — ISS-derived core bulked out with modular kit parts until the silhouette turns monumental; (iii) ISS reserved for the reference-scale space (where *real* is the point) and a fictional megastructure silhouette for the Great Station space.
+**✅ SETTLED by the owner (2026-10-22): option (iii).** The Great Station is a **fictional megastructure**, designed to deliver the monumental, awe-inspiring silhouette the vision calls for. The real ISS model is **reserved for the scale-focused space**, where its authenticity is an advantage. (Decision log: §11, D-2.)
 
 ### 10.4 Real celestial content — the minimal set, corrected
 - **Stars:** HYG v4.2 (CC BY-SA 4.0 — confirmed; ShareAlike covers the *data file and its adaptations*, not the app) → brightest ~5,000 stars as a static data file shipped separately with attribution in credits; B−V color index drives true star colors.
@@ -447,10 +448,45 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **Skies:** NASA imagery (public domain; choose insignia-free) and ESA/Hubble imagery (**CC BY 4.0** — visible credit required, no ShareAlike) as backdrops; per-image terms checked at selection time.
 
 ### 10.5 What this does to the plan
-- Q25 moves from *open* to **proposed stack awaiting owner ratification** (§10.1). Ratifying it does not authorize building — it authorizes the three mockups to be specified against it when the owner reaches step 5 of the settlement sequence (§9.8).
+- Q25: **✅ CONDITIONALLY RATIFIED by the owner (2026-10-22)** — the §10.1 stack is ratified *conditional on passing the three-mockup test* under the acceptance criteria defined in §11.2–11.3. The test remains an **open acceptance gate**; the stack is **not implementation-approved**. (Decision log: §11, D-3.)
 - The three-mockup validation (§9.3) gains hard constraints: built under the §10.1 stack, draw-call discipline, on the owner's actual phone.
 - Gate status unchanged: **NOT READY for final architecture or implementation. Ready for the next design iteration** — now with a costed, verified method for the scenery problem.
 
 ---
 
-*End of Exploration 1, Revision 3. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 11. Decisions log + the three-mockup acceptance gate (owner decisions, 2026-10-22)
+
+**Scope of every decision below: the Worlds Vision design phase only. No code, merge, or deployment is authorized by any of them. The design gate remains OPEN.**
+
+### 11.1 Decisions log
+- **D-1 — Fuel (settled 2026-10-22, §9.10):** warp costs fuel; coming home is always free; a slow free drift always exists and, with no fuel, is slower and less entertaining. Fuel governs warp, never access to memories. Q27 (what earns fuel) remains open.
+- **D-2 — Q29, Great Station form (settled 2026-10-22):** **Fictional megastructure** for the Great Station — a designed silhouette delivering the monumental, awe-inspiring presence the vision calls for (EVE is the touchstone, not a copy). The **real NASA ISS model is reserved for the scale-focused space**, where authenticity is the advantage. Rationale (owner's decision, King's dissent in §10.3 aligned): the ISS wins on efficiency but its recognizable real-world identity and thin truss silhouette fight the fiction and the monumentality; in the scale space, "this is real" is precisely the emotional payload, so the ISS earns more there.
+- **D-3 — Q25, scenery technique stack (conditionally ratified 2026-10-22):** the §10.1 stack — seeded palette math, instanced fields, palette-matched fog, dual-layer compositing, HYG stars, baked-in glow — is **ratified conditional on passing the three-mockup test** defined below. Pre-test requirement (owner's): the performance and visual acceptance criteria are documented **before** any test runs (§11.2–11.3). Until test results are reviewed, the stack is a ratified *hypothesis*, **not implementation-approved**.
+
+### 11.2 Mobile performance thresholds (defined pre-test; measured on the owner's phone)
+The mockups run on the owner's actual Android phone, in the browser, using the §10.1 stack. Hard thresholds — a mockup that misses any one of them fails, and the failure goes back to design, not to tuning-by-hope:
+- **Frame rate:** sustained average **≥ 50 fps** and 1%-low **≥ 30 fps** across a continuous 5-minute session per mockup, including a warp transit and (for the station/scale mockup) a full approach sequence.
+- **Hitches:** no single frame stall **> 100 ms** during transit or approach.
+- **Draw calls:** **≤ 200** per scene at the busiest viewpoint (hard fail above 500, the research's outer bound).
+- **Geometry/texture budget:** visible triangles **≤ 750k** at the busiest viewpoint; environment textures ≤ 1K (hero/landmark textures ≤ 2K); backdrop equirect ≤ 2048×1024.
+- **Load:** cold start to first interactive frame **≤ 5 s** on the device, per mockup.
+- **Endurance:** 15-minute soak across all three mockups with **no crash, no out-of-memory kill**, and no thermal collapse (frame rate at minute 15 within 20% of minute 2).
+- **Reduced motion:** each mockup ships its reduced-motion variant in the test build; the variant must hold the same frame-rate thresholds.
+
+### 11.3 Visual acceptance criteria (defined pre-test; owner judges)
+- **V1 — Blind distinctness (hard):** from unlabeled stills (far / mid / near) of each mockup, the owner identifies which space each still belongs to, **3 of 3 mockups correct** — and none is mistaken for the home galaxy.
+- **V2 — Landmark silhouette (hard):** each mockup's landmark reads as a distinct shape at maximum view distance (for the station mockup: unmistakably a monumental structure, not a ship or a planet).
+- **V3 — Scale without artifacts (hard, station/scale mockup):** a recorded approach shows continuous growth of the landmark/sun with **no visible pop-in, flicker, or depth-fighting**.
+- **V4 — Recipe traceability:** every mockup's palette (light, fog, sky) is documented as derived from its seed recipe — listed values, no hand-tuned exceptions. A mockup that only looks right via one-off tweaks fails V4 even if it looks good, because it proves nothing about the *system*.
+- **V5 — Content honesty:** any brain content shown in a mockup is real sample content placed by the space's stated rule (§9.7 template), not decorative fakes implying features that don't exist.
+- **V6 — Owner verdict (hard):** for each mockup the owner records an explicit pass/fail on: *"cool, distinct, and not the home galaxy — a place worth traveling to."* The owner's eye is the final visual authority.
+**Acceptance rule:** the stack passes only if **all §11.2 hard thresholds and V1, V2, V3, V6 pass for all three mockups**. Any failure returns the stack (or the failing technique) to design with the failure recorded — criteria are not renegotiated after results are seen.
+
+### 11.4 Gate status
+**Design gate: OPEN.** It closes only when (a) the three-mockup test results are reviewed against §11.2–11.3, and (b) the remaining design decisions in the §9.8 settlement sequence are settled. Neither the ratifications above nor a future test pass authorizes implementation — build authorization is a separate, later owner decision, and anything touching shared systems still reconciles with the audit program first.
+
+---
+
+*End of Exploration 1, Revision 4. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
