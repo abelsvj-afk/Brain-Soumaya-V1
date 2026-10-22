@@ -266,6 +266,16 @@ function behav(msg){
   const el = document.getElementById('behavOut');
   el.textContent += (el.textContent ? '\n' : '') + '• ' + msg;
 }
+/* ARMED-DEPARTURE POLICY (review 12): while a warp departure is armed (the
+   cancel window), the ONLY live control is Cancel departure. Every other
+   control is inert and says so. Prevention over detection: races are made
+   impossible by the state machine, and the assertions then verify a clean
+   state. Fuel is floored at 0 at every mutation site. */
+function armedBlock(action){
+  if(!departing) return false;
+  behav(action + ' ignored — a departure is armed; only Cancel departure is live during the window.');
+  return true;
+}
 function setFuelOut(){ document.getElementById('fuelOut').textContent = fuel; }
 function setCargoOut(){
   document.getElementById('cargoOut').textContent =
@@ -380,7 +390,7 @@ function tick(){
   // Departure countdown (cancel window) for warp
   if(departing && performance.now() >= departing.at){
     departing = null;
-    fuel -= WARP_COST; setFuelOut();
+    fuel = Math.max(0, fuel - WARP_COST); setFuelOut(); // fuel floor: never below 0
     flyTo('near', 'warp');
     behav('Warp departed — fixture fuel spent: ' + WARP_COST + '.');
   }
@@ -412,7 +422,7 @@ document.getElementById('warpBtn').addEventListener('click', () => {
   if(fuel < WARP_COST){ behav('CHECK zero-fuel: warp refused at fuel ' + fuel + ' (needs ' + WARP_COST + '). Drift and Return home remain available.'); return; }
   if(camAnim){ behav('INCONCLUSIVE: cannot arm a departure during an active transition — the cancel check would be invalid. Wait for the current flight to finish.'); return; }
   if(departing){ behav('A departure is already armed.'); return; }
-  if(reducedMotion()){ fuel -= WARP_COST; setFuelOut(); flyTo('near', 'cut'); behav('RM departure: instant cut, fixture fuel spent ' + WARP_COST + '.'); return; }
+  if(reducedMotion()){ fuel = Math.max(0, fuel - WARP_COST); setFuelOut(); flyTo('near', 'cut'); behav('RM departure: instant cut, fixture fuel spent ' + WARP_COST + '.'); return; }
   departing = {at: performance.now() + 1200,
                snap: {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage,
                       fuel, aboard: cargo.aboard, camAnim: !!camAnim}};
@@ -423,6 +433,7 @@ document.getElementById('driftBtn').addEventListener('click', () => {
   flyTo('near', 'drift'); behav('Drift departure — the free gait (no fuel).');
 });
 document.getElementById('cargoBtn').addEventListener('click', () => {
+  if(armedBlock('Load cargo')) return;
   if(cargo.aboard){ behav('Cargo already aboard.'); return; }
   orb.visible = true;
   if(reducedMotion()){ cargo.aboard = true; setCargoOut(); behav('A1 (RM): cargo aboard instantly — identity unchanged.'); return; }
@@ -445,6 +456,7 @@ document.getElementById('cancelBtn').addEventListener('click', () => {
     ' · cargo state unchanged: ' + cargoOk + ' · no transition was running: ' + idleOk + '.');
 });
 document.getElementById('turnBtn').addEventListener('click', () => {
+  if(armedBlock('Turn back')) return;
   if(!camAnim || !lastDeparture){ behav('Turn back pressed while not in transit — no-op.'); return; }
   const origin = lastDeparture;
   camAnim = null;
@@ -462,6 +474,7 @@ document.getElementById('turnBtn').addEventListener('click', () => {
   behav('Turning back mid-transit…');
 });
 document.getElementById('homeBtn').addEventListener('click', () => {
+  if(armedBlock('Return home')) return;
   const before = fuel;
   flyTo('far', 'drift', () => {
     const fuelOk = fuel === before;
@@ -471,6 +484,7 @@ document.getElementById('homeBtn').addEventListener('click', () => {
   });
 });
 document.getElementById('drainBtn').addEventListener('click', () => {
+  if(armedBlock('Drain fuel')) return;
   fuel = 0; setFuelOut();
   behav('Fixture fuel drained to 0 for the zero-fuel checks — try Warp (refused), then Return home (works, free).');
 });
