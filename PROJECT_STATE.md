@@ -3,6 +3,46 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-22 — ADR-019 bill lifecycle (design settled; gate OPEN)
+
+**Status:** DESIGN — owner settled the four product decisions for design on
+2026-10-22 (financial-os decision **D8**); design recorded on branch
+`design/money-bill-lifecycle` (docs only, base = deploy HEAD `a9ed7c8`).
+**Implementation NOT authorized and NOT started.** Contract of record:
+`docs/ADR-019-bill-lifecycle.md` (summaries in `docs/architecture.md`,
+`docs/financial-os/{requirements,architecture,decisions,user-stories,roadmap}.md`).
+
+- **Why:** the 2026-10-22 Money-tab trace (vs `a9ed7c8`) found the Budget Engine
+  sound but the bill lifecycle misleading in ordinary use — Paid recorded no
+  payment (Safe to Spend *rose* after paying, D1), Remove left occurrences
+  reserving/listing/glowing indefinitely (D2), Edit never rewrote materialized
+  occurrences (old amounts kept reserving; reschedules doubled, D3) — plus
+  corrections D4–D11 (bill-risk due date always NULL, navigation-dependent
+  materialization, Money Sky UTC day, device-zone money dates, pay-stub
+  double-count, future-dated balance effects, unskippable occurrences).
+- **Design:** lifecycle as guarded state transitions (`upcoming → paid|skipped`),
+  each operation one SQLite transaction (Paid = expense + deduction +
+  `paid_expense_id` link, with match-instead-of-duplicate; Remove cancels future
+  occurrences, preserves history, keeps past-due unpaid visible; Edit rewrites
+  eligible future occurrences only; Skip is per-occurrence). Invariants I1–I8,
+  transaction boundaries, and acceptance tests T1–T17 mapped to D1–D11 in the ADR.
+- **Migration:** none required — `paid_expense_id`, `fin_paystub.income_id`, and
+  the `skipped` status already exist unwritten (ADR-019 §8).
+- **Out of scope (separate undecided owner items, ADR-019 §6):** zero-based
+  budgeting vs Wealth, multi-account, the engagement/rewards system, and the
+  documented-but-dead features D12–D16 (status noted only).
+- **Design gate — the owner's design review must confirm before implementation
+  can be authorized:**
+  - [ ] P1–P4 (Paid / Remove / Edit / Skip) as written are the semantics to build.
+  - [ ] Corrections §3.1–§3.7 in scope as written — in particular the
+        scheduled-vs-settled rule (§3.6) and the backfill window (§3.3).
+  - [ ] Transaction boundaries + invariants (§2/§4) accepted as the contract;
+        §5 accepted as the acceptance-test list.
+  - [ ] §6 stays out of scope — no bundling of engagement, zero-based vs Wealth,
+        multi-account, or D12–D16 features.
+  - [ ] No-schema-change premise (§8) stands; any discovered schema need returns
+        to design before implementation proceeds.
+
 ## 2026-10-21 — ADR-018 implementation: global notification cap + per-space TTS cache (Phases B–D)
 
 **Status:** DESIGN Phase A CLOSED (owner gate, 2026-10-21) → IMPLEMENTED on branch

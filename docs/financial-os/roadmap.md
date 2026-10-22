@@ -51,6 +51,21 @@ useful on its own.
     Follows the existing `detect()/run()` + `agent_logs` + rate-limit contract. **Test** the detect logic.
 **Definition of done:** auto-extraction when keyed (degrades cleanly); ≥1 real overspend nudge fires.
 
+## Stage 1d — Bill lifecycle repair (design settled 2026-10-22; ADR-019)
+
+Sequencing rule (owner, 2026-10-22): **fix the bill lifecycle before adding more
+features to the Money tab.** The 2026-10-22 trace found Paid/Remove/Edit each
+silently corrupting the budget's outputs during ordinary use. This stage restores
+trustworthy behavior per **docs/ADR-019-bill-lifecycle.md** (decisions D8):
+atomic paid-with-expense-linkage (+ match), remove-cancels-future, edit-rewrites-
+eligible-future, per-occurrence skip; plus the no-decision corrections (space-tz
+Money Sky day + web relative dates, bill-risk due-date passthrough, bounded
+repeatable backfill, pay-stub deletion safety, scheduled-vs-settled entries,
+visible/stable Upcoming scope) and the ADR-019 §5 acceptance tests. **Status:
+design only — implementation awaits the ADR-019 design gate and a separate owner
+authorization.** Explicitly NOT in this stage: engagement rewards, zero-based
+budgeting vs Wealth, multi-account, and the unbuilt D12–D16 features (ADR-019 §6).
+
 ## Stage 2 — Conversational Q&A + reconcile
 13. **`finance/snapshot.ts`** → aggregated `FinancialSnapshot`; inject into GraphRAG context (like memory
     context). **Redaction per D5** (aggregated only; raw-doc Q&A opt-in, default off).

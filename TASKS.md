@@ -192,6 +192,30 @@ persistence) are 🔴 additive `space_meta`/migration; all the feedback/visual j
 
 ---
 
+## Finance — Bill Lifecycle Repair (ADR-019; design settled 2026-10-22, implementation NOT authorized)
+
+Design of record: `docs/ADR-019-bill-lifecycle.md` (decisions: `docs/financial-os/decisions.md` D8).
+Sequencing: this repair lands before any new Money-tab features. Gate: PROJECT_STATE.md
+"2026-10-22 — ADR-019 bill lifecycle" checklist must be owner-confirmed first.
+
+- [x] **Design:** four lifecycle decisions settled (Paid/Remove/Edit/Skip) + corrections
+      D4–D11 + transaction boundaries/invariants + acceptance tests T1–T17 (branch
+      `design/money-bill-lifecycle`, docs only).
+- [ ] **Paid (atomic):** expense + balance deduction + `paid_expense_id` link in one
+      transaction; match-existing-expense path; failure leaves occurrence unpaid. (T1–T3)
+- [ ] **Remove:** stop recurrence + cancel future occurrences atomically; paid history
+      preserved; past-due unpaid stay visible until resolved. (T4)
+- [ ] **Edit:** rewrite eligible future unpaid occurrences (amount + schedule, no
+      duplicates); past-due unpaid and paid untouched. (T5–T6)
+- [ ] **Skip:** per-occurrence action; stops reserving, leaves Upcoming, history shows
+      skipped, bill unaffected. (T7)
+- [ ] **Corrections:** bill-risk due-date passthrough (T8); bounded repeatable backfill
+      (T9); Money Sky space-tz day (T10); `moneyDates` space-tz (T11); pay-stub delete
+      safety + re-confirm duplicate check (T12); scheduled-vs-settled entries (T13);
+      visible Upcoming truncation + stable scope (T14).
+- [ ] **Invariant tests:** concurrent mark-paid (T15), concurrent edit + pay (T16),
+      double-submit/retry idempotence (T17); full gate (typecheck + both-TZ suites + build).
+
 ## Deferred / Parked
 
 - [x] 🟢 **Audit follow-ups from agy's clumping batch (minor, non-blocking)** — (1) `Graph3D` does a

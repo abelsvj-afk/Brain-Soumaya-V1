@@ -194,6 +194,33 @@ heuristically.
   remain unarmed; this increment configures no secrets and changes no
   unconfigured-state behavior (no VAPID ⇒ zero push rows and zero claims).
 
+## Bill lifecycle — ADR-019 (design settled 2026-10-22, NOT implemented)
+
+- **Contract of record:** `docs/ADR-019-bill-lifecycle.md`; product decisions are
+  financial-os decision **D8**. The Budget Engine's arithmetic is unchanged and
+  out of scope — the repair is the bill-occurrence lifecycle around it.
+- **Paid is a transaction, not a flag:** expense insert + balance deduction +
+  `paid_expense_id` link + guarded status flip commit or roll back together; an
+  existing expense may be matched instead (no duplicate, no second deduction).
+  **Remove** deactivates the bill and cancels its future `upcoming` occurrences in
+  the same transaction (past-due unpaid occurrences remain visible until the user
+  resolves them; paid history is immutable). **Edit** rewrites eligible future
+  unpaid occurrences (amount and schedule, no duplicates under `fin_occ_unique`)
+  in the same transaction as the template update. **Skip** is a guarded
+  per-occurrence transition to the (already-typed) `skipped` status.
+- **Corrections folded in:** Money Sky and web money relative-dates use the
+  space's timezone (no UTC day slice, no device-zone derivation); bill-risk
+  threads the occurrence due date into `bill_due_at` so ADR-018 urgency can
+  engage; occurrence materialization is a bounded (today − 35d … horizon),
+  idempotent backfill independent of navigation; pay-stub deletion reverses its
+  linked income + balance effect atomically and re-confirm is duplicate-checked;
+  future-dated entries are *scheduled* (no balance effect) until they settle
+  exactly once; the Upcoming list's truncation is visible and its scope stable.
+- **No schema change** (ADR-019 §8): `paid_expense_id`, `fin_paystub.income_id`,
+  and the `skipped` status already exist — they were never written.
+- **Out of scope by owner direction:** engagement rewards, zero-based budgeting
+  vs Wealth, multi-account, and the unbuilt D12–D16 features (ADR-019 §6).
+
 ## Ingestion pipeline — `ingestion/pipeline.ts`
 
 ```
