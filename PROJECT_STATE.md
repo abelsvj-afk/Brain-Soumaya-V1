@@ -1,6 +1,6 @@
 ## 2026-10-21 — ADR-018 Phase A design closure
 
-**Current phase:** Phase A design contract closed for owner review; closure amendment (blocker B1 + questions Q1–Q5) applied and independently verified — the verification's single discrepancy (D-1, legacy reminder staleness) is resolved by the owner's drop-as-unverifiable rule, now stated in the ADR; verifier confirmation of that single item is the next gate, then the owner's design-gate decision; implementation not started.  
+**Current phase:** Phase A CLOSED — closure amendment (blocker B1 + questions Q1–Q5) applied and independently verified; the verification's single discrepancy (D-1, legacy reminder staleness) was resolved by the owner's drop-as-unverifiable rule, and the verifier's single-item confirmation of it has completed (verified). By the owner's design-gate decision (2026-10-21), Phase A is closed and ADR-018 is approved as the implementation contract. Implementation (Phases B–D) has not started and is **not yet authorized** — it awaits the owner's separate explicit authorization; merge, deployment, and feature arming (TTS/VAPID) remain unauthorized and on hold.  
 **Branch:** `design/global-notify-cap-space-tts-cache`  
 **Design record:** [ADR-018](./docs/ADR-018-global-notification-cap-and-space-owned-tts-cache.md)  
 **Design-only commit:** `9d34dfec9def3f81590d28c705408724335b7b3b` (an earlier closure commit on this branch — not the branch tip) updated architecture policy; ADR Phase A closure is recorded in the design branch.  
@@ -21,16 +21,15 @@
 **Verification status**
 - Read-only source inspection only. No production code changed; no tests/build/typecheck were run by this Phase A documentation pass.
 - The closure amendment is documentation-only on the design branch; no production code changed and no tests were run for it.
-- The amendment's independent verification verified all items except D-1; the D-1 closure sentence is now added (documentation only, same branch) and awaits the verifier's single-item confirmation.
+- The amendment's independent verification verified all items except D-1; the D-1 closure sentence was added (documentation only, same branch) and the verifier's single-item confirmation of it has completed (verified). Phase A was then closed by the owner's design-gate decision (2026-10-21); ADR-018 is the approved implementation contract. Implementation (Phases B–D) is not yet authorized.
 - No PR opened, no merge, no secrets changed, no feature armed, no deployment.
 
 **Next tasks**
-1. Verifier confirmation of the single D-1 closure (legacy reminder staleness sentence) against the amended ADR; all other amendment items are already verified.
-2. Owner design-gate decision on the amended Phase A design contract.
-3. Only after separate implementation authorization: implement shared global cap and retry freshness.
-4. Implement per-space TTS ownership, migration, and transactional deletion.
-5. Run schema-parity/migration tests, full server/web/typecheck/build gate, concurrency and deletion rollback tests, and stash-and-fail falsification.
-6. Keep TTS and VAPID feature arming on hold until implementation is accepted and post-merge verification passes.
+1. Owner's separate explicit authorization of implementation (Phases B–D). (Completed 2026-10-21: verifier confirmation of the single D-1 closure, and the owner's design-gate decision closing Phase A with ADR-018 approved as the implementation contract.)
+2. Only after that authorization: implement shared global cap and retry freshness.
+3. Implement per-space TTS ownership, migration, and transactional deletion.
+4. Run schema-parity/migration tests, full server/web/typecheck/build gate, concurrency and deletion rollback tests, and stash-and-fail falsification.
+5. Keep TTS and VAPID feature arming on hold until implementation is accepted and post-merge verification passes.
 
 ---
 
