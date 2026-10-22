@@ -5422,7 +5422,11 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
 .fin-afford-result { font-size: 0.92rem; }
 .fin-bills h4 { margin: 8px 0 6px; }
 .fin-bill-occ, .fin-bill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.fin-bill-occ li { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; font-size: 0.9rem; }
+.fin-bill-occ li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.9rem; }
+.fin-bill-occ .fin-bill-name { flex: 1 1 90px; }
+.fin-match-picker { flex-basis: 100%; display: flex; flex-direction: column; gap: 4px; }
+.fin-match-option { justify-content: space-between; text-align: left; }
+.fin-error { flex-basis: 100%; margin: 0; color: #ffb3b3; font-size: 0.82rem; }
 .fin-bill-due { color: var(--muted); font-size: 0.78rem; }
 .fin-bill-list li { display: flex; flex-direction: column; gap: 4px; }
 .fin-bill-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; font-size: 0.9rem; }
@@ -5438,6 +5442,7 @@ button:not(.fab) { transition: transform 0.08s ease, background 0.15s ease, bord
 .fin-draft-keep { display: inline-flex; align-items: center; gap: 4px; }
 .fin-tag-in { color: #7af9c0; font-weight: 700; font-size: 0.7rem; }
 .fin-tag-out { color: #ffb27a; font-weight: 700; font-size: 0.7rem; }
+.fin-tag-scheduled { color: #ffd27a; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .fin-draft-amt { width: 74px; }
 .fin-draft-lbl { flex: 1 1 90px; min-width: 80px; }
 .fin-draft-cat { flex: 1 1 80px; min-width: 70px; }

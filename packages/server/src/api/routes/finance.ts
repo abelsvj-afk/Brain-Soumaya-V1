@@ -7,7 +7,10 @@ import { FinIncomeRepo } from "../../repositories/finIncome.repo.js";
 import { FinExpenseRepo } from "../../repositories/finExpense.repo.js";
 import { FinBillRepo } from "../../repositories/finBill.repo.js";
 import { getBudgetSummary } from "../../finance/summary.js";
-import { ingestPaste, ingestImage, confirmIngest, ingestPaystubText, ingestPaystubImage, confirmPaystub } from "../../finance/ingest.js";
+import { markOccurrencePaidCreate, markOccurrencePaidMatch, removeBill, editBill, skipOccurrence } from "../../finance/billLifecycle.js";
+import { spaceTimezone, localDay } from "../../agent/notify/policy.js";
+import { ingestPaste, ingestImage, confirmIngest, ingestPaystubText, ingestPaystubImage, confirmPaystub, deletePaystub } from "../../finance/ingest.js";
+import { createIncomeEntry, createExpenseEntry, settleDueEntries } from "../../finance/settlement.js";
 import { editIncome, deleteIncome, editExpense, deleteExpense } from "../../finance/mutations.js";
 import { moneySky } from "../../finance/sky.js";
 import { weeklyBillLoadCents, weeklySurplusCents, weeksToAfford } from "../../finance/forecast.js";
@@ -154,10 +157,19 @@ export function financeRoutes(ctx: AppContext): Router {
   // ---- Live budget summary (the home view + AI snapshot source) ----
   r.get("/summary", (_req, res) => {
     const spaceId = spaceOf(res);
-    const account = new FinAccountRepo(ctx.handle, spaceId).getOrCreate();
+    // Budget FIRST (ADR-019 §3.6): getBudgetSummary sweeps settlement as
+    // its opening step, so the account read below is post-sweep — never a
+    // pre-sweep balance in a balance-bearing response.
     const budget = getBudgetSummary(ctx.handle, spaceId);
-    const upcoming = new FinBillRepo(ctx.handle, spaceId).upcoming(20);
-    res.json({ budget, account, upcoming });
+    const account = new FinAccountRepo(ctx.handle, spaceId).getOrCreate();
+    // ADR-019 §3.7 + I1: `upcoming` is the LIVE list (single predicate,
+    // space-local today), display-limited to 20; `upcomingTotal` is the
+    // live total so the UI can state the truncation and true count.
+    const billsRepo = new FinBillRepo(ctx.handle, spaceId);
+    const today = localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
+    const upcoming = billsRepo.upcoming(20, today);
+    const upcomingTotal = billsRepo.upcomingCount(today);
+    res.json({ budget, account, upcoming, upcomingTotal });
   });
 
   // ---- Money-sky: bills as stars with a state (Stage 4) ----
@@ -184,7 +196,13 @@ export function financeRoutes(ctx: AppContext): Router {
   });
 
   // ---- Account (balance / buffer / meta) ----
-  r.get("/account", (_req, res) => res.json(new FinAccountRepo(ctx.handle, spaceOf(res)).getOrCreate()));
+  r.get("/account", (_req, res) => {
+    const spaceId = spaceOf(res);
+    // ADR-019 §3.6: this route returns the balance WITHOUT the summary,
+    // so it runs the settlement sweep first — never a pre-sweep balance.
+    settleDueEntries(ctx.handle, spaceId);
+    res.json(new FinAccountRepo(ctx.handle, spaceId).getOrCreate());
+  });
   r.put("/account/balance", (req, res) => {
     const p = BalanceBody.safeParse(req.body);
     if (!p.success) return bad(res, "Body must be { cents }", p.error.issues);
@@ -208,23 +226,58 @@ export function financeRoutes(ctx: AppContext): Router {
     if (!Number.isInteger(id)) return bad(res, "Invalid id");
     const p = BillPatch.safeParse(req.body);
     if (!p.success) return bad(res, "Invalid patch", p.error.issues);
-    const bill = new FinBillRepo(ctx.handle, spaceOf(res)).update(id, p.data);
+    // ADR-019 P3/§4: Edit is one transaction — bill + eligible-future
+    // occurrences move together (finance/billLifecycle.ts editBill).
+    const bill = editBill(ctx.handle, spaceOf(res), id, p.data);
     return bill ? res.json(bill) : res.status(404).json({ error: "Not found" });
   });
   r.delete("/bills/:id", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return bad(res, "Invalid id");
-    return new FinBillRepo(ctx.handle, spaceOf(res)).deactivate(id)
+    // ADR-019 P2/§4: Remove deactivates the bill AND deletes its
+    // today-and-future upcoming occurrences in one transaction;
+    // past-due unpaid and paid/skipped rows are preserved. 404 only
+    // when the bill doesn't exist.
+    return removeBill(ctx.handle, spaceOf(res), id)
       ? res.json({ ok: true })
       : res.status(404).json({ error: "Not found" });
   });
+  // ADR-019 P1/§4: Mark paid is claim-first and atomic. Optional JSON
+  // body { expenseId } selects the match path (link an existing expense,
+  // no new deduction); absent/invalid body = the create path (record a
+  // new expense, settled at write). The loser of a concurrent claim is
+  // NOT an error: 200 with alreadyPaid (T20).
+  const PaidBody = z.object({ expenseId: z.number().int().positive().optional() }).strict();
   r.post("/bills/occurrence/:id/paid", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return bad(res, "Invalid id");
     const spaceId = spaceOf(res);
-    const bills = new FinBillRepo(ctx.handle, spaceId);
-    if (!bills.markPaid(id)) return res.status(404).json({ error: "Not found" });
-    res.json({ ok: true, budget: getBudgetSummary(ctx.handle, spaceId) });
+    const p = PaidBody.safeParse(req.body ?? {});
+    const expenseId = p.success ? p.data.expenseId : undefined;
+    if (expenseId != null) {
+      const out = markOccurrencePaidMatch(ctx.handle, spaceId, id, expenseId);
+      if (out.kind === "not-found" || out.kind === "expense-not-found") return res.status(404).json({ error: "Not found" });
+      if (out.kind === "expense-linked") return res.status(409).json({ error: "Expense is already linked to an occurrence" });
+      if (out.kind === "already-resolved") return res.status(409).json({ error: "Occurrence already resolved" });
+      if (out.kind === "already-paid") return res.json({ ok: true, alreadyPaid: true, budget: getBudgetSummary(ctx.handle, spaceId) });
+      return res.json({ ok: true, budget: getBudgetSummary(ctx.handle, spaceId) });
+    }
+    const out = markOccurrencePaidCreate(ctx.handle, spaceId, id);
+    if (out.kind === "not-found") return res.status(404).json({ error: "Not found" });
+    if (out.kind === "already-resolved") return res.status(409).json({ error: "Occurrence already resolved" });
+    if (out.kind === "already-paid") return res.json({ ok: true, alreadyPaid: true, budget: getBudgetSummary(ctx.handle, spaceId) });
+    return res.json({ ok: true, budget: getBudgetSummary(ctx.handle, spaceId) });
+  });
+  // ADR-019 P4: Skip is a per-occurrence action — the occurrence stops
+  // reserving and leaves Upcoming; the recurring bill is untouched.
+  r.post("/bills/occurrence/:id/skip", (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return bad(res, "Invalid id");
+    const spaceId = spaceOf(res);
+    const out = skipOccurrence(ctx.handle, spaceId, id);
+    if (out.kind === "not-found") return res.status(404).json({ error: "Not found" });
+    if (out.kind === "already-resolved") return res.json({ ok: true, alreadyResolved: true, budget: getBudgetSummary(ctx.handle, spaceId) });
+    return res.json({ ok: true, budget: getBudgetSummary(ctx.handle, spaceId) });
   });
 
   // ---- Manual income / expense (adjusts the balance going forward, per D3) ----
@@ -234,8 +287,10 @@ export function financeRoutes(ctx: AppContext): Router {
     const spaceId = spaceOf(res);
     const inc = new FinIncomeRepo(ctx.handle, spaceId);
     const duplicate = inc.findDuplicate(p.data.date, p.data.netCents);
-    const income = inc.create(p.data);
-    new FinAccountRepo(ctx.handle, spaceId).adjustBalance(p.data.netCents);
+    // ADR-019 §3.6/§4: row + marker + balance adjustment in one
+    // transaction via the settlement helper (future-dated = scheduled,
+    // no adjustment) — never a separate, separately-failable adjust.
+    const income = createIncomeEntry(ctx.handle, spaceId, p.data);
     res.json({ income, duplicate: !!duplicate, budget: getBudgetSummary(ctx.handle, spaceId) });
   });
   r.post("/expense", (req, res) => {
@@ -243,10 +298,8 @@ export function financeRoutes(ctx: AppContext): Router {
     if (!p.success) return bad(res, "Invalid expense", p.error.issues);
     const spaceId = spaceOf(res);
     const exp = new FinExpenseRepo(ctx.handle, spaceId);
-    const dir = p.data.direction ?? "out";
     const duplicate = exp.findDuplicate(p.data.date, p.data.amountCents, p.data.merchant ?? null);
-    const expense = exp.create(p.data);
-    new FinAccountRepo(ctx.handle, spaceId).adjustBalance(dir === "out" ? -p.data.amountCents : p.data.amountCents);
+    const expense = createExpenseEntry(ctx.handle, spaceId, p.data);
     res.json({ expense, duplicate: !!duplicate, budget: getBudgetSummary(ctx.handle, spaceId) });
   });
   r.get("/income", (_req, res) => res.json(new FinIncomeRepo(ctx.handle, spaceOf(res)).list()));
@@ -411,7 +464,9 @@ export function financeRoutes(ctx: AppContext): Router {
   r.delete("/paystub/:id", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return bad(res, "Invalid id");
-    return new FinPaystubRepo(ctx.handle, spaceOf(res)).remove(id)
+    // ADR-019 §3.5: stub + linked income + its balance reversal are one
+    // atomic unit (finance/ingest.ts deletePaystub), not a bare row delete.
+    return deletePaystub(ctx.handle, spaceOf(res), id)
       ? res.json({ ok: true })
       : res.status(404).json({ error: "Not found" });
   });

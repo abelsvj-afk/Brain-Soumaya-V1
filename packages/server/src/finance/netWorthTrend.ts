@@ -6,6 +6,7 @@ import { FinAssetRepo } from "../repositories/finAsset.repo.js";
 import { FinAssetSnapshotRepo } from "../repositories/finAssetSnapshot.repo.js";
 import { spaceTimezone } from "../agent/notify/policy.js";
 import { localMonthInZone } from "../lib/time.js";
+import { settleDueEntries } from "./settlement.js";
 
 /**
  * Net worth trend (docs/specs/income-net-worth-trend.md) — cash (fin_account) + every
@@ -29,6 +30,9 @@ function monthEnds(months: number, anchorY: number, anchorM: number): string[] {
 }
 
 export function netWorthSeries(handle: DbHandle, spaceId: string = DEFAULT_SPACE, months = 12, now: Date = new Date()): NetWorthPoint[] {
+  // ADR-019 §3.6: this reader takes the balance WITHOUT the summary, so
+  // it runs the settlement sweep first — never from a pre-sweep balance.
+  settleDueEntries(handle, spaceId, now);
   // The current month is the SPACE-local month of `now` (owner rule
   // 2026-10-21), so "this month's point is real, earlier ones are
   // projected" flips on the user's own month boundary.

@@ -15,6 +15,9 @@ export interface FinanceSummary {
   budget: BudgetSummary;
   account: FinAccount;
   upcoming: Array<FinBillOccurrence & { name: string }>;
+  /** ADR-019 §3.7: the LIVE upcoming total before the display limit — the UI
+   *  states the truncation whenever this exceeds `upcoming.length`. */
+  upcomingTotal: number;
 }
 
 async function getJson<T>(path: string): Promise<T | null> {
@@ -97,7 +100,26 @@ export interface BillInput {
 export const createBill = (b: BillInput) => send<FinBill>("/bills", "POST", b);
 export const patchBill = (id: number, patch: Partial<BillInput> & { active?: boolean }) => send<FinBill>(`/bills/${id}`, "PATCH", patch);
 export const deleteBill = (id: number) => send<{ ok: boolean }>(`/bills/${id}`, "DELETE");
-export const markOccurrencePaid = (id: number) => send<{ ok: boolean; budget: BudgetSummary }>(`/bills/occurrence/${id}/paid`, "POST");
+export type MarkOccurrencePaidResult =
+  | { ok: true; budget: BudgetSummary }
+  | { ok: false; error: string };
+/**
+ * ADR-019 P1: mark an occurrence paid. Without `expenseId` the server records
+ * a new expense (claim-first, atomic); with one it MATCHES that existing
+ * expense instead (no new deduction). Goes through sendChecked so a 409
+ * (e.g. the chosen expense is already linked to another occurrence) surfaces
+ * the server's own error text to the row instead of collapsing to null.
+ */
+export const markOccurrencePaid = async (id: number, expenseId?: number): Promise<MarkOccurrencePaidResult> => {
+  const res = await sendChecked<{ ok: boolean; budget: BudgetSummary }>(
+    `/bills/occurrence/${id}/paid`, "POST", expenseId != null ? { expenseId } : {},
+  );
+  return "error" in res ? { ok: false, error: res.error } : { ok: true, budget: res.data.budget };
+};
+/** ADR-019 P4: skip a single occurrence (stops reserving, leaves Upcoming;
+ *  the recurring bill is untouched). A repeat skip answers `alreadyResolved` —
+ *  the caller's refresh is the correct UI outcome either way. */
+export const skipOccurrence = (id: number) => send<{ ok: boolean; alreadyResolved?: boolean; budget: BudgetSummary }>(`/bills/occurrence/${id}/skip`, "POST");
 
 export interface IncomeInput { date: string; netCents: number; grossCents?: number; taxCents?: number; hours?: number; platform?: string }
 export interface ExpenseInput { date: string; amountCents: number; category: string; direction?: ExpenseDirection; merchant?: string }

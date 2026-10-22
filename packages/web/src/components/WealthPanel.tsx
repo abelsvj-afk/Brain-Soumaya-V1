@@ -9,6 +9,7 @@ import type { FinAllocation } from "@brain/shared";
 import { JourneyChips } from "./JourneyChips.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 import { fmtMoneyDateRel, fmtStampRel } from "./moneyDates.js";
+import { getSpaceTimeZone } from "../utils/spaceTimezone.js";
 import { useCountUp } from "../hooks/useCountUp.js";
 import { prefersReducedMotion } from "../graph/motion.js";
 
@@ -301,6 +302,12 @@ function GoalCard({
   /** Galaxy entity detail focus (Phase O): set only on the ONE GoalCard being focused. */
   focusRef?: RefObject<HTMLDivElement | null>;
 }) {
+  // ADR-019 §3.4: this is a money surface — its relative labels follow the
+  // SPACE zone. Read through the synchronous getter at render (the same
+  // derivation pattern ReviewPanel/TimelineView use), NOT a new hook
+  // subscription per card: WealthPanel re-renders on every finance change,
+  // and its usual parent (FinancePanel) owns the zone subscription.
+  const timeZone = getSpaceTimeZone();
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -371,7 +378,7 @@ function GoalCard({
     <div ref={focusRef} className="wealth-goal">
       <div className="wealth-goal-head">
         <strong>{goal.name}</strong>
-        {goal.targetDate && <span className="fin-muted">by {fmtMoneyDateRel(goal.targetDate)}</span>}
+        {goal.targetDate && <span className="fin-muted">by {fmtMoneyDateRel(goal.targetDate, new Date(), timeZone)}</span>}
       </div>
       {goal.visionNodeId != null && (
         <p className="fin-muted" style={{ margin: "2px 0 0" }}>🌅 {visionLabel ?? "Life Vision"}</p>
@@ -443,7 +450,7 @@ function GoalCard({
           {history?.map((a) => (
             <li key={a.id}>
               <span className={a.amountCents >= 0 ? "wealth-in" : "wealth-out"}>{a.amountCents >= 0 ? "+" : ""}{fmt(a.amountCents)}</span>
-              <span className="fin-muted">{fmtStampRel(a.createdAt)}</span>
+              <span className="fin-muted">{fmtStampRel(a.createdAt, new Date(), timeZone)}</span>
               {a.note && <span className="fin-muted">— {a.note}</span>}
             </li>
           ))}
