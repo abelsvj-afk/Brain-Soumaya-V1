@@ -6163,3 +6163,84 @@ button.mindspace-more { cursor: pointer; }
 .cand-preview { font-size: 0.76rem; opacity: 0.85; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 6px 9px; margin: 6px 0; }
 .cand-preview p { margin: 3px 0; }
 .cand-undo, .cand-bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.78rem; padding: 7px 9px; border-radius: 8px; background: rgba(150, 134, 255, 0.12); border: 1px solid rgba(150, 134, 255, 0.3); margin-bottom: 8px; }
+
+/* ── Mobile HUD layout pass (screenshot round 2, 2026-10-21) ─────────────
+   The galaxy HUD had NO phone layout at all: one fixed-pixel ladder tuned
+   at 390×780, squeezed onto every screen (diagnosis §3 — zero breakpoints
+   touched the HUD in ~6,100 lines). This block is the designed phone view:
+   the SAME elements, rearranged under ONE breakpoint — nothing removed.
+   It must stay the LAST block in the file so its overrides win the cascade
+   at equal specificity, and the JS side uses the identical predicate
+   (graph/labelFrame.ts isPhonePortraitViewport: max-width 560, portrait):
+     1. ship-status stack → its low slot (the below-noticing row), capped
+        so it stays in the screen's lower half and off the sun/titles;
+     2. the Views sheet shrinks with it (scrollable by design) so the two
+        never share the band the stack moved into;
+     3. MindSpace legend → a real dock slot right of the FAB column;
+     4. fuel gauge → shorter tube, meta lines beside it, anchored clear
+        of the camera ladder;
+     5. streak ember → a compact chip in the header row (top-right, under
+        the toolbox), out of the mid-left band entirely.
+   (Items 6–7 of the pass — sector titles and the planet-label safe
+   frame — live in Graph3D/sunProximity/labelFrame, not CSS.) */
+@media (max-width: 560px) and (orientation: portrait) {
+  /* 1 — Status stack: the low slot Package B built for the
+     below-noticing state becomes the phone default. 132px cap chosen so
+     the stack's top edge (186 + 132 = 318) stays in the lower half even
+     on a 640px-tall phone; the beacon body still clips first (hint line
+     first) under the cap, per the stack's existing overflow discipline.
+     Width: 62 (its left) + width must clear the right rail (60) with a
+     gap → 100vw − 140, capped at the desktop 340. */
+  .ship-status-stack {
+    bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
+    width: min(calc(100vw - 140px), 340px);
+    max-height: 132px;
+  }
+  /* 2 — Views sheet: bottom-anchored under the Views circle, so capping
+     its height lowers its top edge below the stack's new band
+     (18 + 160 = 178 ≤ 186 − 8). It scrolls; no chip is lost. */
+  .gv-sheet { max-height: 160px; }
+  /* 3 — MindSpace legend: out from behind the recenter FAB (left 14–60,
+     bottom 74–120) into the slot right of the FAB column — the same
+     62 + 6 clearance the status stack uses. Width capped so it wraps
+     upward instead of reaching the right-side "+N more" pill's row. */
+  .mindspace-legend {
+    left: 68px;
+    max-width: calc(100vw - 216px);
+  }
+  /* 4 — Fuel gauge: a grid — icon over an 84px tube, value + the two
+     meta lines in a column BESIDE the tube instead of stacked under it
+     (197px → ~107px overall). Anchored at 34% height so the whole
+     gauge, meta lines included, clears the 🎯/Views band (242–342 from
+     the bottom) at both phone sizes the geometry gate checks; the ±delta
+     pops move right of the new side column. */
+  .fuel-gauge {
+    top: 34%;
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 6px;
+    row-gap: 2px;
+    align-items: center;
+  }
+  .fuel-gauge .fg-ic { grid-column: 1; grid-row: 1; justify-self: center; }
+  .fuel-gauge .fg-tube { grid-column: 1; grid-row: 2 / span 3; height: 84px; justify-self: center; }
+  .fuel-gauge .fg-val { grid-column: 2; grid-row: 2; justify-self: start; }
+  .fuel-gauge .fg-meta { grid-column: 2; grid-row: 3; justify-self: start; }
+  .fuel-gauge .fg-meta.fg-cost { grid-row: 4; }
+  .fuel-gauge .fg-pops { left: 74px; }
+  /* 5 — Streak ember: a compact horizontal chip in the header row,
+     top-right under the toolbox FAB (which ends at top 58) — out of the
+     mid-left band where it painted over scene labels, and clear of the
+     notifications bar (top-left from 90px). The fan-open step-aside rule
+     above still applies to it unchanged. */
+  .streak-ember {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    top: calc(76px + env(safe-area-inset-top, 0px));
+    left: auto;
+    right: calc(14px + env(safe-area-inset-right, 0px));
+  }
+  .streak-ember .se-flame { font-size: 16px; }
+  .streak-ember .se-warn { max-width: none; margin-top: 0; }
+}

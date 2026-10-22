@@ -1,4 +1,5 @@
 import { SUN_RADIUS_MAX } from "./sun.js";
+import { isPhonePortraitViewport } from "./labelFrame.js";
 
 /**
  * Sun-proximity rules for labels, sector titles, and the MANUAL camera
@@ -176,6 +177,55 @@ export interface Vec3Like {
   x: number;
   y: number;
   z: number;
+}
+
+/**
+ * Sector-title boost by viewport (Mobile HUD layout pass, screenshot
+ * round 2 S2 — the owner's settled call: titles SHRINK on phones).
+ *
+ * Today's rule (which this preserves everywhere else): screens narrower
+ * than 760px get a 1.4× boost so zoomed-out sector names stay readable.
+ * On a phone in portrait that boost is exactly what the round-2 shots
+ * show sprawling across the view (~35–40% of the screen width, cut
+ * mid-word at the edges), so phone portrait gets NO boost — 1.0. The
+ * phone predicate is the pass's one breakpoint (labelFrame.ts), shared
+ * with the CSS and the fan so canvas and chrome agree on what a phone
+ * is. Desktop and landscape are byte-identical to today.
+ */
+export function sectorLabelBoost(viewW: number, viewH: number): number {
+  if (isPhonePortraitViewport(viewW, viewH)) return 1;
+  return viewW < 760 ? 1.4 : 1;
+}
+
+/**
+ * Widest share of the viewport a sector title may occupy on a phone
+ * (Mobile HUD layout pass, S2): ~55% of the screen width. With the
+ * phone boost at 1.0 a title's constant map size is ~25% of a portrait
+ * phone's width, so this cap is a CEILING, not the sizing rule — it
+ * binds only if the base texture, fov, or aspect ever conspire to push
+ * a title past the owner's "stops spanning the screen" line.
+ */
+export const SECTOR_TITLE_PHONE_MAX_FRACTION = 0.55;
+
+/**
+ * The largest title scale factor k whose on-screen width stays within
+ * `maxFraction` of the viewport width, for a title of world width
+ * `baseWidthWorld` (its baseScale.x) at camera distance `dist`. Pure
+ * projection math: a sprite of world width W at distance d spans
+ * W / (2·d·tan(hfov/2)) of the screen, and tan(hfov/2) =
+ * tan(vfov/2)·aspect. Returns Infinity for degenerate inputs (the cap
+ * simply doesn't bind) so callers can Math.min unconditionally.
+ */
+export function sectorTitleWidthCapK(
+  baseWidthWorld: number,
+  dist: number,
+  fovDeg: number,
+  aspect: number,
+  maxFraction: number = SECTOR_TITLE_PHONE_MAX_FRACTION,
+): number {
+  const tanH = Math.tan((fovDeg * Math.PI) / 360) * aspect;
+  if (!(baseWidthWorld > 0) || !(dist > 0) || !(tanH > 0)) return Infinity;
+  return (2 * dist * tanH * maxFraction) / baseWidthWorld;
 }
 
 /**

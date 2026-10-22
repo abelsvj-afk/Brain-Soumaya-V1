@@ -8,7 +8,9 @@ import {
   SUN_GLOW_RADIUS,
   clampCameraToSunFloor,
   labelOpacityNearSun,
+  sectorLabelBoost,
   sectorTitleScaleK,
+  sectorTitleWidthCapK,
   sunContrastOpacityFloor,
   sunProximityFade,
 } from "./sunProximity.js";
@@ -200,5 +202,48 @@ describe("clampCameraToSunFloor — the manual camera's gentle corona stop", () 
     const { pos, clamped } = clampCameraToSunFloor({ x: 0, y: 0, z: 0 });
     expect(clamped).toBe(false);
     expect(pos).toEqual({ x: 0, y: 0, z: 0 });
+  });
+});
+
+describe("sectorLabelBoost — phone portrait loses the narrow-screen boost (round 2, S2)", () => {
+  it("phone portrait viewports get 1.0 — titles shrink on phones", () => {
+    expect(sectorLabelBoost(390, 844)).toBe(1);
+    expect(sectorLabelBoost(360, 640)).toBe(1);
+    expect(sectorLabelBoost(560, 900)).toBe(1);
+  });
+  it("everywhere else today's rule is preserved exactly", () => {
+    expect(sectorLabelBoost(700, 900)).toBe(1.4); // narrow but not phone-portrait
+    expect(sectorLabelBoost(700, 390)).toBe(1.4); // narrow landscape: width < 760 rule, unchanged
+    expect(sectorLabelBoost(759, 500)).toBe(1.4);
+    expect(sectorLabelBoost(760, 500)).toBe(1);
+    expect(sectorLabelBoost(1440, 900)).toBe(1);
+  });
+});
+
+describe("sectorTitleWidthCapK — the ~55vw ceiling on phone titles", () => {
+  const FOV = 50; // three.js default; Graph3D overrides only `far`
+  it("a title scaled by the capped k spans exactly the max fraction of the screen", () => {
+    const base = 129.25; // widest title: 470px window × 0.11 world/px × 2.5 sector scale
+    const dist = 3000;
+    const aspect = 390 / 844;
+    const k = sectorTitleWidthCapK(base, dist, FOV, aspect, 0.55);
+    const tanH = Math.tan((FOV * Math.PI) / 360) * aspect;
+    const fraction = (base * k) / (2 * dist * tanH);
+    expect(fraction).toBeCloseTo(0.55, 10);
+  });
+  it("does not bind at the phone's ordinary map size (boost 1.0 ⇒ ~25% of width)", () => {
+    // The uncapped growth rule at dist 6000 gives k = 5; the cap must sit above it.
+    const capK = sectorTitleWidthCapK(129.25, 6000, FOV, 390 / 844);
+    expect(capK).toBeGreaterThan(5);
+  });
+  it("binds when the geometry conspires (wide aspect, huge base) — it is a real ceiling", () => {
+    const capK = sectorTitleWidthCapK(600, 1200, FOV, 0.75);
+    expect(Number.isFinite(capK)).toBe(true);
+    expect(capK).toBeLessThan(1);
+  });
+  it("degenerate inputs return Infinity (the cap simply doesn't bind)", () => {
+    expect(sectorTitleWidthCapK(0, 1000, FOV, 0.5)).toBe(Infinity);
+    expect(sectorTitleWidthCapK(100, 0, FOV, 0.5)).toBe(Infinity);
+    expect(sectorTitleWidthCapK(100, 1000, 0, 0.5)).toBe(Infinity);
   });
 });

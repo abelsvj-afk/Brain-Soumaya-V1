@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { GraphData, GraphEdge, GraphNode } from "@brain/shared";
+import { isPhonePortraitViewport } from "./graph/labelFrame.js";
 import { localDateOfStored, spaceLocalDay } from "./utils/localDay.js";
 import { parseTolerantMs } from "./utils/dueReminders.js";
 import { getSpaceTimeZone } from "./utils/spaceTimezone.js";
@@ -153,10 +154,84 @@ export function mergeGraphData(prev: GraphData, fresh: GraphData): GraphData {
   return { nodes, links };
 }
 
+/**
+ * Focus-fan geometry (Mobile HUD layout pass, screenshot round 2 S3).
+ *
+ * The fan opens UPWARD from the 🎯 cluster (bottom slot
+ * --hud-cam-focus-bottom = 298, asserted against the stylesheet in
+ * HudDock.geometry.test.tsx). With all 7 target slots filled at the
+ * desktop 54px step, the top item's top edge lands at 298 + 7×54 + 46 =
+ * 722px from the bottom — on the owner's phone that is INSIDE the brand
+ * header (shot 1: a fan item sits directly behind the "Soumaya ⏏"
+ * switcher pill). Package B's geometry gate only asserted the fan stays
+ * ON screen; nothing compared it against the header band.
+ *
+ * Phone portrait (the pass's one breakpoint): the step compresses to
+ * 46px (items touch, never overlap), and if the targets still can't
+ * fit between the 🎯 and the header band, the fan FOLDS — the last
+ * visible slot becomes a "more" item that pages through the remaining
+ * targets. Nothing is removed: every target stays reachable, and off
+ * phones the layout is exactly today's (54px step, no fold at any
+ * realistic window height).
+ */
+export const FAN_STEP_DESKTOP = 54;
+export const FAN_STEP_PHONE = 46;
+export const FAN_ITEM_PX = 46; // .fab circle
+export const FAN_CLUSTER_BOTTOM_PX = 298; // --hud-cam-focus-bottom (asserted in the geometry gate)
+export const FAN_HEADER_BAND_PX = 110; // brand header zone at the top that must stay clear
+
+export interface FanLayout {
+  /** Vertical step between fan items at this viewport. */
+  step: number;
+  /** How many fan slots (targets + the fold's "more" item) fit under the header band. */
+  capacity: number;
+  /** True when the targets overflow the capacity and the fan must page. */
+  folded: boolean;
+  /** Targets per page when folded (capacity minus the "more" slot); all targets when not. */
+  pageSize: number;
+  pageCount: number;
+}
+
+export function fanLayout(viewW: number, viewH: number, total: number): FanLayout {
+  if (!isPhonePortraitViewport(viewW, viewH) || total <= 0) {
+    return { step: FAN_STEP_DESKTOP, capacity: Math.max(total, 1), folded: false, pageSize: Math.max(total, 1), pageCount: 1 };
+  }
+  const capacity = Math.max(
+    2, // a folded fan always shows at least one target beside its "more" item
+    Math.floor((viewH - FAN_HEADER_BAND_PX - FAN_CLUSTER_BOTTOM_PX - FAN_ITEM_PX) / FAN_STEP_PHONE),
+  );
+  const folded = total > capacity;
+  const pageSize = folded ? capacity - 1 : total;
+  return {
+    step: FAN_STEP_PHONE,
+    capacity,
+    folded,
+    pageSize,
+    pageCount: folded ? Math.ceil(total / pageSize) : 1,
+  };
+}
+
+/** The window of target indices shown on `page` (clamped into range). */
+export function fanWindow(
+  total: number,
+  layout: FanLayout,
+  page: number,
+): { start: number; count: number; page: number } {
+  const p = Math.min(Math.max(0, page), layout.pageCount - 1);
+  const start = p * layout.pageSize;
+  return { start, count: Math.min(layout.pageSize, total - start), page: p };
+}
+
+/** Top edge (px from the bottom) of the highest fan slot a layout can show. */
+export function fanTopEdge(layout: FanLayout): number {
+  const slots = layout.folded ? layout.capacity : layout.pageSize;
+  return FAN_CLUSTER_BOTTOM_PX + slots * layout.step + FAN_ITEM_PX;
+}
+
 /** Pop-up offset for an item in the focus cluster (stacks upward when open). */
-export function focusItemStyle(index: number, open: boolean): CSSProperties {
+export function focusItemStyle(index: number, open: boolean, stepPx: number = FAN_STEP_DESKTOP): CSSProperties {
   return open
-    ? { transform: `translateY(${-(index + 1) * 54}px)`, opacity: 1, pointerEvents: "auto" }
+    ? { transform: `translateY(${-(index + 1) * stepPx}px)`, opacity: 1, pointerEvents: "auto" }
     : { transform: "translateY(0) scale(0.4)", opacity: 0, pointerEvents: "none" };
 }
 

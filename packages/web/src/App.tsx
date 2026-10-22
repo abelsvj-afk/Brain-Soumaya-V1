@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
@@ -462,6 +462,10 @@ export default function App() {
   const [beaconPulse, setBeaconPulse] = useState(false);
   const prevSatRef = useRef(0);
   const [focusMenuOpen, setFocusMenuOpen] = useState(false);
+  // Which page of focus targets the fan shows when it folds on a short
+  // phone-portrait screen (Mobile HUD pass, S3) — always 0 (the only
+  // page) whenever the fan fits unfolded.
+  const [fanPage, setFanPage] = useState(0);
   const [help, setHelp] = useState(false);
   // The visual legend (🗺️) — auto-shows ONCE per brain so new users learn the
   // galaxy's language, then it's a tap away whenever they forget.
@@ -2340,158 +2344,193 @@ export default function App() {
           </button>
           {/* Game-style focus cluster: one button that pops up the camera targets. */}
           {(() => {
-            let focusIdx = 0;
-            const shipIdx = focusIdx++;
-            const stationIdx = focusIdx++;
-            const fleetIdx = focusIdx++; // her fleet is always aloft (escort + scout + defender)
-            const satelliteIdx = satelliteCount > 0 ? focusIdx++ : -1;
-            const visitorIdx = visitorCount > 0 ? focusIdx++ : -1;
-            const fig1Idx = (showFocusFig1 && equippedFig1 !== "none") ? focusIdx++ : -1;
-            const fig2Idx = (showFocusFig2 && equippedFig2 !== "none") ? focusIdx++ : -1;
-
+            // Mobile HUD pass (round 2, S3): the fan's targets are a list
+            // now so the fan can FOLD on short phone-portrait screens —
+            // fanLayout compresses the step and, when all targets still
+            // can't fit under the brand-header band, pages them behind a
+            // "more" item. Desktop and tall phones render every target in
+            // one page, exactly as before. Order is unchanged: ship,
+            // station, fleet, then the conditional beacon/visitor/figs.
+            const fanVw = typeof window !== "undefined" ? window.innerWidth : 1440;
+            const fanVh = typeof window !== "undefined" ? window.innerHeight : 900;
+            type FanTarget = {
+              key: string;
+              className: string;
+              ariaLabel: string;
+              title: string;
+              icon: string;
+              onClick: () => void;
+            };
+            const targets: FanTarget[] = [
+              {
+                key: "ship",
+                className: `fab focus-item ${followShip ? "on" : ""}`,
+                ariaLabel: `Focus ${space?.name ?? "Soumaya"}`,
+                title: `Focus ${space?.name ?? "Soumaya"}'s ship`,
+                icon: "🛸",
+                onClick: () => {
+                  setLoreDismissed(false);
+                  setFollowShip(graphRef.current?.toggleFollowShip() ?? false);
+                  setFollowStation(false);
+                  setFollowSatellite(false);
+                  setFollowVisitor(false);
+                  setFollowFig1(false);
+                  setFollowFig2(false);
+                  setFocusMenuOpen(false);
+                  setFanPage(0);
+                },
+              },
+              {
+                key: "station",
+                className: `fab focus-item ${followStation ? "on" : ""}`,
+                ariaLabel: "Focus space station",
+                title: "Focus the space station",
+                icon: "🌐",
+                onClick: () => {
+                  setLoreDismissed(false);
+                  setFollowStation(graphRef.current?.toggleFollowStation() ?? false);
+                  setFollowShip(false);
+                  setFollowSatellite(false);
+                  setFollowVisitor(false);
+                  setFollowFig1(false);
+                  setFollowFig2(false);
+                  setFocusMenuOpen(false);
+                  setFanPage(0);
+                },
+              },
+              {
+                key: "fleet",
+                className: `fab focus-item ${followFleet ? "on" : ""}`,
+                ariaLabel: "Focus the fleet",
+                title: "Jump to her fleet (Escort · Scout · Defender · Tenders)",
+                icon: "🛩️",
+                onClick: () => {
+                  setLoreDismissed(false);
+                  const on = graphRef.current?.cycleFollowFleet() ?? false;
+                  setFollowFleet(on);
+                  setFollowShip(false);
+                  setFollowStation(false);
+                  setFollowSatellite(false);
+                  setFollowVisitor(false);
+                  setFollowFig1(false);
+                  setFollowFig2(false);
+                },
+              },
+            ];
+            if (satelliteCount > 0) {
+              targets.push({
+                key: "satellite",
+                className: `fab focus-item beacon-item ${followSatellite ? "on" : ""}`,
+                ariaLabel: "Jump to an Aura beacon",
+                title: `Jump to a beacon (${satelliteCount} deployed over cooling memories)`,
+                icon: "🛰️",
+                onClick: () => {
+                  const on = graphRef.current?.cycleFollowSatellite() ?? false;
+                  setFollowSatellite(on);
+                  setFollowShip(false);
+                  setFollowStation(false);
+                  setFollowVisitor(false);
+                  setFollowFig1(false);
+                  setFollowFig2(false);
+                },
+              });
+            }
+            if (visitorCount > 0) {
+              targets.push({
+                key: "visitor",
+                className: `fab focus-item visitor-item ${followVisitor ? "on" : ""}`,
+                ariaLabel: "Jump to a visitor",
+                title: `Jump to a visitor (${visitorCount} drifting in)`,
+                icon: "👽",
+                onClick: () => {
+                  const on = graphRef.current?.cycleFollowVisitor() ?? false;
+                  setFollowVisitor(on);
+                  setFollowShip(false);
+                  setFollowStation(false);
+                  setFollowSatellite(false);
+                  setFollowFig1(false);
+                  setFollowFig2(false);
+                },
+              });
+            }
+            if (showFocusFig1 && equippedFig1 !== "none") {
+              targets.push({
+                key: "fig1",
+                className: `fab focus-item ${followFig1 ? "on" : ""}`,
+                ariaLabel: `Focus ${getFigurineLabel(equippedFig1)}`,
+                title: `Focus ${getFigurineLabel(equippedFig1)}`,
+                icon: getFigurineIcon(equippedFig1),
+                onClick: () => {
+                  setLoreDismissed(false);
+                  const on = graphRef.current?.toggleFollowFig1() ?? false;
+                  setFollowFig1(on);
+                  setFollowShip(false);
+                  setFollowStation(false);
+                  setFollowSatellite(false);
+                  setFollowVisitor(false);
+                  setFollowFig2(false);
+                  setFocusMenuOpen(false);
+                  setFanPage(0);
+                },
+              });
+            }
+            if (showFocusFig2 && equippedFig2 !== "none") {
+              targets.push({
+                key: "fig2",
+                className: `fab focus-item ${followFig2 ? "on" : ""}`,
+                ariaLabel: `Focus ${getFigurineLabel(equippedFig2)}`,
+                title: `Focus ${getFigurineLabel(equippedFig2)}`,
+                icon: getFigurineIcon(equippedFig2),
+                onClick: () => {
+                  setLoreDismissed(false);
+                  const on = graphRef.current?.toggleFollowFig2() ?? false;
+                  setFollowFig2(on);
+                  setFollowShip(false);
+                  setFollowStation(false);
+                  setFollowSatellite(false);
+                  setFollowVisitor(false);
+                  setFollowFig1(false);
+                  setFocusMenuOpen(false);
+                  setFanPage(0);
+                },
+              });
+            }
+            const layout = fanLayout(fanVw, fanVh, targets.length);
+            const win = fanWindow(targets.length, layout, fanPage);
+            const visible = targets.slice(win.start, win.start + win.count);
             return (
               <div className={`focus-cluster ${focusMenuOpen ? "open" : ""}`}>
-                <button
-                  className={`fab focus-item ${followShip ? "on" : ""}`}
-                  style={focusItemStyle(shipIdx, focusMenuOpen)}
-                  onClick={() => {
-                    setLoreDismissed(false);
-                    setFollowShip(graphRef.current?.toggleFollowShip() ?? false);
-                    setFollowStation(false);
-                    setFollowSatellite(false);
-                    setFollowVisitor(false);
-                    setFollowFig1(false);
-                    setFollowFig2(false);
-                    setFocusMenuOpen(false);
-                  }}
-                  aria-label={`Focus ${space?.name ?? "Soumaya"}`}
-                  title={`Focus ${space?.name ?? "Soumaya"}'s ship`}
-                >
-                  🛸
-                </button>
-                <button
-                  className={`fab focus-item ${followStation ? "on" : ""}`}
-                  style={focusItemStyle(stationIdx, focusMenuOpen)}
-                  onClick={() => {
-                    setLoreDismissed(false);
-                    setFollowStation(graphRef.current?.toggleFollowStation() ?? false);
-                    setFollowShip(false);
-                    setFollowSatellite(false);
-                    setFollowVisitor(false);
-                    setFollowFig1(false);
-                    setFollowFig2(false);
-                    setFocusMenuOpen(false);
-                  }}
-                  aria-label="Focus space station"
-                  title="Focus the space station"
-                >
-                  🌐
-                </button>
-                <button
-                  className={`fab focus-item ${followFleet ? "on" : ""}`}
-                  style={focusItemStyle(fleetIdx, focusMenuOpen)}
-                  onClick={() => {
-                    setLoreDismissed(false);
-                    const on = graphRef.current?.cycleFollowFleet() ?? false;
-                    setFollowFleet(on);
-                    setFollowShip(false);
-                    setFollowStation(false);
-                    setFollowSatellite(false);
-                    setFollowVisitor(false);
-                    setFollowFig1(false);
-                    setFollowFig2(false);
-                  }}
-                  aria-label="Focus the fleet"
-                  title="Jump to her fleet (Escort · Scout · Defender · Tenders)"
-                >
-                  🛩️
-                </button>
-                {satelliteIdx >= 0 && (
+                {visible.map((t, i) => (
                   <button
-                    className={`fab focus-item beacon-item ${followSatellite ? "on" : ""}`}
-                    style={focusItemStyle(satelliteIdx, focusMenuOpen)}
-                    onClick={() => {
-                      setLoreDismissed(false);
-                      const on = graphRef.current?.cycleFollowSatellite() ?? false;
-                      setFollowSatellite(on);
-                      setFollowShip(false);
-                      setFollowStation(false);
-                      setFollowVisitor(false);
-                      setFollowFig1(false);
-                      setFollowFig2(false);
-                    }}
-                    aria-label="Jump to an Aura beacon"
-                    title={`Jump to a beacon (${satelliteCount} deployed over cooling memories)`}
+                    key={t.key}
+                    className={t.className}
+                    style={focusItemStyle(i, focusMenuOpen, layout.step)}
+                    onClick={t.onClick}
+                    aria-label={t.ariaLabel}
+                    title={t.title}
                   >
-                    🛰️
+                    {t.icon}
                   </button>
-                )}
-                {visitorIdx >= 0 && (
+                ))}
+                {layout.folded && (
                   <button
-                    className={`fab focus-item visitor-item ${followVisitor ? "on" : ""}`}
-                    style={focusItemStyle(visitorIdx, focusMenuOpen)}
-                    onClick={() => {
-                      const on = graphRef.current?.cycleFollowVisitor() ?? false;
-                      setFollowVisitor(on);
-                      setFollowShip(false);
-                      setFollowStation(false);
-                      setFollowSatellite(false);
-                      setFollowFig1(false);
-                      setFollowFig2(false);
-                    }}
-                    aria-label="Jump to a visitor"
-                    title={`Jump to a visitor (${visitorCount} drifting in)`}
+                    className="fab focus-item fan-more"
+                    style={focusItemStyle(visible.length, focusMenuOpen, layout.step)}
+                    onClick={() => setFanPage((p) => (p + 1) % layout.pageCount)}
+                    aria-label={`More focus targets (page ${win.page + 1} of ${layout.pageCount})`}
+                    title="More focus targets"
                   >
-                    👽
-                  </button>
-                )}
-                {fig1Idx >= 0 && (
-                  <button
-                    className={`fab focus-item ${followFig1 ? "on" : ""}`}
-                    style={focusItemStyle(fig1Idx, focusMenuOpen)}
-                    onClick={() => {
-                      setLoreDismissed(false);
-                      const on = graphRef.current?.toggleFollowFig1() ?? false;
-                      setFollowFig1(on);
-                      setFollowShip(false);
-                      setFollowStation(false);
-                      setFollowSatellite(false);
-                      setFollowVisitor(false);
-                      setFollowFig2(false);
-                      setFocusMenuOpen(false);
-                    }}
-                    aria-label={`Focus ${getFigurineLabel(equippedFig1)}`}
-                    title={`Focus ${getFigurineLabel(equippedFig1)}`}
-                  >
-                    {getFigurineIcon(equippedFig1)}
-                  </button>
-                )}
-                {fig2Idx >= 0 && (
-                  <button
-                    className={`fab focus-item ${followFig2 ? "on" : ""}`}
-                    style={focusItemStyle(fig2Idx, focusMenuOpen)}
-                    onClick={() => {
-                      setLoreDismissed(false);
-                      const on = graphRef.current?.toggleFollowFig2() ?? false;
-                      setFollowFig2(on);
-                      setFollowShip(false);
-                      setFollowStation(false);
-                      setFollowSatellite(false);
-                      setFollowVisitor(false);
-                      setFollowFig1(false);
-                      setFocusMenuOpen(false);
-                    }}
-                    aria-label={`Focus ${getFigurineLabel(equippedFig2)}`}
-                    title={`Focus ${getFigurineLabel(equippedFig2)}`}
-                  >
-                    {getFigurineIcon(equippedFig2)}
+                    ⋯
                   </button>
                 )}
                 <button
                   className={`fab focus-main ${focusMenuOpen ? "active" : ""} ${
                     (followShip || followStation || followSatellite || followVisitor || followFig1 || followFig2) && !focusMenuOpen ? "on" : ""
                   } ${beaconPulse ? "pulse" : ""}`}
-                  onClick={() => setFocusMenuOpen((o) => !o)}
+                  onClick={() => {
+                    setFocusMenuOpen((o) => !o);
+                    setFanPage(0);
+                  }}
                   aria-label="Camera focus targets"
                   title="Focus targets (ship · station · beacons · figurines)"
                 >
