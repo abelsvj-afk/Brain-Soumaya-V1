@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 14 — ChatGPT's review of §18 absorbed: step-5 governing principle (prove claims, one universe, no lowered bars); **cohesion itself tested** in the blind review; session script gains **travel-guarantee checks** (return/identity, cancel, turn-back, zero-fuel return); failure-diagnosis taxonomy; recipe minimum contents. Q-V1–Q-V4 await the owner's settlement. Record: `chatgpt-review-5-2026-10-22.md`. **Design gate: OPEN.**
+**Revision:** 15 — Step 5 **settled and closed** by the owner (D-18–D-21). §19 opens step 6 (architecture & roadmap): the worlds as a layer on the brain, component responsibilities, a five-phase gated roadmap, the reconciliation register, and the explicit path to a closable design gate. Steps 1–5 closed. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -478,6 +478,10 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-15 — Proposal cadence (settled 2026-10-22, as recommended):** proposals are **batched into a calm review moment** — no interruptions, no urgency, no approval from silence; approve / edit / reject / defer; under cap pressure they wait quietly, never discarded, never forced (§17 M1).
 - **D-16 — Undo horizon (settled 2026-10-22, as recommended):** **no time-based permanence**; undo works through **dependency-aware compensating entries** — never a blind snapshot restore, never a silent overwrite of newer work; conflicts are explained and resolved by the owner (§17 M1).
 - **D-17 — The log's home (settled 2026-10-22, as recommended):** **both doors, one record** — on-demand explanations at the point of use plus a browsable "World Changes" view over the same append-only log; the view is a reference/control surface, not a notification stream (§17 M6). **Settlement step 4 is CLOSED** (M1–M6 as revised in Rev 12, D-14–D-17).
+- **D-18 — Distinct / one universe (settled 2026-10-22, as recommended):** distinctness lives in each world's palette, composition, silhouette, lighting, and recipe; cohesion lives in what travels and recurs (ship, gates, UI voice, memory identity, carry/place grammar) — and **cohesion is tested in the blind review** alongside distinctness, never assumed and never bought by making worlds look alike (§18 V4).
+- **D-19 — Mockup build order (settled 2026-10-22, as recommended):** **Station → Growing Place → Deep Past**; a failed mockup **stops the sequence** and is diagnosed (stack / recipe / animation load / implementation) before anything proceeds; thresholds are never lowered to obtain a pass (§18 V3).
+- **D-20 — Session script (settled 2026-10-22, as recommended):** the §18 V2 script stands — shared core, signature sequence per mockup, **travel-guarantee checks included** (return + identity/home verification, cancelled departure, mid-transit turn-back, zero-fuel free return in the harness), behavioral results recorded separately from the visual/performance gates; reduced-motion runs held to the same bar.
+- **D-21 — Recipe-first (settled 2026-10-22, as recommended):** **all three environment recipes are settled on paper before any mockup build is authorized**, each carrying the §18 minimum contents; recipes are the traceability reference and may be revised only through this design process. **Settlement step 5 is CLOSED.** Closing step 5 does **not** authorize mockup construction (§18).
 
 **Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
 
@@ -746,7 +750,7 @@ Each mockup is specified by its **environment recipe** (§9.7: Identity / Spatia
 
 **V5 — Placeholder honesty.** Mockups use the §10 verified free assets and procedural generation only; the ISS does **not** appear (reserved to the Scale Space, D-2 — not in the trio). Anything in a mockup that could not ship as-is is listed in its record, so a passing mockup never smuggles in an unshippable beauty (V5 content honesty, §11.3).
 
-**Open for the owner in step 5** *(King's leans and ChatGPT's recommendations aligned; the owner settles)*:
+**Step 5 questions — ✅ SETTLED by the owner (2026-10-22, all four as recommended; D-18–D-21). Step 5 is CLOSED.** *(The recommendations as recorded before settlement:)*
 - **Q-V1** The distinct/cohesive balance (V4): distinctness in the worlds, cohesion in what travels — right split, or should the worlds share more visual DNA? *Both recommend: the split as written, with cohesion itself tested in the blind review (V4), not assumed.*
 - **Q-V2** Build order (V3): Station first, or a different order? *Both recommend: Station → Growing Place → Deep Past, failed mockup stops the sequence, failure diagnosed (stack / recipe / animation load / implementation) before any next step.*
 - **Q-V3** The session script (V2): does the expanded script — now with return-navigation, cancel, turn-back, and zero-fuel checks — capture the guarantees that matter, or is a leg still missing?
@@ -754,4 +758,40 @@ Each mockup is specified by its **environment recipe** (§9.7: Identity / Spatia
 
 ---
 
-*End of Exploration 1, Revision 14. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 19. Settlement step 6 — architecture & roadmap (King's proposal, owner settles)
+
+The last step: how the settled design maps onto systems, in what order it could ever be built, and what stands between here and a closable design gate. This is **design-level architecture** — responsibilities and boundaries, not code design. Nothing here authorizes implementation; every phase below ends at an owner gate, and each phase's start needs its own authorization. Proposal only.
+
+**A1 — The worlds are a layer on the brain, never a second brain.** The existing app remains the system of record: canonical memories, their content, and direct access live there (§13 P1; D-1's access guarantee). The worlds layer adds four things and owns nothing else: **surfacing** (which canonical memories appear where, under P3/P4/P7), **travel** (routes, gates, gaits, the ship), **world state** (the append-only transition log, anchors, discovered gates — §17), and **presentation** (recipes, rendering, animation — §10/§14/§18). If the worlds layer vanished, the brain would lose nothing but scenery.
+
+**A2 — Component responsibilities (design-level).**
+- **Space registry** — the recipes (§18), roster, and per-space rules as *data the design owns*: adding a space is authoring a recipe, not inventing a subsystem.
+- **Surfacing engine** — applies P3's rules, P4's invariant, and P7's tiers to decide every appearance; the single place "why is this here?" is answered from (P6).
+- **Travel system** — routes and topology (N1), gaits and fuel interface (N3/D-1), the three travel acts (N3), discovery state (N4).
+- **World-change rail** — proposals, the append-only log, dependency-aware undo (§17); deliberately mirrors the app's existing approval patterns rather than inventing a second approval philosophy. **[RECONCILE]** with the repo chat's approval work (A4/`pending_approvals`).
+- **Ship agent** — the fenced toolset (§16): flight and proposals only; every world-affecting act exits through the rail or the travel system, never around them.
+- **Renderer** — one shared rendering system, per-space recipes (§9.7/§10.1), held to §11 budgets and the Animation Gate (§14).
+
+**A3 — Roadmap (phases, each separately authorized, each ending at an owner gate).**
+- **Phase 0 — Recipes on paper.** The three trio recipes written to §18's minimum contents and settled (D-21). *Pure design; this exploration's own continuation.*
+- **Phase 1 — The mockup trio.** Build + measure per §18 (needs its own authorization). Ends with the owner's §11 verdicts and the D-3 stack decision: ratified, revised, or rejected.
+- **Phase 2 — Travel skeleton + the Great Station.** Home ↔ Station, gates, both gaits, discovery, route plotting — with the Station as the first real space. Surfacing limited to Station rules (journeys, not memories, D-5).
+- **Phase 3 — One memory-bearing space at a time**, in roster order after the Station: Growing Place, Deep Past (with Chronicle guided mode), People, Scale Space, Quiet/Archive last (D-4). Each space brings its surfacing rules, its animation slice, and its rail integration *as its own gated increment*.
+- **Phase 4 — The mutating world.** The rail, the log and its two doors, the ship's proposal tools (§16) — layered in once the spaces they govern exist. (The rail's *design* is settled at §17; its build waits for things worth changing.)
+Sequencing within phases, and any merging of phases, is the owner's call at each gate.
+
+**A4 — Reconciliation register (shared systems; worlds work reconciles before building on them).** Fuel economy — **Q27 (what earns fuel) is still open** and [RECONCILE] with the audit program's gauge/quests work · Notification cap & quiet rules — proposal cadence (D-15) and `propose_noticing` silence ride the shared cap · Chronicle — the guided mode consumes chapter data the core owns · Approval machinery — the rail (A2) mirrors A4's patterns · Renderer performance — the home galaxy's own perf history in the repo chat informs budgets, and worlds rendering must not regress it. No worlds phase builds on a shared system before its reconciliation is recorded.
+
+**A5 — The path to a closable design gate.** Per the standing definition (Rev 4): the design gate closes when **mockup results are reviewed** *and* the settlement sequence's decisions are settled. So after step 6: steps settled (1–6) → Phase 0 recipes → Phase 1 mockups (separate authorization) → results reviewed → **owner closes the design gate** → only then does implementation planning for real spaces begin. Open by design until then: Q27, the D-13 sun decision (evidence arrives with the Station mockup), and the per-space animation inventories' completion (§14.4).
+
+**Open for the owner in step 6:**
+- **Q-A1** Roadmap shape (A3): phases as proposed — or a different first real increment after the Station?
+- **Q-A2** Space order within Phase 3 (Growing → Deep Past → People → Scale → Quiet): right order? (Quiet last is settled, D-4; the middle three are King's proposal.)
+- **Q-A3** The single-user assumption: everything designed so far is one person's brain, privately. Confirm that stands as the architecture's assumption (any multi-user future would be a new design front, not a retrofit).
+- **Q-A4** Q27 (what earns fuel): settle it in step 6, or explicitly defer it to Phase 2 planning with its [RECONCILE] flag? *King's lean: defer — it depends on the audit program's economy work, and nothing before Phase 2 spends it.*
+
+---
+
+*End of Exploration 1, Revision 15. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
