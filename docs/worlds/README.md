@@ -29,6 +29,7 @@
 21. **`chatgpt-review-12-2026-10-22.md`** — the record of ChatGPT's Revision 29 review (verdict UNRESOLVED) with the final code-level disposition: an armed-departure policy enforced across all controls (only Cancel live during the window) and fuel floored at 0. The code-level list is closed; remaining Station acceptance work is device-side only.
 22. **`chatgpt-review-13-2026-10-22.md`** — the record of ChatGPT's Revision 30 review: Review 12's fix verified closed; one added caution (frame-count animation timing) fixed by converting camera/cargo animation to measured elapsed time. No known code-level items remain.
 23. **`chatgpt-review-14-2026-10-22.md`** — the verification closure of the mockup review series: the reviewer inspected the Rev 31 commit itself (timing fix correct; the 100 ms-cap stall-stretch behavior recorded as a grading note) — **no new code-level blocker**. Next step is the owner's phone evidence run; Growing Place stays parked; V6 is the owner's alone.
+24. **`chatgpt-review-15-2026-10-22.md`** + **`phone-run-sheet-station.md`** — Review 15 independently verified the Rev 32 commit (scene byte-identical to Rev 31; closeout, not acceptance) and fixed the **acceptance checklist** as the grading frame; the run sheet turns that checklist into one guided phone session (setup → behavior → 300 s → soak → reduced motion → D-13 stills + approach recording → send-back list).
 
 ## The most important instruction
 
