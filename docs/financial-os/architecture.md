@@ -116,7 +116,10 @@ Pure functions in `finance/budget.ts`, no LLM:
 
 ```
 reserved(now, nextIncomeDate)  = Σ occurrence.amount_cents for unpaid fin_bill_occurrence
-                                   with due_date < nextIncomeDate
+                                   with due_date <= nextIncomeDate
+                                   (corrected 2026-10-22 per ADR-019 §9: the engine's
+                                   `<=` — a bill due ON payday is reserved — is the
+                                   designed behavior; the earlier `<` here was stale)
 safeToSpend                    = account.balance_cents − reserved − account.buffer_cents
 shortfall                      = max(0, reserved + buffer − balance)   // shown explicitly if > 0
 weekEarned                     = Σ fin_income.net_cents in [weekStart, now]
@@ -127,6 +130,41 @@ weekEarned                     = Σ fin_income.net_cents in [weekStart, now]
 - The engine returns a fully **itemized** result (each reserved line) so the UI shows the Rent/Insurance/
   Car/Phone breakdown and the AI can cite it. Recomputed on every income/expense/bill change (cheap;
   it's sums over small per-space sets).
+
+## 4.1 Bill occurrence lifecycle (ADR-019, design settled 2026-10-22)
+
+The occurrence lifecycle is specified by **docs/ADR-019-bill-lifecycle.md** (owner
+decisions D8 in decisions.md). Summary of the contract this architecture must honor:
+
+- **State machine:** `upcoming → paid | skipped`, terminal states immutable.
+  Eligibility is one rule (ADR-019 I1): an occurrence is *live* iff `upcoming`
+  and (bill active **or** past-due unpaid); it *reserves* iff live and within
+  the horizon. The same `live` predicate governs Upcoming and the Money Sky.
+- **Every lifecycle operation is one SQLite transaction** spanning all of its
+  writes (expense insert + balance adjustment + occurrence flip for Paid; template
+  deactivation + future-occurrence cancellation for Remove; template update +
+  eligible-occurrence rewrite for Edit; stub + linked income + balance reversal
+  for pay-stub deletion). Balance adjustments go through `FinAccountRepo` **inside**
+  the justifying transaction — never as a separate call.
+- **Status flips are guarded and asserted** (`WHERE status = 'upcoming'`, exactly
+  one row or the transaction aborts), and Mark-paid claims the occurrence
+  *before* creating anything — so concurrent or retried operations admit
+  exactly one winner, losers write nothing, and retries converge idempotently
+  (ADR-019 §4).
+- **Materialization is a defined step,** not a read side effect: bounded window
+  (today − 35d … budget horizon), idempotent under the `fin_occ_unique` index,
+  triggered independently of which screens were visited.
+- **Two calendars are banned:** all user-facing money day boundaries (summary,
+  Money Sky, web relative dates) use the space's configured timezone.
+- **Scheduled vs settled:** future-dated income/expense rows do not touch the
+  balance until their date arrives, then settle exactly once — proven by the
+  durable `balance_applied_at` marker, the sole authority on applied-ness;
+  edits and deletes key their balance effects to the marker, never to date
+  re-derivation (ADR-019 §3.6, I9).
+- **One additive migration** is required (ADR-019 §8 as revised by R1):
+  `balance_applied_at` on `fin_income`/`fin_expense`, migrateSchema-only,
+  PRAGMA-guarded, legacy rows backfilled as applied. `paid_expense_id`,
+  `fin_paystub.income_id`, and the `skipped` status value already exist.
 
 ## 5. Proactive coaching (tool-router, Stage 1)
 

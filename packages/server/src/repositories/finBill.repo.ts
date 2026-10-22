@@ -99,22 +99,76 @@ export class FinBillRepo {
     for (const b of this.list()) this.materialize(b.id, from, horizon);
   }
 
-  /** Unpaid, upcoming occurrences with due_date <= `through` (ISO), with the bill name joined. */
-  unpaidThrough(through: string): Array<FinBillOccurrence & { name: string }> {
+  /**
+   * ADR-019 I1 — THE single live predicate, shared by every consumer
+   * (Reserved via unpaidThrough, Upcoming via upcoming/upcomingCount, and
+   * the Money Sky via upcoming). An occurrence is live iff
+   * `status = 'upcoming'` AND (its bill is active OR it is past-due unpaid:
+   * `due_date < today`, space-local). No consumer may apply a different
+   * eligibility rule. `today` is the caller's space-local day; the default
+   * (UTC day) exists only for legacy callers that have no space context —
+   * every production path passes its space-local today explicitly.
+   */
+  private static liveCondition = `(b.active = 1 OR o.due_date < ?)`;
+
+  /** Unpaid occurrences that are LIVE (I1) and due on/before `through` (ISO),
+   *  with the bill name joined. A past-due unpaid occurrence always satisfies
+   *  the horizon test (I1): the production horizon (the next-income date,
+   *  estimateNextIncomeDate) is never before `today`, so every past-due live
+   *  occurrence (due_date < today <= through) is included by the
+   *  `due_date <= through` test alone. */
+  unpaidThrough(through: string, today: string = toDay(new Date())): Array<FinBillOccurrence & { name: string }> {
     const rows = this.handle.sqlite
       .prepare(`SELECT o.*, b.name AS name FROM fin_bill_occurrence o JOIN fin_bill b ON b.id = o.bill_id
-                WHERE o.space_id = ? AND o.status = 'upcoming' AND o.due_date <= ? ORDER BY o.due_date`)
-      .all(this.spaceId, through.slice(0, 10)) as any[];
+                WHERE o.space_id = ? AND o.status = 'upcoming' AND ${FinBillRepo.liveCondition}
+                  AND o.due_date <= ? ORDER BY o.due_date`)
+      .all(this.spaceId, today.slice(0, 10), through.slice(0, 10)) as any[];
     return rows.map((r) => ({ ...this.mapOcc(r), name: r.name }));
   }
 
-  /** All upcoming (unpaid) occurrences, name-joined, ordered by due date. */
-  upcoming(limit = 100): Array<FinBillOccurrence & { name: string }> {
+  /** All LIVE (I1) upcoming occurrences, name-joined, ordered by due date. */
+  upcoming(limit = 100, today: string = toDay(new Date())): Array<FinBillOccurrence & { name: string }> {
     const rows = this.handle.sqlite
       .prepare(`SELECT o.*, b.name AS name FROM fin_bill_occurrence o JOIN fin_bill b ON b.id = o.bill_id
-                WHERE o.space_id = ? AND o.status = 'upcoming' ORDER BY o.due_date LIMIT ?`)
-      .all(this.spaceId, limit) as any[];
+                WHERE o.space_id = ? AND o.status = 'upcoming' AND ${FinBillRepo.liveCondition}
+                ORDER BY o.due_date LIMIT ?`)
+      .all(this.spaceId, today.slice(0, 10), limit) as any[];
     return rows.map((r) => ({ ...this.mapOcc(r), name: r.name }));
+  }
+
+  /** Total number of LIVE (I1) upcoming occurrences (ADR-019 §3.7: the true
+   *  count behind the Upcoming list's display limit). */
+  upcomingCount(today: string = toDay(new Date())): number {
+    const r = this.handle.sqlite
+      .prepare(`SELECT COUNT(*) AS c FROM fin_bill_occurrence o JOIN fin_bill b ON b.id = o.bill_id
+                WHERE o.space_id = ? AND o.status = 'upcoming' AND ${FinBillRepo.liveCondition}`)
+      .get(this.spaceId, today.slice(0, 10)) as { c: number };
+    return r.c;
+  }
+
+  /** One occurrence by id (any status), or null. */
+  getOccurrence(id: number): FinBillOccurrence | null {
+    const r = this.handle.sqlite.prepare(`SELECT * FROM fin_bill_occurrence WHERE id = ? AND space_id = ?`).get(id, this.spaceId);
+    return r ? this.mapOcc(r) : null;
+  }
+
+  /** True when some occurrence in this space already links `expenseId`
+   *  via `paid_expense_id` (ADR-019 I3: one payment, one expense). */
+  isExpenseLinked(expenseId: number): boolean {
+    const r = this.handle.sqlite
+      .prepare(`SELECT 1 AS x FROM fin_bill_occurrence WHERE space_id = ? AND paid_expense_id = ? LIMIT 1`)
+      .get(this.spaceId, expenseId) as { x: number } | undefined;
+    return r != null;
+  }
+
+  /** The bill's earliest LIVE (I1) upcoming occurrence, or null. */
+  earliestLiveForBill(billId: number, today: string): (FinBillOccurrence & { name: string }) | null {
+    const rows = this.handle.sqlite
+      .prepare(`SELECT o.*, b.name AS name FROM fin_bill_occurrence o JOIN fin_bill b ON b.id = o.bill_id
+                WHERE o.space_id = ? AND o.bill_id = ? AND o.status = 'upcoming' AND ${FinBillRepo.liveCondition}
+                ORDER BY o.due_date LIMIT 1`)
+      .all(this.spaceId, billId, today.slice(0, 10)) as any[];
+    return rows.length > 0 ? { ...this.mapOcc(rows[0]), name: rows[0].name } : null;
   }
 
   markPaid(occurrenceId: number, paidExpenseId?: number): boolean {

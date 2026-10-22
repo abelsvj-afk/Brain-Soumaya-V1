@@ -194,6 +194,41 @@ heuristically.
   remain unarmed; this increment configures no secrets and changes no
   unconfigured-state behavior (no VAPID ⇒ zero push rows and zero claims).
 
+## Bill lifecycle — ADR-019 (design settled 2026-10-22, NOT implemented)
+
+- **Contract of record:** `docs/ADR-019-bill-lifecycle.md`; product decisions are
+  financial-os decision **D8**. The Budget Engine's arithmetic is unchanged and
+  out of scope — the repair is the bill-occurrence lifecycle around it.
+- **Paid is a transaction, not a flag (claim-first, per ADR-019 R1):** the
+  guarded status flip claims the occurrence *first*; only then do the expense
+  insert, balance deduction, and `paid_expense_id` link follow, committing or
+  rolling back together — a losing concurrent claim writes nothing. An
+  existing expense may be matched instead (no duplicate, no second deduction;
+  releasing its double-counted reservation may raise Safe to Spend, ADR-019
+  I2b).
+  **Remove** deactivates the bill and cancels its future `upcoming` occurrences in
+  the same transaction (past-due unpaid occurrences remain visible until the user
+  resolves them; paid history is immutable). **Edit** rewrites eligible future
+  unpaid occurrences (amount and schedule, no duplicates under `fin_occ_unique`)
+  in the same transaction as the template update. **Skip** is a guarded
+  per-occurrence transition to the (already-typed) `skipped` status.
+- **Corrections folded in:** Money Sky and web money relative-dates use the
+  space's timezone (no UTC day slice, no device-zone derivation); bill-risk
+  threads the occurrence due date into `bill_due_at` so ADR-018 urgency can
+  engage; occurrence materialization is a bounded (today − 35d … horizon),
+  idempotent backfill independent of navigation; pay-stub deletion reverses its
+  linked income + balance effect atomically and re-confirm is duplicate-checked;
+  future-dated entries are *scheduled* (no balance effect) until they settle
+  exactly once, proven by a durable `balance_applied_at` marker (ADR-019
+  §3.6/R1); the Upcoming list's truncation is visible and its scope stable.
+- **One additive migration** (ADR-019 §8, as revised by R1): `balance_applied_at`
+  on `fin_income`/`fin_expense` (migrateSchema-only, PRAGMA-guarded, legacy
+  rows backfilled as applied). Everything else the design needs —
+  `paid_expense_id`, `fin_paystub.income_id`, the `skipped` status — already
+  exists and was never written.
+- **Out of scope by owner direction:** engagement rewards, zero-based budgeting
+  vs Wealth, multi-account, and the unbuilt D12–D16 features (ADR-019 §6).
+
 ## Ingestion pipeline — `ingestion/pipeline.ts`
 
 ```

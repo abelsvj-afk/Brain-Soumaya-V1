@@ -7,6 +7,7 @@ import { FinBillRepo } from "../repositories/finBill.repo.js";
 import { computeBudget, estimateNextIncomeDate, weekStart, weeksOfIncomeHistory } from "./budget.js";
 import { toDay, parseDay } from "./bills.js";
 import { spaceTimezone, localDay } from "../agent/notify/policy.js";
+import { settleDueEntries } from "./settlement.js";
 
 /**
  * Compose the space's repositories into a live BudgetSummary. This is the single entry point
@@ -20,6 +21,13 @@ export function getBudgetSummary(
   now: Date = new Date(),
   cadenceDays?: number,
 ): BudgetSummary {
+  // ADR-019 §3.6: the settlement sweep is the OPENING step of every
+  // money-state evaluation — no balance-bearing response is computed
+  // from a pre-sweep balance. It runs before the account balance is
+  // read for computeBudget (and before materialize: settlement first
+  // is fine — the two touch disjoint state).
+  settleDueEntries(handle, spaceId, now);
+
   const accounts = new FinAccountRepo(handle, spaceId);
   const income = new FinIncomeRepo(handle, spaceId);
   const bills = new FinBillRepo(handle, spaceId);
@@ -32,9 +40,19 @@ export function getBudgetSummary(
   const today = localDay(now, tz);
   const nextIncomeDate = estimateNextIncomeDate(incomeDates, now, cadenceDays, today);
 
-  // Ensure occurrences exist through the horizon (idempotent), then read the unpaid ones.
-  bills.materializeAll(today, nextIncomeDate);
-  const occurrences = bills.unpaidThrough(nextIncomeDate).map((o) => ({
+  // ADR-019 §3.3: occurrence backfill is a defined window, not a side
+  // effect of which screens ran — from `today − 35 days` through the
+  // budget horizon (next-income date, at minimum `today + 45 days`), in
+  // space-local days, via the idempotent materialize (INSERT OR IGNORE
+  // under fin_occ_unique; existing rows are never altered, I4/I6). This
+  // runs on every summary computation, and the server tool-router tick
+  // evaluates the summary periodically (bill-risk detect()), so a bill
+  // falling due during non-use materializes without any screen opening
+  // (I7). Then read the LIVE unpaid ones (I1) through the horizon.
+  const backfillFrom = toDay(new Date(parseDay(today).getTime() - 35 * 86_400_000));
+  const plus45 = toDay(new Date(parseDay(today).getTime() + 45 * 86_400_000));
+  bills.materializeAll(backfillFrom, nextIncomeDate > plus45 ? nextIncomeDate : plus45);
+  const occurrences = bills.unpaidThrough(nextIncomeDate, today).map((o) => ({
     billId: o.billId, name: o.name, amountCents: o.amountCents, dueDate: o.dueDate,
   }));
 

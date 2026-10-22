@@ -52,6 +52,30 @@ insurance, phone), a goal to move into an apartment. Talks to Soumaya already.
 *As Ray, I mark the car payment paid, or it auto-matches an ingested expense.*
 - A paid occurrence leaves Reserved; the next occurrence is scheduled.
 - Autopay bills are assumed to clear on their due date unless the balance can't cover them (then flagged).
+- **Semantics settled 2026-10-22 (D8 / ADR-019; Safe-to-Spend wording split by
+  review revision R1):** marking paid records a real expense, deducts it from
+  my balance, and links the two — all at once, or not at all. Paying with a
+  new expense never makes my Safe to Spend go *up*. If I already logged the
+  payment, I match it instead of double-counting — and then my Safe to Spend
+  *does* rise, by exactly the reservation that was counting the same
+  obligation twice; the money itself is only ever counted once.
+
+### B3. Remove a bill I no longer have
+*As Ray, I cancel a subscription so it stops shadowing my budget.*
+- The bill stops recurring and its future charges stop reserving immediately.
+- What I already paid stays in my history. A charge that's already past due stays
+  visible until I deal with it — it's never silently erased.
+
+### B4. Edit a bill
+*As Ray, my rent went up — I change it once and my budget believes me.*
+- The new amount/schedule applies to future unpaid charges; the bill never
+  appears twice or reserves twice. Charges already paid (or already past due)
+  keep the amounts they actually had.
+
+### B5. Skip one occurrence
+*As Ray, I'm not paying the gym this month, but the bill itself lives on.*
+- This month's charge stops reserving and leaves my upcoming list; it stays in
+  history marked skipped. Next month's charge arrives normally.
 
 ---
 

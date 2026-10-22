@@ -861,6 +861,9 @@ export interface FinIncome {
   platform?: string | null;
   confidence?: number | null;
   createdAt: string;
+  /** ADR-019 settlement marker (I9): set iff this entry's amount is currently
+   *  reflected in the tracked balance; NULL = scheduled, not yet settled. */
+  balanceAppliedAt?: string | null;
 }
 
 /** A recorded expense (or a non-income inflow). */
@@ -874,6 +877,9 @@ export interface FinExpense {
   direction: ExpenseDirection;
   confidence?: number | null;
   createdAt: string;
+  /** ADR-019 settlement marker (I9): set iff this entry's amount is currently
+   *  reflected in the tracked balance; NULL = scheduled, not yet settled. */
+  balanceAppliedAt?: string | null;
 }
 
 /** One line of the itemized Reserved breakdown. */

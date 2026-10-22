@@ -22,6 +22,8 @@ const getAfford = vi.fn();
 const addIncome = vi.fn();
 const listIncome = vi.fn();
 const listExpense = vi.fn();
+const markOccurrencePaid = vi.fn();
+const skipOccurrence = vi.fn();
 const editIncome = vi.fn();
 const deleteIncome = vi.fn();
 const deleteExpense = vi.fn();
@@ -35,7 +37,9 @@ vi.mock("../api/finance.js", () => ({
   patchBill: (...a: unknown[]) => patchBill(...a),
   deleteBill: (...a: unknown[]) => deleteBill(...a),
   listBills: (...a: unknown[]) => listBills(...a),
-  markOccurrencePaid: vi.fn(), ingestPaste: vi.fn(), ingestImage: vi.fn(), confirmIngest: vi.fn(),
+  markOccurrencePaid: (...a: unknown[]) => markOccurrencePaid(...a),
+  skipOccurrence: (...a: unknown[]) => skipOccurrence(...a),
+  ingestPaste: vi.fn(), ingestImage: vi.fn(), confirmIngest: vi.fn(),
   listIncome: (...a: unknown[]) => listIncome(...a), listExpense: (...a: unknown[]) => listExpense(...a),
   editIncome: (...a: unknown[]) => editIncome(...a),
   deleteIncome: (...a: unknown[]) => deleteIncome(...a),
@@ -83,7 +87,7 @@ function wealth(over: Partial<WealthSummary>): WealthSummary {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  getFinanceSummary.mockResolvedValue({ budget: budget({}), account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" }, upcoming: [] });
+  getFinanceSummary.mockResolvedValue({ budget: budget({}), account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" }, upcoming: [], upcomingTotal: 0 });
   getWealthSummary.mockResolvedValue(wealth({}));
   listPaystubs.mockResolvedValue([]);
   getPaystub.mockResolvedValue(null);
@@ -96,6 +100,8 @@ beforeEach(() => {
   listExpense.mockResolvedValue([]);
   getAfford.mockResolvedValue(null);
   getCognitiveMind.mockResolvedValue([]);
+  markOccurrencePaid.mockResolvedValue({ ok: true, budget: budget({}) });
+  skipOccurrence.mockResolvedValue({ ok: true, budget: budget({}) });
   addIncome.mockResolvedValue({ income: {}, duplicate: false, budget: budget({}) });
 });
 afterEach(() => cleanup());
@@ -328,7 +334,7 @@ describe("FinancePanel — safety buffer (IM-78)", () => {
     getFinanceSummary.mockResolvedValue({
       budget: budget({ balanceCents: 100000, bufferCents: 2500, safeToSpendCents: 97500 }),
       account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 2500, updatedAt: "x" },
-      upcoming: [],
+      upcoming: [], upcomingTotal: 0,
     });
     render(<FinancePanel />);
     await screen.findByText("Safe to Spend");
@@ -406,7 +412,7 @@ describe("FinancePanel — hero freshness + avg weekly income (IM-81)", () => {
     getFinanceSummary.mockResolvedValue({
       budget: budget({ avgWeeklyIncomeCents: 42000 }),
       account: { id: 1, name: "Everyday Checking", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "2026-10-18T09:30:00" },
-      upcoming: [],
+      upcoming: [], upcomingTotal: 0,
     });
     render(<FinancePanel />);
     await screen.findByText("Safe to Spend");
@@ -420,7 +426,7 @@ describe("FinancePanel — hero freshness + avg weekly income (IM-81)", () => {
     getFinanceSummary.mockResolvedValue({
       budget: budget({}),
       account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" },
-      upcoming: [{ id: 9, billId: 3, name: "Rent", dueDate: "2027-01-05", amountCents: 120000, status: "upcoming" }],
+      upcoming: [{ id: 9, billId: 3, name: "Rent", dueDate: "2027-01-05", amountCents: 120000, status: "upcoming" }], upcomingTotal: 1,
     });
     render(<FinancePanel />);
     await screen.findByText("Safe to Spend");
@@ -604,7 +610,7 @@ describe("FinancePanel — load retry + confirmed deletes (IM-84)", () => {
   it("the load-error state has a Retry button that recovers the panel", async () => {
     getFinanceSummary
       .mockResolvedValueOnce(null)
-      .mockResolvedValue({ budget: budget({}), account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" }, upcoming: [] });
+      .mockResolvedValue({ budget: budget({}), account: { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" }, upcoming: [], upcomingTotal: 0 });
     render(<FinancePanel />);
     await screen.findByText(/Couldn't reach the budget/);
     await act(async () => { screen.getByText("Retry").click(); });
@@ -639,5 +645,131 @@ describe("FinancePanel — load retry + confirmed deletes (IM-84)", () => {
     const removes = screen.getAllByText("Remove");
     await act(async () => { removes[removes.length - 1]!.click(); });
     expect(deleteBill).toHaveBeenCalledWith(5);
+  });
+});
+
+describe("FinancePanel — ADR-019 bill lifecycle (web half)", () => {
+  const account = { id: 1, name: "Cash", currency: "USD", balanceCents: 100000, bufferCents: 0, updatedAt: "x" };
+  const rentOccurrence = { id: 9, billId: 3, name: "Rent", dueDate: "2027-01-05", amountCents: 120000, status: "upcoming" as const };
+  const withUpcoming = (upcomingTotal: number) =>
+    getFinanceSummary.mockResolvedValue({ budget: budget({}), account, upcoming: [rentOccurrence], upcomingTotal });
+
+  it("T14: states the truncation and the true count when Upcoming is display-limited", async () => {
+    withUpcoming(48);
+    render(<FinancePanel />);
+    await screen.findByText("Rent");
+    expect(screen.getByText(/Showing 1 of 48/)).toBeTruthy();
+    expect(screen.getByText(/…and 47 more/)).toBeTruthy();
+  });
+
+  it("shows no truncation line when the whole Upcoming list is shown", async () => {
+    withUpcoming(1);
+    render(<FinancePanel />);
+    await screen.findByText("Rent");
+    expect(screen.queryByText(/Showing/)).toBeNull();
+  });
+
+  it("Skip calls skipOccurrence for that occurrence and refreshes (P4)", async () => {
+    withUpcoming(1);
+    render(<FinancePanel />);
+    await screen.findByText("Rent");
+    fireEvent.click(screen.getByText("Skip"));
+    await waitFor(() => expect(skipOccurrence).toHaveBeenCalledWith(9));
+    await waitFor(() => expect(getFinanceSummary).toHaveBeenCalledTimes(2));
+  });
+
+  it("Paid records a payment via markOccurrencePaid with no matched expense (P1)", async () => {
+    withUpcoming(1);
+    render(<FinancePanel />);
+    await screen.findByText("Rent");
+    fireEvent.click(screen.getByText("Paid"));
+    await waitFor(() => expect(markOccurrencePaid).toHaveBeenCalledWith(9));
+  });
+
+  it("Match… lists recent expenses and choosing one matches it to the occurrence (P1)", async () => {
+    listExpense.mockResolvedValue([
+      { id: 31, date: "2026-10-19", amountCents: 120000, merchant: "Landlord LLC", category: "housing", direction: "out", createdAt: "x" },
+      { id: 30, date: "2026-10-18", amountCents: 5000, merchant: "Store", category: "food", direction: "out", createdAt: "x" },
+    ]);
+    withUpcoming(1);
+    render(<FinancePanel />);
+    await screen.findByText("Rent");
+    fireEvent.click(screen.getByText("Match…"));
+    const option = await screen.findByText(/Landlord LLC/);
+    expect(screen.getByText(/Store/)).toBeTruthy();
+    fireEvent.click(option);
+    await waitFor(() => expect(markOccurrencePaid).toHaveBeenCalledWith(9, 31));
+  });
+
+  it("Match surfaces the server's 409 already-linked error inline by the row", async () => {
+    listExpense.mockResolvedValue([
+      { id: 31, date: "2026-10-19", amountCents: 120000, merchant: "Landlord LLC", category: "housing", direction: "out", createdAt: "x" },
+    ]);
+    markOccurrencePaid.mockResolvedValue({ ok: false, error: "Expense is already linked to an occurrence" });
+    withUpcoming(1);
+    render(<FinancePanel />);
+    await screen.findByText("Rent");
+    fireEvent.click(screen.getByText("Match…"));
+    fireEvent.click(await screen.findByText(/Landlord LLC/));
+    await screen.findByText("Expense is already linked to an occurrence");
+  });
+
+  it("History tags an entry as scheduled only while its settlement marker is null (§3.6)", async () => {
+    listIncome.mockResolvedValue([
+      { id: 1, date: "2026-10-02", netCents: 90000, platform: "Acme", createdAt: "x", balanceAppliedAt: "2026-10-02T00:00:00Z" },
+      { id: 2, date: "2026-11-02", netCents: 50000, platform: "Future Co", createdAt: "x", balanceAppliedAt: null },
+    ]);
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText(/View \/ edit history/));
+    await screen.findByText("Future Co");
+    expect(screen.getAllByText("scheduled")).toHaveLength(1);
+  });
+
+  it("Add income shows the scheduled hint only when the chosen date is in the future (§3.6)", async () => {
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("＋ Income"));
+    expect(screen.queryByText(/Scheduled — won't affect your balance until/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2999-01-01" } });
+    await screen.findByText(/Scheduled — won't affect your balance until/);
+  });
+
+  it("the History edit form shows the scheduled hint for a future date (§3.6)", async () => {
+    listIncome.mockResolvedValue([{ id: 1, date: "2026-10-02", netCents: 90000, platform: "Acme", createdAt: "x", balanceAppliedAt: "2026-10-02T00:00:00Z" }]);
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText(/View \/ edit history/));
+    await screen.findByText("Acme");
+    await act(async () => { screen.getByLabelText("Edit").click(); });
+    expect(screen.queryByText(/Scheduled — won't affect your balance until/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2999-01-01" } });
+    await screen.findByText(/Scheduled — won't affect your balance until/);
+  });
+
+  it("T4: the remove-bill dialog copy states the true effects", async () => {
+    listBills.mockResolvedValue([{ id: 5, name: "Internet", amountCents: 8000, frequency: "monthly", anchorDate: "2026-01-15", autopay: false, active: true }]);
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("Manage recurring bills"));
+    await screen.findByText("Internet");
+    await act(async () => { screen.getByText("Remove").click(); });
+    await screen.findByText(/cancels its future occurrences/);
+    expect(screen.getByText(/Past-due unpaid occurrences stay listed and reserving until you resolve them/)).toBeTruthy();
+    expect(screen.getByText(/payment history is kept/)).toBeTruthy();
+  });
+
+  it("the pay stub delete dialog states the income and balance effects (§3.5)", async () => {
+    listPaystubs.mockResolvedValue([{ id: 4, netCents: 90000, employer: "Acme", payDate: "2026-03-01", earnings: [], deductions: [], hasSource: false, createdAt: "x" }]);
+    getPaystub.mockResolvedValue({ id: 4, netCents: 90000, grossCents: 120000, employer: "Acme", payDate: "2026-03-01", earnings: [], deductions: [], hasSource: false, createdAt: "x" });
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("📄 Pay Stubs"));
+    const row = await screen.findByText(/Acme/);
+    await act(async () => { row.click(); });
+    await screen.findByText("Delete");
+    await act(async () => { screen.getByText("Delete").click(); });
+    await screen.findByText(/also removes the income it created/);
+    expect(screen.getByText(/reverses that income's effect on your balance/)).toBeTruthy();
   });
 });

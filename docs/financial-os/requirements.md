@@ -43,6 +43,33 @@ Legend: **[M]** must-have for its stage · **[S]** should-have · **[C]** could-
 - **[S]** Optional: `grace_period_days`, `late_fee`, `payee`, linked account/last-4 (never a full number).
 - **[M]** The system materializes the **next occurrence(s)** of each bill and tracks paid/unpaid.
 - **[M]** Mark a bill occurrence paid (manually, or matched to an ingested expense).
+  **Lifecycle semantics settled 2026-10-22 (decision D8 / ADR-019):** marking paid
+  records the payment as a real expense, deducts it from the tracked balance, and
+  links it via `paid_expense_id` in one atomic operation; an existing payment may
+  be matched instead of duplicated; failure leaves the occurrence unpaid.
+- **[M]** Removing a bill stops recurrence **and** cancels its future scheduled
+  occurrences; payment history is preserved; past-due unpaid occurrences remain
+  visible until the user explicitly resolves them (D8 / ADR-019).
+- **[M]** Editing a bill applies the new amount/schedule to eligible future unpaid
+  occurrences without duplication; paid occurrences, historical amounts, and
+  past-due unpaid occurrences are unchanged (D8 / ADR-019).
+- **[M]** A single occurrence may be **skipped**: it stops reserving, leaves
+  upcoming-unpaid, remains in history as skipped, and the recurring bill is
+  unaffected (D8 / ADR-019).
+- **[M]** Occurrence materialization is bounded, repeatable, and independent of
+  which screens were visited (backfill window: today − 35d through the budget
+  horizon) — ADR-019 §3.3.
+- **[M]** Entries dated after the space-local today are **scheduled**: stored and
+  listed as scheduled, they do not move the tracked balance until their date
+  arrives, when they settle exactly once. Settlement is durable — a
+  `balance_applied_at` marker is the sole record of whether an entry's amount
+  is in the balance, and edits/deletes key their balance effects to it —
+  ADR-019 §3.6 (mechanism added by review revision R1). Settlement is effected
+  lazily at the first money-state evaluation at or after the space-local start
+  of the entry's date — the sweep runs at the head of every such evaluation,
+  so no balance-bearing response is computed from a pre-sweep balance — and
+  applies silently, never backdated (timing specified by revision R2; the
+  owner's explicit acceptance of this behavior is an ADR-019 gate item).
 - **[S]** Autopay bills are surfaced but assumed to clear on the due date unless balance can't cover them.
 
 ## 3. Live budget — Stage 1 (the core deliverable)

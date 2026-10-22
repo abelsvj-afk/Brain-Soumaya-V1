@@ -98,6 +98,7 @@ export const billRiskTool: Tool = {
       billId: { type: "number", description: "Optional: a specific bill id (router path). Omit in conversation to assess all upcoming bills." },
       mode: { type: "string", description: "Router-internal (\"short\" | \"pace\"); omit in conversation." },
       threshold: { type: "number", description: "Router-internal threshold in cents; omit in conversation." },
+      dueDate: { type: "string", description: "Router-internal: the at-risk occurrence's due date (YYYY-MM-DD), threaded from detect() to run() so it persists as the outbox row's bill_due_at (ADR-019 §3.2); omit in conversation." },
     },
     required: [],
     additionalProperties: false,
@@ -126,11 +127,11 @@ export const billRiskTool: Tool = {
     const today = localDay(new Date(tc.now), spaceTimezone(tc.ctx.handle.sqlite, tc.spaceId));
     const days = Math.max(1, Math.round((parseDay(atRisk.dueDate).getTime() - parseDay(today).getTime()) / DAY_MS));
     if (budget.shortfallCents > 0) {
-      return [{ tool: "bill_risk", args: { billId: atRisk.billId, mode: "short", threshold: budget.shortfallCents },
+      return [{ tool: "bill_risk", args: { billId: atRisk.billId, mode: "short", threshold: budget.shortfallCents, dueDate: atRisk.dueDate },
         reason: `short ${dollars(budget.shortfallCents)} for "${atRisk.name}" due ${atRisk.dueDate}` }];
     }
     const perDay = Math.floor(budget.safeToSpendCents / days);
-    return [{ tool: "bill_risk", args: { billId: atRisk.billId, mode: "pace", threshold: perDay },
+    return [{ tool: "bill_risk", args: { billId: atRisk.billId, mode: "pace", threshold: perDay, dueDate: atRisk.dueDate },
       reason: `tight cushion before "${atRisk.name}" due ${atRisk.dueDate}` }];
   },
 
@@ -212,14 +213,27 @@ export const billRiskTool: Tool = {
       alreadyNudgedRecently,
     });
 
+    // ADR-019 §3.2: the at-risk occurrence's due date is threaded from
+    // detect() through the invocation args and persists verbatim into the
+    // outbox row's `bill_due_at` (the column stores the meta value as-is),
+    // so it EQUALS the occurrence's due date (YYYY-MM-DD) and ADR-018's
+    // urgency-from-due-time classification can engage. Fallback when the
+    // arg is absent (a caller that didn't come through detect()): the
+    // bill's earliest LIVE upcoming occurrence due date via the repo.
+    // Policy treats a missing value as non-urgent (safe default).
+    let billDueAt: string | undefined =
+      typeof args.dueDate === "string" && /^\d{4}-\d{2}-\d{2}/.test(args.dueDate) ? args.dueDate.slice(0, 10) : undefined;
+    if (!billDueAt) {
+      const today = localDay(new Date(tc.now), spaceTimezone(tc.ctx.handle.sqlite, tc.spaceId));
+      billDueAt = new FinBillRepo(tc.ctx.handle, tc.spaceId).earliestLiveForBill(billId, today)?.dueDate;
+    }
+
     let delivered = false;
     try {
       await tc.notify(msg, {
         tool: "billRisk",
         billId,
-        // Best-effort due date for urgency classification; policy treats
-        // missing as non-urgent (safe default).
-        billDueAt: (bill as { dueDate?: string }).dueDate,
+        billDueAt,
       });
       delivered = true;
     } catch { /* router logs it regardless */ }

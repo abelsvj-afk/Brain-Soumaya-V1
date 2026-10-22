@@ -53,6 +53,38 @@ nodes**, joined via `fin_goal_link`. No money rows are denormalized into the gra
 across money + goals. Consistent with the "enrich on read, don't denormalize" convention. **Defers:**
 nothing material; this is the intended integration point with the Second Brain.
 
+## D8 — Bill lifecycle semantics (owner-settled 2026-10-22; ADR-019)
+
+Settled after the 2026-10-22 Money-tab trace found the bill lifecycle — not the
+budget arithmetic — misleading during ordinary use. Full contract, transaction
+boundaries, invariants, and acceptance tests: **docs/ADR-019-bill-lifecycle.md**.
+Design-settled only; implementation awaits the ADR-019 design gate and a separate
+owner authorization.
+
+- **Paid** records a real expense, deducts it from the tracked balance, and links
+  it to the occurrence via `paid_expense_id`, atomically. An existing payment may
+  be matched instead of duplicated. Failure leaves the occurrence unpaid.
+- **Remove** stops recurrence **and** cancels future scheduled occurrences; paid
+  history is preserved; past-due unpaid occurrences stay visible until the user
+  explicitly resolves them.
+- **Edit** applies the new amount/schedule to eligible future unpaid occurrences
+  without duplication; paid occurrences and historical amounts are preserved;
+  past-due unpaid occurrences are unchanged.
+- **Skip** is a per-occurrence action: the occurrence stops reserving, leaves
+  upcoming-unpaid, stays in history as skipped, and the recurring bill is
+  unaffected.
+
+Still **open** (not decided by D8): zero-based budgeting (Stage 4 Part B) vs
+Wealth; multi-account under D2; engagement rewards for money actions. See ADR-019
+§6 — none of these may be bundled into the lifecycle repair.
+
+**Design review round 1 (2026-10-22)** upheld the four decisions above and the
+§6 boundaries; it tightened only the technical contract in ADR-019 (revision
+R1): a durable settlement marker for future-dated entries, one
+reservation-eligibility rule, claim-first Mark-paid ordering, and the
+new-payment vs matched-expense Safe-to-Spend split (I2a/I2b). No decision in
+this section changed.
+
 ## D7 — Feature flag / rollout
 **Decision:** The module ships behind a **Financial tab** and a per-space **enable flag** (default off for
 existing spaces, opt-in). Nothing about the galaxy/memory experience changes for users who never enable it.

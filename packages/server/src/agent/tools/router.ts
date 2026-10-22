@@ -1,4 +1,5 @@
 import type { AppContext } from "../../context.js";
+import type { NotifyMeta } from "../notify/policy.js";
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { TOOLS } from "./registry.js";
 import { researchEnabled } from "../../maintenance/agent.js";
@@ -17,7 +18,7 @@ const PER_TOOL_CAP = 8; // safety bound on how much one tool can do per tick
 
 export interface RouterOptions {
   /** Deliver a message to the user (Telegram if linked). Defaults to a no-op. */
-  notify?: (spaceId: string, text: string) => Promise<void>;
+  notify?: (spaceId: string, text: string, meta?: NotifyMeta) => Promise<void>;
   /** Injected clock for tests. */
   now?: number;
 }
@@ -58,8 +59,8 @@ export async function runToolRouter(ctx: AppContext, spaceId: string, opts: Rout
     ctx,
     spaceId,
     now,
-    notify: async (text: string) => {
-      if (opts.notify) await opts.notify(spaceId, text);
+    notify: async (text: string, meta?: NotifyMeta) => {
+      if (opts.notify) await opts.notify(spaceId, text, meta);
     },
   };
 

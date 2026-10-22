@@ -5,6 +5,7 @@ import { getBudgetSummary } from "./summary.js";
 import { getWealthSummary } from "./wealth.js";
 import { FinBillRepo } from "../repositories/finBill.repo.js";
 import { parseDay, toDay } from "./bills.js";
+import { spaceTimezone, localDay } from "../agent/notify/policy.js";
 
 /**
  * Money-sky (Stage 4 Part A) — turns bills into "stars" with a STATE the galaxy renders as
@@ -38,16 +39,21 @@ const GLYPH: Record<MoneyStarState, string> = {
 export function moneySky(handle: DbHandle, spaceId: string = DEFAULT_SPACE, now: Date = new Date()): MoneyStar[] {
   const budget = getBudgetSummary(handle, spaceId, now);
   const bills = new FinBillRepo(handle, spaceId);
-  const today = toDay(now);
-  // Materialize a window AROUND now (getBudgetSummary only fills forward), so a just-overdue
-  // occurrence exists too, then pick each bill's CURRENT-period occurrence (closest to today).
-  const from = toDay(new Date(now.getTime() - 35 * DAY_MS));
-  const horizon = toDay(new Date(now.getTime() + 45 * DAY_MS));
+  // ADR-019 §3.1/I8: "today" is the SPACE's local day (the same source the
+  // Money tab's summary uses) — never a UTC slice. Tab and galaxy can
+  // never disagree about what today is (trace D6 / DB-1).
+  const today = localDay(now, spaceTimezone(handle.sqlite, spaceId));
+  // Materialize a window AROUND today (the §3.3 backfill window, derived
+  // from the space-local today), so a just-overdue occurrence exists too,
+  // then pick each bill's CURRENT-period occurrence (closest to today).
+  // Occurrence selection reads the single LIVE predicate (I1).
+  const from = toDay(new Date(parseDay(today).getTime() - 35 * DAY_MS));
+  const horizon = toDay(new Date(parseDay(today).getTime() + 45 * DAY_MS));
   bills.materializeAll(from, horizon);
   const autopay = new Map(bills.list().map((b) => [b.id, b.autopay]));
 
   const current = new Map<number, { billId: number; name: string; amountCents: number; dueDate: string; abs: number }>();
-  for (const occ of bills.upcoming(300)) {
+  for (const occ of bills.upcoming(300, today)) {
     const abs = Math.abs(parseDay(occ.dueDate).getTime() - parseDay(today).getTime());
     const prev = current.get(occ.billId);
     if (!prev || abs < prev.abs) current.set(occ.billId, { billId: occ.billId, name: occ.name, amountCents: occ.amountCents, dueDate: occ.dueDate, abs });

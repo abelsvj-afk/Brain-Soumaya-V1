@@ -3,6 +3,112 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-22 — ADR-019 bill lifecycle (design settled; gate CLOSED 2026-10-22)
+
+**Status:** DESIGN — owner settled the four product decisions for design on
+2026-10-22 (financial-os decision **D8**); design recorded on branch
+`design/money-bill-lifecycle` (docs only, base = deploy HEAD `a9ed7c8`).
+**Design gate CLOSED by the owner on 2026-10-22** (closure entry below).
+**Implementation NOT authorized and NOT started — the gate closure does not
+authorize it; implementation requires the owner's separate authorization.**
+Contract of record:
+`docs/ADR-019-bill-lifecycle.md` (summaries in `docs/architecture.md`,
+`docs/financial-os/{requirements,architecture,decisions,user-stories,roadmap}.md`).
+
+- **Why:** the 2026-10-22 Money-tab trace (vs `a9ed7c8`) found the Budget Engine
+  sound but the bill lifecycle misleading in ordinary use — Paid recorded no
+  payment (Safe to Spend *rose* after paying, D1), Remove left occurrences
+  reserving/listing/glowing indefinitely (D2), Edit never rewrote materialized
+  occurrences (old amounts kept reserving; reschedules doubled, D3) — plus
+  corrections D4–D11 (bill-risk due date always NULL, navigation-dependent
+  materialization, Money Sky UTC day, device-zone money dates, pay-stub
+  double-count, future-dated balance effects, unskippable occurrences).
+- **Design:** lifecycle as guarded state transitions (`upcoming → paid|skipped`),
+  each operation one SQLite transaction (Paid = expense + deduction +
+  `paid_expense_id` link, with match-instead-of-duplicate; Remove cancels future
+  occurrences, preserves history, keeps past-due unpaid visible; Edit rewrites
+  eligible future occurrences only; Skip is per-occurrence). Invariants I1–I9,
+  transaction boundaries, and acceptance tests T1–T20 mapped to D1–D11 in the ADR.
+- **Design review round 1 (2026-10-22):** the owner's review upheld P1–P4 and
+  the §6 scope boundaries but returned four blocking contract findings (settlement
+  mechanism unspecified; I1 contradicting I5/P2; Mark-paid's guarded flip ordered
+  after the expense/balance writes; I2 too broad for the matched-expense path).
+  All four were re-verified against the ADR and the baseline code — all four
+  confirmed — and corrected in **ADR-019 revision R1**: durable settlement
+  marker (§3.6), one eligibility rule (I1), claim-first Mark-paid (§4), split
+  I2a/I2b, new tests T18–T20. **The gate below stays OPEN pending re-review of
+  R1.** Implementation still NOT authorized.
+- **Precise gate review, round 2 (2026-10-22):** the reviewer's five gate
+  checks were verified against the revised documents — migration path +
+  justified backfill (§8), one-transaction settlement claims with
+  exactly-one-row assertions and retry/concurrency tests (§3.6/§4, T13/T18),
+  the unified reservation rule across Reserved/Upcoming/Money Sky (I1), and
+  I2a/I2b consistency across invariants, user stories, and T1–T20 all
+  verified as written. One gap: settlement *timing* — its triggers were
+  deferred to implementation choice and late-evaluation behavior was
+  unstated. **ADR-019 revision R2** corrects it: §3.6 now enumerates the
+  settlement triggers (the sweep runs at the head of every money-state
+  evaluation; no balance-bearing response is computed from a pre-sweep
+  balance) and specifies late evaluation explicitly (an entry due Monday
+  first evaluated Wednesday settles once at that evaluation, silently, never
+  backdated; while the server runs, the 60-second tool-router tick bounds
+  the delay even with no user activity). **The gate stays OPEN:** the
+  remaining act is the owner's explicit acceptance of that timing behavior
+  (new checklist item below) — the R2 specification does not record it.
+- **Gate CLOSED (owner, 2026-10-22):** with the review history complete —
+  design review round 1 (four blocking contract findings: settlement
+  mechanism unspecified; I1 contradicting I5/P2; Mark-paid's guarded flip
+  ordered after the expense/balance writes; I2 too broad for the
+  matched-expense path — all four re-verified, all four confirmed, corrected
+  in R1) and the round-2 precise gate review (five checks against the R1
+  documents: migration + backfill, one-transaction claims with
+  exactly-one-row assertions and retry/concurrency tests, the unified
+  reservation rule, and I2a/I2b consistency verified as written;
+  settlement timing specified in R2) — the owner closed the design gate in
+  two acts: (1) he **explicitly accepts the settlement-timing behavior**
+  specified in ADR-019 §3.6 (as specified by R2) as product behavior —
+  eligibility at the space-local start of an entry's date; settlement
+  effected lazily at the first evaluation at or after that moment over the
+  enumerated trigger set; silent; never backdated; late-evaluation
+  semantics as written — and (2) he **confirms the remaining §7 items**:
+  P1–P4 as the build semantics; corrections §3.1–§3.7 in scope; the §2/§4
+  contract with T1–T20 as the acceptance-test list; §6 staying out of
+  scope; and §8's single additive migration. **This closure does NOT
+  authorize implementation** — implementation requires the owner's
+  separate authorization; merge and deployment remain separate decisions
+  after that.
+- **Migration (revised by R1):** one additive column — `balance_applied_at` on
+  `fin_income`/`fin_expense`, migrateSchema-only and PRAGMA-guarded, with a
+  legacy backfill — required by the §3.6 settlement mechanism (ADR-019 §8, as
+  revised; the original no-migration claim did not survive review).
+  `paid_expense_id`, `fin_paystub.income_id`, and the `skipped` status already
+  exist unwritten, as originally found.
+- **Out of scope (separate undecided owner items, ADR-019 §6):** zero-based
+  budgeting vs Wealth, multi-account, the engagement/rewards system, and the
+  documented-but-dead features D12–D16 (status noted only).
+- **Design gate — CLOSED by the owner on 2026-10-22** (all items confirmed;
+  closure entry above). Implementation is still NOT authorized — it requires
+  the owner's separate authorization:
+  - [x] P1–P4 (Paid / Remove / Edit / Skip) as written are the semantics to build.
+  - [x] Corrections §3.1–§3.7 in scope as written — in particular the
+        scheduled-vs-settled rule and its durable settlement mechanism (§3.6,
+        as revised by R1) and the backfill window (§3.3).
+  - [x] Settlement timing explicitly accepted as product behavior (ADR-019
+        §3.6, as specified by R2): eligibility at the space-local start of
+        the entry's date; settlement effected lazily at the first evaluation
+        at or after that moment (enumerated triggers; bounded by the
+        tool-router tick while the server runs); silent and never backdated;
+        late-evaluation semantics as written. Accepted by the owner
+        2026-10-22 — the R2 specification alone was not the acceptance;
+        this act is.
+  - [x] Transaction boundaries + invariants (§2/§4, R1 revisions included)
+        accepted as the contract; §5 (T1–T20) accepted as the acceptance-test list.
+  - [x] §6 stays out of scope — no bundling of engagement, zero-based vs Wealth,
+        multi-account, or D12–D16 features.
+  - [x] The single additive migration in §8 (as revised by R1) is accepted; any
+        *further* discovered schema need returns to design before implementation
+        proceeds.
+
 ## 2026-10-21 — ADR-018 implementation: global notification cap + per-space TTS cache (Phases B–D)
 
 **Status:** DESIGN Phase A CLOSED (owner gate, 2026-10-21) → IMPLEMENTED on branch

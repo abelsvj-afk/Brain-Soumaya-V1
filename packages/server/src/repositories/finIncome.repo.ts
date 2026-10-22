@@ -12,20 +12,28 @@ export class FinIncomeRepo {
       grossCents: r.gross_cents ?? null, netCents: r.net_cents,
       taxCents: r.tax_cents ?? null, hours: r.hours ?? null,
       platform: r.platform ?? null, confidence: r.confidence ?? null, createdAt: r.created_at,
+      balanceAppliedAt: r.balance_applied_at ?? null,
     };
   }
 
   create(input: {
     date: string; netCents: number; grossCents?: number | null; taxCents?: number | null;
     hours?: number | null; platform?: string | null; sourceId?: number | null; confidence?: number | null;
+    // ADR-019 marker (I9). Explicit string = applied at that timestamp;
+    // explicit null = scheduled (not applied). Omitted = applied now —
+    // the pre-ADR-019 semantics every direct repo caller already paired
+    // with its own balance adjustment; finance/settlement.ts passes the
+    // marker explicitly on every production path.
+    balanceAppliedAt?: string | null;
   }): FinIncome {
+    const marker = input.balanceAppliedAt === undefined ? new Date().toISOString() : input.balanceAppliedAt;
     const info = this.handle.sqlite
-      .prepare(`INSERT INTO fin_income (space_id, source_id, date, gross_cents, net_cents, tax_cents, hours, platform, confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .prepare(`INSERT INTO fin_income (space_id, source_id, date, gross_cents, net_cents, tax_cents, hours, platform, confidence, balance_applied_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         this.spaceId, input.sourceId ?? null, input.date.slice(0, 10),
         input.grossCents ?? null, Math.round(input.netCents), input.taxCents ?? null,
-        input.hours ?? null, input.platform ?? null, input.confidence ?? null,
+        input.hours ?? null, input.platform ?? null, input.confidence ?? null, marker,
       );
     return this.get(Number(info.lastInsertRowid))!;
   }
@@ -42,6 +50,10 @@ export class FinIncomeRepo {
     patch: {
       date?: string; netCents?: number; platform?: string | null;
       grossCents?: number | null; taxCents?: number | null; hours?: number | null;
+      // ADR-019: edits key every balance effect to the marker — the patch
+      // can set it (settle inside the edit) or clear it (un-settle).
+      // Omitted = leave the marker exactly as it is.
+      balanceAppliedAt?: string | null;
     },
   ): FinIncome | null {
     const cur = this.get(id);
@@ -54,9 +66,10 @@ export class FinIncomeRepo {
     const gross = patch.grossCents !== undefined ? (patch.grossCents != null ? Math.round(patch.grossCents) : null) : cur.grossCents;
     const tax = patch.taxCents !== undefined ? (patch.taxCents != null ? Math.round(patch.taxCents) : null) : cur.taxCents;
     const hours = patch.hours !== undefined ? patch.hours : cur.hours;
+    const marker = patch.balanceAppliedAt !== undefined ? patch.balanceAppliedAt : (cur.balanceAppliedAt ?? null);
     this.handle.sqlite
-      .prepare(`UPDATE fin_income SET date = ?, net_cents = ?, platform = ?, gross_cents = ?, tax_cents = ?, hours = ? WHERE id = ? AND space_id = ?`)
-      .run(date, net, platform ?? null, gross, tax, hours ?? null, id, this.spaceId);
+      .prepare(`UPDATE fin_income SET date = ?, net_cents = ?, platform = ?, gross_cents = ?, tax_cents = ?, hours = ?, balance_applied_at = ? WHERE id = ? AND space_id = ?`)
+      .run(date, net, platform ?? null, gross, tax, hours ?? null, marker, id, this.spaceId);
     return this.get(id);
   }
 

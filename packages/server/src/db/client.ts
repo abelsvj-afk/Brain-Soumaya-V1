@@ -1325,6 +1325,22 @@ function migrateSchema(sqlite: RawDb): void {
       sqlite.exec(`ALTER TABLE push_outbox ADD COLUMN bill_due_at TEXT`);
     }
   }
+  // ADR-019 §8: settlement marker on fin_income / fin_expense —
+  // migrateSchema-only PRAGMA-guarded ALTERs, NEVER in BOOTSTRAP_SQL
+  // (same v252 rule as above). The marker is set iff the entry's amount
+  // is currently reflected in fin_account.balance_cents (I9). The
+  // one-time backfill (= created_at) runs ONLY in the first-add step:
+  // under the pre-ADR-019 ledger model every existing row already
+  // adjusted the balance at creation, so each legacy row IS applied.
+  // Re-opens find the column present and never re-run the backfill, so
+  // a live marker can never be stomped.
+  for (const table of ["fin_income", "fin_expense"] as const) {
+    const finCols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (finCols.length > 0 && !finCols.some((c) => c.name === "balance_applied_at")) {
+      sqlite.exec(`ALTER TABLE ${table} ADD COLUMN balance_applied_at TEXT`);
+      sqlite.exec(`UPDATE ${table} SET balance_applied_at = created_at WHERE balance_applied_at IS NULL`);
+    }
+  }
 }
 
 /**

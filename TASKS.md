@@ -192,6 +192,43 @@ persistence) are 🔴 additive `space_meta`/migration; all the feedback/visual j
 
 ---
 
+## Finance — Bill Lifecycle Repair (ADR-019; design settled 2026-10-22, implementation NOT authorized)
+
+Design of record: `docs/ADR-019-bill-lifecycle.md` (decisions: `docs/financial-os/decisions.md` D8).
+Sequencing: this repair lands before any new Money-tab features. Gate: PROJECT_STATE.md
+"2026-10-22 — ADR-019 bill lifecycle" checklist must be owner-confirmed first.
+
+- [x] **Design:** four lifecycle decisions settled (Paid/Remove/Edit/Skip) + corrections
+      D4–D11 + transaction boundaries/invariants + acceptance tests T1–T20 (branch
+      `design/money-bill-lifecycle`, docs only). Includes design-review revision R1
+      (settlement marker, eligibility rule, claim-first Paid, I2a/I2b split) and
+      revision R2 (settlement timing specified as explicit product behavior:
+      enumerated sweep triggers + late-evaluation semantics, ADR-019 §3.6 —
+      owner's explicit acceptance of that behavior is a gate item, still open).
+- [ ] **Migration:** additive `balance_applied_at` on `fin_income`/`fin_expense`
+      (migrateSchema-only, PRAGMA-guarded, legacy rows backfilled as applied) —
+      ADR-019 §8 as revised by R1.
+- [ ] **Paid (atomic, claim-first):** guarded claim flip first, then expense + balance
+      deduction + `paid_expense_id` link in the same transaction; a losing claim
+      writes nothing; match-existing-expense path; failure leaves occurrence
+      unpaid. (T1–T3, T15, T20)
+- [ ] **Remove:** stop recurrence + cancel future occurrences atomically; paid history
+      preserved; past-due unpaid stay visible until resolved. (T4)
+- [ ] **Edit:** rewrite eligible future unpaid occurrences (amount + schedule, no
+      duplicates); past-due unpaid and paid untouched. (T5–T6)
+- [ ] **Skip:** per-occurrence action; stops reserving, leaves Upcoming, history shows
+      skipped, bill unaffected. (T7)
+- [ ] **Corrections:** bill-risk due-date passthrough (T8); bounded repeatable backfill
+      (T9); Money Sky space-tz day (T10); `moneyDates` space-tz (T11); pay-stub delete
+      safety + re-confirm duplicate check (T12); scheduled-vs-settled entries via the
+      durable marker — create/settle/edit/un-settle/delete keyed to it (T13, T18);
+      visible Upcoming truncation + stable scope (T14).
+- [ ] **Invariant tests:** concurrent mark-paid (T15), concurrent edit + pay (T16),
+      double-submit/retry idempotence (T17), settlement idempotency + boundary edits
+      (T18), inactive-bill eligibility across Reserved/Upcoming/Sky (T19), losing
+      concurrent Paid claim leaves no orphan expense or balance change (T20);
+      full gate (typecheck + both-TZ suites + build).
+
 ## Deferred / Parked
 
 - [x] 🟢 **Audit follow-ups from agy's clumping batch (minor, non-blocking)** — (1) `Graph3D` does a

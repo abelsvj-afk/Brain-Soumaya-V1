@@ -12,6 +12,7 @@ import { FinCategoryOverrideRepo } from "../repositories/finCategoryOverride.rep
 import { FinPaystubRepo } from "../repositories/finPaystub.repo.js";
 import { categorize } from "./categorize.js";
 import { getBudgetSummary } from "./summary.js";
+import { createIncomeEntry, createExpenseEntry, signedIncomeCents } from "./settlement.js";
 import { spaceTimezone, localDay } from "../agent/notify/policy.js";
 
 /**
@@ -115,24 +116,23 @@ export function confirmIngest(
   const source = sources.get(input.sourceId);
   if (!source || source.status !== "pending") return null; // unknown or already handled
 
-  const incomeRepo = new FinIncomeRepo(handle, spaceId);
-  const expenseRepo = new FinExpenseRepo(handle, spaceId);
-  const account = new FinAccountRepo(handle, spaceId);
   const overrides = new FinCategoryOverrideRepo(handle, spaceId);
   let committed = 0;
 
   const tx = handle.sqlite.transaction(() => {
     for (const i of input.incomes) {
       const date = (i.date ?? today(handle, spaceId)).slice(0, 10);
-      incomeRepo.create({ date, netCents: i.netCents, platform: i.platform ?? null, sourceId: source.id, confidence: 1 });
-      account.adjustBalance(i.netCents);
+      // ADR-019 §3.6: creation goes through the settlement helper — the
+      // row + marker + balance adjustment commit together (the helper's
+      // transaction nests as a savepoint inside this one); a future-dated
+      // row is scheduled and moves no money.
+      createIncomeEntry(handle, spaceId, { date, netCents: i.netCents, platform: i.platform ?? null, sourceId: source.id, confidence: 1 });
       committed++;
     }
     for (const e of input.expenses) {
       const date = (e.date ?? today(handle, spaceId)).slice(0, 10);
       const dir = e.direction ?? "out";
-      expenseRepo.create({ date, amountCents: e.amountCents, category: e.category, direction: dir, merchant: e.merchant ?? null, sourceId: source.id, confidence: 1 });
-      account.adjustBalance(dir === "out" ? -e.amountCents : e.amountCents);
+      createExpenseEntry(handle, spaceId, { date, amountCents: e.amountCents, category: e.category, direction: dir, merchant: e.merchant ?? null, sourceId: source.id, confidence: 1 });
       if (e.merchant && e.category) overrides.set(e.merchant, e.category); // remember the choice
       committed++;
     }
@@ -200,15 +200,67 @@ export function confirmPaystub(
     sourceMime?: string | null;
     sourceData?: string | null;
   },
-): { paystub: FinPaystub; budget: BudgetSummary } {
+): { paystub: FinPaystub; budget: BudgetSummary; duplicate: boolean } {
   const incomeRepo = new FinIncomeRepo(handle, spaceId);
-  const account = new FinAccountRepo(handle, spaceId);
   const paystubRepo = new FinPaystubRepo(handle, spaceId);
   const date = (input.payDate ?? today(handle, spaceId)).slice(0, 10);
   const taxCents = input.deductions.reduce((s, d) => s + (d.amountCents || 0), 0);
 
+  // ADR-019 §3.5: re-confirm is duplicate-safe. The check starts from the
+  // same findDuplicate (date + net) the manual and paste paths have, then
+  // extends it with the stub's own identity (employer/period/gross/hours/
+  // lines/source — §3.5's "extended with employer/period where available"):
+  // date + net alone cannot tell a re-upload from a genuinely distinct
+  // stub that happens to share them (two same-net paychecks, a stub
+  // saved with and without its source file), and blocking the distinct
+  // one would lose a real document.
+  //  - Same stub re-uploaded (identity match): NO second income, NO new
+  //    link — the existing stub is returned flagged duplicate.
+  //  - The date+net income came from a MANUAL entry (no stub owns it):
+  //    no second income either, and the stub is saved UNLINKED rather
+  //    than linked to an income it didn't create.
+  //  - A distinct stub that merely shares date + net with another
+  //    stub's income: a real second document — it confirms normally
+  //    (its own income), flagged duplicate like the manual path flags it.
+  const duplicateIncome = incomeRepo.findDuplicate(date, input.netCents);
+  let duplicate = false;
+  if (duplicateIncome) {
+    duplicate = true;
+    const stubs = paystubRepo.list();
+    const incomeDateById = new Map(incomeRepo.list().map((i) => [i.id, i.date]));
+    const sameStub = (s: FinPaystub): boolean => {
+      const effectiveDate = s.payDate ?? (s.incomeId != null ? incomeDateById.get(s.incomeId) ?? null : null);
+      return (
+        effectiveDate === date &&
+        s.netCents === Math.round(input.netCents) &&
+        (s.employer ?? null) === (input.employer ?? null) &&
+        (s.periodStart ?? null) === (input.periodStart ?? null) &&
+        (s.periodEnd ?? null) === (input.periodEnd ?? null) &&
+        (s.grossCents ?? null) === (input.grossCents ?? null) &&
+        (s.hours ?? null) === (input.hours ?? null) &&
+        (s.hourlyRateCents ?? null) === (input.hourlyRateCents ?? null) &&
+        (s.ytdGrossCents ?? null) === (input.ytdGrossCents ?? null) &&
+        (s.ytdNetCents ?? null) === (input.ytdNetCents ?? null) &&
+        (s.sourceFilename ?? null) === (input.sourceFilename ?? null) &&
+        JSON.stringify(s.earnings) === JSON.stringify(input.earnings ?? []) &&
+        JSON.stringify(s.deductions) === JSON.stringify(input.deductions ?? [])
+      );
+    };
+    const reupload = stubs.find(sameStub) ?? null;
+    if (reupload) {
+      return { paystub: reupload, budget: getBudgetSummary(handle, spaceId), duplicate: true };
+    }
+    const incomeHasStub = stubs.some((s) => s.incomeId === duplicateIncome.id);
+    if (!incomeHasStub) {
+      const paystub = paystubRepo.create({ ...input, incomeId: null });
+      return { paystub, budget: getBudgetSummary(handle, spaceId), duplicate: true };
+    }
+    // Distinct stub sharing date + net with another stub's income: fall
+    // through and confirm normally, with the duplicate flag set.
+  }
+
   const tx = handle.sqlite.transaction(() => {
-    const income = incomeRepo.create({
+    const income = createIncomeEntry(handle, spaceId, {
       date,
       netCents: input.netCents,
       grossCents: input.grossCents ?? null,
@@ -217,10 +269,46 @@ export function confirmPaystub(
       platform: input.employer ?? null,
       confidence: 1,
     });
-    account.adjustBalance(input.netCents);
     return paystubRepo.create({ ...input, incomeId: income.id });
   });
   const paystub = tx();
 
-  return { paystub, budget: getBudgetSummary(handle, spaceId) };
+  return { paystub, budget: getBudgetSummary(handle, spaceId), duplicate };
+}
+
+/**
+ * Delete a pay stub as one unit (ADR-019 §3.5 / §4): in ONE transaction —
+ * delete the stub, delete its linked income row (if still present), and
+ * reverse that income's balance adjustment IFF the income's settlement
+ * marker is set (I9). A still-scheduled linked income never adjusted the
+ * balance, so there is nothing to reverse; if the linked income was
+ * already deleted independently, stub deletion proceeds with no reversal
+ * (that deletion already corrected the balance). Returns false when no
+ * such stub exists in this space.
+ */
+export function deletePaystub(
+  handle: DbHandle,
+  spaceId: string = DEFAULT_SPACE,
+  id: number,
+): boolean {
+  const paystubRepo = new FinPaystubRepo(handle, spaceId);
+  const stub = paystubRepo.get(id);
+  if (!stub) return false;
+  const tx = handle.sqlite.transaction((): boolean => {
+    const current = paystubRepo.get(id);
+    if (!current) return false;
+    paystubRepo.remove(id);
+    if (current.incomeId != null) {
+      const incomeRepo = new FinIncomeRepo(handle, spaceId);
+      const income = incomeRepo.get(current.incomeId);
+      if (income) {
+        incomeRepo.remove(income.id);
+        if (income.balanceAppliedAt != null) {
+          new FinAccountRepo(handle, spaceId).adjustBalance(-signedIncomeCents(income));
+        }
+      }
+    }
+    return true;
+  });
+  return tx();
 }

@@ -5,7 +5,7 @@ import { useCountUp } from "../hooks/useCountUp.js";
 import { spaceLocalDay } from "../utils/localDay.js";
 import { useSpaceTimeZone } from "../utils/spaceTimezone.js";
 import {
-  getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, patchBill, deleteBill, markOccurrencePaid, listBills,
+  getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, patchBill, deleteBill, markOccurrencePaid, skipOccurrence, listBills,
   ingestPaste, ingestImage, confirmIngest,
   listIncome, listExpense, editIncome, deleteIncome, editExpense, deleteExpense,
   getAfford, getWealthSummary,
@@ -84,8 +84,10 @@ export function FinancePanel({
 }: { embedded?: boolean; focusGoal?: { id: number; nonce: number } | null; focusBill?: { id: number; nonce: number } | null } = {}) {
   // Audit-2 item 2: subscribe to the space's configured timezone so the
   // panel (and the form defaults derived from `today()` when its
-  // sub-forms mount) re-renders once the configured zone loads.
-  useSpaceTimeZone();
+  // sub-forms mount) re-renders once the configured zone loads. The zone
+  // value itself is threaded into every moneyDates call below (ADR-019
+  // §3.4: relative labels follow the SPACE zone, never the device zone).
+  const timeZone = useSpaceTimeZone();
   const [sum, setSum] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [reservedOpen, setReservedOpen] = useState(false);
@@ -152,7 +154,7 @@ export function FinancePanel({
         <Money cents={b.safeToSpendCents} className="fin-hero-amount" />
         {b.shortfallCents > 0 && (
           <div className="fin-shortfall" role="status">
-            <span aria-hidden>⚠️</span> Short by <MoneyC cents={b.shortfallCents} /> before {fmtMoneyDateRel(b.nextIncomeDate)}
+            <span aria-hidden>⚠️</span> Short by <MoneyC cents={b.shortfallCents} /> before {fmtMoneyDateRel(b.nextIncomeDate, new Date(), timeZone)}
           </div>
         )}
         {/* IM-81: account name/currency/updatedAt crossed the wire but were never
@@ -160,7 +162,7 @@ export function FinancePanel({
             is and when its balance was last set. */}
         <p className="fin-muted" style={{ margin: "4px 0 0" }}>
           {sum.account.name} · {sum.account.currency}
-          {fmtStampRel(sum.account.updatedAt) && <> · Updated {fmtStampRel(sum.account.updatedAt)}</>}
+          {fmtStampRel(sum.account.updatedAt, new Date(), timeZone) && <> · Updated {fmtStampRel(sum.account.updatedAt, new Date(), timeZone)}</>}
         </p>
       </section>
 
@@ -203,7 +205,7 @@ export function FinancePanel({
         <ul className="fin-reserved-list">
           {b.reserved.length === 0 && <li className="fin-muted">Nothing due before your next income.</li>}
           {b.reserved.map((r) => (
-            <li key={`${r.billId}-${r.dueDate}`}><span>{r.name}</span><span>{fmtMoneyDateRel(r.dueDate)}</span><strong>{fmt(r.amountCents)}</strong></li>
+            <li key={`${r.billId}-${r.dueDate}`}><span>{r.name}</span><span>{fmtMoneyDateRel(r.dueDate, new Date(), timeZone)}</span><strong>{fmt(r.amountCents)}</strong></li>
           ))}
         </ul>
       )}
@@ -225,14 +227,17 @@ export function FinancePanel({
         {sum.upcoming.length === 0 && <p className="fin-muted">No upcoming bills. Add your recurring bills once below.</p>}
         <ul className="fin-bill-occ">
           {sum.upcoming.map((o) => (
-            <li key={o.id}>
-              <span className="fin-bill-name">{o.name}</span>
-              <span className="fin-bill-due">{fmtMoneyDateRel(o.dueDate)}</span>
-              <strong>{fmt(o.amountCents)}</strong>
-              <button className="fin-paid" onClick={async () => { await markOccurrencePaid(o.id); await refresh(); }}>Paid</button>
-            </li>
+            <UpcomingRow key={o.id} occurrence={o} timeZone={timeZone} onChanged={refresh} />
           ))}
         </ul>
+        {/* ADR-019 §3.7: the list is display-limited server-side — when it is
+            truncated, state the truncation and the TRUE total, never let the
+            cut look like the whole list. */}
+        {sum.upcomingTotal > sum.upcoming.length && (
+          <p className="fin-muted">
+            Showing {sum.upcoming.length} of {sum.upcomingTotal} — …and {sum.upcomingTotal - sum.upcoming.length} more
+          </p>
+        )}
         <BillManager onChanged={refresh} focusBill={focusBill} />
       </section>
 
@@ -277,11 +282,73 @@ export function FinancePanel({
   );
 }
 
+// ---- One Upcoming bill occurrence: Paid (records a payment), Skip (ADR-019
+// P4, per-occurrence only), and Match… (P1: link an expense that already
+// records this payment instead of creating a duplicate). ----
+type UpcomingOccurrence = FinanceSummary["upcoming"][number];
+
+function UpcomingRow({ occurrence: o, timeZone, onChanged }: { occurrence: UpcomingOccurrence; timeZone: string; onChanged: () => Promise<void> }) {
+  const [matchOpen, setMatchOpen] = useState(false);
+  const [expenses, setExpenses] = useState<FinExpense[] | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
+
+  const toggleMatch = async () => {
+    const next = !matchOpen;
+    setMatchOpen(next);
+    if (next && expenses == null) {
+      const list = (await listExpense()) ?? [];
+      // Most recent first (the server already orders date/id DESC; re-sort so
+      // the picker never depends on that), capped at the recent ~20.
+      setExpenses([...list].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id)).slice(0, 20));
+    }
+  };
+
+  const chooseMatch = async (expense: FinExpense) => {
+    setMatchError(null);
+    const res = await markOccurrencePaid(o.id, expense.id);
+    if (res && !res.ok) {
+      // 409 (already linked) and friends: the server's own words, inline by
+      // the row — the occurrence stays upcoming, so the picker stays usable.
+      setMatchError(res.error);
+      return;
+    }
+    setMatchOpen(false);
+    await onChanged();
+  };
+
+  return (
+    <li>
+      <span className="fin-bill-name">{o.name}</span>
+      <span className="fin-bill-due">{fmtMoneyDateRel(o.dueDate, new Date(), timeZone)}</span>
+      <strong>{fmt(o.amountCents)}</strong>
+      <button className="fin-paid" onClick={async () => { await markOccurrencePaid(o.id); await onChanged(); }}>Paid</button>
+      <button className="fin-paid" onClick={async () => { await skipOccurrence(o.id); await onChanged(); }}>Skip</button>
+      <button className="fin-paid" onClick={() => void toggleMatch()} aria-expanded={matchOpen}>Match…</button>
+      {matchOpen && (
+        <div className="fin-match-picker">
+          {expenses == null && <span className="fin-muted">Loading expenses…</span>}
+          {expenses != null && expenses.length === 0 && <span className="fin-muted">No recorded expenses to match.</span>}
+          {expenses?.map((e) => (
+            <button key={e.id} className="fin-mini fin-match-option" onClick={() => void chooseMatch(e)}>
+              <span>{fmtMoneyDate(e.date)} · {e.merchant || e.category}</span>
+              <strong>{fmtc(e.amountCents)}</strong>
+            </button>
+          ))}
+        </div>
+      )}
+      {matchError && <p className="fin-error" role="alert">{matchError}</p>}
+    </li>
+  );
+}
+
 // ---- History: recent income + expenses, each editable + deletable ----
 interface TxnRow {
   kind: "income" | "expense"; id: number; date: string; cents: number; label: string; category?: string;
   /** Income-only detail (IM-82): captured via Add income / pay stubs, editable here. */
   grossCents?: number | null; taxCents?: number | null; hours?: number | null;
+  /** ADR-019 §3.6 settlement marker (I9): null = scheduled — stored and listed,
+   *  but its amount is NOT in the tracked balance yet. */
+  balanceAppliedAt?: string | null;
 }
 
 function History({ onChanged }: { onChanged: () => void }) {
@@ -301,8 +368,12 @@ function History({ onChanged }: { onChanged: () => void }) {
       ...(inc ?? []).map((i: FinIncome): TxnRow => ({
         kind: "income", id: i.id, date: i.date, cents: i.netCents, label: i.platform ?? "",
         grossCents: i.grossCents ?? null, taxCents: i.taxCents ?? null, hours: i.hours ?? null,
+        balanceAppliedAt: i.balanceAppliedAt ?? null,
       })),
-      ...(exp ?? []).map((e: FinExpense): TxnRow => ({ kind: "expense", id: e.id, date: e.date, cents: e.amountCents, label: e.merchant ?? "", category: e.category })),
+      ...(exp ?? []).map((e: FinExpense): TxnRow => ({
+        kind: "expense", id: e.id, date: e.date, cents: e.amountCents, label: e.merchant ?? "", category: e.category,
+        balanceAppliedAt: e.balanceAppliedAt ?? null,
+      })),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
     setRows(merged);
   };
@@ -377,6 +448,7 @@ function History({ onChanged }: { onChanged: () => void }) {
                   {row.label || (row.category ?? "—")}
                 </button>
                 <span className="fin-txn-date">{fmtMoneyDate(row.date)}</span>
+                {row.balanceAppliedAt == null && <span className="fin-tag-scheduled">scheduled</span>}
                 <strong>{fmt(row.cents)}</strong>
                 <button className="fin-mini" onClick={() => setEditing(row)} aria-label="Edit">✏️</button>
                 <button className="fin-mini" onClick={() => setConfirmDelete(row)} aria-label="Delete">🗑️</button>
@@ -420,6 +492,10 @@ function EditRow({ row, onSave, onCancel }: { row: TxnRow; onSave: (r: TxnRow, a
   const [gross, setGross] = useState(row.grossCents != null ? (row.grossCents / 100).toFixed(2) : "");
   const [tax, setTax] = useState(row.taxCents != null ? (row.taxCents / 100).toFixed(2) : "");
   const [hours, setHours] = useState(row.hours != null ? String(row.hours) : "");
+  // ADR-019 §3.6: a future-dated edit re-schedules the entry — say so at the
+  // date field, compared against the SPACE-local today.
+  const timeZone = useSpaceTimeZone();
+  const scheduled = date > today(new Date(), timeZone);
   return (
     <>
       <input className="fin-draft-amt" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Amount" />
@@ -433,6 +509,7 @@ function EditRow({ row, onSave, onCancel }: { row: TxnRow; onSave: (r: TxnRow, a
         </>
       )}
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+      {scheduled && <span className="fin-muted">Scheduled — won't affect your balance until {fmtMoneyDate(date)}</span>}
       <button className="fin-mini" onClick={() => onSave(row, amount, label, date, category, { gross, tax, hours })} aria-label="Save">✅</button>
       <button className="fin-mini" onClick={onCancel} aria-label="Cancel">✖️</button>
     </>
@@ -504,6 +581,10 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
   const [gross, setGross] = useState("");
   const [tax, setTax] = useState("");
   const [hours, setHours] = useState("");
+  // ADR-019 §3.6: a future-dated entry is scheduled, not settled — the date
+  // picker says so at entry time instead of silently skipping the balance.
+  const timeZone = useSpaceTimeZone();
+  const scheduled = date > today(new Date(), timeZone);
 
   const submit = async () => {
     const c = toCents(amount);
@@ -559,6 +640,7 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
         </div>
       )}
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+      {scheduled && <p className="fin-muted" style={{ margin: 0 }}>Scheduled — won't affect your balance until {fmtMoneyDate(date)}</p>}
       <div className="fin-form-actions">
         <button className="fin-primary" onClick={submit}>Save</button>
         <button className="fin-secondary" onClick={() => setMode(null)}>Cancel</button>
@@ -917,7 +999,7 @@ function BillManager({ onChanged, focusBill }: { onChanged: () => void; focusBil
       {confirmRemove && (
         <ConfirmDialog
           title="Remove this bill?"
-          message={`"${confirmRemove.name}" (${fmtc(confirmRemove.amountCents)}) will stop recurring and stop being reserved for. This can't be undone.`}
+          message={`Removing "${confirmRemove.name}" (${fmtc(confirmRemove.amountCents)}) stops it recurring and cancels its future occurrences. Past-due unpaid occurrences stay listed and reserving until you resolve them, and your payment history is kept. This can't be undone.`}
           confirmLabel="Remove"
           onConfirm={async () => { const bl = confirmRemove; setConfirmRemove(null); await deleteBill(bl.id); await load(); onChanged(); }}
           onCancel={() => setConfirmRemove(null)}
@@ -1370,7 +1452,7 @@ function PaystubSection({ onChanged }: { onChanged: () => void }) {
               {confirmDeleteStub && (
                 <ConfirmDialog
                   title="Delete this pay stub?"
-                  message={`The saved pay stub${detail.employer ? ` from ${detail.employer}` : ""} and its original document will be removed. This can't be undone.`}
+                  message={`Deleting this pay stub${detail.employer ? ` from ${detail.employer}` : ""} also removes the income it created and reverses that income's effect on your balance (when it had one), and removes its original document. This can't be undone.`}
                   confirmLabel="Delete"
                   onConfirm={async () => { setConfirmDeleteStub(false); await remove(detail.id); }}
                   onCancel={() => setConfirmDeleteStub(false)}
@@ -1413,6 +1495,8 @@ function AssetManager({ onChanged }: { onChanged: () => void }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editKind, setEditKind] = useState<FinAssetKind>("savings");
+  // ADR-019 §3.4: the "as of" relative label follows the space zone.
+  const timeZone = useSpaceTimeZone();
 
   const load = async () => {
     const list = (await listAssets()) ?? [];
@@ -1469,7 +1553,7 @@ function AssetManager({ onChanged }: { onChanged: () => void }) {
             <li key={a.id} className="fin-asset-row">
               <span>{a.label} <span className="fin-muted">({a.kind})</span></span>
               {current
-                ? <span className="fin-asset-balance">Current balance {fmtc(current.amountCents)} <span className="fin-muted">as of {fmtMoneyDateRel(current.asOf)}</span></span>
+                ? <span className="fin-asset-balance">Current balance {fmtc(current.amountCents)} <span className="fin-muted">as of {fmtMoneyDateRel(current.asOf, new Date(), timeZone)}</span></span>
                 : <span className="fin-muted">No balance logged yet</span>}
               <div className="fin-inline-form">
                 <input inputMode="decimal" placeholder="Balance" value={drafts[a.id]?.amount ?? ""}

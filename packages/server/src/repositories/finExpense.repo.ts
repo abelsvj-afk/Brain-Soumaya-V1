@@ -11,19 +11,25 @@ export class FinExpenseRepo {
       id: r.id, sourceId: r.source_id ?? null, date: r.date, amountCents: r.amount_cents,
       merchant: r.merchant ?? null, category: r.category, direction: r.direction as ExpenseDirection,
       confidence: r.confidence ?? null, createdAt: r.created_at,
+      balanceAppliedAt: r.balance_applied_at ?? null,
     };
   }
 
   create(input: {
     date: string; amountCents: number; category: string; direction?: ExpenseDirection;
     merchant?: string | null; sourceId?: number | null; confidence?: number | null;
+    // ADR-019 marker (I9) — same contract as FinIncomeRepo.create:
+    // explicit string = applied then, explicit null = scheduled,
+    // omitted = applied now (pre-ADR-019 direct-caller semantics).
+    balanceAppliedAt?: string | null;
   }): FinExpense {
+    const marker = input.balanceAppliedAt === undefined ? new Date().toISOString() : input.balanceAppliedAt;
     const info = this.handle.sqlite
-      .prepare(`INSERT INTO fin_expense (space_id, source_id, date, amount_cents, merchant, category, direction, confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .prepare(`INSERT INTO fin_expense (space_id, source_id, date, amount_cents, merchant, category, direction, confidence, balance_applied_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         this.spaceId, input.sourceId ?? null, input.date.slice(0, 10), Math.round(input.amountCents),
-        input.merchant ?? null, input.category, input.direction ?? "out", input.confidence ?? null,
+        input.merchant ?? null, input.category, input.direction ?? "out", input.confidence ?? null, marker,
       );
     return this.get(Number(info.lastInsertRowid))!;
   }
@@ -33,7 +39,7 @@ export class FinExpenseRepo {
     return r ? this.map(r) : null;
   }
 
-  update(id: number, patch: { date?: string; amountCents?: number; merchant?: string | null; category?: string; direction?: ExpenseDirection }): FinExpense | null {
+  update(id: number, patch: { date?: string; amountCents?: number; merchant?: string | null; category?: string; direction?: ExpenseDirection; balanceAppliedAt?: string | null }): FinExpense | null {
     const cur = this.get(id);
     if (!cur) return null;
     const date = (patch.date ?? cur.date).slice(0, 10);
@@ -41,9 +47,12 @@ export class FinExpenseRepo {
     const merchant = patch.merchant !== undefined ? patch.merchant : cur.merchant;
     const category = patch.category ?? cur.category;
     const direction = patch.direction ?? cur.direction;
+    // ADR-019: omitted = leave the settlement marker as-is; a string sets
+    // it (settle inside the edit), null clears it (un-settle).
+    const marker = patch.balanceAppliedAt !== undefined ? patch.balanceAppliedAt : (cur.balanceAppliedAt ?? null);
     this.handle.sqlite
-      .prepare(`UPDATE fin_expense SET date = ?, amount_cents = ?, merchant = ?, category = ?, direction = ? WHERE id = ? AND space_id = ?`)
-      .run(date, amount, merchant ?? null, category, direction, id, this.spaceId);
+      .prepare(`UPDATE fin_expense SET date = ?, amount_cents = ?, merchant = ?, category = ?, direction = ?, balance_applied_at = ? WHERE id = ? AND space_id = ?`)
+      .run(date, amount, merchant ?? null, category, direction, marker, id, this.spaceId);
     return this.get(id);
   }
 
