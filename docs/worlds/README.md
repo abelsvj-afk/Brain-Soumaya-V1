@@ -16,7 +16,8 @@
 8. **`chatgpt-review-5-2026-10-22.md`** — the record of ChatGPT's fifth review (§18 mockup specification; cohesion tested not assumed, travel-guarantee checks in the session script, failure-diagnosis taxonomy, recipe minimum contents), absorbed into Exploration Revision 14.
 9. **`chatgpt-review-6-2026-10-22.md`** — the record of ChatGPT's sixth review (§19 architecture & roadmap; failure-independence invariant, per-phase authorization separateness, Q27 as a mandatory Phase 2 gate, design gate stays open after step 6), absorbed into Exploration Revision 16.
 10. **`recipe-great-station.md`** — the Phase 0 environment recipe for the Great Station (draft for owner settlement): identity, approach composition, honest content, budget allocation, animation slice, seed traceability table, and the D-13 evidence the mockup must produce.
-11. **`chatgpt-review-7-2026-10-22.md`** — the record of ChatGPT's review of the Great Station recipe (no blocker; R-S1–R-S4 recommendations; triangle-boundary and D-13-openness notes), absorbed into the recipe.
+11. **`chatgpt-review-7-2026-10-22.md`** — the record of ChatGPT's review of the Great Station recipe (no blocker; R-S1–R-S4 recommendations; triangle-boundary and D-13-openness notes), absorbed into the recipe. The recipe itself was **settled by the owner** afterward (R-S1/R-S2/R-S4 approved, R-S3 deferred).
+12. **`recipe-growing-place.md`** — the Phase 0 environment recipe for the Growing Place (draft for owner settlement): terraced garden + witness tree, the kindness rule, milestone landmark grammar, A6/A7 animation slice, budget allocation.
 
 ## The most important instruction
 

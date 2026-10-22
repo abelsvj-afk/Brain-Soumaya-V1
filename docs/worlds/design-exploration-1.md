@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 19 — Great Station recipe **reviewed by ChatGPT** (no blocker): triangle ceiling marked a hard rejection boundary, D-13 openness reinforced, R-S1–R-S4 recommendations recorded in the recipe; owner settlement pending. Record: `chatgpt-review-7-2026-10-22.md`. **Design gate: OPEN.**
+**Revision:** 20 — Great Station recipe **SETTLED** by the owner (R-S1–R-S4 as recommended). **Growing Place recipe drafted** (`recipe-growing-place.md`) on the same template — terraced garden + witness tree, the kindness rule, A6/A7-led animation slice; R-G1–R-G4 await the owner. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -808,12 +808,12 @@ Phase 0 (§19 A3) is the three environment recipes on paper, each a standalone d
 
 | Recipe | File | Status |
 |---|---|---|
-| The Great Station | `recipe-great-station.md` | **Draft, ChatGPT-reviewed** (2026-10-22, no blocker) — R-S1–R-S4 recommendations recorded; awaiting owner settlement |
-| The Growing Place | — | Not yet drafted |
+| The Great Station | `recipe-great-station.md` | ✅ **SETTLED** (owner, 2026-10-22: R-S1/R-S2/R-S4 approved, R-S3 name deferred) |
+| The Growing Place | `recipe-growing-place.md` | **Draft** (King, 2026-10-22) — terraced garden + witness tree; the kindness rule (nothing wilts, ever); open items R-G1–R-G4; awaiting owner review/settlement |
 | The Deep Past | — | Not yet drafted |
 
 The draft Station recipe follows §18's minimum contents: identity (crown-and-stem megastructure; amber harbor in indigo dark), the three-stage approach composition with its named dual-layer handoff risk, honest content (journeys real, traffic atmosphere, no memories), a budget allocation inside §11.2's ceilings, the A13/A17/A11/A12/A15/A16/A19/A20 animation slice with combined load and fallback ladder, shared-vs-distinct elements, a seed parameter table for V4 traceability, and the D-13 evidence the mockup must produce.
 
 ---
 
-*End of Exploration 1, Revision 19. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 20. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
