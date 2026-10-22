@@ -36,6 +36,10 @@
      (298+46=344, +10 gap), height negotiated once via the cap. */
   --hud-status-bottom: 354px;
   --hud-status-max-h: 196px;
+  /* HUD round 3: the collapsed stack's one-line mini-bar height, and the
+     in-button caption size every HUD button's name is set at. */
+  --hud-status-mini-h: 34px;
+  --hud-cap-size: 9.5px;
 }
 
 * {
@@ -1005,14 +1009,32 @@ body,
   background: var(--glass);
   backdrop-filter: blur(14px);
   color: var(--text);
-  font-size: 20px;
+  font-size: 17px;
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
   display: flex;
+  /* HUD round 3: glyph over caption, INSIDE the same 46×46 footprint —
+     a caption below the button would need ~13px the 56px ladder pitch
+     does not have (its gaps are 10px and gate-asserted at ≥8px). No
+     slot, band or fan geometry changes: the trade is glyph size only. */
+  flex-direction: column;
+  gap: 1px;
   align-items: center;
   justify-content: center;
   transition: transform 0.1s ease, filter 0.1s ease, background 0.15s ease, border-color 0.15s ease;
+}
+/* HUD round 3: the small name inside every HUD button, so nobody has to
+   guess what an icon does. Exactly one caption in the HUD pulses — the
+   🎯's (see .focus-main .fab-cap near @keyframes fabpulse). */
+.fab-cap {
+  font-size: var(--hud-cap-size);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  opacity: 0.85;
+  pointer-events: none;
+  white-space: nowrap;
 }
 /* Press/hover feedback so every FAB visibly reacts to a tap (none had any before). */
 .fab:hover { filter: brightness(1.15); border-color: rgba(122, 200, 255, 0.55); }
@@ -1368,7 +1390,7 @@ body,
   position: absolute;
   left: 0;
   bottom: 0;
-  font-size: 20px;
+  font-size: 17px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .focus-cluster .focus-main.active {
@@ -1383,7 +1405,7 @@ body,
   position: absolute;
   left: 0;
   bottom: 0;
-  font-size: 18px;
+  font-size: 17px;
   transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.18s ease;
   will-change: transform, opacity;
 }
@@ -1402,6 +1424,21 @@ body,
     box-shadow: 0 0 16px 4px rgba(255, 178, 77, 0.55);
     border-color: rgba(255, 178, 77, 1);
   }
+}
+/* HUD round 3: exactly ONE caption in the whole HUD pulses — the 🎯's
+   "Focus" (the owner's example: the focus button's name, small, with a
+   pulsing glow). A text-shadow pulse in the fabpulse amber family; a
+   screen of pulsing labels would be noise, so every other .fab-cap is
+   static. Honors prefers-reduced-motion like the rest of the family. */
+.focus-cluster .focus-main .fab-cap {
+  animation: cappulse 2.4s ease-in-out infinite;
+}
+@keyframes cappulse {
+  0%, 100% { text-shadow: 0 0 0 rgba(255, 178, 77, 0); }
+  50% { text-shadow: 0 0 7px rgba(255, 178, 77, 0.95); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-cluster .focus-main .fab-cap { animation: none; }
 }
 
 /* Back arrow + memory list */
@@ -5703,12 +5740,15 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
    The originally-sketched slot (bottom ≈132) is NOT used: at 390×780 it
    lands exactly on the music FAB (bottom 130, same left/width). */
 .gv-wrap { position: fixed; left: var(--hud-dock-left); bottom: calc(var(--hud-cam-views-bottom) + env(safe-area-inset-bottom, 0px)); z-index: var(--hud-z-views); width: 46px; height: 46px; }
-.gv-toggle { position: relative; width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center;
+.gv-toggle { position: relative; width: 46px; height: 46px; padding: 0; display: flex; flex-direction: column; gap: 1px; align-items: center; justify-content: center;
   background: rgba(12,16,34,0.82); border: 1px solid var(--glass-border); color: var(--text);
-  border-radius: 50%; font-size: 20px; cursor: pointer; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
+  border-radius: 50%; font-size: 17px; cursor: pointer; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
 .gv-toggle.open { border-color: rgba(122,220,255,0.5); }
-/* The word "Views" is the circle's accessible name — visually hidden. */
-.gv-toggle-text { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* The word "Views" was the circle's visually-hidden accessible name
+   through Package B (a 1px clip rule lived here). HUD round 3 un-hides
+   it: .gv-toggle-text now carries .fab-cap and renders as the circle's
+   visible in-button caption, like every other HUD button's name — the
+   clip rule is gone on purpose. */
 .gv-toggle-chev { position: absolute; right: 3px; bottom: 1px; font-size: 8px; color: var(--accent); pointer-events: none; }
 /* The dropdown is a SHEET in the dock's reserved lower-left panel slot:
    right of the camera column (left 52px relative to the circle, so it never
@@ -6055,6 +6095,72 @@ div.visitor-chip { cursor: default; }
 }
 .audio-state-chip.all-off { border-color: rgba(255, 150, 120, 0.55); color: #ffd9cf; }
 
+/* HUD round 3 — the SUMMONABLE stack. Collapsed, the stack is this
+   one-line mini-bar on the stack's OWN anchor and width (desktop slot
+   here; the phone block below moves it to the low slot with the phone
+   width, exactly like the expanded stack), so summoning grows UPWARD
+   from a fixed base and no element ever changes its anchor — only its
+   height (34px vs the 196/132 caps). The bar shows the first present
+   status line, a ＋N count of the lines it folds away, and a ▸; the
+   whole pill is the tap target. */
+.ship-status-mini {
+  position: fixed;
+  left: calc(var(--hud-status-left) + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--hud-status-bottom) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--hud-z-status);
+  width: min(56vw, 340px);
+  height: var(--hud-status-mini-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(12, 20, 40, 0.72);
+  border: 1px solid rgba(150, 140, 220, 0.3);
+  color: var(--text);
+  font-size: 0.72rem;
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  text-align: left;
+}
+.ship-status-mini.below-noticing {
+  bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
+}
+.ship-status-mini-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ship-status-mini-count { flex: none; font-weight: 600; opacity: 0.75; }
+.ship-status-mini-chev { flex: none; color: var(--accent); }
+/* A new status while collapsed pulses the bar ONCE (the fabpulse family,
+   one run) — it never auto-expands. */
+.ship-status-mini.pulse { animation: fabpulse 1.8s ease-in-out 1; }
+/* The expanded stack's fold-away: a small glass circle at its top-right
+   corner (badge-style, half outside so it never covers a status line).
+   It gets its own target because the header line's tap already means
+   "follow the visitor". */
+.ship-status-collapse {
+  position: absolute;
+  top: -9px;
+  right: -5px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(12, 20, 40, 0.88);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
 /* IM-23: empty-galaxy first-star cue, centred over the empty sky. */
 .empty-galaxy-cue {
   position: fixed;
@@ -6225,6 +6331,16 @@ button.mindspace-more { cursor: pointer; }
     width: min(calc(100vw - 140px), 340px);
     max-height: 132px;
     max-height: min(132px, calc(50dvh - var(--hud-cam-toggle-bottom) - env(safe-area-inset-bottom, 0px)));
+  }
+  /* HUD round 3 — the mini-bar takes the phone stack's slot and width,
+     so on phones both states share one anchor and the collapsed band is
+     [186+inset, 220+inset]: the lower band even at 640px + a 34px inset
+     (top 254 ≤ midline 320), where the expanded cap still reaches the
+     midline — the collapsed form is inset-proof where the expanded one
+     is not. The gauge gate asserts against the EXPANDED state. */
+  .ship-status-mini {
+    bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
+    width: min(calc(100vw - 140px), 340px);
   }
   /* Overflow contract, phone mechanics: the yielding targets are
      clamped to whole lines with a clamp ellipsis (never a mid-glyph

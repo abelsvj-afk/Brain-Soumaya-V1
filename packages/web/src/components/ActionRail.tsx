@@ -18,9 +18,11 @@ export function ActionRail(p: ActionRailProps) {
     <>
       <button className="fab fab-ingest" onClick={p.onIngest} aria-label="Add a memory" title="Add a memory (or press C anywhere — ⌘K opens the command palette)">
         📝
+        <span className="fab-cap">Add</span>
       </button>
       <button className="fab fab-observatory" onClick={p.onObservatory} aria-label="Open the Observatory home" title="Observatory — your home view">
         🔭
+        <span className="fab-cap">Home</span>
       </button>
       <button
         className={`fab fab-chat ${p.chatActive ? "on" : ""} ${p.chatPulse ? "pulse" : ""}`}
@@ -29,9 +31,11 @@ export function ActionRail(p: ActionRailProps) {
         title={`Talk to ${p.spaceName || "Soumaya"}`}
       >
         💬
+        <span className="fab-cap">Chat</span>
       </button>
       <button className="fab fab-settings" onClick={p.onSettings} aria-label="Settings" title="Settings">
         ⚙️
+        <span className="fab-cap">Settings</span>
       </button>
     </>
   );

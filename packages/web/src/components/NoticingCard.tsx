@@ -165,6 +165,7 @@ export function NoticingCard({
         title={glow ? "Soumaya noticed something new" : "Soumaya's noticings"}
       >
         💭
+        <span className="fab-cap">Notices</span>
         <span className="fab-badge noticing-count">{inquiries.length > 9 ? "9+" : inquiries.length}</span>
       </button>
 

@@ -217,6 +217,7 @@ describe("HUD dock — Views dropdown sheet", () => {
 import {
   fanLayout,
   fanTopEdge,
+  fanTargetCaption,
   FAN_CLUSTER_BOTTOM_PX,
   FAN_HEADER_BAND_PX,
 } from "../App.helpers.js";
@@ -611,5 +612,141 @@ describe("GalaxyViews circle + sheet", () => {
     const sheet = container.querySelector(".gv-wrap .gv-sheet");
     expect(sheet).not.toBeNull();
     expect(sheet!.querySelector(".gv-chips")).not.toBeNull();
+  });
+});
+
+// ── HUD round 3 — summonable stack + button captions ────────────────────
+//
+// The owner's round-3 directives: the ship-status stack becomes a button
+// he can bring up (collapsed = a one-line mini-bar on the same anchor),
+// and every HUD button carries its name INSIDE its 46×46 footprint. The
+// design's wager is that captions cost NO geometry — so the headline
+// gate is that every assertion above passes UNMODIFIED (this section
+// only appends), and the new gates pin the captions' presence, the one
+// pulsing caption, and BOTH stack states over the follow-up's inset grid.
+
+describe("HUD round 3 — captions live inside the footprint (source gate)", () => {
+  it("the caption size is one pinned var; .fab is a column; no ladder slot moved", () => {
+    expect(css).toContain("--hud-cap-size: 9.5px");
+    expect(ruleBody(".fab-cap")).toContain("font-size: var(--hud-cap-size)");
+    expect(ruleBody(".fab")).toContain("flex-direction: column");
+    // The slots every gate above stands on are exactly where Package B
+    // and the mobile pass left them — captions spent no geometry.
+    expect(hudVar("hud-cam-toggle-bottom")).toBe(186);
+    expect(hudVar("hud-cam-views-bottom")).toBe(242);
+    expect(hudVar("hud-cam-focus-bottom")).toBe(298);
+    expect(hudVar("hud-status-bottom")).toBe(354);
+    expect(hudVar("hud-status-max-h")).toBe(196);
+  });
+
+  it("exactly one caption pulses — the 🎯's", () => {
+    expect(css).toMatch(/\.focus-main \.fab-cap\s*\{[^}]*animation: cappulse/);
+    expect((css.match(/animation: cappulse/g) ?? []).length).toBe(1);
+    expect(ruleBody(".fab-cap")).not.toContain("animation");
+  });
+
+  it("every inventoried rail/menu button carries its caption", () => {
+    const nav = readRepoFile("src/components/NavRail.tsx");
+    for (const cap of ["Panels", "Recenter", "Zoom +", "Zoom −"]) {
+      expect(nav, `NavRail caption ${cap}`).toContain(`fab-cap">${cap}`);
+    }
+    const actions = readRepoFile("src/components/ActionRail.tsx");
+    for (const cap of ["Add", "Home", "Chat", "Settings"]) {
+      expect(actions, `ActionRail caption ${cap}`).toContain(`fab-cap">${cap}`);
+    }
+    expect(readRepoFile("src/components/ToolsMenu.tsx")).toContain('fab-cap">Tools');
+    expect(readRepoFile("src/components/NoticingCard.tsx")).toContain('fab-cap">Notices');
+  });
+
+  it("the Views caption is un-hidden: same span, dual class, clip rule gone", () => {
+    expect(readRepoFile("src/components/GalaxyViews.tsx")).toContain("gv-toggle-text fab-cap");
+    expect(css).not.toMatch(/\.gv-toggle-text\s*\{[^}]*width: 1px/);
+    expect(ruleBody(".gv-toggle")).toContain("flex-direction: column");
+    expect(ruleBody(".gv-toggle")).toContain("border-radius: 50%");
+    expect(ruleBody(".gv-toggle")).toContain("width: 46px");
+  });
+
+  it("App's own buttons carry captions: focus toggle, fan items, fan-more, 🎯, music", () => {
+    const win = (from: string, len: number) => {
+      const a = appSrc.indexOf(from);
+      expect(a, `anchor ${from}`).toBeGreaterThan(-1);
+      return appSrc.slice(a, a + len);
+    };
+    expect(win("fab-focus-toggle", 1000)).toContain('fab-cap">Focus');
+    expect(win("className={t.className}", 400)).toContain("{t.caption}");
+    expect(win("fan-more", 700)).toContain("fab-cap");
+    // The 🎯's caption is "Focus" (OC-1) — asserted by its exact text so
+    // the neighbouring Music caption cannot false-pass this window.
+    expect(win("focus-main", 1400)).toContain('fab-cap">Focus');
+    expect(win("fab-music", 900)).toContain('fab-cap">Music');
+    expect(win("<ShipStatusStack", 300)).toContain("onToggle");
+  });
+});
+
+describe("HUD round 3 — fan captions follow the space's own name", () => {
+  it("the ship caption is whatever the brain's maker named it — never hardcoded", () => {
+    expect(fanTargetCaption("ship", "Zephyr")).toBe("Zephyr");
+    expect(fanTargetCaption("ship", "Mama's Brain")).toBe("Mama's Brain");
+    expect(fanTargetCaption("ship", "Zephyr")).not.toBe("Soumaya");
+  });
+  it("an unnamed space falls back to the same default name App itself uses", () => {
+    expect(fanTargetCaption("ship", null)).toBe("Soumaya");
+    expect(fanTargetCaption("ship", undefined)).toBe("Soumaya");
+    expect(fanTargetCaption("ship")).toBe("Soumaya");
+  });
+  it("the fixed targets caption by their job", () => {
+    expect(fanTargetCaption("station")).toBe("Station");
+    expect(fanTargetCaption("fleet")).toBe("Fleet");
+    expect(fanTargetCaption("satellite")).toBe("Beacon");
+    expect(fanTargetCaption("visitor")).toBe("Visitor");
+    expect(fanTargetCaption("fig1")).toBe("Figurine");
+    expect(fanTargetCaption("fig2")).toBe("Figurine");
+    expect(fanTargetCaption("more")).toBe("More");
+  });
+  it("App wires the ship caption from the live space name, not a literal", () => {
+    expect(appSrc).toContain('fanTargetCaption("ship", space?.name)');
+  });
+});
+
+describe("HUD round 3 — both stack states over the inset grid", () => {
+  const MINI_H = 34; // --hud-status-mini-h
+
+  it("the mini-bar's height is a pinned var and the bar mirrors the stack's own anchors", () => {
+    expect(hudVar("hud-status-mini-h")).toBe(MINI_H);
+    const mini = ruleBody(".ship-status-mini");
+    expect(mini).toContain("bottom: calc(var(--hud-status-bottom)");
+    expect(mini).toContain("height: var(--hud-status-mini-h)");
+    expect(mini).toContain("z-index: var(--hud-z-status)");
+    const phoneMini = ruleBodyIn(phoneCss, ".ship-status-mini");
+    expect(phoneMini).toContain("bottom: calc(var(--hud-cam-toggle-bottom)");
+    expect(phoneMini).toContain("100vw - 140px"); // the stack's own right-rail reserve
+  });
+
+  it("the collapsed band stays in the lower half at every phone size × inset", () => {
+    for (const v of PHONE_VIEWS) {
+      for (const inset of INSETS) {
+        const collapsedTop = STACK_SLOT + inset + MINI_H;
+        expect(
+          collapsedTop,
+          `collapsed top at ${v.w}×${v.h} inset ${inset}`,
+        ).toBeLessThanOrEqual(v.h / 2);
+        // Collapsed is strictly below the expanded top at every grid
+        // point: summoning only ever frees screen. (The gauge describes
+        // above assert against stackTopAt — the EXPANDED, worst-case
+        // state — unchanged.)
+        expect(collapsedTop).toBeLessThan(stackTopAt(v.h, inset));
+      }
+    }
+    // The note's sharpest case: at 640 + a 34px inset the expanded cap
+    // reaches the midline (stackTopAt = 320) while the collapsed top is
+    // 254 — the collapsed form is inset-proof where the expanded is not.
+    expect(stackTopAt(640, 34)).toBe(320);
+    expect(STACK_SLOT + 34 + MINI_H).toBe(254);
+  });
+
+  it("the freed height is cap minus one line: 98px on phones, 162px on desktop", () => {
+    expect(stackCapAt(844, 0) - MINI_H).toBe(98);
+    expect(stackCapAt(640, 34) - MINI_H).toBe(66); // even the shrunken cap frees two-thirds
+    expect(hudVar("hud-status-max-h") - MINI_H).toBe(162);
   });
 });
