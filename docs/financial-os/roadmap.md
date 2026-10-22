@@ -61,7 +61,9 @@ atomic paid-with-expense-linkage (+ match), remove-cancels-future, edit-rewrites
 eligible-future, per-occurrence skip; plus the no-decision corrections (space-tz
 Money Sky day + web relative dates, bill-risk due-date passthrough, bounded
 repeatable backfill, pay-stub deletion safety, scheduled-vs-settled entries,
-visible/stable Upcoming scope) and the ADR-019 §5 acceptance tests. **Status:
+visible/stable Upcoming scope) and the ADR-019 §5 acceptance tests. Includes
+one additive migration (`balance_applied_at`, per ADR-019 §8 as revised by
+design review R1). **Status:
 design only — implementation awaits the ADR-019 design gate and a separate owner
 authorization.** Explicitly NOT in this stage: engagement rewards, zero-based
 budgeting vs Wealth, multi-account, and the unbuilt D12–D16 features (ADR-019 §6).

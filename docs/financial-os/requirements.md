@@ -61,7 +61,10 @@ Legend: **[M]** must-have for its stage · **[S]** should-have · **[C]** could-
   horizon) — ADR-019 §3.3.
 - **[M]** Entries dated after the space-local today are **scheduled**: stored and
   listed as scheduled, they do not move the tracked balance until their date
-  arrives, when they settle exactly once — ADR-019 §3.6.
+  arrives, when they settle exactly once. Settlement is durable — a
+  `balance_applied_at` marker is the sole record of whether an entry's amount
+  is in the balance, and edits/deletes key their balance effects to it —
+  ADR-019 §3.6 (mechanism added by review revision R1).
 - **[S]** Autopay bills are surfaced but assumed to clear on the due date unless balance can't cover them.
 
 ## 3. Live budget — Stage 1 (the core deliverable)

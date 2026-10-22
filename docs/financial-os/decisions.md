@@ -78,6 +78,13 @@ Still **open** (not decided by D8): zero-based budgeting (Stage 4 Part B) vs
 Wealth; multi-account under D2; engagement rewards for money actions. See ADR-019
 §6 — none of these may be bundled into the lifecycle repair.
 
+**Design review round 1 (2026-10-22)** upheld the four decisions above and the
+§6 boundaries; it tightened only the technical contract in ADR-019 (revision
+R1): a durable settlement marker for future-dated entries, one
+reservation-eligibility rule, claim-first Mark-paid ordering, and the
+new-payment vs matched-expense Safe-to-Spend split (I2a/I2b). No decision in
+this section changed.
+
 ## D7 — Feature flag / rollout
 **Decision:** The module ships behind a **Financial tab** and a per-space **enable flag** (default off for
 existing spaces, opt-in). Nothing about the galaxy/memory experience changes for users who never enable it.

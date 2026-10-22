@@ -24,10 +24,23 @@
   each operation one SQLite transaction (Paid = expense + deduction +
   `paid_expense_id` link, with match-instead-of-duplicate; Remove cancels future
   occurrences, preserves history, keeps past-due unpaid visible; Edit rewrites
-  eligible future occurrences only; Skip is per-occurrence). Invariants I1–I8,
-  transaction boundaries, and acceptance tests T1–T17 mapped to D1–D11 in the ADR.
-- **Migration:** none required — `paid_expense_id`, `fin_paystub.income_id`, and
-  the `skipped` status already exist unwritten (ADR-019 §8).
+  eligible future occurrences only; Skip is per-occurrence). Invariants I1–I9,
+  transaction boundaries, and acceptance tests T1–T20 mapped to D1–D11 in the ADR.
+- **Design review round 1 (2026-10-22):** the owner's review upheld P1–P4 and
+  the §6 scope boundaries but returned four blocking contract findings (settlement
+  mechanism unspecified; I1 contradicting I5/P2; Mark-paid's guarded flip ordered
+  after the expense/balance writes; I2 too broad for the matched-expense path).
+  All four were re-verified against the ADR and the baseline code — all four
+  confirmed — and corrected in **ADR-019 revision R1**: durable settlement
+  marker (§3.6), one eligibility rule (I1), claim-first Mark-paid (§4), split
+  I2a/I2b, new tests T18–T20. **The gate below stays OPEN pending re-review of
+  R1.** Implementation still NOT authorized.
+- **Migration (revised by R1):** one additive column — `balance_applied_at` on
+  `fin_income`/`fin_expense`, migrateSchema-only and PRAGMA-guarded, with a
+  legacy backfill — required by the §3.6 settlement mechanism (ADR-019 §8, as
+  revised; the original no-migration claim did not survive review).
+  `paid_expense_id`, `fin_paystub.income_id`, and the `skipped` status already
+  exist unwritten, as originally found.
 - **Out of scope (separate undecided owner items, ADR-019 §6):** zero-based
   budgeting vs Wealth, multi-account, the engagement/rewards system, and the
   documented-but-dead features D12–D16 (status noted only).
@@ -35,13 +48,15 @@
   can be authorized:**
   - [ ] P1–P4 (Paid / Remove / Edit / Skip) as written are the semantics to build.
   - [ ] Corrections §3.1–§3.7 in scope as written — in particular the
-        scheduled-vs-settled rule (§3.6) and the backfill window (§3.3).
-  - [ ] Transaction boundaries + invariants (§2/§4) accepted as the contract;
-        §5 accepted as the acceptance-test list.
+        scheduled-vs-settled rule and its durable settlement mechanism (§3.6,
+        as revised by R1) and the backfill window (§3.3).
+  - [ ] Transaction boundaries + invariants (§2/§4, R1 revisions included)
+        accepted as the contract; §5 (T1–T20) accepted as the acceptance-test list.
   - [ ] §6 stays out of scope — no bundling of engagement, zero-based vs Wealth,
         multi-account, or D12–D16 features.
-  - [ ] No-schema-change premise (§8) stands; any discovered schema need returns
-        to design before implementation proceeds.
+  - [ ] The single additive migration in §8 (as revised by R1) is accepted; any
+        *further* discovered schema need returns to design before implementation
+        proceeds.
 
 ## 2026-10-21 — ADR-018 implementation: global notification cap + per-space TTS cache (Phases B–D)
 
