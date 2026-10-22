@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 6 — Roster **settled** by the owner as proposed (D-4/D-5/D-6, §11.1; step 1 closed). §13 opens step 2 (information model, proposal). §14 adds the owner-directed **Animation Gate** with the initial animation inventory. **Design gate: OPEN.**
+**Revision:** 7 — ChatGPT's review of §13–§14 absorbed: §13 gains the three **Operations** (visit / relocate / archive-retrieve), P4 strengthened to a system-wide invariant, P7 gains confidence tiers; §14 gains operation fidelity, atomicity, truthful-or-atmosphere, seed ≠ passed, and combined-load accounting. Record: `chatgpt-review-2-2026-10-22.md`. Step 2's three questions await the owner's settlement (§13). **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -541,7 +541,7 @@ All three queued calls were settled by the owner on 2026-10-22, as proposed (D-4
 
 ## 13. Settlement step 2 — the information model (King's proposal, owner settles)
 
-How the settled roster (§12) shares one brain without duplicating it. Proposal only.
+How the settled roster (§12) shares one brain without duplicating it. Proposal only — revised per ChatGPT's review of §13–§14 (2026-10-22; record: `chatgpt-review-2-2026-10-22.md`); the roster (§12) is settled and is **not** reopened by anything here.
 
 **P1 — One canonical memory, many surfaces (from §9.6).** A memory exists once. Spaces never hold copies; they *surface* the canonical memory under explicit rules. Editing, archiving, or forgetting a memory anywhere changes it everywhere, instantly and consistently.
 
@@ -556,15 +556,24 @@ How the settled roster (§12) shares one brain without duplicating it. Proposal 
 - **Great Station:** no memories at all (D-5): destinations, routes, gates, tours.
 - **Quiet/Archive:** archived items — and *only* there (P4).
 
-**P4 — Archive and privacy are supreme.** Archiving removes a memory from *every* other surface — home, Deep Past, People, tours, resurfacing — no exceptions, no leaks through a "visit." Retrieval happens only by the user's deliberate act in the Archive itself. Anything the user has hidden or restricted anywhere is hidden everywhere.
+**P4 — Archive and privacy are supreme — a system-wide invariant, not a display rule (strengthened per ChatGPT review, 2026-10-22).** Archiving removes a memory from *every* other surface — home, Deep Past, People, tours, resurfacing — no exceptions, no leaks through a "visit." And it goes deeper than visible objects: the archived memory also disappears from **derived clusters and connections, route and tour suggestions, search and resurfacing results, cached scenes, and queued or in-progress animations** — an animation already carrying it must not deliver it into another space after archival; the archive state wins, mid-flight. Retrieval happens **only** by the user's deliberate act inside the Archive itself. Two precisions: archiving is **not deletion** — the underlying information is preserved, at rest; and retrieval restores the memory to its **prior primary home** unless the user explicitly chooses a different home as part of the retrieval act — restoring never silently overwrites that choice. Anything the user has hidden or restricted anywhere is hidden everywhere.
 
 **P5 — Anchors are chosen, never assigned silently.** A memory becomes a Scale-space anchor (or any space's featured landmark) only by brain proposal + user yes, or by the user's own placement. The user can un-anchor at any time; the memory itself is untouched (§9.4 correction principle).
 
 **P6 — Every surfacing is explainable.** Any appearance can answer "why are you here?" in one plain line ("Linked to Maya · from your chapter 'The Move'"). If a rule can't explain an appearance, the appearance doesn't happen. Mis-surfacings are correctable, and the correction teaches the rule, never punishes the memory.
 
-**P7 — Derived things are derived, never stored as truth.** Clusters, connections, chapter routes, growth landmarks, emotion tones: computed from canonical data under §9.4's categories (structural change needs a real event or a user decision). If a derivation is wrong, fixing the derivation fixes every surface at once.
+**P7 — Derived things are derived, never stored as truth — and derivation has confidence tiers (refined per ChatGPT review, 2026-10-22).** Clusters, connections, chapter routes, growth landmarks, emotion tones: computed from canonical data under §9.4's categories (structural change needs a real event or a user decision). If a derivation is wrong, fixing the derivation fixes every surface at once. But "derived" is not one level of certainty, and the design must never render them as if it were: **(i) Confirmed** — a user-stated relationship or user-created link: authoritative. **(ii) Suggested** — a system-proposed connection: a *hypothesis*, presented as one (its bridge, path, or landmark must look provisional, not monumental) until the user confirms it. **(iii) Inferred** — an emotion tone or similar interpretation: the most uncertain tier, always correctable, and its correction changes the rendering, never the memory. A suggestion must not become a permanent fact merely because it was rendered beautifully.
 
-**Open for the owner in step 2:** (a) the age/stillness threshold idea for the Deep Past — threshold, or brain-judged with explanation? (b) Can an anchor memory keep its primary home elsewhere (P2 says yes — confirm)? (c) Should People clusters exist for *every* linked person, or only people the user marks as significant?
+**Operations — three, and only three (added per ChatGPT review, 2026-10-22).** P1–P3 say a memory can *appear* in many spaces; A1–A3 (§14) show a memory being *carried* through a gate. Those must never blur. Every interaction with a memory in the worlds is exactly one of:
+- **Visit / surface** — the memory is shown in another space under P3's rules. Its primary home does **not** change. (Most gate travel with a memory is this: you go *to see it there*, or it is surfaced for a tour.)
+- **Relocate** — the user *deliberately* changes the memory's primary home. An explicit act with its own confirmation; a visit must never silently become a relocation, and a relocation never creates a second memory — the same canonical memory, re-homed, with its history intact.
+- **Archive / retrieve** — the intentional status change governed by P4's invariant, with its stricter visibility rules and Archive-only retrieval.
+Each operation has its own state transition and its own animation semantics (§14): the A1–A3 carry/transit/placement sequence must *represent the actual operation* — a visit's placement is a surfacing, a relocation's placement is a re-homing — and the user can always tell which one just happened, in plain language.
+
+**Open for the owner in step 2** *(ChatGPT's recommendations recorded; the owner settles)*:
+(a) Deep Past membership: fixed age threshold, or brain-judged? — *ChatGPT recommends: an explainable rule combining age with meaningful resurfacing context, with user controls; never silently classify something as "forgotten" merely because it is old.*
+(b) Can an anchor memory keep its primary home elsewhere (P2/P5)? — *ChatGPT recommends: yes — an anchor is a confirmed cross-space appearance, not a forced relocation.*
+(c) People clusters for every linked person, or only significant people? — *ChatGPT recommends: only user-confirmed significant people, or people the user explicitly chooses to surface; ordinary mentions must not automatically create a prominent relationship presence.*
 
 ---
 
@@ -573,10 +582,16 @@ How the settled roster (§12) shares one brain without duplicating it. Proposal 
 The owner directed: *we will need an animation gate* — a standing gate that inventories **what animations each scene and scenario needs** before that scene can be considered design-complete. Movement is how this world communicates; an unanimated state change is a broken promise, and an undesigned animation is how state changes become confusing or dishonest.
 
 ### 14.1 The gate rule
-No space, scene, or scenario is design-complete until its animations are inventoried here with, per animation: **trigger** (what starts it) · **actors** (ship / the brain / the user / the world) · **what moves and how** (plain-language description) · **duration class** (moment <2s / sequence 2–15s / journey >15s) · **reduced-motion equivalent** · **cost class** (cheap / moderate / heavy against §11.2 budgets). The per-space template (§9.7) gains a line: *Animations (per the Animation Gate inventory)*. Passing this gate, like every gate here, authorizes nothing to build.
+No space, scene, or scenario is design-complete until its animations are inventoried here with, per animation: **trigger** (what starts it) · **actors** (ship / the brain / the user / the world) · **what moves and how** (plain-language description) · **duration class** (moment <2s / sequence 2–15s / journey >15s) · **reduced-motion equivalent** · **cost class** (cheap / moderate / heavy against §11.2 budgets) · **user control**: skip, cancel, interruption, and repeat-visit behavior, specified per animation (added per ChatGPT review, 2026-10-22). The per-space template (§9.7) gains a line: *Animations (per the Animation Gate inventory)*. Passing this gate, like every gate here, authorizes nothing to build.
+
+**Seed ≠ passed (review clarification).** The §14.3 list is a *seed inventory* — named animations, not yet fully specified ones. An entry counts as gate-passed only when every field above is filled for it. Nobody may cite an entry's presence in §14.3 as evidence its animation is designed.
+
+**Combined load (review requirement).** Cost classes are planning aids, not guarantees. Each mockup and each scene must state its **combined animation load** (e.g., warp + traffic + particles + placement running together), its **fallback behavior** when the budget is exceeded (what degrades first, gracefully), and the §11 measurement evidence that will prove it on the owner's phone.
 
 ### 14.2 Standing animation rules
+- **Truthful or unmistakably atmosphere (the review's governing principle):** every visible object, connection, journey, and animation is either a truthful representation of the brain's underlying state — or unmistakably presented as *atmosphere*, never as fact. Ambient station traffic (A17) is atmosphere: it implies no other users and no brain activity unless a mapping rule is explicitly designed later. This single distinction protects the world from becoming beautiful but misleading.
 - **Honesty:** an animation may never depict a state that isn't real — no fake traffic pretending to be other users, no growth animation without a real milestone, no "delivery" of a memory that didn't actually move (§9.4, reward honesty).
+- **Atomicity (review requirement):** an operation's animation and its state change are one act. If the user cancels, connectivity drops, or the app is interrupted mid-journey, the memory ends in exactly one consistent state — the operation either completes or visibly doesn't happen; never a half-moved, duplicated, or contradictory state.
 - **Never-punish in motion:** no decay, wilting, breaking, or dimming-to-shame animations, ever. Absence changes nothing on screen (§9.4).
 - **Continuity of identity:** when a memory moves, the *same* memory is seen to move — it never vanishes here and pops in there. Travel and placement are shown, not teleported, unless the user explicitly chooses instant travel (§9.5 repeat-visit direct travel), in which case the transition still shows origin → destination context.
 - **Reduced motion is a real equivalent,** not a removal: every animation's calmer version preserves the information the motion carried (§9.5).
@@ -587,13 +602,14 @@ No space, scene, or scenario is design-complete until its animations are invento
 - A1. **Carry-to-gate:** the ship/the brain picks up or escorts a memory and carries it to a warp gate — visible cargo, unhurried, interruptible.
 - A2. **Gate transit with cargo:** the memory travels *with* the ship through transit (§2.3), arriving in the destination space — the user watches it cross, not just arrive.
 - A3. **Placement:** on arrival the memory settles into its place in the new space — gliding to its position, a soft settle/glow as it takes its place (echoing the intended tending flash, not copying it blindly).
-- A4. **Send-off (core capture flow, per D-6):** a newly sorted memory departs through a gate toward its space — the small, satisfying version of A1–A3 inside the everyday app.
-- A5. **Return/retrieval:** the reverse journeys — bringing a memory back home, and the Archive retrieval (deliberate, gentle, unhurried; never a "release" spectacle).
+  - **Operation fidelity (review requirement):** A1–A3 must depict the *actual* operation (§13 Operations): a visit's placement reads as surfacing; a relocation's as re-homing; an archive journey obeys P4 throughout. The same canonical identity survives the whole journey — and under the atomicity rule, an interruption never leaves the memory half-moved.
+- A4. **Send-off (core capture flow, per D-6):** a newly sorted memory departs through a gate toward its space — the small, satisfying version of A1–A3 inside the everyday app. **Non-blocking (review note):** saving a memory never depends on watching this finish — everyday capture stays fast; the send-off plays alongside, and skipping it loses nothing.
+- A5. **Return/retrieval:** the reverse journeys — bringing a memory back home, and the Archive retrieval (deliberate, gentle, unhurried; never a "release" spectacle). **Stricter rules (review):** retrieval begins *only* from the user's deliberate act inside the Archive — the reverse-travel animation must never imply an archived memory can be pulled back from any destination; and if a memory is archived while any animation is in progress, P4's invariant applies immediately, mid-flight.
 
 **Mutation made visible (§9.4 — structural change is animated, presentation change is gradual):**
 - A6. **Landmark rising (Growing Place):** a real milestone raises/assembles a landmark — construction as celebration, at journey or sequence length, skippable.
 - A7. **Connection forming:** when the brain finds a real link, a path/bridge draws itself between the memories — in whichever space they meet.
-- A8. **Atmosphere shift:** palette/weather changes crossfade slowly (never a cut, never a jump-scare); the user can ask why (§9.4 explainability) mid-shift.
+- A8. **Atmosphere shift:** palette/weather changes crossfade slowly (never a cut, never a jump-scare); the user can ask why (§9.4 explainability) mid-shift. **Correction (review note):** when the shift rests on an *inferred* tone (§13 P7 tier iii), the explanation must say so plainly, and the user can correct the interpretation — the rendering follows the correction, and the memory itself is never edited by an inference.
 - A9. **Cluster bloom (People):** a person's cluster forms/gathers when their memories link up — gentle orbital gathering, not an explosion of nodes.
 - A10. **Laying down (Archive):** a memory being archived settles, dims to restfulness (not darkness-as-death), and comes to stillness — dignity in motion.
 
@@ -606,14 +622,14 @@ No space, scene, or scenario is design-complete until its animations are invento
 - A16. **Gate reveal:** how a newly discovered gate appears (§2.2) — discovery should feel like finding, not unlocking.
 
 **Ambient & interaction life:**
-- A17. **Station traffic:** ambient ships on approach/departure lanes — atmosphere and scale cueing (§9.7 Q22: ambient first; any meaning attached later must be truthful).
+- A17. **Station traffic:** ambient ships on approach/departure lanes — atmosphere and scale cueing (§9.7 Q22: ambient first; any meaning attached later must be truthful). **Atmosphere, not fact (review note):** these ships imply no other real users and represent no brain activity; if they ever map to something real, that mapping gets its own explicit rule first.
 - A18. **Ship behaviors:** idle, tending (incl. the existing flash), escorting, route-following — the ship reads as alive and purposeful, never frantic.
 - A19. **Route plotting:** selecting a destination draws the route in space (EVE's route projection, §10.1) — the user sees the journey before taking it; cancelling undraws it cleanly.
-- A20. **Focus & selection:** focus shifts, planet/memory selection responses — the small motions that make touch feel answered.
+- A20. **Focus & selection:** focus shifts, planet/memory selection responses — the small motions that make touch feel answered. **Immediacy (review note):** on a phone these must feel instant and stable — feedback that confirms the touch, never a delay added to routine navigation.
 
 ### 14.4 Gate status
-Inventory seeded (§14.3); per-space completion happens as each space's design matures through the settlement sequence. The mockup test (§11) already implicitly exercises A11/A13-class sequences (its criteria measure a warp transit and a full approach); the Animation Gate makes that coverage explicit when mockups are specified.
+Inventory seeded (§14.3); per-space completion happens as each space's design matures through the settlement sequence. The mockup test (§11) already implicitly exercises A11/A13-class sequences (its criteria measure a warp transit and a full approach); the Animation Gate makes that coverage explicit when mockups are specified. **ChatGPT reviewed the gate on 2026-10-22 and upheld it** ("keep the gate"), with safeguards now folded into §14.1–14.3: seed ≠ passed, user-control fields required, combined-load + fallback accounting, operation fidelity and atomicity, truthful-or-atmosphere.
 
 ---
 
-*End of Exploration 1, Revision 6. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 7. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*

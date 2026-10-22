@@ -10,6 +10,7 @@
 2. **`design-exploration-1.md`** — King's exploration, now at **Revision 2**: candidate spaces each tied to a second-brain job, gate/transit design, the scale question, a mutation model with a never-punish analysis, tours, placeholder-asset strategy, the scenery problem, the open questions — plus §9, which absorbs ChatGPT review 1 (unique-outcome test, environment-recipe method, mutation tightening, settlement sequence) and the owner's fuel-gated warp proposal (§9.10, questions 26–28).
 3. **`chatgpt-review-1-2026-10-22.md`** — the record of ChatGPT's first review (verdict: strong vision, design gate still open; ready for the next design iteration, not for architecture or implementation).
 4. **`gemini-research-1-2026-10-22.md`** — Gemini Deep Research (scenery study, asset hunt, celestial data) **with King's verification table**: which claims are confirmed, which are corrected (HYG ShareAlike scope; ESA/Hubble is CC BY 4.0), and which are dropped. Exploration §10 absorbs the verified findings as a proposed technique stack (Q25) and adds Q29 (Great Station form).
+5. **`chatgpt-review-2-2026-10-22.md`** — the record of ChatGPT's second review (§13 information model + §14 Animation Gate; verdicts: strengthen three boundaries, keep the gate), absorbed into Exploration Revision 7.
 
 ## The most important instruction
 
