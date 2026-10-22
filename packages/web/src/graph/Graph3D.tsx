@@ -86,7 +86,7 @@ import {
   sectorTitleWidthCapK,
   sunProximityFade,
 } from "./sunProximity.js";
-import { clampLabelCenter, isPhonePortraitViewport } from "./labelFrame.js";
+import { cameraDepthFromNdc, clampLabelCenter, isPhonePortraitViewport, labelHalfExtentsPx } from "./labelFrame.js";
 import { makeOrbitSystem } from "./orbits.js";
 import { makeVisitors, type VisitorSystem } from "./visitors.js";
 import { isNodeProcessing, logVisits } from "../api/client.js";
@@ -2578,9 +2578,28 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                 // width ceiling on top of the (now unboosted) map size —
                 // a title may never span more than ~55% of the screen.
                 // See sectorTitleWidthCapK in sunProximity.ts.
+                // PR #89 follow-up: the cap's basis is the hub's
+                // camera-space DEPTH, not the Euclidean `dist` — the
+                // Euclidean basis let the ceiling reach ~58–61% at
+                // frame corners (trace Finding 2). The hub projects
+                // through the label scratch (restored by the label
+                // pass's own set() before any use); behind-camera hubs
+                // (z ≥ 1) keep the Euclidean basis — their titles are
+                // not on screen anyway.
                 if (IS_PHONE_PORTRAIT) {
                   const persp = camera as THREE.PerspectiveCamera;
-                  k = Math.min(k, sectorTitleWidthCapK(base.x, dist, persp.fov, persp.aspect));
+                  labelProjScratch.copy(tmp).project(camera);
+                  const capDist =
+                    labelProjScratch.z < 1
+                      ? cameraDepthFromNdc(
+                          dist,
+                          labelProjScratch.x,
+                          labelProjScratch.y,
+                          Math.tan((persp.fov * Math.PI) / 360),
+                          persp.aspect,
+                        )
+                      : dist;
+                  k = Math.min(k, sectorTitleWidthCapK(base.x, capDist, persp.fov, persp.aspect));
                 }
                 child.scale.set(base.x * k, base.y * k, 1);
               }
@@ -2724,8 +2743,31 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                     const vw = window.innerWidth;
                     const vh = window.innerHeight;
                     const tanV = Math.tan((persp.fov * Math.PI) / 360);
-                    const halfW = (((child.scale.x * parentScale) / 2) * vw) / (2 * distCam * tanV * persp.aspect);
-                    const halfH = (((child.scale.y * parentScale) / 2) * vh) / (2 * distCam * tanV);
+                    // PR #89 follow-up: half extents are sized from the
+                    // label's camera-space DEPTH (from the NDC just
+                    // projected), not the Euclidean distCam — the
+                    // Euclidean basis understated off-axis labels by
+                    // sec θ and falsified the clamp's whole-box-inside
+                    // guarantee by ~3–7px at frame corners (trace
+                    // Finding 2). The math lives in labelFrame.ts so
+                    // it is unit-tested; on-axis it reproduces the old
+                    // values exactly.
+                    const depth = cameraDepthFromNdc(
+                      distCam,
+                      labelProjScratch.x,
+                      labelProjScratch.y,
+                      tanV,
+                      persp.aspect,
+                    );
+                    const { halfW, halfH } = labelHalfExtentsPx(
+                      child.scale.x * parentScale,
+                      child.scale.y * parentScale,
+                      depth,
+                      persp.fov,
+                      persp.aspect,
+                      vw,
+                      vh,
+                    );
                     const clampedCentre = clampLabelCenter(
                       (labelProjScratch.x * 0.5 + 0.5) * vw,
                       (0.5 - labelProjScratch.y * 0.5) * vh,

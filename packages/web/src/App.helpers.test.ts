@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { GraphEdge, GraphNode } from "@brain/shared";
 import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphNodes, mergeGraphLinks, mergeGraphData, fanLayout, fanWindow, fanTopEdge, FAN_HEADER_BAND_PX } from "./App.helpers.js";
+// Namespace access for the PR #89 follow-up exports: on the pre-fix tree
+// they are absent (undefined), so the new tests below fail individually
+// instead of taking the whole file down at import.
+import * as helpers from "./App.helpers.js";
 
 /** Locks the pure presentational helpers extracted from App.tsx (D4), so a future
  *  refactor that touches them fails loudly instead of silently. */
@@ -278,5 +282,66 @@ describe("fanLayout / fanWindow — the fan never reaches the header band (round
     expect(focusItemStyle(2, true).transform).toBe("translateY(-162px)");
     expect(focusItemStyle(2, true, 46).transform).toBe("translateY(-138px)");
     expect(focusItemStyle(2, false, 46).transform).toBe("translateY(0) scale(0.4)");
+  });
+});
+
+describe("fanLayout — inset-true geometry (PR #89 follow-up, trace Finding 1)", () => {
+  // The CSS cluster anchor is slot(298) + env(safe-area-inset-bottom);
+  // window.innerHeight already includes the gesture strip. The first
+  // pass modelled the inset as 0 — these are the cases that broke on
+  // real hardware (slack at inset 0: 2px @640, 4px @780, 68px @844).
+  it("the owner's phone class (390×780) at inset 0: all 7 fit — with exactly the trace's 4px of slack", () => {
+    const l = fanLayout(390, 780, 7, 0);
+    expect(l.folded).toBe(false);
+    expect(l.clusterBottomPx).toBe(298);
+    expect(780 - FAN_HEADER_BAND_PX - fanTopEdge(l)).toBe(4);
+  });
+
+  it("a 24px gesture inset folds the same phone one slot earlier, and the folded top still clears the header", () => {
+    const l = fanLayout(390, 780, 7, 24);
+    expect(l.clusterBottomPx).toBe(298 + 24);
+    expect(l.capacity).toBe(6);
+    expect(l.folded).toBe(true);
+    expect(l.pageSize).toBe(5);
+    expect(l.pageCount).toBe(2);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(780 - FAN_HEADER_BAND_PX);
+    // The fold drops nothing: pages still tile the full target list.
+    const seen: number[] = [];
+    for (let p = 0; p < l.pageCount; p++) {
+      const w = fanWindow(7, l, p);
+      for (let i = 0; i < w.count; i++) seen.push(w.start + i);
+    }
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("360×640 at inset 34: capacity follows the TRUE available height (3 slots) and clears the header", () => {
+    const l = fanLayout(360, 640, 7, 34);
+    expect(l.capacity).toBe(3);
+    expect(l.folded).toBe(true);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(640 - FAN_HEADER_BAND_PX);
+  });
+
+  it("390×844 at inset 34: all 7 still fit unfolded, at the true (inset-shifted) top edge", () => {
+    const l = fanLayout(390, 844, 7, 34);
+    expect(l.folded).toBe(false);
+    expect(fanTopEdge(l)).toBe(298 + 34 + 7 * 46 + 46);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(844 - FAN_HEADER_BAND_PX);
+  });
+
+  it("across the size × inset grid, capacity never grows with inset and the top edge always clears the header", () => {
+    for (const [w, h] of [[360, 640], [390, 780], [390, 844]] as const) {
+      let prev = Infinity;
+      for (const inset of [0, 16, 24, 34]) {
+        const l = fanLayout(w, h, 7, inset);
+        expect(l.capacity, `capacity at ${w}×${h} inset ${inset}`).toBeLessThanOrEqual(prev);
+        prev = l.capacity;
+        expect(fanTopEdge(l), `top edge at ${w}×${h} inset ${inset}`).toBeLessThanOrEqual(h - FAN_HEADER_BAND_PX);
+      }
+    }
+  });
+
+  it("measureSafeBottomInset returns 0 where env() cannot resolve (jsdom, desktop)", () => {
+    expect(typeof helpers.measureSafeBottomInset).toBe("function");
+    expect(helpers.measureSafeBottomInset()).toBe(0);
   });
 });

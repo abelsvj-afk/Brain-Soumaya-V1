@@ -210,22 +210,29 @@ export const SECTOR_TITLE_PHONE_MAX_FRACTION = 0.55;
 /**
  * The largest title scale factor k whose on-screen width stays within
  * `maxFraction` of the viewport width, for a title of world width
- * `baseWidthWorld` (its baseScale.x) at camera distance `dist`. Pure
- * projection math: a sprite of world width W at distance d spans
+ * `baseWidthWorld` (its baseScale.x) at camera-space DEPTH `depth`.
+ * Pure projection math: a sprite of world width W at depth d spans
  * W / (2·d·tan(hfov/2)) of the screen, and tan(hfov/2) =
  * tan(vfov/2)·aspect. Returns Infinity for degenerate inputs (the cap
  * simply doesn't bind) so callers can Math.min unconditionally.
+ *
+ * PR #89 follow-up: the second argument is the hub's camera-space
+ * DEPTH, not its Euclidean distance — Graph3D previously fed the
+ * Euclidean distance, so the ~55% ceiling really permitted 55%·sec θ
+ * (~58–61% at frame corners), the same substitution the label clamp
+ * made (trace Finding 2). On-axis depth == distance, so centred
+ * titles are unchanged.
  */
 export function sectorTitleWidthCapK(
   baseWidthWorld: number,
-  dist: number,
+  depth: number,
   fovDeg: number,
   aspect: number,
   maxFraction: number = SECTOR_TITLE_PHONE_MAX_FRACTION,
 ): number {
   const tanH = Math.tan((fovDeg * Math.PI) / 360) * aspect;
-  if (!(baseWidthWorld > 0) || !(dist > 0) || !(tanH > 0)) return Infinity;
-  return (2 * dist * tanH * maxFraction) / baseWidthWorld;
+  if (!(baseWidthWorld > 0) || !(depth > 0) || !(tanH > 0)) return Infinity;
+  return (2 * depth * tanH * maxFraction) / baseWidthWorld;
 }
 
 /**
