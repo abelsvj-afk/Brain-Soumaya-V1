@@ -81,9 +81,12 @@ import { makeSun, SUN_RADIUS_MAX } from "./sun.js";
 import {
   clampCameraToSunFloor,
   labelOpacityNearSun,
+  sectorLabelBoost,
   sectorTitleScaleK,
+  sectorTitleWidthCapK,
   sunProximityFade,
 } from "./sunProximity.js";
+import { clampLabelCenter, isPhonePortraitViewport } from "./labelFrame.js";
 import { makeOrbitSystem } from "./orbits.js";
 import { makeVisitors, type VisitorSystem } from "./visitors.js";
 import { isNodeProcessing, logVisits } from "../api/client.js";
@@ -1655,6 +1658,9 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     // Scratch for the planet-material sun-direction uniform (see makePlanetMaterial /
     // uSunDirView) — reused every frame per body rather than allocated.
     const sunDirScratch = new THREE.Vector3();
+    // Scratch for the phone-portrait label safe-frame clamp (labelFrame.ts) —
+    // reused every frame per label rather than allocated.
+    const labelProjScratch = new THREE.Vector3();
     // Scratch for the sun-occlusion check (see isOccludedBySun below).
     const occDirScratch = new THREE.Vector3();
     const occClosestScratch = new THREE.Vector3();
@@ -1715,9 +1721,15 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     // A COUNT cap is bounded by construction, at any camera position, on any dataset.
     const MAX_FIDELITY_BODIES = perfTier === "performance" ? 12 : perfTier === "balanced" ? 20 : 32;
     // Small screens show these zoomed-out sector names much smaller — give them a boost so
-    // they're actually readable on a phone (the "can't read the names when zoomed out" bug).
-    const isNarrowScreen = typeof window !== "undefined" && window.innerWidth < 760;
-    const SECTOR_LABEL_BOOST = isNarrowScreen ? 1.4 : 1;
+    // they're actually readable (the "can't read the names when zoomed out" bug). Mobile
+    // HUD pass (round 2, S2): on phone portrait the boost is what made titles sprawl
+    // across the view, and the owner's settled call is that titles SHRINK on phones —
+    // sectorLabelBoost keeps today's rule everywhere except phone portrait (1.0 there),
+    // and the title pass additionally caps a phone title's width at ~55% of the screen.
+    const viewW = typeof window !== "undefined" ? window.innerWidth : 1024;
+    const viewH = typeof window !== "undefined" ? window.innerHeight : 768;
+    const IS_PHONE_PORTRAIT = isPhonePortraitViewport(viewW, viewH);
+    const SECTOR_LABEL_BOOST = sectorLabelBoost(viewW, viewH);
 
     // Galaxy render recovery pass (2026-09-10): lowered from 2600. Two independent
     // real-device readings (Xclipse 530, hardware-accelerated) at comparable node/link
@@ -2561,7 +2573,15 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               // only past 19,200 units camera-to-hub. See sunProximity.ts.
               const base = child.userData.baseScale;
               if (base) {
-                const k = sectorTitleScaleK(dist, MACRO_DIST, SECTOR_LABEL_BOOST);
+                let k = sectorTitleScaleK(dist, MACRO_DIST, SECTOR_LABEL_BOOST);
+                // Mobile HUD pass (round 2, S2): on phone portrait, a hard
+                // width ceiling on top of the (now unboosted) map size —
+                // a title may never span more than ~55% of the screen.
+                // See sectorTitleWidthCapK in sunProximity.ts.
+                if (IS_PHONE_PORTRAIT) {
+                  const persp = camera as THREE.PerspectiveCamera;
+                  k = Math.min(k, sectorTitleWidthCapK(base.x, dist, persp.fov, persp.aspect));
+                }
                 child.scale.set(base.x * k, base.y * k, 1);
               }
               const mq = child.userData.marquee;
@@ -2671,6 +2691,62 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                 // full speed regardless of prefers-reduced-motion.
                 mq.t += motionDt * 0.36;
                   mat.map!.offset.x = (Math.sin(mq.t) * 0.5 + 0.5) * mq.range;
+                }
+              }
+              // Mobile HUD pass (round 2, S6): on phone portrait, slide the
+              // label inside the dock-inset safe frame (labelFrame.ts) so
+              // it never starts off-screen or runs under a dock button
+              // ("True Covering" losing its T under the ☰ FAB). The
+              // sprite's un-clamped anchor offset is captured once and
+              // every pass recomputes from it, so as the camera moves the
+              // label restores exactly — no drift. A label too big to fit
+              // the frame is declined by clampLabelCenter and keeps its
+              // anchor. Contrast/opacity rules above are untouched; this
+              // only moves the sprite. `tmp` still holds this body's
+              // position here; the parent group carries no rotation, so
+              // world anchor = tmp + basePos × parent scale.
+              if (IS_PHONE_PORTRAIT) {
+                if (!child.userData.labelBasePos) {
+                  child.userData.labelBasePos = child.position.clone();
+                }
+                if (child.visible) {
+                  const basePos = child.userData.labelBasePos as THREE.Vector3;
+                  const parentScale = o.scale.x > 0 ? o.scale.x : 1;
+                  labelProjScratch.set(
+                    tmp.x + basePos.x * parentScale,
+                    tmp.y + basePos.y * parentScale,
+                    tmp.z + basePos.z * parentScale,
+                  );
+                  const distCam = camera.position.distanceTo(labelProjScratch);
+                  labelProjScratch.project(camera);
+                  if (labelProjScratch.z < 1 && distCam > 0) {
+                    const persp = camera as THREE.PerspectiveCamera;
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+                    const tanV = Math.tan((persp.fov * Math.PI) / 360);
+                    const halfW = (((child.scale.x * parentScale) / 2) * vw) / (2 * distCam * tanV * persp.aspect);
+                    const halfH = (((child.scale.y * parentScale) / 2) * vh) / (2 * distCam * tanV);
+                    const clampedCentre = clampLabelCenter(
+                      (labelProjScratch.x * 0.5 + 0.5) * vw,
+                      (0.5 - labelProjScratch.y * 0.5) * vh,
+                      halfW,
+                      halfH,
+                      vw,
+                      vh,
+                    );
+                    if (clampedCentre.clamped) {
+                      labelProjScratch
+                        .set((clampedCentre.x / vw) * 2 - 1, 1 - (clampedCentre.y / vh) * 2, labelProjScratch.z)
+                        .unproject(camera);
+                      child.position.set(
+                        (labelProjScratch.x - tmp.x) / parentScale,
+                        (labelProjScratch.y - tmp.y) / parentScale,
+                        (labelProjScratch.z - tmp.z) / parentScale,
+                      );
+                    } else {
+                      child.position.copy(basePos);
+                    }
+                  }
                 }
               }
             }

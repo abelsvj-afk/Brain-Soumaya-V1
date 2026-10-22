@@ -187,6 +187,205 @@ describe("HUD dock — Views dropdown sheet", () => {
   });
 });
 
+// ── Mobile HUD layout pass (screenshot round 2) ─────────────────────────
+//
+// The gates above pin the ONE desktop ladder at 390×780. The round-2
+// diagnosis proved the HUD had no phone layout at all — these gates pin
+// the phone-portrait block (the LAST block of index.css) at the two
+// phone viewports the pass is designed for, including the assertions
+// Package B's suite lacked: fan-top vs the header band, gauge vs the
+// camera ladder, legend vs the recenter FAB, stack vs the middle band,
+// labels inside the safe frame. Safe-area insets are modelled as 0,
+// the same convention as the gates above.
+
+import {
+  fanLayout,
+  fanTopEdge,
+  FAN_CLUSTER_BOTTOM_PX,
+  FAN_HEADER_BAND_PX,
+} from "../App.helpers.js";
+import { LABEL_SAFE_FRAME } from "../graph/labelFrame.js";
+
+/** Body of the @media block whose prelude matches exactly (brace-matched). */
+function mediaBlock(prelude: string): string {
+  const start = css.indexOf(prelude);
+  if (start < 0) throw new Error(`media block not found: ${prelude}`);
+  const open = css.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}") {
+      depth--;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  throw new Error(`unterminated media block: ${prelude}`);
+}
+
+function ruleBodyIn(src: string, selector: string): string {
+  const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = new RegExp(`${esc}\\s*\\{([^}]*)\\}`).exec(src);
+  if (!m) throw new Error(`rule not found: ${selector}`);
+  return m[1]!;
+}
+
+function pxIn(body: string, prop: string): number {
+  const m = new RegExp(`${prop}:\\s*(-?\\d+)px`).exec(body);
+  if (!m) throw new Error(`no px ${prop} in rule: ${body.slice(0, 60)}`);
+  return parseInt(m[1]!, 10);
+}
+
+// On the base tree there is no phone block at all: phoneCss stays empty
+// and every Mobile HUD describe below fails on its own assertions, while
+// the pre-existing gates in this file still run — that contrast is the
+// falsification record for this pass.
+let phoneCss = "";
+try {
+  phoneCss = mediaBlock("@media (max-width: 560px) and (orientation: portrait)");
+} catch {
+  phoneCss = "";
+}
+const PHONE_VIEWS = [
+  { w: 390, h: 844 },
+  { w: 360, h: 640 },
+];
+
+describe("Mobile HUD — the phone-portrait block exists and is the pass's one breakpoint", () => {
+  it("is present (on the base tree this whole section fails: no block exists)", () => {
+    expect(phoneCss.length).toBeGreaterThan(0);
+  });
+  it("the JS fan geometry agrees with the stylesheet's cluster slot", () => {
+    expect(FAN_CLUSTER_BOTTOM_PX).toBe(hudVar("hud-cam-focus-bottom"));
+  });
+  it("the label safe frame's header inset covers the fan's header band", () => {
+    expect(LABEL_SAFE_FRAME.top).toBeGreaterThanOrEqual(FAN_HEADER_BAND_PX);
+  });
+});
+
+describe("Mobile HUD — ship-status stack leaves the middle band (S1)", () => {
+  const stack = ruleBodyIn(phoneCss, ".ship-status-stack");
+  const stackBottom = hudVar("hud-cam-toggle-bottom"); // the low slot
+  const stackTop = stackBottom + pxIn(stack, "max-height");
+
+  it("docks in the low (below-noticing) slot with a phone cap", () => {
+    expect(stack).toContain("bottom: calc(var(--hud-cam-toggle-bottom)");
+    expect(pxIn(stack, "max-height")).toBeLessThan(hudVar("hud-status-max-h"));
+  });
+  it("stays in the lower half of the screen at both phone sizes", () => {
+    for (const v of PHONE_VIEWS) {
+      expect(stackTop, `stack top at ${v.w}×${v.h}`).toBeLessThanOrEqual(v.h / 2);
+    }
+  });
+  it("clears the right rail: left + width stops before the rail's band", () => {
+    const reserve = parseInt(/100vw - (\d+)px/.exec(stack)![1]!, 10);
+    for (const v of PHONE_VIEWS) {
+      const width = Math.min(v.w - reserve, 340);
+      const rightEdge = hudVar("hud-status-left") + width;
+      expect(rightEdge, `stack right edge at ${v.w} wide`).toBeLessThanOrEqual(v.w - 60 - 8);
+    }
+  });
+  it("the Views sheet shrinks below the stack's new band (coordination, item 1→2)", () => {
+    const sheet = ruleBodyIn(phoneCss, ".gv-sheet");
+    const sheetBottomEdge = hudVar("hud-cam-views-bottom") + pxIn(ruleBody(".gv-sheet"), "bottom");
+    const sheetTop = sheetBottomEdge + pxIn(sheet, "max-height");
+    expect(sheetTop).toBeLessThanOrEqual(stackBottom - 8);
+  });
+});
+
+describe("Mobile HUD — fan top vs the header band (S3, the assertion Package B lacked)", () => {
+  it("at 390×844 all 7 targets fit compressed, top item clear of the header", () => {
+    const l = fanLayout(390, 844, 7);
+    expect(l.step).toBe(46);
+    expect(l.folded).toBe(false);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(844 - FAN_HEADER_BAND_PX);
+  });
+  it("at 360×640 the fan folds and its highest slot still clears the header", () => {
+    const l = fanLayout(360, 640, 7);
+    expect(l.folded).toBe(true);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(640 - FAN_HEADER_BAND_PX);
+  });
+  it("off phones the fan is untouched: desktop step, no fold", () => {
+    const l = fanLayout(1440, 900, 7);
+    expect(l.step).toBe(54);
+    expect(l.folded).toBe(false);
+  });
+});
+
+describe("Mobile HUD — MindSpace legend has a dock slot (S4)", () => {
+  it("starts right of the recenter FAB's column, with clearance", () => {
+    const legend = ruleBodyIn(phoneCss, ".mindspace-legend");
+    const left = pxIn(legend, "left");
+    // FAB column: left 14 + 46px circle = 60; the legend must clear it.
+    expect(left).toBeGreaterThanOrEqual(14 + CIRCLE + 8);
+  });
+  it("its band never meets the phone stack's band", () => {
+    const legendBottom = pxIn(ruleBody(".mindspace-legend"), "bottom");
+    const stackBottom = hudVar("hud-cam-toggle-bottom");
+    expect(legendBottom + 30).toBeLessThanOrEqual(stackBottom - 8); // ~30px pill
+  });
+});
+
+describe("Mobile HUD — fuel gauge vs the camera ladder (S5)", () => {
+  const gauge = ruleBodyIn(phoneCss, ".fuel-gauge");
+  const tube = ruleBodyIn(phoneCss, ".fuel-gauge .fg-tube");
+  const ICON_ROW = 18;
+  const ROW_GAP = 2;
+  // Gauge box: icon row + gap + tube; the meta lines live in the side
+  // column INSIDE the tube's band, so the tube band is their superset.
+  const gaugeBand = (viewH: number) => {
+    const topPct = parseInt(/top:\s*(\d+)%/.exec(gauge)![1]!, 10);
+    const tubeH = pxIn(tube, "height");
+    const boxH = ICON_ROW + ROW_GAP + tubeH;
+    const centreFromBottom = viewH - (topPct / 100) * viewH;
+    const boxBottom = centreFromBottom - boxH / 2;
+    return { tube: { lo: boxBottom, hi: boxBottom + tubeH }, box: { lo: boxBottom, hi: boxBottom + boxH } };
+  };
+
+  it("the tube is shortened and the meta lines move beside it (grid side column)", () => {
+    expect(pxIn(tube, "height")).toBeLessThan(pxIn(ruleBody(".fuel-gauge .fg-tube"), "height"));
+    expect(gauge).toContain("display: grid");
+    expect(ruleBodyIn(phoneCss, ".fuel-gauge .fg-meta")).toContain("grid-column: 2");
+  });
+  it("the meta band clears the 🎯 and Views bands at both phone sizes", () => {
+    const ladder: Array<[number, number]> = [
+      [hudVar("hud-cam-views-bottom") - 8, hudVar("hud-cam-views-bottom") + CIRCLE + 8],
+      [hudVar("hud-cam-focus-bottom") - 8, hudVar("hud-cam-focus-bottom") + 44 + 8],
+    ];
+    for (const v of PHONE_VIEWS) {
+      const { tube: band } = gaugeBand(v.h);
+      for (const [lo, hi] of ladder) {
+        expect(
+          band.hi <= lo || band.lo >= hi,
+          `gauge tube band [${band.lo}, ${band.hi}] must clear ladder band [${lo}, ${hi}] at ${v.w}×${v.h}`,
+        ).toBe(true);
+      }
+    }
+  });
+  it("the whole gauge clears the phone stack's band at both phone sizes", () => {
+    const stackTop = hudVar("hud-cam-toggle-bottom") + pxIn(ruleBodyIn(phoneCss, ".ship-status-stack"), "max-height");
+    for (const v of PHONE_VIEWS) {
+      expect(gaugeBand(v.h).box.lo).toBeGreaterThanOrEqual(stackTop + 8);
+    }
+  });
+});
+
+describe("Mobile HUD — streak ember leaves the mid-left band (S7)", () => {
+  const streak = ruleBodyIn(phoneCss, ".streak-ember");
+  it("becomes a horizontal chip in the header row, top-right", () => {
+    expect(streak).toContain("flex-direction: row");
+    expect(streak).toContain("left: auto");
+    expect(streak).toMatch(/right:\s*calc\(/);
+  });
+  it("clears the toolbox FAB above it and stays out of the vertical middle", () => {
+    const top = parseInt(/top:\s*calc\((\d+)px/.exec(streak)![1]!, 10);
+    const toolsBottom = pxIn(ruleBody(".fab-tools"), "top") + CIRCLE;
+    expect(top).toBeGreaterThanOrEqual(toolsBottom + 8);
+    for (const v of PHONE_VIEWS) {
+      expect((top + 24) / v.h).toBeLessThanOrEqual(0.25); // chip ≈24px tall
+    }
+  });
+});
+
 // ── Component-level gates ────────────────────────────────────────────────
 
 vi.mock("../api/lenses.js", () => ({

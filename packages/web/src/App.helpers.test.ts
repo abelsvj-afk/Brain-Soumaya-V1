@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { GraphEdge, GraphNode } from "@brain/shared";
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphNodes, mergeGraphLinks, mergeGraphData } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphNodes, mergeGraphLinks, mergeGraphData, fanLayout, fanWindow, fanTopEdge, FAN_HEADER_BAND_PX } from "./App.helpers.js";
 
 /** Locks the pure presentational helpers extracted from App.tsx (D4), so a future
  *  refactor that touches them fails loudly instead of silently. */
@@ -231,5 +231,52 @@ describe("mergeGraphLinks", () => {
     expect(merged.target).toBe(nodeB);
     expect(merged.weight).toBe(0.9); // allowlisted scalar DID update
     expect((merged as unknown as Record<string, unknown>).__injected).toBeUndefined();
+  });
+});
+
+describe("fanLayout / fanWindow — the fan never reaches the header band (round 2, S3)", () => {
+  it("desktop keeps today's geometry exactly: 54px step, no fold", () => {
+    const l = fanLayout(1440, 900, 7);
+    expect(l.step).toBe(54);
+    expect(l.folded).toBe(false);
+    expect(l.pageCount).toBe(1);
+    expect(fanWindow(7, l, 0)).toEqual({ start: 0, count: 7, page: 0 });
+  });
+
+  it("the owner's phone (390×844): compressed step, all 7 targets fit under the header", () => {
+    const l = fanLayout(390, 844, 7);
+    expect(l.step).toBe(46);
+    expect(l.folded).toBe(false);
+    // Top item's top edge must stay below the header band (110px from the top).
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(844 - FAN_HEADER_BAND_PX);
+  });
+
+  it("a short phone (360×640): the fan folds — 3 targets + a paging slot per page", () => {
+    const l = fanLayout(360, 640, 7);
+    expect(l.step).toBe(46);
+    expect(l.folded).toBe(true);
+    expect(l.capacity).toBe(4);
+    expect(l.pageSize).toBe(3);
+    expect(l.pageCount).toBe(3);
+    expect(fanTopEdge(l)).toBeLessThanOrEqual(640 - FAN_HEADER_BAND_PX);
+    // Pages tile the full target list — nothing is dropped by the fold.
+    const seen: number[] = [];
+    for (let p = 0; p < l.pageCount; p++) {
+      const w = fanWindow(7, l, p);
+      for (let i = 0; i < w.count; i++) seen.push(w.start + i);
+    }
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("fanWindow clamps an out-of-range page instead of running off the list", () => {
+    const l = fanLayout(360, 640, 7);
+    expect(fanWindow(7, l, 99).page).toBe(l.pageCount - 1);
+    expect(fanWindow(7, l, -1).page).toBe(0);
+  });
+
+  it("focusItemStyle honours the step it is given (and defaults to the desktop 54)", () => {
+    expect(focusItemStyle(2, true).transform).toBe("translateY(-162px)");
+    expect(focusItemStyle(2, true, 46).transform).toBe("translateY(-138px)");
+    expect(focusItemStyle(2, false, 46).transform).toBe("translateY(0) scale(0.4)");
   });
 });
