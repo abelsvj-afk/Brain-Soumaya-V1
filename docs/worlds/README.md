@@ -25,6 +25,7 @@
 17. **`mockup-result-station.md`** — the Station mockup's result record: scene **built** (throwaway fixture scene in the worlds workspace), verdict **UNRESOLVED** — §11 grading awaits the owner's phone run (device, measurements, D-13 stills, V1–V3/V6); P6 and V5 supported by construction, V4 partial. Growing Place remains parked until the Station resolves.
 18. **`mockups/station/`** (folder on this branch) — the Station mockup's code itself, mirrored here at the owner's decision for implementation review: `index.html` (the scene), `three.module.min.js` (vendored three 0.182.0), `README.md` (how to run it on the grading device). Throwaway fixture code — not the product, not a foundation, merges nowhere.
 19. **`chatgpt-review-10-2026-10-22.md`** — the record of ChatGPT's code-level review of the Station mockup (verdict UNRESOLVED) with the builder's dispositions: counter accounting fixed, harness extended to §11 lengths + cold-load, behavioral grammar implemented in-scene at fixture level, V4 derivation table added to the result record. Device run still pending.
+20. **`chatgpt-review-11-2026-10-22.md`** — the record of ChatGPT's Revision 28 review (verdict UNRESOLVED) with dispositions: session-peak render counts tracked; behavioral checks upgraded from scripted logs to verified before/after assertions (overlap case closed); the scripted-log vs verified-assertion distinction now carried by the record.
 
 ## The most important instruction
 

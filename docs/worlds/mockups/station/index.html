@@ -253,7 +253,8 @@ const rim = new THREE.DirectionalLight(0x6f83ff, 0.7); rim.position.set(180, -60
 const WARP_COST = 20;
 let fuel = 100;
 let coldLoadMs = null;
-let departing = null;   // {at} — warp departure countdown (the cancel window)
+let measurePeaks = null; // {calls, tris} — max over the measured session (review 11)
+let departing = null;   // {at, snap} — warp departure countdown (the cancel window) + before-state
 let cargoAnim = null;
 const cargo = {id:'fixture-memory-01', home:'fixture-home', aboard:false};
 const ORB_OFF = new THREE.Vector3(0, 2.4, 0);
@@ -284,7 +285,8 @@ const reducedMotion = () => document.getElementById('rmToggle').checked;
 
 function flyTo(stageName, mode, onDone){ // mode: 'cut' | 'warp' | 'drift'
   const s = STAGES[stageName];
-  lastDeparture = {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage};
+  lastDeparture = {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage,
+                   cargo: {id: cargo.id, home: cargo.home, aboard: cargo.aboard}};
   const dur = mode === 'warp' ? 2600 : mode === 'drift' ? 12000 : 1400;
   if(reducedMotion() || mode === 'cut'){
     camera.position.copy(s.pos); bgCamera.position.set(0,0,0);
@@ -388,6 +390,10 @@ function tick(){
   renderer.render(bgScene, bgCamera);
   renderer.clearDepth();
   renderer.render(scene, camera);
+  if(measurePeaks){ // peak tracking across the whole measured session (review 11)
+    measurePeaks.calls = Math.max(measurePeaks.calls, renderer.info.render.calls);
+    measurePeaks.tris  = Math.max(measurePeaks.tris,  renderer.info.render.triangles);
+  }
   if(coldLoadMs === null){
     coldLoadMs = Math.round(performance.now());
     document.getElementById('coldOut').textContent = coldLoadMs + ' ms (this device)';
@@ -398,14 +404,24 @@ tick();
 
 /* ============ Controls ============ */
 document.querySelectorAll('[data-stage]').forEach(b =>
-  b.addEventListener('click', () => flyTo(b.dataset.stage, 'cut')));
+  b.addEventListener('click', () => {
+    if(departing){ behav('Stage change ignored — a departure is armed (cancel window open).'); return; }
+    flyTo(b.dataset.stage, 'cut');
+  }));
 document.getElementById('warpBtn').addEventListener('click', () => {
   if(fuel < WARP_COST){ behav('CHECK zero-fuel: warp refused at fuel ' + fuel + ' (needs ' + WARP_COST + '). Drift and Return home remain available.'); return; }
+  if(camAnim){ behav('INCONCLUSIVE: cannot arm a departure during an active transition — the cancel check would be invalid. Wait for the current flight to finish.'); return; }
+  if(departing){ behav('A departure is already armed.'); return; }
   if(reducedMotion()){ fuel -= WARP_COST; setFuelOut(); flyTo('near', 'cut'); behav('RM departure: instant cut, fixture fuel spent ' + WARP_COST + '.'); return; }
-  departing = {at: performance.now() + 1200};
-  behav('Warp departure armed — 1.2s cancel window open.');
+  departing = {at: performance.now() + 1200,
+               snap: {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage,
+                      fuel, aboard: cargo.aboard, camAnim: !!camAnim}};
+  behav('Warp departure armed — 1.2s cancel window open. Before-state captured for the cancel assertion.');
 });
-document.getElementById('driftBtn').addEventListener('click', () => { flyTo('near', 'drift'); behav('Drift departure — the free gait (no fuel).'); });
+document.getElementById('driftBtn').addEventListener('click', () => {
+  if(departing){ behav('Drift ignored — a departure is armed (cancel window open).'); return; }
+  flyTo('near', 'drift'); behav('Drift departure — the free gait (no fuel).');
+});
 document.getElementById('cargoBtn').addEventListener('click', () => {
   if(cargo.aboard){ behav('Cargo already aboard.'); return; }
   orb.visible = true;
@@ -415,19 +431,44 @@ document.getElementById('cargoBtn').addEventListener('click', () => {
 });
 document.getElementById('cancelBtn').addEventListener('click', () => {
   if(!departing){ behav('Cancel pressed with no departure armed — nothing to cancel.'); return; }
-  departing = null;
-  behav('CHECK cancel-before-departure: PASS — nothing moved, no fuel spent (fuel ' + fuel + '), cargo state unchanged (' + (cargo.aboard ? 'aboard' : 'not aboard') + ').');
+  const s = departing.snap; departing = null;
+  // Verified assertions against the captured before-state (review 11):
+  const posOk  = camera.position.distanceTo(s.pos) < 1e-6;
+  const lookOk = currentLook.distanceTo(s.look) < 1e-6;
+  const fuelOk = fuel === s.fuel;
+  const cargoOk = cargo.aboard === s.aboard;
+  const idleOk = !camAnim && !s.camAnim;
+  const pass = posOk && lookOk && fuelOk && cargoOk && idleOk;
+  behav('CHECK cancel-before-departure: ' + (pass ? 'PASS' : 'FAIL') +
+    ' — camera unmoved: ' + posOk + ' · look unchanged: ' + lookOk +
+    ' · no fuel spent: ' + fuelOk + ' (fuel ' + fuel + ')' +
+    ' · cargo state unchanged: ' + cargoOk + ' · no transition was running: ' + idleOk + '.');
 });
 document.getElementById('turnBtn').addEventListener('click', () => {
   if(!camAnim || !lastDeparture){ behav('Turn back pressed while not in transit — no-op.'); return; }
   const origin = lastDeparture;
   camAnim = null;
-  flyTo(origin.stage, 'drift', () => behav('CHECK turn-back: PASS — returned to origin (' + origin.stage + '), cargo ' + (cargo.aboard ? 'still aboard' : 'as it was') + ', identity/home unchanged (' + cargo.id + ' / ' + cargo.home + ').'));
+  flyTo(origin.stage, 'drift', () => {
+    const posOk = camera.position.distanceTo(origin.pos) < 0.5;
+    const lookOk = currentLook.distanceTo(origin.look) < 0.5;
+    const idOk = cargo.id === origin.cargo.id && cargo.home === origin.cargo.home;
+    const aboardOk = cargo.aboard === origin.cargo.aboard;
+    const pass = posOk && lookOk && idOk && aboardOk;
+    behav('CHECK turn-back: ' + (pass ? 'PASS' : 'FAIL') +
+      ' — back at origin pose: ' + (posOk && lookOk) +
+      ' · cargo identity/home match the pre-transit snapshot: ' + idOk + ' (' + cargo.id + ' / ' + cargo.home + ')' +
+      ' · cargo aboard-state preserved: ' + aboardOk + '.');
+  });
   behav('Turning back mid-transit…');
 });
 document.getElementById('homeBtn').addEventListener('click', () => {
   const before = fuel;
-  flyTo('far', 'drift', () => behav('CHECK return-home: PASS — home reached at fuel ' + fuel + ' (unchanged: ' + (fuel === before) + '). Return is always free, even at zero fuel.'));
+  flyTo('far', 'drift', () => {
+    const fuelOk = fuel === before;
+    const posOk = camera.position.distanceTo(STAGES.far.pos) < 0.5;
+    behav('CHECK return-home: ' + ((fuelOk && posOk) ? 'PASS' : 'FAIL') +
+      ' — arrived at home pose: ' + posOk + ' · fuel unchanged: ' + fuelOk + ' (' + fuel + '). Return is always free, even at zero fuel.');
+  });
 });
 document.getElementById('drainBtn').addEventListener('click', () => {
   fuel = 0; setFuelOut();
@@ -447,6 +488,7 @@ document.getElementById('shotBtn').addEventListener('click', () => {
 document.getElementById('measureBtn').addEventListener('click', () => {
   const out = document.getElementById('measureOut');
   const durS = parseInt(document.getElementById('durSel').value, 10);
+  measurePeaks = {calls: 0, tris: 0};
   out.textContent = 'Measuring ' + durS + 's — keep this tab in front, fly around (include a warp and the approach)…';
   const samples = [];
   let prev = performance.now();
@@ -467,10 +509,12 @@ document.getElementById('measureBtn').addEventListener('click', () => {
       ' · fps avg: ' + (1000/avg).toFixed(1) +
       ' · 1% low fps: ' + (1000/low1ms).toFixed(1) +
       ' · longest frame: ' + maxMs.toFixed(1) + 'ms' +
-      ' · draw calls (both passes): ' + info.calls +
-      ' · triangles: ' + info.triangles +
+      ' · draw calls PEAK (both passes): ' + (measurePeaks ? measurePeaks.calls : info.calls) +
+      ' · triangles PEAK: ' + (measurePeaks ? measurePeaks.tris : info.triangles) +
+      ' · final-frame calls/tris: ' + info.calls + '/' + info.triangles +
       ' · devicePixelRatio: ' + renderer.getPixelRatio() +
       ' · viewport: ' + innerWidth + 'x' + innerHeight;
+    measurePeaks = null;
   }
   requestAnimationFrame(sample);
 });
