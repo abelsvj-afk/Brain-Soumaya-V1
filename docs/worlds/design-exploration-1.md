@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 2 — ChatGPT design review 1 absorbed 2026-10-22 (see §9). Review record: `chatgpt-review-1-2026-10-22.md` in this folder.
+**Revision:** 3 — Gemini deep research 1 absorbed with King's verification pass 2026-10-22 (see §10). Records: `chatgpt-review-1-2026-10-22.md` (§9), `gemini-research-1-2026-10-22.md` (§10) in this folder.
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -417,4 +417,40 @@ Questions 26–28 — status after the owner's settlement:
 
 ---
 
-*End of Exploration 1, Revision 2. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+---
+
+## 10. Revision 3 — Gemini deep research 1, verified and absorbed (2026-10-22)
+
+Gemini Deep Research returned a combined report for the three briefs (scenery study, asset hunt, celestial data). King verified the decisive claims against primary sources before absorption — full table, corrections, and critique in **`gemini-research-1-2026-10-22.md`**. Headlines: the ISS model's specs and Poly Haven's Boulder 01 check out exactly; HYG's CC BY-SA 4.0 checks out but Gemini's "it could force your app's source open" is **overstated and corrected**; its ESA/Hubble license is **corrected to CC BY 4.0**; the JPL API's no-embedding rule is **confirmed verbatim**; two shortlist entries (a museum ring, a molecule model) are **dropped as filler**. What follows is what the research changes in the design — all still proposals until the owner ratifies.
+
+### 10.1 The technique stack (proposed answer to Q25)
+The research converts Q25 from an open "which method?" into a specific stack, ranked by distinctiveness-per-cost, to be proven or broken by the three mockups (§9.3):
+1. **Seeded palette math** — each space's identity (hue family → derived light/fog/material colors) computed deterministically from its seed. Same space, same look, forever; zero GPU cost. *(This is the NMS lesson, at phone scale.)*
+2. **Instanced fields** — asteroids/debris/dust as instanced meshes: thousands of objects, single-digit draw calls.
+3. **Palette-matched exponential fog** — atmosphere, depth cueing, and LOD pop-in hiding in one move.
+4. **Dual-layer scale compositing** — background layer (sun, planets, distant landmarks at compressed scale) and foreground layer (ship, station, near objects at 1:1), depth cleared between. **This is how felt scale is rendered** — explicitly *not* a logarithmic depth buffer, which the research shows is a mobile performance trap.
+5. **Real-data starfields** — shader point-cloud from real catalog data (§10.4), plus layered additive nebula planes tied to the space's coordinates, over a low-resolution equirect backdrop — *not* high-resolution cubemaps (VRAM blowout on phones).
+6. **Silhouette landmark scaling + baked glow** — hero landmarks rendered large and simple against the sky; glow/occlusion baked into textures instead of post-processing bloom (a mobile fill-rate killer).
+Explicitly **not replicable** at this scale (research-confirmed, agreed): real-time voxel terrain, raymarched volumetric clouds, multi-pass post-processing. Approximations above stand in for each.
+
+### 10.2 Scale space — the implementation half is now answerable
+The sun that "keeps growing as you fly toward it" lives in the background layer: its apparent growth is a designed approach curve, unconstrained by foreground depth precision — so *never arriving* (§3, Q10) can be a pure design choice, not a technical accident. The awe-scale vs. reference-scale conventions (§9.2) map naturally onto the two layers: reference-scale content lives by true numbers in the interface (distances, sizes), awe-scale content lives by felt size in the scene.
+
+### 10.3 The Great Station — asset candidates, with King's dissent noted
+Verified placeholder register (full terms in the research record): **NASA ISS** (public domain; 6,628 polys; GLB variant ~466 KB; textures must be audited and NASA insignia scrubbed before use) · **Poly Haven Boulder 01** (CC0; use a low LOD + 1K textures — the full model is 124K tris) · **Kenney kits** (CC0 as a publisher; exact kit/page confirmed at download time).
+**King's dissent from Gemini's "clear winner":** the ISS is the efficiency winner but may be the *vision* loser — it is a recognizable real station with a thin truss silhouette, and the owner's touchstone is EVE's monumental fictional megastructures. New question:
+29. **Station form:** (i) NASA ISS as-is, massively scaled; (ii) composite — ISS-derived core bulked out with modular kit parts until the silhouette turns monumental; (iii) ISS reserved for the reference-scale space (where *real* is the point) and a fictional megastructure silhouette for the Great Station space. Owner decides; placeholder honesty (§6) means any of the three can be swapped later without redesign.
+
+### 10.4 Real celestial content — the minimal set, corrected
+- **Stars:** HYG v4.2 (CC BY-SA 4.0 — confirmed; ShareAlike covers the *data file and its adaptations*, not the app) → brightest ~5,000 stars as a static data file shipped separately with attribution in credits; B−V color index drives true star colors.
+- **Asteroids:** JPL Small-Body Database → queried **locally at build time only** (the API's fair-use policy explicitly forbids embedding it in a website — confirmed) → static JSON of 50–100 named bodies with real orbital elements.
+- **Skies:** NASA imagery (public domain; choose insignia-free) and ESA/Hubble imagery (**CC BY 4.0** — visible credit required, no ShareAlike) as backdrops; per-image terms checked at selection time.
+
+### 10.5 What this does to the plan
+- Q25 moves from *open* to **proposed stack awaiting owner ratification** (§10.1). Ratifying it does not authorize building — it authorizes the three mockups to be specified against it when the owner reaches step 5 of the settlement sequence (§9.8).
+- The three-mockup validation (§9.3) gains hard constraints: built under the §10.1 stack, draw-call discipline, on the owner's actual phone.
+- Gate status unchanged: **NOT READY for final architecture or implementation. Ready for the next design iteration** — now with a costed, verified method for the scenery problem.
+
+---
+
+*End of Exploration 1, Revision 3. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
