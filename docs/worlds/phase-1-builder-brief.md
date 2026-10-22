@@ -64,7 +64,7 @@ After each mockup: push its result record, update this brief's status table (§9
 
 | Mockup | State | Record |
 |---|---|---|
-| 1 — Great Station (approach + D-13 evidence) | 🟡 Scene built; **reviews 10–12 applied** (both-pass counters + session-peak tracking, harness at §11 lengths + cold-load, behavioral checks as verified assertions under an enforced armed-departure policy, fuel floored at 0, V4 table documented) — **code-level list closed per review 12; §11 measurement pending owner's device run** — verdict UNRESOLVED, no PASS claimed | `mockup-result-station.md` · `chatgpt-review-10/11/12-2026-10-22.md` |
+| 1 — Great Station (approach + D-13 evidence) | 🟡 Scene built; **reviews 10–13 applied** (both-pass counters + session-peak tracking, harness at §11 lengths + cold-load, behavioral checks as verified assertions under an enforced armed-departure policy, fuel floored at 0, elapsed-time animation, V4 table documented) — **no known code-level items remain; §11 measurement pending owner's device run** — verdict UNRESOLVED, no PASS claimed | `mockup-result-station.md` · `chatgpt-review-10–13-2026-10-22.md` |
 | 2 — Growing Place (the rising) | ⬜ Blocked on Mockup 1 PASS | — |
 | 3 — Deep Past (the descent; A1–A3, A21/A22) | ⬜ Blocked on Mockup 2 PASS | — |
 

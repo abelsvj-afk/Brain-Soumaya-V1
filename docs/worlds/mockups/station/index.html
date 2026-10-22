@@ -334,13 +334,19 @@ function hud(now){
 
 /* ============ Main loop ============ */
 const clock = new THREE.Clock();
+let lastTickMs = null;
 function tick(){
   requestAnimationFrame(tick);
   const t = clock.getElapsedTime();
+  // Measured elapsed time drives all animation progress (review 13):
+  // frame-count timing made durations vary with refresh rate / dropped frames.
+  const nowMs = performance.now();
+  const dtMs = lastTickMs === null ? 16.7 : Math.min(100, nowMs - lastTickMs);
+  lastTickMs = nowMs;
   const rm = reducedMotion();
 
   if(camAnim){
-    camAnim.t += 16.7;
+    camAnim.t += dtMs;
     const k = Math.min(1, camAnim.t / camAnim.dur);
     const e = camAnim.mode === 'warp' ? (k<0.5 ? 4*k*k*k : 1-Math.pow(-2*k+2,3)/2) : (1-Math.cos(Math.PI*k))/2;
     camera.position.lerpVectors(camAnim.from, camAnim.to, e);
@@ -382,7 +388,7 @@ function tick(){
   // Cargo rides with the ship once aboard (A2: visible cargo in transit)
   if(cargo.aboard){ orb.visible = true; orb.position.copy(ship.position).add(ORB_OFF); }
   if(cargoAnim){
-    cargoAnim.t += 16.7;
+    cargoAnim.t += dtMs;
     const k = Math.min(1, cargoAnim.t/1200);
     orb.position.lerpVectors(cargoAnim.from, ship.position.clone().add(ORB_OFF), (1-Math.cos(Math.PI*k))/2);
     if(k >= 1){ cargoAnim = null; cargo.aboard = true; setCargoOut(); behav('A1 carry complete — cargo aboard, identity unchanged.'); }
