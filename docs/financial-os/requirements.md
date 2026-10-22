@@ -64,7 +64,12 @@ Legend: **[M]** must-have for its stage · **[S]** should-have · **[C]** could-
   arrives, when they settle exactly once. Settlement is durable — a
   `balance_applied_at` marker is the sole record of whether an entry's amount
   is in the balance, and edits/deletes key their balance effects to it —
-  ADR-019 §3.6 (mechanism added by review revision R1).
+  ADR-019 §3.6 (mechanism added by review revision R1). Settlement is effected
+  lazily at the first money-state evaluation at or after the space-local start
+  of the entry's date — the sweep runs at the head of every such evaluation,
+  so no balance-bearing response is computed from a pre-sweep balance — and
+  applies silently, never backdated (timing specified by revision R2; the
+  owner's explicit acceptance of this behavior is an ADR-019 gate item).
 - **[S]** Autopay bills are surfaced but assumed to clear on the due date unless balance can't cover them.
 
 ## 3. Live budget — Stage 1 (the core deliverable)

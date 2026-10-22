@@ -32,6 +32,18 @@ those are designed here, and none may be bundled into this repair.
   balance change; I2 is split into I2a/I2b because the matched-expense path
   legitimately raises Safe to Spend; §5 gains T18–T20. The gate (§7) remains
   OPEN pending re-review of R1.
+- **R2 — precise gate review, round 2 (2026-10-22).** The reviewer's five gate
+  checks were verified against the R1 documents: migration path + backfill
+  (§8), single-transaction settlement claims with asserted exactly-one-row
+  guards and retry/concurrency coverage (§3.6, §4, T13/T18), the unified
+  reservation rule (I1), and the I2a/I2b distinction across invariants, user
+  stories, and T1–T20 all verified as written. One gap was found and is
+  corrected here: settlement *timing* was described as an assumption with its
+  triggers deferred to implementation (§3.3). §3.6 now specifies the
+  settlement triggers by enumeration and the late-evaluation semantics as
+  explicit product behavior. That behavior is specified for the owner's
+  acceptance — **R2 does not record the acceptance**: §7 gains a dedicated,
+  still-unchecked gate item naming it. The gate remains OPEN.
 
 ---
 
@@ -179,6 +191,8 @@ Materialization becomes a defined server-side step, not a side effect of reads:
   during a period of non-use materializes, reserves, lists, and can be warned about
   without anyone opening the galaxy (I7). Triggers are an implementation choice;
   the window, idempotence, and independence-from-navigation are the contract.
+  (Backfill only: the *settlement* sweep's evaluation points are enumerated as
+  contract in §3.6, not left to implementation choice.)
 
 ### 3.4 Relative dates in the space timezone (kills D7)
 `packages/web/src/components/moneyDates.ts` performs all relative-day math against
@@ -227,22 +241,79 @@ derivation:
 - **Create.** Dated today or earlier: the row is inserted with the marker set
   and the balance adjusted, in one transaction (settled at write). Dated after
   today: inserted with the marker NULL, no balance effect.
-- **Settlement sweep.** Evaluated at the same points the summary is computed
-  (the read path that materializes occurrences, §3.3) and on the server-side
-  periodic path. For each entry with marker NULL and `date <=` space-local
-  today: in one transaction, a **guarded claim** — `UPDATE … SET
-  balance_applied_at = :now WHERE id = ? AND balance_applied_at IS NULL` —
-  must change exactly one row; only then is the balance adjusted by the
-  entry's signed amount, in the same transaction. A guard miss (0 rows) means
-  another path settled it first: no adjustment, no error. Marker write and
-  balance adjustment commit or roll back together, so a crash or retry
+- **Settlement sweep.** The sweep runs as the **opening step of every money-state
+  evaluation** (the trigger enumeration and timing semantics are specified
+  below, in *Settlement timing*). For each entry with marker NULL and
+  `date <=` space-local today: in one transaction, a **guarded claim** —
+  `UPDATE … SET balance_applied_at = :now WHERE id = ? AND balance_applied_at
+  IS NULL` — must change exactly one row; only then is the balance adjusted by
+  the entry's signed amount, in the same transaction. A guard miss (0 rows)
+  means another path settled it first: no adjustment, no error. Marker write
+  and balance adjustment commit or roll back together, so a crash or retry
   mid-settlement leaves the entry either fully settled or still scheduled,
   and re-running the sweep is a no-op for settled entries.
-  **Stated assumption for the gate:** entries become due at the space-local
-  start of their date; settlement is *effected* lazily at the first
-  evaluation at or after that moment (the summary read path), not by a job
-  assumed to fire at exactly midnight. From the user's first view on the
-  entry's date, it is settled.
+
+**Settlement timing — explicit product behavior (R2; specified for the owner's
+gate acceptance, §7 — not yet accepted).** An entry becomes *eligible* to
+settle at the **space-local start of its date** (00:00 in the space's
+configured timezone). Settlement is *effected* **lazily, at the first
+evaluation at or after that moment** — there is no job that is assumed to
+fire at midnight, and eligibility alone changes nothing observable. The
+behavior below is the contract:
+
+- **Triggers (enumerated, not illustrative).** The sweep runs at the head of
+  `getBudgetSummary()` (`finance/summary.ts`) — the single computation every
+  money surface reads — and therefore before any state derived from it is
+  returned by: the finance routes (budget summary, the mark-paid / income /
+  expense responses that embed a fresh summary, and the wealth summary);
+  every finance mutation and ingest path (each mutation, the ingest commit,
+  and the paystub confirm return a fresh summary); the Money Sky
+  (`moneySky()` computes the summary first); the AI/chat finance snapshot;
+  and the agent/context evaluations that call the summary (bill-risk
+  `detect()`/`run()`, brief-me, proactive context, temporal context). The
+  two baseline readers that take the balance **without** the summary — the
+  account route (`GET /account`) and the net-worth trend's current point —
+  are under the same rule: **no balance-bearing response is computed from a
+  pre-sweep balance**; they run the sweep first (or read through the
+  summary). Evaluation points are the contract here — §3.3's "triggers are
+  an implementation choice" applies to occurrence *backfill*, not to
+  settlement.
+- **The delay is bounded while the server runs.** The server tool-router
+  ticks every 60 seconds per space, and bill-risk's `detect()` evaluates the
+  summary on that cadence, so an eligible entry settles within roughly one
+  tick of eligibility even if the user never opens the app. If the server is
+  down across the due moment, settlement happens at the first evaluation
+  after restart; while the server is down no surface serves money state at
+  all, so downtime never presents a stale balance as current.
+- **Between the due moment and the first evaluation**, the entry's
+  unapplied state exists only in the stored rows (marker NULL; the stored
+  balance does not yet include the amount; the entry still lists as
+  *scheduled*). No computed surface can present that in-between state,
+  because every balance-bearing read settles first: the first money state
+  anyone — user, chat snapshot, proactive tool — can observe on or after
+  the entry's date is already settled.
+- **At the settling evaluation**, and only then: the stored balance moves by
+  the entry's signed amount exactly once (I9); the marker records the
+  *evaluation* timestamp — the moment of application, **never backdated**
+  to the entry's date (the entry's own date remains the record of when it
+  was due); the entry stops rendering as *scheduled* from that response
+  onward; Safe to Spend and shortfall move by the same signed amount
+  (Reserved is occurrence-based and is not affected by entry settlement);
+  date-derived aggregates (week earned, trailing averages) key off entry
+  dates and do not change with settlement timing.
+- **Settlement is silent.** No notification, toast, or user-facing event
+  fires *because* an entry settled — it is bookkeeping, not an event.
+  Proactive tools (bill-risk, freshness) observe the post-settlement state
+  on their own cadence; their behavior is unchanged by this section.
+- **Worked example.** An expense dated Monday is first evaluated Wednesday
+  (server down Monday–Tuesday, or no evaluation of any kind until then):
+  nothing about it was displayed as settled before Wednesday, and no
+  surface showed a balance missing it as "current" — every read settles
+  first. At Wednesday's first evaluation the balance drops by the amount,
+  once; the entry shows as a normal entry dated Monday (not as a Wednesday
+  expense, and no catch-up notice is sent). Had the server been up, the
+  same settlement would have landed at Monday's first tool-router tick,
+  before any user view.
 - **Edits** key every balance effect to the marker, never to a date
   re-derivation (this replaces the baseline's unconditional signed-delta /
   undo-the-add behavior in `finance/mutations.ts`):
@@ -386,6 +457,15 @@ Implementation may be proposed only after the owner confirms, on this ADR:
       scheduled-vs-settled rule and its durable settlement mechanism §3.6,
       which changes how future-dated entries behave, and the backfill window
       §3.3).
+- [ ] **Settlement timing is accepted as product behavior** (§3.6, as
+      specified by R2): entries become eligible at the space-local start of
+      their date and settle **lazily at the first evaluation at or after
+      that moment** — bounded to roughly one tool-router tick while the
+      server runs — with the enumerated trigger set, the silent /
+      never-backdated application, and the late-evaluation semantics
+      (including the Monday-entry-evaluated-Wednesday case) as written.
+      This acceptance is the owner's explicit act; the specification alone
+      does not constitute it.
 - [ ] The transaction boundaries and invariants (§2, §4 — including R1's
       claim-first Mark-paid and the split I2a/I2b) are accepted as the
       implementation contract, with §5 (T1–T20) as the acceptance-test list.

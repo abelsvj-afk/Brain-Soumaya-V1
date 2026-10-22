@@ -35,6 +35,23 @@
   marker (§3.6), one eligibility rule (I1), claim-first Mark-paid (§4), split
   I2a/I2b, new tests T18–T20. **The gate below stays OPEN pending re-review of
   R1.** Implementation still NOT authorized.
+- **Precise gate review, round 2 (2026-10-22):** the reviewer's five gate
+  checks were verified against the revised documents — migration path +
+  justified backfill (§8), one-transaction settlement claims with
+  exactly-one-row assertions and retry/concurrency tests (§3.6/§4, T13/T18),
+  the unified reservation rule across Reserved/Upcoming/Money Sky (I1), and
+  I2a/I2b consistency across invariants, user stories, and T1–T20 all
+  verified as written. One gap: settlement *timing* — its triggers were
+  deferred to implementation choice and late-evaluation behavior was
+  unstated. **ADR-019 revision R2** corrects it: §3.6 now enumerates the
+  settlement triggers (the sweep runs at the head of every money-state
+  evaluation; no balance-bearing response is computed from a pre-sweep
+  balance) and specifies late evaluation explicitly (an entry due Monday
+  first evaluated Wednesday settles once at that evaluation, silently, never
+  backdated; while the server runs, the 60-second tool-router tick bounds
+  the delay even with no user activity). **The gate stays OPEN:** the
+  remaining act is the owner's explicit acceptance of that timing behavior
+  (new checklist item below) — the R2 specification does not record it.
 - **Migration (revised by R1):** one additive column — `balance_applied_at` on
   `fin_income`/`fin_expense`, migrateSchema-only and PRAGMA-guarded, with a
   legacy backfill — required by the §3.6 settlement mechanism (ADR-019 §8, as
@@ -50,6 +67,14 @@
   - [ ] Corrections §3.1–§3.7 in scope as written — in particular the
         scheduled-vs-settled rule and its durable settlement mechanism (§3.6,
         as revised by R1) and the backfill window (§3.3).
+  - [ ] Settlement timing explicitly accepted as product behavior (ADR-019
+        §3.6, as specified by R2): eligibility at the space-local start of
+        the entry's date; settlement effected lazily at the first evaluation
+        at or after that moment (enumerated triggers; bounded by the
+        tool-router tick while the server runs); silent and never backdated;
+        late-evaluation semantics as written. This is the owner's remaining
+        act for the gate — specifying the behavior (R2) is not the
+        acceptance.
   - [ ] Transaction boundaries + invariants (§2/§4, R1 revisions included)
         accepted as the contract; §5 (T1–T20) accepted as the acceptance-test list.
   - [ ] §6 stays out of scope — no bundling of engagement, zero-based vs Wealth,

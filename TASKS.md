@@ -201,7 +201,10 @@ Sequencing: this repair lands before any new Money-tab features. Gate: PROJECT_S
 - [x] **Design:** four lifecycle decisions settled (Paid/Remove/Edit/Skip) + corrections
       D4–D11 + transaction boundaries/invariants + acceptance tests T1–T20 (branch
       `design/money-bill-lifecycle`, docs only). Includes design-review revision R1
-      (settlement marker, eligibility rule, claim-first Paid, I2a/I2b split).
+      (settlement marker, eligibility rule, claim-first Paid, I2a/I2b split) and
+      revision R2 (settlement timing specified as explicit product behavior:
+      enumerated sweep triggers + late-evaluation semantics, ADR-019 §3.6 —
+      owner's explicit acceptance of that behavior is a gate item, still open).
 - [ ] **Migration:** additive `balance_applied_at` on `fin_income`/`fin_expense`
       (migrateSchema-only, PRAGMA-guarded, legacy rows backfilled as applied) —
       ADR-019 §8 as revised by R1.
