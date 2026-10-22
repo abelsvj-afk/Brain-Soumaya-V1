@@ -3,6 +3,51 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-21 — ADR-018 implementation: global notification cap + per-space TTS cache (Phases B–D)
+
+**Status:** DESIGN Phase A CLOSED (owner gate, 2026-10-21) → IMPLEMENTED on branch
+`adr018-impl` (base = deploy HEAD `6160d00`). **NOT merged. NOT deployed. TTS and web
+push remain UNARMED** (no `TELEGRAM_TTS_*` / VAPID secrets set; unconfigured-state
+behavior unchanged). Merge, deployment, and arming remain separate owner decisions.
+
+- **Phase B (global cap + retry freshness):** `notification_cap_claims` ledger
+  (`agent/notify/capClaims.ts`) is the sole cap-counting authority — one allowance
+  per space per space-local day across Telegram + push; claim + outbox flip are one
+  SQLite transaction; definite failures release, sent/ambiguous retain, deferred
+  items hold no slot; fresh qualifying urgent deliveries are recorded `cap_exempt`
+  (Option A). Both sweeps reclassify on every attempt from persisted due-time
+  columns (`remind_at` on `notification_outbox`; `remind_at`/`bill_due_at` on
+  `push_outbox`): expired urgency downgrades, staleness ages from due time, the
+  persisted `is_urgent` bit is never authority. Legacy rows fail closed; a
+  pre-migration reminder with `remind_at IS NULL` drops as unverifiable (D-1).
+  In-flight-at-migration rows transition as ledger no-ops (Q1, one lease window).
+- **Phase C (TTS ownership):** `tts_audio_cache` rebuilt with `space_id NOT NULL`,
+  PK `(space_id, cache_key)`; legacy unowned rows purged by migration (fail-closed
+  on unrecognized shapes); `DbSpeechCache(handle, spaceId)` — every query scoped,
+  no unscoped production construction; 500-row global bound kept ("free while
+  cached"). `tts_audio_cache` + `notification_cap_claims` are in the deletion
+  census; brain deletion removes them in the same transaction (rollback proven).
+- **Phase D (gate):** typecheck **0** · server **1857/1858** (TZ=America/New_York;
+  the sole failure is the pre-existing date-rotted `parityPhase4` bill-risk fixture,
+  proven byte-identical on the undeployed base — inherited, not from this increment)
+  · web **1314/1314** under both America/New_York and Pacific/Kiritimati · build **0**.
+  All 28 ADR acceptance criteria map to tests (incl. the criterion-13 interleaved
+  two-drain harness with barriers at the send await). Falsification by file-copy
+  (cap-check bypass → 5 test failures; cache unscope → 5; census removal → 3),
+  each restored and re-verified green. Independent review record:
+  `~/workspace/ui-audit/adr018-implementation-review-2026-10-21.md` (workspace record).
+- **Judgment calls flagged for review (not silently taken):** (1) the TTS rebuild
+  helper also runs once pre-bootstrap in `createDb` — the new bootstrap index
+  references `space_id`, which would abort bootstrap on legacy volumes before
+  migrateSchema runs (empirically proven; helper is idempotent, second run no-ops);
+  (2) legacy PUSH reminders with `remind_at IS NULL` get the same drop-as-unverifiable
+  treatment as Telegram's D-1 — symmetric fail-closed; the ADR's sentence names
+  Telegram, the owner's stated rationale ("must not deliver a reminder whose
+  freshness it cannot establish") is channel-agnostic.
+- Design contract of record: `docs/ADR-018-global-notification-cap-and-space-owned-tts-cache.md`
+  on branch `design/global-notify-cap-space-tts-cache` (its status line gets the
+  implementation record via a follow-up docs commit there).
+
 ## 2026-10-20 — W3 sleep/consolidation (wisdom layer)
 
 **Status:** DESIGN APPROVED (Rev 11 + Amendment 1 Rev 2) → IMPLEMENTED (Milestones 1–5).

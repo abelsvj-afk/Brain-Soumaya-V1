@@ -157,20 +157,23 @@ export const BOOTSTRAP_SQL = `
       last_digest_date TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
-    -- Telegram TTS (Phase D): synthesized voice-note audio, cached by a hash of
-    -- (voice, model, prosody, normalized text) so an unchanged reply is free
-    -- while cached — replays are free even after a restart, and cached
+    -- Telegram TTS (Phase D) / ADR-018 D2: synthesized voice-note audio, cached
+    -- by a hash of (voice, model, prosody, normalized text) so an unchanged reply
+    -- is free while cached — replays are free even after a restart, and cached
     -- replies still play when the provider quota is exhausted. (An evicted
-    -- entry re-synthesizes and re-bills; see telegram/ttsCache.ts.) Global (not
-    -- per-space): the key is content-derived and contains no user data beyond
-    -- the reply text itself, which is Soumaya's own output.
+    -- entry re-synthesizes and re-bills; see telegram/ttsCache.ts.) Space-owned
+    -- per ADR-018 D2: every row belongs to the space whose context produced it;
+    -- legacy unowned rows are purged by migration, never reassigned.
     CREATE TABLE IF NOT EXISTS tts_audio_cache (
-      cache_key TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      cache_key TEXT NOT NULL,
       audio BLOB NOT NULL,
       content_type TEXT NOT NULL,
       filename TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, cache_key)
     );
+    CREATE INDEX IF NOT EXISTS tts_audio_cache_space_created_idx ON tts_audio_cache(space_id, created_at);
     -- Telegram open-ended notes (parity Phase 3): the DURABLE draft behind the
     -- /note → append-verbatim → /done flow. One open draft per (space, chat);
     -- text is the accumulated verbatim note (parts joined by one newline),
@@ -1039,4 +1042,21 @@ export const BOOTSTRAP_SQL = `
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE INDEX IF NOT EXISTS push_outbox_pending_idx ON push_outbox(status, deliver_after);
+
+    -- ADR-018: shared atomic delivery ledger — the sole cap-counting authority
+    -- for proactive notifications across Telegram + web push. Identical DDL
+    -- runs in db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS notification_cap_claims (
+      space_id TEXT NOT NULL,
+      local_day TEXT NOT NULL CHECK (local_day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+      channel TEXT NOT NULL CHECK (channel IN ('telegram', 'push')),
+      delivery_key TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('reserved', 'sent', 'ambiguous', 'released')),
+      cap_exempt INTEGER NOT NULL DEFAULT 0 CHECK (cap_exempt IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, channel, delivery_key, local_day)
+    );
+    CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
+      ON notification_cap_claims(space_id, local_day, state, cap_exempt);
 `;

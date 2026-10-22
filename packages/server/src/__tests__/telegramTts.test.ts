@@ -215,7 +215,7 @@ describe("ElevenLabs synthesizer (fetch mocked — no live calls)", () => {
     expect(await synth.synthesize(prepareSpeech("hello")!)).toBeNull();
   });
 
-  it("CACHE: an unchanged reply synthesizes exactly once — the replay makes zero provider calls", async () => {
+  it("CACHE: an unchanged reply is free while cached — the replay makes zero provider calls", async () => {
     const fetchImpl = fakeAudioFetch();
     const synth = createElevenLabsSynthesizer(cfg, fetchImpl as unknown as typeof fetch, new MemorySpeechCache());
     const prepared = prepareSpeech("The very same reply, word for word.")!;
@@ -529,7 +529,7 @@ describe("bot reply path with the env gate", () => {
     expect(outbox.at(-1)!.text).toBe("Here is your answer, plain and simple.");
   });
 
-  it("CACHE: the same reply twice is synthesized ONCE (second send = DB cache hit, zero provider calls)", async () => {
+  it("CACHE: the same reply twice is free while cached (second send = DB cache hit, zero provider calls)", async () => {
     setTtsEnvOn();
     process.env.TELEGRAM_TTS_MODE = "all";
     const fetchSpy = fakeAudioFetch();
@@ -540,10 +540,15 @@ describe("bot reply path with the env gate", () => {
 
     expect(voiceCalls).toHaveLength(2); // both delivered as voice…
     expect(fetchSpy).toHaveBeenCalledTimes(1); // …but paid for only once
-    expect(new DbSpeechCache(handle).size()).toBe(1);
+    const linkedSpaceId = (
+      handle.sqlite.prepare(`SELECT space_id FROM telegram_links WHERE chat_id = 7`).get() as {
+        space_id: string;
+      }
+    ).space_id;
+    expect(new DbSpeechCache(handle, linkedSpaceId).size()).toBe(1);
   });
 
-  it("a user VOICE MESSAGE triggers a spoken reply in selective mode — and its replay is cache-free", async () => {
+  it("a user VOICE MESSAGE triggers a spoken reply in selective mode — and its replay is free while cached", async () => {
     setTtsEnvOn(); // selective; no /voice opt-in
     const fetchSpy = fakeAudioFetch();
     vi.stubGlobal("fetch", fetchSpy);
@@ -606,13 +611,14 @@ describe("DbSpeechCache", () => {
   });
 
   it("round-trips audio and is readable from a NEW cache instance (restart-safe)", () => {
+    const TEST_SPACE = "space-tts-test";
     const speech: SynthesizedSpeech = {
       audio: new Uint8Array([5, 6, 7]),
       contentType: "audio/ogg",
       filename: "reply.ogg",
     };
-    new DbSpeechCache(h).put("key-1", speech);
-    const fresh = new DbSpeechCache(h); // a "restarted" process over the same DB
+    new DbSpeechCache(h, TEST_SPACE).put("key-1", speech);
+    const fresh = new DbSpeechCache(h, TEST_SPACE); // a "restarted" process over the same DB
     expect(fresh.get("key-1")).toEqual(speech);
     expect(fresh.get("never-synthesized")).toBeNull();
     expect(fresh.size()).toBe(1);

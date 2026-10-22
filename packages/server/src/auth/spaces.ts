@@ -119,6 +119,8 @@ export const SPACE_SCOPED_TABLES = [
   "telegram_note_drafts",
   "push_subscriptions",
   "push_outbox",
+  "tts_audio_cache",
+  "notification_cap_claims",
   "inbox_notifications",
   "lore",
   "instruction_profiles",
