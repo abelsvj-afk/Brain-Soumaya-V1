@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 23 — Deep Past recipe **reviewed by ChatGPT** (no blocker with the constraint included): chronological monotonicity + rise-as-presentation absorbed; A21/A22 ratification rides on the owner's settlement, which completes Phase 0's paper. Record: `chatgpt-review-9-2026-10-22.md`. **Design gate: OPEN.**
+**Revision:** 24 — **Phase 0 COMPLETE (D-26):** the Deep Past recipe is **SETTLED** by the owner (R-D1–R-D4 with the monotonicity constraint) and **A21/A22 are ratified** into §14's inventory. All three recipes now stand settled on paper. Next gate: Phase 1 authorization (separate, not yet given). **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -486,6 +486,7 @@ Verified placeholder register (full terms in the research record): **NASA ISS** 
 - **D-23 — Space order (approved 2026-10-22, same act):** **Growing Place → Deep Past → People → Scale Space → Quiet/Archive**; Quiet/Archive remains last (§19 A3, Phase 3).
 - **D-24 — Scope (approved 2026-10-22, same act):** this design's architecture assumes a **private, single-user brain**; security remains mandatory in full; any future multi-user support requires a **separate design effort** (§19 Q-A3).
 - **D-25 — Fuel earning (approved 2026-10-22, same act):** **Q27 is deferred to the mandatory Phase 2 planning gate**, its **[RECONCILE]** flag preserved; the shared gauge, quests, and reward economy are reconciled with the audit program before any fuel behavior is implemented (§19 A4). **Settlement step 6 is CLOSED — and with it, the full settlement sequence (steps 1–6) is complete.** The design gate remains **OPEN**: Phase 0 recipes, the separately-authorized mockups and their review, and the owner's explicit gate closure still stand between here and any implementation planning (§19 A5).
+- **D-26 — Phase 0 complete (owner settlements, 2026-10-22):** all three environment recipes are **settled on paper** — Great Station (R-S1–R-S4: form/palette/rotation approved, name deferred), Growing Place (R-G1–R-G4, landmark grammar with the non-ranking constraint), Deep Past (R-D1–R-D4, depth semantics with the chronological-monotonicity constraint). **A21 (Chronicle descent) and A22 (resurfacing rise) are ratified into the §14 inventory** as part of the Deep Past settlement. **Phase 0 is COMPLETE.** What remains before the design gate can close: Phase 1 mockups (**separate owner authorization, not yet given**), their §11 review (incl. the D-13 sun evidence), and the owner's explicit gate closure (§19 A5).
 
 **Test-record supplement (owner-relayed caution, 2026-10-22 — supplements, never renegotiates, the criteria):** every measurement reported for the mockup test must record the **exact phone model, OS and version, browser/runtime and version, build configuration (build, settings incl. performance mode), measurement method/tool, and the session script flown** (route, duration, actions). A number without this record is not reproducible and **does not count** toward the gate.
 
@@ -646,6 +647,10 @@ No space, scene, or scenario is design-complete until its animations are invento
 - A18. **Ship behaviors:** idle, tending (incl. the existing flash), escorting, route-following — the ship reads as alive and purposeful, never frantic.
 - A19. **Route plotting:** selecting a destination draws the route in space (EVE's route projection, §10.1) — the user sees the journey before taking it; cancelling undraws it cleanly.
 - A20. **Focus & selection:** focus shifts, planet/memory selection responses — the small motions that make touch feel answered. **Immediacy (review note):** on a phone these must feel instant and stable — feedback that confirms the touch, never a delay added to routine navigation.
+
+**Deep Past signature motions (added by ratification, owner settlement of the Deep Past recipe, 2026-10-22):**
+- A21. **The descent (Chronicle guided):** the ship follows the kindling Chronicle thread down the Deep Past helix, stop by stop. *Trigger:* a guided route starts/continues · *Actors:* ship, world · *Duration:* journey · *Reduced-motion:* stratified cross-fades between stops, same narration and outcomes · *Cost:* moderate · *Control:* pause indefinitely at any stop; leave the route without losing place or changing any memory's state; narration stops cleanly and resumes at the current stop.
+- A22. **Resurfacing rise:** a deep memory lifts from its alcove to a rim-side resting place when its context returns. *Trigger:* an explainable resurfacing cause (D-7) · *Actors:* memory, world · *Duration:* sequence · *Reduced-motion:* fade-rise between positions · *Cost:* cheap–moderate · *Control:* the cause is shown ("risen because…"); the rise is a **derived presentation change only** — never a canonical, home, stratum, or identity change; never a duplication; return to depth follows the same explainable rule, never a neglect timer (§1/recipe monotonicity safeguard).
 
 ### 14.4 Gate status
 Inventory seeded (§14.3); per-space completion happens as each space's design matures through the settlement sequence. The mockup test (§11) already implicitly exercises A11/A13-class sequences (its criteria measure a warp transit and a full approach); the Animation Gate makes that coverage explicit when mockups are specified. **ChatGPT reviewed the gate on 2026-10-22 and upheld it** ("keep the gate"), with safeguards now folded into §14.1–14.3: seed ≠ passed, user-control fields required, combined-load + fallback accounting, operation fidelity and atomicity, truthful-or-atmosphere.
@@ -810,10 +815,12 @@ Phase 0 (§19 A3) is the three environment recipes on paper, each a standalone d
 |---|---|---|
 | The Great Station | `recipe-great-station.md` | ✅ **SETTLED** (owner, 2026-10-22: R-S1/R-S2/R-S4 approved, R-S3 name deferred) |
 | The Growing Place | `recipe-growing-place.md` | ✅ **SETTLED** (owner, 2026-10-22: R-G1/R-G2/R-G4 approved, R-G3 approved with the non-ranking constraint) |
-| The Deep Past | `recipe-deep-past.md` | **Draft, ChatGPT-reviewed** (2026-10-22, no blocker with constraint) — chronological-monotonicity constraint + rise-as-presentation absorbed (§1/§3); R-D1–R-D4 recommendations recorded; A21/A22 ratification rides on settlement; awaiting owner settlement — **its settlement completes Phase 0's paper** |
+| The Deep Past | `recipe-deep-past.md` | ✅ **SETTLED** (owner, 2026-10-22: R-D1–R-D4 as recommended, monotonicity constraint included; **A21/A22 ratified into §14**) |
+
+**Phase 0 status: ✅ COMPLETE (2026-10-22, D-26)** — all three recipes settled on paper. Next gate: **Phase 1 authorization** (building the mockup trio) — a separate owner decision, not yet given. The design gate remains OPEN by definition until mockup results are reviewed and the owner closes it.
 
 The draft Station recipe follows §18's minimum contents: identity (crown-and-stem megastructure; amber harbor in indigo dark), the three-stage approach composition with its named dual-layer handoff risk, honest content (journeys real, traffic atmosphere, no memories), a budget allocation inside §11.2's ceilings, the A13/A17/A11/A12/A15/A16/A19/A20 animation slice with combined load and fallback ladder, shared-vs-distinct elements, a seed parameter table for V4 traceability, and the D-13 evidence the mockup must produce.
 
 ---
 
-*End of Exploration 1, Revision 23. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 24. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
