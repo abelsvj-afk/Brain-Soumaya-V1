@@ -1,6 +1,6 @@
 # Environment Recipe — The Deep Past (Phase 0 draft)
 
-**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21). Follows the settled recipes' template; this is the third of the three — its settlement **completes Phase 0's paper**. **Scope:** the Deep Past space, its Chronicle guided mode (D-6), and its §18 mockup scene (the descent). **Settled ground it must obey:** D-7 membership (explainable rule: age + meaningful resurfacing context, with user controls; never "forgotten" by age alone), §13 P3 (this space surfaces members + anchors), §15 N7/Chronicle (guided tours here are saved routes traveled as visits), §14 Animation Gate, §11 criteria (fixed), §9.4 never-punish. Nothing here authorizes a build.
+**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21). Follows the settled recipes' template; this is the third of the three — its settlement **completes Phase 0's paper**. ChatGPT-reviewed 2026-10-22 (no architectural blocker *provided the chronological-monotonicity constraint is included* — it is, §1/§3; R-D recommendations in §9). **Scope:** the Deep Past space, its Chronicle guided mode (D-6), and its §18 mockup scene (the descent). **Settled ground it must obey:** D-7 membership (explainable rule: age + meaningful resurfacing context, with user controls; never "forgotten" by age alone), §13 P3 (this space surfaces members + anchors), §15 N7/Chronicle (guided tours here are saved routes traveled as visits), §14 Animation Gate, §11 criteria (fixed), §9.4 never-punish. Nothing here authorizes a build.
 
 ---
 
@@ -18,6 +18,8 @@
 
 **The depth rule (this space's constitution):** depth is **never** neglect. A memory resting deep is not buried, lost, fading, or lesser — it is *kept at depth*, with the same light and the same reachability as anything at the rim. Nothing down here dims with age, nothing sinks on its own, and no visual ever suggests that what is old matters less. The worst-week test (§9.4): a user who hasn't touched an old memory in years must find it here *exactly as kept* — lit, named, one explanation away from its story.
 
+**Chronological monotonicity (the depth rule's safeguard — review, 2026-10-22):** depth is chronology, **not a score**. Age establishes a memory's chronological position, and that ordering is **monotonic**: resurfacing context determines *membership* and may bring a memory forward (the rise, §3), but context can **never** make a newer memory appear chronologically older than an earlier one. No emotional inference, visit frequency, productivity measure, or inactivity may push a memory deeper or make it less visible. The visual metaphor may never contradict the data.
+
 ## 2. Spatial composition & the mockup scene
 
 The mockup scene (§18 V1) is **the descent, in Chronicle guided mode**, in three movements:
@@ -34,7 +36,7 @@ The mockup scene (§18 V1) is **the descent, in Chronicle guided mode**, in thre
 - **Depth encodes the rule, nothing else:** resting depth derives from the same explainable inputs (how long kept, the resurfacing context) by a fixed mapping the user can read — depth is *never* a function of neglect, visit frequency, or emotional inference (§17 M5: inferred feeling moves weather, never geography — and never depth).
 - **Anchors (D-8):** a member with a confirmed anchor elsewhere shows its link as a fine line of light rising out of the depth toward its other appearance — the primary home stays put; the line is a visit-path, not a relocation.
 - **Chronicle routes are real routes:** the thread exists only where a saved route exists (§15 N7); its stops are the route's real memories in the route's real order; narration is traceable to node content — where content is thin, the narration is thin, honestly, rather than padded.
-- **Resurfacing:** when life touches a deep memory again (it is linked, visited from elsewhere, or its context returns), the memory **rises** — a gentle ascent animation to a rim-side resting place where it stays while its context is warm, settling back only by the same explainable rule, never by a timer of neglect. Rising is this space's happiest motion and it is always *caused*, always explainable.
+- **Resurfacing:** when life touches a deep memory again (it is linked, visited from elsewhere, or its context returns), the memory **rises** — a gentle ascent to a rim-side resting place while its context is warm. **What the rise is, precisely (review constraint):** a *derived, explainable change in presentation within the Deep Past* — **not** a change to the canonical memory, its primary home, its chronological stratum, or its historical identity. It never duplicates the memory and never creates a partially applied structural change (§14 atomicity). Its cause is visible ("risen because…", P6), and its return to depth follows the **same explainable rule** that raised it — never a neglect timer (§1's monotonicity safeguard).
 - **Atmosphere (never fact):** marine-snow particulate, slow light-breathing in alcoves, the basin's ember shimmer — presentation within §17 M2; none of it implies activity, visits, or change that didn't happen.
 
 ## 4. Performance & accessibility budget (against §11.2's fixed ceilings)
@@ -66,7 +68,7 @@ Ceilings: ≤200 draw calls · ≤750k triangles (**hard rejection boundary, not
 | A19 | Route plotting | A Chronicle route is drawn/selected | World | The thread kindles along the strata from stop to stop in route order | Sequence | Thread appears with a soft pulse | Cheap |
 | A20 | Focus/selection | Touch on a resting memory/alcove | User | The alcove answers with a ring of its own light; explanation available | Moment | Identical | Cheap |
 
-*A21/A22 are proposed additions to the §14 inventory (the descent and the rise are this space's signature motions and deserve their own entries; adding them is a design-doc amendment for the owner's settlement of this recipe to ratify — the seed inventory was explicitly a seed, §14.4).*
+*A21/A22 are proposed additions to the §14 inventory (the descent and the rise are this space's signature motions and deserve their own entries; adding them is a design-doc amendment for the owner's settlement of this recipe to ratify — the seed inventory was explicitly a seed, §14.4). ChatGPT's review (2026-10-22) recommends ratifying both deliberately as part of this recipe's settlement, with the reduced-motion equivalents, triggers, costs, and fallback behavior recorded here; the §14 inventory amendment itself is applied when the owner settles.*
 
 **Combined load (worst honest case):** guided descent + full A1–A3 placement + particulate weather + a resurfacing rise in view simultaneously. **Fallback ladder:** particulate density → alcove detail → basin shimmer → backdrop points. **Never degraded:** resting memories and their lights, the Chronicle thread, depth banding, explanations, the placement outcome. **Interruption:** leaving mid-descent parks the ship's *view*, never the route or the cargo — a placement in progress completes or hasn't happened (§14 atomicity); the guided narration stops cleanly at the current stop and can resume there.
 
@@ -93,9 +95,11 @@ Ceilings: ≤200 draw calls · ≤750k triangles (**hard rejection boundary, not
 
 ## 9. Open for the owner (recipe settlement)
 
-- **R-D1** The form: descending helix of lit strata around a warm basin — right body for the past?
-- **R-D2** The palette: violet dusk lit by the memories' own lanterns, warming with depth — right identity, distinct from harbor and garden?
-- **R-D3** Depth semantics: deeper = earlier (by the readable D-7 mapping), never deeper = neglected — and the proposed **rise** (A22) as the resurfacing motion. Right language?
-- **R-D4** The Chronicle thread: route as a kindling thread of light winding down the strata — right visible form for guided mode?
+*ChatGPT reviewed this recipe (2026-10-22; record: `chatgpt-review-9-2026-10-22.md`) — no architectural blocker, provided the R-D3 constraint is included (it is, §1/§3). The owner settles.*
+- **R-D1** The form: descending helix of lit strata around a warm basin — right body for the past? *ChatGPT recommends: approve — geometry fixed, not seed-randomized; the basin must feel like arrival at something precious, never a grave or pit.*
+- **R-D2** The palette: violet dusk lit by the memories' own lanterns, warming with depth — right identity, distinct from harbor and garden? *ChatGPT recommends: approve — with equal dignity preserved: no memory dimmer, harder to find, or less reachable for resting deeper.*
+- **R-D3** Depth semantics: deeper = earlier (by the readable D-7 mapping), never deeper = neglected — and the proposed **rise** (A22) as the resurfacing motion. Right language? *ChatGPT recommends: approve with the critical constraint now written into §1/§3 — chronological monotonicity (context never reorders chronology) and the rise defined as derived presentation, never a canonical change, with its cause visible and its return rule-bound, never timer-bound.*
+- **R-D4** The Chronicle thread: route as a kindling thread of light winding down the strata — right visible form for guided mode? *ChatGPT recommends: approve — thread follows saved route order; narration grounded in actual content; the user can pause indefinitely or leave the route without losing their place or changing any memory's state.*
+- **A21/A22 ratification** rides on this settlement (per the review's third condition): approving the recipe adds the guided descent and the resurfacing rise to the §14 inventory with this recipe's fields.
 
 *Recipe draft ends. Settlement flow: owner review (ChatGPT pass welcome) → owner settles or amends → all three Phase 0 recipes stand settled, and Phase 0's paper is complete. Recipe settlement does not authorize mockup construction — Phase 1 remains a separate owner authorization (D-22).*

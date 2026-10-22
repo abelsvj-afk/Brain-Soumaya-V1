@@ -20,6 +20,7 @@
 12. **`recipe-growing-place.md`** — the Phase 0 environment recipe for the Growing Place (draft for owner settlement): terraced garden + witness tree, the kindness rule, milestone landmark grammar, A6/A7 animation slice, budget allocation.
 13. **`chatgpt-review-8-2026-10-22.md`** — the record of ChatGPT's review of the Growing Place recipe (no blocker; R-G1–R-G4 recommendations incl. the R-G3 non-ranking mapping constraint), absorbed into the recipe. The recipe itself was **settled by the owner** afterward (all four as recommended, R-G3 with its constraint).
 14. **`recipe-deep-past.md`** — the Phase 0 environment recipe for the Deep Past (draft for owner settlement): descending helix of lit strata, the depth rule, Chronicle guided descent with the full A1–A3 chain, proposed A21/A22 animation entries. Its settlement completes Phase 0's paper.
+15. **`chatgpt-review-9-2026-10-22.md`** — the record of ChatGPT's review of the Deep Past recipe (no blocker with the constraint; R-D1–R-D4 recommendations incl. chronological monotonicity, the rise as derived presentation, and deliberate A21/A22 ratification), absorbed into the recipe.
 
 ## The most important instruction
 
