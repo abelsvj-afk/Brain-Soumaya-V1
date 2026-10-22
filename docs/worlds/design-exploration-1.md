@@ -119,7 +119,7 @@ Candidate elements:
 
 ### 2.4 Fuel and shared systems
 **[RECONCILE]** The ship already has fuel, a streak ember, and status displays in the home galaxy. Whether inter-space travel uses fuel, costs nothing, or uses something else entirely is undecided — and any answer must be reconciled with the audit program's findings on fuel before it is treated as settled. Under no design should a user be *stranded* away from their own memories for lack of fuel.
-**Owner addition (2026-10-22, during Revision 2):** the owner proposes fuel-gated warp — *if the ship doesn't have fuel, she can't warp-travel to the different places.* Recorded in full, with the design tension and reconciliation options, in §9.10. Not yet settled.
+**Owner ruling (2026-10-22):** fuel-gated warp, **settled** in safeguarded form — warp costs fuel; coming home is always free; a slow free drift always exists and, with no fuel, it is deliberately slower and less entertaining than warp (§9.10). What *earns* fuel remains open (Q27), and the fuel economy itself is [RECONCILE] with the audit program.
 
 ---
 
@@ -394,6 +394,8 @@ Counterargument recorded: visual exploration can *inform* earlier decisions — 
 ### 9.10 OWNER ADDITION — fuel-gated warp (2026-10-22, during this revision)
 The owner, thinking it through in the worlds chat: **"If Soumaya doesn't have fuel, she can't warp travel to these different places."** Recorded as the owner's proposed rule: **warp travel between spaces costs fuel; no fuel, no warp.**
 
+**✅ SETTLED by the owner (2026-10-22, worlds chat):** the rule is adopted in its safeguarded shape — **warp costs fuel, but the user is never stranded: coming home is always free, and a slow free drift always exists.** The owner added the defining qualifier himself: *if you have no fuel, the drift is slower and less entertaining.* So fuel buys the full experience — speed, spectacle, the rich transit — while the free drift is deliberately plainer: slower, quieter, less to see. Access is never what fuel buys; quality of journey is. (One guardrail note, within the owner's own never-punish rule: "less entertaining" means plain and slow, never miserable or shaming — the drift stays dignified, comfortable, and reduced-motion friendly.)
+
 The tension, named plainly (this is King's job in the loop, not a veto):
 - ChatGPT's review (§9.5) and Exploration §2.4 both hold: fuel must never lock a user out of their own memories, and no one gets stranded.
 - A strict lockout (no fuel = no travel, full stop) can satisfy both *only if* fuel is reliably earnable through ordinary use of the brain — otherwise a user in a hard week (little activity → little fuel → no travel → less activity) hits exactly the punishment spiral the never-punish rule exists to prevent.
@@ -405,10 +407,10 @@ Design shapes that could hold the owner's rule AND the guardrail — **candidate
 - **(d) Empty tank = an in-world moment, not a lockout screen.** Running dry triggers something kind: the brain offers a short route, a small real task, or a slow tow home — help arriving, not a door closing.
 Combinations are allowed (e.g., a + b + c together).
 
-New open questions:
-26. Does fuel gate **departure only**, or departure and return? (King's recommendation, for the owner to accept or reject: never the return.)
-27. What **earns** fuel — and can a user in a bad week still reach somewhere meaningful? Fuel rewards must be real (the app has a history here: Codex fuel rewards were once silently broken — reward honesty applies to fuel first).
-28. Is there always **one free slow route** between spaces (drift), or is fuel a hard gate on all inter-space travel, strictly as the owner first stated it?
+Questions 26–28 — status after the owner's settlement:
+26. ~~Does fuel gate departure only, or departure and return?~~ **SETTLED:** the return home never costs fuel. Nobody is ever stranded away from home.
+27. **Still open:** What **earns** fuel — and can a user in a bad week still travel meaningfully (even if by drift)? Fuel rewards must be real (the app has a history here: Codex fuel rewards were once silently broken — reward honesty applies to fuel first).
+28. ~~Is there always one free slow route (drift)?~~ **SETTLED:** yes — drift always exists when fuel is gone, and by the owner's design it is **slower and less entertaining** than warp. Warp remains the full experience; drift is the plain, free fallback that guarantees reachability.
 **[RECONCILE]** Fuel is a shared system (gauge, Codex rewards, streak ember) under the audit program in the repo chat — any fuel-economy change reconciles there before build.
 
 ---
