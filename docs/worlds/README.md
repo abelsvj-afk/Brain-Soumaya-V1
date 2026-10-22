@@ -18,6 +18,7 @@
 10. **`recipe-great-station.md`** — the Phase 0 environment recipe for the Great Station (draft for owner settlement): identity, approach composition, honest content, budget allocation, animation slice, seed traceability table, and the D-13 evidence the mockup must produce.
 11. **`chatgpt-review-7-2026-10-22.md`** — the record of ChatGPT's review of the Great Station recipe (no blocker; R-S1–R-S4 recommendations; triangle-boundary and D-13-openness notes), absorbed into the recipe. The recipe itself was **settled by the owner** afterward (R-S1/R-S2/R-S4 approved, R-S3 deferred).
 12. **`recipe-growing-place.md`** — the Phase 0 environment recipe for the Growing Place (draft for owner settlement): terraced garden + witness tree, the kindness rule, milestone landmark grammar, A6/A7 animation slice, budget allocation.
+13. **`chatgpt-review-8-2026-10-22.md`** — the record of ChatGPT's review of the Growing Place recipe (no blocker; R-G1–R-G4 recommendations incl. the R-G3 non-ranking mapping constraint), absorbed into the recipe.
 
 ## The most important instruction
 

@@ -1,6 +1,6 @@
 # Environment Recipe — The Growing Place (Phase 0 draft)
 
-**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21). Follows the settled Great Station recipe's template. **Scope:** the Growing Place space and its §18 mockup scene (the rising). **Settled ground it must obey:** roster/purpose (§12/D-4: goals, milestones, and the memories linked to them), §13 P3 surfacing (landmarks are *milestones*; memories appear as the evidence/path between them), §17 rail (landmark creation is **structural** — it happens only on an approved, real milestone), §9.4 never-punish, §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate. Nothing here authorizes a build.
+**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21). Follows the settled Great Station recipe's template. ChatGPT-reviewed 2026-10-22 (no architectural blocker; R-G3 mapping constraint + structural-honesty checks absorbed; recommendations in §9). **Scope:** the Growing Place space and its §18 mockup scene (the rising). **Settled ground it must obey:** roster/purpose (§12/D-4: goals, milestones, and the memories linked to them), §13 P3 surfacing (landmarks are *milestones*; memories appear as the evidence/path between them), §17 rail (landmark creation is **structural** — it happens only on an approved, real milestone), §9.4 never-punish, §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate. Nothing here authorizes a build.
 
 ---
 
@@ -33,7 +33,7 @@ The mockup scene (§18 V1) is **the rising**, composed in three movements:
 
 - **Real (fact):** landmarks are **real milestones only** — each one exists because an approved structural change put it there (§17 M1/M2), and each can answer "why are you here?" with the milestone it marks (P6). Evidence plots hold **real linked memories** (visits under §13 P3 — the memory lives canonically elsewhere; here it rests as evidence on the path). Paths are **real confirmed connections** (P7 tier i); a *suggested* connection renders as a faint, unfinished trail — visibly a hypothesis (tier ii), never a paved road.
 - **Atmosphere (never fact):** swaying planting, drifting mist, floating light-motes, birdsong-adjacent motion if any — all presentation, all within §17 M2's bounds, none of it implying growth, decline, or activity that didn't happen.
-- **The growth rule, stated plainly:** the garden's structure changes **only** through the rail, **only** upward (a landmark rising, a path confirmed, a plot planted) — and correction works by the §17 rules (a mistaken landmark is removed by a compensating change with its own quiet animation, never by silently unwinding the garden's history).
+- **The growth rule, stated plainly:** the garden's structure changes **only** through the rail, **only** upward (a landmark rising, a path confirmed, a plot planted) — and correction works by the §17 rules (a mistaken landmark is removed by a compensating change with its own quiet animation, never by silently unwinding the garden's history). A landmark is grounded in an **actual milestone** — never inferred from ambient activity, never invented by the world (§7's mapping constraint).
 - **No numbers wearing costumes:** no progress bars disguised as hedges, no percentage vines. If a quantity matters, it is shown as a quantity, in words (§15's honesty about information).
 
 ## 4. Performance & accessibility budget (against §11.2's fixed ceilings)
@@ -80,7 +80,7 @@ Ceilings: ≤200 draw calls · ≤750k triangles (**hard rejection boundary, not
 | Mist density & drift | Seed, within the dawn band; presentation-only (§17 M2) |
 | Terrace count & radii | Fixed ratios (form language) |
 | Witness tree form | Fixed — one tree, authored proportions |
-| Landmark form | **By milestone kind, from a fixed rule table** (e.g., completion → arch; a sustained practice → tower; a first step → gate-stone) — never random; the table is part of this recipe's settled text once the owner approves it |
+| Landmark form | **By milestone kind, from a fixed rule table** (e.g., completion → arch; a sustained practice → tower; a first step → gate-stone) — never random; the table is part of this recipe's settled text once the owner approves it. **Constraint (review, 2026-10-22): the mapping is a language, not a ranking** — a landmark's shape must never imply a greater achievement, importance, or duration than the underlying milestone actually supports; forms differ in *kind*, never in implied worth. A milestone that fits **no defined kind is never guessed into one**: it renders in a neutral representation, or stays unrendered, until the mapping is settled through the design process. |
 | Path routing | Derived from actual confirmed connections (real data, never decorative) |
 | Plot assignment | Derived from actual goal/memory links (P3) |
 
@@ -91,9 +91,10 @@ Ceilings: ≤200 draw calls · ≤750k triangles (**hard rejection boundary, not
 
 ## 9. Open for the owner (recipe settlement)
 
-- **R-G1** The form: terraced garden + witness tree — right body for this space?
-- **R-G2** The palette: eternal dawn (gold/teal/living green) — right identity, distinct enough from harbor and home?
-- **R-G3** Landmark grammar: grown forms by milestone kind (arch/tower/gate-stone rule table) — right language for progress?
-- **R-G4** The dawn: fixed first-light identity (weather varies, the hour never does) — or should presentation be allowed a wider day arc within the dawn band?
+*ChatGPT reviewed this recipe (2026-10-22; record: `chatgpt-review-8-2026-10-22.md`) — no architectural blocker; recommendations below. The owner settles.*
+- **R-G1** The form: terraced garden + witness tree — right body for this space? *ChatGPT recommends: approve — proportions fixed, not seed-randomized; the tree must survive every performance fallback (vegetation detail is expendable, the defining shape is not).*
+- **R-G2** The palette: eternal dawn (gold/teal/living green) — right identity, distinct enough from harbor and home? *ChatGPT recommends: approve — with the kindness rule governing the whole palette: no lighting/mist effect may ever accidentally imply fading progress or a disappointed garden.*
+- **R-G3** Landmark grammar: grown forms by milestone kind (arch/tower/gate-stone rule table) — right language for progress? *ChatGPT recommends: approve with the §7 constraint — deterministic, non-ranking, evidence-backed mapping; unmapped milestones render neutral or not at all, never guessed.*
+- **R-G4** The dawn: fixed first-light identity (weather varies, the hour never does) — or should presentation be allowed a wider day arc within the dawn band? *ChatGPT recommends: approve fixed dawn — mist/light/movement breathe within the band; no noon, sunset, or night cycles, so the world never implies time or activity progressing when neither is.*
 
 *Recipe draft ends. Settlement flow: owner review (ChatGPT pass welcome) → owner settles or amends → recipe joins the settled Phase 0 set. The Deep Past recipe follows the same template and completes Phase 0's paper.*
