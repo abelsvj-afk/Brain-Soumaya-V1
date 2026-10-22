@@ -2,9 +2,14 @@
 
 **Status:** DESIGN — **accepted by the owner as the first design-only increment
 (A4) on 2026-10-22, conditional on the approval-machine trace.** The design
-gate (§13) is **OPEN**. Implementation has **not** started and is **not
-authorized** — gate closure does not authorize it; implementation requires the
-owner's separate explicit authorization. Merge and deployment remain separate
+gate (§13) is **CLOSED for the items settled on 2026-10-22** (DP-1, DP-2,
+bare number = approve under its presentation contract, the MD-1…MD-5 and
+AC-1…AC-11 sets, the two-table migration shape) and **OPEN for the items
+§13 names as still-open** (the wholesale scope and snapshot-contract
+confirmations). This ADR is the contract of record for the settled items.
+Implementation has **not** started and is **not authorized** — the
+settlement does not authorize it; implementation requires the owner's
+separate explicit authorization. Merge and deployment remain separate
 owner decisions.
 **Approved by:** Project owner (scope acceptance, 2026-10-22); design drafted 2026-10-22
 **Date:** 2026-10-22
@@ -30,6 +35,16 @@ are separate candidates (§12). A4 changes neither what approvals are *for*
 **Revision history.**
 - **Initial design (2026-10-22).** Drafted from the acceptance + trace above.
   All §2 givens spot-verified against `a9ed7c8` during drafting.
+- **R1 (2026-10-22) — concurrency safeguards + gate settlement.** Three
+  accepted-requirement amendments from the owner's design review:
+  race-safe snapshot supersession specified as a mechanism (§3.1, §3.5,
+  invariant R2 strengthened, AC-12 added); the fail-closed
+  numbered-resolution rule promoted to a named invariant (R7 — §5.1,
+  §5.2, §9); recovery split into provable non-execution vs
+  outcome-uncertain classes with distinct wording and audit (§7.3,
+  §7.4, AC-10). The same pass records the §13 gate settlement: the
+  items the owner settled are closed there; items the settlement does
+  not cover are named still-open rather than closed over.
 
 ---
 
@@ -145,7 +160,8 @@ A **listing snapshot** is a persisted, server-created record binding
 ordinals to approval ids for one `(space_id, principal)`:
 
 - `approval_listings` — one row per snapshot: `id`, `space_id`,
-  `principal`, `created_at`, `expires_at`, `superseded_by` (nullable
+  `principal`, `generation` (per-principal monotone integer, §3.5),
+  `created_at`, `expires_at`, `superseded_by` (nullable
   listing id), `closed_at` (nullable).
 - `approval_listing_items` — one row per shown item: `listing_id`,
   `ordinal` (1-based), `approval_id`; `UNIQUE(listing_id, ordinal)`,
@@ -231,13 +247,38 @@ visible before it bites (§7).
   items**, or 15 minutes after creation, whichever comes first. After
   that moment its contents are stale by construction (an item it binds
   may have lapsed), so it stops being resolvable (§5, outcome O8).
-- **Supersession.** Creating a new snapshot for the same
-  `(space_id, principal)` immediately supersedes the previous one
-  (`superseded_by` set, `closed_at` set). Only the newest snapshot is
-  ever addressable by numbered answers — a superseded snapshot can never
-  be answered, so renumbering can never silently retarget a reply: the
-  new listing's rendering in the user's own channel *is* the notice that
-  numbering changed (§5, outcome O7).
+- **Supersession — atomic activation by generation (R1).** Every
+  snapshot carries a `generation`: a strictly monotone integer per
+  `(space_id, principal)`, assigned inside the creation transaction.
+  Creation is a **single transaction**: read the principal's current
+  maximum generation → insert the new listing with
+  `generation = max + 1` → mark the previously active listing
+  superseded (`superseded_by`, `closed_at`) → commit. Because SQLite
+  serializes writers, two overlapping creations cannot interleave: the
+  second transaction reads the first's committed generation and takes
+  the next one. The consequences hold by construction, not timing
+  luck:
+  - A listing created earlier (lower generation) can **never** become
+    the active snapshot after a newer one exists — regardless of the
+    order in which the two requests finish rendering or responding.
+    Completion order is irrelevant; commit order alone assigns
+    generations, and activation is inseparable from assignment.
+  - The **active snapshot** is the highest-generation listing for
+    `(space_id, principal)` that is unexpired and has
+    `superseded_by IS NULL`. At most one can qualify: creating
+    generation *n+1* is the same transaction that supersedes *n*.
+  - **Resolution validates before it resolves** (§5.2, step 1): a
+    numbered answer is resolved only against a snapshot verified, at
+    resolution time, to still be the active generation. A reply that
+    races a supersession — sent against the old list, processed after
+    the new one committed — fails that check and takes the fail-closed
+    outcome (O8: refusal + fresh listing), never the superseded
+    binding.
+
+  Only the newest snapshot is ever addressable by numbered answers — a
+  superseded snapshot can never be answered, so renumbering can never
+  silently retarget a reply: the new listing's rendering in the user's
+  own channel *is* the notice that numbering changed (§5, outcome O8).
 - **Resolution does not supersede.** Answering an item leaves the snapshot
   live for its remaining items — the remaining ordinals keep their
   bindings (this is what makes sequential numbered answers work).
@@ -291,9 +332,18 @@ where `<n>` is a 1–2 digit ordinal present in the snapshot. The listing's
 own framing states this grammar before the user acts ("Reply with a number
 to approve it, or 'no' + number to skip it"), so a bare number is
 unambiguous *in context*: the listing defines what a number means, the
-same way the existing prose question defines what "yes" means today. The
-bare-number-equals-approve choice is named for explicit confirmation at
-the gate (§13, item 3).
+same way the existing prose question defines what "yes" means today.
+
+**Strict presentation contract (settled at the gate, §13).** A bare
+number counts as approval **only** under all three conditions: (i) it
+refers to a valid, current (active-generation, unexpired) snapshot;
+(ii) the listing as rendered states, in its own framing, that replying
+with the number **approves the displayed action** (and 'no' + number
+skips it); (iii) the item lines shown are the actions being approved —
+what the user sees at an ordinal is what approval executes (approval
+runs G1's frozen payload, the very record the renderer rendered from).
+A number that arrives without condition (i) is not an approval at all —
+it is handled by the fail-closed rule (invariant R7, §5.2).
 
 Interception order is preserved: on Telegram, approval-answer recognition
 (numbered and bare) runs where `maybeConfirmPending` runs today — before
@@ -301,15 +351,34 @@ note-append interception (`telegram/bot.ts:538-545`) — so an answer can
 never land inside an open-ended note. On web, the same position in
 `api/routes/chat.ts` (before the agent loop).
 
-Outside a live snapshot, a bare number is an ordinary message — today's
-behavior, unchanged (outcome O9). A4 adds no ambient number-guessing.
+Outside any snapshot context, a bare number is an ordinary message —
+today's behavior, unchanged (outcome O9). But "outside a live snapshot"
+is narrower than it reads: if the principal has a snapshot that has
+expired, been superseded, or been closed — a listing the user plausibly
+saw and is answering — a grammar-matching number is a **resolution
+attempt**, and it fails closed under R7 rather than falling through to
+ordinary chat. O9's ordinary-message treatment applies only when no
+snapshot context exists for the principal at all (no listing within the
+snapshot retention window, §8.3). A4 adds no ambient
+number-guessing — and no silent dropping of a number that was plainly
+an answer.
 
 ### 5.2 Resolution procedure — bind by snapshot, decide by the machine
 
 A numbered answer resolves in exactly these steps:
 
-1. Load the principal's newest snapshot; if none is live → not an approval
-   answer (fall through per §5.1/O9).
+1. Load the principal's snapshot and **validate it as the active
+   generation** (§3.5): highest generation for `(space_id, principal)`,
+   unexpired, `superseded_by IS NULL`, and owned by the answering
+   principal. This validation happens inside the resolution flow,
+   before any confirm/deny call. If validation fails, the number is
+   **not** resolved against that snapshot — the fail-closed path (R7)
+   applies: where any snapshot context exists for the principal, the
+   reply is a refusal plus the current list (outcome O8); the number is
+   never reinterpreted as ordinary chat. Only when no snapshot context
+   exists at all does the message fall through as an ordinary message
+   (O9). A snapshot belonging to a *different* principal fails
+   validation identically and leaks nothing about its contents (§6).
 2. Look up the ordinal **in the snapshot** → `approval_id`. The ordinal is
    **never** re-derived from the current pending set. New pendings that
    arrived after the snapshot are not in it and renumber nothing; items
@@ -352,14 +421,14 @@ implementation copy review, the *semantics* are the contract.
 | # | Situation at answer time | System result |
 |---|---|---|
 | O1 | Item pending & unexpired; approve wins the claim; execution succeeds | The execution's own result message (existing behavior), prefixed with the item identity: "#2 — <item line>: <result>". |
-| O2 | Approve wins; execution fails retryably or terminally | Existing curated failure copy, item named ("#2 — <item>: I tried, but it didn't go through…"). Retry/exhaustion semantics unchanged (G7). Raw exception text is never shown (the E1 precedent stands). |
+| O2 | Approve wins; execution fails retryably or terminally | Existing curated failure copy, item named ("#2 — <item>: I tried, but it didn't go through…"). Retry/exhaustion semantics unchanged (G7). Raw exception text is never shown (the E1 precedent stands). Where the failure is a crash-interrupted exhaustion, §7.4's uncertain-form wording replaces the clean-failure implication. |
 | O3 | Deny wins | "Skipped #2 — <item line>. I won't do that." Deny's existing side effects (incl. correction capture) unchanged. |
 | O4 | Item already **executed** (double answer, or decided via the bare flow since the listing) | "Already done — #2 (<item line>) was completed at <space-local time>. It wasn't run again." No re-execution. Message consumed. |
 | O5 | Bare yes/no with zero pendings inside the stray-answer window (§5.3 rule 4) | Same already-done / already-decided family, naming the most recent item and its true state. |
 | O6 | Item already **denied / failed / expired** by an earlier decision | The true state, named: "already skipped", "it failed earlier", "it expired" — with O7's expiry copy where expiry is the state. No re-execution, no silent nothing. |
 | O7 | Item past TTL at answer time (incl. expired-but-unswept) | The answer path lazily expires the row (G4 machinery; for deny, via the unified rule of §7) and replies: "That one expired — proposals only wait 15 minutes. Ask me again and I'll re-propose it if it still matters." |
-| O8 | Number exceeds the live snapshot's items, or the snapshot expired/was superseded before the answer | "That list has changed — here's what's waiting now:" + a fresh listing (new snapshot). Never a guess at the old binding. |
-| O9 | Number with no live snapshot at all | Not an approval answer — ordinary message handling, exactly as today. |
+| O8 | The answer's snapshot context is stale or unusable: number exceeds the live snapshot's items; the snapshot expired or was superseded before the answer; active-generation validation failed (§5.2 step 1); or the only snapshot belongs to another principal | Fail closed: "That list has changed — here's what's waiting now:" + a fresh listing (new snapshot) for the answering principal. Never a guess at the old binding, never a fall-through to ordinary chat, and (for the foreign case) no disclosure that another principal's snapshot exists (§6). |
+| O9 | Number with **no snapshot context at all** for the principal (no listing within the retention window) | Not an approval answer — ordinary message handling, exactly as today. |
 
 ## 6. Authorization — principal containment end to end
 
@@ -383,9 +452,8 @@ decision, not a default the code smuggles in. **Design recommendation:
 denied in A4** — A4 ships channel-bound, matching the machine's existing
 authorization unit. Cross-channel acting would require a new
 principal-equivalence rule (an identity claim no current record makes on
-the approval path) and belongs to its own design if ever wanted. The gate
-(§13) asks the owner to confirm the denied default or decide otherwise
-knowingly.
+the approval path) and belongs to its own design if ever wanted. The
+owner settled this at the gate (§13, 2026-10-22): **denied**.
 
 ## 7. Expiration coherence, the sweep decision, and the orphan rule
 
@@ -443,6 +511,14 @@ carries a one-line notice — "One earlier approval didn't complete and has
 expired: <item line>." — after which the user can simply re-ask, and the
 action re-proposes fresh.
 
+*Why the notice may say "never ran."* This class is provable from
+state: execution can begin only through the guarded
+`confirmed → executing` claim (G3/G7), and an orphan is defined by that
+claim never having succeeded (`execution_attempts = 0`, no `executing`
+transition on record). For this class — and only this class — expiry
+carries no uncertainty about the side effect: it never started. §7.4
+draws the line this creates.
+
 Safety argument: consent in this system is freshness-bounded everywhere
 (15-minute pending TTL). A confirmed orphan is consent whose execution
 context died minutes-to-days ago; the world (guards, preconditions, the
@@ -460,6 +536,42 @@ already holds orphaned or stuck rows is unknowable from code (trace
 unknown). Implementation phase begins with a read-only status census of
 `tool_approvals` before the sweep is first wired, so any pre-existing
 orphans expire visibly rather than surprisingly.
+
+### 7.4 Two recovery classes — provable non-execution vs outcome uncertain (R1)
+
+Recovery wording and audit must never blur two different terminal
+situations:
+
+- **Class 1 — confirmed orphan (provable non-execution).** §7.3's
+  class: `confirmed`, never claimed. The sweep expires it
+  (`approval:orphaned-expired`) and the user-visible notice may state
+  plainly that the action **never ran** — that is a fact of the state
+  machine, not a guess.
+- **Class 2 — stale `executing` (outcome uncertain).** The process died
+  *after* the executing claim succeeded but before a terminal
+  transition was recorded. The tool may or may not have produced its
+  side effect; the record cannot prove either way. This class is
+  **not** an orphan and must never be expired or described as if it
+  were clean:
+  - The sweep's existing rescue applies (retry under the same approval
+    id, bounded by G7's attempt cap, leaning on the tool-level
+    idempotency verified in G7 where it exists).
+  - If attempts exhaust on crash-interrupted executions, the terminal
+    `failed` transition is audited with the distinct action
+    `approval:execution-uncertain`, and any user-visible explanation
+    for the item uses the uncertain form — "this may have gone
+    through before the interruption; check before asking me to redo
+    it" — never the clean-failure form and never the never-ran form.
+    (§5.4's O2 copy is read subject to this paragraph.)
+  - Expiring a Class 1 orphan is evidence about that row only. It must
+    nowhere be presented — in copy, in audit summaries, or in the
+    §7.3 notice — as proof about any Class 2 item's side effect.
+
+The distinction is the contract: wording follows provability. The new
+templated audit action (`approval:execution-uncertain`) sits inside
+the existing append-only audit contract (G5); this section adds no
+machine delta beyond MD-1…MD-5 — the class split is terminal-handling
+and copy within the sweep behavior MD-3/MD-4 already touch.
 
 ## 8. Idempotency and restart recovery
 
@@ -484,7 +596,7 @@ Multi-node captures stamp only the first node, so the window is wider
 than one node. `fire_reminder` and `create_task` do not have this window
 (G7).
 
-**Disposition: explicit deferral, flagged for the owner's gate (DP-2).**
+**Disposition: explicit deferral (DP-2; settled at the gate, §13).**
 Rationale: (a) A4 does not widen the window — numbered resolution reuses
 the identical execution path; (b) the honest fix is a contract change to
 the shared ingest pipeline (the idempotency key would have to be carried
@@ -494,9 +606,10 @@ design problem of its own, not a rider on a listing feature; (c) the
 blast radius is bounded and recoverable: death inside a seconds-wide
 window during an approved capture can duplicate a *memory*, which the
 existing dedup/merge machinery can reconcile — it can never cause a wrong
-action, a wrong reminder, or a double task. The gate asks the owner to
-accept the deferral (recommended) or pull the ingest-key fix into A4's
-implementation scope knowingly (§13, item 5).
+action, a wrong reminder, or a double task. The owner settled this at
+the gate (§13, 2026-10-22): **the fix is deferred** — the window stands
+as a recorded known limitation, and the ingest-pipeline fix is tracked
+as a separate future design task (TASKS.md).
 
 ### 8.3 Snapshot durability across restart — persisted
 
@@ -524,7 +637,10 @@ keyed on `closed_at`.
 - **R2 — Snapshot-immutable binding.** Within a snapshot, an ordinal's
   `approval_id` never changes, and the listing order (`created_at, id`)
   is total and reproducible. Resolution never re-derives an ordinal from
-  the live pending set.
+  the live pending set. Activation is generation-ordered (§3.5): at
+  most one snapshot per `(space_id, principal)` is active, it is always
+  the highest committed generation, and resolution validates that
+  before any machine call.
 - **R3 — System-generated ordinals.** Only the listing service creates
   snapshots and bindings. Model output can request and relay a listing;
   it cannot create, alter, or renumber one.
@@ -537,6 +653,16 @@ keyed on `closed_at`.
   `confirmApproval` / `denyApproval` / `executeApproval`. A4's novelty is
   presentation, binding, and answering — never a second way to make the
   world change.
+- **R7 — Fail-closed numbered resolution (R1).** A message matching the
+  numbered grammar (§5.1) in the presence of any snapshot context for
+  the principal is a resolution attempt; a resolution attempt either
+  resolves against the validated active snapshot or refuses — with an
+  instruction to request the current list — and is **never**
+  reinterpreted as ordinary chat, so the user's intent is never
+  silently dropped. Absent, expired, superseded, and foreign-principal
+  snapshots all take the refusal path (§5.2 step 1, outcome O8);
+  ordinary-message treatment (O9) is reserved for the total absence
+  of snapshot context.
 
 **Machine deltas — the complete list of changes to existing machine
 behavior.** Everything else in A4 is new code (listing service, snapshot
@@ -611,11 +737,27 @@ Testable, numbered. **AC-1 is the owner's key test, first by design.**
   id; a `confirmed` orphan past the threshold is expired with the
   `approval:orphaned-expired` audit action and appears as the notice line
   in that principal's next listing; a terminal row older than 7 days —
-  including an **expired** row — is pruned (MD-2 regression).
+  including an **expired** row — is pruned (MD-2 regression). The two
+  recovery classes (§7.4) are asserted separately: the orphan's
+  audit/notice states non-execution (`approval:orphaned-expired`); a
+  crash-interrupted `executing` row that exhausts attempts is audited
+  `approval:execution-uncertain` and its user-visible wording never
+  claims the action did not happen.
 - **AC-11 — Effectively-once under mixed answers.** Concurrent numbered
   and bare answers to the same item execute it once; the loser receives
   the true-state outcome (O4/O6 family), never an error leak and never a
   second execution.
+- **AC-12 — Supersession under concurrency (R1).** Two listing requests
+  for the same `(space_id, principal)` overlap; the later-committed
+  creation is the higher generation and the only active snapshot,
+  regardless of which response renders first. A numbered reply sent
+  against generation *n* but processed after generation *n+1* committed
+  fails active-generation validation and takes the fail-closed outcome
+  (O8) — it resolves neither against *n*'s superseded mapping nor
+  against *n+1*'s renumbered items. Sequential creation under load
+  never produces two simultaneously active snapshots (asserted via the
+  `UNIQUE(space_id, principal, generation)` constraint plus the
+  resolution-time activation check).
 
 ## 11. Migration implications
 
@@ -625,8 +767,13 @@ tables**: `approval_listings` and `approval_listing_items` are defined in
 (`db/client.ts`). No `ALTER` to `tool_approvals` or any existing table;
 no existing column is referenced by bootstrap SQL before its migration
 (the v252 crash precedent does not arise — these are whole new tables).
-Indexes: `(space_id, principal, created_at)` on listings and the two
-`UNIQUE` constraints of §3.1 on items. Snapshot tables store no args —
+Indexes: `(space_id, principal, created_at)` and
+`UNIQUE(space_id, principal, generation)` on listings, and the two
+`UNIQUE` constraints of §3.1 on items. The `generation` column (R1)
+lives in the new `approval_listings` table itself — no existing table
+gains a column, and no counter table is needed: the next generation is
+`MAX(generation) + 1` read inside the creation transaction (§3.5),
+which SQLite's writer serialization makes race-free. Snapshot tables store no args —
 items reference `approval_id` only (§3.1) — so the migration introduces no
 new home for user text. Drizzle shape in `db/schema.ts` mirrors the DDL,
 per repo convention. If implementation discovers a schema need beyond
@@ -651,36 +798,100 @@ these two tables, work stops and returns to design (standing rule).
 - **Telegram inline buttons/keyboards** — no such flow exists in the tree
   today; A4's grammar is text. Buttons are a future surface decision, not
   a rider.
-- **Cross-channel listing/acting** — denied by default in A4 (DP-1, §6).
+- **Cross-channel listing/acting** — denied in A4 (DP-1, settled
+  2026-10-22, §6, §13).
 
-## 13. Design gate — what the owner's review must confirm
+## 13. Design gate — settlement record (2026-10-22) and what remains open
 
-Implementation is **not** authorized by this design or by gate closure; it
-requires the owner's separate explicit authorization, and merge and
-deployment remain separate decisions after that (standing governance).
+**Settlement (owner, 2026-10-22).** The owner reviewed ADR-020 with
+the R1 amendments (§3.1, §3.5, §5, §7.4, §9, §10) and settled the
+items below, adopting the review's recommendations and its two final
+safeguards plus the recovery distinction as accepted requirements.
+The gate is **CLOSED for the settled items** — this ADR is the
+contract of record for them — and **OPEN for the items named
+still-open below**, which are named rather than closed over. In the
+same breath, the standing boundary: **this settlement does NOT
+authorize implementation** — implementation requires the owner's
+separate explicit authorization; merge and deployment remain separate
+owner decisions after that.
+
+**Settled:**
+
+- **DP-1 — cross-channel listing/acting: DENIED** (§6). A4 ships
+  channel-bound. Cross-channel access would widen the authorization
+  boundary; it is not pre-decided by the interface and would need its
+  own design.
+- **DP-2 — stamp-after-ingest window: fix DEFERRED** (§8.2). The
+  crash window is recorded as a **known limitation** of the current
+  machine. The ingest-pipeline idempotency-key fix is tracked as a
+  separate future design task (TASKS.md) — not a rider on A4 and not
+  a precondition of A4's gate.
+- **Bare number = approve: ACCEPTED with the strict presentation
+  contract** (§5.1) — a bare number approves only against a valid,
+  current snapshot whose rendered framing states that replying with
+  the number approves the displayed action.
+- **MD-1…MD-5: preserved as the complete machine-touch set** (§9).
+  Any new machine-behavior requirement returns through design rather
+  than slipping into implementation.
+- **AC-1…AC-11: preserved as the complete acceptance set** (§10),
+  extended by R1's AC-12 — the verification contract is now
+  AC-1…AC-12, with AC-1 (the list-changed `2` test) as the headline
+  criterion. Any new acceptance requirement returns through design.
+- **Two-table additive migration: ACCEPTED as the design shape**
+  (§11), **subject to migration review** — the migration must
+  preserve existing approval records and enforce the snapshot's
+  identity, ownership, and lifecycle invariants. The migration
+  review is a condition carried into any future implementation
+  authorization; the shape acceptance is what is settled here.
+
+**Still open (NOT covered by the settlement):**
+
+- **Scope as written** (checklist item 1) — the wholesale confirmation
+  that §1 decisions, §3–§8 semantics as amended, and §12's exclusions
+  are the increment to build.
+- **The snapshot contract as a whole** (checklist item 2) — the R1
+  amendments are incorporated as contract text, but the item's
+  wholesale confirmation remains the owner's.
+- **The remaining answer-grammar elements** (checklist item 3 beyond
+  the settled bare-number element) — the §5.3 precedence including
+  the narrow stray-answer window stands as written for owner
+  confirmation.
+
+**Checklist with settlement status:**
 
 - [ ] **Scope as written** — §1 decisions, §3–§8 semantics, and §12's
       exclusions are the increment to build; no reliability pattern and
-      no `web_lookup` is bundled in.
+      no `web_lookup` is bundled in. — **Still open** (not covered by
+      the settlement).
 - [ ] **The snapshot contract** — persisted snapshot (§3, §8.3),
       `created_at, id` oldest-first ordering, earliest-item expiry,
       supersede-on-new-listing, and the §3.4 disclosure policy (140-char
-      bound, fail-closed unknown-tool line, no-ids/no-hash display).
+      bound, fail-closed unknown-tool line, no-ids/no-hash display). —
+      **Still open** as a wholesale confirmation; the R1
+      generation/supersession mechanism (§3.1, §3.5) is incorporated
+      as contract text.
 - [ ] **The answer grammar** — numbered forms of §5.1, in particular
       **bare number = approve** as framed by the listing's own
       instructions, and the §5.3 precedence including the narrow
-      stray-answer window.
-- [ ] **DP-1 — cross-channel default: denied** (§6). Confirm channel-bound
-      A4, or decide cross-channel knowingly as a different design.
-- [ ] **DP-2 — stamp-window disposition** (§8.2). Confirm the explicit
-      deferral (recommended), or pull the ingest-key fix into A4's
-      implementation scope knowingly.
-- [ ] **The machine deltas MD-1…MD-5** (§9) are the complete machine-touch
+      stray-answer window. — **Settled in part:** bare number =
+      approve accepted 2026-10-22 with the §5.1 strict presentation
+      contract; the precedence and stray-answer elements remain open.
+- [x] **DP-1 — cross-channel default: denied** (§6). — **Settled
+      2026-10-22: denied.** A4 is channel-bound.
+- [x] **DP-2 — stamp-window disposition** (§8.2). — **Settled
+      2026-10-22: fix deferred**; known limitation recorded;
+      ingest-pipeline fix tracked as a separate design task.
+- [x] **The machine deltas MD-1…MD-5** (§9) are the complete machine-touch
       set — including wiring the sweep (§7.2) and the
-      expire-and-surface orphan rule (§7.3).
-- [ ] **Acceptance criteria AC-1…AC-11** (§10) are accepted as the
+      expire-and-surface orphan rule (§7.3). — **Settled 2026-10-22:
+      preserved as the complete set.**
+- [x] **Acceptance criteria AC-1…AC-11** (§10) are accepted as the
       implementation's verification contract, with AC-1 (the list-changed
-      `2` test) as the headline criterion.
-- [ ] **Migration shape** (§11) — two additive tables, dual-registered,
+      `2` test) as the headline criterion. — **Settled 2026-10-22:
+      preserved as the complete set**, extended by R1's AC-12
+      (AC-1…AC-12).
+- [x] **Migration shape** (§11) — two additive tables, dual-registered,
       no alteration of existing tables; any further schema need returns
-      to design before implementation proceeds.
+      to design before implementation proceeds. — **Settled 2026-10-22
+      as the design shape, subject to migration review** (condition
+      recorded above).

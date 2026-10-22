@@ -18,18 +18,22 @@ Last audited: 2026-06-20. Tracks all open work, each item tagged with its zone a
 
 ## Agent — `pending_approvals` (A4, ADR-020; design accepted 2026-10-22, implementation NOT authorized)
 
-Design of record: `docs/ADR-020-pending-approvals.md`. Gate: PROJECT_STATE.md
-"2026-10-22 — ADR-020 `pending_approvals`" entry + ADR-020 §13 checklist must be
-owner-confirmed first; implementation then requires its own explicit
-authorization (merge/deployment separate again).
+Design of record: `docs/ADR-020-pending-approvals.md`. Gate: settled in part
+by the owner on 2026-10-22 (settlement record in ADR-020 §13 + PROJECT_STATE.md
+entry) — DP-1, DP-2, bare number = approve, MD-1…MD-5, AC-1…AC-12, and the
+migration shape are closed; the wholesale scope and snapshot-contract
+confirmations remain open. Implementation requires its own explicit owner
+authorization regardless (merge/deployment separate again).
 
 - [x] **Design:** listing snapshot (ordinal → approval id, per space+principal,
       system-generated) + numbered resolution semantics + outcome matrix +
       authorization/expiration/idempotency/restart treatment (branch
       `design/pending-approvals`, docs only). Evidence: approval-machine check
       2026-10-22, all givens spot-verified against `a9ed7c8` during drafting.
-      Open at the gate: DP-1 (cross-channel default denied), DP-2
-      (stamp-after-ingest window — deferral recommended).
+      Gate settled in part 2026-10-22 (ADR-020 §13, R1 amendments incl.
+      race-safe supersession, fail-closed R7, §7.4 recovery split):
+      DP-1 **denied**, DP-2 **deferred** (known limitation — see the
+      separate design task below).
 - [ ] 🔴 **Snapshot store:** `approval_listings` + `approval_listing_items`,
       dual-registered (BOOTSTRAP_SQL + migrateSchema), no ALTER of existing
       tables (ADR-020 §3.1, §11). Acceptance: AC-2, AC-8.
@@ -52,8 +56,15 @@ authorization (merge/deployment separate again).
       the live DB before the sweep first runs, so any pre-existing orphans
       expire visibly (ADR-020 §7.3).
 - [ ] 🔴 **Gate + review:** full gate (typecheck/tests/build) + independent
-      review against AC-1…AC-11 before any merge decision; merge and
+      review against AC-1…AC-12 before any merge decision; merge and
       deployment remain separate owner decisions.
+- [ ] 🔴 **(Separate design task — NOT part of A4, not gated into A4)**
+      Ingest-pipeline idempotency-key fix: carry the approval idempotency
+      key *into* node creation so ingest is atomic with the dedup stamp,
+      closing the `capture_memory`/`dream_playback` stamp-after-ingest
+      crash window (ADR-020 §8.2, DP-2 — fix deferred by owner
+      settlement 2026-10-22; the window stands as a recorded known
+      limitation until this task is designed on its own).
 
 ## Autonomy & Agent Hardening
 

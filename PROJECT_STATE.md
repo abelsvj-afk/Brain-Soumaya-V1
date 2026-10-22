@@ -3,13 +3,29 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
-## 2026-10-22 — ADR-020 `pending_approvals` (A4): listing + numbered resolution (design accepted; gate OPEN)
+## 2026-10-22 — ADR-020 `pending_approvals` (A4): listing + numbered resolution (design accepted; gate settled in part 2026-10-22)
 
 **Status:** DESIGN — the owner accepted A4 as the first design-only increment
 on 2026-10-22, conditional on the approval-machine trace; the design is
 recorded on branch `design/pending-approvals` (docs only, base = deploy HEAD
 `a9ed7c8`). **Implementation NOT authorized and NOT started.** Contract of
 record: `docs/ADR-020-pending-approvals.md`.
+**Gate settlement (owner, 2026-10-22):** the owner settled DP-1
+(cross-channel: denied), DP-2 (stamp-window fix: deferred — known
+limitation; ingest-pipeline fix tracked as a separate design task),
+bare number = approve (with the strict presentation contract),
+MD-1…MD-5 and AC-1…AC-11 as the complete machine-touch and acceptance
+sets, and the two-table migration shape (subject to migration review) —
+see the settlement record in ADR-020 §13. The same pass amended the
+ADR (R1): race-safe generation-ordered snapshot supersession,
+fail-closed numbered resolution (invariant R7), and the
+provable-vs-uncertain recovery split (§7.4, AC-12). **The gate is
+CLOSED for the settled items and OPEN for the items §13 names
+still-open** (wholesale scope confirmation, wholesale
+snapshot-contract confirmation, remaining answer-grammar elements).
+**This settlement does NOT authorize implementation** — implementation
+requires the owner's separate explicit authorization; merge and
+deployment remain separate owner decisions after that.
 
 - **Why:** approvals today are answerable only by a bare yes/no against
   exactly one pending — there is no list, no numbering, and with 2+
@@ -35,19 +51,25 @@ record: `docs/ADR-020-pending-approvals.md`.
   exactly five named deltas (MD-1…MD-5); acceptance is AC-1…AC-11 with the
   owner's list-changed `2` test first. Effectively-once is the promised
   language — never exactly-once.
-- **Open owner decision points at the gate:** DP-1 cross-channel
-  listing/acting (design default: denied — principals are channel-bound);
-  DP-2 the `capture_memory`/`dream_playback` stamp-after-ingest crash
-  window (design recommendation: explicitly deferred to its own design;
-  A4 does not widen it).
+- **Owner decision points — settled 2026-10-22:** DP-1 cross-channel
+  listing/acting: **denied** (principals are channel-bound); DP-2 the
+  `capture_memory`/`dream_playback` stamp-after-ingest crash window:
+  **fix deferred** — recorded as a known limitation; the
+  ingest-pipeline fix is a separate future design task (TASKS.md);
+  A4 does not widen the window.
 - **Out of scope:** the three reliability patterns and `web_lookup`
   (separate candidates), any change to what approvals are for, a web
   inbox UI, Telegram inline buttons.
-- **Design gate — the owner's review must confirm before implementation
-  can be authorized:** the checklist in ADR-020 §13 (scope, snapshot
-  contract, answer grammar incl. bare number = approve, DP-1, DP-2,
-  MD-1…MD-5 as the complete machine-touch set, AC-1…AC-11 as the
-  verification contract, the two-table additive migration shape).
+- **Design gate — settled in part (2026-10-22):** DP-1, DP-2, bare
+  number = approve (strict presentation contract), MD-1…MD-5 as the
+  complete machine-touch set, AC-1…AC-11 as the verification contract
+  (now AC-1…AC-12 with R1's concurrency criterion), and the two-table
+  additive migration shape (subject to migration review) are CLOSED —
+  ADR-020 is the contract of record for them. Still open in ADR-020
+  §13: the wholesale scope confirmation, the wholesale
+  snapshot-contract confirmation, and the remaining answer-grammar
+  elements. Implementation can be authorized only by the owner's
+  separate explicit word, regardless of gate state.
 
 ## 2026-10-21 — ADR-018 implementation: global notification cap + per-space TTS cache (Phases B–D)
 
