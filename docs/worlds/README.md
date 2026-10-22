@@ -13,6 +13,7 @@
 5. **`chatgpt-review-2-2026-10-22.md`** — the record of ChatGPT's second review (§13 information model + §14 Animation Gate; verdicts: strengthen three boundaries, keep the gate), absorbed into Exploration Revision 7.
 6. **`chatgpt-review-3-2026-10-22.md`** — the record of ChatGPT's third review (§15 navigation & scale; utility-first principle, recommendations on Q-N1–Q-N4, the cancel / turn back / return home distinction), absorbed into Exploration Revision 10.
 7. **`chatgpt-review-4-2026-10-22.md`** — the record of ChatGPT's fourth review (§17 mutation & control; stricter presentation boundary, dependency-aware undo, calm cadence, dual-door log, failure-atomicity invariant), absorbed into Exploration Revision 12.
+8. **`chatgpt-review-5-2026-10-22.md`** — the record of ChatGPT's fifth review (§18 mockup specification; cohesion tested not assumed, travel-guarantee checks in the session script, failure-diagnosis taxonomy, recipe minimum contents), absorbed into Exploration Revision 14.
 
 ## The most important instruction
 
