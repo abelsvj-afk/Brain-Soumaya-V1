@@ -3,6 +3,52 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-22 — ADR-020 `pending_approvals` (A4): listing + numbered resolution (design accepted; gate OPEN)
+
+**Status:** DESIGN — the owner accepted A4 as the first design-only increment
+on 2026-10-22, conditional on the approval-machine trace; the design is
+recorded on branch `design/pending-approvals` (docs only, base = deploy HEAD
+`a9ed7c8`). **Implementation NOT authorized and NOT started.** Contract of
+record: `docs/ADR-020-pending-approvals.md`.
+
+- **Why:** approvals today are answerable only by a bare yes/no against
+  exactly one pending — there is no list, no numbering, and with 2+
+  pendings (or a second "yes" after execution) the answer falls through
+  silently. The owner's key acceptance test: a reply of `2` must resolve
+  the same intended proposal even if the pending list changes first.
+- **Evidence:** the 2026-10-22 approval-machine check
+  (`~/workspace/ui-audit/approval-machine-check-2026-10-22.md`) traced the
+  machine at `a9ed7c8`; per the owner's governance caveat (he has not
+  independently verified the trace), every given the design relies on was
+  spot-verified against the code during drafting — all confirmed, two
+  sharpened (the sweep prune can never delete expired rows because
+  `expireApproval` never sets `decided_at`; the "which one?" caller
+  promised in `maybeConfirmPending`'s comment does not exist).
+- **Design:** a persisted listing snapshot binds ordinal → approval id per
+  (space, principal) — system-generated only, `created_at, id` ordering,
+  per-tool rendering under a stated args-disclosure policy — and numbered
+  answers resolve through the existing single-winner confirm/deny/
+  execute. A nine-cell outcome matrix designs silent fall-through out.
+  Expiry is unified across confirm/deny; `sweepApprovals` gets wired
+  (startup + interval) with the prune fix; `confirmed` orphans expire and
+  surface in the next listing, never silently re-drive. Machine contact is
+  exactly five named deltas (MD-1…MD-5); acceptance is AC-1…AC-11 with the
+  owner's list-changed `2` test first. Effectively-once is the promised
+  language — never exactly-once.
+- **Open owner decision points at the gate:** DP-1 cross-channel
+  listing/acting (design default: denied — principals are channel-bound);
+  DP-2 the `capture_memory`/`dream_playback` stamp-after-ingest crash
+  window (design recommendation: explicitly deferred to its own design;
+  A4 does not widen it).
+- **Out of scope:** the three reliability patterns and `web_lookup`
+  (separate candidates), any change to what approvals are for, a web
+  inbox UI, Telegram inline buttons.
+- **Design gate — the owner's review must confirm before implementation
+  can be authorized:** the checklist in ADR-020 §13 (scope, snapshot
+  contract, answer grammar incl. bare number = approve, DP-1, DP-2,
+  MD-1…MD-5 as the complete machine-touch set, AC-1…AC-11 as the
+  verification contract, the two-table additive migration shape).
+
 ## 2026-10-21 — ADR-018 implementation: global notification cap + per-space TTS cache (Phases B–D)
 
 **Status:** DESIGN Phase A CLOSED (owner gate, 2026-10-21) → IMPLEMENTED on branch

@@ -16,6 +16,45 @@ Last audited: 2026-06-20. Tracks all open work, each item tagged with its zone a
 
 ---
 
+## Agent — `pending_approvals` (A4, ADR-020; design accepted 2026-10-22, implementation NOT authorized)
+
+Design of record: `docs/ADR-020-pending-approvals.md`. Gate: PROJECT_STATE.md
+"2026-10-22 — ADR-020 `pending_approvals`" entry + ADR-020 §13 checklist must be
+owner-confirmed first; implementation then requires its own explicit
+authorization (merge/deployment separate again).
+
+- [x] **Design:** listing snapshot (ordinal → approval id, per space+principal,
+      system-generated) + numbered resolution semantics + outcome matrix +
+      authorization/expiration/idempotency/restart treatment (branch
+      `design/pending-approvals`, docs only). Evidence: approval-machine check
+      2026-10-22, all givens spot-verified against `a9ed7c8` during drafting.
+      Open at the gate: DP-1 (cross-channel default denied), DP-2
+      (stamp-after-ingest window — deferral recommended).
+- [ ] 🔴 **Snapshot store:** `approval_listings` + `approval_listing_items`,
+      dual-registered (BOOTSTRAP_SQL + migrateSchema), no ALTER of existing
+      tables (ADR-020 §3.1, §11). Acceptance: AC-2, AC-8.
+- [ ] 🔴 **Listing service + renderers:** pinned `created_at, id` ordering,
+      past-TTL exclusion at read, per-tool renderers under the §3.4 disclosure
+      policy (140-char bound, fail-closed unknown-tool line, space-local
+      times). Acceptance: AC-8, AC-9.
+- [ ] 🔴 **Entry points:** `pending_approvals` read tool (both surfaces,
+      canonical listing text) + Telegram `/approvals` command (ADR-020 §4).
+      Acceptance: AC-8, AC-9.
+- [ ] 🔴 **Numbered resolution:** grammar + precedence (numbered → bare
+      exactly-one → "which one?" listing → narrow stray-answer outcome),
+      resolving by snapshot id through the existing confirm/deny/execute
+      (ADR-020 §5). Acceptance: AC-1 (headline), AC-3, AC-7, AC-11.
+- [ ] 🔴 **Machine deltas MD-1…MD-5:** deny TTL parity; `expireApproval`
+      sets `decided_at`; sweep gains the confirmed-orphan pass; sweep wired
+      at startup + interval; `maybeConfirmPending` precedence (ADR-020 §7,
+      §9). Acceptance: AC-4, AC-10.
+- [ ] 🔴 **Pre-wiring census:** read-only `tool_approvals` status count on
+      the live DB before the sweep first runs, so any pre-existing orphans
+      expire visibly (ADR-020 §7.3).
+- [ ] 🔴 **Gate + review:** full gate (typecheck/tests/build) + independent
+      review against AC-1…AC-11 before any merge decision; merge and
+      deployment remain separate owner decisions.
+
 ## Autonomy & Agent Hardening
 
 - [x] 🔴 **Performance fix: `/next-job` full scan** — ✅ mitigated. The O(n) knn-per-node merge scan is now
