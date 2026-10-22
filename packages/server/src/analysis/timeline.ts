@@ -319,8 +319,11 @@ function narrate(a: Assessment, tz: string): string {
  *              | the current form       "You added M memory/ies on D different day(s)."
  *              | the current empty form "No new memories landed in this stretch."
  *   TREND      = one of the four TREND_SENTENCE strings, verbatim
- *   THEME      = "Much of it circled around <anything>."
- *   PEOPLE     = "<anything> kept showing up."
+ *   THEME      = "Much of it circled around <single-sentence body>."
+ *   PEOPLE     = "<single-sentence body> kept showing up."
+ *   (The THEME/PEOPLE bodies exclude "." — narrate() emits exactly one
+ *   sentence per clause, so a body spanning a sentence boundary means
+ *   hand-appended prose got absorbed; excluding it is the safe direction.)
  *   MILESTONES = "K new thing(s) took root in your mind."
  *   PHOTOS     = "You captured K moment(s) in pictures."
  * in that fixed order — i.e. precisely the sentence inventory narrate()
@@ -338,8 +341,8 @@ function escapeRegExp(s: string): string {
 
 const FORMULA_TAIL =
   `(?: (?:${Object.values(TREND_SENTENCE).map(escapeRegExp).join("|")}))?` +
-  `(?: Much of it circled around .+\\.)?` +
-  `(?: .+ kept showing up\\.)?` +
+  `(?: Much of it circled around [^.]+\\.)?` +
+  `(?: [^.]+ kept showing up\\.)?` +
   `(?: \\d+ new things? took root in your mind\\.)?` +
   `(?: You captured \\d+ moments? in pictures\\.)?`;
 const OLD_OPENING_RE = /^Across about (\d+) days?, you added (\d+) memor(?:y|ies)\./;

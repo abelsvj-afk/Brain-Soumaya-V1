@@ -12,6 +12,7 @@ import {
 } from "../api/client.js";
 import { LifeSeasonsBand } from "./LifeSeasonsBand.js";
 import { localDateOfStored } from "../utils/localDay.js";
+import { getSpaceTimeZone, useSpaceTimeZone } from "../utils/spaceTimezone.js";
 import { pushToast } from "./Toasts.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 
@@ -53,15 +54,17 @@ export function normalizeDate(raw: string): Date {
 }
 
 /** A stored chapter/event timestamp rendered as the calendar date the user
- *  actually lived it on — its day in the space's own timezone (owner rule,
- *  2026-10-21: no UTC in anything user-facing). The web's canonical helper
- *  (utils/localDay.ts) derives that day in this device's zone, which is the
- *  zone the space timezone is set from; the YYYY-MM-DD it returns is a fixed
- *  calendar date, so it is formatted from its own parts (a local-midnight
- *  Date) and can never shift a day under the viewer's zone. Returns "" for
- *  an unparseable value rather than printing "Invalid Date". */
-export function formatLocalDate(raw: string): string {
-  const day = localDateOfStored(raw, (r) => normalizeDate(r ?? "").getTime());
+ *  actually lived it on — its day in the space's own CONFIGURED timezone
+ *  (owner rule, 2026-10-21: no UTC in anything user-facing; audit-2 item
+ *  2). The zone comes from utils/spaceTimezone.ts, which loads the server
+ *  store's `timezone` via getSpacePreferences() — the device zone is only
+ *  that accessor's pre-load fallback. The YYYY-MM-DD the canonical helper
+ *  (utils/localDay.ts) returns is a fixed calendar date, so it is
+ *  formatted from its own parts (a local-midnight Date) and can never
+ *  shift a day under the viewer's zone. Returns "" for an unparseable
+ *  value rather than printing "Invalid Date". */
+export function formatLocalDate(raw: string, timeZone: string = getSpaceTimeZone()): string {
+  const day = localDateOfStored(raw, (r) => normalizeDate(r ?? "").getTime(), timeZone);
   if (!day) return "";
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
   return new Date(y, m - 1, d).toLocaleDateString(undefined);
@@ -125,16 +128,18 @@ type Row =
 /** Chapters (already oldest-first from the server) → a flat list of month/year header rows
  *  and chapter rows, each carrying the real gap that should sit above it. Pure + exported
  *  so the "does this actually behave like a timeline now" question has a testable answer. */
-export function buildRows(chapters: TimelineChapter[]): Row[] {
+export function buildRows(chapters: TimelineChapter[], timeZone: string = getSpaceTimeZone()): Row[] {
   const rows: Row[] = [];
   let prevMonthKey: number | null = null;
   let prevPeriodEnd: string | null = null;
   chapters.forEach((ch, index) => {
     // Month bucketing follows the SPACE-local calendar (owner rule,
     // 2026-10-21): a chapter groups under the month its periodEnd falls in
-    // in the user's own timezone — the same local day formatLocalDate shows
-    // on the card — never the UTC month of the stored instant.
-    const localDay = localDateOfStored(ch.periodEnd, (r) => normalizeDate(r ?? "").getTime());
+    // in the space's configured timezone (utils/spaceTimezone.ts — device
+    // zone only as the pre-load fallback) — the same local day
+    // formatLocalDate shows on the card — never the UTC month of the
+    // stored instant.
+    const localDay = localDateOfStored(ch.periodEnd, (r) => normalizeDate(r ?? "").getTime(), timeZone);
     const [ly, lm] = localDay ? localDay.split("-").map(Number) as [number, number, number] : [NaN, NaN, NaN];
     const monthKey = Number.isFinite(ly) && Number.isFinite(lm) ? ly! * 12 + (lm! - 1) : Number.NaN;
     const gap = prevPeriodEnd ? gapFor(daysBetween(prevPeriodEnd, ch.periodEnd)) : 0;
@@ -154,6 +159,10 @@ export function buildRows(chapters: TimelineChapter[]): Row[] {
 }
 
 export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
+  // Audit-2 item 2: every date below is derived in the SPACE's configured
+  // timezone; the hook re-renders once that zone loads.
+  const spaceTimeZone = useSpaceTimeZone();
+  const fmtLocalDate = (raw: string) => formatLocalDate(raw, spaceTimeZone);
   const [chapters, setChapters] = useState<TimelineChapter[] | null>(null);
   const [seasonsData, setSeasonsData] = useState<LifeSeasonsTimeline | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -317,7 +326,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
     : [];
   const rows =
     chapters && visibleIdx.length > 0
-      ? buildRows(visibleIdx.flatMap((i) => { const c = chapters[i]; return c ? [c] : []; }))
+      ? buildRows(visibleIdx.flatMap((i) => { const c = chapters[i]; return c ? [c] : []; }), spaceTimeZone)
       : [];
 
   return (
@@ -375,7 +384,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
                 <span className="tl-node-body">
                   <span className="tl-node-title">{row.chapter.title}</span>
                   <span className="tl-node-when">
-                    {formatLocalDate(row.chapter.periodStart)} – {formatLocalDate(row.chapter.periodEnd)}
+                    {fmtLocalDate(row.chapter.periodStart)} – {fmtLocalDate(row.chapter.periodEnd)}
                   </span>
                   {row.chapter.summary && <span className="tl-node-summary">{row.chapter.summary}</span>}
                   {/* IM-121: the chapter's theme + change magnitude were
@@ -441,7 +450,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
                 <button key={ev.id} className="tl-ahead-row" onClick={() => onFocus?.(ev.id)} title="Find it in the galaxy">
                   <span className="tl-ahead-label">{ev.label}</span>
                   <span className="tl-ahead-when">
-                    {formatLocalDate(ev.date)} · {eventWhenLabel(ev)}
+                    {fmtLocalDate(ev.date)} · {eventWhenLabel(ev)}
                   </span>
                 </button>
               ))}
@@ -456,7 +465,7 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
           <div className="tl-card-trend" style={{ color: TREND_COLOR[sel.trend] }}>{TREND_LABEL[sel.trend]}</div>
           <h3>{sel.title}</h3>
           <div className="tl-card-when">
-            {formatLocalDate(sel.periodStart)} → {formatLocalDate(sel.periodEnd)}
+            {fmtLocalDate(sel.periodStart)} → {fmtLocalDate(sel.periodEnd)}
             {sel.origin === "user" && <span className="tl-origin"> · you marked this</span>}
           </div>
           {/* IM-121: theme + change magnitude, on the card as on the row. */}

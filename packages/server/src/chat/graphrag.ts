@@ -264,17 +264,21 @@ export async function chat(
   // Finding 2: was THIS reply actually produced by the offline fallback? In
   // priority order — the turn deadline fired; no cloud key exists at all (the
   // heuristic IS the provider); the resilient wrapper served this call from
-  // its fallback (per-call record, covers non-cooldown fallbacks); the
-  // provider is in an active cooldown; the embedding step failed and
-  // retrieval was keyword-only. Absent all of those, this was a real cloud
-  // answer and no flag is attached.
-  // NOTE the order: the per-call record is checked BEFORE `available` — a
+  // its fallback (per-call reason carried on THIS call's result, covers
+  // non-cooldown fallbacks); the provider is in an active cooldown; the
+  // embedding step failed and retrieval was keyword-only. Absent all of
+  // those, this was a real cloud answer and no flag is attached.
+  // Audit-2 item 1: the per-call reason is read from `raw` — the result of
+  // the await above — never from provider state. The provider is a shared
+  // singleton; a getter read here would be a read-after-await of mutable
+  // state another concurrent turn may have overwritten either way.
+  // NOTE the order: the per-call reason is checked BEFORE `available` — a
   // fatal error trips the resilient cooldown DURING this call, after which
   // `available` reads false and would misreport the turn as "offline" (no
   // key) when the truth is the recorded quota/auth/timeout reason.
   let degradedReason: ChatDegradedReason | undefined;
   if (turnTimedOut) degradedReason = "timeout";
-  else if (deps.llm.lastAnswerDegradedReason) degradedReason = deps.llm.lastAnswerDegradedReason;
+  else if (raw.degradedReason) degradedReason = raw.degradedReason;
   else if (deps.llm.degraded) degradedReason = deps.llm.degradedReason ?? "error";
   else if (deps.llm.available === false) degradedReason = "offline";
   else if (embedFailure) degradedReason = embedFailure;

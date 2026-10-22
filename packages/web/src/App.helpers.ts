@@ -1,5 +1,8 @@
 import type { CSSProperties } from "react";
 import type { GraphData, GraphEdge, GraphNode } from "@brain/shared";
+import { localDateOfStored, spaceLocalDay } from "./utils/localDay.js";
+import { parseTolerantMs } from "./utils/dueReminders.js";
+import { getSpaceTimeZone } from "./utils/spaceTimezone.js";
 
 /**
  * Pure presentational helpers extracted from the large App.tsx (Post-MVP D4 refactor):
@@ -197,4 +200,36 @@ export function getFigurineLabel(type: string): string {
     case "blackhole": return "The Singularity";
     default: return type;
   }
+}
+
+/**
+ * Space-timezone day derivations for App.tsx (audit-2 item 2), extracted
+ * from their inline call sites so the day they use is testable. Both
+ * default to the SPACE's configured timezone (utils/spaceTimezone.ts —
+ * device zone only as that accessor's pre-load fallback), never the raw
+ * device zone.
+ */
+
+/** The once-per-day localStorage key for a bill-urgency notification. */
+export function billNotificationKey(
+  billId: string | number,
+  now: Date = new Date(),
+  timeZone: string = getSpaceTimeZone(),
+): string {
+  return `notif.bill.${billId}.${spaceLocalDay(now, timeZone)}`;
+}
+
+/** Streak "logged today": some non-action memory was created on the
+ *  space-local day containing `now`. A memory's createdAt is a stored
+ *  instant, so membership is derived from the instant in the space's
+ *  timezone — never its raw UTC string prefix. */
+export function hasLoggedToday(
+  nodes: Pick<GraphNode, "kind" | "createdAt">[],
+  now: Date = new Date(),
+  timeZone: string = getSpaceTimeZone(),
+): boolean {
+  const today = spaceLocalDay(now, timeZone);
+  return nodes.some(
+    (n) => n.kind !== "action" && localDateOfStored(n.createdAt, parseTolerantMs, timeZone) === today,
+  );
 }

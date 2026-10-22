@@ -129,7 +129,7 @@ export const VOICE_NOTE_REPLY =
  * answered from it without STT — say so honestly. The reply itself is a
  * selective-TTS trigger (you spoke → she speaks back) when the gate is on;
  * with the gate off it's the same words as text. The text is constant, so
- * after the first synthesis it is served from the audio cache for free.
+ * while its entry stays cached it is served from the audio cache for free.
  */
 export async function handleVoiceMessage(
   send: Send,

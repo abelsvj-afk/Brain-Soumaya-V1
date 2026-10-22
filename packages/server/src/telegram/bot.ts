@@ -8,7 +8,7 @@ import { buildDailyDigest } from "../synthesis/dailyDigest.js";
 import { getDailyContact } from "../analysis/dailyContact.js";
 import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../economy.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
-import { SpacesRepo } from "../auth/spaces.js";
+import { SpacesRepo, UserFacingError } from "../auth/spaces.js";
 import { TelegramLinksRepo } from "./links.js";
 import { getPreferences, setPreference, localDay, localTime } from "../agent/notify/policy.js";
 import { captureEpisode } from "../agent/episodic.js"; // W2: episode capture triggers (§5.1)
@@ -328,10 +328,17 @@ export async function handleTelegramUpdate(
     try {
       result = new SpacesRepo(ctx.handle).authOrCreate(name!.trim(), passcode!.trim());
     } catch (err) {
-      // e.g. passcode too short for a NEW brain, or a reserved name — authOrCreate throws
-      // for registration-only validation failures; surface it instead of a silent/generic
-      // failure (this path isn't behind the HTTP route's zod validation).
-      await send(chatId, (err as Error).message);
+      if (err instanceof UserFacingError) {
+        // e.g. passcode too short for a NEW brain, or a reserved name — authOrCreate throws
+        // UserFacingError for registration-only validation failures; surface it instead of
+        // a silent/generic failure (this path isn't behind the HTTP route's zod validation).
+        await send(chatId, err.message);
+      } else {
+        // Unexpected failure (e.g. SQLite "database is locked"): log the raw
+        // detail server-side only — never send err.message to the chat.
+        console.error("[telegram] /link failed:", err);
+        await send(chatId, "Something went wrong linking that brain — please try again.");
+      }
       return;
     }
     if (!result) {

@@ -88,9 +88,11 @@ The *thinking* agent (synthesis/research/merging/daily-log) was **browser-driven
   never break chat.
 - **Audio cache (owner requirement):** synthesized audio is cached in the
   `tts_audio_cache` table under a hash of (voice, model, prosody, normalized
-  text) — `server/src/telegram/ttsCache.ts`. An unchanged reply synthesizes
-  exactly once, ever; replays make zero provider calls, survive restarts, and
-  keep playing after the quota is gone. Bounded to the newest 500 entries.
+  text) — `server/src/telegram/ttsCache.ts`. An unchanged reply is free
+  while cached; replays make zero provider calls, survive restarts, and
+  keep playing after the quota is gone. Bounded to the newest 500 entries —
+  past that, an evicted reply re-synthesizes and re-bills, as do concurrent
+  misses (no single-flight) and replies whose cache write failed (non-fatal).
 - **Selective by default (owner requirement):** the quota is small (Starter
   plan ≈ 40k chars/month ≈ under an hour of speech), so `TELEGRAM_TTS_MODE`
   defaults to `selective`: a conversational reply is spoken ONLY when the

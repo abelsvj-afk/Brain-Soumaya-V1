@@ -37,7 +37,7 @@ import { DbSpeechCache } from "../telegram/ttsCache.js";
  *  - gate on + triggered ⇒ a conversational reply goes out as ONE voice note;
  *  - selective (the default) + no trigger ⇒ text, provider never called;
  *  - provider failure / quota 402 / sendVoice failure / over-cap ⇒ text;
- *  - an unchanged reply is synthesized ONCE — replays come from the cache
+ *  - an unchanged reply, replayed while cached, comes from the cache
  *    with zero further provider calls.
  */
 

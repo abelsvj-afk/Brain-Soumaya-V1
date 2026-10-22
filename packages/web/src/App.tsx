@@ -1,11 +1,10 @@
 import { logDiagnosticEvent } from "./diagnostics/buffer";
-import { spaceLocalDay, localDateOfStored } from "./utils/localDay.js";
-import { parseTolerantMs } from "./utils/dueReminders.js";
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday } from "./App.helpers.js";
+import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
 import { type Graph3DHandle, type FleetStatus } from "./graph/Graph3D.js";
@@ -122,6 +121,11 @@ export default function App() {
     logDiagnosticEvent('event', 'App', { action: 'mount', render: renderCount.current });
     return () => logDiagnosticEvent('event', 'App', { action: 'unmount' });
   }, []);
+  // Audit-2 item 2: kick off the space-timezone load at boot and re-render
+  // when the configured zone arrives — every day derivation below (bill
+  // notification keys, streak "logged today", and all spaceLocalDay
+  // defaults via utils/spaceTimezone.ts) follows the SPACE's zone.
+  const spaceTimeZone = useSpaceTimeZone();
   const [space, setSpace] = useState<{ id: string; name: string } | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
@@ -386,7 +390,7 @@ export default function App() {
       if (!stars) return;
       const urgent = stars.filter((s) => s.state === "overdue" || s.state === "cooling").slice(0, 2);
       for (const s of urgent) {
-        const key = `notif.bill.${s.id}.${spaceLocalDay()}`;
+        const key = billNotificationKey(s.id, new Date(), spaceTimeZone);
         try { if (localStorage.getItem(key)) continue; localStorage.setItem(key, "1"); } catch { /* ignore */ }
         const word = s.state === "overdue" ? `${s.label} is overdue` : `${s.label} needs attention — you can't cover it yet`;
         pushToast(`${word}`, "💸", 9000, "high", { kind: "tab", value: "money" });
@@ -396,7 +400,7 @@ export default function App() {
     const on = () => void check();
     window.addEventListener("brain-finance-changed", on);
     return () => window.removeEventListener("brain-finance-changed", on);
-  }, [space]);
+  }, [space, spaceTimeZone]);
 
   // Make dream cycles VISIBLE: on return, if Soumaya consolidated a new belief while you were
   // away, surface a gentle clickable notification → tap to fly to the belief. (She used to do
@@ -761,15 +765,14 @@ export default function App() {
   const streakShown = useCountUp(streak?.current ?? 0);
 
   // Streak stakes: is the streak alive but unfed TODAY? (drives the "at risk" ember)
-  // "Today" is the user's own local day (owner rule 2026-10-21): a memory's
-  // createdAt is a stored instant, so membership is derived from the instant
-  // — never its raw UTC string prefix.
-  const loggedToday = useMemo(() => {
-    const today = spaceLocalDay();
-    return (data.nodes as GraphNode[]).some(
-      (n) => n.kind !== "action" && localDateOfStored(n.createdAt, parseTolerantMs) === today,
-    );
-  }, [data.nodes]);
+  // "Today" is the SPACE's configured local day (owner rule 2026-10-21;
+  // audit-2 item 2): a memory's createdAt is a stored instant, so
+  // membership is derived from the instant in the space's timezone —
+  // never its raw UTC string prefix, never the device zone.
+  const loggedToday = useMemo(
+    () => hasLoggedToday(data.nodes as GraphNode[], new Date(), spaceTimeZone),
+    [data.nodes, spaceTimeZone],
+  );
   const streakAtRisk = (streak?.current ?? 0) > 0 && !loggedToday;
 
   // Soumaya's flight speed grows as you use the brain: more memories + a live

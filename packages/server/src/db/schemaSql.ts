@@ -158,9 +158,10 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     -- Telegram TTS (Phase D): synthesized voice-note audio, cached by a hash of
-    -- (voice, model, prosody, normalized text) so an unchanged reply is NEVER
-    -- re-synthesized — replays are free even after a restart, and cached
-    -- replies still play when the provider quota is exhausted. Global (not
+    -- (voice, model, prosody, normalized text) so an unchanged reply is free
+    -- while cached — replays are free even after a restart, and cached
+    -- replies still play when the provider quota is exhausted. (An evicted
+    -- entry re-synthesizes and re-bills; see telegram/ttsCache.ts.) Global (not
     -- per-space): the key is content-derived and contains no user data beyond
     -- the reply text itself, which is Soumaya's own output.
     CREATE TABLE IF NOT EXISTS tts_audio_cache (

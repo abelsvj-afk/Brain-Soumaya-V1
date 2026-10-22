@@ -3,6 +3,7 @@ import type { FinBill, BillFrequency, FinIncome, FinExpense, FinPaystub, Paystub
 import type { FinExtractionResult } from "@brain/shared";
 import { useCountUp } from "../hooks/useCountUp.js";
 import { spaceLocalDay } from "../utils/localDay.js";
+import { useSpaceTimeZone } from "../utils/spaceTimezone.js";
 import {
   getFinanceSummary, setBalance, setBuffer, addIncome, addExpense, createBill, patchBill, deleteBill, markOccurrencePaid, listBills,
   ingestPaste, ingestImage, confirmIngest,
@@ -60,9 +61,14 @@ const toCents = (s: string): number | null => {
   const n = parseFloat(String(s).replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 };
-/** The user's own local calendar day (owner rule 2026-10-21) — form defaults
- *  for income/expense/paystub dates are the day the user is actually in. */
-const today = (): string => spaceLocalDay();
+/** The SPACE's configured local calendar day (owner rule 2026-10-21;
+ *  audit-2 item 2 — utils/spaceTimezone.ts, device zone only as the
+ *  pre-load fallback) — form defaults for income/expense/paystub dates
+ *  are the day the user is actually in, in their space's timezone.
+ *  Exported so the default's zone is testable. */
+export function today(now: Date = new Date(), timeZone?: string): string {
+  return spaceLocalDay(now, timeZone);
+}
 
 /** Shared body, rendered both embedded in RightDock's Money tab and inside
  *  FinanceFullscreen.tsx — mirrors WealthPanel/WealthFullscreen's split exactly. Only
@@ -76,6 +82,10 @@ export function FinancePanel({
   focusGoal,
   focusBill,
 }: { embedded?: boolean; focusGoal?: { id: number; nonce: number } | null; focusBill?: { id: number; nonce: number } | null } = {}) {
+  // Audit-2 item 2: subscribe to the space's configured timezone so the
+  // panel (and the form defaults derived from `today()` when its
+  // sub-forms mount) re-renders once the configured zone loads.
+  useSpaceTimeZone();
   const [sum, setSum] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [reservedOpen, setReservedOpen] = useState(false);

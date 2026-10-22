@@ -23,6 +23,7 @@ import type { Journey } from "@brain/shared";
 import { getFinanceSummary, type FinanceSummary } from "../api/finance.js";
 import { getJourneys } from "../api/journeys.js";
 import { isReminderDue } from "../utils/dueReminders.js";
+import { useSpaceTimeZone } from "../utils/spaceTimezone.js";
 
 /** Why she's asking — the icon that frames her daily question. */
 const CONTACT_ICON: Record<string, string> = {
@@ -321,9 +322,13 @@ export function Observatory({
   // space-local day and persisted per brain, so a quest can truthfully show
   // itself complete (see quests.ts) instead of vanishing or treadmilling.
   const questKey = questDayStorageKey(spaceId ?? spaceName);
+  // Audit-2 item 2: the quest day boundary, per-day state key and
+  // tendedOnDay checks all follow the SPACE's configured timezone (the
+  // hook re-renders us once it loads, and the memo re-derives).
+  const spaceTimeZone = useSpaceTimeZone();
   const questResult = useMemo(
-    () => resolveDailyQuests(memories, fedToday, { dayState: loadQuestDayState(questKey) }),
-    [memories, fedToday, questKey],
+    () => resolveDailyQuests(memories, fedToday, { dayState: loadQuestDayState(questKey), timeZone: spaceTimeZone }),
+    [memories, fedToday, questKey, spaceTimeZone],
   );
   useEffect(() => {
     saveQuestDayState(questKey, questResult.dayState);

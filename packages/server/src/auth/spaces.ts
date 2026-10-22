@@ -15,6 +15,23 @@ export interface SpacePublic {
   gamerTag: string;
 }
 
+/**
+ * A curated, user-facing validation error. SpacesRepo throws ONLY this
+ * type for messages that are safe (and intended) to be shown to the user
+ * verbatim — registration / profile / passcode / deletion validation.
+ * Every other throw from these methods (SQLite "database is locked",
+ * constraint / missing-table errors, runtime failures) is unexpected:
+ * callers must log its raw detail server-side and answer with a sanitized
+ * generic shape instead of surfacing `err.message`. This type is the
+ * distinction the space routes and the Telegram /link handler branch on.
+ */
+export class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingError";
+  }
+}
+
 // Every table carrying a space_id — the first account to register claims all
 // pre-multi-tenancy rows still sitting under 'legacy'. Keep in sync when adding
 // a space-scoped table, or the owner's data in it stays orphaned after claim.
@@ -223,16 +240,16 @@ export class SpacesRepo {
     // here, in the registration-only branch, without touching login for anyone already
     // holding a shorter one.
     if (passcode.length < NEW_PASSCODE_MIN_LENGTH) {
-      throw new Error("Passcode must be at least 8 characters for a new brain.");
+      throw new UserFacingError("Passcode must be at least 8 characters for a new brain.");
     }
     // Reject if gamerTag is case-insensitively "soumaya" (unless it is the first brain)
     if (!isFirst) {
       if (trimmedGamerTag.toLowerCase() === "soumaya") {
-        throw new Error("The name/gamer tag 'Soumaya' is reserved.");
+        throw new UserFacingError("The name/gamer tag 'Soumaya' is reserved.");
       }
       // Reject if name is case-insensitively "soumaya" (unless it is the first brain)
       if (trimmedName.toLowerCase() === "soumaya") {
-        throw new Error("The name/gamer tag 'Soumaya' is reserved.");
+        throw new UserFacingError("The name/gamer tag 'Soumaya' is reserved.");
       }
     }
     const id = randomBytes(16).toString("hex");
@@ -273,20 +290,20 @@ export class SpacesRepo {
    */
   updateProfile(id: string, opts: { gamerTag?: string; name?: string }): SpacePublic {
     const cur = this.h.db.select().from(spaces).where(eq(spaces.id, id)).get();
-    if (!cur) throw new Error("No such brain.");
+    if (!cur) throw new UserFacingError("No such brain.");
     const next: { gamerTag?: string; name?: string } = {};
 
     if (opts.gamerTag !== undefined) {
       const tag = opts.gamerTag.trim();
-      if (tag.length < 2 || tag.length > 40) throw new Error("Gamer tag must be 2–40 characters.");
-      if (tag.toLowerCase() === "soumaya") throw new Error("The gamer tag 'Soumaya' is reserved.");
+      if (tag.length < 2 || tag.length > 40) throw new UserFacingError("Gamer tag must be 2–40 characters.");
+      if (tag.toLowerCase() === "soumaya") throw new UserFacingError("The gamer tag 'Soumaya' is reserved.");
       const taken = this.getByGamerTag(tag);
-      if (taken && taken.id !== id) throw new Error("That gamer tag is already taken — pick another.");
+      if (taken && taken.id !== id) throw new UserFacingError("That gamer tag is already taken — pick another.");
       next.gamerTag = tag;
     }
     if (opts.name !== undefined) {
       const nm = opts.name.trim();
-      if (nm.length < 1 || nm.length > 40) throw new Error("Name must be 1–40 characters.");
+      if (nm.length < 1 || nm.length > 40) throw new UserFacingError("Name must be 1–40 characters.");
       next.name = nm;
     }
     if (Object.keys(next).length === 0) return toPublic(cur);
@@ -314,10 +331,10 @@ export class SpacesRepo {
     if (!row) return false;
     if (!verifyPasscode(row, currentPasscode)) return false;
     if (newPasscode.length < NEW_PASSCODE_MIN_LENGTH) {
-      throw new Error(`New passcode must be at least ${NEW_PASSCODE_MIN_LENGTH} characters.`);
+      throw new UserFacingError(`New passcode must be at least ${NEW_PASSCODE_MIN_LENGTH} characters.`);
     }
     if (newPasscode.length > 100) {
-      throw new Error("New passcode must be at most 100 characters.");
+      throw new UserFacingError("New passcode must be at most 100 characters.");
     }
     const salt = randomBytes(16).toString("hex");
     const passcodeHash = hash(newPasscode, salt).toString("hex");
@@ -346,7 +363,7 @@ export class SpacesRepo {
     if (!row) return false;
     if (!verifyPasscode(row, passcode)) return false;
     if (confirmation !== row.gamerTag) {
-      throw new Error("Confirmation does not match this brain's gamer tag — nothing was deleted.");
+      throw new UserFacingError("Confirmation does not match this brain's gamer tag — nothing was deleted.");
     }
 
     const sqlite = this.h.sqlite;

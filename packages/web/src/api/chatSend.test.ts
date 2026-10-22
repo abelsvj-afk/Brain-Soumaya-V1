@@ -9,6 +9,7 @@ import {
   CHAT_TIMEOUT_MS,
   chatErrorForStatus,
   sanitizeChatPayload,
+  type ChatHistoryEntry,
 } from "./chatSend.js";
 
 /**
@@ -80,6 +81,90 @@ describe("sanitizeChatPayload — mirrors the server ChatBody contract", () => {
       question: "q".repeat(3000),
       history: [{ role: "you" as const, text: "x".repeat(5000) }],
       attachments: [{ name: "n".repeat(300), text: "body" }],
+    };
+    expect(sanitizeChatPayload(sanitizeChatPayload(raw))).toEqual(sanitizeChatPayload(raw));
+  });
+});
+
+/**
+ * Audit-2 item 5: history is RUNTIME data — ChatDock persists it in
+ * localStorage and reloads it with a cast, so the static "you" | "soumaya"
+ * typing is a claim corrupted or hand-edited storage can break. The server
+ * accepts only role ∈ {"you", "soumaya"}; a bad role left in the payload
+ * 400s every send AND every retry for the thread. The sanitizer must drop
+ * bad-role entries (never remap them onto a person) at send-build time.
+ * The casts below simulate exactly that corrupted-storage input.
+ */
+describe("sanitizeChatPayload — history role normalization (audit-2 item 5)", () => {
+  const asHistory = (entries: unknown): ChatHistoryEntry[] => entries as ChatHistoryEntry[];
+
+  it("drops entries whose role is not exactly \"you\" or \"soumaya\" — never remaps them", () => {
+    const out = sanitizeChatPayload({
+      question: "q",
+      history: asHistory([
+        { role: "you", text: "mine" },
+        { role: "system", text: "injected" },
+        { role: "user", text: "wrong enum spelling" },
+        { role: "", text: "empty role" },
+        { text: "missing role" },
+        { role: "soumaya", text: "hers" },
+      ]),
+    });
+    expect(out.history).toEqual([
+      { role: "you", text: "mine" },
+      { role: "soumaya", text: "hers" },
+    ]);
+    // Every surviving role is acceptable to the server schema.
+    for (const m of out.history) expect(["you", "soumaya"]).toContain(m.role);
+  });
+
+  it("passes a fully valid history through byte-identical (roles, texts, order)", () => {
+    const history = [
+      { role: "you" as const, text: "first" },
+      { role: "soumaya" as const, text: "second — with ünicode & \"quotes\"" },
+      { role: "you" as const, text: "" },
+      { role: "soumaya" as const, text: "last" },
+    ];
+    const out = sanitizeChatPayload({ question: "q", history });
+    expect(JSON.stringify(out.history)).toBe(JSON.stringify(history));
+  });
+
+  it("stays total over garbage entries: nulls, non-objects and missing fields are dropped, not thrown on", () => {
+    const out = sanitizeChatPayload({
+      question: "q",
+      history: asHistory([
+        null,
+        undefined,
+        "junk",
+        42,
+        {},
+        [],
+        { role: "you" },
+        { role: "soumaya", text: "ok" },
+      ]),
+    });
+    expect(out.history).toEqual([
+      { role: "you", text: "" },
+      { role: "soumaya", text: "ok" },
+    ]);
+  });
+
+  it("still caps at the last 16 SURVIVING entries after bad roles are dropped", () => {
+    const valid = Array.from({ length: 20 }, (_, i) => ({ role: "you" as const, text: `turn ${i}` }));
+    const poisoned = asHistory([{ role: "system", text: "bad" }, ...valid, { role: "admin", text: "bad2" }]);
+    const out = sanitizeChatPayload({ question: "q", history: poisoned });
+    expect(out.history).toHaveLength(CHAT_HISTORY_MAX_ENTRIES);
+    expect(out.history[0]!.text).toBe("turn 4");
+    expect(out.history.at(-1)!.text).toBe("turn 19");
+  });
+
+  it("is idempotent over poisoned history — a retry rebuilds the same clean payload", () => {
+    const raw = {
+      question: "q",
+      history: asHistory([
+        { role: "system", text: "x" },
+        { role: "you", text: "y" },
+      ]),
     };
     expect(sanitizeChatPayload(sanitizeChatPayload(raw))).toEqual(sanitizeChatPayload(raw));
   });
