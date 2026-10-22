@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 18 — **Phase 0 begun** at the owner's direction: the **Great Station recipe** is drafted (`recipe-great-station.md`; §20 register) and awaits owner review/settlement. Growing Place and Deep Past recipes not yet drafted. **Design gate: OPEN.**
+**Revision:** 19 — Great Station recipe **reviewed by ChatGPT** (no blocker): triangle ceiling marked a hard rejection boundary, D-13 openness reinforced, R-S1–R-S4 recommendations recorded in the recipe; owner settlement pending. Record: `chatgpt-review-7-2026-10-22.md`. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -808,7 +808,7 @@ Phase 0 (§19 A3) is the three environment recipes on paper, each a standalone d
 
 | Recipe | File | Status |
 |---|---|---|
-| The Great Station | `recipe-great-station.md` | **Draft** (King, 2026-10-22) — awaiting owner review/settlement; open items R-S1–R-S4 |
+| The Great Station | `recipe-great-station.md` | **Draft, ChatGPT-reviewed** (2026-10-22, no blocker) — R-S1–R-S4 recommendations recorded; awaiting owner settlement |
 | The Growing Place | — | Not yet drafted |
 | The Deep Past | — | Not yet drafted |
 
@@ -816,4 +816,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 18. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 19. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*

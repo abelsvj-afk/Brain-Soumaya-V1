@@ -1,6 +1,6 @@
 # Environment Recipe — The Great Station (Phase 0 draft)
 
-**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21: recipes settle on paper before any mockup build is authorized). **Scope:** the Great Station space and its §18 mockup scene (the approach). **Settled ground it must obey:** D-2 (fictional megastructure), D-5 (home port — journeys, not memories), D-10/D-11 (routes, skippable travel), D-13 (sun deferred — this mockup gathers the evidence), §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate, §15 utility-first, §17 presentation safeguards. Nothing here authorizes a build.
+**Status:** Phase 0 recipe, **draft for owner settlement** (per D-21: recipes settle on paper before any mockup build is authorized). ChatGPT-reviewed 2026-10-22 (no architectural blocker; margin + D-13 notes absorbed; R-S1–R-S4 recommendations recorded in §10). **Scope:** the Great Station space and its §18 mockup scene (the approach). **Settled ground it must obey:** D-2 (fictional megastructure), D-5 (home port — journeys, not memories), D-10/D-11 (routes, skippable travel), D-13 (sun deferred — this mockup gathers the evidence), §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate, §15 utility-first, §17 presentation safeguards. Nothing here authorizes a build.
 
 ---
 
@@ -52,6 +52,8 @@ Ceilings (not targets): ≤200 draw calls · ≤750k visible triangles · textur
 | UI/route overlay | ≤15 | ≤30k | Route projection, markers, summaries |
 | **Total** | **≤88** | **≤750k** | Headroom is deliberate — the margin is where honesty lives |
 
+**Margin note (review, 2026-10-22):** the draw-call plan (~88) holds real headroom under its ceiling; the triangle plan, as tabled, sums to the full 750k ceiling. That asymmetry is corrected in intent here: **750k is a hard rejection boundary, never a target.** The mockup should demonstrate a materially lower actual count where feasible (station LOD discipline is the main lever), and any run that lands *at* the boundary is treated as a warning to investigate, not a pass to celebrate — §11.2's ceiling still governs the verdict, unrelaxed.
+
 **Accessibility:** reduced-motion approach = a calm guided glide: no banking swoops, no ring-rotation in the near field, transitions by gentle fades between staged distances — *same information, same arrival* (§14.2). Guidance meaning is never carried by color alone (cyan markers also pulse in a distinct rhythm and carry shape coding) for color-vision safety. All text summaries in the brain's naming and plain language; no UTC, ever; minimum text sizes follow the core app's rules.
 
 ## 5. Animation inventory slice (§14.1 fields; combined load + fallback)
@@ -94,13 +96,14 @@ Every visual parameter of the mockup must trace to this table or to §4's budget
 
 ## 9. D-13 evidence this mockup must produce
 
-Stills + the approach recording framed to include **sun and station in one composition** at matched approach stages, with a short relative-appearance note — so the owner's deferred sun decision (D-13) can be made on evidence, not imagination. The mockup neither grows nor shrinks the sun; it *photographs the question*.
+Stills + the approach recording framed to include **sun and station in one composition** at matched approach stages, with a short relative-appearance note — so the owner's deferred sun decision (D-13) can be made on evidence, not imagination. The mockup neither grows nor shrinks the sun; it *photographs the question*. **D-13 stays genuinely open (review emphasis, 2026-10-22):** neither this recipe's composition rules ("the ring can eclipse the sun" describes the approach framing at the sun's *current* size) nor any review of this recipe settles the sun's eventual size — that decision is made later, on this mockup's evidence, as its own act.
 
 ## 10. Open for the owner (recipe settlement)
 
-- **R-S1** The form: crown-and-stem (spire + ring + four arms) — right silhouette, or a different monumental form?
-- **R-S2** The palette: warm amber harbor in cold indigo — right identity for the home port?
-- **R-S3** The station's display name: "the Great Station" is this recipe's descriptive title; if you want it to carry a proper name in-world, that's yours to give.
-- **R-S4** Ring rotation: proposed *slow and real* (it reads as life and scale) — or should the ring be still, with motion left to traffic alone?
+*ChatGPT reviewed this recipe (2026-10-22; record: `chatgpt-review-7-2026-10-22.md`) — no architectural blocker; recommendations below. The owner settles.*
+- **R-S1** The form: crown-and-stem (spire + ring + four arms) — right silhouette, or a different monumental form? *ChatGPT recommends: approve — strong distant silhouette that stays legible through the dual-layer handoff; proportions stay fixed by the recipe, never seed-randomized.*
+- **R-S2** The palette: warm amber harbor in cold indigo — right identity for the home port? *ChatGPT recommends: approve — with the cyan = navigation-truth rule preserved in reduced-motion and color-accessibility modes through shape, labeling, and rhythm cues, not color alone.*
+- **R-S3** The station's display name: "the Great Station" is this recipe's descriptive title; if you want it to carry a proper name in-world, that's yours to give. *ChatGPT recommends: defer — keep "the Great Station" as the working display name; don't invent a name to fill the slot; revisit when the wider world's voice is clearer.*
+- **R-S4** Ring rotation: proposed *slow and real* (it reads as life and scale) — or should the ring be still, with motion left to traffic alone? *ChatGPT recommends: approve — stately enough never to compete with route information; reduced-motion suppresses visible rotation while preserving the same scene information.*
 
-*Recipe draft ends. Settlement flow: owner review (ChatGPT pass welcome) → owner settles or amends → recipe joins the settled Phase 0 set. The Growing Place recipe follows the same template.*
+*Recipe draft ends. Settlement flow: owner review (ChatGPT pass done) → owner settles or amends → recipe joins the settled Phase 0 set. Recipe settlement does not authorize mockup construction. The Growing Place recipe follows the same template.*
