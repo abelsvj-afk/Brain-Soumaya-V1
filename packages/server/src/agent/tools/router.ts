@@ -3,6 +3,7 @@ import type { NotifyMeta } from "../notify/policy.js";
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { TOOLS } from "./registry.js";
 import { researchEnabled } from "../../maintenance/agent.js";
+import { NoRecipientsError } from "../notify/sendErrors.js";
 
 /**
  * The tool-router (docs/SOUMAYA_TOOLS.md). Each run, it lets every allowed tool
@@ -60,7 +61,15 @@ export async function runToolRouter(ctx: AppContext, spaceId: string, opts: Rout
     spaceId,
     now,
     notify: async (text: string, meta?: NotifyMeta) => {
-      if (opts.notify) await opts.notify(spaceId, text, meta);
+      // RE-02: with no delivery channel configured, say so honestly
+      // (NoRecipientsError) instead of silently no-oping — a tool that
+      // owns a firing decision (reminder) defers on this signal instead
+      // of consuming its event; other tools already catch notify errors
+      // and simply record delivered=false.
+      if (!opts.notify) {
+        throw new NoRecipientsError("no delivery channel configured");
+      }
+      await opts.notify(spaceId, text, meta);
     },
   };
 

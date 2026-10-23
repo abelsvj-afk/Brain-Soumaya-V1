@@ -1,6 +1,7 @@
 import type { Tool, ToolContext, ToolInvocation, ToolResult } from "./types.js";
 import { buildCommunicationContext, recentActionCount } from "../../communication/context.js";
 import { dispatchPush } from "../../push/outbox.js";
+import { NoRecipientsError } from "../notify/sendErrors.js";
 
 /**
  * Firing reminders — the first tool Soumaya calls on her own. `remind_at` used to be
@@ -126,6 +127,11 @@ export const reminderTool: Tool = {
     const manyRemindersToday = recentActionCount(tc.ctx.handle, tc.spaceId, "tool:fire_reminder", 1, new Date(tc.now)) >= 1;
     const msg = buildReminderMessage({ label: row.label, overdueMs, preferConcise, manyRemindersToday });
     let delivered = false;
+    // RE-02: distinguish "the boundary accepted this" (sent, queued for
+    // quiet hours/cap, or retrying a definite failure — the outbox owns
+    // the outcome from here) from "this reached no channel at all"
+    // (NoRecipientsError: no linked chat, or no channel configured).
+    let reachedChannel = false;
     try {
       await tc.notify(msg, {
         tool: "fire_reminder",
@@ -133,8 +139,13 @@ export const reminderTool: Tool = {
         remindAt: row.remind_at,
       });
       delivered = true;
-    } catch {
-      /* logged below regardless; the in-app bar still surfaces it */
+      reachedChannel = true;
+    } catch (err) {
+      if (!(err instanceof NoRecipientsError)) {
+        // The boundary (or a direct channel) owns this outcome now.
+        reachedChannel = true;
+      }
+      /* otherwise: no channel — decided after the push attempt below */
     }
     // Web push (CL3, policy follow-up per owner decision 2026-10-21): an
     // independent delivery channel dispatched HERE, at the real firing
@@ -162,8 +173,28 @@ export const reminderTool: Tool = {
         { now: new Date(tc.now) },
       );
       if (push.sent > 0) delivered = true;
+      // A push the policy stored for later (deferred) or already had
+      // (deduped) is also a channel that owns delivery from here.
+      if (push.sent > 0 || push.deferred || push.deduped) reachedChannel = true;
     } catch {
       /* push is best-effort — the firing itself already succeeded */
+    }
+    if (!reachedChannel) {
+      // RE-02: the reminder reached NO channel — defer it instead of
+      // consuming it as fired. Release this run's claim (guarded on the
+      // exact claim values, so a racing owner is never disturbed) so
+      // detect() proposes it again on a later tick, until a channel
+      // delivers it or the 3-day grace above retires it.
+      s.prepare(
+        `UPDATE nodes SET reminder_fired_at = NULL, fired_by_approval = NULL
+         WHERE id = ? AND space_id = ? AND reminder_fired_at = ? AND fired_by_approval IS ?`,
+      ).run(nodeId, tc.spaceId, firedIso, approvalId);
+      return {
+        ok: true,
+        summary: `deferred reminder "${row.label}" — no delivery channel; will retry when one is available`,
+        delivered: false,
+        message: msg,
+      };
     }
     return { ok: true, summary: `fired reminder "${row.label}"`, delivered, message: msg };
   },

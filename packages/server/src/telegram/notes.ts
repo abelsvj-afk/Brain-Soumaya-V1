@@ -262,7 +262,8 @@ export async function handleNoteCommand(
   if (draft) {
     return (
       `📝 A note is already in progress (${statusText(draft)}). ` +
-      `Keep sending to add to it, /done to save it, /cancel to discard it.`
+      `Keep sending to add to it, /done to save it, /cancel to discard it. ` +
+      `If you leave it untouched for 24 hours, the draft is discarded.`
     );
   }
   const initial = trimmedText.slice("/note".length).trim();
@@ -274,8 +275,8 @@ export async function handleNoteCommand(
   }
   const started = repo.insert(spaceId, chatId, initial, initial ? 1 : 0, iso(nowMs));
   return initial
-    ? `📝 Note started — part 1 saved (${statusText(started)}). Keep sending, /done to save, /cancel to discard.`
-    : "📝 Note started — send your note in as many messages as you like; I'll keep every word exactly as sent. /done saves it, /cancel discards it.";
+    ? `📝 Note started — part 1 saved (${statusText(started)}). Keep sending, /done to save, /cancel to discard. If you leave the draft untouched for 24 hours, it's discarded.`
+    : "📝 Note started — send your note in as many messages as you like; I'll keep every word exactly as sent. /done saves it, /cancel discards it. If you leave the draft untouched for 24 hours, it's discarded.";
 }
 
 // ---------------------------------------------------------------------------

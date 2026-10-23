@@ -33,6 +33,7 @@ import {
   markSent,
   markFailed,
   markDropped,
+  markAmbiguous,
   recoverExpiredLeases,
   dueRows,
   getRow,
@@ -40,10 +41,22 @@ import {
   MAX_ATTEMPTS,
   type OutboxRow,
 } from "./outbox.js";
+import { AmbiguousSendError, NoRecipientsError } from "./sendErrors.js";
 
 export interface BoundaryDeps {
   sqlite: RawDb;
-  /** Raw send to all linked chats. Must throw on definite failure. */
+  /**
+   * Raw send to all linked chats. Outcome contract (Batch A, RE-01/RE-02):
+   * - resolve: delivered to at least one recipient.
+   * - throw a plain Error: definite failure — a response was received and
+   *   it refused the send. Retried with backoff; the cap claim is released.
+   * - throw AmbiguousSendError: no response came back, so the outcome is
+   *   genuinely unknown. Recorded ambiguous (terminal, cap retained,
+   *   never auto-retried) via the outbox's existing markAmbiguous.
+   * - throw NoRecipientsError: zero recipients (no linked chat). Recorded
+   *   dropped, cap claim released, and re-thrown to the notify caller so a
+   *   firing tool can defer instead of consuming its event.
+   */
   send: (spaceId: string, text: string) => Promise<void>;
   /** Content-free audit log: (spaceId, action, detail). */
   audit: (spaceId: string, action: string, detail: string) => void;
@@ -91,9 +104,20 @@ export function createPolicyNotify(deps: BoundaryDeps) {
       return;
     }
     // action === "send": try immediate delivery with atomic cap claim.
-    await deliverNow(deps, spaceId, text, fullMeta, urgency, now);
+    const outcome = await deliverNow(deps, spaceId, text, fullMeta, urgency, now);
+    // Zero recipients: the drop is already recorded (claim released), but
+    // the caller must not mistake this for acceptance — a firing tool
+    // (reminder) defers its event instead of consuming it. Every other
+    // outcome stays internal: sent/queued/failed-retry/ambiguous are all
+    // states the outbox now owns.
+    if (outcome === "no-recipients") {
+      throw new NoRecipientsError("no linked chats for this space");
+    }
   };
 }
+
+/** What executeSend concluded about one claimed row. */
+type SendOutcome = "sent" | "retry" | "failed" | "ambiguous" | "no-recipients";
 
 /**
  * Attempt immediate delivery: atomic cap claim → send → record.
@@ -106,7 +130,7 @@ async function deliverNow(
   meta: NotifyMeta & { occurrenceId: string },
   urgency: { isUrgent: boolean; reason?: string },
   now: Date
-): Promise<void> {
+): Promise<SendOutcome | "queued" | "deduped"> {
   const { sqlite } = deps;
   const prefs = getPreferences(sqlite, spaceId);
   const day = localDay(now, prefs.timezone);
@@ -123,7 +147,7 @@ async function deliverNow(
   // If deduped, another identical notification is already queued/sent; don't double-send.
   if (deduped) {
     deps.audit(spaceId, "notify:deduped", `${meta.tool} duplicate suppressed`);
-    return;
+    return "deduped";
   }
 
   const claimed = urgency.isUrgent
@@ -137,33 +161,50 @@ async function deliverNow(
       .prepare(`UPDATE notification_outbox SET deliver_after = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(deliverAfter, id);
     deps.audit(spaceId, "notify:queued", `${meta.tool} cap reached, deferred to ${deliverAfter}`);
-    return;
+    return "queued";
   }
 
-  await executeSend(deps, id, spaceId, text, now);
+  return executeSend(deps, id, spaceId, text, now);
 }
 
 /** Execute the actual send for a claimed row, handling all outcomes. */
-async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text: string, now: Date): Promise<void> {
+async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text: string, now: Date): Promise<SendOutcome> {
   const { sqlite } = deps;
   markSendStarted(sqlite, id, nowIso(now));
   try {
     await deps.send(spaceId, text);
   } catch (err) {
+    // No response came back: the outcome is genuinely unknown. Use the
+    // outbox's existing ambiguous mechanism — terminal, cap retained,
+    // never auto-retried (a retry could deliver a duplicate).
+    if (err instanceof AmbiguousSendError) {
+      markAmbiguous(sqlite, id);
+      deps.audit(spaceId, "notify:ambiguous", `${getRow(sqlite, id)?.tool ?? "?"} send outcome unknown, cap retained`);
+      return "ambiguous";
+    }
+    // Zero recipients: a known non-delivery. Drop the row and release the
+    // cap claim — a send to nobody is never recorded as sent and never
+    // keeps a slot. (The immediate path re-throws this to its caller.)
+    if (err instanceof NoRecipientsError) {
+      markDropped(sqlite, id, "no recipients: no linked chat for this space");
+      deps.audit(spaceId, "notify:dropped", `${getRow(sqlite, id)?.tool ?? "?"} no recipients`);
+      return "no-recipients";
+    }
     const msg = err instanceof Error ? err.message : String(err);
     const row = getRow(sqlite, id);
     const attempts = (row?.attempts ?? 0) + 1;
     if (attempts >= MAX_ATTEMPTS) {
       markFailed(sqlite, id, msg, null);
       deps.audit(spaceId, "notify:failed", `${row?.tool} terminal after ${attempts} attempts`);
-    } else {
-      markFailed(sqlite, id, msg, retryAfter(attempts, now));
-      deps.audit(spaceId, "notify:retry", `${row?.tool} attempt ${attempts} failed`);
+      return "failed";
     }
-    return;
+    markFailed(sqlite, id, msg, retryAfter(attempts, now));
+    deps.audit(spaceId, "notify:retry", `${row?.tool} attempt ${attempts} failed`);
+    return "retry";
   }
   markSent(sqlite, id);
   deps.audit(spaceId, "notify:sent", `${getRow(sqlite, id)?.tool ?? "?"} delivered`);
+  const outcome: SendOutcome = "sent";
   // W2 §5.1: proactive message delivered — capture after delivery,
   // best-effort, never throws. `executeSend` is the single choke point for
   // both immediate and sweeper-deferred sends, so this covers every path.
@@ -175,6 +216,7 @@ async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text
       }),
     )
     .catch(() => {});
+  return outcome;
 }
 
 /**
@@ -281,8 +323,9 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
       stats.queued++;
       continue;
     }
-    await executeSend(deps, row.id, row.spaceId, row.message, now);
-    stats.sent++;
+    const outcome = await executeSend(deps, row.id, row.spaceId, row.message, now);
+    if (outcome === "ambiguous") stats.ambiguous++;
+    else stats.sent++;
   }
   return stats;
 }
