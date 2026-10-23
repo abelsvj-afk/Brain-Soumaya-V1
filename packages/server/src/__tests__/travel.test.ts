@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import { createDb, type DbHandle } from "../db/client.js";
 import { EconomyRepo, FUEL_START, WARP_COST } from "../economy.js";
 import { TravelRepo, TravelError } from "../repositories/travel.repo.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { buildContext, type AppContext } from "../context.js";
@@ -235,6 +237,102 @@ describe("two connections, one file (the concurrency proof)", () => {
       .prepare(`SELECT COUNT(*) AS n FROM travel_journeys WHERE space_id = 'spaceA'`)
       .get() as { n: number };
     expect(rows.n).toBe(1);
+  });
+});
+
+describe("concurrent transitions across two processes (review 22)", () => {
+  let dir: string;
+  let dbPath: string;
+  let h: DbHandle;
+
+  interface ChildResult {
+    ok: boolean;
+    state?: string | null;
+    error?: string;
+  }
+  function runChild(journeyId: string, action: string, goFile: string, nowMs: number): Promise<ChildResult> {
+    return new Promise((resolve, reject) => {
+      const cli = fileURLToPath(new URL("../../../../node_modules/tsx/dist/cli.mjs", import.meta.url));
+      const child = fileURLToPath(new URL("./travelRaceChild.mts", import.meta.url));
+      execFile(
+        process.execPath,
+        [cli, child, dbPath, "spaceR", journeyId, action, goFile, String(nowMs)],
+        (err, stdout) => {
+          if (err) return reject(err);
+          const last = stdout.trim().split("\n").pop() ?? "";
+          try {
+            resolve(JSON.parse(last) as ChildResult);
+          } catch {
+            reject(new Error(`unparseable child output: ${stdout}`));
+          }
+        },
+      );
+    });
+  }
+  async function race(
+    journeyId: string,
+    actions: [string, string],
+    nowMs: number,
+  ): Promise<[ChildResult, ChildResult]> {
+    const goFile = join(dir, `go-${Math.random().toString(36).slice(2)}`);
+    const p1 = runChild(journeyId, actions[0], goFile, nowMs);
+    const p2 = runChild(journeyId, actions[1], goFile, nowMs);
+    await new Promise((r) => setTimeout(r, 600)); // let both children reach the barrier
+    writeFileSync(goFile, "go");
+    return Promise.all([p1, p2]);
+  }
+  function inTransitJourney(key: string): { repo: TravelRepo; id: string; deadline: string } {
+    const repo = new TravelRepo(h, "spaceR");
+    const j = repo.depart({ clientKey: key, kind: "warp", destination: "great-station" }, T0);
+    const settled = repo.getJourney(j.id, past(j.cancelDeadline));
+    expect(settled?.state).toBe("in_transit");
+    return { repo, id: j.id, deadline: j.cancelDeadline };
+  }
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "travel-race2-"));
+    dbPath = join(dir, "brain.db");
+    h = createDb(dbPath);
+  });
+  afterAll(() => {
+    h.sqlite.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("duplicate arrivals: exactly one arrived event, both callers see the committed state", async () => {
+    const { repo, id, deadline } = inTransitJourney("race-arrive");
+    const [r1, r2] = await race(id, ["arrive", "arrive"], past(deadline) + 60_000);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(r1.state).toBe("arrived");
+    expect(r2.state).toBe("arrived"); // the loser returns the actual committed state
+    expect(eventTypes(repo, id)).toEqual(["departure_armed", "departed", "arrived"]);
+    expect(repo.getJourney(id, past(deadline) + 120_000)?.state).toBe("arrived");
+  }, 60_000);
+
+  it("arrival vs turn-back: exactly one legal chain, never both transitions", async () => {
+    const { repo, id, deadline } = inTransitJourney("race-mixed");
+    const [r1, r2] = await race(id, ["arrive", "turnBack"], past(deadline) + 60_000);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    const types = eventTypes(repo, id);
+    const chains = [
+      ["departure_armed", "departed", "arrived"], // arrival won outright
+      ["departure_armed", "departed", "turned_back", "returned"], // turn-back won; arrival completed the return
+    ];
+    expect(chains).toContainEqual(types);
+    const final = repo.getJourney(id, past(deadline) + 120_000);
+    expect(final?.state).toBe(types[types.length - 1] === "arrived" ? "arrived" : "returned");
+  }, 60_000);
+
+  it("cross-connection sequential retry still yields one arrival", () => {
+    // Own space (own fuel tank): the race tests above already spent spaceR's.
+    const a = new TravelRepo(h, "spaceX");
+    const j = a.depart({ clientKey: "xconn", kind: "warp", destination: "great-station" }, T0);
+    const b = new TravelRepo(h, "spaceX");
+    expect(b.arrive(j.id, past(j.cancelDeadline))?.state).toBe("arrived");
+    expect(a.arrive(j.id, past(j.cancelDeadline) + 1000)?.state).toBe("arrived");
+    expect(eventTypes(a, j.id)).toEqual(["departure_armed", "departed", "arrived"]);
   });
 });
 

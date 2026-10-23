@@ -25,6 +25,13 @@ import {
  * or turned back (`returning` → `returned`). P2-2 credits NO bonuses —
  * arrivals only record the facts P2-4 will pay on.
  *
+ * Every transition re-reads and re-validates the journey INSIDE its own
+ * immediate transaction and writes through a guarded update (the expected
+ * state in the WHERE clause, exactly-one-row-checked): concurrent acts on
+ * separate connections observe each other's committed state and return
+ * it — they never both apply a transition, and an event is appended only
+ * for a transition that actually committed.
+ *
  * The current world is DERIVED from the latest journey (never a stored
  * pointer): arrived → its destination; returned/cancelled → its origin;
  * an active journey → its origin; no journeys → "home".
@@ -238,18 +245,41 @@ export class TravelRepo {
     }
   }
 
+  /**
+   * Guarded state change, called ONLY inside a transition transaction that
+   * has just re-read the row: the UPDATE carries the expected current state
+   * in its WHERE clause, so if a concurrent request already moved the
+   * journey, this matches zero rows and nothing is written — the caller
+   * then returns the actual committed state instead of appending an event
+   * for a transition that never happened. Returns true iff exactly one
+   * row changed.
+   */
+  private guardedUpdate(
+    journeyId: string,
+    fromState: TravelJourneyState,
+    setSql: string,
+    params: unknown[],
+  ): boolean {
+    const res = this.h.sqlite
+      .prepare(`UPDATE travel_journeys SET ${setSql} WHERE id = ? AND state = ?`)
+      .run(...params, journeyId, fromState);
+    return res.changes === 1;
+  }
+
   /** Cancel while the window is open: free, final, no charge ever. After
    *  settlement the journey has departed — the honest current state is
-   *  returned instead of an error. */
+   *  returned instead of an error. The transition re-reads and re-validates
+   *  inside its own immediate transaction (review 22): a concurrent act
+   *  that committed first is observed, never overwritten. */
   cancel(journeyId: string, nowMs: number = Date.now()): TravelJourney | null {
-    const j = this.settle(journeyId, nowMs);
-    if (!j) return null;
-    if (j.state !== "arming") return j;
-    const run = this.h.sqlite.transaction((): TravelJourney => {
+    if (!this.settle(journeyId, nowMs)) return null;
+    const run = this.h.sqlite.transaction((): TravelJourney | null => {
+      const r = this.rowById(journeyId);
+      if (!r) return null;
+      if (r.state !== "arming") return this.map(r, nowMs);
       const nowIso = new Date(nowMs).toISOString();
-      this.h.sqlite
-        .prepare(`UPDATE travel_journeys SET state = 'cancelled', ended_at = ? WHERE id = ?`)
-        .run(nowIso, journeyId);
+      if (!this.guardedUpdate(journeyId, "arming", `state = 'cancelled', ended_at = ?`, [nowIso]))
+        return this.map(this.rowById(journeyId)!, nowMs);
       this.addEvent(journeyId, "cancelled", { via: "cancel" }, nowMs);
       return this.map(this.rowById(journeyId)!, nowMs);
     });
@@ -258,25 +288,23 @@ export class TravelRepo {
 
   /** Turn back mid-transit: no refund, no second charge; the journey ends
    *  when it arrives back (`returning` → `returned`). Before departure it
-   *  is simply a cancel. */
+   *  is simply a cancel. Same in-transaction re-validation as cancel(). */
   turnBack(journeyId: string, nowMs: number = Date.now()): TravelJourney | null {
-    const j = this.settle(journeyId, nowMs);
-    if (!j) return null;
-    if (j.state === "arming") {
-      const run = this.h.sqlite.transaction((): TravelJourney => {
-        const nowIso = new Date(nowMs).toISOString();
-        this.h.sqlite
-          .prepare(`UPDATE travel_journeys SET state = 'cancelled', ended_at = ? WHERE id = ?`)
-          .run(nowIso, journeyId);
+    if (!this.settle(journeyId, nowMs)) return null;
+    const run = this.h.sqlite.transaction((): TravelJourney | null => {
+      const r = this.rowById(journeyId);
+      if (!r) return null;
+      const nowIso = new Date(nowMs).toISOString();
+      if (r.state === "arming") {
+        if (!this.guardedUpdate(journeyId, "arming", `state = 'cancelled', ended_at = ?`, [nowIso]))
+          return this.map(this.rowById(journeyId)!, nowMs);
         this.addEvent(journeyId, "cancelled", { via: "turn_back" }, nowMs);
         return this.map(this.rowById(journeyId)!, nowMs);
-      });
-      return run.immediate();
-    }
-    if (j.state !== "in_transit") return j;
-    const run = this.h.sqlite.transaction((): TravelJourney => {
+      }
+      if (r.state !== "in_transit") return this.map(r, nowMs);
+      if (!this.guardedUpdate(journeyId, "in_transit", `state = 'returning'`, []))
+        return this.map(this.rowById(journeyId)!, nowMs);
       this.addEvent(journeyId, "turned_back", {}, nowMs);
-      this.h.sqlite.prepare(`UPDATE travel_journeys SET state = 'returning' WHERE id = ?`).run(journeyId);
       return this.map(this.rowById(journeyId)!, nowMs);
     });
     return run.immediate();
@@ -286,31 +314,45 @@ export class TravelRepo {
    * Arrive. Before actual departure (`arming`, window still open) arrival
    * is rejected — JOURNEY_NOT_DEPARTED, no mutation, no event, no charge:
    * fast-forwarding the window would let a stray request force a charge
-   * and erase the user's cancel protection. A retried arrival on a
-   * finished journey returns its state unchanged (exactly one arrival
-   * transition ever happens — P2-4's duplicate protection builds on it).
+   * and erase the user's cancel protection. The transition re-reads and
+   * re-validates inside its own immediate transaction (review 22): two
+   * concurrent arrivals produce exactly ONE `arrived` event — the second
+   * observes the committed state and returns it. (P2-4's duplicate-bonus
+   * protection builds on exactly this.)
    */
   arrive(journeyId: string, nowMs: number = Date.now()): TravelJourney | null {
-    const j = this.settle(journeyId, nowMs);
-    if (!j) return null;
-    if (j.state === "arming")
-      throw new TravelError("JOURNEY_NOT_DEPARTED", "This journey hasn't departed yet — its cancel window is still open.");
-    if (TERMINAL.has(j.state)) return j;
-    const run = this.h.sqlite.transaction((): TravelJourney => {
+    if (!this.settle(journeyId, nowMs)) return null;
+    const run = this.h.sqlite.transaction((): TravelJourney | null => {
+      const r = this.rowById(journeyId);
+      if (!r) return null;
+      if (r.state === "arming")
+        throw new TravelError(
+          "JOURNEY_NOT_DEPARTED",
+          "This journey hasn't departed yet — its cancel window is still open.",
+        );
+      if (TERMINAL.has(r.state)) return this.map(r, nowMs);
       const nowIso = new Date(nowMs).toISOString();
-      if (j.state === "returning") {
-        this.h.sqlite
-          .prepare(`UPDATE travel_journeys SET state = 'returned', arrived_at = ?, ended_at = ? WHERE id = ?`)
-          .run(nowIso, nowIso, journeyId);
-        this.addEvent(journeyId, "returned", { kind: j.kind }, nowMs);
+      if (r.state === "returning") {
+        if (
+          !this.guardedUpdate(journeyId, "returning", `state = 'returned', arrived_at = ?, ended_at = ?`, [
+            nowIso,
+            nowIso,
+          ])
+        )
+          return this.map(this.rowById(journeyId)!, nowMs);
+        this.addEvent(journeyId, "returned", { kind: r.kind }, nowMs);
       } else {
-        const durationSeconds = j.departedAt
-          ? Math.max(0, Math.round((nowMs - Date.parse(j.departedAt)) / 1000))
+        const durationSeconds = r.departed_at
+          ? Math.max(0, Math.round((nowMs - Date.parse(r.departed_at)) / 1000))
           : null;
-        this.h.sqlite
-          .prepare(`UPDATE travel_journeys SET state = 'arrived', arrived_at = ?, ended_at = ? WHERE id = ?`)
-          .run(nowIso, nowIso, journeyId);
-        this.addEvent(journeyId, "arrived", { kind: j.kind, durationSeconds }, nowMs);
+        if (
+          !this.guardedUpdate(journeyId, "in_transit", `state = 'arrived', arrived_at = ?, ended_at = ?`, [
+            nowIso,
+            nowIso,
+          ])
+        )
+          return this.map(this.rowById(journeyId)!, nowMs);
+        this.addEvent(journeyId, "arrived", { kind: r.kind, durationSeconds }, nowMs);
       }
       return this.map(this.rowById(journeyId)!, nowMs);
     });
