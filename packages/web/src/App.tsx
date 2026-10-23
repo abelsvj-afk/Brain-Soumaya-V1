@@ -38,6 +38,7 @@ import { Legend } from "./components/Legend.js";
 import { WelcomeIntro } from "./components/WelcomeIntro.js";
 import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
+import TravelPanel from "./components/TravelPanel.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
@@ -2190,6 +2191,14 @@ export default function App() {
           onExit={exitLens}
           hidden={panel !== null || showChat || showObs}
         />
+      )}
+
+      {/* Worlds travel (Phase 2, P2-3) — ships dark: while the worlds
+          flag is off, TravelPanel renders nothing and fetches nothing. */}
+      {space && (
+        <ErrorBoundary label="travel" fallback={null}>
+          <TravelPanel />
+        </ErrorBoundary>
       )}
 
       {/* Active-lens banner — mirrors "Exit system view"; ✕ restores the full galaxy. */}
