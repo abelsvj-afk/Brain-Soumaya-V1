@@ -81,8 +81,8 @@ describe("useTravel", () => {
       await result.current.depart("warp", "great-station"); // a retry / double-tap
     });
     expect(mockDepart).toHaveBeenCalledTimes(2);
-    const k1 = mockDepart.mock.calls[0][0].clientKey;
-    const k2 = mockDepart.mock.calls[1][0].clientKey;
+    const k1 = mockDepart.mock.calls[0]![0]!.clientKey;
+    const k2 = mockDepart.mock.calls[1]![0]!.clientKey;
     expect(k1).toBeTruthy();
     expect(k2).toBe(k1);
     expect(localStorage.getItem("worlds.departureKey")).toBe(k1);
@@ -124,7 +124,10 @@ describe("useTravel", () => {
 
   it("an observed arrival records the traversed route (presentation memory)", async () => {
     mockState.mockResolvedValue(state(journey({ state: "in_transit", cancellable: false })));
-    mockArrive.mockResolvedValue(journey({ state: "arrived", fuelCharged: 10, cancellable: false }));
+    mockArrive.mockResolvedValue({
+      journey: journey({ state: "arrived", fuelCharged: 10, cancellable: false }),
+      bonus: { credited: true, amount: 5, balance: 30, reason: null },
+    });
     const { result } = renderHook(() => useTravel());
     await waitFor(() => expect(result.current.state?.activeJourney?.state).toBe("in_transit"));
     expect(result.current.hasTraversed("home", "great-station")).toBe(false);

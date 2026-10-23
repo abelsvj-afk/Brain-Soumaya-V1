@@ -1080,6 +1080,9 @@ export const BOOTSTRAP_SQL = `
       departed_at TEXT,
       arrived_at TEXT,
       ended_at TEXT,
+      bonus_credited_at TEXT,
+      bonus_amount REAL NOT NULL DEFAULT 0,
+      bonus_reason TEXT,
       UNIQUE (space_id, client_key)
     );
     CREATE INDEX IF NOT EXISTS idx_travel_journeys_space_created

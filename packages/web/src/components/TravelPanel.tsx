@@ -65,6 +65,17 @@ export default function TravelPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enabl
         </p>
       )}
 
+      {/* Bonus feedback (P2-4): rendered ONLY from the server's bonus
+          outcome for the arrival — a credit line when it paid, the
+          server's plain reason when a drift was gated, nothing at all
+          otherwise. Never a local guess, never a fake celebration. */}
+      {travel.lastBonus?.credited && (
+        <p className="travel-bonus">+{travel.lastBonus.amount} fuel — journey bonus</p>
+      )}
+      {travel.lastBonus && !travel.lastBonus.credited && travel.lastBonus.reason && (
+        <p className="travel-note">{travel.lastBonus.reason}</p>
+      )}
+
       {!state && !error && <p>Checking the chart…</p>}
 
       {state && !journey && (

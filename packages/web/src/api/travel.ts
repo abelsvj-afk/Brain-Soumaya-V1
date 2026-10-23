@@ -16,6 +16,26 @@ export interface TravelState {
   fuel: Fuel;
 }
 
+/**
+ * The server's recorded bonus outcome for one arrival (P2-4). The
+ * client displays bonus state ONLY from this payload — never from its
+ * own inference (GH-19). `reason` is the server's plain-language
+ * explanation when nothing was paid (a gated drift), else null.
+ */
+export interface TravelBonus {
+  credited: boolean;
+  amount: number;
+  balance: number;
+  reason: string | null;
+}
+
+export interface ArriveResult {
+  journey: TravelJourney;
+  bonus: TravelBonus;
+}
+
+const NO_BONUS: TravelBonus = { credited: false, amount: 0, balance: 0, reason: null };
+
 export class TravelClientError extends Error {
   constructor(
     readonly code: string,
@@ -26,17 +46,20 @@ export class TravelClientError extends Error {
   }
 }
 
-async function post(path: string, body: Record<string, unknown>): Promise<TravelJourney> {
+interface TravelResponse {
+  journey?: TravelJourney;
+  bonus?: TravelBonus;
+  error?: string;
+  code?: string;
+}
+
+async function postData(path: string, body: Record<string, unknown>): Promise<TravelResponse> {
   const res = await afetch(`${API}/travel/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => null)) as {
-    journey?: TravelJourney;
-    error?: string;
-    code?: string;
-  } | null;
+  const data = (await res.json().catch(() => null)) as TravelResponse | null;
   if (!res.ok || !data?.journey) {
     if (res.status === 404) {
       throw new TravelClientError("NOT_FOUND", "That journey couldn't be found.");
@@ -46,7 +69,11 @@ async function post(path: string, body: Record<string, unknown>): Promise<Travel
       data?.error ?? "That didn't go through — please try again.",
     );
   }
-  return data.journey;
+  return data;
+}
+
+async function post(path: string, body: Record<string, unknown>): Promise<TravelJourney> {
+  return (await postData(path, body)).journey!;
 }
 
 /** Current travel state, or null when the brain is unreachable (callers
@@ -89,7 +116,11 @@ export function turnBackJourney(journeyId: string): Promise<TravelJourney> {
 }
 
 /** Arrive. The server rejects arrival before actual departure and
- *  returns the committed state for a retried arrival. */
-export function arriveJourney(journeyId: string): Promise<TravelJourney> {
-  return post("arrive", { journeyId });
+ *  returns the committed state for a retried arrival — plus the bonus
+ *  outcome it recorded for that arrival (P2-4), which is the only
+ *  bonus state the UI may show. A response without the sibling (an
+ *  older server) reads as no bonus, never as an invented one. */
+export async function arriveJourney(journeyId: string): Promise<ArriveResult> {
+  const data = await postData("arrive", { journeyId });
+  return { journey: data.journey!, bonus: data.bonus ?? NO_BONUS };
 }

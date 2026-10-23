@@ -117,9 +117,34 @@ describe("journey actions", () => {
     stubFetch(async () =>
       jsonRes(200, { journey: { ...journey, state: "arrived", fuelCharged: 10 } }),
     );
-    const j = await arriveJourney("j-1");
-    expect(j.state).toBe("arrived");
-    expect(j.fuelCharged).toBe(10);
+    const r = await arriveJourney("j-1");
+    expect(r.journey.state).toBe("arrived");
+    expect(r.journey.fuelCharged).toBe(10);
+    // No bonus sibling (older server) reads as no bonus — never invented.
+    expect(r.bonus).toEqual({ credited: false, amount: 0, balance: 0, reason: null });
+  });
+
+  it("arrive carries the server's bonus outcome verbatim (P2-4)", async () => {
+    stubFetch(async () =>
+      jsonRes(200, {
+        journey: { ...journey, state: "arrived" },
+        bonus: { credited: true, amount: 5, balance: 30, reason: null },
+      }),
+    );
+    const r = await arriveJourney("j-1");
+    expect(r.bonus).toEqual({ credited: true, amount: 5, balance: 30, reason: null });
+  });
+
+  it("a gated drift's plain reason arrives with the bonus (P2-4)", async () => {
+    stubFetch(async () =>
+      jsonRes(200, {
+        journey: { ...journey, state: "arrived", kind: "drift" },
+        bonus: { credited: false, amount: 0, balance: 25, reason: "Today's drift bonuses are done — drifting itself is still free." },
+      }),
+    );
+    const r = await arriveJourney("j-1");
+    expect(r.bonus.credited).toBe(false);
+    expect(r.bonus.reason).toMatch(/still free/);
   });
 
   it("TravelClientError is an Error with a stable name", () => {

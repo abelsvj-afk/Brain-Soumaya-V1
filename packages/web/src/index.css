@@ -6418,3 +6418,58 @@ button.mindspace-more { cursor: pointer; }
   .streak-ember .se-flame { font-size: 16px; }
   .streak-ember .se-warn { max-width: none; margin-top: 0; }
 }
+
+/* Worlds surface (Phase 2, P2-4): the Great Station scene overlay.
+   Functional layout only — the scene itself carries the visuals.
+   Sits above the galaxy HUD; the travel panel stays reachable by
+   closing the view (closing is view-only). */
+.worlds-surface {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: #0b1026;
+  color: #e8e6df;
+  overflow: hidden;
+}
+.worlds-surface-canvas {
+  position: absolute;
+  inset: 0;
+}
+.worlds-surface-canvas canvas {
+  display: block;
+}
+.worlds-surface-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  pointer-events: none;
+}
+.worlds-surface-bar > * {
+  pointer-events: auto;
+}
+.worlds-surface-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.worlds-surface-fallback {
+  position: absolute;
+  top: 4rem;
+  left: 1rem;
+  right: 1rem;
+  text-align: center;
+  opacity: 0.85;
+}
+.worlds-surface-credits {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+}
+.travel-bonus {
+  color: #ffd27a;
+}
