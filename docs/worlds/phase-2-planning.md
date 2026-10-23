@@ -20,7 +20,7 @@ The repo already ships a fuel economy (`packages/server/src/economy.ts`, the "Ce
 - **Failure independence (§19 A1) — ✅ designed in (§5).** The skeleton ships behind a flag, dark; removing it leaves the brain — including the pre-existing fuel rows — untouched.
 
 ## 3. The fuel design (D-33 made concrete — rates are proposals for the exit decision)
-- **Warp spend:** `WARP_COST` charged **when the cancel window closes** (a cancelled departure costs nothing and moves nothing, §15 — the mockup chassis semantics, kept). Turn-back mid-transit: no refund, no second charge (the warp was spent; the return leg is drift-class, free). Return home: always free. Drift: always free.
+- **Warp spend:** `WARP_COST` charged **when the cancel window closes** (a cancelled departure costs nothing and moves nothing, §15 — the mockup chassis semantics, kept). **The window is enforced by the server** (review 18): the client shows the countdown, but the spend decision, the duplicate-charge guard, and the state transition are server-side, idempotent under retries. Turn-back mid-transit: no refund, no second charge (the warp was spent; the return leg is drift-class, free). Return home: always free. Drift: always free.
 - **Base:** unchanged shipped behavior (regen + earn-on-tending). Pricing rule of thumb: a warp should cost roughly what **one or two ordinary brain acts earn** (against `EARN_MEMORY` as the yardstick), so a light day funds a warp and a normal day funds several. Exact figure set at P2-1 against the live constants in `@brain/shared`.
 - **Journey bonuses:** `EARN_JOURNEY_COMPLETE` (a completed warp arrival), smaller `EARN_JOURNEY_DRIFT` (a completed drift arrival — patience is also a journey), credited server-side at arrival with the new balance returned. **Evidence:** the travel log (§4) — never the unbuilt server Quest Board, never a client claim.
 - **Calendar safety:** regen is elapsed-time based (no boundary, no timezone hazard). Nothing in Phase 2 fuel is daily-capped; if a cap is ever added it uses the established space-local-day machinery — **never UTC** (the standing rule).
@@ -36,10 +36,13 @@ The repo already ships a fuel economy (`packages/server/src/economy.ts`, the "Ce
 Worlds flag off by default; enabling is the owner's separate act after the build gate. Rollback = flag off + module inert; the journey log and fuel constants are additive and harmless if left in place; no brain table is altered destructively (any schema change follows the safe additive migration path).
 
 ## 6. Increments (each: design note → build → full gate → owner's merge tap)
-- **P2-1 — Fuel extension:** shared constants + `EconomyRepo` warp-spend / journey-earn methods + server tests (spend timing, cancel = no charge, floor at 0, cap respected, bonus crediting atomic with arrival).
-- **P2-2 — Travel skeleton (server):** journey log + depart/cancel/turn-back/arrive semantics + tests (state machine: no arrival without departure, no double-charge, turn-back preserves state).
-- **P2-3 — Web travel layer + Station:** gate, transit, Station arrival + route board, gauge labels from shared constants; budgets verified against §11-derived limits on the owner's device class.
-- **P2-4 — Bonuses live + dark launch:** journey bonuses crediting, flag, owner device check, launch decision.
+Boundaries clarified at review 18 — responsibilities do not overlap, and no increment claims verification of machinery a later increment builds:
+- **P2-1 — Fuel primitives:** shared constants (`WARP_COST`, `EARN_JOURNEY_*`) + `EconomyRepo` warp-spend and balance-bounds methods + unit tests (spend, floor at 0, cap respected, regen untouched). The journey-bonus **interface** is defined here (method shape, idempotency key); end-to-end bonus crediting is **not** claimed verified in this increment — it depends on P2-2's arrival transaction.
+- **P2-2 — Server journey ledger:** the append-only journey log; the **authoritative** departure / cancel / turn-back / arrival state machine; fuel-plus-log writes in **one transaction** (no arrival without departure, no double-charge, turn-back preserves state) + tests.
+- **P2-3 — Web travel layer + Station:** gate, transit, Station arrival + route board, gauge labels from shared constants — integrated against the P2-2 server contract; budgets verified against §11-derived limits on the owner's device class.
+- **P2-4 — Journey rewards + dark launch:** bonus crediting implemented and **verified against completed journeys**, including **duplicate-arrival / retry protection** (a retried arrival never pays twice) and server confirmation before any UI feedback; the worlds flag ships dark; owner device check; launch decision.
+
+**Acceptance requirement (review 18, binding on all four increments):** the **server — never the browser — enforces the cancel window** and prevents duplicate charges and duplicate rewards. Client timing alone must not decide whether fuel is spent; the client presents the window, the server owns it.
 
 **Test gate (standing constraints honored):** tests are authored with each increment and run through the repo's established flow before any merge; this sandbox does not run the repo suite and claims no test results. Merge and deploy remain the owner's separate taps, per increment.
 

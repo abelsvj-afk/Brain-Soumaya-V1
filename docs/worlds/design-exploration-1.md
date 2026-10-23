@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 43 — **Phase 2 PLAN DRAFTED** (`phase-2-planning.md`): reconciliation inspected against the actual repo — the product already ships a space-scoped fuel economy (`economy.ts` / `@brain/shared`), so D-33's base largely exists; the plan adopts **one tank** (warp spend + journey bonuses as new shared constants), server-side bonus crediting (reward honesty), cancel-window charge timing, four bounded increments (P2-1…P2-4) for the repo chat's lanes, dark launch, and the standing test gate. Deferred register items (notifications, Chronicle data, approval rail) recorded as non-blocking for Phase 2. **Awaiting the owner's implementation authorization — the planning gate's exit decision.**
+**Revision:** 44 — **Review 18 correction applied to the Phase 2 plan** (record: `chatgpt-review-18-2026-10-22.md`): increment boundaries made explicit and non-overlapping — **P2-1** fuel primitives (bonus interface defined, end-to-end crediting *not* claimed), **P2-2** server journey ledger (authoritative state, atomic fuel+log), **P2-3** web travel + Station against the server contract, **P2-4** journey rewards verified (duplicate-arrival/retry protection) + dark launch — plus a binding acceptance requirement: **the server, never the browser, enforces the cancel window** and prevents duplicate charges/rewards. The reviewer held authorization until corrected; the correction is now the record. **Awaiting the owner's implementation authorization — narrow by design (P2-1 first).**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -831,4 +831,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 43. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly. Phase 2 planning lives in `phase-2-planning.md`; decisions continue to accumulate here.*
+*End of Exploration 1, Revision 44. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly. Phase 2 planning lives in `phase-2-planning.md`; decisions continue to accumulate here.*
