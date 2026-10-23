@@ -1,0 +1,10 @@
+{
+  "source_file": "hygdata_v41.csv (HYG database, Astronexus \u2014 github.com/astronexus/HYG-Database, hyg/CURRENT/)",
+  "source_sha256": "d9f69fd86bbf90a4e4d52b4c5c53eacfa6dfc0bfdef85bfd94f095e0bebe4ebd",
+  "total_rows": 119626,
+  "subset": "brightest 5000 by apparent magnitude",
+  "mag_brightest": -1.44,
+  "mag_cutoff": 5.99,
+  "ci_missing_in_subset": 22,
+  "shell_radius": 3800.0
+}
