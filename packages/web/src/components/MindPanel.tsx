@@ -333,13 +333,20 @@ export function MindPanel({
   const think = async () => {
     const text = thought.trim();
     if (!text) return;
-    setThought("");
+    // CAP-09: the input used to be cleared BEFORE the save, so a failure
+    // destroyed the words (Mind has no draft store). Clear only on a
+    // verified save; on failure the words stay in the input.
     const r = await addThought(text);
     if (r) {
+      setThought("");
       playSfx("tap");
       await refreshThoughts();
+    } else if (text.length > 500) {
+      // The 500-char case: "try again" with the same words can never
+      // succeed — say what's actually wrong. (Working memory holds 500.)
+      pushToast("That thought is too long to hold (500 characters max) — your words are still here; trim it and try again.", "⚠️", 4500);
     } else {
-      pushToast("Couldn't hold that thought — try again.", "⚠️", 3500);
+      pushToast("Couldn't hold that thought — your words are still here, try again.", "⚠️", 3500);
     }
   };
   const reinforce = async (t: Thought) => {

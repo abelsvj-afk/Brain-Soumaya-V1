@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 
 const ingestText = vi.fn();
-vi.mock("../api/client.js", () => ({ ingestText: (...a: unknown[]) => ingestText(...a) }));
+vi.mock("../api/client.js", () => ({
+  ingestText: (...a: unknown[]) => ingestText(...a),
+  // CAP-05: the draft key is scoped per brain now; this harness's brain is space1.
+  getSpaceId: () => "space1",
+}));
 const extractFileText = vi.fn();
 vi.mock("../lib/extractFileText.js", () => ({ extractFileText: (...a: unknown[]) => extractFileText(...a) }));
 vi.mock("./JourneyChips.js", () => ({ JourneyChips: () => null }));

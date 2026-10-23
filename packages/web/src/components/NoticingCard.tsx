@@ -121,8 +121,15 @@ export function NoticingCard({
     else setIndex((i) => Math.min(i, remaining.length - 1));
   };
   const wave = async () => {
+    // GH-19: dismiss honestly, like send() — the inquiry leaves only on a
+    // verified success. Before, it was removed locally first and a failed
+    // dismiss silently resurrected it at the next poll, unexplained.
+    const ok = await dismissInquiry(q.id).catch(() => false);
+    if (!ok) {
+      pushToast("Couldn't wave that off — it's still here.", "⚠️", 3500);
+      return;
+    }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    await dismissInquiry(q.id);
     void afterAct();
   };
   const reject = async () => {
@@ -140,8 +147,16 @@ export function NoticingCard({
       ? "Lens saved ⧉ — pinned to your galaxy."
       : "Connected ✦ — woven into your galaxy.";
   const confirm = async () => {
+    // GH-19: celebrate ONLY a verified success (send() is the in-file
+    // template). Before, the inquiry was removed locally first and the
+    // success sound + toast fired without ever checking the result — a
+    // connection that was never made got announced as woven in.
+    const r = await confirmInquiry(q.id).catch(() => ({ ok: false, hubId: null }));
+    if (!r.ok) {
+      pushToast("Couldn't connect those — try again.", "⚠️", 3500);
+      return;
+    }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    const r = await confirmInquiry(q.id);
     playSfx("achievement");
     pushToast(confirmToast, "🧠", 3500);
     if (isLens) window.dispatchEvent(new Event("brain-lenses-changed")); // refresh the chips

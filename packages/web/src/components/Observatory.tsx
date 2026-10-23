@@ -158,6 +158,7 @@ export function Observatory({
   onEnter,
   onOpenTab,
   onSearch,
+  onAnswered,
   actionCount = 0,
 }: {
   spaceName: string;
@@ -180,6 +181,11 @@ export function Observatory({
   onSearch?: () => void;
   /** Open "action item" count — actions aren't in `memories`, so it's passed separately. */
   actionCount?: number;
+  /** OB-06: fired after a verified Daily Contact answer, so App can refresh
+   *  the state the answer changed (streak, fedToday, memories) — without it
+   *  the quests card and header kept contradicting the answer's own toast
+   *  until the Observatory closed. */
+  onAnswered?: () => void;
 }) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [constellations, setConstellations] = useState<Constellation[]>([]);
@@ -393,6 +399,7 @@ export function Observatory({
           "🛰️",
           6500,
         );
+        onAnswered?.();
       } else {
         pushToast("Couldn't reach her — try again in a moment.", "⚠️", 4500);
       }
@@ -597,8 +604,14 @@ export function Observatory({
                     }
                   }}
                 />
-                <button className="obs-answer-send" onClick={() => void sendReply()} disabled={sending || !reply.trim()}>
-                  {sending ? "…" : "➤"}
+                <button
+                  className="obs-answer-send"
+                  onClick={() => void sendReply()}
+                  disabled={sending || !reply.trim()}
+                  aria-label="Send your answer"
+                  title="Send your answer"
+                >
+                  {sending ? "… Sending" : "➤ Send"}
                 </button>
               </span>
             </span>
@@ -653,13 +666,15 @@ export function Observatory({
             <span className="obs-ic">💵</span>
             <span className="obs-body">
               <span className="obs-title">Safe to spend</span>
-              <span className="obs-money-amt">${Math.round(finance.budget.safeToSpendCents / 100)}</span>
+              <span className="obs-money-amt">{formatCents(finance.budget.safeToSpendCents)}</span>
               <span className="obs-line">
                 {finance.budget.shortfallCents > 0
                   ? // IM-126: nextIncomeDate was interpolated RAW ("…before
                     // 2026-11-03") — format it, and drop the clause entirely
                     // when there's no parseable date rather than print one.
-                    `⚠️ short $${Math.round(finance.budget.shortfallCents / 100)}${formatObsDate(finance.budget.nextIncomeDate) ? ` before ${formatObsDate(finance.budget.nextIncomeDate)}` : " before your next income"}`
+                    // OB-04: exact cents via formatCents, like this card's own
+                    // bill rows — the rounded figure always favoured the user.
+                    `⚠️ short ${formatCents(finance.budget.shortfallCents)}${formatObsDate(finance.budget.nextIncomeDate) ? ` before ${formatObsDate(finance.budget.nextIncomeDate)}` : " before your next income"}`
                   : `${finance.upcomingTotal} bill${finance.upcomingTotal === 1 ? "" : "s"} coming up`}
               </span>
               {/* IM-125: the bills themselves — names, due dates, amounts —

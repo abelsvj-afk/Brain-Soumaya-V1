@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { SUGGESTED_TAGS } from "@brain/shared";
-import { ingestText } from "../api/client.js";
+import { ingestText, getSpaceId } from "../api/client.js";
 import { extractFileText } from "../lib/extractFileText.js";
 import { JourneyChips } from "./JourneyChips.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
@@ -23,16 +23,42 @@ function toIso(local: string): string | undefined {
  * IM-117: a brain-dump draft survives closing the panel. It lives in
  * localStorage (like ChatDock's history), restores on reopen, clears only on
  * a successful save or an explicit confirmed discard.
+ *
+ * CAP-05: the draft is scoped PER BRAIN — `brain.ingestDraft.${id}` — like
+ * every sibling store (queue `brain.ingestQueue.${id}`, chat
+ * `brain.chat.${id}`, quests `brain.quests.${id}`). The old single global
+ * key let one brain's unsaved words render in another brain's capture box,
+ * one tap from being filed into the wrong brain.
+ *
+ * Legacy handling — ADOPT-ONCE: the first panel opened after the upgrade
+ * moves a legacy global draft into that brain's scoped key and removes the
+ * legacy key. Discarding it instead would silently destroy the user's
+ * unsaved words (the exact loss IM-117 exists to prevent); adoption's
+ * cross-brain risk is one-time and self-limiting — the legacy key is gone
+ * after the first adoption, and from then on scoping is strict. No draft
+ * expiry is introduced: draft lifetime is a pending owner decision.
  */
-const DRAFT_KEY = "brain.ingestDraft";
+const LEGACY_DRAFT_KEY = "brain.ingestDraft";
+const draftKey = (): string => `brain.ingestDraft.${getSpaceId() ?? "default"}`;
 interface IngestDraft {
   text: string; details: string; tags: string[]; action: boolean; ttl: number;
   occurred: string; remind: string;
 }
 function loadDraft(): Partial<IngestDraft> {
   try {
-    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null") as IngestDraft | null;
-    return raw && typeof raw === "object" ? raw : {};
+    const key = draftKey();
+    let raw = localStorage.getItem(key);
+    if (raw == null) {
+      const legacy = localStorage.getItem(LEGACY_DRAFT_KEY);
+      if (legacy != null) {
+        // Adopt-once: move the pre-scoping draft into this brain's key.
+        localStorage.setItem(key, legacy);
+        localStorage.removeItem(LEGACY_DRAFT_KEY);
+        raw = legacy;
+      }
+    }
+    const parsed = JSON.parse(raw || "null") as IngestDraft | null;
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch { return {}; }
 }
 const draftIsEmpty = (d: Partial<IngestDraft>) => !(d.text?.trim() || d.details?.trim());
@@ -90,8 +116,8 @@ export function IngestPanel({
   // Persist the draft as it changes (cleared explicitly on save/discard).
   useEffect(() => {
     try {
-      if (!text && !details) localStorage.removeItem(DRAFT_KEY);
-      else localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, details, tags, action, ttl, occurred, remind } satisfies IngestDraft));
+      if (!text && !details) localStorage.removeItem(draftKey());
+      else localStorage.setItem(draftKey(), JSON.stringify({ text, details, tags, action, ttl, occurred, remind } satisfies IngestDraft));
     } catch { /* ignore */ }
   }, [text, details, tags, action, ttl, occurred, remind]);
 
@@ -113,10 +139,24 @@ export function IngestPanel({
     onClose();
   };
   const discardAndClose = () => {
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(draftKey()); } catch { /* ignore */ }
     setConfirmDiscard(false);
     onClose?.();
   };
+
+  /** Clear the box + draft — shared by the online success path and the
+   *  CAP-06 queued path (a queued capture is saved, so its words must not
+   *  stay live inviting a manual duplicate re-submit). */
+  function clearAfterSave() {
+    setText("");
+    setDetails("");
+    setShowDetails(false);
+    setTags([]);
+    setOccurred("");
+    setRemind("");
+    setShowWhen(false);
+    try { localStorage.removeItem(draftKey()); } catch { /* ignore */ }
+  }
 
   async function submit() {
     const body = details.trim() ? `${text.trim()}\n\n${details.trim()}` : text.trim();
@@ -146,14 +186,7 @@ export function IngestPanel({
           : `+${n} node${n !== 1 ? "s" : ""}, ${e} connection${e !== 1 ? "s" : ""}${fuelBit}${researchBit}`,
       );
       setCreatedNodes(r.nodes.map((x: any) => ({ id: x.id, label: x.label })));
-      setText("");
-      setDetails("");
-      setShowDetails(false);
-      setTags([]);
-      setOccurred("");
-      setRemind("");
-      setShowWhen(false);
-      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+      clearAfterSave();
       const firstId = r.nodes[0]?.id ?? null;
       setSavedNodeId(firstId);
       if (firstId != null) {
@@ -161,7 +194,18 @@ export function IngestPanel({
       }
       onIngested(r.nodes.map((x: any) => x.id), r.fuelEarned, e);
     } catch (err) {
-      setError((err as Error).message);
+      // CAP-06: an OfflineQueuedError means the capture WAS saved (into
+      // the offline queue) — present it as queued in the success span,
+      // never in the ⚠️ error surface, and clear like a success. Matched
+      // by name so the panel needs no new import surface. Genuine
+      // failures (including the queue's honest no-brain / queue-full
+      // errors, which are plain Errors) keep the error surface + words.
+      if ((err as Error)?.name === "OfflineQueuedError") {
+        setMsg((err as Error).message);
+        clearAfterSave();
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       setBusy(false);
     }
