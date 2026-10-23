@@ -28,26 +28,34 @@ A single self-contained throwaway scene (`index.html` + vendored three.js v0.182
 | Field | Value |
 |---|---|
 | Build check (done) | Scene script extracted and syntax-validated with Node v24.20.0 (`node --check`, pass). **A parse check is not a render, a measurement, or evidence under §11.** |
-| Grading device (§11.2) | Owner's phone — **NOT YET RUN.** Model / OS / browser: *to be recorded at the device run.* |
-| Sandbox rendering | Not performed (no GPU/WebGL session in the builder sandbox; no numbers claimed from here). |
+| Grading device (§11.2) | Owner's phone — **RUN (session 1, 2026-10-22 ~21:46–22:01 ET)**, via the standalone single-file build of the Rev 34 scene (byte-identical logic; delivery route recorded per the run sheet). Model / OS / runtime: **still to be supplied by the owner** — the environment record is incomplete until then. Viewport 384×716, devicePixelRatio 2 (from the measurement block). |
+| Sandbox rendering | Builder smoke test only (SwiftShader, 2026-10-22) — explicitly **not** §11 evidence (§2 of `smoke-test-station-2026-10-22.md`). |
+
+## 2b. Device evidence — session 1 (owner's phone, 2026-10-22)
+
+**300 s measurement block (primary run, reduced motion OFF), as printed on device:** duration 300 s · cold load 568 ms · frames 29,803 · **fps avg 99.3** · **1% low 59.5** · **longest frame 108.7 ms** · **draw calls PEAK 16** (both passes) · **triangles PEAK 27,284** · final-frame 16 / 27,284 · DPR 2 · viewport 384×716.
+
+**Behavioral verdicts observed on device (log screenshots):** A1 carry complete (identity unchanged) · **cancel-before-departure: PASS** (all five sub-assertions true) · **turn-back: PASS ×2** (origin pose restored; cargo identity/home match the pre-transit snapshot; aboard-state preserved — the Rev 34 pose fix verified on a real device) · **return-home: PASS at zero fuel** (earlier partial session, reduced motion ON) · one return-home **FAIL** in that earlier session is explained by the log order: fuel was drained *during* the return flight, so the fuel-unchanged sub-assertion tripped on an external mutation, not on the return charging fuel — the immediate clean re-run PASSed · the zero-fuel **refusal** line itself is not yet in the captured evidence (drain + context captured; refusal verdict pending a clean capture) · two "cannot arm during an active transition" INCONCLUSIVE lines = the armed-guard working as designed, not failures.
+
+**Still outstanding after session 1:** the P3 diagnosis (single 108.7 ms frame — see §3) · D-13 stills (Far / Handoff / Near) · the approach recording (V3) · the 900 s soak (P8) · the reduced-motion measurement block (an RM-on partial session ran; its completed block was not captured) · the environment record (phone model / OS / runtime) · V1/V2 (owner's review of the stills) · V6 (owner's call).
 
 ## 3. Criteria grading (§11.2 performance / §11.3 visual)
 
 | Criterion | Threshold | Evidence | Status |
 |---|---|---|---|
-| P1 fps average | ≥50 over 5-min session incl. warp + approach | — | ⬜ UNRESOLVED (device run pending) |
-| P2 fps 1%-low | ≥30 | — | ⬜ UNRESOLVED |
-| P3 longest stall | ≤100 ms | — | ⬜ UNRESOLVED |
-| P4 draw calls | ≤200 (hard fail >500) | Counter accounting **corrected after review 10** (both passes accumulated); **peak-across-session tracking added after review 11** (the graded figure is the session PEAK, not the final frame); value must be read on device | ⬜ UNRESOLVED |
-| P5 visible triangles | ≤750k (hard boundary) | Same corrections as P4 (both passes; session peak) | ⬜ UNRESOLVED |
+| P1 fps average | ≥50 over 5-min session incl. warp + approach | **99.3** avg over the device 300 s session (29,803 frames, warp + drift + approach included) | ✅ **PASS** (device, session 1) |
+| P2 fps 1%-low | ≥30 | **59.5** | ✅ **PASS** (device, session 1) |
+| P3 longest stall | ≤100 ms | **108.7 ms** — a single longest frame over the bar | ❌ **FAIL** (device, session 1) — narrow (8.7 ms over, 1 frame of 29,803); blocks advancement pending diagnosis per the failure protocol; the threshold is not negotiable |
+| P4 draw calls | ≤200 (hard fail >500) | **Peak 16** (both passes, session peak) | ✅ **PASS** (device, session 1) |
+| P5 visible triangles | ≤750k (hard boundary) | **Peak 27,284** | ✅ **PASS** (device, session 1) |
 | P6 texture sizes | ≤1K (hero ≤2K); backdrop ≤2048×1024 | By construction: all textures are 256×256 canvas-generated glow discs; **no image textures at all** | ✅ SUPPORTED (construction evidence; device record should still confirm) |
-| P7 cold load | ≤5 s | — | ⬜ UNRESOLVED |
-| P8 soak | 15 min, criteria hold | — | ⬜ UNRESOLVED |
+| P7 cold load | ≤5 s | **568 ms** (session 1; 618 ms on the first open) | ✅ **PASS** (device) |
+| P8 soak | 15 min, criteria hold | — | ⬜ UNRESOLVED (not yet run) |
 | V1 blind distinctness | 3/3 identifiable + one-universe | Owner's blind review of device captures | ⬜ UNRESOLVED |
 | V2 landmark silhouette | Station identifiable at max distance | Far-stage capture (device) | ⬜ UNRESOLVED |
 | V3 artifact-free approach | No visible pop/stitch in signature sequence | Device recording of Warp/Drift approach | ⬜ UNRESOLVED — **risk pre-flagged:** the handoff here is a distance blend (§4), the exact failure surface V3 grades |
-| V4 seed traceability | Every visible parameter traceable to the recipe (seed table or fixed form language) | Derivation table at §3b: seed-derived values via one seeded RNG from `great-station / harbor-1`; recipe-fixed values listed as fixed (they are traceable to the *recipe*, which is what V4 grades). **Device-side confirmation still required** | 🟡 PARTIAL — accounting complete, device confirmation pending |
-| V5 content honesty | Nothing on screen claims to be what it isn't | Fixture banner on screen at all times; traffic labeled atmosphere in recipe/record; no memories surface; sun at current size | ✅ SUPPORTED (design/construction) |
+| V4 seed traceability | Every visible parameter traceable to the recipe (seed table or fixed form language) | Derivation table at §3b: seed-derived values via one seeded RNG from `great-station / harbor-1`; recipe-fixed values listed as fixed (they are traceable to the *recipe*, which is what V4 grades). **Device-confirmed session 1:** the on-device HUD shows the seed line and the rendered scene matches the table (amber lamp field, cyan navigation only, recipe stages) | ✅ **SUPPORTED** (accounting + device) |
+| V5 content honesty | Nothing on screen claims to be what it isn't | Fixture banner on screen at all times; traffic labeled atmosphere in recipe/record; no memories surface; sun at current size — **banner visible in the owner's own device screenshots** | ✅ SUPPORTED (design/construction + device) |
 | V6 owner pass/fail | Owner's explicit call | — | ⬜ AWAITING OWNER |
 
 ## 3b. V4 derivation table (added after review 10, Finding 2)
@@ -77,4 +85,4 @@ A single self-contained throwaway scene (`index.html` + vendored three.js v0.182
 
 ## 5. Next step (single, ordered)
 
-**Owner device run (corrected scene):** serve `mockups/station/` (see its README), run the session script including the behavioral checks (load cargo → warp with a cancel first, then a real warp with a turn-back, drain fuel → refused warp → free return home), capture the three D-13 stills (Far / Handoff / Near, sun + station in frame) + an approach recording for V3, run the **300 s** measurement (and the 900 s soak when time allows), repeat the script under reduced motion, record phone model / OS / browser here — then this record returns to review. **Growing Place remains parked until the Station's criteria resolve and V6 is the owner's PASS.**
+**Session 1 is in (§2b):** performance passes everywhere except **P3 (single 108.7 ms frame vs the 100 ms bar — FAIL as written)**. Next, in order: (1) **P3 diagnosis** — the failure protocol classifies before anything advances: one isolated frame in 29,803 at ~2× the session's typical frame time; a reproduction session is the cheapest diagnostic (if it recurs, find where; if it doesn't, the record carries both sessions and the owner decides what the gate does with them — the threshold does not move). (2) The remaining captures: D-13 stills, approach recording (V3), 900 s soak (P8), the reduced-motion measurement block, the zero-fuel refusal line, and the environment record (phone model / OS / runtime). (3) Owner's V1/V2 review of the stills, then **V6 — the owner's call**. **Growing Place remains parked until the Station's criteria resolve and V6 is the owner's PASS.**

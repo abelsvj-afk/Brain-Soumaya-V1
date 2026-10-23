@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 35 — **Station review 16: Revision 34 verified** (record: `chatgpt-review-16-2026-10-22.md`): both smoke-test fixes confirmed present in the source by direct fetch; the record's §1 package description now names both three.js files (documentation cleanup). Verdict **UNRESOLVED** pending the owner's phone evidence run. **Design gate: OPEN.**
+**Revision:** 36 — **Station device session 1 GRADED** (result record §2b/§3): on the owner's phone — fps avg **99.3** ✅, 1% low **59.5** ✅, peak calls **16** ✅, peak tris **27,284** ✅, cold load **568 ms** ✅; **P3 FAIL: longest frame 108.7 ms vs the 100 ms bar** (one frame of 29,803 — blocks advancement pending diagnosis; threshold unmoved). Behavioral on device: cancel **PASS**, turn-back **PASS ×2**, return-home **PASS** at zero fuel, A1 complete. Still open: P3 diagnosis, D-13 stills, approach recording (V3), soak (P8), RM measurement block, environment record, V1/V2, **V6 = owner's call**. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -825,4 +825,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 35. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 36. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
