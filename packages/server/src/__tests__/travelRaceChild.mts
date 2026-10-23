@@ -1,19 +1,25 @@
 /**
  * Race-test child process (spawned in pairs by travel.test.ts): opens its
- * OWN connection to a file-backed DB, waits at a go-file barrier so both
- * children fire together, then performs ONE travel act through the real
- * TravelRepo. Prints a single JSON line with the outcome. Test tooling
- * only — not imported by the application.
+ * OWN connection to a file-backed DB, signals readiness, then waits at a
+ * go-file barrier so both children fire together, then performs ONE
+ * travel act through the real TravelRepo. The barrier is deterministic
+ * (review 23): the parent releases the children only after BOTH ready
+ * files exist — no fixed sleeps. Prints a single JSON line with the
+ * outcome. Test tooling only — not imported by the application.
  */
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { createDb } from "../db/client.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
 
-const [dbPath, spaceId, journeyId, action, goFile, nowStr] = process.argv.slice(2);
+const [dbPath, spaceId, journeyId, action, goFile, readyFile, nowStr] = process.argv.slice(2);
 const nowMs = Number(nowStr);
 
 const handle = createDb(dbPath);
 handle.sqlite.pragma("busy_timeout = 10000");
+
+// Ready: connection open, about to wait. The parent confirms BOTH
+// children's ready files before writing the go-file.
+writeFileSync(readyFile, "ready");
 
 const deadline = Date.now() + 30_000;
 const spin = new Int32Array(new SharedArrayBuffer(4));

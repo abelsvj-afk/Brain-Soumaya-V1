@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import { createDb, type DbHandle } from "../db/client.js";
 import { EconomyRepo, FUEL_START, WARP_COST } from "../economy.js";
 import { TravelRepo, TravelError } from "../repositories/travel.repo.js";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -250,13 +250,19 @@ describe("concurrent transitions across two processes (review 22)", () => {
     state?: string | null;
     error?: string;
   }
-  function runChild(journeyId: string, action: string, goFile: string, nowMs: number): Promise<ChildResult> {
+  function runChild(
+    journeyId: string,
+    action: string,
+    goFile: string,
+    readyFile: string,
+    nowMs: number,
+  ): Promise<ChildResult> {
     return new Promise((resolve, reject) => {
       const cli = fileURLToPath(new URL("../../../../node_modules/tsx/dist/cli.mjs", import.meta.url));
       const child = fileURLToPath(new URL("./travelRaceChild.mts", import.meta.url));
       execFile(
         process.execPath,
-        [cli, child, dbPath, "spaceR", journeyId, action, goFile, String(nowMs)],
+        [cli, child, dbPath, "spaceR", journeyId, action, goFile, readyFile, String(nowMs)],
         (err, stdout) => {
           if (err) return reject(err);
           const last = stdout.trim().split("\n").pop() ?? "";
@@ -274,10 +280,19 @@ describe("concurrent transitions across two processes (review 22)", () => {
     actions: [string, string],
     nowMs: number,
   ): Promise<[ChildResult, ChildResult]> {
-    const goFile = join(dir, `go-${Math.random().toString(36).slice(2)}`);
-    const p1 = runChild(journeyId, actions[0], goFile, nowMs);
-    const p2 = runChild(journeyId, actions[1], goFile, nowMs);
-    await new Promise((r) => setTimeout(r, 600)); // let both children reach the barrier
+    const tag = Math.random().toString(36).slice(2);
+    const goFile = join(dir, `go-${tag}`);
+    const ready1 = join(dir, `ready-${tag}-1`);
+    const ready2 = join(dir, `ready-${tag}-2`);
+    const p1 = runChild(journeyId, actions[0], goFile, ready1, nowMs);
+    const p2 = runChild(journeyId, actions[1], goFile, ready2, nowMs);
+    // Deterministic barrier (review 23): release only once BOTH children
+    // have signalled they are waiting — no fixed sleep.
+    const deadline = Date.now() + 20_000;
+    while (!(existsSync(ready1) && existsSync(ready2))) {
+      if (Date.now() > deadline) throw new Error("race children did not reach the barrier in time");
+      await new Promise((r) => setTimeout(r, 25));
+    }
     writeFileSync(goFile, "go");
     return Promise.all([p1, p2]);
   }
