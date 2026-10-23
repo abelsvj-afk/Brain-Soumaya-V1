@@ -5,10 +5,10 @@ import {
   STATION_SEED,
   STATION_WHEEL_RADIUS,
   beaconRing,
-  rngFromSeed,
   trafficLanes,
 } from "./stationLayout.js";
 import { loadProfondoHull } from "./profondoHull.js";
+import { buildHygStarfield } from "./hygStars.js";
 
 /**
  * The Great Station scene (Phase 2, P2-3): three.js wiring over the
@@ -57,31 +57,6 @@ function proxyHull(): THREE.Group {
     g.add(arm);
   }
   return g;
-}
-
-function starfield(seed: string, count = 1500): THREE.Points {
-  const rnd = rngFromSeed(`${seed}:stars`);
-  const pos = new Float32Array(count * 3);
-  const col = new Float32Array(count * 3);
-  const warm = new THREE.Color(STATION_PALETTE.starWarm);
-  const cold = new THREE.Color(STATION_PALETTE.starCold);
-  const c = new THREE.Color();
-  for (let i = 0; i < count; i++) {
-    // Seeded scaffold distribution — the measured HYG subset replaces
-    // this at Gate 0 without changing the scene's shape.
-    const r = 3800 + rnd() * 600;
-    const theta = rnd() * Math.PI * 2;
-    const y = (rnd() * 2 - 1) * 0.6;
-    const rxz = Math.sqrt(Math.max(0, 1 - y * y));
-    pos.set([Math.cos(theta) * rxz * r, y * r, Math.sin(theta) * rxz * r], i * 3);
-    c.copy(rnd() > 0.5 ? warm : cold).multiplyScalar(0.55 + rnd() * 0.45);
-    col.set([c.r, c.g, c.b], i * 3);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  const mat = new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true });
-  return new THREE.Points(geo, mat);
 }
 
 export function createStationScene(opts: { hull?: THREE.Object3D } = {}): StationScene {
@@ -146,7 +121,7 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
     lanes.length * CRAFT_PER_LANE,
   );
   group.add(traffic);
-  group.add(starfield(STATION_SEED));
+  group.add(buildHygStarfield());
 
   const dummy = new THREE.Object3D();
   const update = (elapsedMs: number, uopts?: { reducedMotion?: boolean }) => {

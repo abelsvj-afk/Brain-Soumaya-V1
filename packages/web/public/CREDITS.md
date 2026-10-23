@@ -16,6 +16,15 @@ by vostok (https://blendswap.com) licensed under CC-BY-3.0
 Converted from the original Blender file to glTF; geometry decimated
 (333,563 → 132,432 triangles) and materials re-expressed for this app.
 
+## Data
+
+**Worlds starfield** — brightest-stars subset
+Star positions and colors derived from the HYG database
+(https://github.com/astronexus/HYG-Database) by Astronexus, licensed
+under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+Adaptation: the 5,000 brightest stars by apparent magnitude; positions
+normalized to directions; colors derived from the B-V color index.
+
 ## Audio
 
 **Ship engine start** — `ship-engine-start.mp3`
