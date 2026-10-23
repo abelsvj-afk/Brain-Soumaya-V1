@@ -44,6 +44,8 @@ Boundaries clarified at review 18 — responsibilities do not overlap, and no in
 
 **Acceptance requirement (review 18, binding on all four increments):** the **server — never the browser — enforces the cancel window** and prevents duplicate charges and duplicate rewards. Client timing alone must not decide whether fuel is spent; the client presents the window, the server owns it.
 
+**P2-2 design note prepared (2026-10-22):** `phase-2-p2-2-design-note.md` — schema (two `travel_*` tables in BOOTSTRAP_SQL; `journeys` was already taken by life chapters), the lazy window-close settlement transaction, derived current world, the five-route contract, and acceptance tests mapped to criteria C1–C4. **Design only — implementation awaits the owner's separate authorization.**
+
 **Test gate (standing constraints honored):** tests are authored with each increment and run through the repo's established flow before any merge; this sandbox does not run the repo suite and claims no test results. Merge and deploy remain the owner's separate taps, per increment.
 
 ## 7. What the exit decision authorizes — and what it does not
