@@ -660,7 +660,7 @@ export function Observatory({
                     // 2026-11-03") — format it, and drop the clause entirely
                     // when there's no parseable date rather than print one.
                     `⚠️ short $${Math.round(finance.budget.shortfallCents / 100)}${formatObsDate(finance.budget.nextIncomeDate) ? ` before ${formatObsDate(finance.budget.nextIncomeDate)}` : " before your next income"}`
-                  : `${finance.upcoming.length} bill${finance.upcoming.length === 1 ? "" : "s"} coming up`}
+                  : `${finance.upcomingTotal} bill${finance.upcomingTotal === 1 ? "" : "s"} coming up`}
               </span>
               {/* IM-125: the bills themselves — names, due dates, amounts —
                   were fetched but the card only ever counted them. */}
@@ -672,8 +672,8 @@ export function Observatory({
                   </span>
                 </span>
               ))}
-              {finance.upcoming.length > 3 && (
-                <span className="obs-meta">+{finance.upcoming.length - 3} more in Money</span>
+              {finance.upcomingTotal > 3 && (
+                <span className="obs-meta">+{finance.upcomingTotal - 3} more in Money</span>
               )}
               {finance.budget.weekEarnedCents > 0 && (
                 <span className="obs-meta">Earned this week {formatCents(finance.budget.weekEarnedCents)}</span>
