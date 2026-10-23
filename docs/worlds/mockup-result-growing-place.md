@@ -35,7 +35,7 @@ Run 2026-10-22 after construction (driver: `builds/growing_smoke.py`; frames in 
 | V3 | artifact-free approach | warp/approach holds together | device flight | ⬜ UNRESOLVED |
 | V4 | seed traceability | derivation table | §3b | ✅ SUPPORTED |
 | V5 | content honesty | labeled fixture | FIXTURE banner + staged-milestone declaration in the log | ✅ SUPPORTED |
-| V6 | owner's call | explicit pass/fail | — | ⬜ AWAITING OWNER |
+| V6 | owner's call | explicit pass/fail | **"Pass. Lets move on" — the owner, 2026-10-22**, after running the scene hands-on on his phone (full scene visible, controls functional) | ✅ **OWNER PASS (D-29)** |
 
 ## 3b. Derivation table (V4)
 | Parameter | Value | Source |
@@ -50,5 +50,5 @@ Run 2026-10-22 after construction (driver: `builds/growing_smoke.py`; frames in 
 | Travel timings / fuel | trio chassis (Station) | shared grammar |
 | Sun size/position | scenery backdrop | recipe-fixed |
 
-## 4. Advancement rule
-Deep Past is built only after this mockup's gates resolve on the owner's phone — or by an explicit owner decision of the same kind as D-28, recorded as such. Nothing in this record claims a pass.
+## 4. Advancement rule — and the owner's decision (D-29)
+Deep Past is built only after this mockup's gates resolve on the owner's phone — or by an explicit owner decision of the same kind as D-28, recorded as such. **That decision arrived 2026-10-22: the owner ran the scene on his phone and gave his word — "Pass. Lets move on" (D-29).** Recorded exactly: **V6 is satisfied by the owner's explicit pass.** The formal §11 measurement evidence (a captured 300 s block, stills, soak, RM block, environment record) was **not** captured and remains outstanding on this record — the pass is the owner's hands-on judgment, in the same posture as D-28 ("once it's live I'll know for sure"); no P-criterion is converted to an evidence-pass by it. The sequence advances to Deep Past on the owner's authority.

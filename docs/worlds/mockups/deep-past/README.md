@@ -1,0 +1,7 @@
+# Deep Past mockup — what this is (throwaway, Phase 1)
+
+Files in this folder: `index.html` (the scene) + `three.module.min.js` **and `three.core.min.js`** (vendored three.js 0.182.0 — the module build imports the core file; **both are required**) + this README.
+
+**What the scene contains:** nine lit strata descending in a helix around the warm **First Light basin** (the bottom is the warmest place, not a pit), violet dusk lit by the memories' own lanterns — the same warmth at every depth, because deeper means *earlier*, never neglected. Signature motions: **A21, the Chronicle guided descent** (a thread of light kindles down the spiral along a fixture route's five stops; pause indefinitely, leave without losing your place) and **A22, a resurfacing rise** (a deep memory rises to a presentation shelf near the rim with its cause printed — *"risen because…"* — while its stratum, home, and history provably do not change; it returns by the same rule, never a timer). Plus the trio's full **A1–A3** chain (carry → transit down the helix → placement on a stratum shelf, atomic) and the shared travel grammar (cancel window, turn-back to the captured pose, free return home, zero-fuel refusal, warm-up compile, frame-context harness).
+
+**Status (owner decision D-30, 2026-10-22): built and kept, testing waived.** The owner directed that this mockup's testing be skipped — no sandbox grading, no phone session. It is syntax-validated only; **nothing about it is graded or claimed passed.** Fixtures only; not the product; merged nowhere.
