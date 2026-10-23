@@ -206,52 +206,58 @@ export function confirmPaystub(
   const date = (input.payDate ?? today(handle, spaceId)).slice(0, 10);
   const taxCents = input.deductions.reduce((s, d) => s + (d.amountCents || 0), 0);
 
-  // ADR-019 §3.5: re-confirm is duplicate-safe. The check starts from the
-  // same findDuplicate (date + net) the manual and paste paths have, then
-  // extends it with the stub's own identity (employer/period/gross/hours/
-  // lines/source — §3.5's "extended with employer/period where available"):
-  // date + net alone cannot tell a re-upload from a genuinely distinct
-  // stub that happens to share them (two same-net paychecks, a stub
-  // saved with and without its source file), and blocking the distinct
-  // one would lose a real document.
-  //  - Same stub re-uploaded (identity match): NO second income, NO new
-  //    link — the existing stub is returned flagged duplicate.
-  //  - The date+net income came from a MANUAL entry (no stub owns it):
-  //    no second income either, and the stub is saved UNLINKED rather
-  //    than linked to an income it didn't create.
-  //  - A distinct stub that merely shares date + net with another
-  //    stub's income: a real second document — it confirms normally
-  //    (its own income), flagged duplicate like the manual path flags it.
-  const duplicateIncome = incomeRepo.findDuplicate(date, input.netCents);
+  // ADR-019 §3.5: re-confirm is duplicate-safe. Identity is the ADR key
+  // only — date + net, extended with employer/period where available
+  // (§3.5's "extended with employer/period where available"): a component
+  // disqualifies only when BOTH sides carry a value and they differ.
+  // Peripheral parse fields (earnings/deductions lines, hours, rate,
+  // gross, YTD, source file) are NOT identity: a re-upload whose parse
+  // differs in any of them is still the same stub, and counting it again
+  // would double-count the income.
+  // The branch decision is SET-based over every income at (date, net),
+  // never keyed off a single findDuplicate pick (whose LIMIT 1 row is
+  // arbitrary — with a manual + a stub-owned income at the same
+  // date+net, the old single-row pick made a distinct stub's fate
+  // depend on insertion order):
+  //  - Any stored stub matches the ADR key: it IS this stub — NO second
+  //    income, NO new stub; the existing stub is returned, duplicate.
+  //  - No income in the set is stub-owned (e.g. it came from a MANUAL
+  //    entry): no second income either, and the stub is saved UNLINKED
+  //    rather than linked to an income it didn't create.
+  //  - A set income IS stub-owned but its stub does not match the ADR
+  //    key: a genuinely distinct stub (different employer or period)
+  //    that merely shares date + net — it confirms normally (its own
+  //    income), flagged duplicate like the manual path flags it.
+  const allIncomes = incomeRepo.list();
+  const duplicateIncomes = allIncomes.filter(
+    (i) => i.date === date && i.netCents === Math.round(input.netCents),
+  );
   let duplicate = false;
-  if (duplicateIncome) {
+  if (duplicateIncomes.length > 0) {
     duplicate = true;
     const stubs = paystubRepo.list();
-    const incomeDateById = new Map(incomeRepo.list().map((i) => [i.id, i.date]));
+    const incomeDateById = new Map(allIncomes.map((i) => [i.id, i.date]));
+    const matchesWhereAvailable = (
+      a: string | null | undefined,
+      b: string | null | undefined,
+    ): boolean => a == null || b == null || a === b;
     const sameStub = (s: FinPaystub): boolean => {
       const effectiveDate = s.payDate ?? (s.incomeId != null ? incomeDateById.get(s.incomeId) ?? null : null);
       return (
         effectiveDate === date &&
         s.netCents === Math.round(input.netCents) &&
-        (s.employer ?? null) === (input.employer ?? null) &&
-        (s.periodStart ?? null) === (input.periodStart ?? null) &&
-        (s.periodEnd ?? null) === (input.periodEnd ?? null) &&
-        (s.grossCents ?? null) === (input.grossCents ?? null) &&
-        (s.hours ?? null) === (input.hours ?? null) &&
-        (s.hourlyRateCents ?? null) === (input.hourlyRateCents ?? null) &&
-        (s.ytdGrossCents ?? null) === (input.ytdGrossCents ?? null) &&
-        (s.ytdNetCents ?? null) === (input.ytdNetCents ?? null) &&
-        (s.sourceFilename ?? null) === (input.sourceFilename ?? null) &&
-        JSON.stringify(s.earnings) === JSON.stringify(input.earnings ?? []) &&
-        JSON.stringify(s.deductions) === JSON.stringify(input.deductions ?? [])
+        matchesWhereAvailable(s.employer, input.employer) &&
+        matchesWhereAvailable(s.periodStart, input.periodStart) &&
+        matchesWhereAvailable(s.periodEnd, input.periodEnd)
       );
     };
     const reupload = stubs.find(sameStub) ?? null;
     if (reupload) {
       return { paystub: reupload, budget: getBudgetSummary(handle, spaceId), duplicate: true };
     }
-    const incomeHasStub = stubs.some((s) => s.incomeId === duplicateIncome.id);
-    if (!incomeHasStub) {
+    const duplicateIncomeIds = new Set(duplicateIncomes.map((i) => i.id));
+    const anyStubOwned = stubs.some((s) => s.incomeId != null && duplicateIncomeIds.has(s.incomeId));
+    if (!anyStubOwned) {
       const paystub = paystubRepo.create({ ...input, incomeId: null });
       return { paystub, budget: getBudgetSummary(handle, spaceId), duplicate: true };
     }

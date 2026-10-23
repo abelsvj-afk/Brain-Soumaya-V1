@@ -97,6 +97,10 @@ describe("pay stub routes", () => {
 
     const sourceData = Buffer.from("hello pay stub").toString("base64");
     const withSource = await post("/api/finance/paystub/confirm", {
+      // Distinct payDate: under ADR-019 §3.5 a stub with the stub above's
+      // date + net and no employer/period IS that stub (a re-upload), so
+      // this source round-trip fixture must be a genuinely distinct stub.
+      payDate: "2026-03-02",
       netCents: 1000, earnings: [], deductions: [], sourceFilename: "stub.pdf", sourceMime: "application/pdf", sourceData,
     });
     const withSourceId = (withSource.body as { paystub: FinPaystub }).paystub.id;
@@ -209,7 +213,9 @@ describe("pay stub validation flexibility (Phase W)", () => {
   });
 
   it("7. a genuinely missing hours field is never silently converted to 0", async () => {
-    const { body } = await post("/api/finance/paystub/confirm", { netCents: 60_000, earnings: [], deductions: [] });
+    // Distinct payDate from test 6: same date + net with no employer/period
+    // is the same stub under ADR-019 §3.5, and test 6's stub has hours: 0.
+    const { body } = await post("/api/finance/paystub/confirm", { payDate: "2026-03-03", netCents: 60_000, earnings: [], deductions: [] });
     expect((body as { paystub: FinPaystub }).paystub.hours).toBeNull();
   });
 

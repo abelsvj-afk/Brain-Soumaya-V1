@@ -248,6 +248,172 @@ describe("T12: pay-stub deletion is a defined relationship (D9)", () => {
   });
 });
 
+describe("ADR-019 §3.5 regression: paystub re-confirm duplicate identity (B1–B5)", () => {
+  // Mirrors the adversarial driver's stubBase (VERDICTS.md ATTACK B):
+  // same date+net+employer+period is the ADR identity; peripheral parse
+  // fields (filename, gross, hours, earnings lines, …) are NOT.
+  const stubBase = (over: Partial<Parameters<typeof confirmPaystub>[2]> = {}) => ({
+    employer: "Acme Corp",
+    payDate: daysFromNow(-5),
+    periodStart: daysFromNow(-19),
+    periodEnd: daysFromNow(-6),
+    grossCents: 130_000,
+    netCents: 100_000,
+    hours: 40,
+    hourlyRateCents: 3250,
+    earnings: [{ label: "Regular", amountCents: 130_000 }],
+    deductions: [{ label: "Federal Tax", amountCents: 30_000 }],
+    ytdGrossCents: 1_300_000,
+    ytdNetCents: 1_000_000,
+    sourceFilename: "stub.pdf",
+    sourceMime: "application/pdf",
+    ...over,
+  });
+  const incomeCount = () => new FinIncomeRepo(handle, "s1").list().length;
+  const stubCount = () => new FinPaystubRepo(handle, "s1").list().length;
+
+  it("B1: exact re-upload returns the same stub, duplicate:true, still 1 income, balance unchanged", () => {
+    const first = confirmPaystub(handle, "s1", stubBase());
+    expect(first.duplicate).toBe(false);
+    const again = confirmPaystub(handle, "s1", stubBase());
+    expect(again.duplicate).toBe(true);
+    expect(again.paystub.id).toBe(first.paystub.id);
+    expect(incomeCount()).toBe(1);
+    expect(stubCount()).toBe(1);
+    expect(balanceOf("s1")).toBe(100_000);
+  });
+
+  it("B2: filename differs → duplicate:true, still 1 income, balance unchanged", () => {
+    const first = confirmPaystub(handle, "s1", stubBase());
+    const again = confirmPaystub(handle, "s1", stubBase({ sourceFilename: "stub (1).pdf" }));
+    expect(again.duplicate).toBe(true);
+    expect(again.paystub.id).toBe(first.paystub.id);
+    expect(incomeCount()).toBe(1);
+    expect(stubCount()).toBe(1);
+    expect(balanceOf("s1")).toBe(100_000);
+  });
+
+  it("B2: gross differs (OCR variance) → duplicate:true, still 1 income, balance unchanged", () => {
+    const first = confirmPaystub(handle, "s1", stubBase());
+    const again = confirmPaystub(handle, "s1", stubBase({ grossCents: 130_100 }));
+    expect(again.duplicate).toBe(true);
+    expect(again.paystub.id).toBe(first.paystub.id);
+    expect(incomeCount()).toBe(1);
+    expect(stubCount()).toBe(1);
+    expect(balanceOf("s1")).toBe(100_000);
+  });
+
+  it("B2: earnings-line order differs → duplicate:true, still 1 income, balance unchanged", () => {
+    const twoLines = [
+      { label: "Regular", amountCents: 100_000 },
+      { label: "Overtime", amountCents: 30_000 },
+    ];
+    const first = confirmPaystub(handle, "s1", stubBase({ earnings: twoLines }));
+    const again = confirmPaystub(handle, "s1", stubBase({ earnings: [twoLines[1]!, twoLines[0]!] }));
+    expect(again.duplicate).toBe(true);
+    expect(again.paystub.id).toBe(first.paystub.id);
+    expect(incomeCount()).toBe(1);
+    expect(stubCount()).toBe(1);
+    expect(balanceOf("s1")).toBe(100_000);
+  });
+
+  it("B2: hours null-vs-value → duplicate:true, still 1 income, balance unchanged", () => {
+    const first = confirmPaystub(handle, "s1", stubBase());
+    const again = confirmPaystub(handle, "s1", stubBase({ hours: null }));
+    expect(again.duplicate).toBe(true);
+    expect(again.paystub.id).toBe(first.paystub.id);
+    expect(incomeCount()).toBe(1);
+    expect(stubCount()).toBe(1);
+    expect(balanceOf("s1")).toBe(100_000);
+  });
+
+  it("B3: distinct employers, same date+net → both confirm, 2 incomes", () => {
+    const a = confirmPaystub(handle, "s1", stubBase());
+    const b = confirmPaystub(handle, "s1", stubBase({ employer: "Other LLC" }));
+    expect(a.duplicate).toBe(false);
+    expect(b.duplicate).toBe(true);
+    expect(b.paystub.id).not.toBe(a.paystub.id);
+    expect(b.paystub.incomeId).not.toBeNull();
+    expect(incomeCount()).toBe(2);
+    expect(stubCount()).toBe(2);
+    expect(balanceOf("s1")).toBe(200_000);
+  });
+
+  it("B3b: distinct stub, SAME employer, different period, same date+net → creates its income (period discriminates)", () => {
+    const a = confirmPaystub(handle, "s1", stubBase());
+    const b = confirmPaystub(
+      handle,
+      "s1",
+      stubBase({ periodStart: daysFromNow(-33), periodEnd: daysFromNow(-20) }),
+    );
+    expect(a.duplicate).toBe(false);
+    expect(b.duplicate).toBe(true);
+    expect(b.paystub.id).not.toBe(a.paystub.id);
+    expect(b.paystub.incomeId).not.toBeNull();
+    expect(incomeCount()).toBe(2);
+    expect(stubCount()).toBe(2);
+    expect(balanceOf("s1")).toBe(200_000);
+  });
+
+  it("B4: manual income first → stub saved UNLINKED, no second income, balance unchanged", () => {
+    const date = daysFromNow(-5);
+    createIncomeEntry(handle, "s1", { date, netCents: 100_000, platform: "Manual" });
+    expect(balanceOf("s1")).toBe(100_000);
+    const out = confirmPaystub(handle, "s1", stubBase({ payDate: date }));
+    expect(out.duplicate).toBe(true);
+    expect(out.paystub.incomeId).toBeNull();
+    expect(incomeCount()).toBe(1);
+    expect(stubCount()).toBe(1);
+    expect(balanceOf("s1")).toBe(100_000);
+  });
+
+  // B5: the (date, net) set holds BOTH a manual and a stub-owned income;
+  // a distinct third stub (different employer) must create its income
+  // regardless of which row was inserted first (the old code keyed the
+  // branch off findDuplicate's arbitrary LIMIT 1 pick). The stub-owned
+  // row is constructed directly, as in the adversarial driver, because
+  // confirmPaystub's own B4 branch will not create it after a manual row.
+  const seedManualAndStubOwned = (order: "manual-first" | "stub-first") => {
+    const date = daysFromNow(-5);
+    const makeManual = () => createIncomeEntry(handle, "s1", { date, netCents: 100_000, platform: "Manual" });
+    const makeOwned = () => {
+      const owned = createIncomeEntry(handle, "s1", { date, netCents: 100_000, platform: "Acme Corp" });
+      new FinPaystubRepo(handle, "s1").create({ ...stubBase({ payDate: date }), incomeId: owned.id });
+      return owned;
+    };
+    if (order === "manual-first") {
+      makeManual();
+      makeOwned();
+    } else {
+      makeOwned();
+      makeManual();
+    }
+    return date;
+  };
+
+  it("B5 (manual-first): distinct third stub creates its income", () => {
+    const date = seedManualAndStubOwned("manual-first");
+    expect(incomeCount()).toBe(2);
+    expect(balanceOf("s1")).toBe(200_000);
+    const third = confirmPaystub(handle, "s1", stubBase({ payDate: date, employer: "Employer-B" }));
+    expect(third.duplicate).toBe(true);
+    expect(third.paystub.incomeId).not.toBeNull();
+    expect(incomeCount()).toBe(3);
+    expect(balanceOf("s1")).toBe(300_000);
+  });
+
+  it("B5 (stub-first): distinct third stub creates its income", () => {
+    const date = seedManualAndStubOwned("stub-first");
+    expect(incomeCount()).toBe(2);
+    expect(balanceOf("s1")).toBe(200_000);
+    const third = confirmPaystub(handle, "s1", stubBase({ payDate: date, employer: "Employer-B" }));
+    expect(third.duplicate).toBe(true);
+    expect(third.paystub.incomeId).not.toBeNull();
+    expect(incomeCount()).toBe(3);
+    expect(balanceOf("s1")).toBe(300_000);
+  });
+});
+
 describe("ADR-019 §8 migration: balance_applied_at (migrateSchema-only, legacy backfill)", () => {
   const dirs: string[] = [];
   const fileHandles: DbHandle[] = [];
