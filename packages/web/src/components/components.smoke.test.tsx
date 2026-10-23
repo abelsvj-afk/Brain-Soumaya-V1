@@ -35,7 +35,7 @@ describe("StreakEmber", () => {
 });
 
 describe("FuelEarnSheet", () => {
-  const fuel = { fuel: 40, capacity: 200, jobCost: 2 };
+  const fuel = { fuel: 40, capacity: 200, jobCost: 2, warpCost: 10 };
 
   it("lists the ways to earn (with the current amounts) and closes", () => {
     const onClose = vi.fn();

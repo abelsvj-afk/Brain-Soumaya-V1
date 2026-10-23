@@ -10,7 +10,7 @@ vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) 
 import { FuelGauge } from "./FuelGauge.js";
 
 function fuel(over: Partial<Fuel>): Fuel {
-  return { fuel: 50, capacity: 100, jobCost: 2, ...over } as Fuel;
+  return { fuel: 50, capacity: 100, jobCost: 2, warpCost: 10, ...over } as Fuel;
 }
 
 beforeEach(() => vi.resetAllMocks());

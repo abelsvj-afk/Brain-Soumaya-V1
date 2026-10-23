@@ -32,7 +32,7 @@ describe("derivePresence (IM-65)", () => {
     const p = derivePresence({
       tasks: [],
       latestLog: null,
-      fuel: { fuel: 1, capacity: 100, jobCost: 5 },
+      fuel: { fuel: 1, capacity: 100, jobCost: 5, warpCost: 10 },
     });
     expect(p.mood).toBe("concerned");
     expect(p.moodLabel).toContain("Low on fuel");
