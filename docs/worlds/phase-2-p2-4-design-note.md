@@ -1,6 +1,6 @@
 # Phase 2 · P2-4 Design Note — Journey Rewards + Dark Launch
 
-**Status:** SETTLED + BUILT (2026-10-23). The three review questions were settled by the owner unadjusted from this note's recommendations (Q1 marker-on-row · Q2 30 s floor, 2 drift bonuses per space-local day · Q3 server-authored plain reason), the P2-3 findings were all dispositioned, and the owner authorized the build ("Start"). Built as PR #102 (`worlds/p2-4-rewards`), full gate green, ships dark — merge is the owner's tap; the launch sequence in §6 remains separate and unauthorized.
+**Status:** SETTLED + BUILT (2026-10-23). The three review questions were settled by the owner unadjusted from this note's recommendations (Q1 marker-on-row · Q2 30 s floor, 2 drift bonuses per space-local day · Q3 server-authored plain reason), the P2-3 findings were all dispositioned, and the owner authorized the build ("Start"). Built as PR #102 (`worlds/p2-4-rewards`), full gate green, ships dark — MERGED 2026-10-23 as `6566060` (D-56); the launch sequence in §6 remains separate and unauthorized.
 
 **What P2-4 is:** the last Phase 2 increment. (1) Journey bonuses start paying — server-side, at arrival, exactly once per journey, implementing the contract P2-1 defined. (2) The worlds travel layer launches: the dark flag flips, and the owner verifies on his device. Everything else about Phase 2 is already built and merged (P2-1 fuel primitives, P2-2 ledger, P2-3 web layer + Station).
 
