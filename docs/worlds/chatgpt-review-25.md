@@ -34,4 +34,4 @@ The auditor's reconciled disposition, accepted into the record. The three reconc
 - **F-04 — Gate evidence: FAILURE REPORTING ACCEPTED; evidence access remains a process issue.** The digest failures remain failures, not a green gate. The audit brief's docs-branch location is now flagged for the next review relay.
 - **Cross-phase invariant (restated):** P2-4 must preserve without exception — bonus eligibility must never affect access to memories, drift, or return home. (Adopted into the P2-4 note at Rev 66.)
 
-- **F-02 — HYG attribution: REMAINS OPEN, separate.** The code still needs to either use the credited HYG star data or defer/remove that credit until the asset is actually used. The reconciliations above do not close it. The path is the owner's to choose.
+- **F-02 — HYG attribution: REMAINS OPEN, separate.** The code still needs to either use the credited HYG star data or defer/remove that credit until the asset is actually used. The reconciliations above do not close it. The path is the owner's to choose. **CHOSEN + BUILT (2026-10-23, D-47): integrate the real data — PR #98; F-02 closes on the owner's merge.**
