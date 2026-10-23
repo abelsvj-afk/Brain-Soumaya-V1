@@ -14,6 +14,7 @@ import { createApp } from "../api/server.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { HeuristicProvider } from "../llm/heuristic.js";
 import { EMBED_DIM } from "../db/vec.js";
+import type { TravelKind } from "@brain/shared";
 
 /**
  * P2-2 (Worlds Phase 2): the server journey ledger. Acceptance criteria are
@@ -136,6 +137,39 @@ describe("C3 — every act is idempotent under retries", () => {
     const recancel = t.cancel(j2.id, T0 + 2000);
     expect(recancel?.state).toBe("cancelled");
     expect(eventTypes(t, j2.id)).toEqual(["departure_armed", "cancelled"]);
+  });
+
+  it("F-01: a same-key retry with INVALID changed parameters returns the original journey", () => {
+    const t = travel();
+    const first = t.depart({ clientKey: "f01", kind: "warp", destination: "great-station" }, T0);
+    const before = econ().get();
+    // Invalid kind on the retry — the replay contract wins over validation.
+    const badKind = t.depart(
+      { clientKey: "f01", kind: "teleport" as TravelKind, destination: "great-station" },
+      T0 + 1000,
+    );
+    expect(badKind.id).toBe(first.id);
+    expect(badKind.kind).toBe("warp");
+    // Unknown destination on the retry — same rule.
+    const badDest = t.depart({ clientKey: "f01", kind: "warp", destination: "nowhere" }, T0 + 2000);
+    expect(badDest.id).toBe(first.id);
+    expect(badDest.destination).toBe("great-station");
+    // No new rows, no new events, no charges.
+    expect(journeyCount()).toBe(1);
+    expect(eventTypes(t, first.id)).toEqual(["departure_armed"]);
+    expect(econ().get()).toBeCloseTo(before, 1);
+  });
+
+  it("F-01: fresh requests with invalid parameters are still rejected, without mutation", () => {
+    const t = travel();
+    expect(() =>
+      t.depart({ clientKey: "fresh-bad-kind", kind: "teleport" as TravelKind, destination: "great-station" }, T0),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_KIND" }));
+    expect(() => t.depart({ clientKey: "fresh-bad-dest", kind: "warp", destination: "nowhere" }, T0)).toThrowError(
+      expect.objectContaining({ code: "UNKNOWN_DESTINATION" }),
+    );
+    expect(journeyCount()).toBe(0);
+    expect(t.getState(T0).activeJourney).toBeNull();
   });
 });
 
@@ -348,6 +382,48 @@ describe("concurrent transitions across two processes (review 22)", () => {
     expect(b.arrive(j.id, past(j.cancelDeadline))?.state).toBe("arrived");
     expect(a.arrive(j.id, past(j.cancelDeadline) + 1000)?.state).toBe("arrived");
     expect(eventTypes(a, j.id)).toEqual(["departure_armed", "departed", "arrived"]);
+  });
+});
+
+describe("legacy upgrade path (audit evidence)", () => {
+  it("an existing database WITHOUT the travel tables gains them on open — data intact, travel works", () => {
+    const dir = mkdtempSync(join(tmpdir(), "travel-legacy-"));
+    const dbPath = join(dir, "brain.db");
+    try {
+      // 1. A pre-P2-2 volume: full app schema, some real data, then the
+      //    travel tables dropped to simulate a database from before P2-2.
+      const h1 = createDb(dbPath);
+      const fuelBefore = new EconomyRepo(h1, "legacySpace").get();
+      h1.sqlite.exec(`DROP TABLE travel_journey_events; DROP TABLE travel_journeys;`);
+      const gone = h1.sqlite
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'travel_journeys'`)
+        .get();
+      expect(gone).toBeUndefined();
+      h1.sqlite.close();
+
+      // 2. Reopen through the normal entry point: the upgrade path
+      //    (bootstrap + migrateSchema, both IF NOT EXISTS) must restore
+      //    the tables AND the partial unique index, without touching the
+      //    data that was already there.
+      const h2 = createDb(dbPath);
+      const table = h2.sqlite
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'travel_journeys'`)
+        .get() as { name: string } | undefined;
+      expect(table?.name).toBe("travel_journeys");
+      const index = h2.sqlite
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'travel_journeys_one_active'`)
+        .get() as { name: string } | undefined;
+      expect(index?.name).toBe("travel_journeys_one_active");
+      expect(new EconomyRepo(h2, "legacySpace").get()).toBeCloseTo(fuelBefore, 1);
+
+      // 3. And the restored schema actually works end to end.
+      const repo = new TravelRepo(h2, "legacySpace");
+      const j = repo.depart({ clientKey: "legacy-1", kind: "drift", destination: "great-station" }, T0);
+      expect(repo.arrive(j.id, past(j.cancelDeadline))?.state).toBe("arrived");
+      h2.sqlite.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -209,14 +209,18 @@ export class TravelRepo {
     nowMs: number = Date.now(),
   ): TravelJourney {
     if (!input.clientKey) throw new TravelError("INVALID_CLIENT_KEY", "A departure needs a client key.");
-    if (input.kind !== "warp" && input.kind !== "drift")
-      throw new TravelError("INVALID_KIND", "A journey is either a warp or a drift.");
-    if (!TRAVEL_WORLD_KEYS.includes(input.destination))
-      throw new TravelError("UNKNOWN_DESTINATION", "That destination isn't on the chart yet.");
     this.settleActive(nowMs);
     const admit = this.h.sqlite.transaction((): TravelJourney => {
       const existing = this.rowByKey(input.clientKey);
       if (existing) return this.map(existing, nowMs);
+      // Validation guards CREATION only (audit F-01): a same-key retry
+      // returns the original journey regardless of changed parameters —
+      // including invalid ones — so kind and destination are checked
+      // here, after the idempotency lookup, never before it.
+      if (input.kind !== "warp" && input.kind !== "drift")
+        throw new TravelError("INVALID_KIND", "A journey is either a warp or a drift.");
+      if (!TRAVEL_WORLD_KEYS.includes(input.destination))
+        throw new TravelError("UNKNOWN_DESTINATION", "That destination isn't on the chart yet.");
       if (this.activeRow())
         throw new TravelError("ACTIVE_JOURNEY_EXISTS", "A journey is already in progress — finish or cancel it first.");
       const origin = this.deriveWorld(this.latestRow());
