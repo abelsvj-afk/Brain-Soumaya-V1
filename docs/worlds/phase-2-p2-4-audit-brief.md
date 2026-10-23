@@ -31,7 +31,7 @@
 
 ## Gate evidence (builder-reported, sandbox, byte-identical files)
 
-Root typecheck clean across shared/server/web (the pre-existing useTravel.test errors above are why web typecheck passes now — on the base tip it did not). Full suites with zero failures: server **1907 passed**, web **1454 passed**; web production build green. The two daily-digest tests that failed in the P2-3 sandbox run did NOT fail in this run — reported as observed, not explained away.
+Root typecheck clean across shared/server/web (the pre-existing useTravel.test errors above are why web typecheck passes now — on the base tip it did not). Full suites with zero failures: server **1901 passed**, web **1446 passed**; web production build green. The two daily-digest tests that failed in the P2-3 sandbox run did NOT fail in this run — reported as observed, not explained away. **Correction (2026-10-23):** these counts are from a direct re-run; the figures first reported (1907/1454) came from a completion delivery that a service restart made unverifiable (its process record showed killed, its log lost), so the builder re-ran both suites and replaced the numbers with the observed ones.
 
 ## Known limitations
 
