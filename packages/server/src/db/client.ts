@@ -1119,6 +1119,41 @@ function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
       ON notification_cap_claims(space_id, local_day, state, cap_exempt);
   `);
+  // Worlds travel (Phase 2, P2-2): the travel journey ledger. New tables,
+  // both paths: identical DDL to BOOTSTRAP_SQL in db/schemaSql.ts (fresh
+  // DBs already have them; this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS travel_journeys (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      client_key TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('warp','drift')),
+      origin TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('arming','in_transit','returning','arrived','returned','cancelled')),
+      fuel_charged REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      cancel_deadline TEXT NOT NULL,
+      departed_at TEXT,
+      arrived_at TEXT,
+      ended_at TEXT,
+      UNIQUE (space_id, client_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_travel_journeys_space_created
+      ON travel_journeys(space_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS travel_journeys_one_active
+      ON travel_journeys (space_id) WHERE state IN ('arming','in_transit','returning');
+    CREATE TABLE IF NOT EXISTS travel_journey_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      journey_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      type TEXT NOT NULL CHECK (type IN ('departure_armed','departed','cancelled','turned_back','arrived','returned')),
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_travel_events_journey
+      ON travel_journey_events(journey_id);
+  `);
   // ADR-018 A3: rebuild tts_audio_cache to the space-owned shape (legacy
   // unowned rows purged; see migrateTtsAudioCacheOwned). Runs here rather
   // than as a plain CREATE because an existing legacy table must be

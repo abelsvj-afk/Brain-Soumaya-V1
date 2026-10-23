@@ -40,6 +40,13 @@ export const WARP_COST = 10;
 export const EARN_JOURNEY_COMPLETE = 5;
 /** Bonus credited on a completed drift arrival — the slow free gait still counts as a journey. */
 export const EARN_JOURNEY_DRIFT = 3;
+/**
+ * Seconds between a departure being armed and the server closing its cancel
+ * window (P2-2). The client renders the countdown from this number; the
+ * SERVER owns the deadline — client timing never decides whether a warp is
+ * charged.
+ */
+export const TRAVEL_CANCEL_WINDOW_SECONDS = 10;
 
 export const FUEL_REGEN_PER_HOUR = 3.5;
 
