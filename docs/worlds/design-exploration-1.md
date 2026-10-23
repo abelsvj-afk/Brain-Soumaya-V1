@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 52 — **P2-2 BUILT (D-35)** on branch `worlds/p2-2-travel-ledger` @ `14dffc1` (10 files, verified byte-identical; outcome in the design note): the journey ledger exactly as designed — atomic admission, lazy settlement, derived world, five routes — with **15/15 acceptance tests passing** (C1–C4, derivation, drift, two-connection concurrency proof, HTTP contract), regressions green (economyWarp 9/9 · codexClaim 6/6 · economy 5/5), and **all three package typechecks clean**. The P2-1 `web-push` caveat is definitively retired: the sandbox's module install was incomplete against the lockfile; restored locally, the server typecheck exits 0. **Awaiting the owner's merge tap**; post-merge audit next per the lane.
+**Revision:** 53 — **P2-2 PR OPENED: [#95](https://github.com/abelsvj-afk/Brain-Soumaya-V1/pull/95).** The post-build review declined to accept the implementation from the builder's gate report alone (its first branch read returned a 404; no PR existed) and asked for the PR URL to inspect the actual diff against the approved design — atomic admission + index, settlement atomicity, window ownership, retry safety, both DDL paths, scope boundaries. The PR now exists for that inspection. **Merge remains the owner's tap**; nothing else is authorized. (Build record: Rev 52.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -833,4 +833,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 52. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly. Phase 2 planning lives in `phase-2-planning.md`; decisions continue to accumulate here.*
+*End of Exploration 1, Revision 53. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly. Phase 2 planning lives in `phase-2-planning.md`; decisions continue to accumulate here.*
