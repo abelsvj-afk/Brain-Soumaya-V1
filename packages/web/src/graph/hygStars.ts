@@ -18,6 +18,11 @@ function decodeFloats(b64: string): Float32Array {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  // A regenerated or truncated data module must fail HERE with a named
+  // error, not as a bare RangeError from the typed-array constructor.
+  if (bytes.length % 4 !== 0 || bytes.length / 4 !== HYG_STAR_COUNT * 3) {
+    throw new Error("HYG star data is malformed (hygData.ts) — regenerate it; do not hand-edit.");
+  }
   return new Float32Array(bytes.buffer);
 }
 
