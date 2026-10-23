@@ -130,6 +130,21 @@ function storeNotice(notice: ChatNotice): void {
   } catch {
     /* storage unavailable — nothing more we can do */
   }
+  notifyChatParked();
+}
+
+/** CH-03: a send that resolves into storage also announces it, so a dock
+ *  that was REOPENED before the send resolved (the fast-reopen
+ *  interleaving) can pick the outcome up live instead of never re-reading
+ *  storage — and losing the reply when its own persist effect next writes
+ *  its stale in-memory conversation over the parked one. */
+const CHAT_PARKED_EVENT = "brain-chat-parked";
+function notifyChatParked(): void {
+  try {
+    window.dispatchEvent(new Event(CHAT_PARKED_EVENT));
+  } catch {
+    /* no window */
+  }
 }
 
 /** Append reply messages to the persisted conversation (used when a send
@@ -142,6 +157,36 @@ function persistReplyMessages(reply: ChatMessage[]): void {
   } catch {
     /* storage unavailable */
   }
+  notifyChatParked();
+}
+
+function readStoredMessages(): ChatMessage[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(chatKey()) || "[]") as ChatMessage[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * CH-03: multiset merge — the messages in `stored` that `current` doesn't
+ * already hold (count-aware on role+timestamp+text, so identical repeated
+ * messages aren't collapsed), appended in stored order. A parked reply
+ * therefore lands exactly once in a reopened dock.
+ */
+function mergeParkedMessages(current: ChatMessage[], stored: ChatMessage[]): ChatMessage[] {
+  const keyOf = (m: ChatMessage) => `${m.role}|${m.at ?? ""}|${m.text}`;
+  const held = new Map<string, number>();
+  for (const m of current) held.set(keyOf(m), (held.get(keyOf(m)) ?? 0) + 1);
+  const extra: ChatMessage[] = [];
+  for (const m of stored) {
+    const k = keyOf(m);
+    const n = held.get(k) ?? 0;
+    if (n > 0) held.set(k, n - 1);
+    else extra.push(m);
+  }
+  return extra.length > 0 ? [...current, ...extra].slice(-60) : current;
 }
 
 /** A few tools people don't discover on their own — surfaced as one-tap chips on a
@@ -174,6 +219,7 @@ const MIC_SILENCE_MS = 2800;
  */
 export function ChatDock({
   spaceName = "Soumaya",
+  hasMemories,
   onClose,
   onFocus,
   onRecall,
@@ -185,6 +231,11 @@ export function ChatDock({
   onConsumeJourneyContext,
 }: {
   spaceName?: string;
+  /** CH-11: whether the brain holds any memories at all — the empty-state
+   *  copy must not claim she "has read your whole galaxy" of an empty one.
+   *  Supplied by App (which holds the graph); when unsupplied, the
+   *  established-brain copy is kept. */
+  hasMemories?: boolean;
   onClose: () => void;
   onFocus: (id: number) => void;
   onRecall?: (ids: number[]) => void;
@@ -302,6 +353,32 @@ export function ChatDock({
       mountedRef.current = false;
     };
   }, []);
+
+  // CH-03: pick up an outcome parked by a previous instance whose send was
+  // still in flight when this instance mounted (close → fast-reopen). The
+  // parked reply merges into this conversation (exactly once — see
+  // mergeParkedMessages) and a parked failure surfaces as the notice bar.
+  useEffect(() => {
+    const onParked = () => {
+      setMessages((prev) => mergeParkedMessages(prev, readStoredMessages()));
+      const parked = readStoredNotice();
+      if (parked) setNotice((prev) => prev ?? parked);
+    };
+    window.addEventListener(CHAT_PARKED_EVENT, onParked);
+    return () => window.removeEventListener(CHAT_PARKED_EVENT, onParked);
+  }, []);
+
+  /**
+   * CH-01: outbound doors (fly-to, recall, navigation, panels) act on the
+   * galaxy/panels BEHIND this fixed, near-full-screen-on-phones card — so
+   * acting on one also dismisses the card, or the user never sees the
+   * result. Uses the raw onClose prop, not handleClose: the end-of-chat
+   * distill offer must not intercept a user who just chose to go look.
+   */
+  const closeAfter = (act: () => void) => {
+    act();
+    onClose();
+  };
 
   useEffect(
     () => () => {
@@ -568,6 +645,11 @@ export function ChatDock({
       // "no-speech" just means a quiet stretch — the restart below handles it.
       if (e?.error && e.error !== "no-speech" && e.error !== "aborted") {
         stopMic(false);
+        // CH-05: a permission denial used to look like a dead button — the
+        // mic turned on, then off, with nothing on screen. Name the remedy.
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          pushToast("Mic blocked — allow microphone access in your browser or site settings to dictate.", "🎤", 6000);
+        }
       }
     };
     rec.onend = () => {
@@ -770,10 +852,21 @@ export function ChatDock({
           {messages.length === 0 && (
             <>
               <p className="chatdock-empty">
-                {spaceName} has read your whole galaxy. Think out loud with her — "help me decide…",
-                "what am I missing about…", "what have you noticed lately?" — and she'll connect it to
-                what you've logged, name patterns, and push back when it helps. Tap ＋ to keep anything
-                worth saving. (🎭 shapes who she is to you.)
+                {hasMemories === false ? (
+                  <>
+                    Your galaxy is still empty, so {spaceName} has nothing of yours to draw on yet.
+                    Think out loud with her anyway — "help me decide…", "what am I missing about…" —
+                    and tap ＋ on anything worth keeping: the first things you save become the
+                    memories she'll connect everything else to. (🎭 shapes who she is to you.)
+                  </>
+                ) : (
+                  <>
+                    {spaceName} has read your whole galaxy. Think out loud with her — "help me decide…",
+                    "what am I missing about…", "what have you noticed lately?" — and she'll connect it to
+                    what you've logged, name patterns, and push back when it helps. Tap ＋ to keep anything
+                    worth saving. (🎭 shapes who she is to you.)
+                  </>
+                )}
               </p>
               <div className="chatdock-quick-tools" role="list" aria-label="Explore Soumaya's tools">
                 {QUICK_TOOLS.map((t) => (
@@ -781,7 +874,7 @@ export function ChatDock({
                     key={t.tab}
                     className="pill chatdock-tool-chip"
                     role="listitem"
-                    onClick={() => openQuickTool(t.tab)}
+                    onClick={() => closeAfter(() => openQuickTool(t.tab))}
                     title={`Open ${t.label}`}
                   >
                     {t.icon} {t.label}
@@ -797,7 +890,7 @@ export function ChatDock({
                   key={t.tab}
                   className="pill chatdock-tool-chip"
                   role="listitem"
-                  onClick={() => { setShowQuickTools(false); openQuickTool(t.tab); }}
+                  onClick={() => { setShowQuickTools(false); closeAfter(() => openQuickTool(t.tab)); }}
                   title={`Open ${t.label}`}
                 >
                   {t.icon} {t.label}
@@ -864,7 +957,7 @@ export function ChatDock({
                       key={c.id}
                       className="pill"
                       style={{ borderColor: colorForType(c.type) }}
-                      onClick={() => onFocus(c.id)}
+                      onClick={() => closeAfter(() => onFocus(c.id))}
                       title="Fly to this memory"
                     >
                       {c.label}
@@ -879,7 +972,7 @@ export function ChatDock({
                 <div className="chatdock-cites">
                   <button
                     className="pill"
-                    onClick={() => onRecall?.(m.contextIds!)}
+                    onClick={() => closeAfter(() => onRecall?.(m.contextIds!))}
                     title="Light up the memories she consulted for this reply in the galaxy"
                   >
                     ✦ drew on {m.contextIds.length} {m.contextIds.length === 1 ? "memory" : "memories"}
@@ -890,7 +983,7 @@ export function ChatDock({
                 <div className="chatdock-cites">
                   <button
                     className="pill nav"
-                    onClick={() => onNavigate?.(m.navigation!)}
+                    onClick={() => closeAfter(() => onNavigate?.(m.navigation!))}
                     title={m.navigation.reason}
                   >
                     {m.navigation.target.domain === "journey" ? "🧭" : "💵"} Go to {m.navigation.target.label ?? "this"}

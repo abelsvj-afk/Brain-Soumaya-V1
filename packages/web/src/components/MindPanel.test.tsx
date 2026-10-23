@@ -12,6 +12,7 @@ const getUpcomingEvents = vi.fn();
 const getUpcomingEventsResult = vi.fn();
 const getThoughts = vi.fn();
 const getThoughtsResult = vi.fn();
+const addThought = vi.fn();
 const getPersonSuggestions = vi.fn();
 const getPersonSuggestionsResult = vi.fn();
 const getCognitiveEvidence = vi.fn();
@@ -39,7 +40,7 @@ vi.mock("../api/client.js", () => ({
   dismissPersonSuggestion: vi.fn(),
   getThoughts: (...a: unknown[]) => getThoughts(...a),
   getThoughtsResult: (...a: unknown[]) => getThoughtsResult(...a),
-  addThought: vi.fn(),
+  addThought: (...a: unknown[]) => addThought(...a),
   reinforceThought: vi.fn(),
   promoteThought: vi.fn(),
   dismissThought: vi.fn(),
@@ -688,5 +689,44 @@ describe("MindPanel — cognitive load failure is not an empty mind (Finding 2)"
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     expect(await screen.findByText(/Couldn't refresh your mind/)).toBeTruthy();
     expect(screen.getByText("Run a 5k")).toBeTruthy();
+  });
+});
+
+describe("CAP-09 (Batch B) — a failed thought capture never loses the words", () => {
+  it("keeps the text in the input when addThought fails, and shows the failure", async () => {
+    addThought.mockResolvedValue(null);
+    render(<MindPanel onFocus={() => {}} />);
+    const input = (await screen.findByPlaceholderText(/Hold a thought/)) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "a thought I can't lose" } });
+    fireEvent.click(screen.getByText("Hold"));
+    await waitFor(() => expect(addThought).toHaveBeenCalledWith("a thought I can't lose"));
+    await waitFor(() =>
+      expect(pushToastMock).toHaveBeenCalledWith(expect.stringMatching(/couldn't hold/i), "⚠️", expect.any(Number)),
+    );
+    // The words survive the failure — still in the input, ready to retry.
+    expect(input.value).toBe("a thought I can't lose");
+  });
+
+  it("clears the input only after a verified save", async () => {
+    addThought.mockResolvedValue({ id: 42 });
+    render(<MindPanel onFocus={() => {}} />);
+    const input = (await screen.findByPlaceholderText(/Hold a thought/)) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "a keeper" } });
+    fireEvent.click(screen.getByText("Hold"));
+    await waitFor(() => expect(addThought).toHaveBeenCalledWith("a keeper"));
+    await waitFor(() => expect(input.value).toBe(""));
+  });
+
+  it("an over-500-character thought gets length-specific copy, not a doomed 'try again'", async () => {
+    addThought.mockResolvedValue(null);
+    render(<MindPanel onFocus={() => {}} />);
+    const input = (await screen.findByPlaceholderText(/Hold a thought/)) as HTMLInputElement;
+    const long = "x".repeat(501);
+    fireEvent.change(input, { target: { value: long } });
+    fireEvent.click(screen.getByText("Hold"));
+    await waitFor(() =>
+      expect(pushToastMock).toHaveBeenCalledWith(expect.stringMatching(/too long/i), "⚠️", expect.any(Number)),
+    );
+    expect(input.value).toBe(long);
   });
 });

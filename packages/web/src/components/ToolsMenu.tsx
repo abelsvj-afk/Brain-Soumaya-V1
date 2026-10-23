@@ -40,7 +40,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
     { icon: "🕰️", label: "Timeline", on: p.onTimeline },
     { icon: "🗺️", label: "Legend", on: p.onLegend },
     { icon: "☄️", label: "Flashback", on: p.onFlashback },
-    { icon: p.focusMode ? "🌐" : "🌌", label: p.focusMode ? "Exit focus" : "Focus mode", on: p.onFocusMode },
+    { icon: p.focusMode ? "🌐" : "🌌", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
     { icon: "❓", label: "Help", on: p.onHelp },
   ];
   const alerts = (p.candCount || 0) + (p.dueCount || 0);

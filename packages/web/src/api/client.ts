@@ -281,16 +281,49 @@ export class OfflineQueuedError extends Error {
   }
 }
 
-function enqueueIngest(text: string, opts?: IngestOpts): void {
+/** CAP-06: the offline queue's capacity, named so the refusal can name it. */
+export const INGEST_QUEUE_LIMIT = 200;
+
+type EnqueueResult =
+  | { queued: true }
+  | { queued: false; reason: "no-brain" | "full" | "storage" };
+
+/**
+ * CAP-06: enqueueing used to report nothing — it silently no-opped when no
+ * brain was signed in and silently dropped the oldest capture at capacity
+ * (`slice(-200)`), while the caller still claimed "saved". It now reports
+ * its outcome; at capacity the NEW capture is refused (never a silent drop).
+ */
+function enqueueIngest(text: string, opts?: IngestOpts): EnqueueResult {
   try {
     const key = ingestQueueKey();
-    if (!key) return; // no brain signed in — don't stash an unattributable note
+    if (!key) return { queued: false, reason: "no-brain" }; // no brain signed in — don't stash an unattributable note
     const q = JSON.parse(localStorage.getItem(key) || "[]") as { text: string; opts?: IngestOpts }[];
+    if (q.length >= INGEST_QUEUE_LIMIT) return { queued: false, reason: "full" };
     q.push({ text, opts });
-    localStorage.setItem(key, JSON.stringify(q.slice(-200)));
+    localStorage.setItem(key, JSON.stringify(q));
+    return { queued: true };
   } catch {
-    /* storage unavailable — nothing more we can do */
+    return { queued: false, reason: "storage" };
   }
+}
+
+/**
+ * CAP-06: translate an enqueue outcome into the ingest contract —
+ * OfflineQueuedError ONLY when the capture really was queued; otherwise a
+ * plain honest error that never claims "saved".
+ */
+function throwForEnqueue(result: EnqueueResult): never {
+  if (result.queued) throw new OfflineQueuedError();
+  if (result.reason === "full") {
+    throw new Error(
+      `You're offline, and your offline queue is full (${INGEST_QUEUE_LIMIT} captures waiting) — this one couldn't be saved. Reconnect so the queue can sync, then try again.`,
+    );
+  }
+  if (result.reason === "no-brain") {
+    throw new Error("You're offline and no brain is signed in, so this couldn't be saved. Sign in and try again.");
+  }
+  throw new Error("You're offline, and this device couldn't store the capture, so it wasn't saved. Reconnect and try again.");
 }
 
 /**
@@ -346,8 +379,7 @@ export async function ingestText(text: string, opts?: IngestOpts): Promise<Inges
     (async () => {
       // Offline up front → queue immediately, don't even try the network.
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        enqueueIngest(text, opts);
-        throw new OfflineQueuedError();
+        throwForEnqueue(enqueueIngest(text, opts));
       }
       let res: Response;
       try {
@@ -358,8 +390,7 @@ export async function ingestText(text: string, opts?: IngestOpts): Promise<Inges
         });
       } catch {
         // Network blip mid-request → save it for the next flush.
-        enqueueIngest(text, opts);
-        throw new OfflineQueuedError();
+        throwForEnqueue(enqueueIngest(text, opts));
       }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };

@@ -184,7 +184,7 @@ export default function App() {
     // IM-15: announce focus-mode entry/exit (it used to change silently).
     if (!focusModeSeenRef.current) { focusModeSeenRef.current = true; return; }
     pushToast(
-      focusMode ? "Focus mode on — the chrome has dimmed for a calm read. Toggle it in Tools to exit." : "Focus mode off — welcome back.",
+      focusMode ? "Calm mode on — the chrome has dimmed for a calm read. Toggle it in Tools to exit." : "Calm mode off — welcome back.",
       "🎯",
       3500,
       focusMode ? "high" : "normal",
@@ -2389,7 +2389,7 @@ export default function App() {
             title={focusMode ? "Exit deep-space focus mode" : "Deep-space focus mode — dim the chrome for a calm read"}
           >
             {focusMode ? "🌐" : "🌌"}
-            <span className="fab-cap">Focus</span>
+            <span className="fab-cap">Calm</span>
           </button>
           {/* Game-style focus cluster: one button that pops up the camera targets. */}
           {(() => {
@@ -2740,6 +2740,7 @@ export default function App() {
       {showChat && space && (
         <ChatDock
           spaceName={space.name}
+          hasMemories={data.nodes.length > 0}
           onClose={() => setShowChat(false)}
           onFocus={(id) => focus(id)}
           onRecall={(ids) => graphRef.current?.fireRecall(ids)}
@@ -2757,7 +2758,13 @@ export default function App() {
             if (!kind) return;
             const flew = graphRef.current?.flyToGalaxyEntity(kind, nav.target.id) ?? false;
             const icon = kind === "journey" ? "🧭" : "💵";
-            pushToast(`${icon} ${nav.target.label ?? "Navigating"} — ${nav.reason}`, icon, flew ? 7000 : 5000);
+            // CH-02: a failed flight must not wear the success wording —
+            // the old toast read identically whether she flew or not.
+            if (flew) {
+              pushToast(`${icon} ${nav.target.label ?? "Navigating"} — ${nav.reason}`, icon, 7000);
+            } else {
+              pushToast(`${icon} Couldn't fly to ${nav.target.label ?? "that"} — she couldn't find it in your galaxy.`, "⚠️", 5000);
+            }
           }}
         />
       )}
@@ -2796,6 +2803,15 @@ export default function App() {
           onSearch={() => {
             dismissObs();
             setPanel("search");
+          }}
+          onAnswered={() => {
+            // OB-06: the answer changed graph + streak state — refresh
+            // both through the existing paths (refresh() for the graph/
+            // fuel, the same getStreak the 30s poll uses) so the quests
+            // card, header streak and "Jump back in" agree with the
+            // answer's toast immediately, not at the next poll/close.
+            void refresh();
+            void getStreak().then((s) => { if (s) setStreak(s); }).catch(() => {});
           }}
         />
       )}

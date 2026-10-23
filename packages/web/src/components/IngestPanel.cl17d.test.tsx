@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
-vi.mock("../api/client.js", () => ({ ingestText: vi.fn() }));
+vi.mock("../api/client.js", () => ({ ingestText: vi.fn(), getSpaceId: () => "space1" }));
 vi.mock("../api/journeys.js", () => ({
   getJourneys: vi.fn(async () => []),
   journeysFor: vi.fn(async () => []),
