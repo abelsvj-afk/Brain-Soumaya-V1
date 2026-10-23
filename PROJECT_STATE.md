@@ -3,6 +3,61 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-23 — ADR-021 capture idempotency: one key per capture attempt, on every path (design drafted; gate OPEN)
+
+**Status:** DESIGN — drafted 2026-10-23 under the owner's complete-remediation
+objective; the design is recorded on branch `design/capture-idempotency`
+(docs only, base = deploy HEAD `570128c`). **Implementation NOT authorized
+and NOT started.** Contract of record (once the gate closes):
+`docs/ADR-021-capture-idempotency.md`.
+
+- **Why:** Capture audit pass 6 (2026-10-23) finding **CAP-02** (weak/high):
+  no dedup or idempotency exists on any main capture path, with three
+  concrete double-fire routes — ⌘+Enter bypasses the busy-disabled submit
+  button (no in-flight guard in `IngestPanel.submit()`), the offline queue
+  retries a possibly-committed POST (queue items carry no identity), and a
+  Telegram re-send after a silent failure duplicates. CAP-02 extends the
+  **DP-2** item deferred by ADR-020 (the `capture_memory`/`dream_playback`
+  stamp-after-ingest crash window) from the two approval-gated tools to
+  all capture paths. All givens were spot-verified against the baseline
+  during drafting (ADR-021 §2): the pipeline stamps nothing, the ingest
+  route pays streak/fuel *after* ingest outside any shared transaction,
+  the declared `TelegramUpdate` type carries no `update_id`/`message_id`,
+  and `/note`'s single-save safety is sequential-only (draft removal, no
+  atomic claim).
+- **Design:** claim-first **capture receipts** (new `capture_receipts`
+  table, `UNIQUE(space_id, idempotency_key)`) claimed before any side
+  effect and completed with the attempt's full original result, so a
+  replay returns the original result verbatim with zero side effects;
+  rewards + receipt completion commit in **one transaction** on the
+  reward-paying paths. A non-unique **`nodes.capture_key`** stamp written
+  *at creation* by the pipeline links a capture's nodes to its receipt
+  for crash recovery (stale claims reconcile from the stamp, never
+  blindly re-execute) — and the approval tools pass `approval:<id>`
+  **into** the pipeline, deleting the post-hoc stamp UPDATE: **DP-2 is
+  closed by construction**. Keys are per-attempt, never per-content:
+  client-supplied UUIDs on web/Mind, server-derived on Telegram
+  (`tg:<chatId>:<messageId>`, a draft-derived key for `/note`) and
+  approvals. Promise language is **effectively-once**, never
+  exactly-once; the crash-mid-creation residual is a flagged partial
+  recovery, named in the ADR.
+- **Open owner decision points at the gate:** OD-1 Telegram content-window
+  dedup (10-minute `tgwin:` window — the only mechanism covering a user
+  re-send as a *new* message); OD-2 receipt retention (30 days, incl. its
+  >30-day offline-queue consequence); OD-3 in-flight outcome
+  (409 / "still saving"); OD-4 Mind thought capture in scope; OD-5
+  reconciled-partial semantics.
+- **Out of scope:** CAP-01 raw-source preservation (verbatim-recall V1 is
+  its vehicle; the receipt store is not a source store), CAP-07 reward
+  unification, TG-05 `/log` prefix matching, pre-existing duplicate
+  cleanup, semantic/similarity dedup (explicitly rejected — a fresh key
+  with identical words always captures).
+- **Design gate — the owner's review must confirm before implementation
+  can be authorized:** the checklist in ADR-021 §13 (scope, OD-1…OD-5,
+  deltas SD-1…SD-8 as the complete touch set, AC-1…AC-15 as the
+  verification contract, the §9 migration shape: one dual-registered
+  table + one migrateSchema-only column).
+
 ## 2026-10-22 — ADR-019 bill lifecycle (design settled; gate CLOSED 2026-10-22)
 
 **Status:** DESIGN — owner settled the four product decisions for design on

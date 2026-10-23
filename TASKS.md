@@ -16,6 +16,51 @@ Last audited: 2026-06-20. Tracks all open work, each item tagged with its zone a
 
 ---
 
+## Capture — idempotency on every path (ADR-021; design drafted 2026-10-23, implementation NOT authorized)
+
+Design of record: `docs/ADR-021-capture-idempotency.md`. Gate: PROJECT_STATE.md
+"2026-10-23 — ADR-021 capture idempotency" entry + ADR-021 §13 checklist must be
+owner-confirmed first (incl. OD-1…OD-5); implementation then requires its own
+explicit authorization (merge/deployment separate again). Extends ADR-020's
+deferred **DP-2** to all capture paths per Capture audit **CAP-02**.
+
+- [x] **Design:** claim-first capture receipts + stamp-at-creation +
+      per-path keys (client UUID on web/Mind; server-derived on Telegram
+      and approvals) + replay/conflict/in-flight/recovery outcomes
+      (branch `design/capture-idempotency`, docs only). Evidence: Capture
+      audit pass 6 (CAP-02, CAP-06), all givens spot-verified against
+      the baseline during drafting. Open at the gate: OD-1 (Telegram
+      content window), OD-2 (30-day retention), OD-3 (in-flight outcome),
+      OD-4 (Mind in scope), OD-5 (reconciled-partial semantics).
+- [ ] 🔴 **Receipt store:** `capture_receipts`, dual-registered
+      (BOOTSTRAP_SQL + migrateSchema), `UNIQUE(space_id, idempotency_key)`;
+      `nodes.capture_key` column + index, migrateSchema-only (ADR-021
+      §4, §9). Acceptance: AC-13, AC-14.
+- [ ] 🔴 **Claim service + pipeline stamps:** claim/replay/recovery
+      protocol (§5); `IngestMeta` carries the capture key; `ingestCore`
+      stamps every created node at insert, first node also under
+      `idempotency_key` when supplied (§4.2, SD-3). Acceptance: AC-9.
+- [ ] 🔴 **Web ingest route:** optional `idempotencyKey` body field,
+      claim-first, action branch stamp-at-creation, rewards + completion
+      in one transaction (SD-4, §5.5). Acceptance: AC-5, AC-6, AC-10.
+- [ ] 🔴 **Approval tools (DP-2):** `capture_memory` + `dream_playback`
+      pass `approval:<id>` into the pipeline; post-hoc stamp UPDATE
+      deleted; receipt-backed original-result replay (SD-5, §6.2).
+      Acceptance: AC-4 (headline with AC-1…AC-3).
+- [ ] 🔴 **Telegram:** `TelegramUpdate` gains `message_id`; `/log`
+      claims `tg:` (+ `tgwin:` per OD-1) receipts with §5.5 completion;
+      `/done` claims the draft-key receipt before save (SD-6, §6.3–6.4).
+      Acceptance: AC-3, AC-11.
+- [ ] 🔴 **Web client + panels:** `ingestText` mints/carries the attempt
+      key into the offline queue (legacy items minted + re-persisted
+      pre-POST); flush honors `idempotentReplay`; `IngestPanel`
+      attempt-key lifecycle + in-flight guard; Mind attempt key + guard
+      via `POST /api/working` (SD-7, SD-8, §6.1). Acceptance: AC-1
+      (headline), AC-2 (headline), AC-7, AC-8, AC-12, AC-15.
+- [ ] 🔴 **Gate + review:** full gate (typecheck/tests/build) +
+      independent review against AC-1…AC-15 before any merge decision;
+      merge and deployment remain separate owner decisions.
+
 ## Autonomy & Agent Hardening
 
 - [x] 🔴 **Performance fix: `/next-job` full scan** — ✅ mitigated. The O(n) knn-per-node merge scan is now
