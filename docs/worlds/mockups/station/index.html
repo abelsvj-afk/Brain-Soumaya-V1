@@ -221,6 +221,7 @@ scene.add(route);
 
 // Traffic (A17): instanced shuttles on seeded lanes near the arms — atmosphere, not fact
 const TRAFFIC_N = 22;
+const trafficDummy = new THREE.Object3D(); // shared matrix composer for the traffic loop
 const traffic = new THREE.InstancedMesh(new THREE.ConeGeometry(1.1, 4.6, 6),
   new THREE.MeshBasicMaterial({color:0xcfd8ff}), TRAFFIC_N);
 scene.add(traffic);
@@ -317,6 +318,7 @@ let currentLook = lastLook.clone();
 camera.position.copy(STAGES.far.pos);
 
 /* ============ HUD: fps / draw calls / triangles / clock ============ */
+const clockFmt = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hour12:true}); // hoisted (P3 diagnosis: was constructed every frame)
 const frameTimes = [];
 let lastT = performance.now();
 function hud(now){
@@ -330,8 +332,7 @@ function hud(now){
   const info = renderer.info.render;
   document.getElementById('callsOut').textContent = info.calls;
   document.getElementById('trisOut').textContent = info.triangles.toLocaleString('en-US');
-  document.getElementById('clockOut').textContent =
-    new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date()) + ' ET';
+  document.getElementById('clockOut').textContent = clockFmt.format(new Date()) + ' ET';
 }
 
 /* ============ Main loop ============ */
@@ -369,7 +370,7 @@ function tick(){
 
   if(!rm){
     ring.rotation.y = t * 0.05; // slow ring rotation (settled R-S4)
-    const d = new THREE.Object3D();
+    const d = trafficDummy; // hoisted (P3 diagnosis: was allocated every frame)
     for(let i=0;i<TRAFFIC_N;i++){
       const L = lanes[i];
       const k = (t * L.speed + L.off) % 1;
@@ -418,6 +419,27 @@ function tick(){
   }
   hud(performance.now());
 }
+/* ============ Warm-up (P3 diagnosis fix, 2026-10-22) ============
+   The station group and the cargo orb are visibility-gated (station hidden
+   at the far stage, orb hidden until cargo loads), so their shader programs
+   and textures would first compile/upload MID-SESSION — on the owner's phone
+   the prime suspect for session 1's single 108.7 ms frame. Compile and
+   render both scenes once here, with everything visible from the near
+   stage, so that one-off cost lands inside cold load (568 ms measured
+   against a 5 s bar — ample headroom) and never inside a graded session. */
+{
+  const keepPos = camera.position.clone(), keepLook = currentLook.clone(), keepOrb = orb.visible;
+  station.visible = true; impostor.visible = true; orb.visible = true;
+  camera.position.copy(STAGES.near.pos); currentLook.copy(STAGES.near.look); camera.lookAt(currentLook);
+  bgCamera.quaternion.copy(camera.quaternion);
+  renderer.compile(bgScene, bgCamera);
+  renderer.compile(scene, camera);
+  renderer.render(bgScene, bgCamera);
+  renderer.render(scene, camera);
+  camera.position.copy(keepPos); currentLook.copy(keepLook); camera.lookAt(currentLook);
+  orb.visible = keepOrb;
+}
+
 tick();
 
 /* ============ Controls ============ */
@@ -515,8 +537,12 @@ document.getElementById('measureBtn').addEventListener('click', () => {
   const samples = [];
   let prev = performance.now();
   const t0 = prev;
+  let maxCtx = null; // context of the longest frame (P3 diagnosis instrumentation)
   function sample(now){
-    samples.push(now - prev); prev = now;
+    const dt = now - prev; prev = now;
+    samples.push(dt);
+    if(!maxCtx || dt > maxCtx.ms) maxCtx = {ms: dt, atS: ((now - t0)/1000).toFixed(1),
+      stage: currentStage, mode: camAnim ? camAnim.mode : (departing ? 'arming departure' : 'no transition')};
     if(now - t0 < durS*1000){ requestAnimationFrame(sample); return; }
     const sorted = [...samples].sort((a,b)=>a-b);
     const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
@@ -531,6 +557,7 @@ document.getElementById('measureBtn').addEventListener('click', () => {
       ' · fps avg: ' + (1000/avg).toFixed(1) +
       ' · 1% low fps: ' + (1000/low1ms).toFixed(1) +
       ' · longest frame: ' + maxMs.toFixed(1) + 'ms' +
+      (maxCtx ? ' (at ~' + maxCtx.atS + 's in · stage ' + maxCtx.stage + ' · ' + maxCtx.mode + ')' : '') +
       ' · draw calls PEAK (both passes): ' + (measurePeaks ? measurePeaks.calls : info.calls) +
       ' · triangles PEAK: ' + (measurePeaks ? measurePeaks.tris : info.triangles) +
       ' · final-frame calls/tris: ' + info.calls + '/' + info.triangles +

@@ -39,13 +39,26 @@ A single self-contained throwaway scene (`index.html` + vendored three.js v0.182
 
 **Still outstanding after session 1:** the P3 diagnosis (single 108.7 ms frame — see §3) · D-13 stills (Far / Handoff / Near) · the approach recording (V3) · the 900 s soak (P8) · the reduced-motion measurement block (an RM-on partial session ran; its completed block was not captured) · the environment record (phone model / OS / runtime) · V1/V2 (owner's review of the stills) · V6 (owner's call).
 
+## 2c. P3 diagnosis (builder, 2026-10-22 — at the owner's direction: diagnose + fix first)
+
+**What the number is:** the harness samples requestAnimationFrame intervals; 108.7 ms means the main thread delivered no frame callback for that long, once, in 29,803 frames (session average ≈10 ms). Session 1's harness captured the value but not its moment or context — itself an instrumentation gap, now closed (below).
+
+**Ranked causes (code-level, from reading the scene as built):**
+1. **First-compile / first-upload at the handoff (prime suspect, scene-side).** The station group is visibility-gated (`station.visible = hand < 0.98`): at the far stage it is hidden, so its shader programs and buffer/texture uploads never happen at load — they happen on the **first approach**, mid-session. The cargo orb is likewise hidden until first cargo load. First-compile spikes of 50–150 ms on mobile GPUs are the classic one-off long frame, and this scene had the exposure by construction.
+2. **Per-frame allocations feeding GC (scene-side).** The traffic loop allocated a `new THREE.Object3D()` every frame, and the HUD constructed a `new Intl.DateTimeFormat` on every frame — steady garbage churn that makes a collection pause during a session plausible.
+3. **External (not eliminable from here).** The session ran inside an unidentified viewer app (environment record incomplete); an OS/viewer hiccup cannot be ruled out — but causes 1–2 are real defects regardless of which one fired.
+
+**Fixes applied (Rev 37; syntax-validated; sandbox-verified — turn-back PASS, zero page errors):** a **warm-up pass at load** compiles and renders both scenes once with station, impostor, and orb all visible from the near stage, moving every first-compile/upload into cold load (568 ms measured vs a 5 s bar — ample headroom); the traffic dummy and the clock formatter are **hoisted** out of the frame loop; the harness now **records the longest frame's context** (elapsed time, stage, transition state) and prints it in the measurement block, so any future long frame arrives with its diagnosis attached.
+
+**Disposition:** the session-1 **FAIL stands** as measured fact. The owner (D-28) waived a re-test session: after this diagnosis + fix + the ChatGPT review loop over the session-1 evidence, the sequence may advance without a second phone run — the residual risk is consciously carried, in the owner's words: *"once it's live I'll know for sure."* P3 is therefore recorded as **FAIL (session 1) → diagnosed, fixed, and owner-waived** — never as a pass.
+
 ## 3. Criteria grading (§11.2 performance / §11.3 visual)
 
 | Criterion | Threshold | Evidence | Status |
 |---|---|---|---|
 | P1 fps average | ≥50 over 5-min session incl. warp + approach | **99.3** avg over the device 300 s session (29,803 frames, warp + drift + approach included) | ✅ **PASS** (device, session 1) |
 | P2 fps 1%-low | ≥30 | **59.5** | ✅ **PASS** (device, session 1) |
-| P3 longest stall | ≤100 ms | **108.7 ms** — a single longest frame over the bar | ❌ **FAIL** (device, session 1) — narrow (8.7 ms over, 1 frame of 29,803); blocks advancement pending diagnosis per the failure protocol; the threshold is not negotiable |
+| P3 longest stall | ≤100 ms | **108.7 ms** — a single longest frame over the bar | ❌ **FAIL** (device, session 1) — narrow (8.7 ms over, 1 frame of 29,803); **diagnosis + scene fix at §2c (Rev 37)**; re-test **waived by the owner (D-28)** after diagnosis + fix + review — the FAIL remains the session-1 fact on record, not a pass; the threshold was not moved |
 | P4 draw calls | ≤200 (hard fail >500) | **Peak 16** (both passes, session peak) | ✅ **PASS** (device, session 1) |
 | P5 visible triangles | ≤750k (hard boundary) | **Peak 27,284** | ✅ **PASS** (device, session 1) |
 | P6 texture sizes | ≤1K (hero ≤2K); backdrop ≤2048×1024 | By construction: all textures are 256×256 canvas-generated glow discs; **no image textures at all** | ✅ SUPPORTED (construction evidence; device record should still confirm) |

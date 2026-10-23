@@ -64,7 +64,7 @@ After each mockup: push its result record, update this brief's status table (§9
 
 | Mockup | State | Record |
 |---|---|---|
-| 1 — Great Station (approach + D-13 evidence) | 🟡 Scene built; **reviews 10–15 closed the code-review series; builder smoke test (2026-10-22) then found + fixed two run-time defects the reviews couldn't see** — missing `three.core.min.js` in the vendored package (scene couldn't start) and turn-back targeting the origin stage instead of the captured pose (FAIL → pose target → PASS, verified in-environment) — **§11 measurement pending owner's device run (`phone-run-sheet-station.md`)** — verdict UNRESOLVED, no PASS claimed | `mockup-result-station.md` · `chatgpt-review-10–15-2026-10-22.md` · `smoke-test-station-2026-10-22.md` |
+| 1 — Great Station (approach + D-13 evidence) | 🟡 **Device session 1 graded:** P1/P2/P4/P5/P7 ✅ (99.3 avg · 59.5 low · peak 16 calls · peak 27,284 tris · 568 ms cold load); **P3 ❌ 108.7 ms single frame → diagnosed (§2c: first-compile at the handoff + per-frame allocations) → fixed (warm-up at load, hoisted objects, longest-frame context) → re-test WAIVED by the owner (D-28)** after the review loop; behavior PASS on device (cancel, turn-back ×2, return-home, A1). Stills/recording/soak/RM block/environment record still outstanding on the record; **V6 = owner's later call** | `mockup-result-station.md` §2b/§2c/§3 |
 | 2 — Growing Place (the rising) | ⬜ Blocked on Mockup 1 PASS | — |
 | 3 — Deep Past (the descent; A1–A3, A21/A22) | ⬜ Blocked on Mockup 2 PASS | — |
 
