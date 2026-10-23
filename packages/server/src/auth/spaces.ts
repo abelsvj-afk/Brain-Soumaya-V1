@@ -71,6 +71,10 @@ const TABLES_WITH_SPACE = [
   "journey_mission_completions",
   "intelligence_clarifications",
   "interaction_preferences",
+  "sources",
+  "source_chunks",
+  "node_sources",
+  "source_corrections",
 ] as const;
 
 function hash(passcode: string, salt: string): Buffer {
@@ -170,6 +174,10 @@ export const SPACE_SCOPED_TABLES = [
   "notification_outbox",
   "travel_journey_events",
   "travel_journeys",
+  "node_sources",
+  "source_corrections",
+  "source_chunks",
+  "sources",
 ] as const;
 
 /**
@@ -188,6 +196,8 @@ const DERIVED_INDEXES: ReadonlyArray<readonly [indexTable: string, keyColumn: st
   ["vec_journeys", "journey_id", "journeys"],
   ["vec_episodes", "episode_id", "episodes"],
   ["episodes_fts", "rowid", "episodes"],
+  ["vec_source_chunks", "chunk_id", "source_chunks"],
+  ["sources_fts", "rowid", "source_chunks"],
 ];
 
 const toPublic = (row: SpaceRow): SpacePublic => ({ id: row.id, name: row.name, gamerTag: row.gamerTag });

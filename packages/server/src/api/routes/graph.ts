@@ -64,6 +64,27 @@ export function graphRoutes(ctx: AppContext): Router {
   r.get("/export", (_req, res) => {
     res.json(new GraphExportRepo(ctx.handle, spaceOf(res)).exportGraph());
   });
+  // POST /api/graph/restore -> rebuild a graph export (v2 with sources,
+  // or a pre-V1 v1 export) into this space (Verbatim V1 section 18.4.3).
+  // Hash mismatches abort with 422 and restore nothing.
+  r.post("/restore", (req, res) => {
+    const body = req.body as { nodes?: unknown; edges?: unknown } | undefined;
+    if (!body || !Array.isArray(body.nodes) || !Array.isArray(body.edges)) {
+      return res.status(400).json({ error: "body must be a graph export { nodes: [], edges: [], sources?: [] }" });
+    }
+    try {
+      const report = new GraphExportRepo(ctx.handle, spaceOf(res)).restoreGraph(
+        body as unknown as import("../../repositories/graphExport.repo.js").GraphExport,
+      );
+      return res.json({ ok: true, ...report });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("content_hash mismatch")) {
+        return res.status(422).json({ error: message });
+      }
+      return res.status(400).json({ error: message });
+    }
+  });
   // GET /api/graph/entity/:kind/:id -> GalaxyEntityDescriptor (Maya Intelligence Part I3:
   // "what's that star?"). One bounded, deterministic lookup per Galaxy body kind — no
   // embeddings/LLM call, so this is safe to hit on every click.

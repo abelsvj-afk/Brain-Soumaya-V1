@@ -4,6 +4,7 @@ import type { DbHandle } from "../db/client.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
 import { TelegramNoteDraftsRepo, type TelegramNoteDraft } from "../repositories/telegramNoteDrafts.repo.js";
+import { SourcesRepo, extractionHashOf } from "../repositories/sources.repo.js";
 import { linkCognitiveAnchor } from "../analysis/cognitive.js";
 
 /**
@@ -163,6 +164,17 @@ export async function saveTelegramNote(
 ): Promise<GraphNode> {
   const label = noteLabel(rawText);
   const embedding = await ctx.embeddings.embed(rawText);
+  // Verbatim V1 (evidence E1): the assembled draft text is already
+  // verbatim — persist it as a source (hash/chunks/provenance) BEFORE
+  // the node is created. A persistence failure throws here, so the
+  // caller's honest-failure path keeps the draft and claims nothing.
+  const sourcesRepo = new SourcesRepo(ctx.handle, spaceId);
+  const { source } = sourcesRepo.persistText({
+    kind: "telegram",
+    citationClass: "verbatim_typed",
+    text: rawText,
+    title: label,
+  });
   const nodesRepo = new NodesRepo(ctx.handle, spaceId);
   const node = nodesRepo.create(
     {
@@ -174,6 +186,13 @@ export async function saveTelegramNote(
     },
     embedding,
   );
+  // Direct (extraction-free) capture: link origin + terminate the
+  // processing state via claim/complete, like the action branch.
+  const owner = `telegram-note:${process.pid}:${Date.now()}`;
+  if (sourcesRepo.claim(source.id, owner)) {
+    sourcesRepo.linkNodeToAllChunks(node.id, source.id);
+    sourcesRepo.completeExtraction(source.id, owner, extractionHashOf([node]));
+  }
   ctx.handle.sqlite
     .prepare(`UPDATE nodes SET origin = 'telegram' WHERE id = ? AND space_id = ?`)
     .run(node.id, spaceId);

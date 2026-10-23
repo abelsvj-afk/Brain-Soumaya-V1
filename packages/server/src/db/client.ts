@@ -361,7 +361,7 @@ export function migrateTtsAudioCacheOwned(sqlite: RawDb): { migrated: boolean } 
  * (e.g. an existing volume on Fly). CREATE TABLE IF NOT EXISTS won't add new
  * columns, so we patch them in idempotently.
  */
-function migrateSchema(sqlite: RawDb): void {
+export function migrateSchema(sqlite: RawDb): void {
   const cols = sqlite.prepare(`PRAGMA table_info(nodes)`).all() as { name: string }[];
   if (!cols.some((c) => c.name === "importance")) {
     sqlite.exec(`ALTER TABLE nodes ADD COLUMN importance REAL`);
@@ -1137,9 +1137,6 @@ function migrateSchema(sqlite: RawDb): void {
       departed_at TEXT,
       arrived_at TEXT,
       ended_at TEXT,
-      bonus_credited_at TEXT,
-      bonus_amount REAL NOT NULL DEFAULT 0,
-      bonus_reason TEXT,
       UNIQUE (space_id, client_key)
     );
     CREATE INDEX IF NOT EXISTS idx_travel_journeys_space_created
@@ -1157,21 +1154,6 @@ function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS idx_travel_events_journey
       ON travel_journey_events(journey_id);
   `);
-
-  // P2-4 journey-bonus outcome columns on existing travel_journeys volumes
-  // (additive; the marker is the exactly-once crediting record).
-  const travelCols = sqlite.prepare(`PRAGMA table_info(travel_journeys)`).all() as { name: string }[];
-  if (travelCols.length > 0) {
-    if (!travelCols.some((c) => c.name === "bonus_credited_at")) {
-      sqlite.exec(`ALTER TABLE travel_journeys ADD COLUMN bonus_credited_at TEXT`);
-    }
-    if (!travelCols.some((c) => c.name === "bonus_amount")) {
-      sqlite.exec(`ALTER TABLE travel_journeys ADD COLUMN bonus_amount REAL NOT NULL DEFAULT 0`);
-    }
-    if (!travelCols.some((c) => c.name === "bonus_reason")) {
-      sqlite.exec(`ALTER TABLE travel_journeys ADD COLUMN bonus_reason TEXT`);
-    }
-  }
   // ADR-018 A3: rebuild tts_audio_cache to the space-owned shape (legacy
   // unowned rows purged; see migrateTtsAudioCacheOwned). Runs here rather
   // than as a plain CREATE because an existing legacy table must be
@@ -1394,6 +1376,84 @@ function migrateSchema(sqlite: RawDb): void {
       sqlite.exec(`UPDATE ${table} SET balance_applied_at = created_at WHERE balance_applied_at IS NULL`);
     }
   }
+
+  // Verbatim-Recall V1 Source Layer (design note Rev 1-3, sections
+  // 18.2-18.3). New tables via CREATE TABLE IF NOT EXISTS with DDL
+  // identical to BOOTSTRAP_SQL in db/schemaSql.ts (the W2 pattern) —
+  // a no-op on fresh volumes, the migration on legacy ones.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      citation_class TEXT NOT NULL DEFAULT 'verbatim_typed',
+      title TEXT,
+      raw_bytes BLOB NOT NULL,
+      raw_text TEXT,
+      encoding TEXT NOT NULL DEFAULT 'utf8',
+      content_hash TEXT NOT NULL,
+      byte_length INTEGER NOT NULL,
+      speaker TEXT NOT NULL DEFAULT 'owner',
+      occurred_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      idempotency_key TEXT,
+      audio_ref TEXT,
+      processing_status TEXT NOT NULL DEFAULT 'preserved',
+      processing_attempts INTEGER NOT NULL DEFAULT 0,
+      processing_lease_owner TEXT,
+      processing_lease_expires_at TEXT,
+      extraction_hash TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sources_space_occurred
+      ON sources(space_id, occurred_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_space_idempotency
+      ON sources(space_id, idempotency_key);
+    CREATE TABLE IF NOT EXISTS source_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      ordinal INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      start_ms INTEGER,
+      end_ms INTEGER,
+      indexed_vec INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_chunks_space_source_ordinal
+      ON source_chunks(space_id, source_id, ordinal);
+    CREATE TABLE IF NOT EXISTS node_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      chunk_id INTEGER,
+      role TEXT NOT NULL DEFAULT 'origin',
+      active INTEGER NOT NULL DEFAULT 1,
+      superseded_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (node_id, chunk_id, role)
+    );
+    CREATE INDEX IF NOT EXISTS idx_node_sources_node
+      ON node_sources(node_id, active);
+    CREATE INDEX IF NOT EXISTS idx_node_sources_source
+      ON node_sources(source_id, active);
+    CREATE TABLE IF NOT EXISTS source_corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      chunk_id INTEGER,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      corrected_text TEXT NOT NULL,
+      reason TEXT,
+      corrected_by TEXT,
+      seq INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (source_id, seq)
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(text);
+  `);
 }
 
 /**
