@@ -208,6 +208,38 @@ export interface Fuel {
   warpCost: number;
 }
 
+/** How a travel journey moves (Worlds travel, Phase 2). */
+export type TravelKind = "warp" | "drift";
+
+/** Lifecycle of one travel journey, as recorded by the server's ledger. */
+export type TravelJourneyState =
+  | "arming"
+  | "in_transit"
+  | "returning"
+  | "arrived"
+  | "returned"
+  | "cancelled";
+
+/** One journey between worlds, as the server reports it (P2-2). */
+export interface TravelJourney {
+  id: string;
+  kind: TravelKind;
+  /** World key the journey started from — always server-derived. */
+  origin: string;
+  /** World key the journey is headed to. */
+  destination: string;
+  state: TravelJourneyState;
+  /** Fuel actually debited (0 until the cancel window closes; always 0 for drift). */
+  fuelCharged: number;
+  /** True while the journey can still be cancelled free of charge. */
+  cancellable: boolean;
+  createdAt: string;
+  cancelDeadline: string;
+  departedAt?: string;
+  arrivedAt?: string;
+  endedAt?: string;
+}
+
 /** Daily-tending streak — consecutive days the brain was fed a memory. */
 export interface Streak {
   /** Current live streak in days (0 if it has lapsed). */

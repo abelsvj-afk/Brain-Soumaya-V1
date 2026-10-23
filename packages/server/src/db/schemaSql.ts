@@ -1059,4 +1059,44 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
       ON notification_cap_claims(space_id, local_day, state, cap_exempt);
+
+    -- Worlds travel (Phase 2, P2-2): the travel journey ledger. Events are
+    -- append-only — every state transition writes exactly one, in the same
+    -- transaction as the transition. The current world is DERIVED from
+    -- travel_journeys, never stored as a pointer. (The older journeys
+    -- tables are life chapters — unrelated.) Identical DDL also runs in
+    -- db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS travel_journeys (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      client_key TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('warp','drift')),
+      origin TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('arming','in_transit','returning','arrived','returned','cancelled')),
+      fuel_charged REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      cancel_deadline TEXT NOT NULL,
+      departed_at TEXT,
+      arrived_at TEXT,
+      ended_at TEXT,
+      UNIQUE (space_id, client_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_travel_journeys_space_created
+      ON travel_journeys(space_id, created_at);
+    -- At most one ACTIVE journey per space, enforced by the database itself:
+    -- the (space_id, client_key) uniqueness stops duplicate keys, this stops
+    -- competing journeys under different keys.
+    CREATE UNIQUE INDEX IF NOT EXISTS travel_journeys_one_active
+      ON travel_journeys (space_id) WHERE state IN ('arming','in_transit','returning');
+    CREATE TABLE IF NOT EXISTS travel_journey_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      journey_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      type TEXT NOT NULL CHECK (type IN ('departure_armed','departed','cancelled','turned_back','arrived','returned')),
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_travel_events_journey
+      ON travel_journey_events(journey_id);
 `;

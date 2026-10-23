@@ -1,4 +1,4 @@
-import type { Fuel } from "@brain/shared";
+import type { Fuel, TravelKind } from "@brain/shared";
 import type { DbHandle } from "./db/client.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
 
@@ -148,7 +148,11 @@ export class EconomyRepo {
  * journey: `journeyId` is the idempotency key, so a retried arrival returns
  * the original outcome instead of paying twice (reward honesty).
  */
-export type JourneyKind = "warp" | "drift";
+/** The travel-kind vocabulary lives in `@brain/shared` (one definition,
+ *  shared with the P2-2 travel ledger); this alias keeps the bonus
+ *  contract's original spelling. A travel journey's id is what
+ *  `creditJourneyBonus` will receive as its `journeyId`. */
+export type JourneyKind = TravelKind;
 
 export interface JourneyBonusResult {
   /** True when this call is the one that credited the bonus. */
