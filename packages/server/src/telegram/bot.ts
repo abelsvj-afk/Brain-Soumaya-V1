@@ -28,6 +28,8 @@ import {
 import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand } from "./notes.js";
 import { chunkTelegramText } from "./chunking.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
+import type { DbHandle } from "../db/client.js";
+import { AmbiguousSendError, NoRecipientsError } from "../agent/notify/sendErrors.js";
 
 /**
  * Talk to your Soumaya brain from Telegram. This deployment hosts many private
@@ -54,17 +56,76 @@ export interface TelegramUpdate {
 /** Injected sender so tests run with no network. */
 export type Send = (chatId: number, text: string) => Promise<void>;
 
-/** Send a text message to a chat (real network). Best-effort — never throws. */
+/**
+ * Send a text message to a chat (real network). Reports the outcome
+ * honestly (Batch A, RE-01) — classification (see notify/sendErrors.ts):
+ * - resolves: Telegram accepted the message.
+ * - throws a plain Error: a response WAS received and it refused the
+ *   send (HTTP error status, or a body with ok:false) — a definite
+ *   failure, safe to retry.
+ * - throws AmbiguousSendError: no response came back (network failure /
+ *   timeout), so Telegram may or may not have received it — never a
+ *   clean success, never a definite failure.
+ */
 export async function tgSend(token: string, chatId: number, text: string): Promise<void> {
+  let res: Response;
   try {
-    await fetch(`${TG_API}/bot${token}/sendMessage`, {
+    res = await fetch(`${TG_API}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
     });
   } catch (err) {
-    console.error("[telegram] send failed:", err);
+    throw new AmbiguousSendError("Telegram send outcome unknown: no response received", { cause: err });
   }
+  if (!res.ok) {
+    throw new Error(`Telegram send failed: HTTP ${res.status}`);
+  }
+  // Telegram can answer HTTP 200 with an ok:false body — that is still a
+  // refusal (a response was received, so the failure is definite).
+  try {
+    const body = (await res.json()) as { ok?: boolean; description?: string };
+    if (body && body.ok === false) {
+      throw new Error(`Telegram send failed: ${body.description ?? "ok:false"}`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Telegram send failed")) throw err;
+    // An unparseable body on an HTTP-OK response does not turn an
+    // accepted send into a failure.
+  }
+}
+
+/**
+ * The production raw sender the notification boundary wraps (index.ts):
+ * deliver one proactive message to every chat linked to a space.
+ * - No linked chat → NoRecipientsError (a known non-delivery to nobody).
+ * - Every linked chat is attempted, even when one fails.
+ * - Any definite refusal → a definite throw (wins over ambiguity: at
+ *   least one recipient provably did not receive it).
+ * - Otherwise any no-response failure → AmbiguousSendError.
+ */
+export function createTelegramSpaceSender(
+  handle: DbHandle,
+  token: string,
+): (spaceId: string, text: string) => Promise<void> {
+  return async (spaceId: string, text: string) => {
+    const links = new TelegramLinksRepo(handle).all().filter((l) => l.spaceId === spaceId);
+    if (links.length === 0) {
+      throw new NoRecipientsError("no linked chats for this space");
+    }
+    let definite: Error | null = null;
+    let ambiguous: AmbiguousSendError | null = null;
+    for (const l of links) {
+      try {
+        await tgSend(token, l.chatId, text);
+      } catch (err) {
+        if (err instanceof AmbiguousSendError) ambiguous ??= err;
+        else definite ??= err instanceof Error ? err : new Error(String(err));
+      }
+    }
+    if (definite) throw definite;
+    if (ambiguous) throw ambiguous;
+  };
 }
 
 /**
@@ -129,11 +190,11 @@ const HELP =
   "Then, any time:\n" +
   "• Send me anything and I'll answer from your memories (with what I drew on).\n" +
   "• /log <thought> — save a new memory; I'll tell you what landed.\n" +
-  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it.\n" +
+  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it. A draft left untouched for 24 hours is discarded.\n" +
   "• /digest — get today's digest now (I also send it once a day on my own).\n" +
   "• /digest 07:00 — change when the daily digest arrives.\n" +
   "• /quiet 21:00 04:30 — set quiet hours (I won't ping you then unless it's urgent).\n" +
-  "• /cap 5 — max proactive pings per day (urgent ones don't count).\n" +
+  "• /cap 5 — max proactive pings per day (urgent ones don't count; your daily digest is scheduled separately and doesn't count against the cap).\n" +
   "• /tz America/Chicago — set your timezone for quiet hours + digest.\n" +
   "• /settings — show your current notification settings.\n" +
   "• /voice on — hear my replies as voice notes (when voice is enabled on the server); /voice off — back to text.\n" +
@@ -409,7 +470,15 @@ export async function handleTelegramUpdate(
       await send(chatId, r.ok ? `Digest time set to ${arg}.` : `Couldn't set that: ${r.error}`);
       return;
     }
-    const digest = buildDailyDigest(ctx.handle, spaceId);
+    let digest;
+    try {
+      digest = buildDailyDigest(ctx.handle, spaceId);
+    } catch (err) {
+      // TG-06: a user-initiated command never ends in silence.
+      console.error("[telegram] /digest failed:", err);
+      await send(chatId, "I couldn't put your digest together just now — please try again in a moment.");
+      return;
+    }
     await send(chatId, formatDigest(digest, link.spaceName));
     // W2 §5.1: on-demand digest delivery is also a digest_sent episode.
     void Promise.resolve()
@@ -449,11 +518,16 @@ export async function handleTelegramUpdate(
   if (text.startsWith("/cap")) {
     const m = /^\/cap\s+(\S+)\s*$/.exec(text);
     if (!m) {
-      await send(chatId, "Usage: /cap <number> — e.g. /cap 5 (max proactive pings per day)");
+      await send(chatId, "Usage: /cap <number> — e.g. /cap 5 (max proactive pings per day; your daily digest doesn't count against it)");
       return;
     }
     const r = setPreference(ctx.handle.sqlite, spaceId, "dailyProactiveCap", m[1]!);
-    await send(chatId, r.ok ? `Daily cap set to ${m[1]}.` : `Couldn't set that: ${r.error}`);
+    await send(
+      chatId,
+      r.ok
+        ? `Daily cap set to ${m[1]}. Your scheduled daily digest is separate — it doesn't count against this cap.`
+        : `Couldn't set that: ${r.error}`,
+    );
     return;
   }
 
@@ -476,7 +550,7 @@ export async function handleTelegramUpdate(
         `• Timezone: ${p.timezone}\n` +
         `• Quiet hours: ${p.quietStart}–${p.quietEnd}\n` +
         `• Digest time: ${p.digestTime}\n` +
-        `• Daily cap: ${p.dailyProactiveCap} proactive pings (urgent bypasses)`
+        `• Daily cap: ${p.dailyProactiveCap} proactive pings (urgent bypasses; your daily digest is separate and doesn't count)`
     );
     return;
   }
@@ -491,13 +565,23 @@ export async function handleTelegramUpdate(
     return;
   }
 
-  if (text.startsWith("/log")) {
+  // TG-05: only the real /log command token (followed by whitespace or
+  // end-of-string) saves a memory — "/logistics …" is an ordinary message.
+  if (text === "/log" || /^\/log\s/.test(text)) {
     const body = text.slice("/log".length).trim();
     if (!body) {
       await send(chatId, "Add the memory after /log — e.g. /log call mom on Sunday");
       return;
     }
-    const result = await ingestWithContext(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, ctx, body, spaceId);
+    let result;
+    try {
+      result = await ingestWithContext(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, ctx, body, spaceId);
+    } catch (err) {
+      // TG-06: a user-initiated command never ends in silence.
+      console.error("[telegram] /log ingest failed:", err);
+      await send(chatId, "I couldn't save that just now — nothing was logged. Please try again in a moment.");
+      return;
+    }
     const linkCount = result.associativeEdges.length;
     // A /log while her daily question is pending counts as answering it —
     // otherwise the same question rode every digest forever for Telegram-first
@@ -623,6 +707,10 @@ export async function sendDailyDigests(ctx: AppContext, send: Send): Promise<num
       if (contact.question && !contact.answered) {
         msg += `\n\n🪞 One thing I want to understand better:\n${contact.question.text}\n(Reply with /log — it becomes a memory and answers me.)`;
       }
+      // RE-01: the injected sender now throws on refusal / unknown
+      // outcome, so reaching this line means the digest was accepted —
+      // only then is it marked sent (a throw lands in the catch below
+      // and the digest stays unmarked, so a later sweep retries it).
       await send(link.chatId, msg);
       // W2 §5.1: digest delivered — capture after delivery, best-effort.
       void Promise.resolve()

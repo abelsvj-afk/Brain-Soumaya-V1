@@ -1,8 +1,7 @@
 import { buildContext } from "./context.js";
 import { createApp } from "./api/server.js";
 import { NodesRepo } from "./repositories/nodes.repo.js";
-import { setTelegramWebhook, sendDailyDigests, tgSend } from "./telegram/bot.js";
-import { TelegramLinksRepo } from "./telegram/links.js";
+import { setTelegramWebhook, sendDailyDigests, tgSend, createTelegramSpaceSender } from "./telegram/bot.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
 import { sweepPendingPushes } from "./push/outbox.js";
@@ -157,11 +156,12 @@ setInterval(() => {
       // Phase 2: all proactive sends go through the notification policy boundary.
       // Tools pass metadata; the policy decides send-now vs queue vs drop, and the
       // outbox sweeper below delivers deferred items. Raw send is Telegram-only.
+      // Batch A (RE-01/RE-02): the raw sender classifies outcomes —
+      // a refused send throws (definite), a no-response send throws
+      // ambiguous, and a space with no linked chat throws
+      // NoRecipientsError — so the boundary records delivery honestly.
       const rawSend = tgToken
-        ? async (spaceId: string, text: string) => {
-            const links = new TelegramLinksRepo(ctx.handle).all().filter((l) => l.spaceId === spaceId);
-            for (const l of links) await tgSend(tgToken, l.chatId, text);
-          }
+        ? createTelegramSpaceSender(ctx.handle, tgToken)
         : async (_spaceId: string, _text: string) => {};
       const policyNotify = createPolicyNotify({
         sqlite: ctx.handle.sqlite,
