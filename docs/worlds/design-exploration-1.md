@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 38 — **Review 17 closes the P3 diagnosis loop** (record: `chatgpt-review-17-2026-10-22.md`): the reviewer fetched the Rev 37 commit — diagnosis credible (plausible, not proven), fixes correctly aimed, no new blocking defect; **one qualification recorded as an open evidence item: Rev 37's on-device cold load is unmeasured** (the 568 ms figure predates the warm-up). The D-28 scope is preserved exactly — outstanding Station evidence stays outstanding; Station acceptance remains **UNRESOLVED**; the sequence now advances to the Growing Place mockup under D-28, which is not proof the Station passed. **Design gate: OPEN; V6 still the owner's.**
+**Revision:** 39 — **Growing Place mockup BUILT + smoke-verified** (record: `mockup-result-growing-place.md`; scene at `docs/worlds/mockups/growing-place/`, both three.js files vendored from the start): terraced dawn garden + witness tree, 300 instanced trees, **A6 landmark rising** (staged fixture arch) + **A7 connection forming** + the full **A1–A3 placement chain** (atomic; turn-back holds placement). Sandbox smoke: placement **PASS**, A6/A7 complete, return-home **PASS** at zero fuel, zero page errors; diagnostic peak 30 calls / 19,480 tris (non-evidence). Cancel + zero-fuel-refusal checks not reached in the sandbox run (driver sequencing — a drift was still in flight) and remain on the device script (`phone-run-sheet-growing-place.md`). Sandbox frames suggest the dawn reads weakly in a software renderer — flagged for the device visual review, not chased blind. **All §11 criteria UNRESOLVED pending the owner's phone session; Deep Past still gated. Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -826,4 +826,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 38. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 39. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*

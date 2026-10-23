@@ -65,7 +65,7 @@ After each mockup: push its result record, update this brief's status table (§9
 | Mockup | State | Record |
 |---|---|---|
 | 1 — Great Station (approach + D-13 evidence) | 🟡 **Device session 1 graded:** P1/P2/P4/P5/P7 ✅ (99.3 avg · 59.5 low · peak 16 calls · peak 27,284 tris · 568 ms cold load); **P3 ❌ 108.7 ms single frame → diagnosed (§2c: first-compile at the handoff + per-frame allocations) → fixed (warm-up at load, hoisted objects, longest-frame context) → re-test WAIVED by the owner (D-28)** after the review loop; behavior PASS on device (cancel, turn-back ×2, return-home, A1). Stills/recording/soak/RM block/environment record still outstanding on the record; **V6 = owner's later call** | `mockup-result-station.md` §2b/§2c/§3 |
-| 2 — Growing Place (the rising) | ⬜ Blocked on Mockup 1 PASS | — |
+| 2 — Growing Place (the rising) | 🟡 **Built under D-28** (advanced on the Station's diagnosis/fix/review path — not a Station pass) — scene at `docs/worlds/mockups/growing-place/`; sandbox smoke: **placement (A3) PASS, A6/A7 complete, return-home PASS, zero errors**; cancel + zero-fuel-refusal checks pending (device script); §11 verdict awaits the owner's phone session — UNRESOLVED, no PASS claimed | `mockup-result-growing-place.md` · `phone-run-sheet-growing-place.md` |
 | 3 — Deep Past (the descent; A1–A3, A21/A22) | ⬜ Blocked on Mockup 2 PASS | — |
 
 *Brief ends. The design gate remains OPEN throughout Phase 1; it closes only when the results are reviewed and the owner explicitly closes it (D-27).*

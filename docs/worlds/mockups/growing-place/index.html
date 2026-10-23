@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Growing Place — landmark rising mockup (FIXTURE)</title>
+<style>
+  html,body{margin:0;padding:0;background:#1a1420;overflow:hidden;font-family:system-ui,sans-serif}
+  #fixture{position:fixed;top:0;left:0;right:0;z-index:10;background:#5a2d16;color:#ffe9c9;
+    text-align:center;font-weight:700;letter-spacing:.08em;padding:6px 4px;font-size:13px}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+  #hud{position:fixed;top:34px;left:8px;z-index:9;background:rgba(16,12,18,.72);color:#f3e6cf;
+    border:1px solid rgba(255,205,140,.35);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.5;max-width:62vw}
+  #hud b{color:#ffd9a0}
+  #panel{position:fixed;left:8px;right:8px;bottom:8px;z-index:9;display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+    background:rgba(16,12,18,.72);border:1px solid rgba(255,205,140,.35);border-radius:10px;padding:8px}
+  #panel button{background:#2c2135;color:#ffe9c9;border:1px solid rgba(255,205,140,.5);border-radius:8px;
+    padding:9px 12px;font-size:13px;cursor:pointer}
+  #panel button:disabled{opacity:.45;cursor:default}
+  #panel label{color:#f3e6cf;font-size:13px}
+  #panel select{background:#2c2135;color:#ffe9c9;border:1px solid rgba(255,205,140,.5);border-radius:6px;padding:6px}
+  #measureOut{width:100%;color:#bfe8c8;font-size:11px;white-space:pre-wrap}
+  #behavOut{width:100%;font-size:11px;color:#ffd9a0;white-space:pre-wrap;max-height:26vh;overflow-y:auto}
+</style>
+<script type="importmap">{"imports":{"three":"./three.module.min.js"}}</script>
+</head>
+<body>
+<div id="fixture">FIXTURE — THROWAWAY MOCKUP · PHASE 1 · NOT THE PRODUCT</div>
+<div id="app"></div>
+<div id="hud">
+  <div><b>Growing Place</b> — landmark rising mockup</div>
+  <div>Seed: <span id="seedOut"></span></div>
+  <div>Stage: <b id="stageOut">far</b></div>
+  <div>FPS avg: <b id="fpsOut">—</b> · 1% low: <b id="lowOut">—</b></div>
+  <div>Draw calls (both passes): <b id="callsOut">—</b> · Tris: <b id="trisOut">—</b></div>
+  <div>Cold load: <b id="coldOut">—</b></div>
+  <div>Fixture fuel: <b id="fuelOut">100</b> · Cargo: <b id="cargoOut">none</b></div>
+  <div>Local time: <span id="clockOut">—</span></div>
+</div>
+<div id="panel">
+  <button data-stage="far">Far</button>
+  <button data-stage="mid">Handoff</button>
+  <button data-stage="near">Near / Plots</button>
+  <button id="warpBtn">Warp Far→Near</button>
+  <button id="driftBtn">Drift Far→Near</button>
+  <button id="shotBtn">Capture still</button>
+  <button id="measureBtn">Run measurement</button>
+  <label>Length
+    <select id="durSel">
+      <option value="60">60s (diagnostic)</option>
+      <option value="300" selected>300s (§11 session)</option>
+      <option value="900">900s (soak)</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="rmToggle"> Reduced motion</label>
+  <button id="cargoBtn">Load cargo (A1)</button>
+  <button id="placeBtn">Carry &amp; place at plot (A2–A3)</button>
+  <button id="growBtn">Grow landmark — fixture milestone (A6)</button>
+  <button id="trailBtn">Form connection (A7)</button>
+  <button id="cancelBtn">Cancel departure</button>
+  <button id="turnBtn">Turn back</button>
+  <button id="homeBtn">Return home (free)</button>
+  <button id="drainBtn">Drain fuel (test)</button>
+  <div id="measureOut"></div>
+  <div id="behavOut"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============ Seeded RNG (V4: every scatter derives from the one seed) ============ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function seedFromString(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+const SEED_LABEL = 'growing-place / terrace-1';
+const rand = mulberry32(seedFromString(SEED_LABEL));
+document.getElementById('seedOut').textContent = SEED_LABEL;
+
+/* ============ Renderer / scenes (dual-layer: dawn backdrop + garden) ============ */
+const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.autoReset = false; // counters accumulate BOTH passes per frame
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xe8a37c, 0.0016); // palette-matched dawn haze (recipe-fixed)
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+
+const bgScene = new THREE.Scene();
+const bgCamera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+bgCamera.position.set(0,0,0.001);
+
+/* ============ Helpers ============ */
+function glowTexture(inner, outer){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128,128,0,128,128,128);
+  gr.addColorStop(0, inner); gr.addColorStop(1, outer);
+  g.fillStyle = gr; g.fillRect(0,0,256,256);
+  const t = new THREE.CanvasTexture(c); return t;
+}
+const dummy = new THREE.Object3D(); // shared matrix composer (hoisted — no per-frame allocation)
+
+/* ============ Backdrop: dawn sky dome, low sun, silhouette ridges + hill ============ */
+{
+  const c = document.createElement('canvas'); c.width = 64; c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0,0,0,512);
+  gr.addColorStop(0.0,'#241b38'); gr.addColorStop(0.28,'#6b3a5e');
+  gr.addColorStop(0.48,'#c65f63'); gr.addColorStop(0.62,'#eda25e'); gr.addColorStop(0.72,'#f7c873'); gr.addColorStop(1.0,'#f7c873');
+  g.fillStyle = gr; g.fillRect(0,0,64,512);
+  const skyTex = new THREE.CanvasTexture(c);
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(1800, 24, 16),
+    new THREE.MeshBasicMaterial({map: skyTex, side: THREE.BackSide, fog:false}));
+  sky.position.y = -320; // lift the dawn band into the far-stage frame (builder adjustment from sandbox frames)
+  bgScene.add(sky);
+  const sunSpr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,230,170,1)','rgba(255,170,80,0)'), fog:false, depthWrite:false}));
+  sunSpr.position.set(-420, 120, -1500); sunSpr.scale.setScalar(620); bgScene.add(sunSpr);
+  const ridgeMat = new THREE.MeshBasicMaterial({color:0x2c2138, fog:false});
+  for(let i=0;i<3;i++){
+    const ridge = new THREE.Mesh(new THREE.ConeGeometry(900-i*180, 300-i*60, 7), ridgeMat);
+    ridge.position.set(-500+i*480, -40, -1250-i*120); bgScene.add(ridge);
+  }
+  // Silhouette hill + tree (impostor layer — the far-stage composition)
+  const impMat = new THREE.MeshBasicMaterial({color:0x1d1526, fog:false});
+  const impHill = new THREE.Mesh(new THREE.CylinderGeometry(46, 150, 34, 24), impMat);
+  impHill.position.set(0, 2, -1050); bgScene.add(impHill);
+  const impTrunk = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 6.5, 62, 8), impMat);
+  impTrunk.position.set(0, 44, -1050); bgScene.add(impTrunk);
+  const impCanopy = new THREE.Mesh(new THREE.IcosahedronGeometry(46, 1), impMat);
+  impCanopy.position.set(0, 92, -1050); impCanopy.scale.y = 0.72; bgScene.add(impCanopy);
+  bgScene.userData.impostor = [impHill, impTrunk, impCanopy];
+}
+
+/* ============ The garden: terraces climbing to the witness tree ============ */
+const garden = new THREE.Group(); scene.add(garden);
+const LEVELS = 5, BASE_R = 128, R_STEP = 19, H_STEP = 3.2;
+const levelY = i => i * H_STEP;
+const levelR = i => BASE_R - i * R_STEP;
+{
+  const greens = [0x3d6b35, 0x477a3a, 0x528741, 0x5d9247, 0x6b9c4e];
+  for(let i=0;i<LEVELS;i++){
+    const top = new THREE.Mesh(new THREE.CircleGeometry(levelR(i), 40),
+      new THREE.MeshLambertMaterial({color: greens[i]}));
+    top.rotation.x = -Math.PI/2; top.position.y = levelY(i); garden.add(top);
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(levelR(i), levelR(i)+7, H_STEP+0.4, 40, 1, true),
+      new THREE.MeshLambertMaterial({color: 0x2e4d2a}));
+    skirt.position.y = levelY(i) - H_STEP/2; garden.add(skirt);
+  }
+}
+/* Witness tree — must survive every fallback (recipe): trunk + canopy masses */
+const tree = new THREE.Group();
+{
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 7.5, 34, 10),
+    new THREE.MeshLambertMaterial({color: 0x5a4030}));
+  trunk.position.y = 17; tree.add(trunk);
+  const canopyMat = new THREE.MeshLambertMaterial({color: 0x74a24b, emissive: 0x1d2f10});
+  const blobs = [[0,42,0,26],[15,36,6,17],[-14,37,-5,16],[4,38,-14,15],[-5,39,13,14]];
+  for(const [x,y,z,r] of blobs){
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), canopyMat);
+    b.position.set(x,y,z); b.scale.y = 0.72; tree.add(b);
+  }
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,215,140,0.55)','rgba(255,180,90,0)'), depthWrite:false}));
+  halo.position.y = 40; halo.scale.setScalar(120); tree.add(halo);
+  tree.position.y = levelY(LEVELS-1); garden.add(tree);
+}
+/* Instanced vegetation — seeded scatter on the terraces (the recipe's named perf risk, instanced) */
+const VEG_N = 300;
+{
+  const trunkG = new THREE.CylinderGeometry(0.35, 0.55, 3.2, 5);
+  const canG = new THREE.IcosahedronGeometry(2.3, 0);
+  const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshLambertMaterial({color:0x54402e}), VEG_N);
+  const cans = new THREE.InstancedMesh(canG, new THREE.MeshLambertMaterial({color:0x5c8a42}), VEG_N);
+  for(let i=0;i<VEG_N;i++){
+    const lvl = Math.floor(rand()*LEVELS);
+    const ang = rand()*Math.PI*2;
+    const rr = (0.25 + rand()*0.68) * levelR(lvl);
+    const x = Math.cos(ang)*rr, z = Math.sin(ang)*rr, y = levelY(lvl);
+    const s = 0.7 + rand()*0.9;
+    dummy.position.set(x, y + 1.6*s, z); dummy.scale.setScalar(s); dummy.rotation.set(0, rand()*6.28, 0);
+    dummy.updateMatrix(); trunks.setMatrixAt(i, dummy.matrix);
+    dummy.position.y = y + (3.2 + 1.6)*s; dummy.updateMatrix(); cans.setMatrixAt(i, dummy.matrix);
+  }
+  garden.add(trunks); garden.add(cans);
+}
+/* Plots — resting ground until a memory rests there (kindness rule: never barren-looking) */
+function makePlot(x, y, z, tint){
+  const grp = new THREE.Group();
+  const bed = new THREE.Mesh(new THREE.CircleGeometry(6.5, 24),
+    new THREE.MeshBasicMaterial({color: tint}));
+  bed.rotation.x = -Math.PI/2; bed.position.y = 0.15; grp.add(bed);
+  const ringSpr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,220,150,0.8)','rgba(255,190,90,0)'), depthWrite:false}));
+  ringSpr.scale.setScalar(13); ringSpr.position.y = 1.2; grp.add(ringSpr);
+  grp.position.set(x, y, z); garden.add(grp);
+  return grp;
+}
+const plotA = makePlot(30, levelY(2), 40, 0x8a6a3a);   // placement target
+const plotB = makePlot(-38, levelY(2), 30, 0x74603a);  // connection partner (evidence plot)
+/* Gate + route (cyan = navigation truth only) */
+const gate = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 10, 40),
+  new THREE.MeshBasicMaterial({color: 0x7fe7ff}));
+gate.position.set(0, 8, 300); scene.add(gate);
+const routeMat = new THREE.LineBasicMaterial({color: 0x7fe7ff, transparent:true, opacity:0.65});
+{
+  const pts = [];
+  for(let i=0;i<=40;i++){ const k=i/40; pts.push(new THREE.Vector3(
+    THREE.MathUtils.lerp(0, 30, k), 6 + Math.sin(k*Math.PI)*10 + k*2, THREE.MathUtils.lerp(292, 44, k))); }
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), routeMat));
+}
+/* Ship */
+const ship = new THREE.Group();
+{
+  const hull = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6.5, 8),
+    new THREE.MeshLambertMaterial({color: 0xb9c4d6, emissive: 0x222a36}));
+  hull.rotation.x = Math.PI/2; ship.add(hull);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(160,240,255,0.9)','rgba(120,200,255,0)'), depthWrite:false}));
+  glow.scale.setScalar(7); glow.position.z = 3.4; ship.add(glow);
+}
+ship.position.set(0, 6, 292); scene.add(ship);
+/* Cargo orb (the fixture memory) */
+const ORB_OFF = new THREE.Vector3(0, 4.6, 0);
+const orb = new THREE.Mesh(new THREE.SphereGeometry(1.7, 18, 14),
+  new THREE.MeshBasicMaterial({color: 0xffd9a0}));
+orb.visible = false; orb.position.set(0, 6, 306); scene.add(orb);
+/* Landmark arch (A6) — form by kind: completion → arch. Starts resting in the ground. */
+const arch = new THREE.Group();
+{
+  const mat = new THREE.MeshLambertMaterial({color: 0xcbb491, emissive: 0x2a1f0d});
+  const p1 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 17, 2.6), mat); p1.position.set(-8, 8.5, 0);
+  const p2 = p1.clone(); p2.position.x = 8;
+  const topBar = new THREE.Mesh(new THREE.BoxGeometry(19.5, 3, 2.8), mat); topBar.position.y = 17.6;
+  arch.add(p1); arch.add(p2); arch.add(topBar);
+  const archGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,224,160,0.75)','rgba(255,190,90,0)'), depthWrite:false}));
+  archGlow.scale.setScalar(44); archGlow.position.y = 10; arch.add(archGlow);
+  arch.position.set(-16, levelY(3), -34);
+  arch.scale.y = 0.02; arch.visible = false; // grows when its moment comes; before that it simply isn't there — never rubble
+  garden.add(arch);
+}
+/* Connection trail (A7) — light orbs revealed along a curve between the plots */
+const TRAIL_N = 42;
+const trail = new THREE.InstancedMesh(new THREE.SphereGeometry(0.85, 10, 8),
+  new THREE.MeshBasicMaterial({color: 0xffe2a8}), TRAIL_N);
+trail.count = 0; scene.add(trail);
+const trailCurve = new THREE.QuadraticBezierCurve3(
+  new THREE.Vector3(30, levelY(2)+2.5, 40),
+  new THREE.Vector3(-4, levelY(2)+13, 52),
+  new THREE.Vector3(-38, levelY(2)+2.5, 30));
+/* Lights */
+scene.add(new THREE.AmbientLight(0xffd9b0, 1.15));
+const sunLight = new THREE.DirectionalLight(0xffc27d, 1.6);
+sunLight.position.set(-160, 90, -260); scene.add(sunLight);
+
+/* ============ Camera stages & travel (chassis shared with the Station mockup) ============ */
+const STAGES = {
+  far:  {pos: new THREE.Vector3(0, 66, 330),  look: new THREE.Vector3(0, 24, -60)},
+  mid:  {pos: new THREE.Vector3(52, 36, 175), look: new THREE.Vector3(0, 16, -10)},
+  near: {pos: new THREE.Vector3(38, 22, 128), look: new THREE.Vector3(2, 11, 2)},
+};
+let currentStage = 'far';
+let camAnim = null;
+let lastDeparture = null;
+let currentLook = STAGES.far.look.clone();
+camera.position.copy(STAGES.far.pos);
+const reducedMotion = () => document.getElementById('rmToggle').checked;
+let targetShipK = 0; // 0 = gate hover, 1 = plot hover, along the route curve
+const routeCurve = new THREE.QuadraticBezierCurve3(
+  new THREE.Vector3(0, 8, 292), new THREE.Vector3(12, 34, 180), new THREE.Vector3(30, 16, 52));
+
+function flyTo(stageName, mode, onDone, target){
+  const s = STAGES[stageName];
+  const tPos = target ? target.pos : s.pos;
+  const tLook = target ? target.look : s.look;
+  lastDeparture = {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage,
+                   cargo: {id: cargo.id, home: cargo.home, aboard: cargo.aboard, placed: cargo.placed}};
+  const dur = mode === 'warp' ? 2600 : mode === 'drift' ? 12000 : 1400;
+  targetShipK = stageName === 'near' ? 1 : stageName === 'mid' ? 0.5 : 0;
+  if(reducedMotion() || mode === 'cut'){
+    camera.position.copy(tPos); bgCamera.position.set(0,0,0.001);
+    camAnim = null; currentLook.copy(tLook);
+    shipK = targetShipK;
+    if(onDone) onDone();
+  } else {
+    camAnim = {t:0, dur, from: camera.position.clone(), to: tPos.clone(),
+               fromLook: currentLook.clone(), toLook: tLook.clone(), mode, onDone, toStage: stageName};
+  }
+  currentStage = stageName;
+  document.getElementById('stageOut').textContent = stageName + (mode ? ' ('+mode+')' : '');
+}
+
+/* ============ Fixture state: fuel + cargo (a memory with identity + home) ============ */
+const WARP_COST = 20;
+let fuel = 100;
+const cargo = {id: 'fixture-memory-01', home: 'fixture-home', aboard: false, placed: null};
+let cargoAnim = null, placeAnim = null, growAnim = null, trailAnim = null, pendingPlace = false;
+let shipK = 0;
+const behavOut = document.getElementById('behavOut');
+function behav(msg){ behavOut.textContent += (behavOut.textContent ? '\n' : '') + '• ' + msg; behavOut.scrollTop = behavOut.scrollHeight; }
+function setFuelOut(){ document.getElementById('fuelOut').textContent = fuel; }
+function setCargoOut(){
+  document.getElementById('cargoOut').textContent = cargo.aboard ? cargo.id + ' · home: ' + cargo.home + ' · aboard'
+    : cargo.placed ? cargo.id + ' · home: ' + cargo.home + ' · resting at ' + cargo.placed : 'none';
+}
+
+/* ============ HUD ============ */
+const clockFmt = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hour12:true});
+const frameTimes = [];
+let lastT = performance.now();
+function hud(now){
+  const dt = now - lastT; lastT = now;
+  frameTimes.push(dt); if(frameTimes.length > 600) frameTimes.shift();
+  const avg = frameTimes.reduce((a,b)=>a+b,0)/frameTimes.length;
+  const sorted = [...frameTimes].sort((a,b)=>b-a);
+  const low1 = sorted[Math.floor(sorted.length*0.01)] || avg;
+  document.getElementById('fpsOut').textContent = (1000/avg).toFixed(1);
+  document.getElementById('lowOut').textContent = (1000/low1).toFixed(1);
+  const info = renderer.info.render;
+  document.getElementById('callsOut').textContent = info.calls;
+  document.getElementById('trisOut').textContent = info.triangles.toLocaleString('en-US');
+  document.getElementById('clockOut').textContent = clockFmt.format(new Date()) + ' ET';
+}
+
+/* ============ Travel controls: armed-departure policy (only Cancel live) ============ */
+let departing = null; // {at, snap}
+function snapState(){ return {pos: camera.position.clone(), look: currentLook.clone(), fuel,
+                              camAnim: !!camAnim, aboard: cargo.aboard, placed: cargo.placed}; }
+function armedBlock(action){
+  if(!departing) return false;
+  behav(action + ' pressed during the cancel window — only Cancel departure is live; nothing changed.');
+  return true;
+}
+function busyBlock(action){
+  if(!placeAnim) return false;
+  behav(action + ' pressed while a placement is completing — placement is atomic and cannot be interrupted; nothing changed.');
+  return true;
+}
+document.querySelectorAll('[data-stage]').forEach(b => b.addEventListener('click', () => {
+  if(armedBlock('Stage ' + b.dataset.stage)) return;
+  if(busyBlock('Stage change')) return;
+  pendingPlace = false;
+  flyTo(b.dataset.stage, 'cut');
+}));
+function armWarp(){
+  if(departing){ behav('INCONCLUSIVE: a departure is already armed — re-arming refused.'); return; }
+  if(camAnim){ behav('INCONCLUSIVE: cannot arm a departure during an active transition — the cancel check would be invalid. Wait for the current flight to finish.'); return; }
+  if(fuel < WARP_COST){ behav('CHECK zero-fuel: warp refused at fuel ' + fuel + ' (needs ' + WARP_COST + '). Drift and Return home remain available.'); return; }
+  departing = {at: performance.now() + 1200, snap: snapState()};
+  behav('Warp departure armed — 1.2s cancel window open. Before-state captured for the cancel assertion.');
+}
+document.getElementById('warpBtn').addEventListener('click', armWarp);
+document.getElementById('driftBtn').addEventListener('click', () => {
+  if(armedBlock('Drift')) return;
+  if(busyBlock('Drift')) return;
+  pendingPlace = false;
+  flyTo(currentStage === 'near' ? 'far' : 'near', 'drift');
+  behav('Drift departure — the free gait (no fuel).');
+});
+document.getElementById('cancelBtn').addEventListener('click', () => {
+  if(!departing){ behav('Cancel pressed with no departure armed — nothing to cancel.'); return; }
+  const s = departing.snap; departing = null;
+  const posOk = camera.position.distanceTo(s.pos) < 0.01;
+  const lookOk = currentLook.distanceTo(s.look) < 0.01;
+  const fuelOk = fuel === s.fuel;
+  const cargoOk = cargo.aboard === s.aboard && cargo.placed === s.placed;
+  const idleOk = !camAnim && !s.camAnim;
+  const pass = posOk && lookOk && fuelOk && cargoOk && idleOk;
+  behav('CHECK cancel-before-departure: ' + (pass ? 'PASS' : 'FAIL') +
+    ' — camera unmoved: ' + posOk + ' · look unchanged: ' + lookOk +
+    ' · no fuel spent: ' + fuelOk + ' (fuel ' + fuel + ')' +
+    ' · cargo state unchanged: ' + cargoOk + ' · no transition was running: ' + idleOk + '.');
+});
+document.getElementById('turnBtn').addEventListener('click', () => {
+  if(armedBlock('Turn back')) return;
+  if(busyBlock('Turn back')) return;
+  if(!camAnim || !lastDeparture){ behav('Turn back pressed while not in transit — no-op.'); return; }
+  const origin = lastDeparture;
+  if(pendingPlace){ pendingPlace = false; behav('Placement held — cargo remains aboard; nothing was half-placed.'); }
+  camAnim = null;
+  flyTo(origin.stage, 'drift', () => {
+    const posOk = camera.position.distanceTo(origin.pos) < 0.5;
+    const lookOk = currentLook.distanceTo(origin.look) < 0.5;
+    const idOk = cargo.id === origin.cargo.id && cargo.home === origin.cargo.home;
+    const aboardOk = cargo.aboard === origin.cargo.aboard && cargo.placed === origin.cargo.placed;
+    const pass = posOk && lookOk && idOk && aboardOk;
+    behav('CHECK turn-back: ' + (pass ? 'PASS' : 'FAIL') +
+      ' — back at origin pose: ' + (posOk && lookOk) +
+      ' · cargo identity/home match the pre-transit snapshot: ' + idOk + ' (' + cargo.id + ' / ' + cargo.home + ')' +
+      ' · cargo state preserved: ' + aboardOk + '.');
+  }, {pos: origin.pos, look: origin.look});
+  behav('Turning back mid-transit…');
+});
+document.getElementById('homeBtn').addEventListener('click', () => {
+  if(armedBlock('Return home')) return;
+  if(busyBlock('Return home')) return;
+  pendingPlace = false;
+  const before = fuel;
+  flyTo('far', 'drift', () => {
+    const fuelOk = fuel === before;
+    const posOk = camera.position.distanceTo(STAGES.far.pos) < 0.5;
+    behav('CHECK return-home: ' + ((fuelOk && posOk) ? 'PASS' : 'FAIL') +
+      ' — arrived at home pose: ' + posOk + ' · fuel unchanged: ' + fuelOk + ' (' + fuel + '). Return is always free, even at zero fuel.');
+  });
+});
+document.getElementById('drainBtn').addEventListener('click', () => {
+  if(armedBlock('Drain fuel')) return;
+  fuel = 0; setFuelOut();
+  behav('Fixture fuel drained to 0 for the zero-fuel checks — try Warp (refused), then Return home (works, free).');
+});
+
+/* ============ A1: carry the fixture memory aboard ============ */
+document.getElementById('cargoBtn').addEventListener('click', () => {
+  if(armedBlock('Load cargo')) return;
+  if(busyBlock('Load cargo')) return;
+  if(cargo.aboard){ behav('Cargo already aboard.'); return; }
+  if(cargo.placed){ behav('Cargo already resting at ' + cargo.placed + ' — it stays there.'); return; }
+  cargoAnim = {t: 0, from: new THREE.Vector3(0, 6, 306)};
+  orb.visible = true; orb.position.copy(cargoAnim.from);
+  behav('A1 carry started — ship taking fixture cargo aboard at the gate.');
+});
+
+/* ============ A2–A3: carry to the plot and place it (atomic) ============ */
+document.getElementById('placeBtn').addEventListener('click', () => {
+  if(armedBlock('Place cargo')) return;
+  if(busyBlock('Place cargo')) return;
+  if(!cargo.aboard){ behav('Place pressed with no cargo aboard — load cargo first (A1).'); return; }
+  if(camAnim){ behav('Place pressed during a transition — wait for the flight to finish.'); return; }
+  pendingPlace = true;
+  behav('A2 transit — carrying the fixture memory to its plot, visible aboard the ship.');
+  flyTo('near', 'drift', () => {
+    if(!pendingPlace) return; // turned back en route — placement held, cargo still aboard
+    pendingPlace = false;
+    const target = new THREE.Vector3(30, levelY(2) + 2.4, 40);
+    placeAnim = {t: 0, dur: 2600, from: orb.position.clone(), to: target,
+                 snap: {id: cargo.id, home: cargo.home}};
+    behav('A3 placement — the memory settles into its plot.');
+  });
+});
+
+/* ============ A6: the landmark rises (staged fixture milestone) ============ */
+let archGrown = false;
+document.getElementById('growBtn').addEventListener('click', () => {
+  if(armedBlock('Grow landmark')) return;
+  if(archGrown){ behav('The fixture arch already stands.'); return; }
+  archGrown = true;
+  behav('A6 landmark rising — STAGED fixture milestone (form by kind: completion → arch). No real milestone is claimed; this is a fixture.');
+  if(reducedMotion()){
+    arch.visible = true; arch.scale.y = 1;
+    behav('A6 complete (reduced motion: shown standing, no rising motion). The arch stands.');
+  } else {
+    arch.visible = true; growAnim = {t: 0, dur: 6000};
+  }
+});
+
+/* ============ A7: a connection forms between the plots ============ */
+let trailFormed = false;
+document.getElementById('trailBtn').addEventListener('click', () => {
+  if(armedBlock('Form connection')) return;
+  if(trailFormed){ behav('The fixture connection already shines.'); return; }
+  trailFormed = true;
+  behav('A7 connection forming — a trail of light between the plots' +
+        (cargo.placed ? ' (from the placed memory\u2019s plot)' : ' (fixture plots)') + '.');
+  if(reducedMotion()){
+    trail.count = TRAIL_N;
+    for(let i=0;i<TRAIL_N;i++){ dummy.position.copy(trailCurve.getPoint(i/(TRAIL_N-1))); dummy.scale.setScalar(1); dummy.rotation.set(0,0,0); dummy.updateMatrix(); trail.setMatrixAt(i, dummy.matrix); }
+    trail.instanceMatrix.needsUpdate = true;
+    behav('A7 complete (reduced motion: shown whole).');
+  } else {
+    trailAnim = {t: 0, dur: 4000};
+  }
+});
+
+/* ============ Capture still ============ */
+let coldLoadMs = null;
+document.getElementById('shotBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = 'growing-' + currentStage + '.png';
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});
+
+/* ============ Measurement harness (300s = §11 session, 900s = soak, 60s diagnostic) ============ */
+let measurePeaks = null;
+document.getElementById('measureBtn').addEventListener('click', () => {
+  const out = document.getElementById('measureOut');
+  const durS = parseInt(document.getElementById('durSel').value, 10);
+  measurePeaks = {calls: 0, tris: 0};
+  out.textContent = 'Measuring ' + durS + 's — keep this tab in front, fly around (include a warp and the approach)…';
+  const samples = [];
+  let prev = performance.now();
+  const t0 = prev;
+  let maxCtx = null;
+  function sample(now){
+    const dt = now - prev; prev = now;
+    samples.push(dt);
+    if(!maxCtx || dt > maxCtx.ms) maxCtx = {ms: dt, atS: ((now - t0)/1000).toFixed(1),
+      stage: currentStage, mode: camAnim ? camAnim.mode : (departing ? 'arming departure' : 'no transition')};
+    if(now - t0 < durS*1000){ requestAnimationFrame(sample); return; }
+    const sorted = [...samples].sort((a,b)=>a-b);
+    const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
+    const low1ms = sorted[Math.floor(sorted.length*0.99)];
+    const maxMs = sorted[sorted.length-1];
+    const info = renderer.info.render;
+    out.textContent =
+      'MEASUREMENT (this device — the §11 verdict requires the owner\u2019s phone)\n' +
+      'duration: ' + durS + 's' + (durS >= 300 ? ' (§11 session length)' : ' (DIAGNOSTIC ONLY — below §11 session length)') +
+      ' · cold load: ' + coldLoadMs + 'ms' +
+      ' · frames: ' + samples.length +
+      ' · fps avg: ' + (1000/avg).toFixed(1) +
+      ' · 1% low fps: ' + (1000/low1ms).toFixed(1) +
+      ' · longest frame: ' + maxMs.toFixed(1) + 'ms' +
+      (maxCtx ? ' (at ~' + maxCtx.atS + 's in · stage ' + maxCtx.stage + ' · ' + maxCtx.mode + ')' : '') +
+      ' · draw calls PEAK (both passes): ' + (measurePeaks ? measurePeaks.calls : info.calls) +
+      ' · triangles PEAK: ' + (measurePeaks ? measurePeaks.tris : info.triangles) +
+      ' · final-frame calls/tris: ' + info.calls + '/' + info.triangles +
+      ' · devicePixelRatio: ' + renderer.getPixelRatio() +
+      ' · viewport: ' + innerWidth + 'x' + innerHeight;
+    measurePeaks = null;
+  }
+  requestAnimationFrame(sample);
+});
+
+/* ============ Main loop (measured elapsed time drives all animation) ============ */
+const clock = new THREE.Clock();
+let lastTickMs = null;
+function tick(){
+  requestAnimationFrame(tick);
+  const t = clock.getElapsedTime();
+  const nowMs = performance.now();
+  const dtMs = lastTickMs === null ? 16.7 : Math.min(100, nowMs - lastTickMs);
+  lastTickMs = nowMs;
+  const rm = reducedMotion();
+
+  if(camAnim){
+    camAnim.t += dtMs;
+    const k = Math.min(1, camAnim.t / camAnim.dur);
+    const e = camAnim.mode === 'warp' ? (k<0.5 ? 4*k*k*k : 1-Math.pow(-2*k+2,3)/2) : (1-Math.cos(Math.PI*k))/2;
+    camera.position.lerpVectors(camAnim.from, camAnim.to, e);
+    currentLook.lerpVectors(camAnim.fromLook, camAnim.toLook, e);
+    if(k >= 1){ const cb = camAnim.onDone; camAnim = null; if(cb) cb(); }
+  }
+  camera.lookAt(currentLook);
+  bgCamera.quaternion.copy(camera.quaternion);
+
+  // Ship rides the route toward its hover target; gentle bob unless reduced motion
+  shipK += THREE.MathUtils.clamp(targetShipK - shipK, -dtMs/9000, dtMs/9000);
+  ship.position.copy(routeCurve.getPoint(THREE.MathUtils.clamp(shipK, 0, 1)));
+  if(!rm) ship.position.y += Math.sin(t*0.7)*0.5;
+
+  // Departure countdown (cancel window) for warp
+  if(departing && performance.now() >= departing.at){
+    departing = null;
+    fuel = Math.max(0, fuel - WARP_COST); setFuelOut(); // fuel floor: never below 0
+    pendingPlace = false;
+    flyTo('near', 'warp');
+    behav('Warp departed — fixture fuel spent: ' + WARP_COST + '.');
+  }
+
+  // A1 carry animation
+  if(cargoAnim){
+    cargoAnim.t += dtMs;
+    const k = Math.min(1, cargoAnim.t/1200);
+    const e = (1-Math.cos(Math.PI*k))/2;
+    orb.position.lerpVectors(cargoAnim.from, ship.position.clone().add(ORB_OFF), e);
+    if(k >= 1){ cargoAnim = null; cargo.aboard = true; setCargoOut(); behav('A1 carry complete — cargo aboard, identity unchanged.'); }
+  }
+  if(cargo.aboard && !placeAnim) orb.position.copy(ship.position).add(ORB_OFF);
+
+  // A3 placement descent (atomic: completes whole or not at all)
+  if(placeAnim){
+    placeAnim.t += dtMs;
+    const k = Math.min(1, placeAnim.t / placeAnim.dur);
+    const e = (1-Math.cos(Math.PI*k))/2;
+    orb.position.lerpVectors(placeAnim.from, placeAnim.to, e);
+    if(k >= 1){
+      const s = placeAnim.snap; placeAnim = null;
+      cargo.aboard = false; cargo.placed = 'plot-terrace-1'; setCargoOut();
+      const atOk = orb.position.distanceTo(new THREE.Vector3(30, levelY(2) + 2.4, 40)) < 1.0;
+      const idOk = cargo.id === s.id && cargo.home === s.home;
+      behav('CHECK placement (A3): ' + ((atOk && idOk) ? 'PASS' : 'FAIL') +
+        ' — memory resting at its plot: ' + atOk + ' · identity/home unchanged: ' + idOk +
+        ' (' + cargo.id + ' / ' + cargo.home + ') · placed atomically, never half-placed.');
+    }
+  }
+
+  // A6 rising
+  if(growAnim){
+    growAnim.t += dtMs;
+    const k = Math.min(1, growAnim.t / growAnim.dur);
+    const e = 1 - Math.pow(1-k, 3);
+    arch.scale.y = 0.02 + 0.98*e;
+    if(k >= 1){ growAnim = null; behav('A6 complete — the arch stands over the terrace.'); }
+  }
+
+  // A7 trail forming
+  if(trailAnim){
+    trailAnim.t += dtMs;
+    const k = Math.min(1, trailAnim.t / trailAnim.dur);
+    const n = Math.floor(k * TRAIL_N);
+    trail.count = n;
+    for(let i=0;i<n;i++){
+      dummy.position.copy(trailCurve.getPoint(i/(TRAIL_N-1)));
+      dummy.position.y += Math.sin(t*1.4 + i*0.55)*0.35;
+      dummy.scale.setScalar(1); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+      trail.setMatrixAt(i, dummy.matrix);
+    }
+    trail.instanceMatrix.needsUpdate = true;
+    if(k >= 1){ trailAnim = null; behav('A7 complete — the connection shines between the plots.'); }
+  }
+
+  renderer.info.reset(); // counters accumulate BOTH passes this frame
+  renderer.clear();
+  renderer.render(bgScene, bgCamera);
+  renderer.clearDepth();
+  renderer.render(scene, camera);
+  if(measurePeaks){
+    measurePeaks.calls = Math.max(measurePeaks.calls, renderer.info.render.calls);
+    measurePeaks.tris  = Math.max(measurePeaks.tris,  renderer.info.render.triangles);
+  }
+  if(coldLoadMs === null){
+    coldLoadMs = Math.round(performance.now());
+    document.getElementById('coldOut').textContent = coldLoadMs + ' ms (this device)';
+  }
+  hud(performance.now());
+}
+
+/* ============ Warm-up: compile + render everything once at load ============
+   (Station P3 lesson: visibility-gated content must never first-compile
+   mid-session. The arch, orb and trail all start hidden — warm them here.) */
+{
+  const keepPos = camera.position.clone(), keepLook = currentLook.clone(), keepOrb = orb.visible;
+  const keepArchScale = arch.scale.y;
+  arch.visible = true; arch.scale.y = 1; orb.visible = true;
+  trail.count = TRAIL_N;
+  for(let i=0;i<TRAIL_N;i++){ dummy.position.copy(trailCurve.getPoint(i/(TRAIL_N-1))); dummy.scale.setScalar(1); dummy.rotation.set(0,0,0); dummy.updateMatrix(); trail.setMatrixAt(i, dummy.matrix); }
+  trail.instanceMatrix.needsUpdate = true;
+  camera.position.copy(STAGES.near.pos); currentLook.copy(STAGES.near.look); camera.lookAt(currentLook);
+  bgCamera.quaternion.copy(camera.quaternion);
+  renderer.compile(bgScene, bgCamera);
+  renderer.compile(scene, camera);
+  renderer.render(bgScene, bgCamera);
+  renderer.render(scene, camera);
+  camera.position.copy(keepPos); currentLook.copy(keepLook); camera.lookAt(currentLook);
+  orb.visible = keepOrb; arch.scale.y = keepArchScale; arch.visible = false; trail.count = 0;
+}
+
+tick();
+
+addEventListener('resize', () => {
+  camera.aspect = bgCamera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix(); bgCamera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

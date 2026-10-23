@@ -1,0 +1,9 @@
+# Growing Place mockup — how to run (throwaway, Phase 1)
+
+Files in this folder: `index.html` (the scene) + `three.module.min.js` **and `three.core.min.js`** (vendored three.js 0.182.0, same version as the product repo — the module build imports the core file; **both are required** or the scene cannot start) + this README.
+
+**What this scene proves:** the Growing Place recipe's signature motions at budget — **A6, a landmark rising** (a staged fixture milestone: form by kind, completion → arch; the log declares it staged — no real milestone is claimed) and **A7, a connection forming** (a trail of light between two plots) — plus the **A1–A3 chain** the Station scene deferred: carry a fixture memory aboard, transit with it visible, and **place it at a garden plot** (atomic: it completes whole or the cargo stays aboard — a turn-back mid-transit holds the placement). Eternal dawn, terraced arcs, the witness tree, instanced vegetation (the recipe's named perf risk, instanced per the settled technique).
+
+**Run it:** serve this whole folder with any static server (e.g. `npx serve .`) and open it on the phone. Session script (same as the trio's): stages Far → Handoff → Near · **Load cargo** → **Warp** + **Cancel** inside the window · **Carry & place at plot** (watch A2–A3 + the placement CHECK) · **Grow landmark** · **Form connection** · **Drift** + **Turn back** mid-flight · **Drain fuel** → Warp (refused) → **Return home** · **300s measurement** while flying (900s soak when time allows) · repeat under **Reduced motion** (flights cut instantly; the landmark is shown standing; the trail appears whole).
+
+**What this is not:** not the product, not merged anywhere, no real data — fixtures only. Nothing here wilts, browns, or dies (the kindness rule governs even the fixture: untouched plots are *resting ground*, and the un-grown landmark simply isn't there yet — never rubble).
