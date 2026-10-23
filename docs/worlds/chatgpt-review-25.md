@@ -23,3 +23,15 @@
 - Two documentary completions done in this filing: F-01 host named + P2-4 scope updated; F-03 reconciled against D-43.
 - One evidence handoff owed: the auditor's completion pass against the brief on the docs branch (owner relays the pointer).
 - P2-4's three review decisions (record shape, drift numbers, capped-out feedback) remain the owner's to settle in review. The auditor's invariant is adopted verbatim into the P2-4 note: **bonus eligibility must never affect the ability to access memories, drift, or return home.**
+
+
+## Disposition update (relayed by the owner, 2026-10-23)
+
+The auditor's reconciled disposition, accepted into the record. The three reconciliation items are **no longer labeled unresolved defects**:
+
+- **F-01 — Scene unmounted: RECONCILED BY DESIGN.** The flag-gated launch mount is intentional. The host is specified as a worlds surface view alongside `GalaxyViews`, with the mount scoped to P2-4. This closes the scope ambiguity; actual integration and device behavior still require verification at their authorized gates.
+- **F-03 — Look-test: EVIDENCE RECONCILED.** D-43 records the Gate 0 tap at 1:57 AM ET, distinct from the outstanding deployed-app device checks, which remain pending.
+- **F-04 — Gate evidence: FAILURE REPORTING ACCEPTED; evidence access remains a process issue.** The digest failures remain failures, not a green gate. The audit brief's docs-branch location is now flagged for the next review relay.
+- **Cross-phase invariant (restated):** P2-4 must preserve without exception — bonus eligibility must never affect access to memories, drift, or return home. (Adopted into the P2-4 note at Rev 66.)
+
+- **F-02 — HYG attribution: REMAINS OPEN, separate.** The code still needs to either use the credited HYG star data or defer/remove that credit until the asset is actually used. The reconciliations above do not close it. The path is the owner's to choose.
