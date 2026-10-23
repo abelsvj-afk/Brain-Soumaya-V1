@@ -709,6 +709,87 @@ export const BOOTSTRAP_SQL = `
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS interaction_preferences_unique ON interaction_preferences(space_id, signal);
+
+    -- === VERBATIM_RECALL_V1 ===
+    -- Verbatim-Recall V1 Source Layer (design note Rev 1-3, sections
+    -- 18.2-18.3 govern the fields; 12A/12B/15 for discipline). Additive
+    -- only: sources are truth, nodes are derived. raw_bytes is
+    -- authoritative; raw_text is its deterministic UTF-8 decode (NULL +
+    -- encoding='binary' when the bytes are not valid UTF-8). Write-once
+    -- fields (raw_text, kind, speaker, occurred_at, content_hash,
+    -- byte_length) have NO repository update path. Identical DDL also
+    -- runs in db/client.ts migrateSchema() for existing volumes.
+    CREATE TABLE IF NOT EXISTS sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      citation_class TEXT NOT NULL DEFAULT 'verbatim_typed',
+      title TEXT,
+      raw_bytes BLOB NOT NULL,
+      raw_text TEXT,
+      encoding TEXT NOT NULL DEFAULT 'utf8',
+      content_hash TEXT NOT NULL,
+      byte_length INTEGER NOT NULL,
+      speaker TEXT NOT NULL DEFAULT 'owner',
+      occurred_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      idempotency_key TEXT,
+      audio_ref TEXT,
+      processing_status TEXT NOT NULL DEFAULT 'preserved',
+      processing_attempts INTEGER NOT NULL DEFAULT 0,
+      processing_lease_owner TEXT,
+      processing_lease_expires_at TEXT,
+      extraction_hash TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sources_space_occurred
+      ON sources(space_id, occurred_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_space_idempotency
+      ON sources(space_id, idempotency_key);
+    CREATE TABLE IF NOT EXISTS source_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      ordinal INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      start_ms INTEGER,
+      end_ms INTEGER,
+      indexed_vec INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_chunks_space_source_ordinal
+      ON source_chunks(space_id, source_id, ordinal);
+    CREATE TABLE IF NOT EXISTS node_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      chunk_id INTEGER,
+      role TEXT NOT NULL DEFAULT 'origin',
+      active INTEGER NOT NULL DEFAULT 1,
+      superseded_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (node_id, chunk_id, role)
+    );
+    CREATE INDEX IF NOT EXISTS idx_node_sources_node
+      ON node_sources(node_id, active);
+    CREATE INDEX IF NOT EXISTS idx_node_sources_source
+      ON node_sources(source_id, active);
+    CREATE TABLE IF NOT EXISTS source_corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      chunk_id INTEGER,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      corrected_text TEXT NOT NULL,
+      reason TEXT,
+      corrected_by TEXT,
+      seq INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (source_id, seq)
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(text);
 -- INSERT INTO packages/server/src/db/schemaSql.ts BOOTSTRAP_SQL
 -- AFTER line 633 (the interaction_preferences_unique index), BEFORE line 634 (the closing `;`).
 --

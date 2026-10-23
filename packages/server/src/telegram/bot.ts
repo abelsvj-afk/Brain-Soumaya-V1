@@ -575,7 +575,7 @@ export async function handleTelegramUpdate(
     }
     let result;
     try {
-      result = await ingestWithContext(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, ctx, body, spaceId);
+      result = await ingestWithContext(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, ctx, body, spaceId, { channel: "telegram" });
     } catch (err) {
       // TG-06: a user-initiated command never ends in silence.
       console.error("[telegram] /log ingest failed:", err);

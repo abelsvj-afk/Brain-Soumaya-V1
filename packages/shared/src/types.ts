@@ -161,6 +161,15 @@ export interface GraphNode {
   researchQuestions?: string[];
   researchAnswers?: Record<string, string>;
   createdAt: string;
+  /**
+   * Verbatim-Recall V1 provenance plumbing (design section 12D): true
+   * when this node carries at least one ACTIVE `origin` link to a
+   * preserved source in node_sources — i.e. it was extracted from the
+   * owner's own captured words. Absent/false for machine-made nodes
+   * (research expansions, dream output) and all pre-V1 legacy nodes.
+   * Enriched on read by the server; never stored on the node row.
+   */
+  hasOriginSource?: boolean;
 }
 
 /** Curated starter tags offered in the dump UI: a blend of life-areas + moods. */

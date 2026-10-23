@@ -83,6 +83,10 @@ export const captureMemoryTool: Tool = {
       tc.ctx,
       text,
       tc.spaceId,
+      // Verbatim V1: conversational captures are kind 'chat' sources;
+      // the approval id doubles as the source idempotency key so a
+      // crash-retry of the same approval can never duplicate the source.
+      { channel: "chat", idempotencyKey: idemKey ?? undefined },
     );
     if (result.nodes.length === 0) {
       return { ok: false, summary: "capture produced no memories" };

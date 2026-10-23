@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { ingest, ingestWithContext } from "../../ingestion/pipeline.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
+import { SourcesRepo, extractionHashOf } from "../../repositories/sources.repo.js";
 import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../../economy.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../../streak.js";
 import { applyCognitiveGravity } from "../../analysis/cognitive.js";
@@ -22,6 +23,13 @@ const IngestBody = z.object({
   occurredAt: z.string().datetime().optional(),
   remindAt: z.string().datetime().optional(),
   tags: z.array(z.string().min(1).max(40)).max(12).optional(),
+  // Verbatim-Recall V1: capture provenance. sourceKind 'document' marks a
+  // file import — its source is the submitted extracted text, citation
+  // class 'imported_text' (design section 23: the server never receives
+  // file bytes in the current flow; no new upload route). idempotencyKey
+  // makes a retried capture return the one existing source.
+  sourceKind: z.enum(["note", "document", "chat"]).optional(),
+  idempotencyKey: z.string().min(1).max(200).optional(),
 });
 
 export function ingestRoutes(ctx: AppContext): Router {
@@ -33,12 +41,32 @@ export function ingestRoutes(ctx: AppContext): Router {
       res.status(400).json({ error: "Body must be { text: string }" });
       return;
     }
-    const { text, kind, ttlHours, occurredAt, remindAt, tags } = parsed.data;
+    const { text, kind, ttlHours, occurredAt, remindAt, tags, sourceKind, idempotencyKey } = parsed.data;
     const spaceId = spaceOf(res);
 
     // Action items are quick to-dos: a small body, no LLM extraction or linking,
     // and an expiry. (Keeps them cheap + transient, distinct from real memories.)
     if (kind === "action") {
+      // Verbatim V1 (evidence E1): the source is taken BEFORE this
+      // branch's trim — the untrimmed submitted text is what is owed
+      // preservation. Persistence failure fails the capture honestly:
+      // the throw propagates and no node is created.
+      const sourcesRepo = new SourcesRepo(ctx.handle, spaceId);
+      const { source, created: sourceCreated } = sourcesRepo.persistText({
+        kind: "note",
+        citationClass: "verbatim_typed",
+        text,
+        occurredAt,
+        idempotencyKey,
+      });
+      if (!sourceCreated && source.processingStatus === "extracted") {
+        // Idempotent replay of an already-saved action capture: return
+        // its node instead of creating a duplicate.
+        const priorIds = sourcesRepo.nodeIdsWithOriginFrom(source.id);
+        const prior = new NodesRepo(ctx.handle, spaceId).byIds(priorIds, { includeSuperseded: true });
+        res.json({ nodes: prior, extractedEdges: [], associativeEdges: [] });
+        return;
+      }
       const expiresAt = new Date(Date.now() + (ttlHours ?? 24) * 3_600_000).toISOString();
       const label = text.trim().split(/\s+/).slice(0, 6).join(" ") || "Action item";
       const vec = await ctx.embeddings.embed(text.trim());
@@ -56,6 +84,14 @@ export function ingestRoutes(ctx: AppContext): Router {
         },
         vec,
       );
+      // Direct (extraction-free) capture: claim + complete so the
+      // processing state machine still terminates honestly.
+      const owner = `action:${process.pid}:${Date.now()}`;
+      if (sourcesRepo.claim(source.id, owner)) {
+        sourcesRepo.linkNodeToAllChunks(node.id, source.id);
+        node.hasOriginSource = true;
+        sourcesRepo.completeExtraction(source.id, owner, extractionHashOf([node]));
+      }
       res.json({ nodes: [node], extractedEdges: [], associativeEdges: [] });
       return;
     }
@@ -66,7 +102,14 @@ export function ingestRoutes(ctx: AppContext): Router {
       ctx,
       text,
       spaceId,
-      { occurredAt, remindAt, tags },
+      {
+        occurredAt,
+        remindAt,
+        tags,
+        sourceKind,
+        citationClass: sourceKind === "document" ? "imported_text" : undefined,
+        idempotencyKey,
+      },
     );
     // Tending the galaxy advances the daily streak; a new day grants a small bonus.
     const { streak, advanced, shieldUsed } = new StreakRepo(ctx.handle, spaceId).touch();
