@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 48 — **P2-1 AUDIT CLOSED (review 19): no confirmed blocker.** All four checklist items pass (fuel safety · contract scope · nine-file regression scope · the `web-push` caveat confirmed as a plausible environment gap). Two carry-forwards now bind the later increments, recorded in `phase-2-planning.md` §6: **P2-2 acceptance criteria** (server-authoritative cancel window; atomic fuel+ledger; idempotency across all travel acts; failure safety) and a **P2-4 design gate** — drift is free and pays +3, so drift-bonus *eligibility* and anti-farming rules must be designed before P2-4 builds, with drift itself staying free (D-1). P2-2 remains unauthorized; deployment and the flag likewise.
+**Revision:** 49 — **P2-2 DESIGN NOTE PREPARED** (`phase-2-p2-2-design-note.md`), at the owner's direction that the plan return for review before any code: two `travel_*` tables in BOOTSTRAP_SQL (the name `journeys` belongs to life chapters — collision found in recon and avoided), window-close as a **lazy settlement transaction** (charge + ledger commit together; an unpayable warp collapses to a no-charge cancellation, never a partial state), current world **derived** from the ledger (no pointer to disagree), a five-route contract, and acceptance tests mapped 1:1 to review 19's criteria C1–C4. **No code; P2-2 implementation still requires the owner's separate authorization.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
