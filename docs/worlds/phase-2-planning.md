@@ -1,29 +1,47 @@
 # Phase 2 Planning — Travel Skeleton + Great Station
 
-**Status: PLANNING OPEN (D-32, owner's word "Ready", 2026-10-22). Implementation NOT authorized — it is this gate's exit decision.**
-Governing design: `design-exploration-1.md` (design gate CLOSED, D-31). Decisions continue in its §11 register.
+**Status: PLAN DRAFTED (2026-10-22) — awaiting the owner's implementation authorization (this gate's exit decision).**
+Planning opened D-32 · governing design: `design-exploration-1.md` (design gate CLOSED, D-31) · Q27 settled (D-33).
+**Execution home:** implementation runs in the repo chat's established build lanes (design note → build → full gate → merge by the owner's tap); this document is the worlds-side contract it builds against.
 
-## What Phase 2 is (D-22)
-The first real build inside the product: the **travel skeleton** (gates, transit, the three travel acts — cancel / turn back / return home — and the fuel economy) plus the **Great Station** as the first real space (home port: orientation, departure, discovery — it surfaces journeys and routes, not memories, per D-5/P3). Everything else (memory-bearing spaces) is Phase 3+, one at a time, separately authorized.
+## 1. What Phase 2 builds (D-22)
+The **travel skeleton** — gates, transit (warp/drift), the three travel acts (cancel before departure · turn back mid-transit · return home), and warp fuel spend — plus the **Great Station** as the first real space: arrival, approach, and the route board (D-5: it surfaces journeys/routes, never memories). No memory-bearing spaces (Phase 3+), no Station interior (later, D-2), no world mutation (§17 rail belongs to Phase 4).
 
-## Settled at this gate
-- **Q27 — fuel earning (D-33): BOTH.** A steady base from ordinary use (generous; no streaks, no productivity thresholds) + bonuses from journeys (travels, Chronicle walks, placements, tours). D-1 invariants bind: warp costs · home free · drift always exists · fuel never gates access · bad-week safe · reward honesty (promised payouts must verifiably pay).
+## 2. Reconciliation findings (§19 A4) — inspected 2026-10-22
+The repo already ships a fuel economy (`packages/server/src/economy.ts`, the "Celestial Economy"): a **space-scoped** balance in `space_meta.fuel`, managed by `EconomyRepo`, with all rates as shared constants in `@brain/shared` (`FUEL_CAP`, `FUEL_START`, `EARN_MEMORY/LINK/ACTION_DONE/MIND/THOUGHT/CODEX_DISCOVERY/REVIEW`, `FUEL_JOB_COST`, `FUEL_REGEN_PER_HOUR`). Findings per register item:
 
-## Reconciliation register — to clear before implementation (§19 A4)
-Worlds builds on shared systems only after each item is reconciled with the repo chat's audit program:
-- [ ] **Fuel economy mechanics** — rates, caps, the gauge, quest/economy hooks (the D-33 model is settled; the numbers reconcile with the audit program's economy work, incl. its known reward-honesty history).
-- [ ] **Notification cap & quiet rules** — D-15 proposal cadence rides the shared cap.
-- [ ] **Chronicle data** — guided modes consume chapter data the core owns; no second store.
-- [ ] **Approval machinery** — the §17 rail mirrors the A4 `pending_approvals` patterns (ADR-020 line).
-- [ ] **Renderer performance** — worlds rendering must not regress the home galaxy's performance; budgets from §11 carry in.
-- [ ] **Failure independence** (§19 A1) — the worlds layer stays disposable; the brain stays authoritative if the layer is removed.
+- **Fuel — ✅ reconciled in model, numbers proposed in §3.** Worlds uses the **same tank** (no second currency): D-33's *steady base* already exists in shipped form (passive regen ≈ empty→full in ~2.5 days + earn-on-tending, `EARN_MEMORY` the main income). Worlds adds: one spend (`WARP_COST`) and journey-bonus earns, as new shared constants beside the existing ones.
+- **Reward honesty — ⚠️ precondition named.** This economy carries the Codex lesson in its own history (claims once silently 400'd, rewards permanently lost; the audit program's Round 1 aligned the claim allow-list). Rule for Phase 2: **journey bonuses are credited server-side on the journey-completion event itself** — no client claim step that can silently fail — and the UI shows a credit only after the server confirms it (GH-19's rule: never celebrate unverified success).
+- **Spend contention — named tension, recommendation in §3.** The tank also funds autonomous jobs (`FUEL_JOB_COST`; at zero, autonomy idles on free upkeep — pre-existing behavior). Warp becomes a second spender. The D-1 invariants keep this safe (access never gated; drift/home always free), but pricing must keep ordinary travel comfortably fundable from ordinary use.
+- **Notification cap — ⏸ deferred, not blocking.** Phase 2 introduces no proposals or notifications of its own; D-15 cadence reconciliation rides with the first feature that proposes (Phase 3+).
+- **Chronicle data — ⏸ deferred, not blocking.** Guided modes consuming core-owned chapter data is Phase 3 (Deep Past); Phase 2's Station surfaces no memories at all (P3).
+- **Approval machinery — ⏸ deferred, not blocking.** The §17 rail mirrors A4 patterns when world mutation arrives (Phase 4). Phase 2 mutates nothing structural.
+- **Renderer performance — ✅ carried in.** The home galaxy's renderer is the host; the travel layer and the Station scene build to the §11-derived budgets (draw calls / triangles / no post-processing stack) proven in the mockups.
+- **Failure independence (§19 A1) — ✅ designed in (§5).** The skeleton ships behind a flag, dark; removing it leaves the brain — including the pre-existing fuel rows — untouched.
 
-## Build-plan questions the plan must answer before the exit decision
-1. Where the travel skeleton lives (new module vs. extension of the galaxy renderer) and its failure boundary.
-2. The fuel ledger: where balances live, how base accrual is computed (and in whose timezone — the standing rule: the viewer's local time, never UTC), how journey bonuses are evidenced.
-3. The Station's first real slice: approach + arrival + route board (undiscovered = unlit, labeled), no interior (later phase, D-2).
-4. The test gate for Phase 2: what runs where (the standing environment constraints apply), and what device evidence the owner grades.
-5. Rollback shape: how the layer ships dark and comes off cleanly (failure independence, §19 A1).
+## 3. The fuel design (D-33 made concrete — rates are proposals for the exit decision)
+- **Warp spend:** `WARP_COST` charged **when the cancel window closes** (a cancelled departure costs nothing and moves nothing, §15 — the mockup chassis semantics, kept). Turn-back mid-transit: no refund, no second charge (the warp was spent; the return leg is drift-class, free). Return home: always free. Drift: always free.
+- **Base:** unchanged shipped behavior (regen + earn-on-tending). Pricing rule of thumb: a warp should cost roughly what **one or two ordinary brain acts earn** (against `EARN_MEMORY` as the yardstick), so a light day funds a warp and a normal day funds several. Exact figure set at P2-1 against the live constants in `@brain/shared`.
+- **Journey bonuses:** `EARN_JOURNEY_COMPLETE` (a completed warp arrival), smaller `EARN_JOURNEY_DRIFT` (a completed drift arrival — patience is also a journey), credited server-side at arrival with the new balance returned. **Evidence:** the travel log (§4) — never the unbuilt server Quest Board, never a client claim.
+- **Calendar safety:** regen is elapsed-time based (no boundary, no timezone hazard). Nothing in Phase 2 fuel is daily-capped; if a cap is ever added it uses the established space-local-day machinery — **never UTC** (the standing rule).
+- **Contention recommendation:** single tank, warp priced minor next to job costs; if travel-vs-autonomy contention ever shows in real use, splitting tanks is a new owner decision then — not a Phase 2 complication now.
 
-## Exit
-The owner's implementation authorization, given on the finished plan. Nothing in this document authorizes code, merge, or deployment.
+## 4. Architecture shape
+- **Server:** a travel module beside `economy.ts` — an append-only **journey log** (departures, cancels, turn-backs, arrivals, fuel movements with reasons) per space; depart/arrive endpoints that transact fuel + log atomically (the ADR-019 lesson: claims and balance changes in one transaction, exactly-one-row assertions). The journey log doubles as the bonus evidence and the future "World Changes" substrate.
+- **Shared:** new constants in `@brain/shared` (`WARP_COST`, `EARN_JOURNEY_*`) so web labels never restate numbers (the economy file's own stated rule).
+- **Web:** a travel layer alongside the galaxy renderer — gate affordance in the home galaxy, the transit experience (warp/drift at the D-11 durations, skippable after first traversal), the Station scene built fresh from the settled recipe with real assets (HYG star data, baked glow, instancing per D-3), and the route board (discovered routes lit; undiscovered = unlit markers labeled undiscovered). Memory objects are never cargo in Phase 2 UI beyond what the skeleton's APIs anticipate — carrying arrives with Phase 3's first space.
+- **Timezone:** all user-facing times/dates in the viewer's local timezone (his: America/New_York); no UTC anywhere user-facing.
+
+## 5. Dark launch & rollback
+Worlds flag off by default; enabling is the owner's separate act after the build gate. Rollback = flag off + module inert; the journey log and fuel constants are additive and harmless if left in place; no brain table is altered destructively (any schema change follows the safe additive migration path).
+
+## 6. Increments (each: design note → build → full gate → owner's merge tap)
+- **P2-1 — Fuel extension:** shared constants + `EconomyRepo` warp-spend / journey-earn methods + server tests (spend timing, cancel = no charge, floor at 0, cap respected, bonus crediting atomic with arrival).
+- **P2-2 — Travel skeleton (server):** journey log + depart/cancel/turn-back/arrive semantics + tests (state machine: no arrival without departure, no double-charge, turn-back preserves state).
+- **P2-3 — Web travel layer + Station:** gate, transit, Station arrival + route board, gauge labels from shared constants; budgets verified against §11-derived limits on the owner's device class.
+- **P2-4 — Bonuses live + dark launch:** journey bonuses crediting, flag, owner device check, launch decision.
+
+**Test gate (standing constraints honored):** tests are authored with each increment and run through the repo's established flow before any merge; this sandbox does not run the repo suite and claims no test results. Merge and deploy remain the owner's separate taps, per increment.
+
+## 7. What the exit decision authorizes — and what it does not
+Authorizing implementation starts P2-1 in the repo chat's lanes. It does **not** authorize: merging or deploying (owner's taps per increment), enabling the flag (separate act), Phase 3, or any change to the settled fuel guarantees (D-1/D-33).
