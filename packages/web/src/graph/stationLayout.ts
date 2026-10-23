@@ -15,6 +15,9 @@
 
 export const STATION_SEED = "great-station / harbor-1";
 
+/** The wheel/rim radius every Station layout element is sized against. */
+export const STATION_WHEEL_RADIUS = 210;
+
 export const STATION_PALETTE = {
   hullBasalt: 0x2b2e35,
   hullGunmetal: 0x3d4149,
@@ -54,7 +57,7 @@ export interface Beacon {
 }
 
 /** Beacons around the wheel rim. Every 8th is a cardinal nav marker. */
-export function beaconRing(seed: string, count = 48, radius = 210): Beacon[] {
+export function beaconRing(seed: string, count = 48, radius = STATION_WHEEL_RADIUS): Beacon[] {
   const rnd = rngFromSeed(`${seed}:beacons`);
   const out: Beacon[] = [];
   for (let i = 0; i < count; i++) {

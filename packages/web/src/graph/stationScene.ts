@@ -3,10 +3,12 @@ import { disposeObject3D } from "./graph3dHelpers.js";
 import {
   STATION_PALETTE,
   STATION_SEED,
+  STATION_WHEEL_RADIUS,
   beaconRing,
   rngFromSeed,
   trafficLanes,
 } from "./stationLayout.js";
+import { loadProfondoHull } from "./profondoHull.js";
 
 /**
  * The Great Station scene (Phase 2, P2-3): three.js wiring over the
@@ -28,8 +30,6 @@ export interface StationScene {
   dispose: () => void;
 }
 
-const WHEEL_RADIUS = 210;
-
 function proxyHull(): THREE.Group {
   const g = new THREE.Group();
   const basalt = new THREE.MeshStandardMaterial({
@@ -42,7 +42,7 @@ function proxyHull(): THREE.Group {
     roughness: 0.6,
     metalness: 0.55,
   });
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(WHEEL_RADIUS, 26, 12, 72), basalt);
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(STATION_WHEEL_RADIUS, 26, 12, 72), basalt);
   wheel.rotation.x = Math.PI / 2;
   g.add(wheel);
   const spindle = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 190, 16), gunmetal);
@@ -52,7 +52,7 @@ function proxyHull(): THREE.Group {
   for (let i = 0; i < 4; i++) {
     const arm = new THREE.Mesh(new THREE.BoxGeometry(70, 5, 8), gunmetal);
     const a = (i / 4) * Math.PI * 2;
-    arm.position.set(Math.cos(a) * (WHEEL_RADIUS - 38), 0, Math.sin(a) * (WHEEL_RADIUS - 38));
+    arm.position.set(Math.cos(a) * (STATION_WHEEL_RADIUS - 38), 0, Math.sin(a) * (STATION_WHEEL_RADIUS - 38));
     arm.rotation.y = -a;
     g.add(arm);
   }
@@ -86,7 +86,25 @@ function starfield(seed: string, count = 1500): THREE.Points {
 
 export function createStationScene(opts: { hull?: THREE.Object3D } = {}): StationScene {
   const group = new THREE.Group();
-  group.add(opts.hull ?? proxyHull());
+  // The proxy form is the standing backup (D-37): it renders
+  // immediately, and the real Profondo hull swaps in when it loads —
+  // the app's model pattern. A failed load keeps the proxy and is
+  // registered as a model fallback (see profondoHull.ts).
+  const proxy = proxyHull();
+  group.add(opts.hull ?? proxy);
+  let disposed = false;
+  if (!opts.hull) {
+    void loadProfondoHull().then((hull) => {
+      if (!hull) return;
+      if (disposed) {
+        disposeObject3D(hull);
+        return;
+      }
+      group.remove(proxy);
+      disposeObject3D(proxy);
+      group.add(hull);
+    });
+  }
 
   const ambient = new THREE.AmbientLight(STATION_PALETTE.indigo, 1.4);
   group.add(ambient);
@@ -98,7 +116,7 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
 
   // Beacons: two instanced meshes so nav (cyan) and work (amber) can
   // pulse on different phases — color discipline is in the layout.
-  const ring = beaconRing(STATION_SEED, 48, WHEEL_RADIUS);
+  const ring = beaconRing(STATION_SEED, 48, STATION_WHEEL_RADIUS);
   const beaconGeo = new THREE.SphereGeometry(2.4, 8, 6);
   const makeBeaconMesh = (role: "nav" | "work", color: number) => {
     const items = ring.filter((b) => b.role === role);
@@ -153,6 +171,9 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
   return {
     group,
     update,
-    dispose: () => disposeObject3D(group),
+    dispose: () => {
+      disposed = true;
+      disposeObject3D(group);
+    },
   };
 }
