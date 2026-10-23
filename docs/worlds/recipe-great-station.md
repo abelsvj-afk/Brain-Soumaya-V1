@@ -2,6 +2,12 @@
 
 **Status:** Phase 0 recipe — ✅ **SETTLED by the owner (2026-10-22)**: R-S1 approve form, R-S2 approve palette, R-S3 name deferred ("the Great Station" is the working display name), R-S4 approve slow ring rotation. ChatGPT-reviewed 2026-10-22 (no architectural blocker; margin + D-13 notes absorbed). Settlement authorizes **no** mockup construction — that remains a separate owner decision after all three recipes settle (D-21). **Scope:** the Great Station space and its §18 mockup scene (the approach). **Settled ground it must obey:** D-2 (fictional megastructure), D-5 (home port — journeys, not memories), D-10/D-11 (routes, skippable travel), D-13 (sun deferred — this mockup gathers the evidence), §10.1 stack (D-3, conditional), §11 criteria (fixed), §14 Animation Gate, §15 utility-first, §17 presentation safeguards. Nothing here authorizes a build.
 
+**D-37 update (2026-10-23):** the Station's **hull is now Profondo** (by vostok, BlendSwap — https://blendswap.com/blend/11999 — **CC-BY**, verified on the source page; record in `gemini-research-2-verification.md`). The form language below (crown-and-stem) is **retained as the backup design** if Profondo fails inspection. What carries forward unchanged: the palette, the light grammar (amber = working/inhabited, cyan = navigation truth), the three-stage approach composition, and every budget. What D-37 adds:
+
+- **The accessory layer (King's design work):** procedural flare built around the Profondo hull to bring it to life — beacon arrays and approach lane markers, docking extensions and traffic (A17), light rigs that seat the hull in this recipe's amber/cyan grammar, solar/antenna dressing, and window-light life. The wheel silhouette stays the hero; accessories serve it, never clutter it. The owner's bar: *much* more beautiful than the Phase 1 mockup.
+- **License register entry:** Profondo · BlendSwap (vostok) · CC-BY · slot: Great Station hull · **attribution required** — the app must carry a credits surface (title, author, source link, "Licensed under CC-BY", modifications note).
+- **Inspection gates (for the P2-3 design note, before any build):** true triangle count from the file itself, .blend → glTF conversion path, texture/material audit (the model is textureless — its Cycles materials must be re-expressed as PBR under this recipe's grammar), and a look test under our lighting. Any failure returns the design to the backup form above.
+
 ---
 
 ## 1. Identity & visual grammar
