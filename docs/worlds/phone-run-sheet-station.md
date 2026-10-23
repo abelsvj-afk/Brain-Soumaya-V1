@@ -6,7 +6,7 @@
 
 ## 0 · Setup (≈2 min)
 
-1. Serve the folder on any computer on the same Wi-Fi: `npx serve .` inside `mockups/station/` — or any static server. Open the address on the phone.
+1. Serve the folder on any computer on the same Wi-Fi: `npx serve .` inside `mockups/station/` — or any static server. Serve the **whole folder** (the scene needs both `three.module.min.js` and `three.core.min.js` beside `index.html`). Open the address on the phone. *(A single-file build with both library files embedded exists for download-based delivery; if you use it, record that in §6 — its scene logic is byte-identical.)*
 2. Fill in before you start:
    - Phone model: ______________ · OS + version: ______________
    - Browser / runtime + version: ______________

@@ -1,6 +1,6 @@
 # Great Station mockup — how to run (throwaway, Phase 1)
 
-Files in this folder: `index.html` (the scene) + `three.module.min.js` (vendored three.js 0.182.0, same version as the product repo) + this README.
+Files in this folder: `index.html` (the scene) + `three.module.min.js` **and `three.core.min.js`** (vendored three.js 0.182.0, same version as the product repo — the module build imports the core file; **both are required** or the scene cannot start) + this README.
 
 **On the owner's phone (the §11 grading device):**
 1. Serve this folder with any static server, e.g. from a terminal in this folder: `npx serve .` — or copy the folder to any static host the owner controls.

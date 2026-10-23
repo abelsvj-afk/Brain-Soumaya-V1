@@ -293,19 +293,21 @@ let camAnim = null;
 let lastDeparture = null; // {pos, look, stage} captured at each departure — turn-back target
 const reducedMotion = () => document.getElementById('rmToggle').checked;
 
-function flyTo(stageName, mode, onDone){ // mode: 'cut' | 'warp' | 'drift'
+function flyTo(stageName, mode, onDone, target){ // mode: 'cut' | 'warp' | 'drift'; target {pos, look} overrides the stage pose (turn-back: §15 promises the exact origin pose, not merely the origin stage — smoke test 2026-10-22)
   const s = STAGES[stageName];
+  const tPos = target ? target.pos : s.pos;
+  const tLook = target ? target.look : s.look;
   lastDeparture = {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage,
                    cargo: {id: cargo.id, home: cargo.home, aboard: cargo.aboard}};
   const dur = mode === 'warp' ? 2600 : mode === 'drift' ? 12000 : 1400;
   if(reducedMotion() || mode === 'cut'){
-    camera.position.copy(s.pos); bgCamera.position.set(0,0,0);
+    camera.position.copy(tPos); bgCamera.position.set(0,0,0);
     camAnim = null;
-    currentLook.copy(s.look);
+    currentLook.copy(tLook);
     if(onDone) onDone();
   } else {
-    camAnim = {t:0, dur, from: camera.position.clone(), to: s.pos.clone(),
-               fromLook: currentLook.clone(), toLook: s.look.clone(), mode, onDone};
+    camAnim = {t:0, dur, from: camera.position.clone(), to: tPos.clone(),
+               fromLook: currentLook.clone(), toLook: tLook.clone(), mode, onDone};
   }
   currentStage = stageName;
   document.getElementById('stageOut').textContent = stageName + (mode ? ' ('+mode+')' : '');
@@ -476,7 +478,7 @@ document.getElementById('turnBtn').addEventListener('click', () => {
       ' — back at origin pose: ' + (posOk && lookOk) +
       ' · cargo identity/home match the pre-transit snapshot: ' + idOk + ' (' + cargo.id + ' / ' + cargo.home + ')' +
       ' · cargo aboard-state preserved: ' + aboardOk + '.');
-  });
+  }, {pos: origin.pos, look: origin.look});
   behav('Turning back mid-transit…');
 });
 document.getElementById('homeBtn').addEventListener('click', () => {

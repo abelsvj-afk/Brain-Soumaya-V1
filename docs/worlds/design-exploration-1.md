@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 33 — **Station mockup review 15: independent verification of Rev 32 + the acceptance checklist adopted as the grading frame** (record: `chatgpt-review-15-2026-10-22.md`); a step-by-step **phone-run sheet** (`phone-run-sheet-station.md`) now accompanies the result record. The mockup review series (10–15) is closed; verdict **UNRESOLVED** pending the owner's phone evidence run. **Design gate: OPEN.**
+**Revision:** 34 — **Station builder smoke test** (record: `smoke-test-station-2026-10-22.md`): running the package for the first time found two defects the review series couldn't see — `three.core.min.js` never vendored (scene couldn't start anywhere) and turn-back targeting the origin stage rather than the captured pose — **both fixed and verified in-environment** (turn-back PASS in parked + chained scenarios; cancel/zero-fuel/return-home PASS; console errors 0). Sandbox figures are not §11 evidence; verdict **UNRESOLVED** pending the owner's phone evidence run. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -825,4 +825,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 33. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 34. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
