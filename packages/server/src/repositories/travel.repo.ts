@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
-import { EconomyRepo } from "../economy.js";
+import { EconomyRepo, type JourneyBonusCreditor, type JourneyBonusResult } from "../economy.js";
+import { spaceTimezone } from "../agent/notify/policy.js";
 import {
+  EARN_JOURNEY_COMPLETE,
+  EARN_JOURNEY_DRIFT,
   TRAVEL_CANCEL_WINDOW_SECONDS,
   WARP_COST,
   type TravelJourney,
@@ -22,8 +25,8 @@ import {
  * any) and the `departed` event commit together with the move to
  * `in_transit`; if the balance can no longer pay, the journey collapses to
  * a no-charge `cancelled` instead. From `in_transit` a journey is arrived
- * or turned back (`returning` → `returned`). P2-2 credits NO bonuses —
- * arrivals only record the facts P2-4 will pay on.
+ * or turned back (`returning` → `returned`). P2-2 credited no bonuses;
+ * P2-4 pays them inside the arrival transition itself (see arrive()).
  *
  * Every transition re-reads and re-validates the journey INSIDE its own
  * immediate transaction and writes through a guarded update (the expected
@@ -61,6 +64,54 @@ export class TravelError extends Error {
   }
 }
 
+/**
+ * Journey bonuses (P2-4, implementing the P2-1 JourneyBonusCreditor
+ * contract): paid server-side at arrival, exactly once per journey. The
+ * outcome is recorded ON the journey row (bonus_credited_at /
+ * bonus_amount / bonus_reason) inside the arrival transaction, so a
+ * retried arrival returns the recorded outcome and never re-pays.
+ *
+ * The drift gate constrains the BONUS only — never the travel (D-1):
+ * a drift must show at least DRIFT_BONUS_MIN_ELAPSED_MS of server-side
+ * elapsed time and the space may earn at most DRIFT_BONUS_DAILY_CAP
+ * drift bonuses per day, counted in the space's own timezone. A warp
+ * needs no gate: it costs 10 and pays 5, so farming loses fuel by
+ * construction. An ineligible arrival is not an error and never a
+ * punishment: the journey completes; the bonus simply doesn't pay,
+ * and the server says why in plain language.
+ */
+export const DRIFT_BONUS_MIN_ELAPSED_MS = 30_000;
+export const DRIFT_BONUS_DAILY_CAP = 2;
+
+const BONUS_REASON_TOO_SHORT =
+  "That drift was quick — drift bonuses are for journeys of at least half a minute.";
+const BONUS_REASON_DAILY_CAP =
+  "Today's drift bonuses are done — drifting itself is still free.";
+
+/** The recorded bonus outcome for one journey: the contract result
+ *  plus the server's plain-language reason when nothing was paid. */
+export interface TravelBonusOutcome extends JourneyBonusResult {
+  reason: string | null;
+}
+
+/** YYYY-MM-DD of an instant in a timezone (the space-local day key the
+ *  drift cap counts by — never a UTC boundary). Falls back to the UTC
+ *  date when the zone name is unusable. */
+function localDateKey(tz: string, ms: number): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(ms));
+    const get = (type: string) => parts.find((x) => x.type === type)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
 interface JourneyRow {
   id: string;
   client_key: string;
@@ -74,6 +125,9 @@ interface JourneyRow {
   departed_at: string | null;
   arrived_at: string | null;
   ended_at: string | null;
+  bonus_credited_at: string | null;
+  bonus_amount: number;
+  bonus_reason: string | null;
 }
 
 export interface TravelEvent {
@@ -84,7 +138,7 @@ export interface TravelEvent {
 
 const TERMINAL: ReadonlySet<TravelJourneyState> = new Set(["arrived", "returned", "cancelled"]);
 
-export class TravelRepo {
+export class TravelRepo implements JourneyBonusCreditor {
   constructor(
     private h: DbHandle,
     private spaceId: string = DEFAULT_SPACE,
@@ -349,18 +403,109 @@ export class TravelRepo {
         const durationSeconds = r.departed_at
           ? Math.max(0, Math.round((nowMs - Date.parse(r.departed_at)) / 1000))
           : null;
+        // P2-4: the bonus outcome is DECIDED here — by the one call
+        // that wins the arrival transition — and recorded on the row
+        // in the same guarded update, so arrival, decision, and
+        // credit commit or fail together. A concurrent arrival that
+        // loses the race observes the recorded outcome; it never
+        // re-decides and never re-pays.
+        const bonus = this.decideBonus(r, nowMs);
         if (
-          !this.guardedUpdate(journeyId, "in_transit", `state = 'arrived', arrived_at = ?, ended_at = ?`, [
-            nowIso,
-            nowIso,
-          ])
+          !this.guardedUpdate(
+            journeyId,
+            "in_transit",
+            `state = 'arrived', arrived_at = ?, ended_at = ?, bonus_credited_at = ?, bonus_amount = ?, bonus_reason = ?`,
+            [nowIso, nowIso, nowIso, bonus.amount, bonus.reason],
+          )
         )
           return this.map(this.rowById(journeyId)!, nowMs);
-        this.addEvent(journeyId, "arrived", { kind: r.kind, durationSeconds }, nowMs);
+        if (bonus.amount > 0) new EconomyRepo(this.h, this.spaceId).add(bonus.amount);
+        this.addEvent(
+          journeyId,
+          "arrived",
+          { kind: r.kind, durationSeconds, bonusAmount: bonus.amount, bonusReason: bonus.reason },
+          nowMs,
+        );
       }
       return this.map(this.rowById(journeyId)!, nowMs);
     });
     return run.immediate();
+  }
+
+  // --- journey bonuses (P2-4) ---
+
+  /** Eligibility, from the ledger alone. Warp: always pays. Drift:
+   *  the honesty floor on server elapsed time, then the space-local
+   *  daily cap. Returns the amount and, when nothing pays, the plain
+   *  reason the UI may show. */
+  private decideBonus(r: JourneyRow, nowMs: number): { amount: number; reason: string | null } {
+    if (r.kind === "warp") return { amount: EARN_JOURNEY_COMPLETE, reason: null };
+    const departedMs = r.departed_at ? Date.parse(r.departed_at) : Number.NaN;
+    if (!Number.isFinite(departedMs) || nowMs - departedMs < DRIFT_BONUS_MIN_ELAPSED_MS)
+      return { amount: 0, reason: BONUS_REASON_TOO_SHORT };
+    if (this.driftBonusesToday(nowMs) >= DRIFT_BONUS_DAILY_CAP)
+      return { amount: 0, reason: BONUS_REASON_DAILY_CAP };
+    return { amount: EARN_JOURNEY_DRIFT, reason: null };
+  }
+
+  /** Drift bonuses already credited on the space-local day of nowMs. */
+  private driftBonusesToday(nowMs: number): number {
+    const tz = spaceTimezone(this.h.sqlite, this.spaceId);
+    const today = localDateKey(tz, nowMs);
+    const rows = this.h.sqlite
+      .prepare(
+        `SELECT bonus_credited_at FROM travel_journeys
+         WHERE space_id = ? AND kind = 'drift' AND bonus_amount > 0 AND bonus_credited_at IS NOT NULL`,
+      )
+      .all(this.spaceId) as { bonus_credited_at: string }[];
+    return rows.filter((x) => localDateKey(tz, Date.parse(x.bonus_credited_at)) === today).length;
+  }
+
+  /** The recorded outcome for a journey (null when the journey is
+   *  unknown). Before any arrival the outcome is simply "not credited"
+   *  at the current balance. */
+  bonusOutcome(journeyId: string): TravelBonusOutcome | null {
+    const r = this.rowById(journeyId);
+    if (!r) return null;
+    const amount = r.bonus_amount ?? 0;
+    return {
+      credited: amount > 0,
+      amount,
+      balance: new EconomyRepo(this.h, this.spaceId).get(),
+      reason: r.bonus_reason ?? null,
+    };
+  }
+
+  /**
+   * The P2-1 contract (JourneyBonusCreditor). Crediting itself happens
+   * in arrive()'s transaction; this entry point returns the recorded
+   * outcome, and for a legacy arrival that predates P2-4 (arrived, no
+   * outcome recorded) it decides and records the outcome now, guarded
+   * so concurrent calls credit at most once. The row is the authority
+   * on kind — the parameter is accepted per the contract, and the
+   * journey's own recorded kind governs.
+   */
+  creditJourneyBonus(journeyId: string, _kind: TravelKind): JourneyBonusResult {
+    const econ = new EconomyRepo(this.h, this.spaceId);
+    const existing = this.bonusOutcome(journeyId);
+    if (!existing) return { credited: false, amount: 0, balance: econ.get() };
+    const r = this.rowById(journeyId)!;
+    if (r.bonus_credited_at || r.state !== "arrived") return existing;
+    const run = this.h.sqlite.transaction(() => {
+      const fresh = this.rowById(journeyId);
+      if (!fresh || fresh.bonus_credited_at || fresh.state !== "arrived") return;
+      const nowMs = Date.now();
+      const bonus = this.decideBonus(fresh, nowMs);
+      this.h.sqlite
+        .prepare(
+          `UPDATE travel_journeys SET bonus_credited_at = ?, bonus_amount = ?, bonus_reason = ?
+           WHERE id = ? AND bonus_credited_at IS NULL`,
+        )
+        .run(new Date(nowMs).toISOString(), bonus.amount, bonus.reason, journeyId);
+      if (bonus.amount > 0) new EconomyRepo(this.h, this.spaceId).add(bonus.amount);
+    });
+    run.immediate();
+    return this.bonusOutcome(journeyId)!;
   }
 
   getJourney(journeyId: string, nowMs: number = Date.now()): TravelJourney | null {

@@ -56,7 +56,24 @@ export function travelRoutes(ctx: AppContext): Router {
 
   r.post("/cancel", (req, res) => act(res, (t) => t.cancel(String(req.body?.journeyId ?? ""))));
   r.post("/turn-back", (req, res) => act(res, (t) => t.turnBack(String(req.body?.journeyId ?? ""))));
-  r.post("/arrive", (req, res) => act(res, (t) => t.arrive(String(req.body?.journeyId ?? ""))));
+  // Arrival is the one act whose response carries more than the
+  // journey: the P2-4 bonus outcome the server recorded for it
+  // ({ journey, bonus }) — the client displays bonus state only from
+  // this sibling, never from its own inference.
+  r.post("/arrive", (req, res) => {
+    try {
+      const t = repo(res);
+      const id = String(req.body?.journeyId ?? "");
+      const journey = t.arrive(id);
+      if (!journey) {
+        res.status(404).json({ error: "Journey not found." });
+        return;
+      }
+      res.json({ journey, bonus: t.bonusOutcome(id) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
 
   r.get("/state", (req, res) => {
     const spaceId = spaceOf(res);

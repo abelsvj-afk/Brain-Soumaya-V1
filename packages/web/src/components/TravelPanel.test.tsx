@@ -31,6 +31,7 @@ function fakeTravel(over: Partial<UseTravel> = {}): UseTravel {
     busy: false,
     error: null,
     cancelSecondsLeft: null,
+    lastBonus: null,
     refresh: vi.fn(async () => {}),
     depart: vi.fn(async () => null),
     cancel: vi.fn(async () => null),
@@ -136,5 +137,35 @@ describe("TravelPanel", () => {
     mockUseTravel.mockReturnValue(fakeTravel({ error: "Can't reach the brain right now." }));
     render(<TravelPanel enabled />);
     expect(screen.getByRole("alert").textContent).toContain("Can't reach the brain");
+  });
+
+  it("shows the bonus line only from the server's outcome — credited (P2-4)", () => {
+    mockUseTravel.mockReturnValue(
+      fakeTravel({ lastBonus: { credited: true, amount: 5, balance: 30, reason: null } }),
+    );
+    render(<TravelPanel enabled />);
+    expect(screen.getByText("+5 fuel — journey bonus")).toBeTruthy();
+  });
+
+  it("a gated drift shows the server's plain reason, never a celebration (P2-4)", () => {
+    mockUseTravel.mockReturnValue(
+      fakeTravel({
+        lastBonus: {
+          credited: false,
+          amount: 0,
+          balance: 25,
+          reason: "Today's drift bonuses are done — drifting itself is still free.",
+        },
+      }),
+    );
+    render(<TravelPanel enabled />);
+    expect(screen.getByText(/drifting itself is still free/)).toBeTruthy();
+    expect(screen.queryByText(/journey bonus/)).toBeNull();
+  });
+
+  it("no bonus state, no bonus line (P2-4)", () => {
+    mockUseTravel.mockReturnValue(fakeTravel({ lastBonus: null }));
+    render(<TravelPanel enabled />);
+    expect(screen.queryByText(/journey bonus/)).toBeNull();
   });
 });

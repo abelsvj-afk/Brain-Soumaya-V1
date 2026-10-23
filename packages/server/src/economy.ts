@@ -143,8 +143,9 @@ export class EconomyRepo {
 
 /**
  * Journey-bonus crediting contract (Worlds Phase 2 — DEFINED in P2-1,
- * implemented in P2-4 against the P2-2 journey ledger; no runtime crediting
- * path exists yet). Crediting is server-side, at arrival, exactly once per
+ * IMPLEMENTED in P2-4: TravelRepo satisfies this interface, crediting
+ * inside the P2-2 arrival transaction and recording the outcome on the
+ * journey row). Crediting is server-side, at arrival, exactly once per
  * journey: `journeyId` is the idempotency key, so a retried arrival returns
  * the original outcome instead of paying twice (reward honesty).
  */

@@ -39,6 +39,7 @@ import { WelcomeIntro } from "./components/WelcomeIntro.js";
 import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
 import TravelPanel from "./components/TravelPanel.js";
+import WorldsSurface from "./components/WorldsSurface.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
@@ -2198,6 +2199,15 @@ export default function App() {
       {space && (
         <ErrorBoundary label="travel" fallback={null}>
           <TravelPanel />
+        </ErrorBoundary>
+      )}
+
+      {/* Worlds surface (Phase 2, P2-4 — the F-01 mount): the Great
+          Station scene appears when travel state places the brain
+          there. Same dark contract, same flag. */}
+      {space && (
+        <ErrorBoundary label="worlds-surface" fallback={null}>
+          <WorldsSurface />
         </ErrorBoundary>
       )}
 

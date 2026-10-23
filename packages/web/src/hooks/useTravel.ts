@@ -7,6 +7,7 @@ import {
   getTravelState,
   TravelClientError,
   turnBackJourney,
+  type TravelBonus,
   type TravelState,
 } from "../api/travel.js";
 
@@ -74,6 +75,10 @@ export interface UseTravel {
   error: string | null;
   /** Seconds left in the cancel window — display only, server decides. */
   cancelSecondsLeft: number | null;
+  /** The bonus outcome of the most recent arrival, exactly as the
+   *  server recorded it (P2-4) — null until an arrival happens, and
+   *  cleared when a new journey departs. Display only. */
+  lastBonus: TravelBonus | null;
   refresh: () => Promise<void>;
   depart: (kind: TravelKind, destination: string) => Promise<TravelJourney | null>;
   cancel: () => Promise<TravelJourney | null>;
@@ -87,6 +92,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastBonus, setLastBonus] = useState<TravelBonus | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const keyRef = useRef<string | null>(read(KEY_STORAGE));
   const stateRef = useRef<TravelState | null>(null);
@@ -182,6 +188,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
 
   const depart = useCallback(
     (kind: TravelKind, destination: string) => {
+      setLastBonus(null); // a new journey retires the last arrival's outcome
       if (!keyRef.current) {
         keyRef.current = newKey();
         write(KEY_STORAGE, keyRef.current);
@@ -212,7 +219,17 @@ export function useTravel(enabled: boolean = true): UseTravel {
     return j;
   }, [withActive, clearKey]);
   const turnBack = useCallback(() => withActive(turnBackJourney), [withActive]);
-  const arrive = useCallback(() => withActive(arriveJourney), [withActive]);
+  // Arrival additionally captures the server's bonus outcome from the
+  // response sibling (P2-4) — the panel renders it verbatim.
+  const arrive = useCallback(async () => {
+    const id = stateRef.current?.activeJourney?.id;
+    if (!id) return null;
+    return act(async () => {
+      const r = await arriveJourney(id);
+      setLastBonus(r.bonus);
+      return r.journey;
+    });
+  }, [act]);
 
   const hasTraversed = useCallback(
     (origin: string, destination: string) => traversedRoutes().includes(routeKey(origin, destination)),
@@ -231,6 +248,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
     busy,
     error,
     cancelSecondsLeft,
+    lastBonus,
     refresh,
     depart,
     cancel,
