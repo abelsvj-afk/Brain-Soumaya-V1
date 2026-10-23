@@ -92,7 +92,9 @@ meta = {
 }
 ts = f"""/**
  * GENERATED FILE — do not hand-edit. Regenerate with
- * gate0/hyg/generate_hyg.py (kept with the worlds design records).
+ * generate_hyg.py — the generator and its build record live with
+ * the worlds design records (in the repo: docs/worlds/generate_hyg.py
+ * and docs/worlds/hyg-build-record.json, branch design/worlds-vision).
  *
  * Star data: HYG database (Astronexus), CC BY-SA 4.0. Subset: the
  * {N} brightest stars by apparent magnitude. Positions are the
