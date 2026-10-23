@@ -18,7 +18,7 @@ afterEach(() => cleanup());
 vi.mock("../graph/sfx.js", () => ({ playSfx: vi.fn() }));
 vi.mock("./Toasts.js", () => ({ pushToast: vi.fn() }));
 
-const fuel: Fuel = { fuel: 42, capacity: 120, jobCost: 7 };
+const fuel: Fuel = { fuel: 42, capacity: 120, jobCost: 7, warpCost: 10 };
 function graphWith(nodes: Partial<import("@brain/shared").GraphNode>[]): GraphData {
   return {
     nodes: nodes.map((n, i) => ({

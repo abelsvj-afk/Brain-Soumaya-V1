@@ -131,7 +131,7 @@ describe("IM-95 — fuel economy is visible in Progress", () => {
     const { container } = render(
       <AchievementsPanel
         graph={graphOf([], [])}
-        fuel={{ fuel: 42, capacity: 100, jobCost: 3 }}
+        fuel={{ fuel: 42, capacity: 100, jobCost: 3, warpCost: 10 }}
         streak={null}
         spaceId="s1"
       />,

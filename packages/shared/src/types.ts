@@ -204,6 +204,8 @@ export interface Fuel {
   capacity: number;
   /** Cost the agent pays per autonomous LLM job. */
   jobCost: number;
+  /** Cost the user pays per warp between spaces (Worlds travel, Phase 2). */
+  warpCost: number;
 }
 
 /** Daily-tending streak — consecutive days the brain was fed a memory. */

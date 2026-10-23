@@ -32,6 +32,9 @@ export {
   EARN_THOUGHT,
   EARN_CODEX_DISCOVERY,
   EARN_REVIEW,
+  WARP_COST,
+  EARN_JOURNEY_COMPLETE,
+  EARN_JOURNEY_DRIFT,
   FUEL_REGEN_PER_HOUR,
   ACTION_DONE_MIN_AGE_MINUTES,
 } from "@brain/shared";
@@ -40,6 +43,7 @@ import {
   FUEL_CAP,
   FUEL_JOB_COST,
   FUEL_REGEN_PER_HOUR,
+  WARP_COST,
 } from "@brain/shared";
 
 const clamp = (x: number, lo: number, hi: number) => (x < lo ? lo : x > hi ? hi : x);
@@ -117,7 +121,44 @@ export class EconomyRepo {
     return this.get() >= FUEL_JOB_COST;
   }
 
-  toFuel(): Fuel {
-    return { fuel: Math.round(this.get() * 10) / 10, capacity: FUEL_CAP, jobCost: FUEL_JOB_COST };
+  /**
+   * Charge one warp (Worlds travel, Phase 2). Same refusal semantics as
+   * spend(): no partial debit, never below zero. The travel layer calls this
+   * only when the server closes a departure's cancel window — a cancelled
+   * departure is never charged.
+   */
+  spendWarp(): boolean {
+    return this.spend(WARP_COST);
   }
+
+  /** True if the balance covers one warp. */
+  canWarp(): boolean {
+    return this.get() >= WARP_COST;
+  }
+
+  toFuel(): Fuel {
+    return { fuel: Math.round(this.get() * 10) / 10, capacity: FUEL_CAP, jobCost: FUEL_JOB_COST, warpCost: WARP_COST };
+  }
+}
+
+/**
+ * Journey-bonus crediting contract (Worlds Phase 2 — DEFINED in P2-1,
+ * implemented in P2-4 against the P2-2 journey ledger; no runtime crediting
+ * path exists yet). Crediting is server-side, at arrival, exactly once per
+ * journey: `journeyId` is the idempotency key, so a retried arrival returns
+ * the original outcome instead of paying twice (reward honesty).
+ */
+export type JourneyKind = "warp" | "drift";
+
+export interface JourneyBonusResult {
+  /** True when this call is the one that credited the bonus. */
+  credited: boolean;
+  /** The bonus amount for the journey kind (0 when not credited). */
+  amount: number;
+  /** The balance after the credit (or the current balance when not credited). */
+  balance: number;
+}
+
+export interface JourneyBonusCreditor {
+  creditJourneyBonus(journeyId: string, kind: JourneyKind): JourneyBonusResult;
 }
