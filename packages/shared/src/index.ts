@@ -9,3 +9,4 @@ export * from "./economy.js";
 export * from "./lifeVision.js";
 export * from "./temporal.js";
 export * from "./intelligence.js";
+export * from "./worlds.js";

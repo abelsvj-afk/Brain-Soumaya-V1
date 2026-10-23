@@ -9,6 +9,13 @@ by NestaEric (https://sketchfab.com/Nestaeric) licensed under CC-BY-4.0
 (http://creativecommons.org/licenses/by/4.0/).
 Converted from glTF (specular-glossiness) to metallic-roughness + Draco for web use.
 
+**The Great Station (Worlds)** — `profondo.glb`
+This work is based on "Profondo" (https://blendswap.com/blend/11999)
+by vostok (https://blendswap.com) licensed under CC-BY-3.0
+(http://creativecommons.org/licenses/by/3.0/).
+Converted from the original Blender file to glTF; geometry decimated
+(333,563 → 132,432 triangles) and materials re-expressed for this app.
+
 ## Audio
 
 **Ship engine start** — `ship-engine-start.mp3`

@@ -168,6 +168,8 @@ export const SPACE_SCOPED_TABLES = [
   "w3_recon_progress",
   "w3_recon_semantic_queue",
   "notification_outbox",
+  "travel_journey_events",
+  "travel_journeys",
 ] as const;
 
 /**
