@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 34 — **Station builder smoke test** (record: `smoke-test-station-2026-10-22.md`): running the package for the first time found two defects the review series couldn't see — `three.core.min.js` never vendored (scene couldn't start anywhere) and turn-back targeting the origin stage rather than the captured pose — **both fixed and verified in-environment** (turn-back PASS in parked + chained scenarios; cancel/zero-fuel/return-home PASS; console errors 0). Sandbox figures are not §11 evidence; verdict **UNRESOLVED** pending the owner's phone evidence run. **Design gate: OPEN.**
+**Revision:** 35 — **Station review 16: Revision 34 verified** (record: `chatgpt-review-16-2026-10-22.md`): both smoke-test fixes confirmed present in the source by direct fetch; the record's §1 package description now names both three.js files (documentation cleanup). Verdict **UNRESOLVED** pending the owner's phone evidence run. **Design gate: OPEN.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -825,4 +825,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 34. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 35. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*

@@ -19,6 +19,8 @@ A focused test (departure chained mid-flight, so the captured origin was a mid-r
 ## Not exercised here
 V3 handoff appearance on a real GPU · D-13 stills as graded evidence (the sandbox frames are illustrative only — though the Far frame does show the designed composition: sun disc + station impostor silhouette in one frame) · the 900 s soak · reduced-motion performance.
 
+**Illustrative frames** (sandbox smoke run, SwiftShader — **not** evidence; the graded D-13 stills come from the owner's phone): three stage frames (Far / Handoff / Near) are retained in the builder's workspace (`~/workspace/worlds-vision/builds/smoke/`) and were shown to the owner in the worlds chat on 2026-10-22. They are **not** on this branch — the snapshot push tooling carries text only, so binary frames can't be filed through it; the owner's graded phone stills will face the same limit and can be committed via GitHub's web upload or held alongside this record by description + measurements.
+
 **Gate state unchanged: Station UNRESOLVED.** The review series' "no known code-level items" statement covered the scene logic as written; this run found one packaging defect and one behavioral defect *around* that logic, both fixed and verified in-environment. The phone evidence run remains the critical path.
 
 *Smoke record — builder's own run, at the owner's direction. Nothing here authorizes product implementation, merge, or deployment.*
