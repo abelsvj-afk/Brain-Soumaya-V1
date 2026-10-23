@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 45 — **P2-1 AUTHORIZED (D-34)** and its design note filed (`phase-2-p2-1-design-note.md`): constants priced against the live economy (`WARP_COST` 10 vs `EARN_MEMORY` 15 and 3.5/hr regen — a quiet week still travels; `EARN_JOURNEY_COMPLETE` 5, never net-positive; `EARN_JOURNEY_DRIFT` 3), `Fuel.warpCost` added to the shared contract, `spendWarp`/`canWarp` on the existing refusal-semantics `spend()`, the bonus contract as types only (implementation is P2-4's, per review 18). Base verified file-by-file against deploy head `d7493eb`. Build runs in the repo workflow; merge stays the owner's tap.
+**Revision:** 46 — **P2-1 BUILT** on branch `worlds/p2-1-fuel` @ `a7db8d6` (9 files, verified byte-identical; outcome recorded in the design note): new warp tests **9/9**, existing economy tests **5/5**, shared + web typechecks **clean**, affected web tests **37/37** — the web gate caught four extra `Fuel` fixture literals, fixed in-increment. One environment caveat (server `tsc`: `web-push` missing from this sandbox's modules; untouched file, pre-existing). **Awaiting the owner's merge tap**; post-merge ChatGPT audit follows per the default lane.
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
