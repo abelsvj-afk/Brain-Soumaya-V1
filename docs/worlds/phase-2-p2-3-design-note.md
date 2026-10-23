@@ -21,6 +21,14 @@ No scene code is written until the hull is proven. Steps, in order, each with a 
 4. **Look test.** The converted hull, lit our way, in the sandbox scene harness (the Phase 1 grading rig): silhouette read at approach distance, surface read at arrival distance. **Fail line:** the owner's eye — if it does not clearly beat the mockup's look, the backup form takes over. (Owner, D-37: the mockup is not the visual bar.)
 5. **Register.** License entry completed (asset · source · author · CC-BY · slot: Great Station hull · attribution text) before the asset is used anywhere else.
 
+**GATE 0 RECORD (2026-10-23, King):** the owner downloaded the file through his own BlendSwap account and sent it in — license chain clean. Steps 1–3 and 5 are DONE; step 4 (the owner's look-test) is the only remainder.
+- **File:** `Profondo.blend`, 6,892,000 bytes, Blender **2.68**, 66 mesh objects + the author's camera/light (discarded). Archive also carried the license page and a preview image.
+- **License (verified from the file itself, not just the web page):** "Profondo by vostok — **Creative Commons Attribution 3.0** — You MUST give attribution/credit to vostok." No textures; Cycles materials only — as the page said.
+- **Measure:** **333,563 evaluated triangles** (359,556 verts — heavy EDGE_SPLIT duplication), bounds 11.11 × 11.14 × 8.07 units. Weight: three circular structures (~98k) + eight identical 9,154-tri greeble blocks (~73k).
+- **Convert:** headless Blender 4.2.3 (installed as build prep): weld (merge-by-distance 0.0005) → Decimate-collapse at ratio **0.40** → joined to ONE object, 5 material groups preserved (Material · arancione · luci · plastica grigia · plastica nera). **Result: 132,432 triangles — under the 150k line with headroom; GLB 3,468,496 bytes.** Verified by re-import (1 mesh, 132,432 tris, bounds intact). Note: §11's hard ceiling is 750k visible tris; the 150k Gate 0 line is the stricter headroom bar, and the conversion clears both.
+- **Materials:** the raw glTF export is unfaithful to the 2014 Cycles setup (black base colors, broad emissive wash) — as this note predicted, materials are re-expressed in-app under the recipe grammar, by material name, mutated in place (replacing loaded materials breaks the mesh's rendering — found in smoke testing; same lesson family as run-the-package).
+- **Look-test:** a single-file harness (hull + recipe lighting + beacon ring preview) was smoke-tested headless (loads clean, station reads at approach framing; screenshot on file) and sent to the owner. **Gate 0 closes on his verdict.** If he fails it, the crown-and-stem backup takes over per this section — the travel layer and scene scaffold are unaffected either way (the hull is a seam in `stationScene.ts`).
+
 ## 3. The Station scene
 
 Built fresh as production code (mockup code carries over *nothing* but the lessons), three.js 0.182 (the web package's existing version), under the recipe:
