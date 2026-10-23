@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 46 — **P2-1 BUILT** on branch `worlds/p2-1-fuel` @ `a7db8d6` (9 files, verified byte-identical; outcome recorded in the design note): new warp tests **9/9**, existing economy tests **5/5**, shared + web typechecks **clean**, affected web tests **37/37** — the web gate caught four extra `Fuel` fixture literals, fixed in-increment. One environment caveat (server `tsc`: `web-push` missing from this sandbox's modules; untouched file, pre-existing). **Awaiting the owner's merge tap**; post-merge ChatGPT audit follows per the default lane.
+**Revision:** 47 — **P2-1 MERGED**: PR **#94** into the deploy branch, merge commit **`0d95fda`** (files verified byte-identical post-merge). The owner settled "merge now — audit after, per the lane" after a relayed review recommended holding for a pre-merge audit; per the default lane, **the ChatGPT audit of the merged increment is next**, findings to become the fix list. Deployment, the flag, and P2-2 remain unauthorized. (Build record: Rev 46 / the design note.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -832,4 +832,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 46. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly. Phase 2 planning lives in `phase-2-planning.md`; decisions continue to accumulate here.*
+*End of Exploration 1, Revision 47. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly. Phase 2 planning lives in `phase-2-planning.md`; decisions continue to accumulate here.*
