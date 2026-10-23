@@ -81,3 +81,5 @@ The travel layer and Station mount only when the worlds flag is on, following th
 ## 10. Authorization boundary
 
 This note + its review settle the design. Building requires the owner's explicit implementation authorization (which will also name the Gate 0 outcome handling). Merging stays his tap; the post-merge audit follows per the lane. Deployment and flag activation remain unauthorized — flag activation belongs to P2-4.
+
+**ADDENDUM (2026-10-23, post-merge audit review 25, F-01): the Station scene's host.** The scene factory (`graph/stationScene.ts`) ships unmounted in P2-3 — deliberate, per this note's dark-launch posture (the scene mounts only when the worlds flag is on, which happens at P2-4's launch). The host is now named: **a dedicated worlds surface view (a `GalaxyViews` sibling) that mounts `createStationScene` when the flag is on and the travel state places the user at the Great Station, and loads nothing while the flag is off.** The mount implementation is a named item in P2-4's build scope (§5 of its note). This addendum is the explicit deferral record the audit asked for.

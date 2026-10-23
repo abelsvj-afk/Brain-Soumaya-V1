@@ -39,6 +39,8 @@ Drift travel is free and pays +3. Without an eligibility rule, looping drifts pr
 - An ineligible drift arrival is **not an error**: the journey completes normally, `bonus.credited` is false, and the amount is 0. Nothing about the traveler is punished, flagged, or shamed (never-punish invariant) — the bonus simply doesn't pay, and §5's UI says nothing celebratory about it.
 - Eligibility is computed from the journey ledger alone — no new tracking of the user, no behavior profiles. The ledger already holds every fact used.
 
+**Invariant (adopted from the P2-3 audit, review 25): bonus eligibility must never affect the ability to access memories, drift, or return home.**
+
 ## 4 · Server confirmation before UI feedback (GH-19)
 
 The P2-3 panel's arrival state is presentation only. P2-4 adds bonus feedback **only** from the server's `bonus` result in the arrive response: credited → a quiet "+N fuel — journey bonus" line with the new balance; not credited → no bonus line at all (never a fake celebration, never raw codes). If the arrive call fails, the panel shows the P2-2 plain-language error path and no bonus state — the next state refresh reconciles from the server, which is the only authority.
@@ -47,7 +49,8 @@ The P2-3 panel's arrival state is presentation only. P2-4 adds bonus feedback **
 
 - `api/travel.ts`: type the `bonus` sibling on the arrive response.
 - `useTravel`: expose the last arrival's bonus result from the arrive action's return (no polling changes; state refresh already reconciles balances).
-- `TravelPanel`: render the §4 feedback line; nothing else changes. Route board prices/affordability already read server fuel, so the post-bonus balance appears on the next state load.
+- `TravelPanel`: render the §4 feedback line; nothing else changes.
+- **Station scene mount (added by review 25, F-01):** the worlds surface view (a `GalaxyViews` sibling) mounts `createStationScene` when the flag is on and travel state places the user at the Great Station; nothing loads while the flag is off. The scene code itself is P2-3's; only the mount is P2-4 work. Route board prices/affordability already read server fuel, so the post-bonus balance appears on the next state load.
 
 ## 6 · The launch (separate, owner-run steps — not part of the build)
 
