@@ -157,75 +157,119 @@ export async function processSourceExtraction(
       return { nodes: prior, extractedEdges: [], associativeEdges: [] };
     }
 
-    // 2 + 3. Embed each new node and store it (relational + vector),
-    // writing its node_sources origin links in the same pass.
+    // 2 + 3. Embed each new node (external call — stays OUTSIDE the
+    // write transaction below, like the extraction LLM call above).
     const contents = extraction.nodes.map((n) => n.content);
     const vectors = await deps.embeddings.embedBatch(contents);
     const createdNodes: GraphNode[] = [];
     const labelToId = new Map<string, number>();
-    for (let i = 0; i < extraction.nodes.length; i++) {
-      const n = extraction.nodes[i]!;
-      // Stamp the user's event date / reminder / tags on each node from this dump.
-      const node = nodesRepo.create(
-        { ...n, occurredAt: meta?.occurredAt, remindAt: meta?.remindAt, tags: meta?.tags },
-        vectors[i]!,
-      );
-      sourcesRepo.linkNodeToAllChunks(node.id, sourceId);
-      node.hasOriginSource = true;
-      createdNodes.push(node);
-      labelToId.set(n.label, node.id);
-
-      // Immediate cognitive linking
-      if (ctx) {
-          linkCognitiveAnchor(ctx, spaceId, node.id, node.label, vectors[i]!);
-      }
-    }
-
-    // 4a. Persist the edges the LLM extracted within this input (label -> id).
     const extractedEdges: GraphEdge[] = [];
-    for (const e of extraction.edges) {
-      const sourceNode = labelToId.get(e.sourceLabel);
-      const target = labelToId.get(e.targetLabel);
-      if (sourceNode === undefined || target === undefined || sourceNode === target) continue;
-      if (edgesRepo.exists(sourceNode, target)) continue;
-      extractedEdges.push(edgesRepo.create({ source: sourceNode, target, relationship: e.relationship }));
-    }
+    const mentionEdges: GraphEdge[] = [];
 
-    // 4b. Autonomous associative linking against existing memory. D4: at most 2
-    // concurrent per-node jobs — with each job's max 3 concurrent validations,
-    // the aggregate in-flight bound is 2 × 3 = 6 (structural, not timing-based).
-    // Per-node results are collected by index so output order stays deterministic.
-    const perNodeLinks = await mapWithConcurrency(
-      createdNodes,
-      2,
-      (node, i) =>
-        associativeLink(
-          h,
-          { nodes: nodesRepo, edges: edgesRepo, llm: deps.llm },
-          node,
+    // Fix round (review finding — exactly-once under mid-loop failure):
+    // the attempt's writes are ATOMIC. Node creation, origin-link
+    // writes, cognitive-anchor links, LLM-extracted edges, people-
+    // mention edges, and the completion bookkeeping all run in ONE
+    // synchronous DB transaction. Any failure mid-loop (e.g. the
+    // second node's insert) rolls the whole attempt back — no partial
+    // nodes, no partial links, no recorded extraction_hash — so the
+    // retryable failure path re-runs extraction over a clean slate
+    // and creates the node set exactly once. (Previously each node
+    // committed independently; a mid-loop fault left earlier nodes
+    // committed, the hash-reuse check only matches COMPLETE sets, and
+    // recovery re-created the already-committed nodes as duplicates.)
+    // Nested repo transactions (NodesRepo.create) join this one as
+    // savepoints under better-sqlite3, so their writes roll back too.
+    const writeTx = h.sqlite.transaction(() => {
+      for (let i = 0; i < extraction.nodes.length; i++) {
+        const n = extraction.nodes[i]!;
+        // Stamp the user's event date / reminder / tags on each node from this dump.
+        const node = nodesRepo.create(
+          { ...n, occurredAt: meta?.occurredAt, remindAt: meta?.remindAt, tags: meta?.tags },
           vectors[i]!,
-          deps.linkOptions ?? DEFAULT_LINK_OPTIONS,
-          spaceId,
-        ),
-    );
-    const associativeEdges: GraphEdge[] = perNodeLinks.flat();
+        );
+        sourcesRepo.linkNodeToAllChunks(node.id, sourceId);
+        node.hasOriginSource = true;
+        createdNodes.push(node);
+        labelToId.set(n.label, node.id);
 
-    // 4c. Auto-link mentions of already-tracked people (Mind tab CRM). Checked per
-    // CREATED NODE's own content, not the whole raw dump — a multi-node capture
-    // shouldn't link every resulting node to someone only ONE of them actually
-    // mentions. This is what grows `personProfile().count`; without it a person's
-    // interaction count never advances past however many mentions they had when
-    // added, however many new memories name them afterward.
-    for (let i = 0; i < createdNodes.length; i++) {
-      const node = createdNodes[i]!;
-      const mentioned = getMentionedPeople(h.sqlite, spaceId, `${node.label}. ${extraction.nodes[i]!.content}`);
-      for (const person of mentioned) {
-        if (edgesRepo.exists(node.id, person.id)) continue;
-        associativeEdges.push(edgesRepo.create({ source: node.id, target: person.id, relationship: "supports" }));
+        // Immediate cognitive linking
+        if (ctx) {
+            linkCognitiveAnchor(ctx, spaceId, node.id, node.label, vectors[i]!);
+        }
       }
-    }
 
-    sourcesRepo.completeExtraction(sourceId, owner, resultHash);
+      // 4a. Persist the edges the LLM extracted within this input (label -> id).
+      for (const e of extraction.edges) {
+        const sourceNode = labelToId.get(e.sourceLabel);
+        const target = labelToId.get(e.targetLabel);
+        if (sourceNode === undefined || target === undefined || sourceNode === target) continue;
+        if (edgesRepo.exists(sourceNode, target)) continue;
+        extractedEdges.push(edgesRepo.create({ source: sourceNode, target, relationship: e.relationship }));
+      }
+
+      // 4c. Auto-link mentions of already-tracked people (Mind tab CRM). Checked per
+      // CREATED NODE's own content, not the whole raw dump — a multi-node capture
+      // shouldn't link every resulting node to someone only ONE of them actually
+      // mentions. This is what grows `personProfile().count`; without it a person's
+      // interaction count never advances past however many mentions they had when
+      // added, however many new memories name them afterward.
+      for (let i = 0; i < createdNodes.length; i++) {
+        const node = createdNodes[i]!;
+        const mentioned = getMentionedPeople(h.sqlite, spaceId, `${node.label}. ${extraction.nodes[i]!.content}`);
+        for (const person of mentioned) {
+          if (edgesRepo.exists(node.id, person.id)) continue;
+          mentionEdges.push(edgesRepo.create({ source: node.id, target: person.id, relationship: "supports" }));
+        }
+      }
+
+      // Completion bookkeeping INSIDE the same transaction: the source
+      // only becomes 'extracted' (with its extraction_hash) if every
+      // write above committed with it. Losing the lease here aborts
+      // the whole attempt rather than stranding unowned nodes.
+      if (!sourcesRepo.completeExtraction(sourceId, owner, resultHash)) {
+        throw new Error(`processSourceExtraction: completion lost the lease for source ${sourceId}`);
+      }
+    });
+    writeTx();
+
+    // 4b. Autonomous associative linking against existing memory. This
+    // step genuinely CANNOT join the write transaction above: it awaits
+    // LLM validateLink calls, and a better-sqlite3 transaction is
+    // synchronous — holding one open across awaits would commit before
+    // the async work finished (and block the connection meanwhile).
+    // It therefore runs AFTER the extraction commit as best-effort
+    // enrichment: the extracted node set is already durable and marked
+    // extracted, its own per-validation failures are already contained
+    // inside associativeLink, and a top-level failure here is logged,
+    // never re-marking the source failed or duplicating nodes (a later
+    // retry takes the hash-reuse path and creates nothing).
+    // D4: at most 2 concurrent per-node jobs — with each job's max 3
+    // concurrent validations, the aggregate in-flight bound is
+    // 2 × 3 = 6 (structural, not timing-based). Per-node results are
+    // collected by index so output order stays deterministic.
+    let associativeEdges: GraphEdge[] = [];
+    try {
+      const perNodeLinks = await mapWithConcurrency(
+        createdNodes,
+        2,
+        (node, i) =>
+          associativeLink(
+            h,
+            { nodes: nodesRepo, edges: edgesRepo, llm: deps.llm },
+            node,
+            vectors[i]!,
+            deps.linkOptions ?? DEFAULT_LINK_OPTIONS,
+            spaceId,
+          ),
+      );
+      associativeEdges = perNodeLinks.flat();
+    } catch (err) {
+      console.warn(
+        `[ingest] associative linking failed for source ${sourceId} (extraction already committed): ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    associativeEdges.push(...mentionEdges);
     return { nodes: createdNodes, extractedEdges, associativeEdges };
   } catch (err) {
     sourcesRepo.failExtraction(sourceId, owner);

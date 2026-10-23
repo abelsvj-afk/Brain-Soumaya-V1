@@ -448,3 +448,62 @@ describe("legacy-DB migration rehearsal (ADR-019 manner)", () => {
     }
   }, 30_000);
 });
+
+describe("Fix C regression: restore rejects forged derived fields", () => {
+  async function buildPayload() {
+    const repo = new SourcesRepo(handle, SPACE);
+    const nodes = new NodesRepo(handle, SPACE);
+    const text = "derived fields must match the bytes exactly";
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text });
+    const node = nodes.create({ label: "dc", type: "daily", content: text }, await embeddings.embed(text));
+    repo.linkNodeToAllChunks(node.id, source.id);
+    return JSON.parse(JSON.stringify(new GraphExportRepo(handle, SPACE).exportGraph()));
+  }
+
+  it("chunk-text tamper aborts the whole restore: zero sources, zero nodes restored", async () => {
+    const payload = await buildPayload();
+    payload.sources[0].chunks[0].text = "forged chunk words that were never said";
+    const h2 = createDb(":memory:");
+    try {
+      expect(() => new GraphExportRepo(h2, SPACE).restoreGraph(payload)).toThrow(/derived-field mismatch/);
+      expect(new SourcesRepo(h2, SPACE).count()).toBe(0);
+      expect((h2.sqlite.prepare(`SELECT COUNT(*) AS c FROM nodes`).get() as { c: number }).c).toBe(0);
+      expect((h2.sqlite.prepare(`SELECT COUNT(*) AS c FROM source_chunks`).get() as { c: number }).c).toBe(0);
+    } finally {
+      h2.sqlite.close();
+    }
+  });
+
+  it("rawText tamper aborts the whole restore", async () => {
+    const payload = await buildPayload();
+    payload.sources[0].rawText = "forged raw text that does not match the bytes";
+    const h2 = createDb(":memory:");
+    try {
+      expect(() => new GraphExportRepo(h2, SPACE).restoreGraph(payload)).toThrow(/derived-field mismatch/);
+      expect(new SourcesRepo(h2, SPACE).count()).toBe(0);
+    } finally {
+      h2.sqlite.close();
+    }
+  });
+
+  it("chunk offset tamper (partition break) aborts the whole restore", async () => {
+    const payload = await buildPayload();
+    payload.sources[0].chunks[0].endOffset = payload.sources[0].chunks[0].endOffset - 1;
+    const h2 = createDb(":memory:");
+    try {
+      expect(() => new GraphExportRepo(h2, SPACE).restoreGraph(payload)).toThrow(/derived-field mismatch/);
+      expect(new SourcesRepo(h2, SPACE).count()).toBe(0);
+    } finally {
+      h2.sqlite.close();
+    }
+  });
+});
+
+describe("Fix A regression: travel_journeys bonus columns present on a fresh DB", () => {
+  it("PRAGMA table_info(travel_journeys) includes bonus_credited_at / bonus_amount / bonus_reason", () => {
+    const cols = (handle.sqlite.prepare(`PRAGMA table_info(travel_journeys)`).all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain("bonus_credited_at");
+    expect(cols).toContain("bonus_amount");
+    expect(cols).toContain("bonus_reason");
+  });
+});

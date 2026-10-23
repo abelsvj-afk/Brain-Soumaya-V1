@@ -386,3 +386,92 @@ describe("ingest route wiring (action branch + document import)", () => {
     expect(badRes.status).toBe(422);
   });
 });
+
+describe("Fix B regression: exactly-once under mid-loop failure (reviewer probe)", () => {
+  class TwoNodeProbeLlm extends HeuristicProvider {
+    async extract(_text: string, _context: never) {
+      return {
+        nodes: [
+          { label: "AlphaProbe", type: "daily" as const, content: "AlphaProbe content" },
+          { label: "BetaProbe", type: "daily" as const, content: "BetaProbe content" },
+        ],
+        edges: [],
+      };
+    }
+  }
+  const probeText = "alpha beta probe capture words";
+  const nodeLabels = () =>
+    (handle.sqlite.prepare(`SELECT label FROM nodes WHERE space_id = ? ORDER BY label ASC`).all(SPACE) as { label: string }[]).map((r) => r.label);
+  const activeLinkCount = (sourceId: number) =>
+    (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM node_sources WHERE source_id = ? AND active = 1`).get(sourceId) as { c: number }).c;
+  const duplicateLinkGroups = (sourceId: number) =>
+    (handle.sqlite
+      .prepare(`SELECT COUNT(*) AS c FROM (SELECT 1 FROM node_sources WHERE source_id = ? AND active = 1 GROUP BY node_id, chunk_id, role HAVING COUNT(*) > 1)`)
+      .get(sourceId) as { c: number }).c;
+
+  function expectExactlyOnceAfterRecovery(sourceId: number) {
+    const repo = new SourcesRepo(handle, SPACE);
+    expect(nodeLabels()).toEqual(["AlphaProbe", "BetaProbe"]);
+    expect(repo.getById(sourceId)!.processingStatus).toBe("extracted");
+    expect(repo.nodeIdsWithOriginFrom(sourceId).length).toBe(2);
+    // One chunk in this source => exactly one origin link per node, no dupes.
+    expect(activeLinkCount(sourceId)).toBe(2 * repo.chunksOf(sourceId).length);
+    expect(duplicateLinkGroups(sourceId)).toBe(0);
+  }
+
+  it("(1) fault on the second node's insert: attempt rolls back whole; recovery yields exactly the 2 intended nodes", async () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: probeText });
+    handle.sqlite.exec(
+      `CREATE TRIGGER fail_beta_insert BEFORE INSERT ON nodes WHEN NEW.label = 'BetaProbe'
+       BEGIN SELECT RAISE(ABORT, 'injected fault on second node insert'); END`,
+    );
+    try {
+      await expect(
+        processSourceExtraction(handle, { embeddings, llm: new TwoNodeProbeLlm() }, source.id, SPACE),
+      ).rejects.toThrow(/injected fault/);
+    } finally {
+      handle.sqlite.exec(`DROP TRIGGER IF EXISTS fail_beta_insert`);
+    }
+    // Capture failed honestly: source byte-exact + retryable, and the
+    // first node's partial writes were rolled back with the attempt.
+    const afterFail = repo.getById(source.id)!;
+    expect(afterFail.rawText).toBe(probeText);
+    expect(afterFail.contentHash).toBe(sha(probeText));
+    expect(afterFail.processingStatus).toBe("extraction_failed");
+    expect(nodeLabels()).toEqual([]);
+    expect(activeLinkCount(source.id)).toBe(0);
+
+    const rec = await recoverPendingSources(handle, { embeddings, llm: new TwoNodeProbeLlm() });
+    expect(rec.resumed).toBe(1);
+    expectExactlyOnceAfterRecovery(source.id);
+  });
+
+  it("(2) fault on the second node's origin-link write (after the first node would have committed): same exactly-once guarantee", async () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: probeText });
+    const original = SourcesRepo.prototype.linkNodeToAllChunks;
+    let calls = 0;
+    SourcesRepo.prototype.linkNodeToAllChunks = function (nodeId: number, sourceId: number) {
+      calls++;
+      if (calls === 2) throw new Error("injected fault on second node link write");
+      return original.call(this, nodeId, sourceId);
+    };
+    try {
+      await expect(
+        processSourceExtraction(handle, { embeddings, llm: new TwoNodeProbeLlm() }, source.id, SPACE),
+      ).rejects.toThrow(/injected fault on second node link/);
+    } finally {
+      SourcesRepo.prototype.linkNodeToAllChunks = original;
+    }
+    const afterFail = repo.getById(source.id)!;
+    expect(afterFail.rawText).toBe(probeText);
+    expect(afterFail.processingStatus).toBe("extraction_failed");
+    expect(nodeLabels()).toEqual([]);
+    expect(activeLinkCount(source.id)).toBe(0);
+
+    const rec = await recoverPendingSources(handle, { embeddings, llm: new TwoNodeProbeLlm() });
+    expect(rec.resumed).toBe(1);
+    expectExactlyOnceAfterRecovery(source.id);
+  });
+});

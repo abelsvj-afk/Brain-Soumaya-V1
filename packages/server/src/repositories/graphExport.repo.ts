@@ -1,6 +1,6 @@
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
-import { sha256Hex } from "./sources.repo.js";
+import { sha256Hex, decodeUtf8 } from "./sources.repo.js";
 
 /**
  * Graph JSON export (IM-129c). The only pre-existing export facility is the
@@ -149,6 +149,9 @@ export class GraphExportRepo {
    * Hash verification happens over the decoded bytes BEFORE insert and
    * again after rebuild; any mismatch throws with the offending source
    * ids and the transaction rolls back — nothing is silently served.
+   * Derived fields are verified the same way, also before insert:
+   * raw_text is recomputed from the bytes and the chunks must exactly
+   * partition it (see the derived-field block in restoreGraph).
    */
   restoreGraph(payload: GraphExport): RestoreReport {
     const sqlite = this.h.sqlite;
@@ -173,6 +176,57 @@ export class GraphExportRepo {
     if (report.hashMismatches.length > 0) {
       throw new Error(
         `restore aborted: content_hash mismatch for source id(s) ${report.hashMismatches.join(", ")} — nothing was restored`,
+      );
+    }
+
+    // Derived-field verification (fix round — restore tamper gap):
+    // content_hash covers raw_bytes ONLY, so a payload whose bytes are
+    // intact but whose DERIVED fields were forged (a chunk's text, or
+    // rawText itself) previously restored silently — and the forged
+    // chunk text was then served via FTS as if it were the owner's
+    // words. Restore therefore NEVER trusts the payload's derived
+    // fields: raw_text is recomputed by decoding raw_bytes per the
+    // deterministic decodeUtf8 rule, and the chunks must form an
+    // EXACT partition of that decoded text (contiguous offsets in
+    // ordinal order, slice(start, end) === text for every chunk).
+    // A payload presenting a rawText inconsistent with its bytes, an
+    // encoding inconsistent with the decode, or chunks that do not
+    // partition the decoded text aborts the whole restore, exactly
+    // like a hash mismatch. The values actually INSERTED below are
+    // the recomputed ones, not the payload's.
+    const recomputed = new Map<number, { text: string | null; encoding: "utf8" | "binary" }>();
+    const derivedMismatches: number[] = [];
+    for (const s of payload.sources ?? []) {
+      const bytes = decoded.get(s.id as number);
+      if (!bytes) continue;
+      const dec = decodeUtf8(bytes);
+      recomputed.set(s.id as number, dec);
+      let bad = false;
+      if (s.encoding !== undefined && s.encoding !== null && s.encoding !== dec.encoding) bad = true;
+      if (s.rawText !== undefined && s.rawText !== null && s.rawText !== dec.text) bad = true;
+      if (dec.text === null && s.rawText !== undefined && s.rawText !== null) bad = true;
+      const chunks = ((s.chunks as Record<string, unknown>[]) ?? [])
+        .slice()
+        .sort((a, b) => (a.ordinal as number) - (b.ordinal as number));
+      if (dec.text === null || dec.text.length === 0) {
+        if (chunks.length > 0) bad = true;
+      } else {
+        let cursor = 0;
+        for (let i = 0; i < chunks.length; i++) {
+          const c = chunks[i]!;
+          if (c.ordinal !== i) { bad = true; break; }
+          if (c.startOffset !== cursor) { bad = true; break; }
+          if (typeof c.endOffset !== "number" || c.endOffset <= cursor || c.endOffset > dec.text.length) { bad = true; break; }
+          if (dec.text.slice(c.startOffset as number, c.endOffset as number) !== c.text) { bad = true; break; }
+          cursor = c.endOffset as number;
+        }
+        if (!bad && cursor !== dec.text.length) bad = true;
+      }
+      if (bad) derivedMismatches.push(s.id as number);
+    }
+    if (derivedMismatches.length > 0) {
+      throw new Error(
+        `restore aborted: derived-field mismatch for source id(s) ${derivedMismatches.join(", ")} — payload rawText/chunks do not match the decoded raw_bytes; nothing was restored`,
       );
     }
 
@@ -250,10 +304,11 @@ export class GraphExportRepo {
         for (const s of payload.sources) {
           const bytes = decoded.get(s.id as number);
           if (!bytes) continue;
+          const rec = recomputed.get(s.id as number);
           const sInfo = insSource.run(
             this.spaceId, s.kind as string,
             (s.citationClass as string) ?? "verbatim_typed", (s.title as string) ?? null,
-            bytes, (s.rawText as string) ?? null, (s.encoding as string) ?? "utf8",
+            bytes, rec ? rec.text : ((s.rawText as string) ?? null), rec ? rec.encoding : ((s.encoding as string) ?? "utf8"),
             s.contentHash as string, s.byteLength as number,
             (s.speaker as string) ?? "owner", (s.occurredAt as string) ?? null,
             (s.createdAt as string) ?? new Date().toISOString(),

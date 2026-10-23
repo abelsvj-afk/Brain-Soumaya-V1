@@ -1137,6 +1137,9 @@ export function migrateSchema(sqlite: RawDb): void {
       departed_at TEXT,
       arrived_at TEXT,
       ended_at TEXT,
+      bonus_credited_at TEXT,
+      bonus_amount REAL NOT NULL DEFAULT 0,
+      bonus_reason TEXT,
       UNIQUE (space_id, client_key)
     );
     CREATE INDEX IF NOT EXISTS idx_travel_journeys_space_created
@@ -1154,6 +1157,21 @@ export function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS idx_travel_events_journey
       ON travel_journey_events(journey_id);
   `);
+
+  // P2-4 journey-bonus outcome columns on existing travel_journeys volumes
+  // (additive; the marker is the exactly-once crediting record).
+  const travelCols = sqlite.prepare(`PRAGMA table_info(travel_journeys)`).all() as { name: string }[];
+  if (travelCols.length > 0) {
+    if (!travelCols.some((c) => c.name === "bonus_credited_at")) {
+      sqlite.exec(`ALTER TABLE travel_journeys ADD COLUMN bonus_credited_at TEXT`);
+    }
+    if (!travelCols.some((c) => c.name === "bonus_amount")) {
+      sqlite.exec(`ALTER TABLE travel_journeys ADD COLUMN bonus_amount REAL NOT NULL DEFAULT 0`);
+    }
+    if (!travelCols.some((c) => c.name === "bonus_reason")) {
+      sqlite.exec(`ALTER TABLE travel_journeys ADD COLUMN bonus_reason TEXT`);
+    }
+  }
   // ADR-018 A3: rebuild tts_audio_cache to the space-owned shape (legacy
   // unowned rows purged; see migrateTtsAudioCacheOwned). Runs here rather
   // than as a plain CREATE because an existing legacy table must be

@@ -81,6 +81,12 @@ interface ForgetRequestRow {
 export function forgetSourceByRequest(
   h: DbHandle,
   requestId: number,
+  // RECORDED DEVIATION (V1 fix round, PR #104): the source id is taken
+  // as an argument and this function does NOT bind it to the request's
+  // own scope fields — weaker than applyForgetRequest's on-request
+  // binding. Tolerable only while this function has NO production
+  // caller; it MUST be bound to the request's scope before any
+  // route/tool wiring exposes it.
   sourceId: number,
 ): SourceForgetResult {
   const sqlite = h.sqlite;
