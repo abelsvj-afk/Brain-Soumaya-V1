@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 37 — **P3 diagnosed + fixed; owner waives the re-test (D-28)** (result record §2c): prime suspect = first shader-compile/upload when the visibility-gated station first renders mid-approach, plus per-frame allocations feeding GC — fixes = warm-up compile/render at load, hoisted loop objects, and longest-frame context instrumentation (syntax-validated, sandbox-verified). After the ChatGPT review loop over this evidence, the sequence may advance to the Growing Place mockup **without a second phone session**; session 1's P3 FAIL stands as fact (failed → diagnosed → fixed → owner-waived, never a pass). **Design gate: OPEN; V6 still the owner's.**
+**Revision:** 38 — **Review 17 closes the P3 diagnosis loop** (record: `chatgpt-review-17-2026-10-22.md`): the reviewer fetched the Rev 37 commit — diagnosis credible (plausible, not proven), fixes correctly aimed, no new blocking defect; **one qualification recorded as an open evidence item: Rev 37's on-device cold load is unmeasured** (the 568 ms figure predates the warm-up). The D-28 scope is preserved exactly — outstanding Station evidence stays outstanding; Station acceptance remains **UNRESOLVED**; the sequence now advances to the Growing Place mockup under D-28, which is not proof the Station passed. **Design gate: OPEN; V6 still the owner's.**
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
@@ -826,4 +826,4 @@ The draft Station recipe follows §18's minimum contents: identity (crown-and-st
 
 ---
 
-*End of Exploration 1, Revision 37. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
+*End of Exploration 1, Revision 38. Workflow (updated 2026-10-22 at the owner's direction): these plans live on GitHub (branch `design/worlds-vision`, folder `docs/worlds/`) so ChatGPT can read and review them there; its review returns to the worlds chat, and this document is revised — not replaced — so decisions accumulate visibly.*
