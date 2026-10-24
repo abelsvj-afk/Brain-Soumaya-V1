@@ -4,6 +4,7 @@
 **Lane:** design note → review loop → owner settlement → build authorization → build → full gate → owner's merge tap.
 **Predecessors:** P2-1…P2-4 (travel skeleton), P3-1 (Growing Place, merged `aaaeb1a`).
 **Launch:** PR #107 (flag flip) is open; this increment ships under the same flag.
+**Review:** preliminary ChatGPT review received 2026-10-24 (record `chatgpt-review-28-preliminary.md`): directionally sound, formal verdict pending — the reviewer 404'd the files on the default branch; they live on `design/worlds-vision`. No reconciliation yet: the provisional recommendations confirm the note as written.
 
 ## §1. What exists today — and what is missing
 
