@@ -9,6 +9,10 @@ import { STATION_PALETTE } from "../graph/stationLayout.js";
 import { buildGardenLayout, type GardenLayout } from "../graph/gardenLayout.js";
 import { createGardenScene } from "../graph/gardenScene.js";
 import WorldCredits from "./WorldCredits.js";
+import { createTransitScene } from "../graph/transitScene.js";
+import { TRANSIT_MS } from "./TravelPanel.js";
+import { makeEngineAudio } from "../graph/engineAudio.js";
+import { WORLD_CHART } from "../lib/routeBoard.js";
 
 /**
  * The worlds surface view — the mount the P2-3 audit's F-01 reconciled as
@@ -33,6 +37,15 @@ import WorldCredits from "./WorldCredits.js";
  * monumental orbit, frozen under reduced motion. Closing the surface is
  * view-only: the brain stays where the server says it is, and the travel
  * panel is how it journeys on.
+ *
+ * Transit (P2-5): while a journey is in_transit or returning, the surface
+ * shows the transit scene instead of a destination scene — her ship flying
+ * from the departure gate to the arrival gate, warp rich / drift plain.
+ * The ship is the procedural hull: the soumaya-ship.glb license is
+ * unconfirmed (see the P2-5 audit brief), so the GLB is not loaded here.
+ * Engine audio rides along, gated by the interface-sounds setting.
+ * Arming still shows nothing — the user is still at the origin world and
+ * the panel owns the countdown.
  */
 
 interface WorldSceneEntry {
@@ -85,22 +98,33 @@ export default function WorldsSurface({
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const currentWorld = travel.state?.currentWorld;
+  const journey = travel.state?.activeJourney ?? null;
   const atWorld =
+    enabled && !!currentWorld && currentWorld in WORLD_SCENES && !journey;
+  const inTransit =
     enabled &&
-    !!currentWorld &&
-    currentWorld in WORLD_SCENES &&
-    !travel.state?.activeJourney;
-  const visible = atWorld && !dismissed;
+    !!journey &&
+    (journey.state === "in_transit" || journey.state === "returning");
+  const transitKind = inTransit ? journey.kind : null;
+  const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
+  const mode = inTransit ? "transit" : atWorld ? "world" : null;
+  const visible = !!mode && !dismissed;
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
+  const worldName = (key: string) =>
+    WORLD_CHART.find((w) => w.key === key)?.name ?? key;
+  const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
+  const transitFallback =
+    "The journey view needs graphics support on this device — your journey is unaffected.";
 
-  // A new stay in a world (leaving and returning) reopens the view.
+  // A new stay — a new world, or a new journey — reopens the view. (A
+  // transit dismissed mid-flight reopens at arrival: the destination scene
+  // is a new stay, not the dismissed transit.)
+  const journeyId = journey?.id ?? null;
   useEffect(() => {
-    if (!atWorld) {
-      setDismissed(false);
-      setGraphicsFailed(false);
-    }
-  }, [atWorld]);
+    setDismissed(false);
+    setGraphicsFailed(false);
+  }, [mode, currentWorld, journeyId]);
 
   // Landmarks need the user's Journeys; the graph prop already carries the
   // memories. A failed fetch omits landmarks and says so — it never blocks
@@ -129,10 +153,10 @@ export default function WorldsSurface({
   }, [atGarden, graph, journeys]);
 
   useEffect(() => {
-    if (!visible || !entry) return;
+    if (!visible || !mode) return;
     // The garden needs the graph before it can build; until then the dialog
     // shows its loading line (see the render below) and builds nothing.
-    if (currentWorld === "growing-place" && !layout) return;
+    if (mode === "world" && currentWorld === "growing-place" && !layout) return;
     const host = hostRef.current;
     if (!host) return;
     let renderer: THREE.WebGLRenderer;
@@ -149,17 +173,34 @@ export default function WorldsSurface({
     renderer.setSize(host.clientWidth, host.clientHeight);
     host.appendChild(renderer.domElement);
 
+    const background = mode === "transit" ? 0x05070f : (entry?.background ?? 0x05070f);
+    const fogDensity = mode === "transit" ? 0 : (entry?.fogDensity ?? 0);
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(entry.background);
-    scene.fog = new THREE.FogExp2(entry.background, entry.fogDensity);
+    scene.background = new THREE.Color(background);
+    scene.fog = new THREE.FogExp2(background, fogDensity);
     const camera = new THREE.PerspectiveCamera(
       55,
       host.clientWidth / Math.max(1, host.clientHeight),
       1,
       9000,
     );
-    const world = entry.build(layout);
+    const world =
+      mode === "transit"
+        ? createTransitScene({
+            kind: transitKind ?? "warp",
+            totalMs: transitTotalMs,
+            origin: journey?.origin ?? "home",
+            destination: journey?.destination ?? "home",
+          })
+        : entry
+          ? entry.build(layout)
+          : null;
+    if (!world) return;
     scene.add(world.group);
+    // Engine audio rides the transit only; it is gated internally by the
+    // interface-sounds setting, and it stops when the surface unmounts.
+    const engine = mode === "transit" ? makeEngineAudio() : null;
+    const orbit = mode === "world" ? entry : null;
 
     const onResize = () => {
       const w = host.clientWidth;
@@ -176,13 +217,21 @@ export default function WorldsSurface({
     const frame = () => {
       const elapsed = performance.now() - startedAt;
       world.update(elapsed, { reducedMotion });
-      const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
-      camera.position.set(
-        Math.sin(angle) * entry.orbitRadius,
-        entry.orbitHeight,
-        Math.cos(angle) * entry.orbitRadius,
-      );
-      camera.lookAt(0, entry.lookAtY, 0);
+      if (mode === "transit") {
+        // Chase view: behind and above the ship, looking down the corridor
+        // at the arrival gate. The scene moves the gates; the camera holds.
+        camera.position.set(0, 8, 26);
+        camera.lookAt(0, 0, -60);
+        engine?.setLevel(1, transitKind === "warp" ? 1 : 0.35);
+      } else if (orbit) {
+        const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
+        camera.position.set(
+          Math.sin(angle) * orbit.orbitRadius,
+          orbit.orbitHeight,
+          Math.cos(angle) * orbit.orbitRadius,
+        );
+        camera.lookAt(0, orbit.lookAtY, 0);
+      }
       try {
         renderer.render(scene, camera);
       } catch {
@@ -196,32 +245,35 @@ export default function WorldsSurface({
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      engine?.dispose();
       world.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [visible, entry, currentWorld, layout]);
+  }, [visible, mode, entry, currentWorld, layout, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
 
-  if (!visible || !entry) return null;
+  if (!visible || !mode) return null;
+  const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
+  const fallback = mode === "transit" ? transitFallback : (entry?.fallback ?? "");
 
   return (
-    <section className="worlds-surface" role="dialog" aria-label={entry.title}>
+    <section className="worlds-surface" role="dialog" aria-label={title}>
       <div className="worlds-surface-canvas" ref={hostRef} />
       <header className="worlds-surface-bar">
-        <h3>{entry.title}</h3>
+        <h3>{title}</h3>
         <button type="button" onClick={() => setDismissed(true)}>
           Back to your galaxy
         </button>
       </header>
-      {currentWorld === "growing-place" && !layout && (
+      {mode === "world" && currentWorld === "growing-place" && !layout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}
-      {journeysFailed && (
+      {mode === "world" && journeysFailed && (
         <p className="worlds-surface-fallback">
           Landmarks couldn&apos;t load — your garden is unaffected.
         </p>
       )}
-      {graphicsFailed && <p className="worlds-surface-fallback">{entry.fallback}</p>}
+      {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
       <footer className="worlds-surface-credits">
         <button type="button" onClick={() => setShowCredits((v) => !v)}>
           {showCredits ? "Hide credits" : "Credits"}

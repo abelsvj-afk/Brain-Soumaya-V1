@@ -76,11 +76,11 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("mid-journey renders nothing — arrival is the server's word first", () => {
+  it("mid-journey renders the transit view, not nothing (P2-5) — arrival is still the server's word", async () => {
     mockUseTravel.mockReturnValue(
       atStation({
         state: {
-          currentWorld: "great-station",
+          currentWorld: "home",
           activeJourney: {
             id: "j-9",
             kind: "warp",
@@ -89,6 +89,60 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
             state: "in_transit",
             fuelCharged: 10,
             cancellable: false,
+            createdAt: "2026-10-23T12:00:00.000Z",
+            cancelDeadline: "2026-10-23T12:00:10.000Z",
+          },
+          fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+        },
+      }),
+    );
+    render(<WorldsSurface enabled />);
+    expect(
+      screen.getByRole("dialog", { name: "Travelling to The Great Station" }),
+    ).toBeTruthy();
+    // happy-dom has no working WebGL: the honest fallback appears,
+    // the journey itself is unaffected.
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your journey is unaffected/)).toBeTruthy();
+  });
+
+  it("returning renders the transit view too (P2-5)", () => {
+    mockUseTravel.mockReturnValue(
+      atStation({
+        state: {
+          currentWorld: "great-station",
+          activeJourney: {
+            id: "j-10",
+            kind: "drift",
+            origin: "great-station",
+            destination: "home",
+            state: "returning",
+            fuelCharged: 0,
+            cancellable: false,
+            createdAt: "2026-10-23T12:00:00.000Z",
+            cancelDeadline: "2026-10-23T12:00:10.000Z",
+          },
+          fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+        },
+      }),
+    );
+    render(<WorldsSurface enabled />);
+    expect(screen.getByRole("dialog", { name: "Travelling to Home" })).toBeTruthy();
+  });
+
+  it("arming renders nothing — the user is still at the origin and the panel owns the countdown (P2-5)", () => {
+    mockUseTravel.mockReturnValue(
+      atStation({
+        state: {
+          currentWorld: "home",
+          activeJourney: {
+            id: "j-11",
+            kind: "warp",
+            origin: "home",
+            destination: "great-station",
+            state: "arming",
+            fuelCharged: 0,
+            cancellable: true,
             createdAt: "2026-10-23T12:00:00.000Z",
             cancelDeadline: "2026-10-23T12:00:10.000Z",
           },
