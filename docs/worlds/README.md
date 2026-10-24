@@ -106,3 +106,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 73. **P3-1 MERGED (D-63).** PR #106 → `aaaeb1a`, SHAs verified on deploy. Growing Place in the app, still dark. Post-merge audit is the next step when the owner orders it; Deep Past after the P3-1 arc, on his word.
 
 74. **LAUNCH AUTHORIZED (D-64).** Owner turned the worlds layer on. Flag-flip PR #107 open (`worlds/launch-flag-flip`, one line, SHA-verified). Merge is his tap; live on his next redeploy, then his device check.
+
+75. **P2-5 DESIGN NOTE DRAFTED (D-65).** Real warp gates + transit space + arrival areas, built once for all worlds. Relay package: `docs/worlds/phase-2-p2-5-review-relay.md`. Review loop next; settlement + build authorization are the owner's.
