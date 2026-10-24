@@ -24,6 +24,30 @@
 - The Phase 1 mockup (owner-passed, D-29) proves the garden's grammar at budget in a single 33 KB scene: terraces, witness tree, instanced vegetation, A7 connection-forming, A6 landmark-rising, A1–A3 carry-and-place. It is the scene's starting point, as the Station scaffold was for P2-3.
 - The HYG starfield module (P2-3/F-02) is reusable as the garden's dimmed dawn sky — same data, presentation-dimmed per the recipe.
 
+## 2.5 The home galaxy vs the garden — same data, different question (verified against the real galaxy)
+
+The owner asked that this be understood properly before anything is built, so it was checked against the galaxy's actual code (`graph/Graph3D.tsx`, `shared/types.ts` `GraphNode`, `graph/journeyHubs.ts`, `graph/sun.ts`, `graph/fleet.ts`), not assumed.
+
+**The home galaxy is the brain itself, working.** It renders the same graph as a sky: every node is a body whose class (star / planet / moon) comes from its derived mass (importance, degree, emotional weight); a node's spaced-repetition strength drives its brightness; Journey hubs, the money sky, and the fleet (Escort, scouts, defenders, tenders — followable) are layers over it; a sun sits at the center with its own proximity rules, and rank-ups fire celebratory salvos around it. You **work** there: click a star, read it, act on it, navigate by citation. It is the second brain's home, settled design, and **worlds work never touches it** (D-48).
+
+**The garden is the same data, asked a different question.** The galaxy answers *"what do I know, and how does it connect?"* The garden answers *"what is it all adding up to?"* — and it answers by arrangement, not by a second truth:
+
+| | Home galaxy | The garden |
+|---|---|---|
+| What it is | The brain, working — sky | A visit — ground you stand on |
+| Space | Free 3D, bodies by mass, sun at center | Terraces rising to one tree; dawn, no sun |
+| What a node is | A star/planet/moon, brightness by review strength | A plot of resting ground, placed by age and seeded position |
+| What a link is | A constellation line | A path of light between two plots |
+| What a journey is | A hub in the sky (isolatable layer) | A standing landmark — **only** when the user marked it done (Q1, settled B) |
+| What you do there | Read, navigate, act (tools, chat, fleet) | Walk through what it adds up to; nothing is edited from the garden |
+| What it stores | The brain | Nothing — it re-reads the brain on every visit |
+
+Three guardrails this comparison sets for the build:
+
+1. **One truth, two arrangements.** The galaxy already encodes progress (goal nodes carry `progress`), strength (brightness), and importance (body class). The garden must never re-encode the same signal differently — no progress-bar hedges, no second brightness. A goal's progress is shown, if at all, as a number in words; the garden's structure comes only from what the brain confirms (a journey done, a link real).
+2. **The garden is a lens, not a second brain.** It adds no node, no link, no edit surface. Delete a memory in the brain and its plot is gone next visit. This is the failure-independence invariant stated for this world.
+3. **Sky vs ground is the identity.** The galaxy is flown through; the garden is walked in. If a garden scene starts to feel like a second galaxy — stars, orbits, a sun — it has lost the plot (literally) and the design is wrong.
+
 ## 3. Design
 
 ### 3.1 Travel extension
@@ -40,11 +64,11 @@
 - **Touching a plot** surfaces its memory through the app's existing memory mechanisms (the same focus/citation path the galaxy uses) — reuse, never a parallel viewer.
 - **Empty or young brain:** terraces stand as resting ground — honestly unplanted, quietly lit. The garden never fabricates a plot to look fuller.
 
-### 3.4 Landmarks — the one real fork (Q1, §5 below)
+### 3.4 Landmarks — settled: presence-only for completed Journeys (Q1 = B, D-59)
 Landmarks are milestones, and milestones are structural (§17) — but the garden in P3-1 *renders*; it does not *decide*. Two honest readings:
 - **(A) Defer landmarks entirely to Phase 4.** P3-1 ships terraces + plots + paths only; landmarks arrive with the rail, rising animation and all.
 - **(B) Presence-only landmarks for user-completed Journeys.** A journey the user themselves marked **done** in the brain is a user-confirmed milestone already recorded; the garden renders a standing landmark for it (deterministic placement, form by the recipe's grammar, can answer "why are you here?" with the journey's title). **No rising animation** — A6 stays Phase 4, when a completion can be *celebrated* through the rail; in P3-1 the landmark is simply, truthfully, *there*, the way a plot is there. Nothing is inferred: active/paused journeys render nothing (non-ranking, unmapped = unrendered, per R-G3).
-**Recommendation: (B).** It grounds every landmark in the user's own confirmed record, applies nothing, stores nothing, and keeps the ceremony for the phase that owns it.
+**SETTLED by the owner 2026-10-24 (D-59): (B).** Landmarks render, presence-only, for Journeys the user has marked done in the brain — the garden's translation of the galaxy's journey hubs, filtered to done, rendered in garden grammar. It grounds every landmark in the user's own confirmed record, applies nothing, stores nothing, and keeps the rising ceremony for the phase that owns it.
 
 ### 3.5 Honesty rails (acceptance-level, not aspirations)
 - Every rendered plot/path/landmark traces to a real node/edge/journey in the fetched data — testable by construction (the layout consumes only that data).
@@ -62,7 +86,7 @@ Landmarks are milestones, and milestones are structural (§17) — but the garde
 
 ## 5. Open questions for the owner
 
-- **Q1 Landmarks:** (A) defer to Phase 4, or (B) presence-only for your completed Journeys? *(Recommendation: B.)*
+- **Q1 Landmarks: SETTLED (B, D-59)** — presence-only landmarks for your completed Journeys (see §3.4).
 - **Q2 Plot scale:** all memories as plots (recommended — the layout bands by age and the garden is built to be walked at brain scale), or a curated subset? If the brain grows to thousands, banding still holds; clustering is a later refinement, not a P3-1 need.
 - **Q3 (settled by recipe, recorded so it isn't re-litigated):** the dawn sky is the HYG field dimmed — no new star data, no new credits beyond the existing HYG entry's reuse.
 
