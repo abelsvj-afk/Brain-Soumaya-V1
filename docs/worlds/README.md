@@ -108,3 +108,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 74. **LAUNCH AUTHORIZED (D-64).** Owner turned the worlds layer on. Flag-flip PR #107 open (`worlds/launch-flag-flip`, one line, SHA-verified). Merge is his tap; live on his next redeploy, then his device check.
 
 75. **P2-5 DESIGN NOTE DRAFTED (D-65).** Real warp gates + transit space + arrival areas, built once for all worlds. Relay package: `docs/worlds/phase-2-p2-5-review-relay.md`. Review loop next; settlement + build authorization are the owner's.
+
+76. **P2-5 REVIEW 28 RECONCILED (D-66).** Formal verdict READY WITH CHANGES. Record: `docs/worlds/chatgpt-review-28.md` (+ preliminary `chatgpt-review-28-preliminary.md`). Revised note back to the owner for settlement of Q1–Q5; no build authorized.
