@@ -77,7 +77,7 @@
 69. **P3-1 IN THE REVIEW LOOP (owner, 2026-10-24).** Relay package: `docs/worlds/p3-1-review-relay.md` — paste-ready prompt + links for ChatGPT and Gemini. Settled, do not reopen: Q1 = (B). Review focus: Q2 plot scale, §2.5 galaxy-vs-garden verification, tier-ii deferral, C1/C2 testability, budget realism, honesty/kindness, gaps. Verdict format: READY / READY WITH CHANGES / NOT READY.
 70. **REVIEW 27 RETURNED + RECONCILED (D-60): READY WITH CHANGES.** Record: `docs/worlds/chatgpt-review-27.md`. 12 findings, all addressed in the note (eligibility contract, scale strategy, determinism/traceability specs, per-channel non-ranking, edge semantics, measured performance, empty/sparse/error fixtures, two-sided dark-shipping). Concept + settled decisions endorsed. One new proposed convention awaits the owner's settlement: age-banded terraces, arrival at the present, ascent toward the oldest light. Build still unauthorized.
 71. **P3-1 SETTLED + BUILD AUTHORIZED (D-61).** Owner approved the revised note incl. the terrace convention and said "Continue." Build underway on `worlds/p3-1-garden`, ships dark.
-72. **P3-1 BUILT — PR #106 (D-62).** Gate green (server 1902 / web 1460 / typecheck / build). **Audit brief: `docs/worlds/phase-3-p3-1-audit-brief.md` on this branch.** Ships dark — flip + deploy unauthorized. Merge is the owner's tap. Also: the owner reports another chat is now working on the Man-God world — that work lives there; this lane stays on P3-1. Man-God: destruction OUT by the owner's agreement; cosmic-scale tools within the fence affirmed. Fleets concept filed (`docs/worlds/fleets-concept.md`): Soumaya dispatches bounded automated missions at end-game costs.
+72. **P3-1 BUILT — PR #106 (D-62).** Gate green (server 1902 / web 1460 / typecheck / build). **Audit brief: `docs/worlds/phase-3-p3-1-audit-brief.md` on this branch.** Ships dark — flip + deploy unauthorized. Merged as `aaaeb1a` (D-63). Also: the owner reports another chat is now working on the Man-God world — that work lives there; this lane stays on P3-1. Man-God: destruction OUT by the owner's agreement; cosmic-scale tools within the fence affirmed. Fleets concept filed (`docs/worlds/fleets-concept.md`): Soumaya dispatches bounded automated missions at end-game costs.
 
 ## The most important instruction
 
@@ -102,3 +102,5 @@ Section-by-section design thinking on the exploration — recommendations, reaso
 ## Coordination note
 
 A separate chat runs this app's audit program and repairs; designs here that touch shared systems (galaxy renderer, fuel, quests, streak, notifications, Chronicle) must be reconciled there before any build. Flag any such touchpoints you spot.
+
+73. **P3-1 MERGED (D-63).** PR #106 → `aaaeb1a`, SHAs verified on deploy. Growing Place in the app, still dark. Post-merge audit is the next step when the owner orders it; Deep Past after the P3-1 arc, on his word.
