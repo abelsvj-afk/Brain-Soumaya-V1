@@ -110,3 +110,7 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 75. **P2-5 DESIGN NOTE DRAFTED (D-65).** Real warp gates + transit space + arrival areas, built once for all worlds. Relay package: `docs/worlds/phase-2-p2-5-review-relay.md`. Review loop next; settlement + build authorization are the owner's.
 
 76. **P2-5 REVIEW 28 RECONCILED (D-66).** Formal verdict READY WITH CHANGES. Record: `docs/worlds/chatgpt-review-28.md` (+ preliminary `chatgpt-review-28-preliminary.md`). Revised note back to the owner for settlement of Q1–Q5; no build authorized.
+
+77. **P2-5 Q1–Q5 SETTLED + BUILD AUTHORIZED (D-67).** Owner settled all five as recommended (shared dressed gate; HYG + motion MVP; common arrival contract; chase view; drift minimum). Built in the default lane; ships dark.
+
+78. **P2-5 PR #108 OPEN WITH GATE CAVEAT (D-68).** Owner: "Move on." Branch `worlds/p2-5-transit`, commit `cda9b6f`, 8 files SHA-verified. Gate: typecheck clean, targeted 20/20, server 1,877/1,902 (21 env disk-I/O fails, 0 assertion fails); web full suite + build NOT RUN (sandbox EPERM, proven environmental). Audit brief: `docs/worlds/phase-2-p2-5-audit-brief.md`. Merge is his tap.
