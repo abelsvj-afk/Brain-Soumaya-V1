@@ -1,6 +1,6 @@
 # Phase 3 · P3-1 Design Note — The Growing Place (first memory-bearing world)
 
-**Status:** DRAFT for the review loop (owner + ChatGPT + Gemini). Phase 3 OPENED by the owner 2026-10-23 ("Start number 2"); per D-23 the Growing Place is Phase 3's first world. **No implementation is authorized by this note.** P3-1, when built, ships dark behind the same flag; the Phase 2 launch sequence is unchanged and still the owner's separate call.
+**Status:** IN THE REVIEW LOOP (owner-relayed 2026-10-24; relay package `phase-3-p3-1-review-relay.md`). Phase 3 OPENED by the owner 2026-10-23 ("Start number 2"); per D-23 the Growing Place is Phase 3's first world. Q1 settled (B, D-59). **No implementation is authorized by this note.** P3-1, when built, ships dark behind the same flag; the Phase 2 launch sequence is unchanged and still the owner's separate call.
 
 **What P3-1 is:** the first world that shows *memories*. The Station (D-5) surfaces journeys and routes; the Growing Place surfaces the brain's own becoming — real memories resting as evidence, real connections drawn as paths, real completed chapters standing as landmarks — inside the settled garden: terraced arcs under eternal dawn, one colossal witness tree, and the kindness rule over everything (nothing wilts, browns, or dies, ever).
 
