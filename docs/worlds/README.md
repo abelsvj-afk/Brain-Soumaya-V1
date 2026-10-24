@@ -104,3 +104,5 @@ Section-by-section design thinking on the exploration — recommendations, reaso
 A separate chat runs this app's audit program and repairs; designs here that touch shared systems (galaxy renderer, fuel, quests, streak, notifications, Chronicle) must be reconciled there before any build. Flag any such touchpoints you spot.
 
 73. **P3-1 MERGED (D-63).** PR #106 → `aaaeb1a`, SHAs verified on deploy. Growing Place in the app, still dark. Post-merge audit is the next step when the owner orders it; Deep Past after the P3-1 arc, on his word.
+
+74. **LAUNCH AUTHORIZED (D-64).** Owner turned the worlds layer on. Flag-flip PR #107 open (`worlds/launch-flag-flip`, one line, SHA-verified). Merge is his tap; live on his next redeploy, then his device check.
