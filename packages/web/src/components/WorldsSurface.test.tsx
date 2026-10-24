@@ -4,6 +4,7 @@ import WorldsSurface from "./WorldsSurface.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
 
 vi.mock("../hooks/useTravel.js", () => ({ useTravel: vi.fn() }));
+vi.mock("../api/journeys.js", () => ({ getJourneys: vi.fn(async () => []) }));
 const mockUseTravel = vi.mocked(useTravel);
 
 function fakeTravel(over: Partial<UseTravel> = {}): UseTravel {
@@ -37,6 +38,26 @@ const atStation = (over: Partial<UseTravel> = {}) =>
     },
     ...over,
   });
+
+const atGarden = (over: Partial<UseTravel> = {}) =>
+  fakeTravel({
+    state: {
+      currentWorld: "growing-place",
+      activeJourney: null,
+      fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+    },
+    ...over,
+  });
+
+const gardenGraph = {
+  nodes: [
+    { id: 1, label: "a", type: "memory", content: "", createdAt: "2026-10-01T00:00:00.000Z" },
+    { id: 2, label: "b", type: "memory", content: "", createdAt: "2025-05-01T00:00:00.000Z" },
+  ],
+  links: [
+    { id: 10, source: 1, target: 2, relationship: "related", weight: 0.5, createdAt: "2026-10-01T00:00:00.000Z" },
+  ],
+} as never;
 
 describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
   beforeEach(() => {
@@ -88,5 +109,40 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("WorldsSurface — the Growing Place (P3-1)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+  });
+
+  it("at the garden with the graph it mounts the garden; without WebGL it degrades honestly", async () => {
+    mockUseTravel.mockReturnValue(atGarden());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
+  });
+
+  it("at the garden without the graph yet it shows a loading line and builds nothing", () => {
+    mockUseTravel.mockReturnValue(atGarden());
+    render(<WorldsSurface enabled graph={null} />);
+    expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
+    expect(screen.getByText(/Your garden is loading/)).toBeTruthy();
+  });
+
+  it("an unknown world renders nothing — the registry admits only built worlds", () => {
+    mockUseTravel.mockReturnValue(
+      fakeTravel({
+        state: {
+          currentWorld: "deep-past",
+          activeJourney: null,
+          fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+        },
+      }),
+    );
+    const { container } = render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(container.firstChild).toBeNull();
   });
 });
