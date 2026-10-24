@@ -235,6 +235,19 @@ describe("machine legality, drift, and current-world derivation", () => {
     expect(departed?.detail?.fuelCharged).toBe(0);
   });
 
+  it("admits the Growing Place (P3-1): warp there and back, same ledger", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "gp-1", kind: "warp", destination: "growing-place" }, T0);
+    expect(out.destination).toBe("growing-place");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("growing-place");
+    const home = t.depart({ clientKey: "gp-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
+
   it("rejects off-chart destinations and bad kinds before anything is written", () => {
     const t = travel();
     expect(() => t.depart({ clientKey: "x1", kind: "warp", destination: "narnia" }, T0)).toThrowError(

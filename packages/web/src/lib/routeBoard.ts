@@ -19,6 +19,11 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     name: "The Great Station",
     blurb: "The home port: journeys and routes begin here.",
   },
+  {
+    key: "growing-place",
+    name: "The Growing Place",
+    blurb: "The garden where your becoming is kept — memories resting as evidence, paths between them.",
+  },
 ];
 
 export interface RouteOption {

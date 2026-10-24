@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { TravelJourney } from "@brain/shared";
 import TravelPanel from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
@@ -57,9 +57,18 @@ describe("TravelPanel", () => {
   it("shows the route board with honest prices at home", () => {
     render(<TravelPanel enabled />);
     expect(screen.getByText("The Great Station")).toBeTruthy();
+    expect(screen.getByText("The Growing Place")).toBeTruthy();
     expect(screen.getByText("You are here")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Warp · 10 fuel/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Drift · free/ })).toBeTruthy();
+    // Two off-world destinations now: each offers warp at the shared cost
+    // and drift free. Scoped per destination so a third world cannot hide
+    // behind a single-element query.
+    const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
+    expect(entries).toHaveLength(3);
+    for (const entry of entries.slice(1)) {
+      const scoped = within(entry as HTMLElement);
+      expect(scoped.getByRole("button", { name: /Warp · 10 fuel/ })).toBeTruthy();
+      expect(scoped.getByRole("button", { name: /Drift · free/ })).toBeTruthy();
+    }
   });
 
   it("disables warp on a low balance and says why — drift stays possible", () => {
@@ -73,16 +82,23 @@ describe("TravelPanel", () => {
       }),
     );
     render(<TravelPanel enabled />);
-    expect((screen.getByRole("button", { name: /Warp/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/drifting is always free/)).toBeTruthy();
+    const warps = screen.getAllByRole("button", { name: /Warp/ });
+    expect(warps).toHaveLength(2); // Station + Garden: warp is unaffordable to both
+    for (const w of warps) expect((w as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText(/drifting is always free/)).toHaveLength(2);
   });
 
   it("depart is wired to the chosen route and kind", () => {
     const t = fakeTravel();
     mockUseTravel.mockReturnValue(t);
     render(<TravelPanel enabled />);
-    fireEvent.click(screen.getByRole("button", { name: /Warp · 10 fuel/ }));
+    const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
+    const station = within(entries[1] as HTMLElement);
+    fireEvent.click(station.getByRole("button", { name: /Warp · 10 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "great-station");
+    const garden = within(entries[2] as HTMLElement);
+    fireEvent.click(garden.getByRole("button", { name: /Warp · 10 fuel/ }));
+    expect(t.depart).toHaveBeenCalledWith("warp", "growing-place");
   });
 
   it("arming shows the server's cancel window as a countdown and a free cancel", () => {
