@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
-import type { GraphData, Journey } from "@brain/shared";
+import type { GraphData, Journey, JourneyLinkSummary } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
-import { getJourneys } from "../api/journeys.js";
+import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { createStationScene } from "../graph/stationScene.js";
 import { STATION_PALETTE } from "../graph/stationLayout.js";
 import { buildGardenLayout, type GardenLayout } from "../graph/gardenLayout.js";
 import { createGardenScene } from "../graph/gardenScene.js";
+import {
+  buildDeepPastLayout,
+  type DeepPastLayout,
+} from "../graph/deepPastLayout.js";
+import {
+  createDeepPastScene,
+  EMPTY_DEEP_PAST_LAYOUT,
+  deepPastDescentCamera,
+  deepPastDescentStage,
+  DEEP_PAST_DESCENT,
+} from "../graph/deepPastScene.js";
 import WorldCredits from "./WorldCredits.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -21,14 +32,16 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * overlay layer: when the travel flag is on AND the server's travel state
  * places the brain in a world with a scene, that scene mounts full-screen.
  *
- * Worlds (P3-1): the Great Station (P2-4) and the Growing Place (the
- * garden — plots = real memories, paths = real connections, landmarks =
- * completed Journeys, all derived per-visit from the graph the app
- * already holds). The garden renders the graph data the app holds — the
- * same window the home galaxy sees — via the `graph` prop from App; it
- * never fetches its own copy of the brain. Journeys are fetched on
- * garden entry for the landmarks; if that fetch fails, landmarks are
- * simply absent and the surface says so honestly.
+ * Worlds (P3-2): the Great Station (P2-4), the Growing Place (the garden —
+ * plots = real memories, paths = real connections, landmarks = completed
+ * Journeys, all derived per-visit from the graph the app already holds),
+ * and the Deep Past (the helix — members = old memories by the D-7 rule,
+ * anchors = links to their other appearances, the Chronicle thread = the
+ * earliest done Journey with two member stops). Each world renders the graph
+ * data the app already holds — the same window the home galaxy sees — via
+ * the `graph` prop from App; none fetches its own copy of the brain.
+ * Journeys are fetched on garden/deep-past entry (landmarks / routes); if a
+ * fetch fails, the world renders without that layer and says so honestly.
  *
  * Dark contract, same as the panel's: while the flag is off this renders
  * nothing, fetches nothing, and never touches three.js or any scene. The
@@ -46,7 +59,32 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * Engine audio rides along, gated by the interface-sounds setting.
  * Arming still shows nothing — the user is still at the origin world and
  * the panel owns the countdown.
+ *
+ * Guided descent (P3-2, A21, follow-only): at the Deep Past, when a
+ * Chronicle thread exists, one button starts the slow descent along the
+ * thread (rim → basin, 90 s, capped); the same button leaves it. Leaving
+ * parks the view — the orbit continues at the parked depth, and re-entering
+ * resumes from there; the route is never lost. Reduced motion turns the
+ * descent into stratified stage holds (rim → mid → basin).
  */
+
+interface WorldSceneHandle {
+  group: THREE.Group;
+  update: (ms: number, opts?: { reducedMotion?: boolean }) => void;
+  dispose: () => void;
+}
+
+function isGardenLayout(
+  layout: GardenLayout | DeepPastLayout | undefined,
+): layout is GardenLayout {
+  return !!layout && "plots" in layout;
+}
+
+function isDeepPastLayout(
+  layout: GardenLayout | DeepPastLayout | undefined,
+): layout is DeepPastLayout {
+  return !!layout && "members" in layout;
+}
 
 interface WorldSceneEntry {
   title: string;
@@ -56,7 +94,7 @@ interface WorldSceneEntry {
   orbitHeight: number;
   lookAtY: number;
   fallback: string;
-  build: (layout?: GardenLayout) => { group: THREE.Group; update: (ms: number, opts?: { reducedMotion?: boolean }) => void; dispose: () => void };
+  build: (layout?: GardenLayout | DeepPastLayout) => WorldSceneHandle;
 }
 
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
@@ -78,7 +116,23 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: 300,
     lookAtY: 60,
     fallback: "The garden view needs graphics support on this device — your memories are unaffected.",
-    build: (layout) => createGardenScene(layout ?? { plots: [], paths: [], landmarks: [], eligibleCount: 0, excludedCount: 0, omittedEdgeCount: 0 }),
+    build: (layout) =>
+      createGardenScene(
+        isGardenLayout(layout)
+          ? layout
+          : { plots: [], paths: [], landmarks: [], eligibleCount: 0, excludedCount: 0, omittedEdgeCount: 0 },
+      ),
+  },
+  "deep-past": {
+    title: "The Deep Past",
+    background: 0x140d24,
+    fogDensity: 0.00016,
+    orbitRadius: 850,
+    orbitHeight: 150,
+    lookAtY: -200,
+    fallback: "The Deep Past view needs graphics support on this device — your memories are unaffected.",
+    build: (layout) =>
+      createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT),
   },
 };
 
@@ -95,6 +149,13 @@ export default function WorldsSurface({
   const [graphicsFailed, setGraphicsFailed] = useState(false);
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
+  const [journeyLinksMap, setJourneyLinksMap] = useState<Map<number, JourneyLinkSummary[]> | null>(null);
+  const [guided, setGuided] = useState(false);
+  const guidedRef = useRef(false);
+  const descentStartedAtRef = useRef(0);
+  const descentFromRef = useRef(0);
+  const parkedProgressRef = useRef(0);
+  const lastProgressRef = useRef(0);
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const currentWorld = travel.state?.currentWorld;
@@ -111,26 +172,33 @@ export default function WorldsSurface({
   const visible = !!mode && !dismissed;
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
+  const atDeepPast = atWorld && currentWorld === "deep-past";
   const worldName = (key: string) =>
     WORLD_CHART.find((w) => w.key === key)?.name ?? key;
   const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
   const transitFallback =
     "The journey view needs graphics support on this device — your journey is unaffected.";
 
-  // A new stay — a new world, or a new journey — reopens the view. (A
-  // transit dismissed mid-flight reopens at arrival: the destination scene
-  // is a new stay, not the dismissed transit.)
+  // A new stay — a new world, or a new journey — reopens the view and
+  // parks the guided descent back at the rim. (A transit dismissed
+  // mid-flight reopens at arrival: the destination scene is a new stay,
+  // not the dismissed transit.)
   const journeyId = journey?.id ?? null;
   useEffect(() => {
     setDismissed(false);
     setGraphicsFailed(false);
+    setGuided(false);
+    guidedRef.current = false;
+    parkedProgressRef.current = 0;
+    lastProgressRef.current = 0;
   }, [mode, currentWorld, journeyId]);
 
-  // Landmarks need the user's Journeys; the graph prop already carries the
-  // memories. A failed fetch omits landmarks and says so — it never blocks
-  // the garden, and it never invents a landmark.
+  // Landmarks (garden) and Chronicle routes (Deep Past) need the user's
+  // Journeys; the graph prop already carries the memories. A failed fetch
+  // omits that layer and says so — it never blocks the world, and it never
+  // invents a landmark or a route.
   useEffect(() => {
-    if (!atGarden) return;
+    if (!atGarden && !atDeepPast) return;
     let cancelled = false;
     getJourneys()
       .then((js) => {
@@ -143,7 +211,31 @@ export default function WorldsSurface({
     return () => {
       cancelled = true;
     };
-  }, [atGarden]);
+  }, [atGarden, atDeepPast]);
+
+  // Chronicle routes: a done Journey's linked memories, fetched per Journey
+  // on Deep Past entry. A single Journey's links failing omits only that
+  // Journey's route — the world still renders, honestly, without it.
+  useEffect(() => {
+    if (!atDeepPast || !journeys) return;
+    let cancelled = false;
+    const done = journeys.filter((j) => j.status === "done");
+    void Promise.all(
+      done.map(async (j): Promise<[number, JourneyLinkSummary[]]> => {
+        try {
+          const detail = await journeyLinks(j.id);
+          return [j.id, detail?.links ?? []];
+        } catch {
+          return [j.id, []];
+        }
+      }),
+    ).then((entries) => {
+      if (!cancelled) setJourneyLinksMap(new Map(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [atDeepPast, journeys]);
 
   // The garden layout derives from the app's graph on every data change —
   // the world re-reads the brain; it stores nothing of its own.
@@ -152,11 +244,36 @@ export default function WorldsSurface({
     return buildGardenLayout(graph, journeys ?? []);
   }, [atGarden, graph, journeys]);
 
+  // The Deep Past layout derives the same way, plus the fetched Journey
+  // links that make the Chronicle thread. No links yet → no thread yet;
+  // the helix still renders, honestly, without it.
+  const deepPastLayout = useMemo<DeepPastLayout | undefined>(() => {
+    if (!atDeepPast || !graph) return undefined;
+    return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map());
+  }, [atDeepPast, graph, journeys, journeyLinksMap]);
+
+  const sceneLayout = currentWorld === "growing-place" ? layout : currentWorld === "deep-past" ? deepPastLayout : undefined;
+
+  const toggleGuided = () => {
+    if (guidedRef.current) {
+      // Leaving the descent parks the view at the last progress.
+      parkedProgressRef.current = lastProgressRef.current;
+      guidedRef.current = false;
+      setGuided(false);
+    } else {
+      descentFromRef.current = parkedProgressRef.current;
+      descentStartedAtRef.current = performance.now();
+      guidedRef.current = true;
+      setGuided(true);
+    }
+  };
+
   useEffect(() => {
     if (!visible || !mode) return;
-    // The garden needs the graph before it can build; until then the dialog
-    // shows its loading line (see the render below) and builds nothing.
-    if (mode === "world" && currentWorld === "growing-place" && !layout) return;
+    // A memory-bearing world needs the graph before it can build; until
+    // then the dialog shows its loading line (see the render below) and
+    // builds nothing.
+    if (mode === "world" && (atGarden || atDeepPast) && !sceneLayout) return;
     const host = hostRef.current;
     if (!host) return;
     let renderer: THREE.WebGLRenderer;
@@ -193,7 +310,7 @@ export default function WorldsSurface({
             destination: journey?.destination ?? "home",
           })
         : entry
-          ? entry.build(layout)
+          ? entry.build(sceneLayout)
           : null;
     if (!world) return;
     scene.add(world.group);
@@ -224,13 +341,41 @@ export default function WorldsSurface({
         camera.lookAt(0, 0, -60);
         engine?.setLevel(1, transitKind === "warp" ? 1 : 0.35);
       } else if (orbit) {
-        const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
-        camera.position.set(
-          Math.sin(angle) * orbit.orbitRadius,
-          orbit.orbitHeight,
-          Math.cos(angle) * orbit.orbitRadius,
-        );
-        camera.lookAt(0, orbit.lookAtY, 0);
+        if (currentWorld === "deep-past") {
+          // Guided descent (A21, follow-only): the camera follows the thread
+          // down; leaving parks the view at the last progress, and re-entering
+          // resumes from there. Reduced motion = stratified stage holds.
+          let progress = parkedProgressRef.current;
+          if (guidedRef.current) {
+            const sinceStart = performance.now() - descentStartedAtRef.current;
+            progress = reducedMotion
+              ? deepPastDescentStage(sinceStart)
+              : Math.min(1, descentFromRef.current + sinceStart / DEEP_PAST_DESCENT.durationMs);
+            lastProgressRef.current = progress;
+          }
+          const pose = deepPastDescentCamera(progress);
+          if (guidedRef.current) {
+            camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
+            camera.lookAt(pose.lookAt[0], pose.lookAt[1], pose.lookAt[2]);
+          } else {
+            // Parked orbit: the same slow orbit, at the parked depth.
+            const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
+            camera.position.set(
+              Math.sin(angle) * orbit.orbitRadius,
+              pose.position[1],
+              Math.cos(angle) * orbit.orbitRadius,
+            );
+            camera.lookAt(0, pose.lookAt[1], 0);
+          }
+        } else {
+          const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
+          camera.position.set(
+            Math.sin(angle) * orbit.orbitRadius,
+            orbit.orbitHeight,
+            Math.cos(angle) * orbit.orbitRadius,
+          );
+          camera.lookAt(0, orbit.lookAtY, 0);
+        }
       }
       try {
         renderer.render(scene, camera);
@@ -250,17 +395,23 @@ export default function WorldsSurface({
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [visible, mode, entry, currentWorld, layout, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
+  }, [visible, mode, entry, currentWorld, sceneLayout, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
 
   if (!visible || !mode) return null;
   const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
   const fallback = mode === "transit" ? transitFallback : (entry?.fallback ?? "");
+  const thread = atDeepPast ? deepPastLayout?.thread ?? null : null;
 
   return (
     <section className="worlds-surface" role="dialog" aria-label={title}>
       <div className="worlds-surface-canvas" ref={hostRef} />
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
+        {atDeepPast && thread && (
+          <button type="button" onClick={toggleGuided}>
+            {guided ? "Back to the rim" : "Descend the Chronicle"}
+          </button>
+        )}
         <button type="button" onClick={() => setDismissed(true)}>
           Back to your galaxy
         </button>
@@ -268,9 +419,19 @@ export default function WorldsSurface({
       {mode === "world" && currentWorld === "growing-place" && !layout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}
+      {mode === "world" && currentWorld === "deep-past" && !deepPastLayout && (
+        <p className="worlds-surface-fallback">Your past is loading — your memories are unaffected.</p>
+      )}
+      {mode === "world" && atDeepPast && thread && (
+        <p className="worlds-surface-fallback">
+          Chronicle route: {thread.title} — {thread.stops.length} stops along the descent.
+        </p>
+      )}
       {mode === "world" && journeysFailed && (
         <p className="worlds-surface-fallback">
-          Landmarks couldn&apos;t load — your garden is unaffected.
+          {atDeepPast
+            ? "Chronicle routes couldn\u2019t load — your past is unaffected."
+            : "Landmarks couldn\u2019t load — your garden is unaffected."}
         </p>
       )}
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}

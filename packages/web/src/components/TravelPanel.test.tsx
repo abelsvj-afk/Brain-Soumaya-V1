@@ -58,12 +58,13 @@ describe("TravelPanel", () => {
     render(<TravelPanel enabled />);
     expect(screen.getByText("The Great Station")).toBeTruthy();
     expect(screen.getByText("The Growing Place")).toBeTruthy();
+    expect(screen.getByText("The Deep Past")).toBeTruthy();
     expect(screen.getByText("You are here")).toBeTruthy();
-    // Two off-world destinations now: each offers warp at the shared cost
-    // and drift free. Scoped per destination so a third world cannot hide
+    // Three off-world destinations now: each offers warp at the shared cost
+    // and drift free. Scoped per destination so a fourth world cannot hide
     // behind a single-element query.
     const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
-    expect(entries).toHaveLength(3);
+    expect(entries).toHaveLength(4);
     for (const entry of entries.slice(1)) {
       const scoped = within(entry as HTMLElement);
       expect(scoped.getByRole("button", { name: /Warp · 10 fuel/ })).toBeTruthy();
@@ -83,9 +84,9 @@ describe("TravelPanel", () => {
     );
     render(<TravelPanel enabled />);
     const warps = screen.getAllByRole("button", { name: /Warp/ });
-    expect(warps).toHaveLength(2); // Station + Garden: warp is unaffordable to both
+    expect(warps).toHaveLength(3); // Station + Garden + Deep Past: warp is unaffordable to all
     for (const w of warps) expect((w as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByText(/drifting is always free/)).toHaveLength(2);
+    expect(screen.getAllByText(/drifting is always free/)).toHaveLength(3);
   });
 
   it("depart is wired to the chosen route and kind", () => {
@@ -99,6 +100,9 @@ describe("TravelPanel", () => {
     const garden = within(entries[2] as HTMLElement);
     fireEvent.click(garden.getByRole("button", { name: /Warp · 10 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "growing-place");
+    const past = within(entries[3] as HTMLElement);
+    fireEvent.click(past.getByRole("button", { name: /Warp · 10 fuel/ }));
+    expect(t.depart).toHaveBeenCalledWith("warp", "deep-past");
   });
 
   it("arming shows the server's cancel window as a countdown and a free cancel", () => {

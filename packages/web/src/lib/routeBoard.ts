@@ -24,6 +24,11 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     name: "The Growing Place",
     blurb: "The garden where your becoming is kept — memories resting as evidence, paths between them.",
   },
+  {
+    key: "deep-past",
+    name: "The Deep Past",
+    blurb: "Where your earlier life is kept — descend gently to what has waited longest.",
+  },
 ];
 
 export interface RouteOption {

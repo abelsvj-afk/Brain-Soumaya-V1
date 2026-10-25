@@ -248,6 +248,19 @@ describe("machine legality, drift, and current-world derivation", () => {
     expect(t.currentWorld(T0)).toBe("home");
   });
 
+  it("admits the Deep Past (P3-2): warp there and back, same ledger", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "dp-1", kind: "warp", destination: "deep-past" }, T0);
+    expect(out.destination).toBe("deep-past");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("deep-past");
+    const home = t.depart({ clientKey: "dp-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
+
   it("rejects off-chart destinations and bad kinds before anything is written", () => {
     const t = travel();
     expect(() => t.depart({ clientKey: "x1", kind: "warp", destination: "narnia" }, T0)).toThrowError(

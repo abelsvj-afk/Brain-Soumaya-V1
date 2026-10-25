@@ -36,6 +36,7 @@ export const GATE_DRESSINGS: Record<string, GateDressing> = {
   home: HOME_DRESSING,
   "great-station": { ring: 0x8a8f9a, beads: 0xffb347, accent: 0x7af9ff },
   "growing-place": { ring: 0xd8b36a, beads: 0xffd27a, accent: 0x8fe7c0 },
+  "deep-past": { ring: 0x4a3a63, beads: 0xffd9a0, accent: 0x8a76c9 },
 };
 
 export const GATE_RADIUS = 60;
