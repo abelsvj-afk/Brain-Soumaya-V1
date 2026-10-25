@@ -2,10 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import WorldsSurface from "./WorldsSurface.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
+import { getJourneys, journeyLinks } from "../api/journeys.js";
 
 vi.mock("../hooks/useTravel.js", () => ({ useTravel: vi.fn() }));
-vi.mock("../api/journeys.js", () => ({ getJourneys: vi.fn(async () => []) }));
+vi.mock("../api/journeys.js", () => ({
+  getJourneys: vi.fn(async () => []),
+  journeyLinks: vi.fn(async () => null),
+}));
 const mockUseTravel = vi.mocked(useTravel);
+const mockGetJourneys = vi.mocked(getJourneys);
+const mockJourneyLinks = vi.mocked(journeyLinks);
 
 function fakeTravel(over: Partial<UseTravel> = {}): UseTravel {
   return {
@@ -43,6 +49,16 @@ const atGarden = (over: Partial<UseTravel> = {}) =>
   fakeTravel({
     state: {
       currentWorld: "growing-place",
+      activeJourney: null,
+      fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+    },
+    ...over,
+  });
+
+const atDeepPast = (over: Partial<UseTravel> = {}) =>
+  fakeTravel({
+    state: {
+      currentWorld: "deep-past",
       activeJourney: null,
       fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
     },
@@ -190,7 +206,7 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
     mockUseTravel.mockReturnValue(
       fakeTravel({
         state: {
-          currentWorld: "deep-past",
+          currentWorld: "quiet-archive",
           activeJourney: null,
           fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
         },
@@ -198,5 +214,69 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
     );
     const { container } = render(<WorldsSurface enabled graph={gardenGraph} />);
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("WorldsSurface — the Deep Past (P3-2)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+    mockGetJourneys.mockResolvedValue([]);
+    mockJourneyLinks.mockResolvedValue(null);
+  });
+
+  const deepPastGraph = {
+    nodes: [
+      { id: 1, label: "a", type: "memory", content: "", createdAt: "2024-05-01T00:00:00.000Z" },
+      { id: 3, label: "c", type: "memory", content: "", createdAt: "2017-01-01T00:00:00.000Z" },
+    ],
+    links: [],
+  } as never;
+
+  it("at the Deep Past with the graph it mounts the past; without WebGL it degrades honestly", async () => {
+    mockUseTravel.mockReturnValue(atDeepPast());
+    render(<WorldsSurface enabled graph={deepPastGraph} />);
+    expect(screen.getByRole("dialog", { name: "The Deep Past" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
+  });
+
+  it("at the Deep Past without the graph yet it shows a loading line and builds nothing", () => {
+    mockUseTravel.mockReturnValue(atDeepPast());
+    render(<WorldsSurface enabled graph={null} />);
+    expect(screen.getByRole("dialog", { name: "The Deep Past" })).toBeTruthy();
+    expect(screen.getByText(/Your past is loading/)).toBeTruthy();
+  });
+
+  it("a done Journey with two member stops becomes the Chronicle thread — with its guided button", async () => {
+    mockUseTravel.mockReturnValue(atDeepPast());
+    mockGetJourneys.mockResolvedValue([
+      { id: 7, title: "Done chapter", description: "", status: "done", progress: 1 } as never,
+    ]);
+    mockJourneyLinks.mockResolvedValue({
+      links: [
+        { kind: "node", refId: 3, label: "c" },
+        { kind: "node", refId: 1, label: "a" },
+      ],
+      totalCount: 2,
+      earnedCents: 0,
+      spentCents: 0,
+      displayLimit: 50,
+      unshownByKind: {},
+    } as never);
+    render(<WorldsSurface enabled graph={deepPastGraph} />);
+    expect(await screen.findByText(/Chronicle route: Done chapter — 2 stops along the descent/)).toBeTruthy();
+    // The guided descent is user-initiated, never auto-started.
+    const descend = screen.getByRole("button", { name: "Descend the Chronicle" });
+    fireEvent.click(descend);
+    expect(screen.getByRole("button", { name: "Back to the rim" })).toBeTruthy();
+  });
+
+  it("with no qualifying route there is no thread and no guided button", async () => {
+    mockUseTravel.mockReturnValue(atDeepPast());
+    render(<WorldsSurface enabled graph={deepPastGraph} />);
+    expect(screen.getByRole("dialog", { name: "The Deep Past" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.queryByText(/Chronicle route:/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Descend the Chronicle" })).toBeNull();
   });
 });

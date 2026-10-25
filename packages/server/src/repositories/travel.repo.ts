@@ -45,7 +45,7 @@ import {
 /** World keys a journey may target. Server-side allow-list: a
  *  client-invented destination would corrupt the derived current world.
  *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place"];
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past"];
 export const HOME_WORLD = "home";
 
 export type TravelErrorCode =

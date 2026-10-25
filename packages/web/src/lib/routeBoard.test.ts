@@ -11,7 +11,7 @@ const state = (currentWorld: string, fuel: number): TravelState => ({
 describe("buildRouteBoard", () => {
   it("charts both worlds and marks the current one (no options to stay put)", () => {
     const board = buildRouteBoard(state("home", 25));
-    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place"]);
+    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past"]);
     expect(board[0]!.isCurrent).toBe(true);
     expect(board[0]!.options).toEqual([]);
   });
@@ -21,6 +21,16 @@ describe("buildRouteBoard", () => {
     const garden = board[2]!;
     expect(garden.name).toBe("The Growing Place");
     expect(garden.options).toEqual([
+      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "drift", label: "Drift", cost: 0, affordable: true },
+    ]);
+  });
+
+  it("charts the Deep Past (P3-2) with the same warp/drift options", () => {
+    const board = buildRouteBoard(state("home", 25));
+    const past = board[3]!;
+    expect(past.name).toBe("The Deep Past");
+    expect(past.options).toEqual([
       { kind: "warp", label: "Warp", cost: 10, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
