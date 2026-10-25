@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 106 — **UNOPENED FOLD GLB RECEIVED (twelfth relic GLB).** Owner supplied `New_Project_10252026__12__11_diwf.glb` (88.1 MB, 1,500,000 tris, 3× 4096 textures) — filed at `relics/glb/unopened-fold.glb`; shippable slim built the same day (`unopened-fold-slim.glb`, 4.51 MB, 22,500 tris, Draco) and render-checked from the slim file (ivory-gray folded sheet, layered edges with compressed strata, offset flap, rounded corners). Ratio kept at 0.015 so the thin layers don't pinch; the slim run took 160 s, the slowest yet. Not yet in the repo; upload + Archive/codex wiring is a future increment. (Rev 105: Stillness Seal GLB.)
+**Revision:** 107 — **UNNUMBERED FRAGMENT GLB RECEIVED (thirteenth relic GLB; first Eternity relic).** Owner supplied `New_Project_10252026__13__12_01yx.glb` (61.6 MB, 1,500,000 tris, 3× 4096 textures) — filed at `relics/glb/unnumbered-fragment.glb`; shippable slim built the same day (`unnumbered-fragment-slim.glb`, 2.86 MB, 15,000 tris, Draco) and render-checked from the slim file (fractured pale-marble shard, milky-white face with pale gray veining, fractured edges in shadow). Placement still the owner's decision. Not yet in the repo; upload + Eternity/codex wiring is a future increment. (Rev 106: Unopened Fold GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
