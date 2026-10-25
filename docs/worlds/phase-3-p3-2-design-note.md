@@ -1,6 +1,6 @@
 # Phase 3 · P3-2 Design Note — The Deep Past (second memory-bearing world)
 
-**Status:** DRAFT — for the review loop. No build authorized. No implementation is authorized by this note.
+**Status:** BUILD AUTHORIZED (owner, 2026-10-25, D-71: "Lets start building all of this") — Q1–Q4 settled per the note's recommendations, no adjustments; review loop bypassed at his word (reviews reconcile as a fix list after the build). P3-2 builds first.
 **What P3-2 is:** the second world that shows *memories* — the deep water where the earlier life is kept. The Growing Place answers "what is it all adding up to?"; the Deep Past answers "what did I live through, and is it still mine?" — by descent: you go down to the past, and going down is gentle. Older, quieter, dimmer light; the First Light basin at the bottom is where the light is oldest and steadiest, never a grave or a pit.
 **Order:** Deep Past is next per D-23 (Growing Place → Deep Past → People → Scale → Quiet/Archive). P3-1 merged (D-63); P2-5 merged (D-69); the worlds layer is ON (D-70) — P3-2 ships **visible**, not dark. There is no more dark shipping.
 **Owner direction folded in (2026-10-25, his words):** every world must be complete from every reachable angle — the garden-underside lesson generalized. If a camera can reach a place, that place must be finished; if it cannot be finished, the angle must be unreachable. Ships belong in the Deep Past too. The Station scale-up (gigantic, EVE-like, accessories) is a separate increment, not this one.
@@ -115,4 +115,4 @@ When life touches a deep memory again (linked, visited from elsewhere, its conte
 ## 6. Sequencing & non-scope
 
 - This note → review loop (ChatGPT + the cold-check findings, which may change this note) → owner's settlement of Q1–Q4 → owner's separate implementation word → build → full gate → owner's merge tap → post-merge audit. The lane that built Phase 2 and P3-1, unchanged.
-- **Not in P3-2:** the §17 rail (Phase 4); People, Scale, Quiet/Archive; the Station scale-up (separate increment — gigantic, EVE-like, accessories); the Man-God (other chat); NPCs and the autonomous agent (separate design track — §16 fence); any change to the home galaxy; any change to the P2-5 gate caveat (stated, not re-litigated here).
+- **Not in P3-2:** the §17 rail (Phase 4); People, Scale, Quiet/Archive; the Station scale-up (separate increment — gigantic, EVE-like, accessories); Eternity (other chat — already in code and in a mockup there; this chat does not design him); NPCs and the autonomous agent (separate design track — §16 fence); any change to the home galaxy; any change to the P2-5 gate caveat (stated, not re-litigated here).
