@@ -2,6 +2,7 @@
 
 **Status:** DRAFT — filed 2026-10-25, awaiting owner settlement. **No build authorized.**
 **Revision (2026-10-25):** §6 extended with tab thresholds (owner's words) — every app tab carries plain, visible thresholds; meeting one feeds the mutating world, Alignment, and can summon events including a fleet (see `docs/worlds/fleet-defense-concept.md`).
+**Revision (2026-10-25):** B-01 settled — relics are gate credentials; lore revised (see §5, Q9, Review 30 reconciliation).
 **Source direction (owner, 2026-10-25, voice):** once relics are found and discovered, they give buffs to users. The buff must come from what the Lord is behind the object — the lore behind each artifact decides what its buff is. Buffs supply and complement the mechanics that are already established. Some buffs boost one stat and decrease another. There is a fixed, select number of each artifact in the whole universe — not every user gets every relic. Relics are also tied to reaching Eternity's world: certain ones unlock the gate to it. Travel to him is never direct — you jump through different worlds to get there (EVE-style jump chains). Eternity is autonomous, his own agent; you don't interact with him directly except when you discover him, and discovering him is meant to be really, really hard. The creator's account has everything unlocked for testing; other accounts earn it. Eternity will create new worlds over time, pertaining to individual persons' uses — guardrails for that are still to be figured out. Emotional balance (goals attacked, negative vs good memories, growth) is a candidate driver for game elements. Eternity's skills (e.g. a shield for a meteor shower) need REAL assets pulled in, not procedural stand-ins.
 
 ## §1 What a buff is
@@ -71,8 +72,8 @@ Each stat is one existing mechanic, renamed for the player. Numbers in §3 are s
 ## §5 Eternity's gate — relics as the way to him
 
 - Discovering Eternity is meant to be **really, really hard** — the hardest thing in the universe to reach, like the Man-God in the light novel: very difficult even to figure out how to get to where he is.
-- **Gate (PROPOSED):** the gate to his world opens for a traveler holding the **Witness Without a Name** (the key) plus **any two other relics**. The exact set is the owner's to settle.
-- **BLOCKED — owner's call (review 30, B-01):** the lore says *"These relics do not form a required set. The register is an editorial record of possible discoveries, not a completion target."* The gate as proposed makes the Witness mandatory — a direct contradiction. Either the gate changes (relics stay narrative discoveries; the gate uses something else) or the lore changes (revise that line and settle the key's placement). Nothing in this section is settled until he picks one.
+- **Gate (PROPOSED):** the gate to his world opens for a traveler holding the **Witness Without a Name** (the key) plus **any two other relics**. The set is settled (Witness + any two); the Witness's placement is still open.
+- **SETTLED (owner, 2026-10-25, widget tap): relics ARE gate credentials.** The lore is revised accordingly (eternity-lore.md §6: the relics form a required set for the gate to Eternity's world, and for that gate only). **Once opened, the gate stays open (owner, 2026-10-25, his words: "once opened once, the gate stays accessible"):** the relics are the key that opens it the first time — they are not consumed, and the opening is permanent for that traveler. After that, the only price is the fuel for the journey: enough fuel for the grueling jump chain (three legs minimum, warp 10 per leg) or enough to warp. The Witness's placement is still open — its discovery place in the lore remains "an isolated, quiet space... final placement undefined," and the owner settles it.
 - **Jump chain (PROPOSED):** there is **no direct jump** to his world. You route through at least **two intermediate worlds** — three legs minimum (origin → intermediate → intermediate → his world), e.g. Station → Deep Past → Scale → his world. Each leg is a real journey — fuel, transit, arrival — not a menu teleport. (Review 30, B-02: the earlier example showed only one intermediate world and contradicted the stated minimum — corrected here. The example is illustrative only; which routes are eligible is Q4, and the rule must be validated against the actual world graph before implementation.)
 - **Alignment** earns regular travel to him once the gate is open; it is never a score, never a threshold displayed as a number, never shame.
 - **Creator unlock:** the owner's account has everything unlocked — every world, every relic, every gate — for testing. Other accounts earn it. The unlock is a property of his account, not a cheat code in the client.
@@ -106,7 +107,7 @@ Each stat is one existing mechanic, renamed for the player. Numbers in §3 are s
 - **Q6** Creator unlock: does it cover relic copies too (does his holding a copy consume one of the scarce copies)?
 - **Q7** Emotional balance: what does it change beyond Steadiness, within the §6 constraint?
 - **Q8** Eternity-created worlds: what guardrails (approval, cost, scope)?
-- **Q9 (review 30, B-01 — the gate fork):** do relics stay narrative discoveries (gate uses something else — alignment, the jump chain, a different key) or are they gate credentials (revise the lore's "not a required set" line and settle the Witness's placement)?
+- **Q9 (review 30, B-01 — the gate fork): SETTLED (owner, 2026-10-25, widget tap) — relics are gate credentials; the lore is revised. Remaining: the Witness's placement (owner settles).**
 
 ## §10 Acceptance (what "done" looks like when this builds)
 
@@ -130,7 +131,7 @@ Full review: `docs/worlds/chatgpt-review-30.md`. The note stays in draft.
 - **§4:** the owner's Dragon Ball return rule is recorded — copies eventually go back to new places in the worlds to be found again, never the same place twice; the return trigger is open (see below).
 
 **Awaiting the owner's settlement (nothing here is settled until he picks):**
-1. **B-01 Gate vs lore** — the fork (Q9): (a) relics stay narrative, the gate uses something else; (b) relics are gate credentials, the lore is revised and the Witness's placement is settled.
+1. **B-01 Gate vs lore** — **SETTLED (owner, 2026-10-25, widget tap): relics are gate credentials; the lore is revised (Rev 112).** Remaining: the Witness's placement (owner settles).
 2. **B-03 Scarcity lifecycle** — return trigger (what sends a copy back: willing release, brain deletion, or something else — never inactivity), transfers, deleted brains, creator-test isolation.
 3. **H-01 Stacking** — additive vs order vs conflict, equipment limits, combined-effect disclosure before pickup, base-value restoration on unequip.
 4. **H-04 Mechanic mapping** — the builder verifies at recon which buff operations exist (partial milestones, people-tagged progress, transit/emotion); any operation that does not exist becomes a separate proposed mechanic, not an implied existing one.

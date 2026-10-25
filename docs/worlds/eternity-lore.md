@@ -335,7 +335,7 @@ A small, translucent fragment that no world claims as its own. It is associated 
 
 A smooth, pale object preserved in the oldest accounts of the first making. It has no surviving name in any language, and the title used here is only a convenience for the codex. Its inscription describes the boundary between the one who makes and the worlds that remember him, without explaining that boundary.
 
-**[ADDED]** These relics do not form a required set. The register is an editorial record of possible discoveries, not a completion target. Future relics may add new accounts, but they must not turn the first truth into a chronology or make Eternity's identity fully explainable.
+**[REVISED 2026-10-25 — owner settled: relics are gate credentials (review 30, B-01)]** These relics DO form a required set — for the gate to Eternity's world, and for that gate only. The gate opens for a traveler holding the Witness Without a Name, the key, plus any two other relics. Once the gate has opened for a traveler, it stays open to them — the only price after that is the fuel for the journey. The register is otherwise an editorial record of possible discoveries, not a completion target: no relic is required for anything else, and holding relics never becomes a score. Future relics may add new accounts, but they must not turn the first truth into a chronology or make Eternity's identity fully explainable.
 
 ## 7. The rule for future worlds (settled going forward)
 
