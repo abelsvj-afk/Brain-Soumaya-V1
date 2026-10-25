@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 95 — **P3-2 DEEP PAST BUILT + GATED (PR PENDING OWNER'S TAP).** Builder dispatched from deploy @ 7033909; 13 files (9 modified, 4 new), all SHAs byte-identical between staging and the gated worktree. Gate: typecheck clean ×3 (verified by King's own re-runs — the builder's web re-run log was 0 bytes, noted honestly in the brief), targeted web 53/53, targeted server 23/23, full server 1983/1984 (1 pre-existing longitudinal failure, proven on the clean tree), full web 1552/1559 (7 pre-existing failures in 3 files, proven on the clean tree), production build green. Recon: D-7 rule as built (1-year minimum, 9 strata, 30-day warm rise), Journeys ARE saved Chronicle routes (via /journeys/:id/links), C7 via the app recovery card. 8 deviations recorded. Audit brief `docs/worlds/phase-3-p3-2-audit-brief.md`. PR NOT opened — the owner's tap. (Rev 94: expanded lore bible, 15 relics.)
+**Revision:** 96 — **DAWN LEAF GLB RECEIVED (first relic GLB).** Owner supplied `New_Project_10252026_0_916m.glb` (13.4 MB, 175,376 tris, 2048 texture) — filed at `relics/glb/dawn-leaf.glb`; shippable slim built the same day (`dawn-leaf-slim.glb`, 2.06 MB, 17,537 tris, Draco, 1024 texture). Honest finding: as supplied it outweighed the whole Station hull — the slim is the shipping candidate. Not yet in the repo; upload + garden/codex wiring is a future increment on his word. (Rev 95: P3-2 built + gated, PR pending.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
