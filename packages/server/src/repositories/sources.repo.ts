@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { isVectorEnabled, type RawDb } from "../db/vec.js";
+import { NotificationsRepo } from "./notifications.repo.js";
 
 /**
  * Verbatim-Recall V1 — the Source Layer (design note Rev 1-3).
@@ -49,6 +50,23 @@ export type ProcessingStatus =
   | "extraction_failed"
   | "failed_permanent";
 
+/** Fix round 2 (audit P1): what boot recovery must DO with a pending
+ *  source. Persisted at capture time (sources.capture_intent) so the
+ *  intent survives a crash — recovery routes to the right handler
+ *  instead of generic extraction for every source. */
+export type CaptureIntent = "extract" | "action" | "telegram_note";
+
+/** Params for the direct-capture intents, stored as JSON in
+ *  sources.capture_params. Action: expiresAt (ISO, required) plus the
+ *  route's occurredAt/remindAt/tags. Telegram note: none (the node is
+ *  fully determined by the source row). */
+export interface ActionCaptureParams {
+  expiresAt: string;
+  occurredAt?: string;
+  remindAt?: string;
+  tags?: string[];
+}
+
 /** After this many extraction attempts a source is failed_permanent (18.3). */
 export const MAX_EXTRACTION_ATTEMPTS = 5;
 /** Lease length for a claimed extraction (18.3: 15 minutes). */
@@ -81,6 +99,9 @@ export interface SourceRow {
   processingLeaseOwner: string | null;
   processingLeaseExpiresAt: string | null;
   extractionHash: string | null;
+  /** Fix round 2: direct-capture intent + params (see CaptureIntent). */
+  captureIntent: CaptureIntent;
+  captureParams: ActionCaptureParams | null;
 }
 
 export interface SourceChunkRow {
@@ -131,13 +152,34 @@ interface RawSourceRow {
   processing_lease_owner: string | null;
   processing_lease_expires_at: string | null;
   extraction_hash: string | null;
+  capture_intent: string | null;
+  capture_params: string | null;
 }
 
 const SOURCE_COLS = `id, space_id, kind, citation_class, title, raw_bytes,
   raw_text, encoding, content_hash, byte_length, speaker, occurred_at,
   created_at, idempotency_key, audio_ref, processing_status,
   processing_attempts, processing_lease_owner, processing_lease_expires_at,
-  extraction_hash`;
+  extraction_hash, capture_intent, capture_params`;
+
+function parseCaptureParams(raw: string | null): ActionCaptureParams | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as ActionCaptureParams;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Unknown intent values (hand-edited rows, forged restores) degrade
+ *  to generic extraction — recovery must never crash on the intent. */
+export function asCaptureIntent(raw: string | null | undefined): CaptureIntent {
+  return raw === "action" || raw === "telegram_note" ? raw : "extract";
+}
 
 function toSource(r: RawSourceRow): SourceRow {
   return {
@@ -161,6 +203,8 @@ function toSource(r: RawSourceRow): SourceRow {
     processingLeaseOwner: r.processing_lease_owner,
     processingLeaseExpiresAt: r.processing_lease_expires_at,
     extractionHash: r.extraction_hash,
+    captureIntent: asCaptureIntent(r.capture_intent),
+    captureParams: parseCaptureParams(r.capture_params),
   };
 }
 
@@ -234,6 +278,11 @@ export interface PersistSourceInput {
   occurredAt?: string;
   idempotencyKey?: string;
   audioRef?: string;
+  /** Fix round 2: direct-capture intent, persisted with the source so
+   *  boot recovery can route to the right handler. Default 'extract'. */
+  captureIntent?: CaptureIntent;
+  /** Params for the direct-capture intents (action only, today). */
+  captureParams?: ActionCaptureParams | null;
 }
 
 export interface PersistResult {
@@ -263,6 +312,8 @@ export class SourcesRepo {
     const { text, encoding } = decodeUtf8(input.rawBytes);
     const contentHash = sha256Hex(input.rawBytes);
     const nowIso = new Date().toISOString();
+    const captureIntent = input.captureIntent ?? "extract";
+    const captureParamsJson = input.captureParams ? JSON.stringify(input.captureParams) : null;
     const tx = this.h.sqlite.transaction((): PersistResult => {
       // Re-check inside the transaction: a concurrent replay may have
       // landed between the pre-check and here (unique index backstops).
@@ -274,8 +325,9 @@ export class SourcesRepo {
         .prepare(
           `INSERT INTO sources (space_id, kind, citation_class, title, raw_bytes,
              raw_text, encoding, content_hash, byte_length, speaker, occurred_at,
-             created_at, idempotency_key, audio_ref, processing_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'preserved')`,
+             created_at, idempotency_key, audio_ref, processing_status,
+             capture_intent, capture_params)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'preserved', ?, ?)`,
         )
         .run(
           this.spaceId,
@@ -292,6 +344,8 @@ export class SourcesRepo {
           nowIso,
           input.idempotencyKey ?? null,
           input.audioRef ?? null,
+          captureIntent,
+          captureParamsJson,
         );
       const sourceId = Number(info.lastInsertRowid);
       if (text !== null && text.length > 0) {
@@ -441,21 +495,18 @@ export class SourcesRepo {
         .run(next, sourceId, this.spaceId);
       if (permanent) {
         // 18.3 permanent-failure surfacing: a plain-language Inbox item
-        // via the existing inbox_notifications table (the NotificationsRepo
-        // write path, inlined because its NotificationSource union is a
-        // closed web-facing set; the column itself is free TEXT and the
-        // repo's reader casts — 'system' rows render as normal items).
-        // INSERT OR IGNORE under the (space_id, dedupe_key) unique index.
-        this.h.sqlite
-          .prepare(
-            `INSERT OR IGNORE INTO inbox_notifications (space_id, source, text, icon, priority, dedupe_key)
-             VALUES (?, 'system', ?, '📝', 'normal', ?)`,
-          )
-          .run(
-            this.spaceId,
-            "A note was saved but couldn't be processed — it's preserved and searchable exactly as you wrote it. You can retry it or leave it as it is.",
-            `source-failed-permanent:${sourceId}`,
-          );
+        // through the typed NotificationsRepo path (fix round 2: 'system'
+        // is now a member of the shared NotificationSource union, so the
+        // write is type-checked and the reader's cast no longer hides a
+        // mismatch). INSERT OR IGNORE semantics live in record() under
+        // the (space_id, dedupe_key) unique index.
+        new NotificationsRepo(this.h, this.spaceId).record({
+          source: "system",
+          text: "A note was saved but couldn't be processed — it's preserved and searchable exactly as you wrote it. You can retry it or leave it as it is.",
+          icon: "📝",
+          priority: "normal",
+          dedupeKey: `source-failed-permanent:${sourceId}`,
+        });
       }
       return next;
     });
@@ -933,6 +984,15 @@ export interface ChunkSearchResult {
  * The combined retrieval primitive the acceptance tests exercise:
  * FTS always; vector fused in when a query vector is supplied and the
  * vec index has data. Degradation is reported, never silent (12E).
+ *
+ * Fusion is reciprocal rank fusion (fix round 2, audit P2): the old
+ * code inserted FTS hits first, appended vector hits, and sliced to
+ * k — so a result that only the vector side found could be crowded
+ * out entirely while the mode still claimed "fts+vec". RRF scores
+ * each chunk 1/(60+rank) in each ranking it appears in (the same
+ * constant and shape as fuseRrf in db/fts.ts, which memorySearch
+ * uses for nodes) and returns the top-k fused order, so a
+ * vector-only hit ranked highly by meaning survives the cut.
  */
 export function searchSourceChunks(
   repo: SourcesRepo,
@@ -954,6 +1014,20 @@ export function searchSourceChunks(
       for (const h of vecHits) {
         if (!byChunk.has(h.chunk.id)) byChunk.set(h.chunk.id, { chunk: h.chunk, source: h.source });
       }
+      const scores = new Map<number, number>();
+      const addRank = (ids: number[]) => {
+        ids.forEach((id, i) => scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + i + 1)));
+      };
+      addRank(ftsHits.map((h) => h.chunk.id));
+      addRank(vecHits.map((h) => h.chunk.id));
+      const ordered = [...scores.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, k)
+        .map(([id]) => id);
+      const hits = ordered
+        .map((id) => byChunk.get(id))
+        .filter((h): h is { chunk: SourceChunkRow; source: SourceRow } => h !== undefined);
+      return { hits, degraded, mode, vecLag };
     }
   }
   return { hits: [...byChunk.values()].slice(0, k), degraded, mode, vecLag };

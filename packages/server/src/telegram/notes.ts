@@ -1,6 +1,8 @@
 import type { GraphNode } from "@brain/shared";
 import type { AppContext } from "../context.js";
 import type { DbHandle } from "../db/client.js";
+import type { EmbeddingProvider } from "../embeddings/adapter.js";
+import type { IngestResult } from "../ingestion/pipeline.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
 import { TelegramNoteDraftsRepo, type TelegramNoteDraft } from "../repositories/telegramNoteDrafts.repo.js";
@@ -154,59 +156,129 @@ function linkMentionedPeople(handle: DbHandle, spaceId: string, node: GraphNode)
  * only names "user"|"agent", so the provenance is stamped at the SQL layer
  * after the typed create — the row is the record).
  *
- * Cognitive linking is best-effort and edge-only: it may ATTACH the note to
- * people/goals, it can never rewrite its content.
+ * Capture-first (fix round 2, audit P1): the source is persisted BEFORE
+ * any fallible work — the old code embedded first, so a failing embedder
+ * lost the capture before any source row existed. The source row carries
+ * capture_intent='telegram_note', so a crash after persist still recovers
+ * through this direct-note path (processTelegramNoteCapture), never
+ * through generic LLM extraction. Cognitive linking is best-effort and
+ * edge-only: it may ATTACH the note to people/goals, it can never
+ * rewrite its content.
  */
 export async function saveTelegramNote(
   ctx: AppContext,
   spaceId: string,
   rawText: string,
 ): Promise<GraphNode> {
-  const label = noteLabel(rawText);
-  const embedding = await ctx.embeddings.embed(rawText);
-  // Verbatim V1 (evidence E1): the assembled draft text is already
-  // verbatim — persist it as a source (hash/chunks/provenance) BEFORE
-  // the node is created. A persistence failure throws here, so the
-  // caller's honest-failure path keeps the draft and claims nothing.
   const sourcesRepo = new SourcesRepo(ctx.handle, spaceId);
   const { source } = sourcesRepo.persistText({
     kind: "telegram",
     citationClass: "verbatim_typed",
     text: rawText,
-    title: label,
+    title: noteLabel(rawText),
+    captureIntent: "telegram_note",
   });
-  const nodesRepo = new NodesRepo(ctx.handle, spaceId);
-  const node = nodesRepo.create(
-    {
-      label,
-      type: "daily",
-      content: rawText,
-      tags: ["note", "telegram"],
-      origin: "user",
-    },
-    embedding,
-  );
-  // Direct (extraction-free) capture: link origin + terminate the
-  // processing state via claim/complete, like the action branch.
+  const result = await processTelegramNoteCapture(ctx.handle, ctx.embeddings, source.id, spaceId, ctx);
+  const node = result.nodes[0];
+  if (!node) throw new Error("telegram note capture produced no node");
+  return node;
+}
+
+/**
+ * Fix round 2 (audit P1): complete a DIRECT Telegram-note capture for
+ * an already-persisted source — the shared completion path for
+ * saveTelegramNote AND boot recovery. The node is built from the
+ * source row itself (verbatim content, first-line label, note/telegram
+ * tags, origin 'telegram'), with no LLM extraction anywhere on the
+ * path; people-mention + cognitive linking stay best-effort and
+ * edge-only, after the commit.
+ *
+ * Exactly-once mirrors processSourceExtraction: an extracted source
+ * returns its linked node; a lost claim returns whatever is linked;
+ * a node already linked by a crashed attempt is reused (completion
+ * recorded, nothing recreated); node creation + origin links +
+ * completion run in ONE transaction (Fix B atomicity). The embedding
+ * call stays outside the transaction. `ctx` is optional: recovery
+ * without a full AppContext still completes the note (cognitive
+ * linking is skipped, it is best-effort).
+ */
+export async function processTelegramNoteCapture(
+  h: DbHandle,
+  embeddings: EmbeddingProvider,
+  sourceId: number,
+  spaceId: string,
+  ctx?: AppContext,
+): Promise<IngestResult> {
+  const sourcesRepo = new SourcesRepo(h, spaceId);
+  const nodesRepo = new NodesRepo(h, spaceId);
+  const source = sourcesRepo.getById(sourceId);
+  if (!source) throw new Error(`processTelegramNoteCapture: source ${sourceId} not found`);
+  const rawText = source.rawText ?? "";
+  const existingNodes = (): GraphNode[] =>
+    nodesRepo.byIds(sourcesRepo.nodeIdsWithOriginFrom(sourceId), { includeSuperseded: true });
+
+  if (source.processingStatus === "extracted") {
+    return { nodes: existingNodes(), extractedEdges: [], associativeEdges: [] };
+  }
   const owner = `telegram-note:${process.pid}:${Date.now()}`;
-  if (sourcesRepo.claim(source.id, owner)) {
-    sourcesRepo.linkNodeToAllChunks(node.id, source.id);
-    sourcesRepo.completeExtraction(source.id, owner, extractionHashOf([node]));
-  }
-  ctx.handle.sqlite
-    .prepare(`UPDATE nodes SET origin = 'telegram' WHERE id = ? AND space_id = ?`)
-    .run(node.id, spaceId);
-  try {
-    linkMentionedPeople(ctx.handle, spaceId, node);
-  } catch {
-    /* best-effort: linking must never fail the save */
+  const claimed = sourcesRepo.claim(sourceId, owner);
+  if (!claimed) {
+    // Another worker holds the lease (or the source went terminal):
+    // create nothing; surface whatever is already linked.
+    return { nodes: existingNodes(), extractedEdges: [], associativeEdges: [] };
   }
   try {
-    linkCognitiveAnchor(ctx, spaceId, node.id, node.label, embedding);
-  } catch {
-    /* best-effort, same contract as the ingest pipeline */
+    // Crash-after-node-creation (pre-fix-2 shape): node already linked
+    // but completion never recorded — reuse it, create nothing.
+    const prior = existingNodes();
+    if (prior.length > 0) {
+      sourcesRepo.completeExtraction(sourceId, owner, extractionHashOf(prior));
+      for (const n of prior) n.hasOriginSource = true;
+      return { nodes: prior, extractedEdges: [], associativeEdges: [] };
+    }
+    const label = noteLabel(rawText);
+    const embedding = await embeddings.embed(rawText);
+    let node: GraphNode | undefined;
+    const writeTx = h.sqlite.transaction(() => {
+      const created = nodesRepo.create(
+        {
+          label,
+          type: "daily",
+          content: rawText,
+          tags: ["note", "telegram"],
+          origin: "user",
+        },
+        embedding,
+      );
+      sourcesRepo.linkNodeToAllChunks(created.id, sourceId);
+      if (!sourcesRepo.completeExtraction(sourceId, owner, extractionHashOf([created]))) {
+        throw new Error(`processTelegramNoteCapture: completion lost the lease for source ${sourceId}`);
+      }
+      h.sqlite
+        .prepare(`UPDATE nodes SET origin = 'telegram' WHERE id = ? AND space_id = ?`)
+        .run(created.id, spaceId);
+      created.hasOriginSource = true;
+      node = created;
+    });
+    writeTx();
+    const done = nodesRepo.getById(node!.id) ?? node!;
+    try {
+      linkMentionedPeople(h, spaceId, done);
+    } catch {
+      /* best-effort: linking must never fail the save */
+    }
+    if (ctx) {
+      try {
+        linkCognitiveAnchor(ctx, spaceId, done.id, done.label, embedding);
+      } catch {
+        /* best-effort, same contract as the ingest pipeline */
+      }
+    }
+    return { nodes: [done], extractedEdges: [], associativeEdges: [] };
+  } catch (err) {
+    sourcesRepo.failExtraction(sourceId, owner);
+    throw err;
   }
-  return nodesRepo.getById(node.id) ?? node;
 }
 
 // ---------------------------------------------------------------------------

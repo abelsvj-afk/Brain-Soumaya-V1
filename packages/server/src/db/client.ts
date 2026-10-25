@@ -1420,7 +1420,9 @@ export function migrateSchema(sqlite: RawDb): void {
       processing_attempts INTEGER NOT NULL DEFAULT 0,
       processing_lease_owner TEXT,
       processing_lease_expires_at TEXT,
-      extraction_hash TEXT
+      extraction_hash TEXT,
+      capture_intent TEXT NOT NULL DEFAULT 'extract',
+      capture_params TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sources_space_occurred
       ON sources(space_id, occurred_at);
@@ -1472,6 +1474,23 @@ export function migrateSchema(sqlite: RawDb): void {
     );
     CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(text);
   `);
+
+  // Fix round 2 (audit P1: direct-capture recovery): volumes created
+  // by the V1 build (PR #104, pre-fix-2) already have a `sources`
+  // table WITHOUT capture_intent/capture_params — the CREATE TABLE
+  // above is a no-op for them. PRAGMA-guarded ALTERs backfill the
+  // columns (same pattern as the journeys span columns above); the
+  // 'extract' default is correct for every pre-fix-2 row, which was
+  // generic-extraction by construction.
+  const sourceCols = sqlite.prepare(`PRAGMA table_info(sources)`).all() as { name: string }[];
+  if (sourceCols.length > 0) {
+    if (!sourceCols.some((c) => c.name === "capture_intent")) {
+      sqlite.exec(`ALTER TABLE sources ADD COLUMN capture_intent TEXT NOT NULL DEFAULT 'extract'`);
+    }
+    if (!sourceCols.some((c) => c.name === "capture_params")) {
+      sqlite.exec(`ALTER TABLE sources ADD COLUMN capture_params TEXT`);
+    }
+  }
 }
 
 /**

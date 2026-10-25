@@ -6,7 +6,7 @@ import type { EmbeddingProvider } from "../embeddings/adapter.js";
 import type { LlmProvider } from "../llm/adapter.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
-import { SourcesRepo, extractionHashOf } from "../repositories/sources.repo.js";
+import { SourcesRepo, extractionHashOf, type ActionCaptureParams } from "../repositories/sources.repo.js";
 import { linkCognitiveAnchor } from "../analysis/cognitive.js";
 import {
   associativeLink,
@@ -271,6 +271,96 @@ export async function processSourceExtraction(
     }
     associativeEdges.push(...mentionEdges);
     return { nodes: createdNodes, extractedEdges, associativeEdges };
+  } catch (err) {
+    sourcesRepo.failExtraction(sourceId, owner);
+    throw err;
+  }
+}
+
+/**
+ * Fix round 2 (audit P1): complete a DIRECT action capture for an
+ * already-persisted source — the shared completion path for the
+ * ingest route's action branch AND boot recovery. The source row
+ * carries capture_intent='action' + capture_params (expiresAt,
+ * occurredAt, remindAt, tags) persisted at capture time, so a crash
+ * anywhere after persist still recovers as an action node (kind
+ * 'action', trimmed content, the captured expiry) — never as an
+ * ordinary extracted memory.
+ *
+ * Exactly-once mirrors processSourceExtraction: an extracted source
+ * returns its linked nodes; a lost claim returns whatever is linked;
+ * nodes already linked by a crashed attempt are reused (completion
+ * recorded, nothing recreated); node creation + origin links +
+ * completion run in ONE transaction (Fix B atomicity), so a mid-write
+ * fault rolls the attempt back and the retry starts clean. The
+ * embedding call stays outside the transaction, like extraction.
+ */
+export async function processActionCapture(
+  h: DbHandle,
+  deps: IngestDeps,
+  sourceId: number,
+  spaceId: string,
+): Promise<IngestResult> {
+  const sourcesRepo = new SourcesRepo(h, spaceId);
+  const nodesRepo = new NodesRepo(h, spaceId);
+  const source = sourcesRepo.getById(sourceId);
+  if (!source) throw new Error(`processActionCapture: source ${sourceId} not found`);
+  const existingNodes = (): GraphNode[] =>
+    nodesRepo.byIds(sourcesRepo.nodeIdsWithOriginFrom(sourceId), { includeSuperseded: true });
+
+  if (source.processingStatus === "extracted") {
+    return { nodes: existingNodes(), extractedEdges: [], associativeEdges: [] };
+  }
+  const owner = `action:${process.pid}:${Date.now()}:${randomBytes(6).toString("hex")}`;
+  const claimed = sourcesRepo.claim(sourceId, owner);
+  if (!claimed) {
+    // Another worker holds the lease (or the source went terminal):
+    // create nothing; surface whatever is already linked.
+    return { nodes: existingNodes(), extractedEdges: [], associativeEdges: [] };
+  }
+
+  const rawText = claimed.rawText ?? "";
+  try {
+    // Crash-after-node-creation (pre-fix-2 shape): nodes already linked
+    // but completion never recorded — reuse them, create nothing.
+    const prior = existingNodes();
+    if (prior.length > 0) {
+      sourcesRepo.completeExtraction(sourceId, owner, extractionHashOf(prior));
+      for (const n of prior) n.hasOriginSource = true;
+      return { nodes: prior, extractedEdges: [], associativeEdges: [] };
+    }
+    const params: ActionCaptureParams | null = source.captureParams;
+    const expiresAt =
+      params && typeof params.expiresAt === "string" && !Number.isNaN(Date.parse(params.expiresAt))
+        ? params.expiresAt
+        : new Date(Date.now() + 24 * 3_600_000).toISOString();
+    const label = rawText.trim().split(/\s+/).slice(0, 6).join(" ") || "Action item";
+    const vec = await deps.embeddings.embed(rawText.trim());
+    let node: GraphNode | undefined;
+    const writeTx = h.sqlite.transaction(() => {
+      const created = nodesRepo.create(
+        {
+          label,
+          type: "daily",
+          content: rawText.trim(),
+          importance: 0.12, // small celestial body
+          kind: "action",
+          expiresAt,
+          occurredAt: params?.occurredAt,
+          remindAt: params?.remindAt,
+          tags: params?.tags,
+        },
+        vec,
+      );
+      sourcesRepo.linkNodeToAllChunks(created.id, sourceId);
+      created.hasOriginSource = true;
+      node = created;
+      if (!sourcesRepo.completeExtraction(sourceId, owner, extractionHashOf([created]))) {
+        throw new Error(`processActionCapture: completion lost the lease for source ${sourceId}`);
+      }
+    });
+    writeTx();
+    return { nodes: [node!], extractedEdges: [], associativeEdges: [] };
   } catch (err) {
     sourcesRepo.failExtraction(sourceId, owner);
     throw err;

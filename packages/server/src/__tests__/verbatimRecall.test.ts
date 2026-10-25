@@ -8,7 +8,7 @@ import { createDb, bootstrapSchema, migrateSchema, type DbHandle } from "../db/c
 import { BOOTSTRAP_SQL } from "../db/schemaSql.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { EMBED_DIM } from "../db/vec.js";
-import { upsertSourceChunkEmbedding } from "../db/vec.js";
+import { upsertSourceChunkEmbedding, upsertEmbedding, upsertJourneyEmbedding } from "../db/vec.js";
 import {
   SourcesRepo,
   chunkExact,
@@ -184,6 +184,27 @@ describe("14.7 offline retrieval: FTS exact with announced degradation", () => {
     expect(fused.mode).toBe("fts+vec");
     expect(fused.degraded).toBe(false);
   });
+
+  it("fix round 2 (audit P2): RRF fusion returns a vector-only hit in the top-k instead of crowding it out", async () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    // Three chunks match the FTS query; a fourth matches only by meaning.
+    repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "zebra migration notes one" });
+    repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "zebra migration notes two" });
+    repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "zebra migration notes three" });
+    const b = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "quiet harbor logistics" }).source;
+    const bChunk = repo.chunksOf(b.id)[0]!;
+    // Only B has a vector row, embedded exactly at the query vector.
+    const queryVec = await embeddings.embed("quiet harbor logistics");
+    upsertSourceChunkEmbedding(handle.sqlite, bChunk.id, queryVec);
+
+    const res = searchSourceChunks(repo, "zebra", { k: 3, queryVec });
+    expect(res.mode).toBe("fts+vec");
+    expect(res.hits.length).toBe(3);
+    // The old FTS-first-then-append code returned the three zebra chunks
+    // and sliced B away while still reporting mode "fts+vec".
+    expect(res.hits.map((h) => h.chunk.id)).toContain(bChunk.id);
+    expect(res.hits.some((h) => h.chunk.text.includes("zebra"))).toBe(true);
+  });
 });
 
 describe("18.4.1 bootstrap vs migration schema agreement", () => {
@@ -226,6 +247,49 @@ describe("18.4.1 bootstrap vs migration schema agreement", () => {
       expect(SPACE_SCOPED_TABLES).toContain(t);
     }
   });
+
+  it("fix round 2: a V1-shaped sources table (pre-fix-2, no capture columns) gains capture_intent/capture_params via migration", async () => {
+    // A volume created by the V1 build (PR #104, pre-fix-2) already has
+    // a `sources` table WITHOUT the intent columns — the CREATE TABLE
+    // in migrateSchema is a no-op for it, so only the PRAGMA-guarded
+    // ALTERs can add them. Build exactly that shape, then open it
+    // through createDb (bootstrap + migrate, like a real restart).
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "verbatim-intent-"));
+    const file = nodePath.join(dir, "brain.db");
+    try {
+      const raw = new BetterSqlite3(file);
+      raw.exec(`CREATE TABLE sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, space_id TEXT NOT NULL, kind TEXT NOT NULL,
+        citation_class TEXT NOT NULL DEFAULT 'verbatim_typed', title TEXT, raw_bytes BLOB NOT NULL,
+        raw_text TEXT, encoding TEXT NOT NULL DEFAULT 'utf8', content_hash TEXT NOT NULL,
+        byte_length INTEGER NOT NULL, speaker TEXT NOT NULL DEFAULT 'owner', occurred_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        idempotency_key TEXT, audio_ref TEXT, processing_status TEXT NOT NULL DEFAULT 'preserved',
+        processing_attempts INTEGER NOT NULL DEFAULT 0, processing_lease_owner TEXT,
+        processing_lease_expires_at TEXT, extraction_hash TEXT
+      );`);
+      raw.close();
+      const h2 = createDb(file);
+      try {
+        const cols = (h2.sqlite.prepare(`PRAGMA table_info(sources)`).all() as { name: string }[]).map((c) => c.name);
+        expect(cols).toContain("capture_intent");
+        expect(cols).toContain("capture_params");
+        const repo = new SourcesRepo(h2, SPACE);
+        const plain = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "migrated intent default" }).source;
+        expect(plain.captureIntent).toBe("extract");
+        const action = repo.persistText({
+          kind: "note", citationClass: "verbatim_typed", text: "action intent",
+          captureIntent: "action", captureParams: { expiresAt: "2026-10-25T00:00:00.000Z" },
+        }).source;
+        expect(action.captureIntent).toBe("action");
+        expect(action.captureParams).toEqual({ expiresAt: "2026-10-25T00:00:00.000Z" });
+      } finally {
+        h2.sqlite.close();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
 
 describe("18.4.2 space erasure removes sources + dependent FTS/vec rows", () => {
@@ -313,6 +377,134 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     expect(nodes.getById(node.id)).toBeUndefined();
   });
 
+  it("fix round 2 (audit P1): marker seeded across representative downstream records + indexes is fully scrubbed; sweep over the complete E2 inventory finds zero hits", async () => {
+    const UNIQUE = "ZQXWUNIQUESTRING54321";
+    const repo = new SourcesRepo(handle, SPACE);
+    const nodes = new NodesRepo(handle, SPACE);
+    const srcA = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: `alpha capture ${UNIQUE} alpha` }).source;
+    const srcB = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "bravo capture with ordinary words" }).source;
+    const shared = nodes.create(
+      { label: "shared", type: "daily", content: "a summary that quotes neither capture word for word" },
+      await embeddings.embed("shared summary"),
+    );
+    repo.linkNodeToAllChunks(shared.id, srcA.id);
+    repo.linkNodeToAllChunks(shared.id, srcB.id);
+    // Unlinked node quoting the forgotten chunk (no node_sources row at all).
+    const quoter = nodes.create(
+      { label: "quoter", type: "daily", content: `quoting alpha capture ${UNIQUE} alpha end` },
+      await embeddings.embed("quoter"),
+    );
+    upsertEmbedding(handle.sqlite, quoter.id, await embeddings.embed("quoter"));
+    // A true 24-char span of the forgotten chunk: the scrub predicate
+    // is containsVerbatimSpan, so seeded rows must quote a full window.
+    const SPAN = "alpha capture ZQXWUNIQUE";
+    expect(SPAN.length).toBe(24);
+    const srcAChunk = repo.chunksOf(srcA.id)[0]!;
+    upsertSourceChunkEmbedding(handle.sqlite, srcAChunk.id, await embeddings.embed(`alpha capture ${UNIQUE} alpha`));
+    const vec = await embeddings.embed("sweep probe");
+    const vecBlob = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
+    const run = (sql: string, ...params: unknown[]) => handle.sqlite.prepare(sql).run(...params);
+    const nowIso = new Date().toISOString();
+
+    // Representative downstream records, each holding the marker.
+    const epInfo = run(
+      `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at)
+       VALUES (?, 'conversation', ?, ?, ?)`,
+      SPACE, `episode summary ${SPAN} here`, nowIso, nowIso,
+    );
+    const epId = Number(epInfo.lastInsertRowid);
+    run(`INSERT INTO episodes_fts (rowid, summary, detail) VALUES (?, ?, ?)`, epId, `episode summary ${SPAN} here`, `episode detail ${SPAN} here`);
+    run(`INSERT INTO vec_episodes (episode_id, embedding) VALUES (?, ?)`, BigInt(epId), vecBlob);
+    run(`INSERT INTO episode_enrichments (episode_id, space_id, version, detail) VALUES (?, ?, 1, ?)`, epId, SPACE, `enrichment detail ${SPAN} here`);
+    run(`INSERT INTO insights (space_id, node_a, node_b, text) VALUES (?, ?, ?, ?)`, SPACE, shared.id, quoter.id, `insight text ${SPAN} here`);
+    run(`INSERT INTO daily_logs (space_id, content, date) VALUES (?, ?, '2026-10-24')`, SPACE, `daily log ${SPAN} here`);
+    run(`INSERT INTO working_memory (space_id, text) VALUES (?, ?)`, SPACE, `working thought ${SPAN} here`);
+    run(`INSERT INTO inquiries (space_id, question, kind, signature) VALUES (?, ?, 'test', 'sweep-probe-1')`, SPACE, `question quoting ${SPAN} here`);
+    run(`INSERT INTO timeline_chapters (space_id, title, summary) VALUES (?, ?, ?)`, SPACE, `chapter ${SPAN}`, `chapter summary ${SPAN} here`);
+    run(`INSERT INTO telegram_note_drafts (space_id, chat_id, text, part_count) VALUES (?, 99, ?, 1)`, SPACE, `draft words ${SPAN} here`);
+    run(`INSERT INTO agent_logs (space_id, agent, action, description, targets) VALUES (?, 'soumaya', 'test_action', ?, '{}')`, SPACE, `log line ${SPAN} here`);
+    run(`INSERT INTO attachments (space_id, node_id, filename, data) VALUES (?, ?, 'note.txt', ?)`, SPACE, shared.id, `attachment payload ${SPAN} here`);
+    const journeyInfo = run(`INSERT INTO journeys (space_id, title, description) VALUES (?, ?, ?)`, SPACE, `journey ${SPAN}`, `journey description ${SPAN} here`);
+    const journeyId = Number(journeyInfo.lastInsertRowid);
+    upsertJourneyEmbedding(handle.sqlite, journeyId, vec);
+    run(`INSERT INTO lore (space_id, subject_type, subject_id, version, text) VALUES (?, 'memory', ?, 1, ?)`, SPACE, String(shared.id), `lore text ${SPAN} here`);
+    run(
+      `INSERT INTO contradictions (space_id, domain, old_kind, old_id, new_kind, new_id, category, reported_by, resolution)
+       VALUES (?, 'nodes', 'node', ?, 'node', ?, 'duplicate_claim', 'user', ?)`,
+      SPACE, shared.id, quoter.id, `resolution quoting ${SPAN} here`,
+    );
+    run(
+      `INSERT INTO consolidation_runs (space_id, window_date, fence, started_at, lease_expires_at, error)
+       VALUES (?, '2026-10-24', 'f', ?, ?, ?)`,
+      SPACE, nowIso, nowIso, `run error ${SPAN} here`,
+    );
+    run(`INSERT INTO corrections (space_id, node_id, correction_type, corrected_by, reason) VALUES (?, ?, 'factual_update', 'user', ?)`, SPACE, shared.id, `reason quoting ${SPAN} here`);
+    run(`INSERT INTO inbox_notifications (space_id, source, text) VALUES (?, 'insight', ?)`, SPACE, `inbox item ${SPAN} here`);
+    run(`INSERT INTO tool_approvals (space_id, principal, tool, args_json, args_hash, status, expires_at) VALUES (?, 'user', 'capture_memory', ?, 'x', 'pending', ?)`, SPACE, JSON.stringify({ text: `approval args ${SPAN} here` }), nowIso);
+    run(`INSERT INTO candidate_links (space_id, a, b, reason) VALUES (?, ?, ?, ?)`, SPACE, shared.id, quoter.id, `candidate reason ${SPAN} here`);
+    run(`INSERT INTO codex_discoveries (space_id, key, title, lore) VALUES (?, 'sweep-probe', ?, ?)`, SPACE, `discovery ${SPAN}`, `discovery lore ${SPAN} here`);
+    // Control rows with no marker: the scrub must be targeted, not a wipe.
+    run(`INSERT INTO insights (space_id, node_a, node_b, text) VALUES (?, ?, ?, ?)`, SPACE, shared.id, quoter.id, "a clean insight with ordinary words");
+    const cleanEp = run(
+      `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at) VALUES (?, 'conversation', ?, ?, ?)`,
+      SPACE, "a clean episode summary", nowIso, nowIso,
+    );
+    const cleanEpId = Number(cleanEp.lastInsertRowid);
+
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcA.id);
+    expect(res.nodesSurvivedClean).toContain(shared.id);
+    expect(res.nodesTombstoned).toContain(quoter.id);
+    // Tombstoned episode keeps its row, loses the words.
+    const epRow = handle.sqlite.prepare(`SELECT summary, forgotten_at FROM episodes WHERE id = ?`).get(epId) as { summary: string; forgotten_at: string | null };
+    expect(epRow.summary).not.toContain(UNIQUE);
+    expect(epRow.forgotten_at).not.toBeNull();
+    // The episode's FTS row (summary + enrichment detail) is gone too.
+    const epFts = handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM episodes_fts WHERE rowid = ?`).get(epId) as { c: number };
+    expect(epFts.c).toBe(0);
+    // Controls survive untouched.
+    const cleanInsight = handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM insights WHERE text = 'a clean insight with ordinary words'`).get() as { c: number };
+    expect(cleanInsight.c).toBe(1);
+    const cleanEpRow = handle.sqlite.prepare(`SELECT summary, forgotten_at FROM episodes WHERE id = ?`).get(cleanEpId) as { summary: string; forgotten_at: string | null };
+    expect(cleanEpRow.summary).toBe("a clean episode summary");
+    expect(cleanEpRow.forgotten_at).toBeNull();
+    expect(repo.getById(srcB.id)).toBeDefined();
+
+    // Sweep the COMPLETE E2 inventory (text tables + FTS + vec tables):
+    // zero hits anywhere, not just in the source + correction.
+    const inventory = [
+      "nodes", "episodes", "episode_enrichments", "insights", "daily_logs",
+      "knowledge_docs", "knowledge_chunks", "lore", "working_memory",
+      "agent_logs", "telegram_note_drafts", "attachments", "timeline_chapters",
+      "inquiries", "consolidation_runs", "consolidation_episodes", "contradictions",
+      "user_model", "user_persona", "instruction_profiles", "journeys",
+      "sources", "source_chunks", "source_corrections", "node_sources",
+      "sources_fts", "nodes_fts", "episodes_fts", "corrections", "tts_audio_cache",
+      "vec_source_chunks", "vec_nodes", "vec_episodes", "vec_docs", "vec_journeys", "vec_profiles",
+      "inbox_notifications", "tool_approvals", "candidate_links", "codex_discoveries",
+    ];
+    const existing = new Set(
+      (handle.sqlite.prepare(`SELECT name FROM sqlite_master WHERE type IN ('table','view')`).all() as { name: string }[]).map((r) => r.name),
+    );
+    for (const t of inventory) {
+      if (!existing.has(t)) continue;
+      const rows = handle.sqlite.prepare(`SELECT * FROM ${t}`).all() as Record<string, unknown>[];
+      const blob = JSON.stringify(rows, (_k, v) => (Buffer.isBuffer(v) ? v.toString("utf8") : v));
+      expect(blob.includes(UNIQUE), `unique string survived in ${t}`).toBe(false);
+    }
+    // Vector rows are embeddings, not text: assert by id that no vec row
+    // remains for any erased/tombstoned entity.
+    const vecCount = (t: string, col: string, id: number) =>
+      (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM ${t} WHERE ${col} = ?`).get(BigInt(id)) as { c: number }).c;
+    expect(vecCount("vec_source_chunks", "chunk_id", srcAChunk.id)).toBe(0);
+    expect(vecCount("vec_nodes", "node_id", quoter.id)).toBe(0);
+    expect(vecCount("vec_episodes", "episode_id", epId)).toBe(0);
+    expect(vecCount("vec_journeys", "journey_id", journeyId)).toBe(0);
+    // Result fields (asserted last so a pre-fix run fails on the
+    // surviving marker above, not on the new fields' absence).
+    expect(res.episodesTombstoned).toContain(epId);
+    expect(res.derivedRowsScrubbed).toBeGreaterThan(0);
+  });
+
   it("a shared node whose content DOES quote the forgotten chunk is tombstoned, not kept", async () => {
     const repo = new SourcesRepo(handle, SPACE);
     const nodes = new NodesRepo(handle, SPACE);
@@ -344,6 +536,37 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
   it("containsVerbatimSpan catches whole-chunk and windowed spans only", () => {
     expect(containsVerbatimSpan("xx a very distinctive forgotten sentence yy", ["a very distinctive forgotten sentence here"])).toBe(true);
     expect(containsVerbatimSpan("nothing alike at all", ["a very distinctive forgotten sentence here"])).toBe(false);
+  });
+
+  it("fix round 2 (audit P1): a 24-char span at an UNALIGNED offset is caught — every window, not stride-8 samples", () => {
+    // The marker starts at offset 10 of the chunk (10 % 8 = 2): the old
+    // stride-8 windows (0, 8, 16, 24, 32, 40) plus the tail window never
+    // equal it, so the old checker certified this "scrub-verified clean".
+    const MARKER = "QWERTYUNALIGNEDSPAN12345"; // exactly 24 chars
+    expect(MARKER.length).toBe(24);
+    const chunkText = "0123456789" + MARKER + "tail padding text to push the tail window past it";
+    expect(chunkText.indexOf(MARKER)).toBe(10);
+    expect(containsVerbatimSpan(`prefix ${MARKER} suffix`, [chunkText])).toBe(true);
+    expect(containsVerbatimSpan("nothing alike at all here", [chunkText])).toBe(false);
+  });
+
+  it("fix round 2 (audit P1): a multi-source node quoting the forgotten chunk at an unaligned offset is tombstoned, not kept", async () => {
+    const MARKER = "QWERTYUNALIGNEDSPAN12345";
+    const repo = new SourcesRepo(handle, SPACE);
+    const nodes = new NodesRepo(handle, SPACE);
+    const srcA = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "0123456789" + MARKER + "tail padding text to push the tail window past it" }).source;
+    const srcB = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "an unrelated second capture" }).source;
+    const node = nodes.create(
+      { label: "unaligned-quote", type: "daily", content: `he said ${MARKER} and moved on` },
+      await embeddings.embed("unaligned-quote"),
+    );
+    repo.linkNodeToAllChunks(node.id, srcA.id);
+    repo.linkNodeToAllChunks(node.id, srcB.id);
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcA.id);
+    expect(res.nodesTombstoned).toContain(node.id);
+    const row = handle.sqlite.prepare(`SELECT content, deleted_at FROM nodes WHERE id = ?`).get(node.id) as { content: string; deleted_at: string | null };
+    expect(row.content).not.toContain(MARKER);
+    expect(row.deleted_at).not.toBeNull();
   });
 });
 

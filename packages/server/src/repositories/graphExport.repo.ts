@@ -85,7 +85,8 @@ export class GraphExportRepo {
                   idempotency_key AS idempotencyKey, audio_ref AS audioRef,
                   processing_status AS processingStatus,
                   processing_attempts AS processingAttempts,
-                  extraction_hash AS extractionHash
+                  extraction_hash AS extractionHash,
+                  capture_intent AS captureIntent, capture_params AS captureParams
            FROM sources WHERE space_id = ? ORDER BY id ASC`,
         )
         .all(this.spaceId) as Record<string, unknown>[];
@@ -283,8 +284,8 @@ export class GraphExportRepo {
           `INSERT INTO sources (space_id, kind, citation_class, title, raw_bytes,
              raw_text, encoding, content_hash, byte_length, speaker, occurred_at,
              created_at, idempotency_key, audio_ref, processing_status,
-             processing_attempts, extraction_hash)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             processing_attempts, extraction_hash, capture_intent, capture_params)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         );
         const insChunk = sqlite.prepare(
           `INSERT INTO source_chunks (space_id, source_id, ordinal, text,
@@ -315,6 +316,19 @@ export class GraphExportRepo {
             (s.idempotencyKey as string) ?? null, (s.audioRef as string) ?? null,
             (s.processingStatus as string) ?? "preserved",
             (s.processingAttempts as number) ?? 0, (s.extractionHash as string) ?? null,
+            // Fix round 2: restore the capture intent + params so a
+            // restored direct-capture source still recovers through its
+            // own path. Pre-fix-2 exports carry neither key and degrade
+            // to 'extract' (correct: every pre-fix-2 source was
+            // generic-extraction by construction). Unknown intent values
+            // and non-string params degrade the same way — recovery
+            // coerces them on read, so a forged value can never route
+            // a restore down the wrong handler.
+            typeof s.captureIntent === "string" &&
+              ["extract", "action", "telegram_note"].includes(s.captureIntent)
+              ? (s.captureIntent as string)
+              : "extract",
+            typeof s.captureParams === "string" ? (s.captureParams as string) : null,
           );
           const newSourceId = Number(sInfo.lastInsertRowid);
           sourceIdMap.set(s.id as number, newSourceId);

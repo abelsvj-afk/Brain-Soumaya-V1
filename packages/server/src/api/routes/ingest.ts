@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
-import { ingest, ingestWithContext } from "../../ingestion/pipeline.js";
+import { ingest, ingestWithContext, processActionCapture } from "../../ingestion/pipeline.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
-import { SourcesRepo, extractionHashOf } from "../../repositories/sources.repo.js";
+import { SourcesRepo } from "../../repositories/sources.repo.js";
 import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../../economy.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../../streak.js";
 import { applyCognitiveGravity } from "../../analysis/cognitive.js";
@@ -51,13 +51,23 @@ export function ingestRoutes(ctx: AppContext): Router {
       // branch's trim — the untrimmed submitted text is what is owed
       // preservation. Persistence failure fails the capture honestly:
       // the throw propagates and no node is created.
+      //
+      // Fix round 2 (audit P1): the source row persists the direct-
+      // capture intent ('action') + params (expiry, occurredAt,
+      // remindAt, tags) at capture time, and completion is the shared
+      // processActionCapture path — the same crash/retry exactly-once
+      // path boot recovery runs. A crash anywhere after persist
+      // recovers as an action node, never as an extracted memory.
       const sourcesRepo = new SourcesRepo(ctx.handle, spaceId);
+      const expiresAt = new Date(Date.now() + (ttlHours ?? 24) * 3_600_000).toISOString();
       const { source, created: sourceCreated } = sourcesRepo.persistText({
         kind: "note",
         citationClass: "verbatim_typed",
         text,
         occurredAt,
         idempotencyKey,
+        captureIntent: "action",
+        captureParams: { expiresAt, occurredAt, remindAt, tags },
       });
       if (!sourceCreated && source.processingStatus === "extracted") {
         // Idempotent replay of an already-saved action capture: return
@@ -67,32 +77,13 @@ export function ingestRoutes(ctx: AppContext): Router {
         res.json({ nodes: prior, extractedEdges: [], associativeEdges: [] });
         return;
       }
-      const expiresAt = new Date(Date.now() + (ttlHours ?? 24) * 3_600_000).toISOString();
-      const label = text.trim().split(/\s+/).slice(0, 6).join(" ") || "Action item";
-      const vec = await ctx.embeddings.embed(text.trim());
-      const node = new NodesRepo(ctx.handle, spaceId).create(
-        {
-          label,
-          type: "daily",
-          content: text.trim(),
-          importance: 0.12, // small celestial body
-          kind: "action",
-          expiresAt,
-          occurredAt,
-          remindAt,
-          tags,
-        },
-        vec,
+      const result = await processActionCapture(
+        ctx.handle,
+        { embeddings: ctx.embeddings, llm: ctx.llm },
+        source.id,
+        spaceId,
       );
-      // Direct (extraction-free) capture: claim + complete so the
-      // processing state machine still terminates honestly.
-      const owner = `action:${process.pid}:${Date.now()}`;
-      if (sourcesRepo.claim(source.id, owner)) {
-        sourcesRepo.linkNodeToAllChunks(node.id, source.id);
-        node.hasOriginSource = true;
-        sourcesRepo.completeExtraction(source.id, owner, extractionHashOf([node]));
-      }
-      res.json({ nodes: [node], extractedEdges: [], associativeEdges: [] });
+      res.json({ nodes: result.nodes, extractedEdges: [], associativeEdges: [] });
       return;
     }
 

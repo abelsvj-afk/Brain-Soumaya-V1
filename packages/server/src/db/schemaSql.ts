@@ -719,6 +719,12 @@ export const BOOTSTRAP_SQL = `
     -- fields (raw_text, kind, speaker, occurred_at, content_hash,
     -- byte_length) have NO repository update path. Identical DDL also
     -- runs in db/client.ts migrateSchema() for existing volumes.
+    -- Fix round 2 (audit P1: direct-capture recovery): sources carry
+    -- capture_intent + capture_params (see the CREATE TABLE below) so
+    -- boot recovery routes to the right handler. The CREATE TABLE text
+    -- must stay byte-identical to the migrateSchema() copy in
+    -- db/client.ts (the 18.4.1 agreement test compares them) — keep
+    -- commentary OUTSIDE the statement, never inside it.
     CREATE TABLE IF NOT EXISTS sources (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       space_id TEXT NOT NULL,
@@ -739,7 +745,9 @@ export const BOOTSTRAP_SQL = `
       processing_attempts INTEGER NOT NULL DEFAULT 0,
       processing_lease_owner TEXT,
       processing_lease_expires_at TEXT,
-      extraction_hash TEXT
+      extraction_hash TEXT,
+      capture_intent TEXT NOT NULL DEFAULT 'extract',
+      capture_params TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sources_space_occurred
       ON sources(space_id, occurred_at);

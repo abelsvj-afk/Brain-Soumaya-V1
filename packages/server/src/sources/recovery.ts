@@ -4,7 +4,8 @@ import type { EmbeddingProvider } from "../embeddings/adapter.js";
 import type { LlmProvider } from "../llm/adapter.js";
 import { upsertSourceChunkEmbedding } from "../db/vec.js";
 import { SourcesRepo } from "../repositories/sources.repo.js";
-import { processSourceExtraction, type IngestResult } from "../ingestion/pipeline.js";
+import { processSourceExtraction, processActionCapture, type IngestResult } from "../ingestion/pipeline.js";
+import { processTelegramNoteCapture } from "../telegram/notes.js";
 import type { AppContext } from "../context.js";
 
 /**
@@ -71,7 +72,13 @@ export async function backfillChunkVec(
 
 /**
  * Resume pending sources across all spaces: reclaim expired leases,
- * then run each pending source through the pipeline's claim path.
+ * then run each pending source through the handler its persisted
+ * capture_intent names (fix round 2, audit P1) — generic extraction
+ * for 'extract', the direct action path for 'action', the direct
+ * Telegram-note path for 'telegram_note'. A crashed action source
+ * used to recover as an ordinary extracted memory and a crashed
+ * Telegram note through LLM extraction; the intent is persisted at
+ * capture time precisely so recovery cannot take the wrong path.
  * Per-source failures are already recorded by the state machine
  * (extraction_failed / failed_permanent + Inbox); recovery continues
  * with the next source rather than failing boot.
@@ -89,7 +96,14 @@ export async function recoverPendingSources(
     reclaimed += repo.reclaimExpiredLeases();
     for (const source of repo.pendingSources()) {
       try {
-        const r = await processSourceExtraction(h, deps, source.id, spaceId, undefined, ctx);
+        let r: IngestResult;
+        if (source.captureIntent === "action") {
+          r = await processActionCapture(h, deps, source.id, spaceId);
+        } else if (source.captureIntent === "telegram_note") {
+          r = await processTelegramNoteCapture(h, deps.embeddings, source.id, spaceId, ctx);
+        } else {
+          r = await processSourceExtraction(h, deps, source.id, spaceId, undefined, ctx);
+        }
         results.push(r);
         resumed++;
       } catch {

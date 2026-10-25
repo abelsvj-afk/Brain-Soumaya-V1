@@ -12,6 +12,7 @@ import { buildContext } from "../context.js";
 import { createApp } from "../api/server.js";
 import { ingest, ingestWithContext, processSourceExtraction } from "../ingestion/pipeline.js";
 import { SourcesRepo, MAX_EXTRACTION_ATTEMPTS } from "../repositories/sources.repo.js";
+import { NotificationsRepo } from "../repositories/notifications.repo.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { mergeMemories } from "../analysis/dedup.js";
 import { supersede } from "../agent/temporal.js";
@@ -250,6 +251,13 @@ describe("18.3 permanent failure surfacing", () => {
     expect(inbox!.text).not.toMatch(/UTC|Z$|\d{4}-\d{2}-\d{2}T/);
     expect(inbox!.text).toContain("preserved and searchable");
     expect(repo.searchChunksFts("doomed but preserved").length).toBe(1);
+    // Fix round 2 (audit deviation): the item is a supported 'system'
+    // NotificationSource read back through the typed repo — no cast
+    // hiding a mismatch, and the write went through record().
+    const listed = new NotificationsRepo(handle, SPACE).list();
+    const item = listed.find((n) => n.dedupeKey === `source-failed-permanent:${source.id}`);
+    expect(item?.source).toBe("system");
+    expect(item?.text).toBe(inbox!.text);
     // No further claims are possible from a terminal state.
     expect(repo.claim(source.id, "late-worker")).toBeNull();
   });
@@ -343,6 +351,39 @@ describe("ingest route wiring (action branch + document import)", () => {
     expect(source.contentHash).toBe(sha("extracted file contents here"));
   });
 
+  it("fix round 2 (audit P1): a crashed action capture recovers as an action node, not an extracted memory", async () => {
+    const { status } = await post("/api/ingest", { text: "  buy almond butter  ", kind: "action", ttlHours: 48 });
+    expect(status).toBe(200);
+    const repo = new SourcesRepo(actx.handle, spaceId);
+    const source = repo.list().find((s) => s.rawText === "  buy almond butter  ")!;
+    // Simulate the crash: node + links gone, source back to preserved.
+    const nodeIds = repo.nodeIdsWithOriginFrom(source.id);
+    expect(nodeIds.length).toBe(1);
+    for (const id of nodeIds) {
+      actx.handle.sqlite.prepare(`DELETE FROM nodes WHERE id = ?`).run(id);
+      actx.handle.sqlite.prepare(`DELETE FROM nodes_fts WHERE rowid = ?`).run(id);
+      try { actx.handle.sqlite.prepare(`DELETE FROM vec_nodes WHERE node_id = ?`).run(BigInt(id)); } catch { /* vec absent */ }
+    }
+    actx.handle.sqlite.prepare(`DELETE FROM node_sources WHERE source_id = ?`).run(source.id);
+    actx.handle.sqlite.prepare(`UPDATE sources SET processing_status = 'preserved', extraction_hash = NULL WHERE id = ?`).run(source.id);
+
+    const rec = await recoverPendingSources(actx.handle, { embeddings: new HashEmbeddingProvider(EMBED_DIM), llm: new HeuristicProvider() });
+    expect(rec.resumed).toBeGreaterThanOrEqual(1);
+    expect(repo.getById(source.id)!.processingStatus).toBe("extracted");
+    const recoveredIds = repo.nodeIdsWithOriginFrom(source.id);
+    expect(recoveredIds.length).toBe(1);
+    const node = new NodesRepo(actx.handle, spaceId).getById(recoveredIds[0]!)!;
+    expect(node.kind).toBe("action");
+    expect(node.content).toBe("buy almond butter");
+    expect(node.expiresAt).toBeTruthy();
+    const ttlMs = Date.parse(node.expiresAt!) - Date.now();
+    expect(ttlMs).toBeGreaterThan(47 * 3_600_000);
+    expect(ttlMs).toBeLessThan(49 * 3_600_000);
+    // Intent field (asserted last so a pre-fix run fails on the
+    // misrouted node above, not on the new field's absence).
+    expect(repo.getById(source.id)!.captureIntent).toBe("action");
+  });
+
   it("route idempotency: the same idempotencyKey posted twice yields one source", async () => {
     await post("/api/ingest", { text: "route replay words", idempotencyKey: "route-key-9" });
     await post("/api/ingest", { text: "route replay words", idempotencyKey: "route-key-9" });
@@ -384,6 +425,73 @@ describe("ingest route wiring (action branch + document import)", () => {
       body: JSON.stringify(tampered),
     });
     expect(badRes.status).toBe(422);
+  });
+});
+
+describe("Fix round 2 (audit P1): direct-capture recovery is intent-routed + exactly-once", () => {
+  it("a crashed Telegram note recovers via the direct-note path, not LLM extraction", async () => {
+    const text = "first part\nsecond part — exactly as dictated 😀";
+    const node = await saveTelegramNote(ctx, SPACE, text);
+    const repo = new SourcesRepo(handle, SPACE);
+    const source = repo.list()[0]!;
+    // Simulate the crash: node + links gone, source back to preserved.
+    handle.sqlite.prepare(`DELETE FROM nodes WHERE id = ?`).run(node.id);
+    handle.sqlite.prepare(`DELETE FROM nodes_fts WHERE rowid = ?`).run(node.id);
+    try { handle.sqlite.prepare(`DELETE FROM vec_nodes WHERE node_id = ?`).run(BigInt(node.id)); } catch { /* vec absent */ }
+    handle.sqlite.prepare(`DELETE FROM node_sources WHERE source_id = ?`).run(source.id);
+    handle.sqlite.prepare(`UPDATE sources SET processing_status = 'preserved', extraction_hash = NULL WHERE id = ?`).run(source.id);
+
+    const rec = await recoverPendingSources(handle, { embeddings, llm: new HeuristicProvider() });
+    expect(rec.resumed).toBe(1);
+    expect(repo.getById(source.id)!.processingStatus).toBe("extracted");
+    const ids = repo.nodeIdsWithOriginFrom(source.id);
+    expect(ids.length).toBe(1);
+    const recovered = new NodesRepo(handle, SPACE).getById(ids[0]!)!;
+    expect(recovered.content).toBe(text);
+    expect(recovered.tags).toEqual(expect.arrayContaining(["note", "telegram"]));
+    expect(recovered.origin).toBe("telegram");
+    // Intent field (asserted last so a pre-fix run fails on the
+    // misrouted node above, not on the new field's absence).
+    expect(repo.getById(source.id)!.captureIntent).toBe("telegram_note");
+  });
+
+  it("a Telegram note whose node was created before the crash is completed exactly once, not duplicated", async () => {
+    // First line has 8 words: noteLabel keeps all 8, the heuristic
+    // extractor's deriveLabel keeps 6 — so the old generic-recovery
+    // path's hash-reuse check misses and it creates a duplicate node.
+    const text = "one two three four five six seven eight\nsecond line here";
+    const node = await saveTelegramNote(ctx, SPACE, text);
+    const repo = new SourcesRepo(handle, SPACE);
+    const source = repo.list()[0]!;
+    // Simulate crash after node creation, before completion: node +
+    // links intact, source stuck 'extracting' with an expired lease.
+    handle.sqlite
+      .prepare(`UPDATE sources SET processing_status = 'extracting', processing_attempts = 1, processing_lease_owner = 'dead-worker', processing_lease_expires_at = ? WHERE id = ?`)
+      .run(new Date(Date.now() - 1000).toISOString(), source.id);
+
+    const rec = await recoverPendingSources(handle, { embeddings, llm: new HeuristicProvider() });
+    expect(rec.reclaimed).toBe(1);
+    expect(repo.getById(source.id)!.processingStatus).toBe("extracted");
+    expect(repo.nodeIdsWithOriginFrom(source.id)).toEqual([node.id]);
+  });
+
+  it("a failing embedder no longer loses the note — the source is persisted before embedding", async () => {
+    const failingEmbeddings = {
+      dim: EMBED_DIM,
+      model: "hash-bow",
+      embed: async (): Promise<Float32Array> => { throw new Error("embedder down"); },
+      embedBatch: async (): Promise<Float32Array[]> => { throw new Error("embedder down"); },
+    };
+    const failingCtx = { ...ctx, embeddings: failingEmbeddings } as AppContext;
+    const text = "words the embedder must not eat";
+    await expect(saveTelegramNote(failingCtx, SPACE, text)).rejects.toThrow(/embedder down/);
+    const repo = new SourcesRepo(handle, SPACE);
+    expect(repo.count()).toBe(1);
+    const source = repo.list()[0]!;
+    expect(source.rawText).toBe(text);
+    // Retryable, not lost: recovery can complete it once the embedder returns.
+    expect(source.processingStatus).toBe("extraction_failed");
+    expect(repo.searchChunksFts("embedder must not eat").length).toBe(1);
   });
 });
 
