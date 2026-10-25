@@ -5,16 +5,16 @@
 
 ## §1 What it is
 
-- A **full-screen map overlay**, opened from a button in the travel UI (exact placement open — Q1). The background is **transparent**: the live spatial backdrop — the stars — shows through, and the map is drawn over it. It is a star map, not a menu.
+- A **full-screen map overlay**, opened from a button in the existing popup menu (settled 2026-10-25 — the button lives in the popup menu the app already has; the builder confirms the exact menu at recon). The background is **transparent**: the live spatial backdrop — the stars — shows through, and the map is drawn over it. It is a star map, not a menu.
 - **Nodes are worlds. Edges are the connections between them** — the gates and routes you can travel. The map answers one question: *which ways did I take to get somewhere, and which ways can I take from here?*
 - The map is a **view**, not a second travel system. Tapping a world opens that world's travel (the normal depart → transit → arrive flow, with fuel, the cancel window, and the jump chain). Nothing on the map bypasses the travel rules.
 
 ## §2 What it shows — and what it never shows
 
 - **Shows:** worlds you have discovered and visited; the gates and routes between them that you have discovered or traveled; your current world; the legs of routes you have taken.
-- **Never shows:** worlds you have not discovered. The map shows only what you know; the rest is stars. In particular, **Eternity's world and its route must never appear on the map before discovery** — discovering him stays really, really hard, and the map must not give it away.
+- **Never shows:** worlds you have not discovered. The map shows only what you know; the rest is stars. In particular, **Eternity's world and its route must never appear on the map before discovery** — discovering him stays really, really hard, and the map must not give it away. **The map may hint at him (settled 2026-10-25, his words: "the map could hint... but it isn't easy")** — a faint hint is allowed, but it must not make finding him easy; the exact form of the hint is open. A hint is not a taunt and not a route.
 - **No locked-door taunts.** Nothing on the map says "you haven't found this" or counts what you are missing. Undiscovered space is simply unmarked stars (the P3-1 C8 rule: gentle, honest, no fabricated content, no locked-door taunts).
-- **Growth:** when a new world is created — by Eternity or by the owner — it appears on the map when it becomes reachable and discovered (exact trigger open — Q3). New nodes arrive calmly: no urgency, no animation of loss, no fanfare that punishes anyone who has not been there.
+- **Growth (settled 2026-10-25):** when a new world is created — by Eternity or by the owner — it appears on the map **only on first travel and discovery**. It does not appear automatically when created. New nodes arrive calmly: no urgency, no animation of loss, no fanfare that punishes anyone who has not been there.
 
 ## §3 Data source (PROPOSED — builder verifies at recon)
 
@@ -43,20 +43,20 @@
 
 ## §7 Open questions (owner settles)
 
-- **Q1** Where does the button live (TravelPanel, WorldsSurface, the galaxy HUD)?
+- **Q1 — SETTLED (owner, 2026-10-25):** the button lives in the existing popup menu. (Builder confirms the exact menu at recon.)
 - **Q2** Undiscovered worlds: hidden entirely, or shown as unnamed "unknown" space?
-- **Q3** New worlds: appear on the map automatically when created, or only on first travel there?
+- **Q3 — SETTLED (owner, 2026-10-25):** new worlds appear only on first travel and discovery — never automatically when created.
 - **Q4** Route history: how many past legs does the map show, and for how long?
 - **Q5** Fuel cost per leg: shown always, or only when a route is selected?
-- **Q6** Eternity's world: confirmed never on the map until discovered — and does the map ever hint at it (a faint region, a rumor)?
+- **Q6 — PARTLY SETTLED (owner, 2026-10-25):** Eternity's world and route never appear until discovered — but the map **may hint** at him. The hint must not make finding him easy. Exact form of the hint (a faint region, a rumor, something else) is open.
 - **Q7** Performance budget for the overlay (frame cost while open, on the owner's phone).
 
 ## §8 Acceptance (what "done" looks like when this builds)
 
-- **C1** The map shows only discovered worlds and routes; Eternity's world and route are absent until discovered.
+- **C1** The map shows only discovered worlds and routes; Eternity's world and route are absent until discovered. A faint hint at him is permitted, and must not make discovery easy.
 - **C2** No locked-door taunts anywhere on the map; undiscovered space is unmarked stars.
 - **C3** Tapping a world uses the normal travel flow (fuel, cancel window, jump chain); the map invents no shortcut.
 - **C4** Fuel cost per leg is shown from the server, never invented by the client.
-- **C5** The map grows with new worlds (Eternity-created or owner-created) without re-flowing punitively.
+- **C5** The map grows with new worlds (Eternity-created or owner-created) — each appears only on first travel and discovery — without re-flowing punitively.
 - **C6** Reduced-motion equivalent: same information, same controls, static.
 - **C7** Full gate (typecheck, server + web suites, production build) before any merge ask; merge is the owner's separate tap.
