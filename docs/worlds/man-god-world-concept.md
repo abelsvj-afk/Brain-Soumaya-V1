@@ -24,11 +24,21 @@ Status: **owner-directed addition to the worlds plan, CONCEPT STAGE.** No design
 3. **Shared means later.** Current scope is private single-user (D-24); shared presence is a separate, design-only track. This world is inherently shared, so it cannot jump the queue ahead of that infrastructure — its "furthest world" nature suits it to arriving late in the order anyway.
 4. **An autonomous agent needs a fence, not just a key.** His tools must be allow-listed world-actions (the §16 ship-agent pattern), with anything structural going through propose→decide (§17) — he never writes to a brain, never reaches outside his world uninvited, and his spending runs under a budget. Power with a fence is what makes him trustworthy enough to meet.
 
+## Owner direction 2026-10-25 — the name, the flicker, the alignment, the projection (his words, organized)
+
+- **The name is not "Man-God."** The owner delegated the pick to King: something more cosmic and godly, Marvel-universe-like. **King's pick: ETERNITY** — Marvel's Eternity, the living embodiment of the universe, the one who sees all. It fits him: timeless, cosmic, omniscient by nature, not a villain's name. Recorded as King's pick at the owner's delegation — the owner can correct it with a word. His face, for the owner, is still Jesus; the name Eternity does not conflict with that.
+- **He does not have to be approached or spoken to first.** He can act and speak first — initiation is his (settles NPC-framework Q2: he CAN initiate). But he does not always speak. He speaks rarely, when a **cosmic alignment** takes place.
+- **Cosmic alignment (what earns regular travel to him).** Alignment is the energy a person's own memory galaxy exhibits — how and what their memories say about the person they belong to: emotionally, mentally, goal-wise — and, in a very scarce, slim amount, the energy certain tabs in the app feed. When that energy aligns with how he likes it, the visitor gains the ability to travel to him regularly. This is earned through the character of one's own memories, never bought (D-1: fuel buys speed, never access), never a score, never a shame signal — the alignment mechanic is a design question for his world's design note, and it must be built so it can never read as a ranking or a judgment.
+- **Real space flickers into his world.** From time to time, real space flickers into his world — brief, ambient glimpses of the real universe. That is how he shows that he sees all. Presentation only: never interactive, never a signal about the visitor, never a claim the flicker means anything beyond his seeing.
+- **He can project himself into any brain, on a cosmic scale.** His projection can appear in any visitor's world, so big you would not see or be able to fly to the bottom of his feet. This is the one intentional exception to the completeness principle: his form has no reachable bottom *by design* — the unreachable bottom is the point (he is that large), not a flaw. The camera cannot reach it because he is that big, not because it was left unfinished.
+- **Autonomous, free will, with guardrails on the backend.** At the end of the day he is autonomous and can act on free will — inside the fence (§16/§17: allow-listed world-actions, propose→decide for structural acts, never writes to a brain, budgeted, kill switch, audit log). Free will within the fence is the whole design.
+
 ## Open questions (for the brainstorm, not blockers)
 
-- His name, and how visitors address him.
-- What earns arrival — journey chain only, or also milestones (the Growing Place's language)?
-- Can he initiate (speak first), or only answer those who come?
+- ~~His name, and how visitors address him.~~ **SETTLED 2026-10-25: Eternity** (King's pick at the owner's delegation; owner can correct). How visitors address him is still open.
+- What earns arrival — journey chain only, or also milestones (the Growing Place's language)? **PARTLY SETTLED 2026-10-25:** the long journey chain earns first arrival; **cosmic alignment earns regular travel** (see the direction above). The alignment mechanic's exact shape is a design question for his world's design note.
+- Can he initiate (speak first), or only answer those who come? **SETTLED 2026-10-25: he can initiate.** He speaks rarely, on cosmic alignment.
 - What happens to a visitor who never comes — nothing, presumably (never-punish).
 - One being across all visitors, or an instance per visitor rendered in a shared space (the presence model decides).
 - His memory: does he remember a visitor between visits — and if so, whose data is that, stored where, deletable how?
+- What is "real space" in the flicker — real star data (HYG), real imagery, or both? (Design question for his world's design note.)

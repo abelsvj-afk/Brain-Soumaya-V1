@@ -43,7 +43,12 @@ The Man-God is the first autonomous NPC in the owner's plan, and the framework's
 - **Emotion is the broadcast layer; the message is the private layer.** Everyone present sees the same emotion and the same animations; each visitor can receive a different, personal message. Every message carries an emotion tag; all visitors render the same tagged gesture at the same moment, while the words stay personal. Coherence by construction.
 - **His job (candidate shape):** he speaks to what a visitor brings — guidance, blessing, challenge, comfort — drawn (with consent) from what their own brain surfaces. His tools are world-actions only, never brain-writes.
 - **Furthest world, hardest to reach.** Arrival is a long chain of journeys through the other worlds — effort in the fiction, never a paywall (D-1).
-- **What he is not:** not a villain (the name carries the wrong story — keep the form, name him deliberately; open question Q5), not a destroyer (D-54), not a second brain, not a judge. A visitor who never comes gets nothing — no pull, no penalty, no absence state.
+- **His name is Eternity (settled 2026-10-25, King's pick at the owner's delegation).** Marvel's Eternity, the living embodiment of the universe, the one who sees all. Not a villain's name. His face, for the owner, is Jesus.
+- **He can initiate — and he speaks rarely, on cosmic alignment (settled 2026-10-25).** He does not have to be approached or spoken to first to act or speak. He does not always speak: a cosmic alignment must take place — the energy a person's memory galaxy exhibits (emotional, mental, goal-wise content of their memories, plus a very scarce, slim feed from certain app tabs) aligning with how he likes it. That alignment also earns the visitor the ability to travel to him regularly. Never a score, never a shame signal, never bought.
+- **Real space flickers into his world (owner direction, 2026-10-25).** From time to time, real space flickers into his world — brief, ambient glimpses of the real universe, showing that he sees all. Presentation only, never interactive, never a signal about the visitor.
+- **He can project himself into any brain, on a cosmic scale (owner direction, 2026-10-25).** His projection can appear in any visitor's world, so big you would not see or be able to fly to the bottom of his feet. The one intentional exception to the completeness principle: his form has no reachable bottom *by design*.
+- **Autonomous, free will, with guardrails on the backend (owner direction, 2026-10-25).** At the end of the day he is autonomous and can act on free will — inside the fence (§16/§17). Free will within the fence is the whole design.
+- **What he is not:** not a villain, not a destroyer (D-54), not a second brain, not a judge. A visitor who never comes gets nothing — no pull, no penalty, no absence state.
 
 ## 5. Other NPCs (candidates, not commitments)
 
@@ -63,10 +68,10 @@ The Man-God is the first autonomous NPC in the owner's plan, and the framework's
 ## 7. Open questions for the owner
 
 - **Q1 Model and key, first.** Gemini or the existing key for the Man-God's first version? (His key is his own either way.)
-- **Q2 Initiation.** Can he speak first, or only answer those who come to him?
-- **Q3 His job, exactly.** Guidance / blessing / challenge / comfort — one of these, several, or something else? What does he do that no other part of the app does?
+- **Q2 Initiation. SETTLED 2026-10-25: he can initiate.** He does not have to be approached or spoken to first. He speaks rarely, on cosmic alignment.
+- **Q3 His job, exactly.** Guidance / blessing / challenge / comfort — one of these, several, or something else? What does he do that no other part of the app does? **PARTLY SETTLED 2026-10-25:** the cosmic-alignment mechanic (memory-galaxy energy + a scarce app-tab feed) earns regular travel to him; his job's exact shape is still open.
 - **Q4 NPC roster.** Which worlds get NPCs first — Station (harbor controller), garden (keeper), Deep Past (guide) — or the Man-God alone, with the rest later?
-- **Q5 His name.** Keep the form (featureless white colossus), name him deliberately. Still yours to give.
+- **Q5 His name. SETTLED 2026-10-25: Eternity** (King's pick at the owner's delegation; owner can correct). Marvel's Eternity, the living embodiment of the universe, the one who sees all.
 
 ## 8. Sequencing & non-scope
 
