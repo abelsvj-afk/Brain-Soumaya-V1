@@ -116,3 +116,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 78. **P2-5 PR #108 OPEN WITH GATE CAVEAT (D-68).** Owner: "Move on." Branch `worlds/p2-5-transit`, commit `cda9b6f`, 8 files SHA-verified. Gate: typecheck clean, targeted 20/20, server 1,877/1,902 (21 env disk-I/O fails, 0 assertion fails); web full suite + build NOT RUN (sandbox EPERM, proven environmental). Audit brief: `docs/worlds/phase-2-p2-5-audit-brief.md`. Merge is his tap.
 
 79. **P2-5 MERGED (D-69).** PR #108 merged as `db545f0` on the owner's "Continue" (read as the merge tap). Post-merge SHAs byte-identical on the deploy branch. In the app, still dark. Next: post-merge audit when he orders it; Deep Past after the P3-1 arc.
+
+80. **WORLDS TURNED ON (D-70).** Owner: "They don't need to be dark. Nothing does." Flag-flip PR #107 merged as `7033909`; `WORLDS_TRAVEL_ENABLED = true` verified on the deploy branch. Live on his next redeploy, then his device check.
