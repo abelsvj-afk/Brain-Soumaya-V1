@@ -25,6 +25,11 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
     asset: "Station accessories, lighting, and approach dressing",
     credit: "Procedural work made for this app — beacons, docking lights, and traffic are atmosphere, not information.",
   },
+  {
+    asset: "Warp gates and the transit corridor",
+    credit:
+      "Procedural work made for this app — shared gate rings, the fly-through corridor, and the procedural ship hull are atmosphere, not information. The corridor sky is the same HYG data credited above.",
+  },
 ];
 
 export default function WorldCredits() {

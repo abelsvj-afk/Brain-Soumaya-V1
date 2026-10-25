@@ -16,6 +16,13 @@ by vostok (https://blendswap.com) licensed under CC-BY-3.0
 Converted from the original Blender file to glTF; geometry decimated
 (333,563 → 132,432 triangles) and materials re-expressed for this app.
 
+**Organic spaceship (ship skin)** — `organic-spaceship.glb`
+This work is based on "Organic alien spaceship"
+(https://sketchfab.com/3d-models/organic-alien-spaceship-af5018eeddab45919a11b9df3e86754c)
+by ricksticky (https://sketchfab.com/ricksticky) licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/).
+Converted from glTF to Draco + KTX2 for web use; materials re-tinted in-app.
+
 ## Data
 
 **Worlds starfield** — brightest-stars subset
