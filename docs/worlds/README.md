@@ -114,3 +114,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 77. **P2-5 Q1–Q5 SETTLED + BUILD AUTHORIZED (D-67).** Owner settled all five as recommended (shared dressed gate; HYG + motion MVP; common arrival contract; chase view; drift minimum). Built in the default lane; ships dark.
 
 78. **P2-5 PR #108 OPEN WITH GATE CAVEAT (D-68).** Owner: "Move on." Branch `worlds/p2-5-transit`, commit `cda9b6f`, 8 files SHA-verified. Gate: typecheck clean, targeted 20/20, server 1,877/1,902 (21 env disk-I/O fails, 0 assertion fails); web full suite + build NOT RUN (sandbox EPERM, proven environmental). Audit brief: `docs/worlds/phase-2-p2-5-audit-brief.md`. Merge is his tap.
+
+79. **P2-5 MERGED (D-69).** PR #108 merged as `db545f0` on the owner's "Continue" (read as the merge tap). Post-merge SHAs byte-identical on the deploy branch. In the app, still dark. Next: post-merge audit when he orders it; Deep Past after the P3-1 arc.
