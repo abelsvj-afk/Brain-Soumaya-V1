@@ -40,6 +40,7 @@ import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
 import TravelPanel from "./components/TravelPanel.js";
 import WorldsSurface from "./components/WorldsSurface.js";
+import WorldMap from "./components/WorldMap.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
@@ -165,6 +166,10 @@ export default function App() {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showFuelWays, setShowFuelWays] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  // The world map overlay (Rev 116) and the world it should focus the
+  // travel panel on when the map hands the traveller over.
+  const [showWorldMap, setShowWorldMap] = useState(false);
+  const [travelFocus, setTravelFocus] = useState<string | null>(null);
   // A full-screen "rank up" celebration moment (not just a quiet toast).
   const [rankUp, setRankUp] = useState<{ title: string; level: number } | null>(null);
   // The "🔓 Unlocked!" celebration moment for the Unlockables system (IM-133).
@@ -2198,7 +2203,22 @@ export default function App() {
           flag is off, TravelPanel renders nothing and fetches nothing. */}
       {space && (
         <ErrorBoundary label="travel" fallback={null}>
-          <TravelPanel />
+          <TravelPanel focusWorld={travelFocus} />
+        </ErrorBoundary>
+      )}
+
+      {/* World map (Rev 116) — the full-screen star map from the Tools
+          popup menu. Travelling still happens in the travel panel: the
+          map hands over with a focus world and closes. */}
+      {space && showWorldMap && (
+        <ErrorBoundary label="world-map" fallback={null}>
+          <WorldMap
+            onClose={() => setShowWorldMap(false)}
+            onTravelTo={(world) => {
+              setShowWorldMap(false);
+              setTravelFocus(world);
+            }}
+          />
         </ErrorBoundary>
       )}
 
@@ -2351,6 +2371,7 @@ export default function App() {
             dueCount={dueCount}
             onTimeline={() => setShowTimeline(true)}
             onLegend={() => setShowLegend(true)}
+            onWorldMap={() => setShowWorldMap(true)}
             onFlashback={triggerFlashback}
             onFocusMode={() => setFocusMode((v) => !v)}
             focusMode={focusMode}

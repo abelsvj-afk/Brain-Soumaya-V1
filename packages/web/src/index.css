@@ -6479,3 +6479,142 @@ button.mindspace-more { cursor: pointer; }
 .travel-bonus {
   color: #ffd27a;
 }
+.route-focused {
+  outline: 2px solid #ffd27a;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* World map (Rev 116) — a full-screen star map on the worlds-surface
+   layer (z-index 70), with a TRANSPARENT background: the live galaxy
+   shows through and the map is drawn over it. No animation anywhere in
+   this block — the map renders once and redraws only on interaction, so
+   reduced motion needs no separate treatment. */
+.world-map {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: transparent;
+  color: #e8ecff;
+  overflow: hidden;
+}
+.world-map-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  pointer-events: none;
+}
+.world-map-bar > * {
+  pointer-events: auto;
+}
+.world-map-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.world-map-fuel {
+  opacity: 0.85;
+}
+.world-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.world-map-edge {
+  stroke: rgba(207, 224, 255, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 4 6;
+}
+.world-map-edge.traveled {
+  stroke: rgba(207, 224, 255, 0.65);
+  stroke-dasharray: none;
+}
+.world-map-edge.bright {
+  stroke: #ffd27a;
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.world-map-edge-label {
+  fill: #cfe0ff;
+  font-size: 13px;
+  paint-order: stroke;
+  stroke: #05070f;
+  stroke-width: 3px;
+}
+.world-map-node {
+  cursor: pointer;
+  outline: none;
+}
+.world-map-node:focus-visible {
+  outline: 2px solid #ffd27a;
+  outline-offset: 2px;
+}
+.world-map-ring {
+  fill: none;
+  stroke: #fff6e0;
+  stroke-width: 2;
+}
+.world-map-ring.selected {
+  stroke: #ffd27a;
+  stroke-dasharray: 5 4;
+}
+.world-map-node-label {
+  fill: #e8ecff;
+  font-size: 14px;
+  paint-order: stroke;
+  stroke: #05070f;
+  stroke-width: 3px;
+}
+.world-map-here-label {
+  fill: #ffd27a;
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: #05070f;
+  stroke-width: 3px;
+}
+.world-map-controls {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+.world-map-detail {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(18, 22, 44, 0.97), rgba(10, 12, 28, 0.97));
+  border: 1px solid rgba(122, 200, 255, 0.25);
+}
+.world-map-chain {
+  opacity: 0.9;
+}
+.world-map-here {
+  color: #ffd27a;
+}
+.world-map-note {
+  opacity: 0.85;
+}
+.world-map-fallback {
+  position: absolute;
+  top: 4rem;
+  left: 1rem;
+  right: 1rem;
+  text-align: center;
+  opacity: 0.85;
+}

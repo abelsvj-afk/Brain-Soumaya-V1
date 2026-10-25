@@ -48,8 +48,16 @@ export interface RouteEntry {
   options: RouteOption[];
 }
 
+/** Fuel the server charges for one leg of this kind to this destination —
+ *  the server's own price (WARP_COST), displayed only; the server
+ *  settles. Warp home and drift are always free. The world map reads the
+ *  same price, so the board and the map can never disagree. */
+export function routeLegCost(kind: TravelKind, destination: string): number {
+  return destination === "home" || kind === "drift" ? 0 : WARP_COST;
+}
+
 function option(kind: TravelKind, world: string, balance: number): RouteOption {
-  const cost = world === "home" || kind === "drift" ? 0 : WARP_COST;
+  const cost = routeLegCost(kind, world);
   return {
     kind,
     label: kind === "warp" ? "Warp" : "Drift",

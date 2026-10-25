@@ -8,6 +8,7 @@ function props(over = {}) {
   return {
     onSearch: vi.fn(), onLenses: vi.fn(), onConnections: vi.fn(), candCount: 0,
     onReview: vi.fn(), dueCount: 0, onTimeline: vi.fn(), onLegend: vi.fn(),
+    onWorldMap: vi.fn(),
     onFlashback: vi.fn(), onFocusMode: vi.fn(), focusMode: false, onHelp: vi.fn(),
     ...over,
   };
@@ -24,6 +25,15 @@ describe("ToolsMenu (mobile-first tool consolidation)", () => {
     expect(p.onLenses).toHaveBeenCalled();
     // Selecting an item closes the menu.
     expect(screen.queryByText("Lenses")).toBeNull();
+  });
+
+  it("routes the World map item — the map opens from the Tools popup menu (Q1)", () => {
+    const p = props();
+    render(<ToolsMenu {...p} />);
+    fireEvent.click(screen.getByLabelText("Tools"));
+    fireEvent.click(screen.getByText("World map"));
+    expect(p.onWorldMap).toHaveBeenCalled();
+    expect(screen.queryByText("World map")).toBeNull();
   });
 
   it("shows a combined alert badge for pending connections + due recalls", () => {
