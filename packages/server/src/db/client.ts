@@ -1212,6 +1212,33 @@ export function migrateSchema(sqlite: RawDb): void {
   // inquiries with contradiction_id NULL never collide.
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_inquiries_contradiction ON inquiries(space_id, contradiction_id)`);
 
+  // Fix round 3 (forget-request binding, D1/D9): `forget_requests`
+  // gains `target_source_id INTEGER NULL`, plus the partial unique
+  // index for at most one live (pending/approved) source-forget
+  // request per source per space. migrateSchema ONLY, never
+  // BOOTSTRAP_SQL (v252 crash precedent) — the CREATE TABLE above is
+  // a no-op on existing volumes, so only this PRAGMA-guarded ALTER
+  // can add the column, on fresh and legacy volumes alike. No FK, no
+  // backfill: NULL is the only correct default (a pre-column request's
+  // intended source is unknowable — target_query is nulled at
+  // approval — and such rows must refuse, D5). This MUST sit before
+  // the W2 post-migration assertion below (which lists the column)
+  // and AFTER the W2 CREATE TABLE block above (the index cannot
+  // reference a column that does not exist yet). SQLite treats NULLs
+  // as distinct in a unique index, so legacy/episodic NULL rows
+  // never conflict.
+  const forgetCols = sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[];
+  if (forgetCols.length > 0) {
+    if (!forgetCols.some((c) => c.name === "target_source_id")) {
+      sqlite.exec(`ALTER TABLE forget_requests ADD COLUMN target_source_id INTEGER`);
+    }
+    sqlite.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_forget_requests_live_source
+       ON forget_requests(space_id, target_source_id)
+       WHERE status IN ('pending','approved')`,
+    );
+  }
+
   // W3 Amendment 1 §2 (Milestone 3): extend the user_model.invalid_reason
   // CHECK to seven values via table rebuild when the live table still has
   // the original five. Runs AFTER the review_flag ALTERs above so the
@@ -1245,7 +1272,7 @@ export function migrateSchema(sqlite: RawDb): void {
     forget_requests: [
       "id", "space_id", "requested_by", "target_episode_id", "target_node_id",
       "target_query", "scope_episode_ids", "scope_node_ids", "scope_topics",
-      "status", "created_at", "applied_at",
+      "status", "created_at", "applied_at", "target_source_id",
     ],
     enrichment_quota: ["space_id", "quota_date", "claimed"],
     // FTS5 virtual table: rowid is implicit (not listed by PRAGMA table_info).
@@ -1479,9 +1506,17 @@ export function migrateSchema(sqlite: RawDb): void {
   // by the V1 build (PR #104, pre-fix-2) already have a `sources`
   // table WITHOUT capture_intent/capture_params — the CREATE TABLE
   // above is a no-op for them. PRAGMA-guarded ALTERs backfill the
-  // columns (same pattern as the journeys span columns above); the
-  // 'extract' default is correct for every pre-fix-2 row, which was
-  // generic-extraction by construction.
+  // columns (same pattern as the journeys span columns above).
+  //
+  // Fix round 3 — the 'extract' default is NOT correct for every
+  // pre-fix-2 row, despite what this comment used to claim. Pre-fix-2
+  // direct captures (Telegram /note saves and action captures) were
+  // persisted without intent, so they are defaulted to 'extract' here
+  // and boot recovery runs them through generic extraction — the
+  // recovery routing cannot tell them apart afterwards (see the
+  // disclosed residual in sources/recovery.ts). The default is kept
+  // because there is no safe signal to reclassify them by (no guessing
+  // from content or title); it is a known misroute, not a correct one.
   const sourceCols = sqlite.prepare(`PRAGMA table_info(sources)`).all() as { name: string }[];
   if (sourceCols.length > 0) {
     if (!sourceCols.some((c) => c.name === "capture_intent")) {

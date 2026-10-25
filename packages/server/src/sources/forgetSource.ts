@@ -13,14 +13,16 @@ import { SourcesRepo } from "../repositories/sources.repo.js";
  * ordinary node deletion never reaches here (it deactivates links;
  * sources are untouched by node events, section 12D).
  *
- * The source id is an explicit argument of the apply call — and that
- * is the known gap (fix round 2, audit P1): no forget_requests field
- * names a source, so the approved request does NOT authorize the
- * specific sourceId (see the comment on forgetSourceByRequest). The
- * V1 schema bound was the four new tables; binding needs a new
- * target_source_id column + approval flow — a schema/design decision
- * for the owner, not taken in this round. Until it lands, this helper
- * MUST have no production caller.
+ * Binding (fix round 3, design `forget-request-binding-design-
+ * 2026-10-25.md`, D1–D10): the request names its exact source in
+ * `forget_requests.target_source_id`, set at creation (D2) and
+ * re-validated at approval. `forgetSourceByRequest(h, requestId)`
+ * takes NO source argument (D6) — the bound id is read from the row
+ * inside the function and verified (D7) before any DELETE, in the
+ * same transaction as the erasure. A row with NULL target_source_id
+ * (legacy or episodic) can never authorize a source forget (D5).
+ * Creation, approval, and apply are three separate explicit owner
+ * acts (D10); the apply route is the ONLY production caller.
  *
  * Dependency rule (18.1): a node is erased with a forgotten source
  * ONLY if that source was its sole remaining origin. If other active
@@ -89,45 +91,364 @@ interface ForgetRequestRow {
   space_id: string;
   requested_by: string;
   status: string;
+  target_source_id: number | null;
+  scope_episode_ids: string;
+  scope_node_ids: string;
+  scope_topics: string;
+  created_at: string;
+  applied_at: string | null;
+}
+
+/**
+ * A refused forget-request act. `reason` is the stable machine code
+ * (also the first token of the message, so tests can match on it);
+ * `status` is the HTTP status the route layer returns for it.
+ * Refusals never leak content — reason codes and ids only.
+ */
+export class ForgetSourceRefusal extends Error {
+  readonly reason: string;
+  readonly status: number;
+  readonly existingRequestId?: number;
+  constructor(
+    reason: string,
+    message: string,
+    opts?: { status?: number; existingRequestId?: number },
+  ) {
+    super(`${reason}: ${message}`);
+    this.name = "ForgetSourceRefusal";
+    this.reason = reason;
+    this.status = opts?.status ?? 400;
+    if (opts?.existingRequestId !== undefined) this.existingRequestId = opts.existingRequestId;
+  }
+}
+
+/** Content-free identifying summary of a source (design §2.3): never raw_text. */
+export interface ForgetSourceSummary {
+  kind: string;
+  citationClass: string;
+  createdAt: string;
+  byteLength: number;
+  contentHash: string;
+  chunkCount: number;
+}
+
+/** Content-free view of a forget request + its bound source, if any. */
+export interface ForgetRequestSummary {
+  requestId: number;
+  sourceId: number | null;
+  status: string;
+  requestedBy: string;
+  createdAt: string;
+  appliedAt: string | null;
+  source: ForgetSourceSummary | null;
+}
+
+function sourceSummary(h: DbHandle, spaceId: string, sourceId: number): ForgetSourceSummary | null {
+  const repo = new SourcesRepo(h, spaceId);
+  const source = repo.getById(sourceId);
+  if (!source) return null;
+  return {
+    kind: source.kind,
+    citationClass: source.citationClass,
+    createdAt: source.createdAt,
+    byteLength: source.byteLength,
+    contentHash: source.contentHash,
+    chunkCount: repo.chunksOf(sourceId).length,
+  };
+}
+
+/** Content-free view of one request in this space; undefined when the
+ *  request does not exist here (cross-space ids are indistinguishable
+ *  from missing ones — existence must not leak across spaces). */
+export function inspectForgetSourceRequest(
+  h: DbHandle,
+  spaceId: string,
+  requestId: number,
+): ForgetRequestSummary | undefined {
+  const req = h.sqlite
+    .prepare(`SELECT * FROM forget_requests WHERE id = ? AND space_id = ?`)
+    .get(requestId, spaceId) as ForgetRequestRow | undefined;
+  if (!req) return undefined;
+  return {
+    requestId: req.id,
+    sourceId: req.target_source_id,
+    status: req.status,
+    requestedBy: req.requested_by,
+    createdAt: req.created_at,
+    appliedAt: req.applied_at,
+    source: req.target_source_id == null ? null : sourceSummary(h, spaceId, req.target_source_id),
+  };
+}
+
+/**
+ * Create a source-forget request (design §2, owner act 1 of 3; D2/D3/D4).
+ * Validates, in order: the source exists in this space; no live
+ * (pending/approved) request already exists for it (D9 index backstop
+ * + explicit pre-check). The row carries requested_by='user',
+ * status='pending', target_source_id=sourceId, target_query=NULL, all
+ * three scope fields '[]' — a mixed-scope row cannot be created
+ * through this door (there is no scope parameter to fill). Creation
+ * deletes nothing and authorizes nothing.
+ */
+export function createForgetSourceRequest(
+  h: DbHandle,
+  spaceId: string,
+  sourceId: number,
+): ForgetRequestSummary {
+  const sqlite = h.sqlite;
+  const liveFor = (sid: number) =>
+    sqlite
+      .prepare(
+        `SELECT id FROM forget_requests
+         WHERE space_id = ? AND target_source_id = ? AND status IN ('pending','approved')`,
+      )
+      .get(spaceId, sid) as { id: number } | undefined;
+  const repo = new SourcesRepo(h, spaceId);
+  if (!repo.getById(sourceId)) {
+    throw new ForgetSourceRefusal("source_not_found", `source ${sourceId} does not exist in this space`, { status: 404 });
+  }
+  const live = liveFor(sourceId);
+  if (live) {
+    throw new ForgetSourceRefusal(
+      "already_pending",
+      `a live forget request (id ${live.id}) already exists for source ${sourceId}`,
+      { status: 409, existingRequestId: live.id },
+    );
+  }
+  let requestId: number;
+  try {
+    const info = sqlite
+      .prepare(
+        `INSERT INTO forget_requests
+           (space_id, requested_by, status, target_source_id, target_query,
+            scope_episode_ids, scope_node_ids, scope_topics)
+         VALUES (?, 'user', 'pending', ?, NULL, '[]', '[]', '[]')`,
+      )
+      .run(spaceId, sourceId);
+    requestId = Number(info.lastInsertRowid);
+  } catch (err) {
+    // D9 backstop: a racing live request surfaces as a unique-index
+    // violation — re-read it and report already_pending, not a 500.
+    const raced = liveFor(sourceId);
+    if (raced) {
+      throw new ForgetSourceRefusal(
+        "already_pending",
+        `a live forget request (id ${raced.id}) already exists for source ${sourceId}`,
+        { status: 409, existingRequestId: raced.id },
+      );
+    }
+    throw err;
+  }
+  const created = inspectForgetSourceRequest(h, spaceId, requestId);
+  if (!created) throw new Error(`forget request ${requestId} vanished immediately after creation`);
+  return created;
+}
+
+/**
+ * Approve a source-forget request (design §3, owner act 2 of 3).
+ * Re-validates in ONE transaction: request exists in this space;
+ * requested_by='user'; status='pending'; target_source_id IS NOT
+ * NULL; the bound source still exists in the request's space; no
+ * scope fields set. Any failure refuses and changes nothing.
+ * Approval alone deletes nothing.
+ */
+export function approveForgetSourceRequest(
+  h: DbHandle,
+  spaceId: string,
+  requestId: number,
+): ForgetRequestSummary {
+  const sqlite = h.sqlite;
+  return sqlite.transaction((): ForgetRequestSummary => {
+    const req = sqlite
+      .prepare(`SELECT * FROM forget_requests WHERE id = ? AND space_id = ?`)
+      .get(requestId, spaceId) as ForgetRequestRow | undefined;
+    if (!req) {
+      throw new ForgetSourceRefusal("not_found", `forget request ${requestId} does not exist`, { status: 404 });
+    }
+    if (req.requested_by !== "user") {
+      throw new ForgetSourceRefusal("not_user", "forget requests must be user-requested", { status: 403 });
+    }
+    if (req.status !== "pending") {
+      throw new ForgetSourceRefusal(
+        "not_pending",
+        `forget request ${requestId} has status '${req.status}' — only 'pending' requests can be approved`,
+        { status: 409 },
+      );
+    }
+    if (req.target_source_id == null) {
+      throw new ForgetSourceRefusal(
+        "unbound_legacy_request",
+        `forget request ${requestId} names no source (target_source_id IS NULL)`,
+        { status: 422 },
+      );
+    }
+    if (req.scope_episode_ids !== "[]" || req.scope_node_ids !== "[]" || req.scope_topics !== "[]") {
+      throw new ForgetSourceRefusal(
+        "mixed_scope",
+        `forget request ${requestId} carries both a bound source and episodic scope`,
+        { status: 422 },
+      );
+    }
+    const source = new SourcesRepo(h, spaceId).getById(req.target_source_id);
+    if (!source) {
+      throw new ForgetSourceRefusal("source_not_found", `source ${req.target_source_id} does not exist in this space`, { status: 404 });
+    }
+    if (source.spaceId !== spaceId) {
+      throw new ForgetSourceRefusal(
+        "space_mismatch",
+        `source ${req.target_source_id} belongs to a different space than forget request ${requestId}`,
+        { status: 403 },
+      );
+    }
+    const changed = sqlite
+      .prepare(`UPDATE forget_requests SET status = 'approved' WHERE id = ? AND status = 'pending'`)
+      .run(requestId).changes;
+    if (changed !== 1) {
+      throw new ForgetSourceRefusal("not_pending", `forget request ${requestId} is no longer pending`, { status: 409 });
+    }
+    const approved = inspectForgetSourceRequest(h, spaceId, requestId);
+    if (!approved) throw new Error(`forget request ${requestId} vanished during approval`);
+    return approved;
+  })();
+}
+
+/**
+ * Reject a source-forget request (design §3.4). A rejected request
+ * can never be approved or applied afterwards. Rejection deletes
+ * nothing and needs no binding — it only closes the request.
+ */
+export function rejectForgetSourceRequest(
+  h: DbHandle,
+  spaceId: string,
+  requestId: number,
+): ForgetRequestSummary {
+  const sqlite = h.sqlite;
+  return sqlite.transaction((): ForgetRequestSummary => {
+    const req = sqlite
+      .prepare(`SELECT * FROM forget_requests WHERE id = ? AND space_id = ?`)
+      .get(requestId, spaceId) as ForgetRequestRow | undefined;
+    if (!req) {
+      throw new ForgetSourceRefusal("not_found", `forget request ${requestId} does not exist`, { status: 404 });
+    }
+    if (req.requested_by !== "user") {
+      throw new ForgetSourceRefusal("not_user", "forget requests must be user-requested", { status: 403 });
+    }
+    if (req.status !== "pending") {
+      throw new ForgetSourceRefusal(
+        "not_pending",
+        `forget request ${requestId} has status '${req.status}' — only 'pending' requests can be rejected`,
+        { status: 409 },
+      );
+    }
+    const changed = sqlite
+      .prepare(`UPDATE forget_requests SET status = 'rejected' WHERE id = ? AND status = 'pending'`)
+      .run(requestId).changes;
+    if (changed !== 1) {
+      throw new ForgetSourceRefusal("not_pending", `forget request ${requestId} is no longer pending`, { status: 409 });
+    }
+    const rejected = inspectForgetSourceRequest(h, spaceId, requestId);
+    if (!rejected) throw new Error(`forget request ${requestId} vanished during rejection`);
+    return rejected;
+  })();
+}
+
+/** Write a content-free refusal audit row, then throw. No row is
+ *  written when there is no space to attribute it to (unknown request
+ *  id) — there is nothing to audit against. */
+function refuse(
+  h: DbHandle,
+  spaceId: string,
+  requestId: number,
+  reason: string,
+  message: string,
+  status: number,
+): never {
+  h.sqlite
+    .prepare(
+      `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
+       VALUES (?, 'soumaya', 'forget_source_refused', ?, ?, 'refused')`,
+    )
+    .run(
+      spaceId,
+      `forget_source_refused request_id=${requestId} reason=${reason}`,
+      JSON.stringify({ request_id: requestId, reason }),
+    );
+  throw new ForgetSourceRefusal(reason, message, { status });
 }
 
 export function forgetSourceByRequest(
   h: DbHandle,
   requestId: number,
-  // FIX ROUND 2 (audit P1) — INVESTIGATED, NOT FIXABLE WITHOUT A
-  // SCHEMA/DESIGN CHANGE: this function does NOT bind the approved
-  // request to the specific sourceId. The forget_requests schema
-  // (db/schemaSql.ts + agent/episodic.ts applyForgetRequest) names
-  // its target ONLY as target_episode_id / target_node_id /
-  // scope_episode_ids / scope_node_ids / scope_topics — no field can
-  // name a source. target_query is nulled at approval (B4 Rev 4) and
-  // is free text, not an id; scope_node_ids names NODES (repurposing
-  // it would conflate the episodic forget flow and still would not
-  // name the source — an unrelated approved request whose scope
-  // happened to list a linked node could authorize the wrong source).
-  // Binding genuinely requires a new target_source_id (or
-  // scope_source_ids) column + a creation/approval flow that resolves
-  // it — a schema change to an existing table and a design decision,
-  // outside this fix round's authorization. So: this helper MUST NOT
-  // gain a production caller until that binding lands, and the merge
-  // remains blocked on it unless the owner explicitly defers it with
-  // a guarantee no route/tool can call it. See the gates checklist
-  // (Gate 2 forget-path box, still open) and the fix-round report.
-  sourceId: number,
 ): SourceForgetResult {
   const sqlite = h.sqlite;
   const req = sqlite
-    .prepare(`SELECT id, space_id, requested_by, status FROM forget_requests WHERE id = ?`)
+    .prepare(
+      `SELECT id, space_id, requested_by, status, target_source_id,
+              scope_episode_ids, scope_node_ids, scope_topics
+       FROM forget_requests WHERE id = ?`,
+    )
     .get(requestId) as ForgetRequestRow | undefined;
-  if (!req) throw new Error(`forget request ${requestId} does not exist`);
-  if (req.requested_by !== "user") throw new Error("forget requests must be user-requested");
-  if (req.status !== "approved") {
-    throw new Error(`forget request ${requestId} has status '${req.status}' — only 'approved' requests can be applied`);
+  if (!req) {
+    // No row, no space to attribute an audit row to: throw bare.
+    throw new ForgetSourceRefusal("not_found", `forget request ${requestId} does not exist`, { status: 404 });
   }
   const spaceId = req.space_id;
+  // D7 — binding verification, in order, BEFORE any DELETE. Any
+  // failure throws (with a content-free audit row) and nothing is
+  // erased; the erasure below runs in one transaction, so a throw
+  // anywhere in it rolls everything back.
+  if (req.requested_by !== "user") {
+    refuse(h, spaceId, requestId, "not_user", "forget requests must be user-requested", 403);
+  }
+  if (req.status !== "approved") {
+    refuse(
+      h, spaceId, requestId, "not_approved",
+      `forget request ${requestId} has status '${req.status}' — only 'approved' requests can be applied`,
+      409,
+    );
+  }
+  // D5: a NULL target can never authorize a source forget — legacy
+  // rows and episodic rows refuse here, forever, with no backfill.
+  if (req.target_source_id == null) {
+    refuse(
+      h, spaceId, requestId, "unbound_legacy_request",
+      `forget request ${requestId} names no source (target_source_id IS NULL) — it cannot authorize a source forget`,
+      422,
+    );
+  }
+  const sourceId = req.target_source_id;
+  // The bound source must exist in the request's own space: an
+  // unscoped lookup plus an explicit space-equality check as
+  // defense-in-depth (the space-scoped repo lookup alone would
+  // conflate "missing" with "another space's").
+  const sourceSpace = sqlite
+    .prepare(`SELECT space_id FROM sources WHERE id = ?`)
+    .get(sourceId) as { space_id: string } | undefined;
+  if (!sourceSpace) {
+    refuse(h, spaceId, requestId, "source_not_found", `source ${sourceId} does not exist`, 404);
+  }
+  if (sourceSpace.space_id !== spaceId) {
+    refuse(
+      h, spaceId, requestId, "space_mismatch",
+      `source ${sourceId} belongs to a different space than forget request ${requestId}`,
+      403,
+    );
+  }
+  // D3: one request, one forget act — a row carrying both a bound
+  // source and episodic scope is invalid at apply as well as at creation.
+  if (req.scope_episode_ids !== "[]" || req.scope_node_ids !== "[]" || req.scope_topics !== "[]") {
+    refuse(
+      h, spaceId, requestId, "mixed_scope",
+      `forget request ${requestId} carries both a bound source and episodic scope`,
+      422,
+    );
+  }
   const repo = new SourcesRepo(h, spaceId);
   const source = repo.getById(sourceId);
-  if (!source) throw new Error(`source ${sourceId} does not exist in this space`);
+  if (!source) {
+    // Unreachable after the checks above (defense-in-depth).
+    refuse(h, spaceId, requestId, "source_not_found", `source ${sourceId} does not exist in this space`, 404);
+  }
   const now = new Date().toISOString();
 
   const tx = sqlite.transaction((): SourceForgetResult => {
@@ -256,12 +577,47 @@ export function forgetSourceByRequest(
     // episodes.detail column in the bootstrap/migration DDL — "detail"
     // lives in episode_enrichments.detail and in episodes_fts, both
     // deleted here; the capture column is summary.)
+    //
+    // Fix round 3 (re-review B1): the scrub must consider the detail
+    // text too, not just the summary. An episode whose summary is clean
+    // but whose enrichment detail or episodes_fts detail quotes the
+    // forgotten source keeps a MATCH-retrievable FTS row under a
+    // summary-only gate. When ONLY the detail quotes: delete the
+    // episodes_fts row (and the vec_episodes row — its embedding is
+    // computed over summary + detail, so it embeds the quote) and let
+    // the deleteScrub pass below remove the quoting enrichment rows;
+    // the episode itself is NOT tombstoned (its summary is clean).
     if (tableExists("episodes")) {
       const epRows = sqlite
         .prepare(`SELECT id, summary FROM episodes WHERE space_id = ? AND forgotten_at IS NULL`)
         .all(spaceId) as { id: number; summary: string | null }[];
       for (const ep of epRows) {
-        if (!rowHasSpan([ep.summary])) continue;
+        const summaryQuotes = rowHasSpan([ep.summary]);
+        let detailQuotes = false;
+        if (!summaryQuotes) {
+          const enrDetails = tableExists("episode_enrichments")
+            ? (sqlite
+                .prepare(`SELECT detail FROM episode_enrichments WHERE episode_id = ? AND space_id = ?`)
+                .all(ep.id, spaceId) as { detail: string | null }[]).map((r) => r.detail)
+            : [];
+          const ftsRow = tableExists("episodes_fts")
+            ? (sqlite
+                .prepare(`SELECT summary, detail FROM episodes_fts WHERE rowid = ?`)
+                .get(ep.id) as { summary: string | null; detail: string | null } | undefined)
+            : undefined;
+          detailQuotes = rowHasSpan([...enrDetails, ftsRow?.summary, ftsRow?.detail]);
+        }
+        if (!summaryQuotes && !detailQuotes) continue;
+        if (!summaryQuotes) {
+          // Detail-only quote: drop the retrievable indexes; the quoting
+          // enrichment rows fall to the deleteScrub pass below. The
+          // episode row itself survives untouched.
+          try { sqlite.prepare(`DELETE FROM episodes_fts WHERE rowid = ?`).run(ep.id); } catch { /* FTS absent */ }
+          if (isVectorEnabled(sqlite)) {
+            try { sqlite.prepare(`DELETE FROM vec_episodes WHERE episode_id = ?`).run(BigInt(ep.id)); } catch { /* vec absent */ }
+          }
+          continue;
+        }
         sqlite
           .prepare(
             `UPDATE episodes SET summary = ?, forgotten_at = ?, enrichment_lease = NULL
@@ -360,8 +716,10 @@ export function forgetSourceByRequest(
     }
 
     // Mark the authorizing request applied (content-free audit, as in
-    // applyForgetRequest) when it carried no other scope; a request
-    // already applied by the episodic path is left as-is.
+    // applyForgetRequest). D8: the marking stays conditional — a second
+    // apply sees status='applied' and refuses under D7, so a request
+    // authorizes exactly one forget act. The D7 checks above already
+    // guaranteed this row is source-only.
     sqlite
       .prepare(
         `UPDATE forget_requests SET status = 'applied', applied_at = COALESCE(applied_at, ?), target_query = NULL

@@ -18,7 +18,9 @@ import {
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { GraphExportRepo } from "../repositories/graphExport.repo.js";
 import { SpacesRepo, SPACE_SCOPED_TABLES } from "../auth/spaces.js";
-import { forgetSourceByRequest, containsVerbatimSpan } from "../sources/forgetSource.js";
+import { forgetSourceByRequest, containsVerbatimSpan, createForgetSourceRequest, approveForgetSourceRequest, rejectForgetSourceRequest, inspectForgetSourceRequest, ForgetSourceRefusal } from "../sources/forgetSource.js";
+import { applyForgetRequest } from "../agent/episodic.js";
+import { fileURLToPath } from "node:url";
 import { backfillChunkVec } from "../sources/recovery.js";
 
 /**
@@ -43,11 +45,16 @@ afterEach(() => handle.sqlite.close());
 
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
-function approvedForgetRequest(spaceId: string): number {
-  const info = handle.sqlite
-    .prepare(`INSERT INTO forget_requests (space_id, requested_by, status) VALUES (?, 'user', 'approved')`)
-    .run(spaceId);
-  return Number(info.lastInsertRowid);
+// Fix round 3 (binding, D2/D6): fixtures create BOUND requests —
+// via createForgetSourceRequest + approve, never bare approved rows.
+// A bare approved row is unbound by definition now and must refuse.
+function approvedForgetRequest(spaceId: string, sourceId: number): number {
+  const created = createForgetSourceRequest(handle, spaceId, sourceId);
+  expect(created.status).toBe("pending");
+  expect(created.sourceId).toBe(sourceId);
+  const approved = approveForgetSourceRequest(handle, spaceId, created.requestId);
+  expect(approved.status).toBe("approved");
+  return approved.requestId;
 }
 
 describe("14.1 exact preservation (repo level)", () => {
@@ -321,7 +328,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     const node = nodes.create({ label: "doomed", type: "daily", content: "forget this exact sentence" }, await embeddings.embed("x"));
     repo.linkNodeToAllChunks(node.id, doomed.id);
 
-    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), doomed.id);
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, doomed.id));
     expect(res.nodesErased).toContain(node.id);
     expect(repo.getById(doomed.id)).toBeUndefined();
     expect(repo.chunksOf(doomed.id)).toEqual([]);
@@ -345,7 +352,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     repo.linkNodeToAllChunks(node.id, srcB.id);
     repo.addCorrection({ sourceId: srcA.id, startOffset: 0, endOffset: 5, correctedText: `alpha ${UNIQUE}` });
 
-    const first = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcA.id);
+    const first = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
     expect(first.nodesSurvivedClean).toContain(node.id);
     expect(nodes.getById(node.id)).toBeDefined();
     expect(repo.getById(srcA.id)).toBeUndefined();
@@ -372,7 +379,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     }
 
     // Forgetting the second source leaves the node with no origin: erased.
-    const second = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcB.id);
+    const second = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcB.id));
     expect(second.nodesErased).toContain(node.id);
     expect(nodes.getById(node.id)).toBeUndefined();
   });
@@ -451,7 +458,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     );
     const cleanEpId = Number(cleanEp.lastInsertRowid);
 
-    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcA.id);
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
     expect(res.nodesSurvivedClean).toContain(shared.id);
     expect(res.nodesTombstoned).toContain(quoter.id);
     // Tombstoned episode keeps its row, loses the words.
@@ -471,6 +478,9 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
 
     // Sweep the COMPLETE E2 inventory (text tables + FTS + vec tables):
     // zero hits anywhere, not just in the source + correction.
+    // Fix round 3: sweep for the seeded SPAN, not UNIQUE. The downstream
+    // rows were seeded with the 24-char SPAN; UNIQUE (21 chars) never
+    // occurs in them, so the old sweep could not detect a survivor.
     const inventory = [
       "nodes", "episodes", "episode_enrichments", "insights", "daily_logs",
       "knowledge_docs", "knowledge_chunks", "lore", "working_memory",
@@ -489,7 +499,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
       if (!existing.has(t)) continue;
       const rows = handle.sqlite.prepare(`SELECT * FROM ${t}`).all() as Record<string, unknown>[];
       const blob = JSON.stringify(rows, (_k, v) => (Buffer.isBuffer(v) ? v.toString("utf8") : v));
-      expect(blob.includes(UNIQUE), `unique string survived in ${t}`).toBe(false);
+      expect(blob.includes(SPAN), `seeded span survived in ${t}`).toBe(false);
     }
     // Vector rows are embeddings, not text: assert by id that no vec row
     // remains for any erased/tombstoned entity.
@@ -505,6 +515,36 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     expect(res.derivedRowsScrubbed).toBeGreaterThan(0);
   });
 
+  it("fix round 3 (re-review B1): an episode with a CLEAN summary but QUOTING enrichment/FTS detail loses its FTS row + enrichment, not its episode", () => {
+    // Mirrors re-review Probe 2: the old scrub gated on the summary only,
+    // so this episode's episodes_fts row stayed MATCH-retrievable.
+    const UNIQUE = "ZQXWUNIQUESTRING54321";
+    const SPAN = "alpha capture ZQXWUNIQUE"; // 24 chars, a true window of the chunk
+    expect(SPAN.length).toBe(24);
+    const repo = new SourcesRepo(handle, SPACE);
+    const srcA = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: `alpha capture ${UNIQUE} alpha` }).source;
+    const nowIso = new Date().toISOString();
+    const epInfo = handle.sqlite.prepare(
+      `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at) VALUES (?, 'conversation', ?, ?, ?)`,
+    ).run(SPACE, "a clean episode summary", nowIso, nowIso);
+    const epId = Number(epInfo.lastInsertRowid);
+    handle.sqlite.prepare(`INSERT INTO episode_enrichments (episode_id, space_id, version, detail) VALUES (?, ?, 1, ?)`).run(epId, SPACE, `enrichment detail ${SPAN} here`);
+    handle.sqlite.prepare(`INSERT INTO episodes_fts (rowid, summary, detail) VALUES (?, ?, ?)`).run(epId, "a clean episode summary", `enrichment detail ${SPAN} here`);
+
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
+    // The quoting enrichment row is gone (deleteScrub), the FTS row is gone,
+    // and the clean-summary episode itself is NOT tombstoned.
+    const enrCount = (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM episode_enrichments WHERE episode_id = ?`).get(epId) as { c: number }).c;
+    expect(enrCount).toBe(0);
+    const ftsRows = handle.sqlite.prepare(`SELECT * FROM episodes_fts WHERE rowid = ?`).all(epId) as Record<string, unknown>[];
+    expect(ftsRows.length).toBe(0);
+    expect(JSON.stringify(ftsRows)).not.toContain(UNIQUE);
+    const epRow = handle.sqlite.prepare(`SELECT summary, forgotten_at FROM episodes WHERE id = ?`).get(epId) as { summary: string; forgotten_at: string | null };
+    expect(epRow.summary).toBe("a clean episode summary");
+    expect(epRow.forgotten_at).toBeNull();
+    expect(res.episodesTombstoned).not.toContain(epId);
+  });
+
   it("a shared node whose content DOES quote the forgotten chunk is tombstoned, not kept", async () => {
     const repo = new SourcesRepo(handle, SPACE);
     const nodes = new NodesRepo(handle, SPACE);
@@ -516,7 +556,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     );
     repo.linkNodeToAllChunks(node.id, srcA.id);
     repo.linkNodeToAllChunks(node.id, srcB.id);
-    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcA.id);
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
     expect(res.nodesTombstoned).toContain(node.id);
     const row = handle.sqlite.prepare(`SELECT content, deleted_at FROM nodes WHERE id = ?`).get(node.id) as { content: string; deleted_at: string | null };
     expect(row.content).not.toContain("distinctive forgotten");
@@ -526,10 +566,10 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
   it("refuses without an approved user forget request (no second door)", () => {
     const repo = new SourcesRepo(handle, SPACE);
     const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "still here" });
-    const pending = handle.sqlite
-      .prepare(`INSERT INTO forget_requests (space_id, requested_by, status) VALUES (?, 'user', 'pending')`)
-      .run(SPACE);
-    expect(() => forgetSourceByRequest(handle, Number(pending.lastInsertRowid), source.id)).toThrow(/approved/);
+    // A bound but merely pending request refuses (not_approved), and the
+    // source survives. (Rejected / nonexistent ids are pinned in T-B3.)
+    const pending = createForgetSourceRequest(handle, SPACE, source.id);
+    expect(() => forgetSourceByRequest(handle, pending.requestId)).toThrow(/not_approved/);
     expect(repo.getById(source.id)).toBeDefined();
   });
 
@@ -562,7 +602,7 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     );
     repo.linkNodeToAllChunks(node.id, srcA.id);
     repo.linkNodeToAllChunks(node.id, srcB.id);
-    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE), srcA.id);
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
     expect(res.nodesTombstoned).toContain(node.id);
     const row = handle.sqlite.prepare(`SELECT content, deleted_at FROM nodes WHERE id = ?`).get(node.id) as { content: string; deleted_at: string | null };
     expect(row.content).not.toContain(MARKER);
@@ -729,4 +769,295 @@ describe("Fix A regression: travel_journeys bonus columns present on a fresh DB"
     expect(cols).toContain("bonus_amount");
     expect(cols).toContain("bonus_reason");
   });
+});
+
+describe("Fix 3: forget-request binding (D1–D10) — T-B1…T-B10", () => {
+  function sourceCount(): number {
+    return (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM sources`).get() as { c: number }).c;
+  }
+
+  function refusedAudits(requestId: number): { description: string; targets: string }[] {
+    const rows = handle.sqlite
+      .prepare(`SELECT description, targets FROM agent_logs WHERE action = 'forget_source_refused'`)
+      .all() as { description: string; targets: string }[];
+    return rows.filter((r) => {
+      try {
+        return (JSON.parse(r.targets) as { request_id?: number }).request_id === requestId;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  it("T-B1 — bound apply erases exactly its source; the other source is byte-identical", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const a = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "forgettable alpha words here" }).source;
+    const b = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "keeper bravo words here" }).source;
+    const bBefore = repo.getById(b.id)!;
+    const bChunksBefore = repo.chunksOf(b.id).map((c) => c.text).join("");
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, a.id));
+    expect(res.sourceId).toBe(a.id);
+    expect(res.requestId).toBeGreaterThan(0);
+    expect(repo.getById(a.id)).toBeUndefined();
+    expect(repo.chunksOf(a.id)).toEqual([]);
+    const bAfter = repo.getById(b.id)!;
+    expect(bAfter.rawText).toBe(bBefore.rawText);
+    expect(bAfter.contentHash).toBe(bBefore.contentHash);
+    expect(bAfter.byteLength).toBe(bBefore.byteLength);
+    expect(repo.chunksOf(b.id).map((c) => c.text).join("")).toBe(bChunksBefore);
+  });
+
+  it("T-B2 — an approved episodic request cannot drive a source forget", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "episodic must not forget me" });
+    const info = handle.sqlite.prepare(
+      `INSERT INTO forget_requests (space_id, requested_by, status, scope_episode_ids) VALUES (?, 'user', 'approved', ?)`,
+    ).run(SPACE, "[1]");
+    const reqId = Number(info.lastInsertRowid);
+    expect(() => forgetSourceByRequest(handle, reqId)).toThrow(/unbound_legacy_request/);
+    expect(repo.getById(source.id)).toBeDefined();
+    expect(sourceCount()).toBe(1);
+  });
+
+  it("T-B3 — unapproved requests refuse: pending, rejected, nonexistent", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "not yet approved words" });
+    const pending = createForgetSourceRequest(handle, SPACE, source.id);
+    expect(() => forgetSourceByRequest(handle, pending.requestId)).toThrow(/not_approved/);
+    const rejected = rejectForgetSourceRequest(handle, SPACE, pending.requestId);
+    expect(rejected.status).toBe("rejected");
+    expect(() => forgetSourceByRequest(handle, pending.requestId)).toThrow(/not_approved/);
+    expect(() => forgetSourceByRequest(handle, 999999)).toThrow(/not_found/);
+    expect(repo.getById(source.id)).toBeDefined();
+  });
+
+  it("T-B4 — a legacy unbound row (NULL target_source_id) refuses and deletes nothing; the refusal is audited, content-free", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "legacy survivor words" });
+    const info = handle.sqlite.prepare(
+      `INSERT INTO forget_requests (space_id, requested_by, status) VALUES (?, 'user', 'approved')`,
+    ).run(SPACE);
+    const reqId = Number(info.lastInsertRowid);
+    expect(() => forgetSourceByRequest(handle, reqId)).toThrow(/unbound_legacy_request/);
+    expect(repo.getById(source.id)).toBeDefined();
+    expect(sourceCount()).toBe(1);
+    const audits = refusedAudits(reqId);
+    expect(audits.length).toBe(1);
+    expect(audits[0]!.description).toContain("unbound_legacy_request");
+    expect(JSON.stringify(audits[0])).not.toContain("legacy survivor");
+  });
+
+  it("T-B5 — cross-space binding holds: a request in S1 cannot forget a source in S2", () => {
+    const repoB = new SourcesRepo(handle, "space-b");
+    const other = repoB.persistText({ kind: "note", citationClass: "verbatim_typed", text: "other space words" }).source;
+    // Hand-crafted: creation would refuse source_not_found, so a
+    // cross-space row can only exist by direct insert — which is
+    // exactly the shape the apply check must still refuse.
+    const info = handle.sqlite.prepare(
+      `INSERT INTO forget_requests (space_id, requested_by, status, target_source_id) VALUES (?, 'user', 'approved', ?)`,
+    ).run(SPACE, other.id);
+    const reqId = Number(info.lastInsertRowid);
+    expect(() => forgetSourceByRequest(handle, reqId)).toThrow(/space_mismatch/);
+    expect(repoB.getById(other.id)).toBeDefined();
+  });
+
+  it("T-B6 — double-apply refuses: the second apply sees status 'applied'", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "apply me once only" });
+    const reqId = approvedForgetRequest(SPACE, source.id);
+    const res = forgetSourceByRequest(handle, reqId);
+    expect(res.sourceId).toBe(source.id);
+    const row = handle.sqlite.prepare(`SELECT status FROM forget_requests WHERE id = ?`).get(reqId) as { status: string };
+    expect(row.status).toBe("applied");
+    expect(() => forgetSourceByRequest(handle, reqId)).toThrow(/not_approved/);
+    expect(repo.getById(source.id)).toBeUndefined();
+  });
+
+  it("T-B7 — a mixed-scope row is invalid at both doors", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "mixed scope survivor" });
+    // Creation door: there is no scope parameter, so a created row is
+    // always source-only — assert the created row's shape directly.
+    const created = createForgetSourceRequest(handle, SPACE, source.id);
+    const createdRow = handle.sqlite.prepare(
+      `SELECT target_query, scope_episode_ids, scope_node_ids, scope_topics FROM forget_requests WHERE id = ?`,
+    ).get(created.requestId) as {
+      target_query: string | null; scope_episode_ids: string; scope_node_ids: string; scope_topics: string;
+    };
+    expect(createdRow.target_query).toBeNull();
+    expect(createdRow.scope_episode_ids).toBe("[]");
+    expect(createdRow.scope_node_ids).toBe("[]");
+    expect(createdRow.scope_topics).toBe("[]");
+    // Apply door: a hand-crafted mixed row refuses.
+    const { source: source2 } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "second mixed survivor" });
+    const info = handle.sqlite.prepare(
+      `INSERT INTO forget_requests (space_id, requested_by, status, target_source_id, scope_episode_ids) VALUES (?, 'user', 'approved', ?, '[1]')`,
+    ).run(SPACE, source2.id);
+    const reqId = Number(info.lastInsertRowid);
+    expect(() => forgetSourceByRequest(handle, reqId)).toThrow(/mixed_scope/);
+    expect(repo.getById(source.id)).toBeDefined();
+    expect(repo.getById(source2.id)).toBeDefined();
+  });
+
+  it("T-B8 — one live request per source: second create refuses; after reject/apply the live window closes", () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "one live request only" });
+    const first = createForgetSourceRequest(handle, SPACE, source.id);
+    let secondErr: unknown;
+    try {
+      createForgetSourceRequest(handle, SPACE, source.id);
+    } catch (err) {
+      secondErr = err;
+    }
+    expect(secondErr).toBeInstanceOf(ForgetSourceRefusal);
+    expect((secondErr as ForgetSourceRefusal).reason).toBe("already_pending");
+    expect((secondErr as ForgetSourceRefusal).existingRequestId).toBe(first.requestId);
+    // The partial unique index is the backstop: a raw duplicate insert fails too.
+    expect(() =>
+      handle.sqlite.prepare(
+        `INSERT INTO forget_requests (space_id, requested_by, status, target_source_id, target_query, scope_episode_ids, scope_node_ids, scope_topics)
+         VALUES (?, 'user', 'pending', ?, NULL, '[]', '[]', '[]')`,
+      ).run(SPACE, source.id),
+    ).toThrow(/UNIQUE constraint/);
+    // After the first is rejected, a new request may be created…
+    rejectForgetSourceRequest(handle, SPACE, first.requestId);
+    const recreated = createForgetSourceRequest(handle, SPACE, source.id);
+    expect(recreated.requestId).not.toBe(first.requestId);
+    // …and after it is applied, the live window closes: a raw pending
+    // row for the same source id inserts cleanly (the index guards
+    // live rows only). Creating through the door then refuses
+    // source_not_found — the source is gone, which is correct.
+    approveForgetSourceRequest(handle, SPACE, recreated.requestId);
+    forgetSourceByRequest(handle, recreated.requestId);
+    expect(repo.getById(source.id)).toBeUndefined();
+    handle.sqlite.prepare(
+      `INSERT INTO forget_requests (space_id, requested_by, status, target_source_id) VALUES (?, 'user', 'pending', ?)`,
+    ).run(SPACE, source.id);
+    expect(() => createForgetSourceRequest(handle, SPACE, source.id)).toThrow(/source_not_found/);
+  });
+
+  it("T-B9 — static enforcement pins: source DELETEs live only in forgetSource.ts; the helper is called in production only from the apply route", () => {
+    const srcDir = nodePath.resolve(nodePath.dirname(fileURLToPath(import.meta.url)), "..");
+    const prodFiles: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "__tests__") continue;
+        const p = nodePath.join(dir, entry.name);
+        if (entry.isDirectory()) walk(p);
+        else if (entry.isFile() && p.endsWith(".ts")) prodFiles.push(p);
+      }
+    };
+    walk(srcDir);
+    expect(prodFiles.length).toBeGreaterThan(0);
+    const deleteRe = /DELETE\s+FROM\s+(sources|source_chunks|source_corrections|node_sources)/;
+    const deleteHolders = prodFiles.filter((f) => deleteRe.test(fs.readFileSync(f, "utf8")));
+    expect(deleteHolders.map((f) => nodePath.relative(srcDir, f))).toEqual(["sources/forgetSource.ts"]);
+    const callers = prodFiles.filter((f) => /forgetSourceByRequest/.test(fs.readFileSync(f, "utf8")));
+    expect(callers.map((f) => nodePath.relative(srcDir, f)).sort()).toEqual([
+      "api/routes/forgetRequests.ts",
+      "sources/forgetSource.ts",
+    ]);
+  });
+
+  it("T-B10 — migration rehearsal: pre-binding DB opens, episodic still applies, legacy refuses, bound flow works, reopen idempotent, fresh DB agrees", async () => {
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "verbatim-binding-"));
+    const file = nodePath.join(dir, "brain.db");
+    try {
+      // Seed a pre-binding DB: boot the file, then remove the binding
+      // column + index — the exact shape pre-binding code produced —
+      // and seed an approved episodic request and an approved
+      // NULL-target (legacy) request while the column is absent.
+      const h0 = createDb(file);
+      const h0Cols = (h0.sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[]).map((c) => c.name);
+      // Index first: SQLite refuses DROP COLUMN while an index
+      // references the column.
+      h0.sqlite.exec(`DROP INDEX IF EXISTS idx_forget_requests_live_source`);
+      if (h0Cols.includes("target_source_id")) {
+        h0.sqlite.exec(`ALTER TABLE forget_requests DROP COLUMN target_source_id`);
+      }
+      const seededCols = (h0.sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[]).map((c) => c.name);
+      expect(seededCols).not.toContain("target_source_id");
+      const ep = h0.sqlite.prepare(
+        `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at)
+         VALUES ('legacy', 'conversation', 'legacy episode words', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`,
+      ).run();
+      const epId = Number(ep.lastInsertRowid);
+      const epiReq = h0.sqlite.prepare(
+        `INSERT INTO forget_requests (space_id, requested_by, status, scope_episode_ids) VALUES ('legacy', 'user', 'approved', ?)`,
+      ).run(JSON.stringify([epId]));
+      const epiReqId = Number(epiReq.lastInsertRowid);
+      const legacyReq = h0.sqlite.prepare(
+        `INSERT INTO forget_requests (space_id, requested_by, status) VALUES ('legacy', 'user', 'approved')`,
+      ).run();
+      const legacyReqId = Number(legacyReq.lastInsertRowid);
+      h0.sqlite.close();
+
+      const h2 = createDb(file);
+      try {
+        // (1) The DB opens under the new code; the PRAGMA-guarded ALTER
+        // adds target_source_id (NULL on every pre-existing row) and
+        // the live-source index; assertW2Schema passes (createDb
+        // would throw otherwise).
+        const cols = (h2.sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[]).map((c) => c.name);
+        expect(cols).toContain("target_source_id");
+        const legacyTarget = (h2.sqlite.prepare(`SELECT target_source_id FROM forget_requests WHERE id = ?`).get(legacyReqId) as { target_source_id: number | null }).target_source_id;
+        expect(legacyTarget).toBeNull();
+        const idx = h2.sqlite.prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_forget_requests_live_source'`).get() as { sql: string } | undefined;
+        expect(idx?.sql).toContain("WHERE status IN ('pending','approved')");
+        // (2) A pre-existing approved EPISODIC row still applies via
+        // applyForgetRequest exactly as before.
+        const epiRes = applyForgetRequest(h2, epiReqId);
+        expect(epiRes.episodesTombstoned).toContain(epId);
+        const epRow = h2.sqlite.prepare(`SELECT summary, forgotten_at FROM episodes WHERE id = ?`).get(epId) as { summary: string; forgotten_at: string | null };
+        expect(epRow.summary).not.toBe("legacy episode words");
+        expect(epRow.forgotten_at).not.toBeNull();
+        // (3) A pre-existing approved row with target_source_id NULL
+        // refuses (unbound_legacy_request) and deletes nothing.
+        const repo2 = new SourcesRepo(h2, SPACE);
+        const { source } = repo2.persistText({ kind: "note", citationClass: "verbatim_typed", text: "legacy survivor words" });
+        expect(() => forgetSourceByRequest(h2, legacyReqId)).toThrow(/unbound_legacy_request/);
+        expect(repo2.getById(source.id)).toBeDefined();
+        // (4) A fresh bound request created, approved, and applied on
+        // the migrated DB erases exactly its source.
+        const created = createForgetSourceRequest(h2, SPACE, source.id);
+        expect(created.sourceId).toBe(source.id);
+        const inspected = inspectForgetSourceRequest(h2, SPACE, created.requestId);
+        expect(inspected?.source?.contentHash).toBe(source.contentHash);
+        const approved = approveForgetSourceRequest(h2, SPACE, created.requestId);
+        expect(approved.status).toBe("approved");
+        const res = forgetSourceByRequest(h2, approved.requestId);
+        expect(res.sourceId).toBe(source.id);
+        expect(repo2.getById(source.id)).toBeUndefined();
+        // (5) Second open is idempotent (the ALTER is a no-op; the
+        // index already exists).
+        h2.sqlite.close();
+        const h3 = createDb(file);
+        try {
+          const cols3 = (h3.sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[]).map((c) => c.name);
+          expect(cols3).toContain("target_source_id");
+          const idx3 = h3.sqlite.prepare(`SELECT 1 AS x FROM sqlite_master WHERE type = 'index' AND name = 'idx_forget_requests_live_source'`).get() as { x: number } | undefined;
+          expect(idx3?.x).toBe(1);
+        } finally {
+          h3.sqlite.close();
+        }
+        // (6) Fresh-DB bootstrap produces the identical column (via
+        // migrateSchema, per D1).
+        const fresh = createDb(":memory:");
+        try {
+          const freshCols = (fresh.sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[]).map((c) => c.name);
+          expect(freshCols).toContain("target_source_id");
+        } finally {
+          fresh.sqlite.close();
+        }
+      } finally {
+        try {
+          h2.sqlite.close();
+        } catch {
+          /* already closed at step (5) */
+        }
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

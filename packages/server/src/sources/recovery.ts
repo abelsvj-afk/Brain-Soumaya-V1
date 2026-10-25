@@ -82,6 +82,32 @@ export async function backfillChunkVec(
  * Per-source failures are already recorded by the state machine
  * (extraction_failed / failed_permanent + Inbox); recovery continues
  * with the next source rather than failing boot.
+ *
+ * Fix round 3 — DISCLOSED RESIDUAL (re-review Probe 3, not fixed):
+ * pre-fix-2 pending direct captures cannot be routed to their direct
+ * paths, because no persisted signal distinguishes them from generic
+ * captures. Verified: Telegram /log goes through ingestWithContext
+ * with { channel: "telegram" } (telegram/bot.ts), which persists kind
+ * "telegram" with NO captureIntent — so a pre-fix-2 /log row is
+ * kind "telegram" + intent 'extract', exactly like a generic
+ * Telegram-channel ingest; and a pre-fix-2 /note row is ALSO kind
+ * "telegram" + intent 'extract' (saveTelegramNote only started
+ * persisting capture_intent='telegram_note' in fix round 2), so /log
+ * and /note are indistinguishable from each other too. Action
+ * captures are worse: kind "note" + intent 'extract', byte-identical
+ * in shape to an ordinary app note. The only candidate discriminator
+ * is the title (a /note row carries its first line as title; /log
+ * rows carry none) — but that is content-derived guessing, explicitly
+ * out of bounds: titles are not intent markers and must never be
+ * used to route a recovery. So pre-fix-2 pending direct captures
+ * recover through generic extraction (the 'extract' default the
+ * migration assigns them) and a pre-fix-2 pending /note may surface
+ * as an extracted memory instead of a direct note, and a pre-fix-2
+ * pending action capture as an extracted memory instead of an action
+ * node. Post-fix-2 captures are unaffected — their intent is
+ * persisted at capture time. No routing fix is attempted here: there
+ * is no safe distinguishing signal, and guessing would misroute
+ * generic captures the other way.
  */
 export async function recoverPendingSources(
   h: DbHandle,
