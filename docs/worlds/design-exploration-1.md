@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 101 — **LANTERN OF KEEPING GLB RECEIVED (seventh relic GLB).** Owner supplied `New_Project_10252026__6__6_oe5x.glb` (76.2 MB, 1,500,012 tris, 3× 4096 textures) — filed at `relics/glb/lantern-of-keeping.glb`; shippable slim built the same day (`lantern-of-keeping-slim.glb`, 4.12 MB, 15,000 tris, Draco) and render-checked from the slim file (domed cap, loop, ribs, frosted panels lit from within — as the lore describes). Honest finding: as supplied it carried twice the garden's whole budget in one lantern. Not yet in the repo; upload + Deep Past/codex wiring is a future increment. (Rev 100: Basin Stone + shard glow edit.)
+**Revision:** 102 — **HEARTH EMBER GLB RECEIVED (eighth relic GLB) + LANTERN GLOW EDIT.** Hearth Ember: master 102 MB / 3,176,454 tris → slim 2.03 MB / 15,881 tris, plus the flare on the owner's word — amber crack glow (warm emission strength 2.0, glow follows the surface texture so only the fissures light and the charcoal stays dark), render-checked first pass. Lantern of Keeping, also on his word: slim now has a warm light inside (emission strength 1.5, texture-driven so only the panels glow and the frame stays dark), re-rendered and verified. Both filed at `relics/glb/`; not yet in the repo. (Rev 101: Lantern of Keeping GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
