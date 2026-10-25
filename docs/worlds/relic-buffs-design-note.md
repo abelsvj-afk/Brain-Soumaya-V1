@@ -73,7 +73,7 @@ Each stat is one existing mechanic, renamed for the player. Numbers in §3 are s
 
 - Discovering Eternity is meant to be **really, really hard** — the hardest thing in the universe to reach, like the Man-God in the light novel: very difficult even to figure out how to get to where he is.
 - **Gate (PROPOSED):** the gate to his world opens for a traveler holding the **Witness Without a Name** (the key) plus **any two other relics**. The set is settled (Witness + any two); the Witness's placement is still open.
-- **SETTLED (owner, 2026-10-25, widget tap): relics ARE gate credentials.** The lore is revised accordingly (eternity-lore.md §6: the relics form a required set for the gate to Eternity's world, and for that gate only). **Once opened, the gate stays open (owner, 2026-10-25, his words: "once opened once, the gate stays accessible"):** the relics are the key that opens it the first time — they are not consumed, and the opening is permanent for that traveler. After that, the only price is the fuel for the journey: enough fuel for the grueling jump chain (three legs minimum, warp 10 per leg) or enough to warp. The Witness's placement is still open — its discovery place in the lore remains "an isolated, quiet space... final placement undefined," and the owner settles it.
+- **SETTLED (owner, 2026-10-25, widget tap): relics ARE gate credentials.** The lore is revised accordingly (eternity-lore.md §6: the relics form a required set for the gate to Eternity's world, and for that gate only). **Once opened, the gate stays open (owner, 2026-10-25, his words: "once opened once, the gate stays accessible"):** the relics are the key that opens it the first time — they are not consumed, and the opening is permanent for that traveler. After that, the only price is the fuel for the journey: enough fuel for the grueling jump chain (three legs minimum, warp 10 per leg) or enough to warp. The Witness's placement is still open — its discovery place in the lore remains "an isolated, quiet space... final placement undefined," and the placement is to be decided together (owner + King).
 - **Jump chain (PROPOSED):** there is **no direct jump** to his world. You route through at least **two intermediate worlds** — three legs minimum (origin → intermediate → intermediate → his world), e.g. Station → Deep Past → Scale → his world. Each leg is a real journey — fuel, transit, arrival — not a menu teleport. (Review 30, B-02: the earlier example showed only one intermediate world and contradicted the stated minimum — corrected here. The example is illustrative only; which routes are eligible is Q4, and the rule must be validated against the actual world graph before implementation.)
 - **Alignment** earns regular travel to him once the gate is open; it is never a score, never a threshold displayed as a number, never shame.
 - **Creator unlock:** the owner's account has everything unlocked — every world, every relic, every gate — for testing. Other accounts earn it. The unlock is a property of his account, not a cheat code in the client.
@@ -107,7 +107,7 @@ Each stat is one existing mechanic, renamed for the player. Numbers in §3 are s
 - **Q6** Creator unlock: does it cover relic copies too (does his holding a copy consume one of the scarce copies)?
 - **Q7** Emotional balance: what does it change beyond Steadiness, within the §6 constraint?
 - **Q8** Eternity-created worlds: what guardrails (approval, cost, scope)?
-- **Q9 (review 30, B-01 — the gate fork): SETTLED (owner, 2026-10-25, widget tap) — relics are gate credentials; the lore is revised. Remaining: the Witness's placement (owner settles).**
+- **Q9 (review 30, B-01 — the gate fork): SETTLED (owner, 2026-10-25, widget tap) — relics are gate credentials; the lore is revised. Remaining: the Witness's placement (to be decided together).**
 
 ## §10 Acceptance (what "done" looks like when this builds)
 
@@ -131,7 +131,7 @@ Full review: `docs/worlds/chatgpt-review-30.md`. The note stays in draft.
 - **§4:** the owner's Dragon Ball return rule is recorded — copies eventually go back to new places in the worlds to be found again, never the same place twice; the return trigger is open (see below).
 
 **Awaiting the owner's settlement (nothing here is settled until he picks):**
-1. **B-01 Gate vs lore** — **SETTLED (owner, 2026-10-25, widget tap): relics are gate credentials; the lore is revised (Rev 112).** Remaining: the Witness's placement (owner settles).
+1. **B-01 Gate vs lore** — **SETTLED (owner, 2026-10-25, widget tap): relics are gate credentials; the lore is revised (Rev 112).** Remaining: the Witness's placement (to be decided together).
 2. **B-03 Scarcity lifecycle** — return trigger (what sends a copy back: willing release, brain deletion, or something else — never inactivity), transfers, deleted brains, creator-test isolation.
 3. **H-01 Stacking** — additive vs order vs conflict, equipment limits, combined-effect disclosure before pickup, base-value restoration on unequip.
 4. **H-04 Mechanic mapping** — the builder verifies at recon which buff operations exist (partial milestones, people-tagged progress, transit/emotion); any operation that does not exist becomes a separate proposed mechanic, not an implied existing one.
