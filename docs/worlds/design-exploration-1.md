@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 98 — **HARBOR NAIL GLB RECEIVED (third relic GLB).** Owner supplied `New_Project_10252026__2__2_hbq6.glb` (37.2 MB, 952,192 tris, 3× 2048 textures, Tripo material) — filed at `relics/glb/harbor-nail.glb`; shippable slim built the same day (`harbor-nail-slim.glb`, 3.77 MB, 14,282 tris, Draco) and render-checked from the slim file (head, tapered shaft, hammered texture intact). Honest finding: as supplied it outweighed the garden's whole budget in one nail. Not yet in the repo; upload + Station/codex wiring is a future increment. (Rev 97: Mooring Ring GLB.)
+**Revision:** 99 — **P3-2 PR #109 OPEN (owner's tap).** Branch `worlds/p3-2-deep-past` from deploy @ 7033909, commit `95c4f250`, all 13 SHAs byte-identical; PR body states the gate plainly (8 pre-existing failures, none in P3-2 files). Merge is a separate tap. **WITNESS SEED + FIRST LIGHT SHARD GLBs RECEIVED (fourth + fifth relic GLBs).** Witness Seed: master 37.9 MB / 968,136 tris → slim 3.71 MB / 14,522 tris, render-checked. First Light Shard: master 32.6 MB / 966,370 tris → slim 2.36 MB / 14,495 tris, render-checked. Both filed at `relics/glb/`; not yet in the repo. (Rev 98: Harbor Nail GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.

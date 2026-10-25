@@ -138,3 +138,7 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 89. **MOORING RING GLB RECEIVED (second relic GLB).** Owner's `New_Project_10252026__1__1_3wgh.glb` (72.5 MB, 1,500,000 tris, 3× 4096 textures) filed at `relics/glb/mooring-ring.glb`; slim built (`mooring-ring-slim.glb`, 3.5 MB, 14,999 tris, Draco) and render-checked — smooth silhouette, patina + lug intact. Not yet in the repo; upload + Station/codex wiring is a future increment.
 
 90. **HARBOR NAIL GLB RECEIVED (third relic GLB).** Owner's `New_Project_10252026__2__2_hbq6.glb` (37.2 MB, 952,192 tris, 3× 2048 textures, Tripo material) filed at `relics/glb/harbor-nail.glb`; slim built (`harbor-nail-slim.glb`, 3.77 MB, 14,282 tris, Draco) and render-checked — head, tapered shaft, hammered texture intact. Not yet in the repo; upload + Station/codex wiring is a future increment.
+
+91. **P3-2 PR #109 OPEN (owner's tap).** Branch `worlds/p3-2-deep-past` from deploy @ 7033909, commit `95c4f250`, all 13 SHAs byte-identical; gate evidence in the PR body (8 pre-existing failures, none in P3-2 files). Merge is a separate tap.
+
+92. **WITNESS SEED + FIRST LIGHT SHARD GLBs RECEIVED (fourth + fifth relic GLBs).** Witness Seed: master 37.9 MB / 968,136 tris → slim 3.71 MB / 14,522 tris, render-checked. First Light Shard: master 32.6 MB / 966,370 tris → slim 2.36 MB / 14,495 tris, render-checked. Both filed at `relics/glb/`; not yet in the repo.
