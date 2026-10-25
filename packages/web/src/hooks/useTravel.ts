@@ -66,6 +66,20 @@ function traversedRoutes(): string[] {
   }
 }
 const routeKey = (origin: string, destination: string) => `${origin}>${destination}`;
+
+/** Traversed routes as origin/destination pairs — the client's discovery
+ *  record (the same record the skip rule reads). The world map draws
+ *  discovered worlds and routes from this; it fetches nothing new. */
+export function readTraversedRoutes(): { origin: string; destination: string }[] {
+  return traversedRoutes()
+    .map((r) => r.split(">"))
+    .filter(
+      (p): p is [string, string] =>
+        p.length === 2 && p[0] !== undefined && p[0] !== "" && p[1] !== undefined && p[1] !== "",
+    )
+    .map(([origin, destination]) => ({ origin, destination }));
+}
+
 const TERMINAL: ReadonlySet<string> = new Set(["arrived", "returned", "cancelled"]);
 
 export interface UseTravel {

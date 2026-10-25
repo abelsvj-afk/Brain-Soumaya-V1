@@ -19,11 +19,27 @@ import WorldCredits from "./WorldCredits.js";
  *  skipped immediately; reduced-motion travellers are never held. */
 export const TRANSIT_MS = { warp: 12_000, drift: 45_000 } as const;
 
-export default function TravelPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enabled?: boolean }) {
+export default function TravelPanel({
+  enabled = WORLDS_TRAVEL_ENABLED,
+  focusWorld = null,
+}: {
+  enabled?: boolean;
+  /** A world the map sent the traveller here for: its route entry is
+   *  highlighted and scrolled into view. The panel itself is unchanged
+   *  — departure still goes through the server, as always. */
+  focusWorld?: string | null;
+}) {
   const travel = useTravel(enabled);
   const [showCredits, setShowCredits] = useState(false);
   const [elapsedJourneyId, setElapsedJourneyId] = useState<string | null>(null);
   const activeJourney = travel.state?.activeJourney ?? null;
+
+  // A map handoff focuses one route entry (highlight + scroll). The
+  // highlight is view-only; it never changes what the panel offers.
+  useEffect(() => {
+    if (!focusWorld) return;
+    document.getElementById(`route-${focusWorld}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [focusWorld]);
 
   // The transit presentation clock: presentation only — the server
   // accepts arrival whenever it is asked; this clock decides when the
@@ -81,7 +97,11 @@ export default function TravelPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enabl
       {state && !journey && (
         <ul className="route-board">
           {buildRouteBoard(state).map((entry) => (
-            <li key={entry.world} className="route-entry">
+            <li
+              key={entry.world}
+              id={`route-${entry.world}`}
+              className={`route-entry${entry.world === focusWorld && !entry.isCurrent ? " route-focused" : ""}`}
+            >
               <div>
                 <strong>{entry.name}</strong>
                 <span> {entry.blurb}</span>

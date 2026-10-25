@@ -20,6 +20,7 @@ export interface ToolsMenuProps {
   dueCount: number;
   onTimeline: () => void;
   onLegend: () => void;
+  onWorldMap: () => void;
   onFlashback: () => void;
   onFocusMode: () => void;
   focusMode: boolean;
@@ -39,6 +40,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
     { icon: "🧠", label: "Recall", on: p.onReview, badge: p.dueCount },
     { icon: "🕰️", label: "Timeline", on: p.onTimeline },
     { icon: "🗺️", label: "Legend", on: p.onLegend },
+    { icon: "🪐", label: "World map", on: p.onWorldMap },
     { icon: "☄️", label: "Flashback", on: p.onFlashback },
     { icon: p.focusMode ? "🌐" : "🌌", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
     { icon: "❓", label: "Help", on: p.onHelp },
