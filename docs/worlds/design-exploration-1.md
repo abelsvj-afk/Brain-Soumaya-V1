@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 96 — **DAWN LEAF GLB RECEIVED (first relic GLB).** Owner supplied `New_Project_10252026_0_916m.glb` (13.4 MB, 175,376 tris, 2048 texture) — filed at `relics/glb/dawn-leaf.glb`; shippable slim built the same day (`dawn-leaf-slim.glb`, 2.06 MB, 17,537 tris, Draco, 1024 texture). Honest finding: as supplied it outweighed the whole Station hull — the slim is the shipping candidate. Not yet in the repo; upload + garden/codex wiring is a future increment on his word. (Rev 95: P3-2 built + gated, PR pending.)
+**Revision:** 97 — **MOORING RING GLB RECEIVED (second relic GLB).** Owner supplied `New_Project_10252026__1__1_3wgh.glb` (72.5 MB, 1,500,000 tris, 3× 4096 textures) — filed at `relics/glb/mooring-ring.glb`; shippable slim built the same day (`mooring-ring-slim.glb`, 3.5 MB, 14,999 tris, Draco) and render-checked from the slim file (smooth silhouette, patina + lug intact). Honest finding: as supplied it carried twice the garden's whole triangle budget in one ring. Not yet in the repo; upload + Station/codex wiring is a future increment. (Rev 96: Dawn Leaf GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.

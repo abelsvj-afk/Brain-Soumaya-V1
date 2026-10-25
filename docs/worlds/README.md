@@ -134,3 +134,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 87. **P3-2 DEEP PAST BUILT + GATED (PR PENDING OWNER'S TAP).** 13 files, gate: typecheck clean ×3, targeted web 53/53, targeted server 23/23, full server 1983/1984, full web 1552/1559 (all 8 failures proven pre-existing on the clean tree), build green. Audit brief `docs/worlds/phase-3-p3-2-audit-brief.md`. PR not opened — the owner's tap.
 
 88. **DAWN LEAF GLB RECEIVED (first relic GLB).** Owner's `New_Project_10252026_0_916m.glb` (13.4 MB, 175,376 tris) filed at `relics/glb/dawn-leaf.glb`; slim built (`dawn-leaf-slim.glb`, 2.06 MB, 17,537 tris, Draco, 1024 texture) — the shipping candidate. Not yet in the repo; upload + garden/codex wiring is a future increment.
+
+89. **MOORING RING GLB RECEIVED (second relic GLB).** Owner's `New_Project_10252026__1__1_3wgh.glb` (72.5 MB, 1,500,000 tris, 3× 4096 textures) filed at `relics/glb/mooring-ring.glb`; slim built (`mooring-ring-slim.glb`, 3.5 MB, 14,999 tris, Draco) and render-checked — smooth silhouette, patina + lug intact. Not yet in the repo; upload + Station/codex wiring is a future increment.
