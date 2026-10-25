@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 100 — **BASIN STONE GLB RECEIVED (sixth relic GLB) + FIRST LIGHT SHARD GLOW EDIT.** Basin Stone: master 74.8 MB / 1,500,000 tris → slim 3.83 MB / 15,000 tris, render-checked (grooves held at 1% decimation). Shard, on the owner's word: slim now slightly translucent (transmission 0.45) with an intense textured glow (warm-white emission strength 2.0, glow follows the surface texture so the striations stay visible) — first passes at 3.0 and 1.8 blew the surface out; 2.0 textured is the settled balance, re-rendered and verified in the GLB. Both filed at `relics/glb/`; not yet in the repo. (Rev 99: P3-2 PR #109 open + Witness Seed/First Light Shard.)
+**Revision:** 101 — **LANTERN OF KEEPING GLB RECEIVED (seventh relic GLB).** Owner supplied `New_Project_10252026__6__6_oe5x.glb` (76.2 MB, 1,500,012 tris, 3× 4096 textures) — filed at `relics/glb/lantern-of-keeping.glb`; shippable slim built the same day (`lantern-of-keeping-slim.glb`, 4.12 MB, 15,000 tris, Draco) and render-checked from the slim file (domed cap, loop, ribs, frosted panels lit from within — as the lore describes). Honest finding: as supplied it carried twice the garden's whole budget in one lantern. Not yet in the repo; upload + Deep Past/codex wiring is a future increment. (Rev 100: Basin Stone + shard glow edit.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
