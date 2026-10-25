@@ -142,3 +142,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 91. **P3-2 PR #109 OPEN (owner's tap).** Branch `worlds/p3-2-deep-past` from deploy @ 7033909, commit `95c4f250`, all 13 SHAs byte-identical; gate evidence in the PR body (8 pre-existing failures, none in P3-2 files). Merge is a separate tap.
 
 92. **WITNESS SEED + FIRST LIGHT SHARD GLBs RECEIVED (fourth + fifth relic GLBs).** Witness Seed: master 37.9 MB / 968,136 tris → slim 3.71 MB / 14,522 tris, render-checked. First Light Shard: master 32.6 MB / 966,370 tris → slim 2.36 MB / 14,495 tris, render-checked. Both filed at `relics/glb/`; not yet in the repo.
+
+93. **BASIN STONE GLB RECEIVED (sixth relic GLB) + FIRST LIGHT SHARD GLOW EDIT.** Basin Stone: master 74.8 MB / 1,500,000 tris → slim 3.83 MB / 15,000 tris, render-checked (grooves held). Shard, on the owner's word: slim now slightly translucent (transmission 0.45) with an intense textured glow (emission strength 2.0, glow follows the surface texture) — settled after 3.0 and 1.8 blew the surface out. Both filed at `relics/glb/`; not yet in the repo.

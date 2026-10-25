@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 99 — **P3-2 PR #109 OPEN (owner's tap).** Branch `worlds/p3-2-deep-past` from deploy @ 7033909, commit `95c4f250`, all 13 SHAs byte-identical; PR body states the gate plainly (8 pre-existing failures, none in P3-2 files). Merge is a separate tap. **WITNESS SEED + FIRST LIGHT SHARD GLBs RECEIVED (fourth + fifth relic GLBs).** Witness Seed: master 37.9 MB / 968,136 tris → slim 3.71 MB / 14,522 tris, render-checked. First Light Shard: master 32.6 MB / 966,370 tris → slim 2.36 MB / 14,495 tris, render-checked. Both filed at `relics/glb/`; not yet in the repo. (Rev 98: Harbor Nail GLB.)
+**Revision:** 100 — **BASIN STONE GLB RECEIVED (sixth relic GLB) + FIRST LIGHT SHARD GLOW EDIT.** Basin Stone: master 74.8 MB / 1,500,000 tris → slim 3.83 MB / 15,000 tris, render-checked (grooves held at 1% decimation). Shard, on the owner's word: slim now slightly translucent (transmission 0.45) with an intense textured glow (warm-white emission strength 2.0, glow follows the surface texture so the striations stay visible) — first passes at 3.0 and 1.8 blew the surface out; 2.0 textured is the settled balance, re-rendered and verified in the GLB. Both filed at `relics/glb/`; not yet in the repo. (Rev 99: P3-2 PR #109 open + Witness Seed/First Light Shard.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
