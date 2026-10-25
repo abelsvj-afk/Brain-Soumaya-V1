@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 97 — **MOORING RING GLB RECEIVED (second relic GLB).** Owner supplied `New_Project_10252026__1__1_3wgh.glb` (72.5 MB, 1,500,000 tris, 3× 4096 textures) — filed at `relics/glb/mooring-ring.glb`; shippable slim built the same day (`mooring-ring-slim.glb`, 3.5 MB, 14,999 tris, Draco) and render-checked from the slim file (smooth silhouette, patina + lug intact). Honest finding: as supplied it carried twice the garden's whole triangle budget in one ring. Not yet in the repo; upload + Station/codex wiring is a future increment. (Rev 96: Dawn Leaf GLB.)
+**Revision:** 98 — **HARBOR NAIL GLB RECEIVED (third relic GLB).** Owner supplied `New_Project_10252026__2__2_hbq6.glb` (37.2 MB, 952,192 tris, 3× 2048 textures, Tripo material) — filed at `relics/glb/harbor-nail.glb`; shippable slim built the same day (`harbor-nail-slim.glb`, 3.77 MB, 14,282 tris, Draco) and render-checked from the slim file (head, tapered shaft, hammered texture intact). Honest finding: as supplied it outweighed the garden's whole budget in one nail. Not yet in the repo; upload + Station/codex wiring is a future increment. (Rev 97: Mooring Ring GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
