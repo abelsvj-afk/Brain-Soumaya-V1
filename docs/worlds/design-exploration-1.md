@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 103 — **THREAD OF MANY GLB RECEIVED (ninth relic GLB).** Owner supplied `New_Project_10252026__8__8_lpl2.glb` (65.4 MB, 1,500,000 tris, 3× 4096 textures) — filed at `relics/glb/thread-of-many.glb`; shippable slim built the same day (`thread-of-many-slim.glb`, 3.31 MB, 22,500 tris, Draco) and render-checked from the slim file (pale-gold filament loop, two broad curves, one crossing, strand continuous and substantial). Ratio kept at 0.015 — a thin strand pinches easily. Not yet in the repo; upload + People/codex wiring is a future increment. (Rev 102: Hearth Ember + Lantern glow edit.)
+**Revision:** 104 — **SUNWARD COMPASS GLB RECEIVED (tenth relic GLB).** Owner supplied `New_Project_10252026__10__9_37yi.glb` (34.6 MB, 959,390 tris, 3× 2048 textures, Tripo material) — filed at `relics/glb/sunward-compass.glb`; shippable slim built the same day (`sunward-compass-slim.glb`, 2.79 MB, 14,390 tris, Draco) and render-checked from the slim file (dark-bronze disc, raised rim, concentric grooves, central dome, thickness visible). Not yet in the repo; upload + Scale/codex wiring is a future increment. (Rev 103: Thread of Many GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
