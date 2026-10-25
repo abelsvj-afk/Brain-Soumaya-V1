@@ -1,5 +1,10 @@
 # Relic Buffs — Review Relay
 
+**Exact locations on GitHub (all on branch `design/worlds-vision`):**
+- The design note: https://github.com/abelsvj-afk/Brain-Soumaya-V1/blob/design/worlds-vision/docs/worlds/relic-buffs-design-note.md
+- This relay: https://github.com/abelsvj-afk/Brain-Soumaya-V1/blob/design/worlds-vision/docs/worlds/relic-buffs-review-relay.md
+- The relic lore it derives from: https://github.com/abelsvj-afk/Brain-Soumaya-V1/blob/design/worlds-vision/docs/worlds/eternity-lore.md
+
 **To the owner:** paste this to ChatGPT (GitHub-connected) with the design note below, or hand it the branch. The note lives at `docs/worlds/relic-buffs-design-note.md` on branch `design/worlds-vision`.
 
 ---

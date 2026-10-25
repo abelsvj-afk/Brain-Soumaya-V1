@@ -1,6 +1,7 @@
 # Relic Buffs — Design Note (DRAFT)
 
 **Status:** DRAFT — filed 2026-10-25, awaiting owner settlement. **No build authorized.**
+**Revision (2026-10-25):** §6 extended with tab thresholds (owner's words) — every app tab carries plain, visible thresholds; meeting one feeds the mutating world, Alignment, and can summon events including a fleet (see `docs/worlds/fleet-defense-concept.md`).
 **Source direction (owner, 2026-10-25, voice):** once relics are found and discovered, they give buffs to users. The buff must come from what the Lord is behind the object — the lore behind each artifact decides what its buff is. Buffs supply and complement the mechanics that are already established. Some buffs boost one stat and decrease another. There is a fixed, select number of each artifact in the whole universe — not every user gets every relic. Relics are also tied to reaching Eternity's world: certain ones unlock the gate to it. Travel to him is never direct — you jump through different worlds to get there (EVE-style jump chains). Eternity is autonomous, his own agent; you don't interact with him directly except when you discover him, and discovering him is meant to be really, really hard. The creator's account has everything unlocked for testing; other accounts earn it. Eternity will create new worlds over time, pertaining to individual persons' uses — guardrails for that are still to be figured out. Emotional balance (goals attacked, negative vs good memories, growth) is a candidate driver for game elements. Eternity's skills (e.g. a shield for a meteor shower) need REAL assets pulled in, not procedural stand-ins.
 
 ## §1 What a buff is
@@ -73,9 +74,10 @@ Each stat is one existing mechanic, renamed for the player. Numbers in §3 are s
 - **Creator unlock:** the owner's account has everything unlocked — every world, every relic, every gate — for testing. Other accounts earn it. The unlock is a property of his account, not a cheat code in the client.
 - Eternity himself: autonomous, his own agent, his own skills. You do not interact with him directly — he does his own thing, stewards in good faith most of the time, watches everybody. Direct interaction happens only when you discover him, and only on his terms (he speaks rarely, on cosmic alignment).
 
-## §6 Emotional balance as a driver (owner's idea — OPEN)
+## §6 Emotional balance and tab thresholds as drivers (owner's idea — OPEN)
 
 - The owner's idea: an individual brain's **emotional balance** — whether they are attacking their goals, whether their memories run negative or good, whether they are growing — should drive game elements.
+- **Tab thresholds (added 2026-10-25, owner's words):** every tab in the app (memories, goals, emotions and mental state, finances, and the rest) carries **thresholds** — plain, visible conditions the owner defines (e.g. a goal attacked three days running, a memory carried with negative weight for a month, a debt falling below a mark, a skill practiced to a milestone). Meeting a threshold **contributes to the worlds**: it feeds the mutating world (it grows over time, bigger and bigger), it feeds Alignment, and it can summon events — including a fleet (see `docs/worlds/fleet-defense-concept.md`). Thresholds are never hidden judgments and never gate access — they open opportunities, never close doors.
 - The mechanical expression proposed here is the **Steadiness** stat (§2): emotional balance steadies or swings the emotionalWeight channel, and relics move it.
 - **Hard constraint:** emotional state must **never gate access, never punish, never shame**. A hard week changes nothing about what you can reach. Per the settled mutation rule (D-14), inferred emotion moves weather, never geography. Any emotional-balance mechanic that gates, locks, or degrades access is out by design.
 - Open: what exactly emotional balance changes beyond Steadiness — the owner settles the shape.
