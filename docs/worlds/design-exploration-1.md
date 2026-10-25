@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 104 — **SUNWARD COMPASS GLB RECEIVED (tenth relic GLB).** Owner supplied `New_Project_10252026__10__9_37yi.glb` (34.6 MB, 959,390 tris, 3× 2048 textures, Tripo material) — filed at `relics/glb/sunward-compass.glb`; shippable slim built the same day (`sunward-compass-slim.glb`, 2.79 MB, 14,390 tris, Draco) and render-checked from the slim file (dark-bronze disc, raised rim, concentric grooves, central dome, thickness visible). Not yet in the repo; upload + Scale/codex wiring is a future increment. (Rev 103: Thread of Many GLB.)
+**Revision:** 105 — **STILLNESS SEAL GLB RECEIVED (eleventh relic GLB).** Owner supplied `New_Project_10252026__11__10_xg72.glb` (35.3 MB, 957,928 tris, 3× 2048 textures, Tripo material) — filed at `relics/glb/stillness-seal.glb`; shippable slim built the same day (`stillness-seal-slim.glb`, 3.0 MB, 14,367 tris, Draco) and render-checked from the slim file (rounded-square charcoal stone, smooth central depression catching a soft silver reflection, worn chipped edges). Not yet in the repo; upload + Archive/codex wiring is a future increment. (Rev 104: Sunward Compass GLB.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.
