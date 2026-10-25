@@ -1,7 +1,7 @@
 # Design Exploration 1 — Many Spaces, Jump Gates, a World That Mutates
 
 **Status:** Exploration only. Nothing in this document is decided.
-**Revision:** 88 — **WORLDS TURNED ON (D-70).** Flag-flip PR #107 merged as `7033909` on the owner's "They don't need to be dark. Nothing does." `WORLDS_TRAVEL_ENABLED = true` verified on the deploy branch. Live on his next redeploy, then his device check. (Rev 87: P2-5 merged.)
+**Revision:** 89 — **OWNER'S 2026-10-25 BUILD-ALL DIRECTION FILED; P3-2 + P2-6 DRAFTED.** The owner ordered: cold-check/pitfall hunt of everything live (relay `docs/worlds/worlds-cold-check-relay.md`); build the rest of the worlds; Man-God inserted (other chat holds it); Station gigantic + EVE-like + accessories; free ships, no accounts (shortlist `docs/worlds/free-spaceship-shortlist.md`); NPCs, Man-God as autonomous agent with guardrails; every world fleshed out completely — the garden-underside lesson is now the completeness principle (every reachable angle finished, or unreachable). Reference-image prompts filed (`docs/worlds/reference-image-prompts.md`). P3-2 Deep Past design note DRAFTED (`docs/worlds/phase-3-p3-2-design-note.md`, review relay beside it) — Deep Past is next per D-23. P2-6 Station scale-up design note DRAFTED (`docs/worlds/phase-2-p2-6-design-note.md`, review relay beside it). Neither draft authorizes a build. (Rev 88: D-70, flag flip merged.)
 **Date:** 2026-10-22
 **Source:** Owner vision brief, 2026-10-22 (`vision-brief-2026-10-22.md`)
 **App:** Soumaya Second Brain — home galaxy is live. This explores what lives *beyond* it.

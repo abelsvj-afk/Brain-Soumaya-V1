@@ -118,3 +118,5 @@ A separate chat runs this app's audit program and repairs; designs here that tou
 79. **P2-5 MERGED (D-69).** PR #108 merged as `db545f0` on the owner's "Continue" (read as the merge tap). Post-merge SHAs byte-identical on the deploy branch. In the app, still dark. Next: post-merge audit when he orders it; Deep Past after the P3-1 arc.
 
 80. **WORLDS TURNED ON (D-70).** Owner: "They don't need to be dark. Nothing does." Flag-flip PR #107 merged as `7033909`; `WORLDS_TRAVEL_ENABLED = true` verified on the deploy branch. Live on his next redeploy, then his device check.
+
+81. **OWNER'S BUILD-ALL DIRECTION (2026-10-25) + P3-2 AND P2-6 DRAFTS.** Cold-check relay (`docs/worlds/worlds-cold-check-relay.md`), reference-image prompts (`docs/worlds/reference-image-prompts.md`), free-ship shortlist (`docs/worlds/free-spaceship-shortlist.md`) — all filed. P3-2 Deep Past design note DRAFTED + relay (`docs/worlds/phase-3-p3-2-design-note.md`); P2-6 Station scale-up design note DRAFTED + relay (`docs/worlds/phase-2-p2-6-design-note.md`). Neither draft authorizes a build. The completeness principle is now standing law: every reachable angle finished, or unreachable.

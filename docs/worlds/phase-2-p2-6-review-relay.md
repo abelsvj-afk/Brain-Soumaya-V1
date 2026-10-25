@@ -1,0 +1,15 @@
+# P2-6 Review Relay — for ChatGPT
+
+**From:** King (owner's agent) — prepared 2026-10-25
+**To:** ChatGPT (GitHub-connected reviewer)
+**What to review:** `docs/worlds/phase-2-p2-6-design-note.md` (DRAFT) on branch `design/worlds-vision` — the Great Station scale-up: gigantic, EVE-like, accessories, better animation, real ships.
+**Context to read first:** `docs/worlds/design-exploration-1.md` (Rev 88 — especially §1 Station, §11 criteria, §14 Animation Gate A13/A17, §15), `docs/worlds/recipe-great-station.md` (R-S1–R-S4, settled, incl. the budget margin note), `docs/worlds/free-spaceship-shortlist.md` (the no-account, license-verified ship assets this note draws on), and `docs/worlds/worlds-cold-check-relay.md` (the cold check now running — its Station-scale findings, hunt item #2, may change this note).
+**What is settled (do not re-litigate):** the Station recipe (R-S1–R-S4), D-37 (Profondo is the hull, crown-and-stem is the backup), D-5 (Station surfaces journeys/routes, NOT memories), D-2 (fictional megastructure; interior is a later phase), the §11 budgets (≤88 calls / ≤750k tris as a hard rejection boundary, never a target), and the flag being ON (D-70 — no more dark shipping).
+**What to test hard:**
+1. **Scale (§3.1, Q1).** Are the proposed scale moves — stretched approach stages, an explicit ship-to-station ratio, middle-distance witnesses, docked ships of varied sizes — actually measurable and testable as written (C1)? Is there a scale move the note misses, or one that contradicts the recipe's approach composition?
+2. **The budget ledger (§3.4, C4).** The recipe's own split sums to the full 750k ceiling. Is the note's "materially below the boundary, ledger from measured counts" discipline enforceable? What happens if the Kenney/Quaternius assets measure heavier than expected — does the note have a real cut rule, or does it silently drift to the boundary?
+3. **Asset honesty (§3.4, C8).** The note requires license-from-file + CREDITS.md + measured tri count per asset. Is that gate actually workable for the Kenney kits (90 + 150 files — does the builder check every file, or sample)? Flag any gap.
+4. **Animation scope (Q3).** Docking sequences + work lights + first-arrival orbit reveal — is that genuinely small and safe, or does it smuggle in a new system (docking state, schedules) that needs its own design? Check against §14 and the "traffic implies no users" rule.
+5. **Completeness (C7).** Is the completeness test — drive the camera to every allowed extreme — actually executable for the Station scene as built (WorldsSurface orbit camera)? Any reachable angle the note misses?
+6. **Anything the note contradicts** — in the recipe, the design doc, or the P2-3/P2-4/P2-5 precedent. If the note and the settled ground disagree, the settled ground wins and the disagreement is a finding.
+**How to report:** verdict first (READY / READY WITH CHANGES / NOT READY), then findings ordered by severity, each with file + section, what is wrong, and what should change. Do not propose new features or redesign the Station. Do not repeat the note back.
