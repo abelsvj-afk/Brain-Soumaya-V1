@@ -50,8 +50,12 @@ export const captureMemoryTool: Tool = {
   },
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
-    const text = String(args.text ?? "").trim();
-    if (!text) return { ok: false, summary: "empty capture text" };
+    // Fix round 4 (§18.2 byte-exact contract): the persisted payload is
+    // the submitted text UNTRIMMED — only the empty check uses a trimmed
+    // copy. trim() here used to silently drop leading/trailing spaces
+    // before persist, violating "the JSON string value exactly as submitted".
+    const text = String(args.text ?? "");
+    if (!text.trim()) return { ok: false, summary: "empty capture text" };
 
     // Phase 1 approval machinery: the approval id is the idempotency key.
     // A crash-retry of the same approval must not ingest a second copy.

@@ -384,6 +384,42 @@ describe("ingest route wiring (action branch + document import)", () => {
     expect(repo.getById(source.id)!.captureIntent).toBe("action");
   });
 
+  it("fix round 4 (audit §3): a crashed action capture whose node already exists is completed exactly once, not duplicated", async () => {
+    // Audit §3 note: the action-path test above exercises recovery
+    // after REMOVING the node; the Telegram-note test covers the
+    // pre-existing-node scenario (node + links intact, completion
+    // never recorded). This test closes the gap for the action path:
+    // crash after node creation, before completion — recovery must
+    // reuse the node and create nothing.
+    const { status } = await post("/api/ingest", { text: "  buy almond butter  ", kind: "action", ttlHours: 48 });
+    expect(status).toBe(200);
+    const repo = new SourcesRepo(actx.handle, spaceId);
+    const source = repo.list().find((s) => s.rawText === "  buy almond butter  ")!;
+    const nodeIds = repo.nodeIdsWithOriginFrom(source.id);
+    expect(nodeIds.length).toBe(1);
+    const nodeId = nodeIds[0]!;
+    const before = new NodesRepo(actx.handle, spaceId).getById(nodeId)!;
+    expect(before.kind).toBe("action");
+    expect(before.content).toBe("buy almond butter");
+    // Simulate crash after node creation, before completion: node +
+    // links intact, source stuck 'extracting' with an expired lease.
+    actx.handle.sqlite
+      .prepare(`UPDATE sources SET processing_status = 'extracting', processing_attempts = 1, processing_lease_owner = 'dead-worker', processing_lease_expires_at = ? WHERE id = ?`)
+      .run(new Date(Date.now() - 1000).toISOString(), source.id);
+
+    const rec = await recoverPendingSources(actx.handle, { embeddings: new HashEmbeddingProvider(EMBED_DIM), llm: new HeuristicProvider() });
+    expect(rec.reclaimed).toBeGreaterThanOrEqual(1);
+    expect(rec.resumed).toBeGreaterThanOrEqual(1);
+    expect(repo.getById(source.id)!.processingStatus).toBe("extracted");
+    // Exactly the pre-existing node, reused — no duplicate created.
+    expect(repo.nodeIdsWithOriginFrom(source.id)).toEqual([nodeId]);
+    const after = new NodesRepo(actx.handle, spaceId).getById(nodeId)!;
+    expect(after.kind).toBe("action");
+    expect(after.content).toBe("buy almond butter");
+    expect(after.expiresAt).toBe(before.expiresAt);
+    expect(repo.getById(source.id)!.captureIntent).toBe("action");
+  });
+
   it("route idempotency: the same idempotencyKey posted twice yields one source", async () => {
     await post("/api/ingest", { text: "route replay words", idempotencyKey: "route-key-9" });
     await post("/api/ingest", { text: "route replay words", idempotencyKey: "route-key-9" });

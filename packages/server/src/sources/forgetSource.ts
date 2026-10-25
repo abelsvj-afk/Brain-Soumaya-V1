@@ -1,6 +1,7 @@
 import type { DbHandle } from "../db/client.js";
 import { isVectorEnabled } from "../db/vec.js";
 import { SourcesRepo } from "../repositories/sources.repo.js";
+import { refreshPersona } from "../persona/derive.js";
 
 /**
  * Verbatim-Recall V1 — source forgetting (design section 18.1).
@@ -51,6 +52,23 @@ export interface SourceForgetResult {
   episodesTombstoned: number[];
   /** Derived/cache/draft rows deleted by the scrub pass below. */
   derivedRowsScrubbed: number;
+  /** Inferred/consolidated user_model rows DELETED because their content quoted the source. */
+  userModelDeleted: number[];
+  /** Inferred/consolidated user_model rows invalidated (sole evidence withdrawn by this forget). */
+  userModelInvalidated: number[];
+  /** Inferred/consolidated user_model rows whose evidence was pruned of forgotten refs. */
+  userModelPruned: number[];
+  /** True when the stored persona quoted the source and was deleted + re-derived. */
+  personaScrubbed: boolean;
+  /** TTS audio cache rows purged for this space (the cache is regenerable; the purge is space-scoped). */
+  ttsCachePurged: number;
+  /**
+   * Quoting rows left in place by policy — table + row id only, never
+   * content. Covers stated user_model rows and instruction_profiles
+   * rows (owner scope decisions pending). Empty means no quoting row
+   * survived the scrub anywhere the sweep covers.
+   */
+  unresolved: { table: string; rowId: number }[];
 }
 
 const FORGET_TOMBSTONE = "[forgotten at the owner's request]";
@@ -61,27 +79,39 @@ export const SCRUB_SPAN_CHARS = 24;
 
 /**
  * Does `content` contain a verbatim span of any forgotten chunk text?
- * Checks whole chunk texts and EVERY SCRUB_SPAN_CHARS window of them
- * (fix round 2, audit P1: the previous stride-8 sampling could miss a
- * quote starting at an unaligned offset, certifying it "scrub-verified
- * clean"). Every-window checking is exact: a 24-char span of forgotten
- * text appears in `content` iff some window equals it. Bounded cost —
- * chunks are at most SOURCE_CHUNK_CHARS (1000) characters and node
- * content is short, so the window scan is small and terminates.
- * The empty/short-text case: a chunk shorter than the span is checked
- * whole (it IS a complete owner utterance).
+ * Checks whole short chunk texts and EVERY SCRUB_SPAN_CHARS window of
+ * the forgotten text (fix round 2, audit P1: the previous stride-8
+ * sampling could miss a quote starting at an unaligned offset,
+ * certifying it "scrub-verified clean"; fix round 4, re-audit P1:
+ * windows were scanned WITHIN each chunk only, so a span crossing a
+ * chunk boundary was a window of NO single chunk and likewise passed
+ * as clean). Windows are therefore scanned over the JOINED contiguous
+ * text — chunks are an exact non-overlapping partition of the source
+ * (chunkExact / chunksOf ORDER BY ordinal ASC), so joining them in
+ * order reconstructs the source text exactly and every 24-char window
+ * of the source, including cross-boundary ones, is a window of the
+ * joined text. Every-window checking is exact: a 24-char span of
+ * forgotten text appears in `content` iff some window equals it.
+ * Bounded cost — chunks are at most SOURCE_CHUNK_CHARS (1000)
+ * characters and node content is short, so the window scan is small
+ * and terminates. The empty/short-text case: a chunk shorter than the
+ * span is checked whole (it IS a complete owner utterance).
  */
 export function containsVerbatimSpan(content: string, chunkTexts: string[]): boolean {
   if (!content) return false;
+  // Short chunks (4..24 chars) are checked whole: a 24-char window
+  // over the joined text can never equal a chunk shorter than the
+  // span, so without this a short chunk's verbatim occurrence would
+  // be missed whenever its window would need neighboring-chunk
+  // characters. (Chunks shorter than 4 chars are common fragments,
+  // not quotable spans.)
   for (const t of chunkTexts) {
     if (!t) continue;
-    if (t.length <= SCRUB_SPAN_CHARS) {
-      if (t.length >= 4 && content.includes(t)) return true;
-      continue;
-    }
-    for (let i = 0; i + SCRUB_SPAN_CHARS <= t.length; i++) {
-      if (content.includes(t.slice(i, i + SCRUB_SPAN_CHARS))) return true;
-    }
+    if (t.length <= SCRUB_SPAN_CHARS && t.length >= 4 && content.includes(t)) return true;
+  }
+  const joined = chunkTexts.filter(Boolean).join("");
+  for (let i = 0; i + SCRUB_SPAN_CHARS <= joined.length; i++) {
+    if (content.includes(joined.slice(i, i + SCRUB_SPAN_CHARS))) return true;
   }
   return false;
 }
@@ -352,27 +382,18 @@ export function rejectForgetSourceRequest(
   })();
 }
 
-/** Write a content-free refusal audit row, then throw. No row is
- *  written when there is no space to attribute it to (unknown request
- *  id) — there is nothing to audit against. */
+/** Throw a refusal. The content-free `forget_source_refused` audit
+ *  row is written by the caller (forgetSourceByRequest's wrapper)
+ *  OUTSIDE the transaction: a throw inside the transaction rolls
+ *  everything back, which would roll an audit row written in here
+ *  back too. No row is written when there is no space to attribute
+ *  it to (unknown request id) — there is nothing to audit against. */
 function refuse(
-  h: DbHandle,
-  spaceId: string,
   requestId: number,
   reason: string,
   message: string,
   status: number,
 ): never {
-  h.sqlite
-    .prepare(
-      `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
-       VALUES (?, 'soumaya', 'forget_source_refused', ?, ?, 'refused')`,
-    )
-    .run(
-      spaceId,
-      `forget_source_refused request_id=${requestId} reason=${reason}`,
-      JSON.stringify({ request_id: requestId, reason }),
-    );
   throw new ForgetSourceRefusal(reason, message, { status });
 }
 
@@ -381,77 +402,91 @@ export function forgetSourceByRequest(
   requestId: number,
 ): SourceForgetResult {
   const sqlite = h.sqlite;
-  const req = sqlite
-    .prepare(
-      `SELECT id, space_id, requested_by, status, target_source_id,
-              scope_episode_ids, scope_node_ids, scope_topics
-       FROM forget_requests WHERE id = ?`,
-    )
-    .get(requestId) as ForgetRequestRow | undefined;
-  if (!req) {
-    // No row, no space to attribute an audit row to: throw bare.
+  // Existence only, outside the transaction: a missing row has no
+  // space to attribute an audit row to, so it throws bare (no audit
+  // row), exactly as before. Everything that authorizes the erasure
+  // is re-read and verified INSIDE the transaction below (D7).
+  const existing = sqlite
+    .prepare(`SELECT id, space_id FROM forget_requests WHERE id = ?`)
+    .get(requestId) as { id: number; space_id: string } | undefined;
+  if (!existing) {
     throw new ForgetSourceRefusal("not_found", `forget request ${requestId} does not exist`, { status: 404 });
   }
-  const spaceId = req.space_id;
-  // D7 — binding verification, in order, BEFORE any DELETE. Any
-  // failure throws (with a content-free audit row) and nothing is
-  // erased; the erasure below runs in one transaction, so a throw
-  // anywhere in it rolls everything back.
-  if (req.requested_by !== "user") {
-    refuse(h, spaceId, requestId, "not_user", "forget requests must be user-requested", 403);
-  }
-  if (req.status !== "approved") {
-    refuse(
-      h, spaceId, requestId, "not_approved",
-      `forget request ${requestId} has status '${req.status}' — only 'approved' requests can be applied`,
-      409,
-    );
-  }
-  // D5: a NULL target can never authorize a source forget — legacy
-  // rows and episodic rows refuse here, forever, with no backfill.
-  if (req.target_source_id == null) {
-    refuse(
-      h, spaceId, requestId, "unbound_legacy_request",
-      `forget request ${requestId} names no source (target_source_id IS NULL) — it cannot authorize a source forget`,
-      422,
-    );
-  }
-  const sourceId = req.target_source_id;
-  // The bound source must exist in the request's own space: an
-  // unscoped lookup plus an explicit space-equality check as
-  // defense-in-depth (the space-scoped repo lookup alone would
-  // conflate "missing" with "another space's").
-  const sourceSpace = sqlite
-    .prepare(`SELECT space_id FROM sources WHERE id = ?`)
-    .get(sourceId) as { space_id: string } | undefined;
-  if (!sourceSpace) {
-    refuse(h, spaceId, requestId, "source_not_found", `source ${sourceId} does not exist`, 404);
-  }
-  if (sourceSpace.space_id !== spaceId) {
-    refuse(
-      h, spaceId, requestId, "space_mismatch",
-      `source ${sourceId} belongs to a different space than forget request ${requestId}`,
-      403,
-    );
-  }
-  // D3: one request, one forget act — a row carrying both a bound
-  // source and episodic scope is invalid at apply as well as at creation.
-  if (req.scope_episode_ids !== "[]" || req.scope_node_ids !== "[]" || req.scope_topics !== "[]") {
-    refuse(
-      h, spaceId, requestId, "mixed_scope",
-      `forget request ${requestId} carries both a bound source and episodic scope`,
-      422,
-    );
-  }
-  const repo = new SourcesRepo(h, spaceId);
-  const source = repo.getById(sourceId);
-  if (!source) {
-    // Unreachable after the checks above (defense-in-depth).
-    refuse(h, spaceId, requestId, "source_not_found", `source ${sourceId} does not exist in this space`, 404);
-  }
-  const now = new Date().toISOString();
+  const spaceId = existing.space_id;
 
   const tx = sqlite.transaction((): SourceForgetResult => {
+    // D7 — the request row is re-read and ALL binding verification
+    // runs here, in the same transaction (same snapshot) as the
+    // erasure below. A failure throws with no audit row written in
+    // here: the throw rolls the transaction back, which would roll
+    // an audit row written in here back too — the wrapper after
+    // tx() writes it outside the transaction instead.
+    const req = sqlite
+      .prepare(
+        `SELECT id, space_id, requested_by, status, target_source_id,
+                scope_episode_ids, scope_node_ids, scope_topics
+         FROM forget_requests WHERE id = ?`,
+      )
+      .get(requestId) as ForgetRequestRow | undefined;
+    if (!req) {
+      // Deleted between the outer read and the transaction (no
+      // production path deletes request rows): same bare not_found,
+      // and the wrapper skips the audit row for it.
+      throw new ForgetSourceRefusal("not_found", `forget request ${requestId} does not exist`, { status: 404 });
+    }
+    if (req.requested_by !== "user") {
+      refuse(requestId, "not_user", "forget requests must be user-requested", 403);
+    }
+    if (req.status !== "approved") {
+      refuse(
+        requestId, "not_approved",
+        `forget request ${requestId} has status '${req.status}' — only 'approved' requests can be applied`,
+        409,
+      );
+    }
+    // D5: a NULL target can never authorize a source forget — legacy
+    // rows and episodic rows refuse here, forever, with no backfill.
+    if (req.target_source_id == null) {
+      refuse(
+        requestId, "unbound_legacy_request",
+        `forget request ${requestId} names no source (target_source_id IS NULL) — it cannot authorize a source forget`,
+        422,
+      );
+    }
+    const sourceId = req.target_source_id;
+    // The bound source must exist in the request's own space: an
+    // unscoped lookup plus an explicit space-equality check as
+    // defense-in-depth (the space-scoped repo lookup alone would
+    // conflate "missing" with "another space's").
+    const sourceSpace = sqlite
+      .prepare(`SELECT space_id FROM sources WHERE id = ?`)
+      .get(sourceId) as { space_id: string } | undefined;
+    if (!sourceSpace) {
+      refuse(requestId, "source_not_found", `source ${sourceId} does not exist`, 404);
+    }
+    if (sourceSpace.space_id !== spaceId) {
+      refuse(
+        requestId, "space_mismatch",
+        `source ${sourceId} belongs to a different space than forget request ${requestId}`,
+        403,
+      );
+    }
+    // D3: one request, one forget act — a row carrying both a bound
+    // source and episodic scope is invalid at apply as well as at creation.
+    if (req.scope_episode_ids !== "[]" || req.scope_node_ids !== "[]" || req.scope_topics !== "[]") {
+      refuse(
+        requestId, "mixed_scope",
+        `forget request ${requestId} carries both a bound source and episodic scope`,
+        422,
+      );
+    }
+    const repo = new SourcesRepo(h, spaceId);
+    const source = repo.getById(sourceId);
+    if (!source) {
+      // Unreachable after the checks above (defense-in-depth).
+      refuse(requestId, "source_not_found", `source ${sourceId} does not exist in this space`, 404);
+    }
+    const now = new Date().toISOString();
     const chunks = repo.chunksOf(sourceId);
     const chunkIds = chunks.map((c) => c.id);
     const chunkTexts = chunks.map((c) => c.text);
@@ -552,15 +587,23 @@ export function forgetSourceByRequest(
     //   Deliberately NOT scrubbed, with reasons: knowledge_docs/chunks
     //   (independent imports — V1's §18.4 no-touch decision; the same
     //   words there are a separate copy, not a derivation of the
-    //   source), user_model/user_persona/instruction_profiles
-    //   (owner-authored claims/instructions with evidence semantics and
-    //   no source->model evidence linkage in V1 — known limitation,
-    //   recorded in the fix-round report), tts_audio_cache (rows are
-    //   keyed by content hash over voice+model+text, so a forgotten
-    //   source's audio cannot be located by text — disclosed residual,
-    //   like the Fly snapshot residue in §18.1; rows age out under the
-    //   500-row cap), fin_* (out of scope by design, E2).
+    //   source), user_model rows with origin='stated' and
+    //   instruction_profiles (owner-pasted/owner-spoken text whose
+    //   deletion would destroy irreplaceable owner words — owner scope
+    //   decisions pending; quoting rows are named in the result's
+    //   `unresolved` field instead of silently kept), fin_* (out of
+    //   scope by design, E2). user_model inferred/consolidated rows,
+    //   user_persona, and tts_audio_cache ARE scrubbed — see the fix
+    //   round 4 block below (the fix-round-2 exemption comment that
+    //   used to sit here was wrong on three facts: user_persona is
+    //   derived, not owner-authored; user_model does have evidence
+    //   linkage; tts rows do not reliably age out under the global
+    //   500-row cap, which evicts only on write with no TTL).
     const episodesTombstoned: number[] = [];
+    // Enrichment ids erased in this transaction (tombstoned episodes'
+    // enrichments + quoting enrichments dropped by the deleteScrub
+    // below) — the user_model evidence pass needs the exact set.
+    const forgottenEnrichmentIds: number[] = [];
     let derivedRowsScrubbed = 0;
     const tableExists = (t: string): boolean => {
       const r = sqlite
@@ -625,6 +668,10 @@ export function forgetSourceByRequest(
           )
           .run(FORGET_TOMBSTONE, now, ep.id, spaceId);
         if (tableExists("episode_enrichments")) {
+          const enrIds = sqlite
+            .prepare(`SELECT id FROM episode_enrichments WHERE episode_id = ? AND space_id = ?`)
+            .all(ep.id, spaceId) as { id: number }[];
+          forgottenEnrichmentIds.push(...enrIds.map((r) => r.id));
           sqlite.prepare(`DELETE FROM episode_enrichments WHERE episode_id = ? AND space_id = ?`).run(ep.id, spaceId);
         }
         try { sqlite.prepare(`DELETE FROM episodes_fts WHERE rowid = ?`).run(ep.id); } catch { /* FTS absent */ }
@@ -695,6 +742,7 @@ export function forgetSourceByRequest(
           if (!rowHasSpan(texts)) continue;
           sqlite.prepare(`DELETE FROM ${table} WHERE id = ? AND space_id = ?`).run(row.id as number, spaceId);
           derivedRowsScrubbed++;
+          if (table === "episode_enrichments") forgottenEnrichmentIds.push(row.id as number);
           if (table === "journeys" && isVectorEnabled(sqlite)) {
             try { sqlite.prepare(`DELETE FROM vec_journeys WHERE journey_id = ?`).run(BigInt(row.id as number)); } catch { /* vec absent */ }
           }
@@ -715,17 +763,191 @@ export function forgetSourceByRequest(
       if (agentLogsTrigger) sqlite.exec(agentLogsTrigger.sql);
     }
 
+    // --- Fix round 4 (re-audit P1): the four erasure exceptions.
+    // The fix-round-2 comment above exempted user_model, user_persona,
+    // instruction_profiles, and tts_audio_cache. Three of its facts were
+    // wrong (corrected in that comment): user_persona is DERIVED by
+    // Soumaya, not owner-authored (persona/derive.ts: "Soumaya derives
+    // it herself"); user_model DOES have evidence linkage
+    // (validateEvidenceRefs admits episode/node/correction/enrichment
+    // refs, just no source-typed refs); tts_audio_cache rows do NOT
+    // reliably age out (the 500-row cap is GLOBAL and eviction runs
+    // only on write, with no TTL — telegram/ttsCache.ts).
+    // What is built here, all inside this same transaction:
+    //   * user_model rows with origin IN ('inferred','consolidated'):
+    //     evidence pass first (sole forgotten evidence -> invalidated
+    //     with 'evidence_withdrawn', mirroring applyForgetRequest;
+    //     surviving legs -> evidence pruned), then span pass (quoting
+    //     rows DELETEd — invalidation alone leaves the text in the row).
+    //     Stated rows are untouched by policy (owner decision pending:
+    //     they are the owner's own irreplaceable verbatim words, and
+    //     the design contradicts itself on them, §3.7 vs §3.8).
+    //   * user_persona: the singleton row is DELETEd when it quotes the
+    //     span, then re-derived from the surviving nodes (force=true —
+    //     the 6h staleness cache would otherwise keep the quoting body).
+    //     Re-derivation reads only node labels/tags/degree, never
+    //     content, so it is clean by construction once the quoting
+    //     nodes are gone.
+    //   * tts_audio_cache: a targeted scrub is impossible (no text
+    //     column; the key is a SHA-256 over the entire reply text), so
+    //     the space's cache is purged outright. The cache is purely
+    //     regenerable — loss costs only re-synthesis.
+    //   * instruction_profiles: untouched by policy (owner decision
+    //     pending: owner-pasted only, no derivation from sources; any
+    //     delete/blank/excise destroys or corrupts irreplaceable owner
+    //     text). Their vec_profiles rows stay too.
+    // The result reports the truth: `unresolved` names every quoting
+    // row left in place by policy (table + row id only, never content),
+    // so no clearance is claimed while exceptions remain.
+    const forgottenEpisodeSet = new Set(episodesTombstoned);
+    const forgottenNodeSet = new Set([...nodesErased, ...nodesTombstoned]);
+    const forgottenEnrichmentSet = new Set(forgottenEnrichmentIds);
+    type UmEvidenceRef = { type: string; id: number };
+    const isForgottenUmRef = (ref: UmEvidenceRef): boolean =>
+      (ref.type === "episode" && forgottenEpisodeSet.has(ref.id)) ||
+      (ref.type === "enrichment" && forgottenEnrichmentSet.has(ref.id)) ||
+      (ref.type === "node" && forgottenNodeSet.has(ref.id));
+
+    // (1a) Evidence pass — inferred/consolidated rows only, mirroring
+    // applyForgetRequest step 5 (agent/episodic.ts): sole evidence
+    // withdrawn -> invalidated; independent remaining evidence ->
+    // pruned. (The consolidation boundary's forget-propagation path
+    // uses invalid_reason 'evidence_forgotten' for the same escalation;
+    // this pass follows applyForgetRequest exactly and uses
+    // 'evidence_withdrawn'. Both values are admitted by the CHECK.)
+    // No stated rows are written here, so no stated_set_version bump.
+    const userModelInvalidated: number[] = [];
+    const userModelPruned: number[] = [];
+    const umEvRows = sqlite
+      .prepare(
+        `SELECT id, evidence_ids FROM user_model
+         WHERE space_id = ? AND invalid_at IS NULL AND origin IN ('inferred','consolidated')`,
+      )
+      .all(spaceId) as { id: number; evidence_ids: string }[];
+    for (const um of umEvRows) {
+      let evidence: UmEvidenceRef[];
+      try {
+        const parsed: unknown = JSON.parse(um.evidence_ids);
+        if (!Array.isArray(parsed)) continue;
+        evidence = parsed as UmEvidenceRef[];
+      } catch {
+        continue; // malformed evidence — cannot interpret; leave untouched
+      }
+      if (evidence.length === 0) continue;
+      const remaining = evidence.filter((ref) => !isForgottenUmRef(ref));
+      if (remaining.length === 0) {
+        sqlite
+          .prepare(
+            `UPDATE user_model
+             SET invalid_at = ?, invalid_reason = 'evidence_withdrawn'
+             WHERE id = ?`,
+          )
+          .run(now, um.id);
+        userModelInvalidated.push(um.id);
+      } else if (remaining.length < evidence.length) {
+        sqlite
+          .prepare(`UPDATE user_model SET evidence_ids = ? WHERE id = ?`)
+          .run(JSON.stringify(remaining), um.id);
+        userModelPruned.push(um.id);
+      }
+    }
+
+    // (1b) Span pass — quoting inferred/consolidated rows are DELETEd
+    // (any invalid_at: an invalidated row still holds the text). No
+    // FTS/vec companion exists for user_model (vec tables are only
+    // vec_nodes/vec_docs/vec_profiles/vec_journeys/vec_episodes/
+    // vec_source_chunks; FTS only nodes/episodes/sources), so deleting
+    // the row removes the representation entirely. Inbound replaced_by
+    // links are nulled so getUserModelHistory still walks cleanly.
+    const userModelDeleted: number[] = [];
+    const umSpanRows = sqlite
+      .prepare(
+        `SELECT id, content FROM user_model
+         WHERE space_id = ? AND origin IN ('inferred','consolidated')`,
+      )
+      .all(spaceId) as { id: number; content: string }[];
+    for (const um of umSpanRows) {
+      if (!containsVerbatimSpan(um.content, chunkTexts)) continue;
+      sqlite.prepare(`DELETE FROM user_model WHERE id = ? AND space_id = ?`).run(um.id, spaceId);
+      sqlite.prepare(`UPDATE user_model SET replaced_by = NULL WHERE replaced_by = ?`).run(um.id);
+      userModelDeleted.push(um.id);
+    }
+
+    // (2) Persona — delete the quoting singleton, then re-derive from
+    // the surviving nodes (force=true: the 6h staleness cache would
+    // otherwise serve the quoting body back). refreshPersona runs on
+    // this same handle, so it reads the post-forget node set inside
+    // this transaction; it returns "" (and leaves no row) when fewer
+    // than 3 nodes remain.
+    let personaScrubbed = false;
+    const personaRow = sqlite
+      .prepare(`SELECT body FROM user_persona WHERE space_id = ?`)
+      .get(spaceId) as { body: string } | undefined;
+    if (personaRow && containsVerbatimSpan(personaRow.body, chunkTexts)) {
+      sqlite.prepare(`DELETE FROM user_persona WHERE space_id = ?`).run(spaceId);
+      refreshPersona(h, spaceId, true);
+      personaScrubbed = true;
+    }
+
+    // (3) TTS cache — space-scoped purge (the deleteSpace precedent).
+    // No text column exists to scrub against, and the key hashes the
+    // entire reply text, so a targeted scrub is impossible; the cache
+    // is regenerable, so the purge costs only re-synthesis.
+    let ttsCachePurged = 0;
+    if (tableExists("tts_audio_cache")) {
+      ttsCachePurged = sqlite
+        .prepare(`DELETE FROM tts_audio_cache WHERE space_id = ?`)
+        .run(spaceId).changes;
+    }
+
+    // Honesty (audit P1): every quoting row left in place by policy,
+    // named by table + row id only — never content. Stated user_model
+    // rows and instruction_profiles rows are the two policy blocks;
+    // the scan also covers any inferred/consolidated row the span pass
+    // somehow missed, so a survivor can never be silent.
+    const unresolved: { table: string; rowId: number }[] = [];
+    const umAllRows = sqlite
+      .prepare(`SELECT id, content FROM user_model WHERE space_id = ? ORDER BY id`)
+      .all(spaceId) as { id: number; content: string }[];
+    for (const um of umAllRows) {
+      if (containsVerbatimSpan(um.content, chunkTexts)) {
+        unresolved.push({ table: "user_model", rowId: um.id });
+      }
+    }
+    if (tableExists("instruction_profiles")) {
+      const profRows = sqlite
+        .prepare(`SELECT id, name, body FROM instruction_profiles WHERE space_id = ? ORDER BY id`)
+        .all(spaceId) as { id: number; name: string | null; body: string }[];
+      for (const p of profRows) {
+        const text = [p.name, p.body].filter((t) => t != null && t !== "").join("\n");
+        if (containsVerbatimSpan(text, chunkTexts)) {
+          unresolved.push({ table: "instruction_profiles", rowId: p.id });
+        }
+      }
+    }
+
     // Mark the authorizing request applied (content-free audit, as in
     // applyForgetRequest). D8: the marking stays conditional — a second
     // apply sees status='applied' and refuses under D7, so a request
     // authorizes exactly one forget act. The D7 checks above already
-    // guaranteed this row is source-only.
-    sqlite
+    // guaranteed this row is source-only. The .changes ARE checked
+    // now: 0 changes means another apply won the race between this
+    // transaction's verification and its marking, so refuse instead
+    // of returning a second success — the throw rolls the whole
+    // erasure back.
+    const marked = sqlite
       .prepare(
         `UPDATE forget_requests SET status = 'applied', applied_at = COALESCE(applied_at, ?), target_query = NULL
          WHERE id = ? AND status = 'approved'`,
       )
-      .run(now, requestId);
+      .run(now, requestId).changes;
+    if (marked !== 1) {
+      throw new ForgetSourceRefusal(
+        "not_approved",
+        `forget request ${requestId} is no longer approved — another apply won the race`,
+        { status: 409 },
+      );
+    }
     sqlite
       .prepare(
         `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
@@ -733,7 +955,7 @@ export function forgetSourceByRequest(
       )
       .run(
         spaceId,
-        `forget_source_applied request_id=${requestId} source_id=${sourceId} nodes_erased=${nodesErased.length} nodes_tombstoned=${nodesTombstoned.length}`,
+        `forget_source_applied request_id=${requestId} source_id=${sourceId} nodes_erased=${nodesErased.length} nodes_tombstoned=${nodesTombstoned.length} tts_purged=${ttsCachePurged} unresolved=${unresolved.length}`,
         JSON.stringify({ request_id: requestId, source_id: sourceId }),
       );
 
@@ -748,7 +970,36 @@ export function forgetSourceByRequest(
       nodesTombstoned,
       episodesTombstoned,
       derivedRowsScrubbed,
+      userModelDeleted,
+      userModelInvalidated,
+      userModelPruned,
+      personaScrubbed,
+      ttsCachePurged,
+      unresolved,
     };
   });
-  return tx();
+  try {
+    return tx();
+  } catch (err) {
+    if (err instanceof ForgetSourceRefusal) {
+      // Refusal auditing happens OUTSIDE the transaction: the throw
+      // rolled it back, which would have rolled an audit row written
+      // inside it back too. No row for not_found — there is no
+      // request (hence no space) to audit against, exactly as before.
+      if (err.reason !== "not_found") {
+        sqlite
+          .prepare(
+            `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
+             VALUES (?, 'soumaya', 'forget_source_refused', ?, ?, 'refused')`,
+          )
+          .run(
+            spaceId,
+            `forget_source_refused request_id=${requestId} reason=${err.reason}`,
+            JSON.stringify({ request_id: requestId, reason: err.reason }),
+          );
+      }
+      throw err;
+    }
+    throw err;
+  }
 }

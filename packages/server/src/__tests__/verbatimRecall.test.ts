@@ -8,7 +8,7 @@ import { createDb, bootstrapSchema, migrateSchema, type DbHandle } from "../db/c
 import { BOOTSTRAP_SQL } from "../db/schemaSql.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { EMBED_DIM } from "../db/vec.js";
-import { upsertSourceChunkEmbedding, upsertEmbedding, upsertJourneyEmbedding } from "../db/vec.js";
+import { upsertSourceChunkEmbedding, upsertEmbedding, upsertJourneyEmbedding, upsertProfileEmbedding } from "../db/vec.js";
 import {
   SourcesRepo,
   chunkExact,
@@ -20,6 +20,9 @@ import { GraphExportRepo } from "../repositories/graphExport.repo.js";
 import { SpacesRepo, SPACE_SCOPED_TABLES } from "../auth/spaces.js";
 import { forgetSourceByRequest, containsVerbatimSpan, createForgetSourceRequest, approveForgetSourceRequest, rejectForgetSourceRequest, inspectForgetSourceRequest, ForgetSourceRefusal } from "../sources/forgetSource.js";
 import { applyForgetRequest } from "../agent/episodic.js";
+import { refreshPersona } from "../persona/derive.js";
+import { getUserModelHistory } from "../agent/userModel.js";
+import { InstructionProfilesRepo } from "../repositories/instructions.repo.js";
 import { fileURLToPath } from "node:url";
 import { backfillChunkVec } from "../sources/recovery.js";
 
@@ -211,6 +214,28 @@ describe("14.7 offline retrieval: FTS exact with announced degradation", () => {
     // and sliced B away while still reporting mode "fts+vec".
     expect(res.hits.map((h) => h.chunk.id)).toContain(bChunk.id);
     expect(res.hits.some((h) => h.chunk.text.includes("zebra"))).toBe(true);
+  });
+
+  it("fix round 4 (re-audit P2): a vector-only hit reports mode \"vec_only\", not \"fts+vec\"", async () => {
+    const repo = new SourcesRepo(handle, SPACE);
+    // One chunk, findable only by meaning: its text shares no term
+    // with the FTS query, but its vector is exactly the query vector.
+    const target = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "harbor lantern keeper's log" }).source;
+    const targetChunk = repo.chunksOf(target.id)[0]!;
+    const queryVec = await embeddings.embed("harbor lantern keeper's log");
+    upsertSourceChunkEmbedding(handle.sqlite, targetChunk.id, queryVec);
+
+    // "vecmodeprobe" matches nothing in FTS; the vector side still finds the chunk.
+    const res = searchSourceChunks(repo, "vecmodeprobe", { queryVec });
+    expect(res.mode).toBe("vec_only");
+    expect(res.degraded).toBe(false); // vector healthy and contributing; 12E is about vector availability
+    expect(res.hits.map((h) => h.chunk.id)).toContain(targetChunk.id);
+
+    // Neither path contributes: still "fts_only" with degradation announced.
+    const empty = searchSourceChunks(repo, "vecmodeprobe");
+    expect(empty.mode).toBe("fts_only");
+    expect(empty.degraded).toBe(true);
+    expect(empty.hits).toEqual([]);
   });
 });
 
@@ -514,8 +539,165 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     expect(res.episodesTombstoned).toContain(epId);
     expect(res.derivedRowsScrubbed).toBeGreaterThan(0);
   });
+  it("fix round 4 (re-audit P1): marker seeded into user_model/user_persona/instruction_profiles/tts_audio_cache — inferred rows scrubbed, persona re-derived clean, TTS purged, stated + profile named in unresolved", async () => {
+    const SPAN = "alpha capture ZQXWEXCEPT"; // 24 chars, a true window of the chunk
+    expect(SPAN.length).toBe(24);
+    const repo = new SourcesRepo(handle, SPACE);
+    const nodes = new NodesRepo(handle, SPACE);
+    const srcA = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: `alpha capture ZQXWEXCEPT alpha` }).source;
+    const run = (sql: string, ...params: unknown[]) => handle.sqlite.prepare(sql).run(...params);
+    const nowIso = new Date().toISOString();
 
-  it("fix round 3 (re-review B1): an episode with a CLEAN summary but QUOTING enrichment/FTS detail loses its FTS row + enrichment, not its episode", () => {
+    // Marker node: sole origin is srcA (erased with it) and its tag/label
+    // carry the marker into the derived persona body.
+    const markerNode = nodes.create(
+      { label: `marker hub ${SPAN}`, type: "daily", content: "marker node content, clean of the quote", tags: [SPAN] },
+      await embeddings.embed("marker"),
+    );
+    repo.linkNodeToAllChunks(markerNode.id, srcA.id);
+    // Three clean nodes so the persona can re-derive after the marker node is gone.
+    const cleanNodes = [
+      nodes.create({ label: "clean one", type: "daily", content: "first clean memory" }, await embeddings.embed("clean one")),
+      nodes.create({ label: "clean two", type: "daily", content: "second clean memory" }, await embeddings.embed("clean two")),
+      nodes.create({ label: "clean three", type: "daily", content: "third clean memory" }, await embeddings.embed("clean three")),
+    ];
+
+    // Tombstoned episode + enrichment, both quoting the span.
+    const epInfo = run(
+      `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at) VALUES (?, 'conversation', ?, ?, ?)`,
+      SPACE, `episode summary ${SPAN} here`, nowIso, nowIso,
+    );
+    const epId = Number(epInfo.lastInsertRowid);
+    const enrInfo = run(
+      `INSERT INTO episode_enrichments (episode_id, space_id, version, detail) VALUES (?, ?, 1, ?)`,
+      epId, SPACE, `enrichment detail ${SPAN} here`,
+    );
+    const enrId = Number(enrInfo.lastInsertRowid);
+
+    // user_model rows (raw inserts: the API validators reject test-shaped content).
+    const um = (origin: string, content: string, evidence: unknown[], replacedBy: number | null = null) => {
+      const info = run(
+        `INSERT INTO user_model (space_id, slot, content, confidence, evidence_ids, valid_at, origin, replaced_by)
+         VALUES (?, 'belief', ?, 0.8, ?, ?, ?, ?)`,
+        SPACE, content, JSON.stringify(evidence), nowIso, origin, replacedBy,
+      );
+      return Number(info.lastInsertRowid);
+    };
+    const inferredQuoting = um("inferred", `I believe the note said ${SPAN} and more`, []);
+    const inferredSoleEpisode = um("inferred", "a clean inferred claim about the week", [{ type: "episode", id: epId }]);
+    const inferredSoleNode = um("inferred", "another clean inferred claim", [{ type: "node", id: markerNode.id }]);
+    const inferredSoleEnrichment = um("inferred", "a third clean inferred claim", [{ type: "enrichment", id: enrId }]);
+    const inferredPruned = um("inferred", "a claim with two legs", [
+      { type: "episode", id: epId },
+      { type: "node", id: cleanNodes[0]!.id },
+    ]);
+    const statedQuoting = um("stated", `I said ${SPAN} myself`, [{ type: "episode", id: epId }]);
+    const chainNew = um("inferred", `the newer claim quoting ${SPAN} here`, []);
+    const chainOld = um("inferred", "an older inferred claim", [{ type: "node", id: cleanNodes[0]!.id }], chainNew);
+
+    // Persona derived from the live nodes quotes the span via the marker node's tag.
+    const personaBefore = refreshPersona(handle, SPACE, true);
+    expect(personaBefore).toContain(SPAN);
+
+    // Owner-pasted instruction profile quoting the span (+ its vec row).
+    const profiles = new InstructionProfilesRepo(handle, SPACE);
+    const profile = profiles.create({ name: "sweep probe profile", body: `always remember ${SPAN} when answering` });
+    upsertProfileEmbedding(handle.sqlite, profile.id, await embeddings.embed("profile probe"));
+
+    // TTS cache: two rows in this space, one in another space.
+    run(`INSERT INTO tts_audio_cache (space_id, cache_key, audio, content_type, filename) VALUES (?, 'k1', ?, 'audio/mpeg', 'a.mp3')`, SPACE, Buffer.from([0x01]));
+    run(`INSERT INTO tts_audio_cache (space_id, cache_key, audio, content_type, filename) VALUES (?, 'k2', ?, 'audio/mpeg', 'b.mp3')`, SPACE, Buffer.from([0x02]));
+    run(`INSERT INTO tts_audio_cache (space_id, cache_key, audio, content_type, filename) VALUES ('other-space', 'k1', ?, 'audio/mpeg', 'a.mp3')`, Buffer.from([0x03]));
+
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
+
+    const umRow = (id: number) =>
+      handle.sqlite.prepare(`SELECT * FROM user_model WHERE id = ?`).get(id) as Record<string, unknown> | undefined;
+
+    // (1a) Evidence pass: sole-evidence inferred rows invalidated, never deleted.
+    for (const id of [inferredSoleEpisode, inferredSoleNode, inferredSoleEnrichment]) {
+      const row = umRow(id)!;
+      expect(row.invalid_at, `user_model ${id} invalid_at`).not.toBeNull();
+      expect(row.invalid_reason, `user_model ${id} invalid_reason`).toBe("evidence_withdrawn");
+    }
+    expect(res.userModelInvalidated).toEqual(expect.arrayContaining([inferredSoleEpisode, inferredSoleNode, inferredSoleEnrichment]));
+    // (1a) Prune: the two-legged claim survives on its node leg.
+    const prunedRow = umRow(inferredPruned)!;
+    expect(prunedRow.invalid_at).toBeNull();
+    expect(JSON.parse(prunedRow.evidence_ids as string)).toEqual([{ type: "node", id: cleanNodes[0]!.id }]);
+    expect(res.userModelPruned).toContain(inferredPruned);
+    // (1b) Span pass: quoting inferred rows are DELETED, text gone.
+    expect(umRow(inferredQuoting)).toBeUndefined();
+    expect(umRow(chainNew)).toBeUndefined();
+    expect(res.userModelDeleted).toEqual(expect.arrayContaining([inferredQuoting, chainNew]));
+    // (1c) The deleted row's inbound replaced_by is nulled: history still walks.
+    expect((umRow(chainOld)!.replaced_by as number | null)).toBeNull();
+    expect(getUserModelHistory(handle, SPACE, chainOld).map((e) => e.id)).toEqual([chainOld]);
+    // Stated row: untouched by policy (content, evidence, validity all as seeded).
+    const statedRow = umRow(statedQuoting)!;
+    expect(statedRow.content).toContain(SPAN);
+    expect(statedRow.invalid_at).toBeNull();
+    expect(JSON.parse(statedRow.evidence_ids as string)).toEqual([{ type: "episode", id: epId }]);
+
+    // (2) Persona: quoting row deleted, re-derived clean from surviving nodes.
+    expect(res.personaScrubbed).toBe(true);
+    const personaRow = handle.sqlite.prepare(`SELECT body FROM user_persona WHERE space_id = ?`).get(SPACE) as { body: string } | undefined;
+    expect(personaRow).toBeDefined();
+    expect(personaRow!.body).not.toContain(SPAN);
+    expect(personaRow!.body.length).toBeGreaterThan(0);
+
+    // (3) TTS: this space purged, the other space untouched.
+    expect(res.ttsCachePurged).toBe(2);
+    expect((handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM tts_audio_cache WHERE space_id = ?`).get(SPACE) as { c: number }).c).toBe(0);
+    expect((handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM tts_audio_cache WHERE space_id = 'other-space'`).get() as { c: number }).c).toBe(1);
+
+    // Honesty: the result names exactly the quoting rows left in place by policy.
+    expect(res.unresolved).toEqual([
+      { table: "user_model", rowId: statedQuoting },
+      { table: "instruction_profiles", rowId: profile.id },
+    ]);
+    // The profile itself is untouched, vec row included (disclosed residual).
+    const profileRow = handle.sqlite.prepare(`SELECT body FROM instruction_profiles WHERE id = ?`).get(profile.id) as { body: string };
+    expect(profileRow.body).toContain(SPAN);
+    expect((handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM vec_profiles WHERE profile_id = ?`).get(BigInt(profile.id)) as { c: number }).c).toBe(1);
+
+    // Sweep the COMPLETE E2 inventory for the span: zero hits in every
+    // scrubbed representation; the only survivors are the two unresolved rows.
+    const inventory = [
+      "nodes", "episodes", "episode_enrichments", "insights", "daily_logs",
+      "knowledge_docs", "knowledge_chunks", "lore", "working_memory",
+      "agent_logs", "telegram_note_drafts", "attachments", "timeline_chapters",
+      "inquiries", "consolidation_runs", "consolidation_episodes", "contradictions",
+      "user_model", "user_persona", "instruction_profiles", "journeys",
+      "sources", "source_chunks", "source_corrections", "node_sources",
+      "sources_fts", "nodes_fts", "episodes_fts", "corrections", "tts_audio_cache",
+      "vec_source_chunks", "vec_nodes", "vec_episodes", "vec_docs", "vec_journeys", "vec_profiles",
+      "inbox_notifications", "tool_approvals", "candidate_links", "codex_discoveries",
+    ];
+    const existing = new Set(
+      (handle.sqlite.prepare(`SELECT name FROM sqlite_master WHERE type IN ('table','view')`).all() as { name: string }[]).map((r) => r.name),
+    );
+    for (const t of inventory) {
+      if (!existing.has(t)) continue;
+      const rows = handle.sqlite.prepare(`SELECT * FROM ${t}`).all() as Record<string, unknown>[];
+      const quoting = rows
+        .filter((r) => JSON.stringify(r, (_k, v) => (Buffer.isBuffer(v) ? v.toString("utf8") : v)).includes(SPAN))
+        .map((r) => r.id as number);
+      if (t === "user_model") {
+        expect(quoting, `quoting rows left in ${t}`).toEqual([statedQuoting]);
+      } else if (t === "instruction_profiles") {
+        expect(quoting, `quoting rows left in ${t}`).toEqual([profile.id]);
+      } else {
+        expect(quoting, `seeded span survived in ${t}`).toEqual([]);
+      }
+    }
+    // The marker node went with its sole-origin source.
+    expect(res.nodesErased).toContain(markerNode.id);
+    expect(nodes.getById(markerNode.id)).toBeUndefined();
+  });
+
+
+  it("fix round 3 (re-review B1): an episode with a CLEAN summary but QUOTING enrichment/FTS detail loses its FTS row + enrichment, not its episode", async () => {
     // Mirrors re-review Probe 2: the old scrub gated on the summary only,
     // so this episode's episodes_fts row stayed MATCH-retrievable.
     const UNIQUE = "ZQXWUNIQUESTRING54321";
@@ -530,6 +712,12 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     const epId = Number(epInfo.lastInsertRowid);
     handle.sqlite.prepare(`INSERT INTO episode_enrichments (episode_id, space_id, version, detail) VALUES (?, ?, 1, ?)`).run(epId, SPACE, `enrichment detail ${SPAN} here`);
     handle.sqlite.prepare(`INSERT INTO episodes_fts (rowid, summary, detail) VALUES (?, ?, ?)`).run(epId, "a clean episode summary", `enrichment detail ${SPAN} here`);
+    // Fix round 4 (audit §3 note): seed the vec_episodes row too — the
+    // detail-only branch deletes it (its embedding covers summary +
+    // detail, so it embeds the quote), and the old test never proved it.
+    const vec = await embeddings.embed("b1 detail probe");
+    const vecBlob = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
+    handle.sqlite.prepare(`INSERT INTO vec_episodes (episode_id, embedding) VALUES (?, ?)`).run(BigInt(epId), vecBlob);
 
     const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
     // The quoting enrichment row is gone (deleteScrub), the FTS row is gone,
@@ -539,6 +727,8 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     const ftsRows = handle.sqlite.prepare(`SELECT * FROM episodes_fts WHERE rowid = ?`).all(epId) as Record<string, unknown>[];
     expect(ftsRows.length).toBe(0);
     expect(JSON.stringify(ftsRows)).not.toContain(UNIQUE);
+    const vecCount = (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM vec_episodes WHERE episode_id = ?`).get(BigInt(epId)) as { c: number }).c;
+    expect(vecCount).toBe(0);
     const epRow = handle.sqlite.prepare(`SELECT summary, forgotten_at FROM episodes WHERE id = ?`).get(epId) as { summary: string; forgotten_at: string | null };
     expect(epRow.summary).toBe("a clean episode summary");
     expect(epRow.forgotten_at).toBeNull();
@@ -607,6 +797,81 @@ describe("14.10 forget cascade + 18.5.11 dependency-aware erasure", () => {
     const row = handle.sqlite.prepare(`SELECT content, deleted_at FROM nodes WHERE id = ?`).get(node.id) as { content: string; deleted_at: string | null };
     expect(row.content).not.toContain(MARKER);
     expect(row.deleted_at).not.toBeNull();
+  });
+
+  it("fix round 4 (re-audit P1): a 24-char span CROSSING a chunk boundary is caught — joined-text windows, not per-chunk windows", () => {
+    // The marker starts at offset 990 of a 2,024-char source: it spans
+    // 990..1014, crossing the 1,000-char chunk boundary, so it is a
+    // window of NO single chunk. The old per-chunk scan certified a
+    // node quoting exactly this span "scrub-verified clean".
+    const MARKER = "CROSSBOUNDARYSPAN2026!!!"; // exactly 24 chars
+    expect(MARKER.length).toBe(24);
+    const text = "x".repeat(990) + MARKER + "y".repeat(1010);
+    expect(text.length).toBe(2024);
+    expect(text.indexOf(MARKER)).toBe(990);
+    const chunkTexts = chunkExact(text).map((c) => c.text);
+    expect(chunkTexts.length).toBe(3);
+    expect(chunkTexts[0]!.length).toBe(1000);
+    expect(chunkTexts[0]!.includes(MARKER)).toBe(false);
+    expect(chunkTexts[1]!.includes(MARKER)).toBe(false);
+    expect(containsVerbatimSpan(`he said ${MARKER} and moved on`, chunkTexts)).toBe(true);
+    // A span fully inside one chunk is still found.
+    const inner = text.slice(100, 124);
+    expect(inner.length).toBe(24);
+    expect(containsVerbatimSpan(`quoting ${inner} here`, chunkTexts)).toBe(true);
+    // A non-present span is not found.
+    expect(containsVerbatimSpan("nothing alike at all here", chunkTexts)).toBe(false);
+  });
+
+  it("fix round 4 (re-audit P1): the short-chunk whole-text check survives the joined scan", () => {
+    // A chunk of 4..24 chars is checked whole: its text must still match
+    // even when a 24-char window over it would need neighboring-chunk
+    // characters. The joined scan alone would miss a short chunk whose
+    // only occurrence is verbatim.
+    expect(containsVerbatimSpan("he said short phrase here aloud", ["short phrase here"])).toBe(true);
+    expect(containsVerbatimSpan("he said short phrase aloud", ["short phrase here"])).toBe(false);
+    expect(containsVerbatimSpan("prefix abcd suffix", ["abcd"])).toBe(true);
+    // A 3-char chunk is below the whole-text floor: not a quotable span.
+    expect(containsVerbatimSpan("prefix abc suffix", ["abc"])).toBe(false);
+    // A short chunk at the tail of a longer source still matches whole.
+    const chunkTexts = chunkExact("z".repeat(1000) + "tail words here").map((c) => c.text);
+    expect(chunkTexts[1]).toBe("tail words here");
+    expect(containsVerbatimSpan("quoting tail words here end", chunkTexts)).toBe(true);
+  });
+
+  it("fix round 4 (re-audit P1): a multi-source node quoting a cross-boundary span is tombstoned, not kept", async () => {
+    const MARKER = "CROSSBOUNDARYSPAN2026!!!";
+    expect(MARKER.length).toBe(24);
+    const repo = new SourcesRepo(handle, SPACE);
+    const nodes = new NodesRepo(handle, SPACE);
+    const srcA = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "x".repeat(990) + MARKER + "y".repeat(1010) }).source;
+    const srcB = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "an unrelated second capture" }).source;
+    // Sanity: the marker really does straddle the chunk boundary.
+    const chunks = repo.chunksOf(srcA.id);
+    expect(chunks.length).toBe(3);
+    expect(chunks.map((c) => c.text).join("").indexOf(MARKER)).toBe(990);
+    expect(chunks[0]!.text).not.toContain(MARKER);
+    expect(chunks[1]!.text).not.toContain(MARKER);
+    const node = nodes.create(
+      { label: "cross-boundary-quote", type: "daily", content: `he said ${MARKER} and moved on` },
+      await embeddings.embed("cross-boundary-quote"),
+    );
+    repo.linkNodeToAllChunks(node.id, srcA.id);
+    repo.linkNodeToAllChunks(node.id, srcB.id);
+    // nodes.create seeds the vec + FTS rows the tombstone must drop.
+    const vecBefore = (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM vec_nodes WHERE node_id = ?`).get(BigInt(node.id)) as { c: number }).c;
+    expect(vecBefore).toBe(1);
+    const ftsBefore = (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM nodes_fts WHERE rowid = ?`).get(node.id) as { c: number }).c;
+    expect(ftsBefore).toBe(1);
+    const res = forgetSourceByRequest(handle, approvedForgetRequest(SPACE, srcA.id));
+    expect(res.nodesTombstoned).toContain(node.id);
+    const row = handle.sqlite.prepare(`SELECT content, deleted_at FROM nodes WHERE id = ?`).get(node.id) as { content: string; deleted_at: string | null };
+    expect(row.content).not.toContain(MARKER);
+    expect(row.deleted_at).not.toBeNull();
+    const ftsAfter = (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM nodes_fts WHERE rowid = ?`).get(node.id) as { c: number }).c;
+    expect(ftsAfter).toBe(0);
+    const vecAfter = (handle.sqlite.prepare(`SELECT COUNT(*) AS c FROM vec_nodes WHERE node_id = ?`).get(BigInt(node.id)) as { c: number }).c;
+    expect(vecAfter).toBe(0);
   });
 });
 
@@ -1060,4 +1325,112 @@ describe("Fix 3: forget-request binding (D1–D10) — T-B1…T-B10", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it("T-B11 — cross-connection double-apply refuses: B applies first via a second handle, A refuses, exactly one successful apply", async () => {
+    // Fix round 4 (audit P1, D7): the binding checks must be verified
+    // in the same transaction as the erasure. This test drives two
+    // handles on the SAME temp-file database (:memory: handles are
+    // separate DBs, so a file is required) and changes the request
+    // from connection B, then applies from connection A.
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "verbatim-d7-race-"));
+    const file = nodePath.join(dir, "brain.db");
+    const hA = createDb(file);
+    const hB = createDb(file);
+    try {
+      const repoA = new SourcesRepo(hA, SPACE);
+      const s1 = repoA.persistText({ kind: "note", citationClass: "verbatim_typed", text: "race one words here" }).source;
+      const s2 = repoA.persistText({ kind: "note", citationClass: "verbatim_typed", text: "race two words here" }).source;
+      const s3 = repoA.persistText({ kind: "note", citationClass: "verbatim_typed", text: "race three words here" }).source;
+      const approveOn = (h: DbHandle, sourceId: number): number => {
+        const created = createForgetSourceRequest(h, SPACE, sourceId);
+        return approveForgetSourceRequest(h, SPACE, created.requestId).requestId;
+      };
+      const r1 = approveOn(hA, s1.id);
+      const r2 = approveOn(hA, s2.id);
+      const r3 = approveOn(hA, s3.id);
+      const appliedAudits = (h: DbHandle, requestId: number): number =>
+        (h.sqlite.prepare(
+          `SELECT COUNT(*) AS c FROM agent_logs WHERE action = 'forget_source_applied' AND targets LIKE ?`,
+        ).get(`%\"request_id\":${requestId}%`) as { c: number }).c;
+
+      // Scenario 1 — B applies first; A's apply must refuse, and the
+      // request must produce exactly ONE successful apply outcome.
+      const resB = forgetSourceByRequest(hB, r1);
+      expect(resB.sourceId).toBe(s1.id);
+      expect(repoA.getById(s1.id)).toBeUndefined();
+      expect(() => forgetSourceByRequest(hA, r1)).toThrow(/not_approved/);
+      expect(appliedAudits(hA, r1)).toBe(1);
+      expect(repoA.getById(s2.id)).toBeDefined();
+      expect(repoA.getById(s3.id)).toBeDefined();
+
+      // Scenario 2 — B flips the status out from under A (raw UPDATE
+      // stands in for any concurrent status change); A refuses and
+      // erases nothing.
+      hB.sqlite.prepare(`UPDATE forget_requests SET status = 'rejected' WHERE id = ?`).run(r2);
+      expect(() => forgetSourceByRequest(hA, r2)).toThrow(/not_approved/);
+      expect(repoA.getById(s2.id)).toBeDefined();
+      expect(appliedAudits(hA, r2)).toBe(0);
+
+      // Scenario 3 — B rebinds the request to a source that does not
+      // exist; A refuses and the originally bound source survives.
+      hB.sqlite.prepare(`UPDATE forget_requests SET target_source_id = 999999 WHERE id = ?`).run(r3);
+      expect(() => forgetSourceByRequest(hA, r3)).toThrow(/source_not_found/);
+      expect(repoA.getById(s3.id)).toBeDefined();
+      expect(appliedAudits(hA, r3)).toBe(0);
+    } finally {
+      hA.sqlite.close();
+      hB.sqlite.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("T-B12 — mid-erasure race refuses: a concurrent apply landing between validation and the applied-marking must not produce a second success", () => {
+    // Fix round 4 (audit P1, D7): the pre-transaction checks pass and
+    // the final UPDATE ... WHERE status='approved' never checked its
+    // .changes, so a second concurrent apply that passed the
+    // pre-transaction check ran the whole erasure and returned
+    // success. The race window is INSIDE one synchronous call, so it
+    // cannot be driven by interleaving two handles in sequence — the
+    // second handle's change would be visible to the first handle's
+    // pre-transaction read. Instead this test simulates the
+    // cross-connection race deterministically with a trigger: the
+    // trigger stands in for connection B's apply landing after A's
+    // validation but before A's applied-marking (the exact window the
+    // audit names). No timing is involved.
+    const repo = new SourcesRepo(handle, SPACE);
+    const { source } = repo.persistText({ kind: "note", citationClass: "verbatim_typed", text: "mid erasure race words" });
+    const reqId = approvedForgetRequest(SPACE, source.id);
+    handle.sqlite.exec(`
+      CREATE TRIGGER d7_race_sim_flip
+      BEFORE DELETE ON sources
+      BEGIN
+        UPDATE forget_requests SET status = 'applied', applied_at = '2026-10-25T00:00:00.000Z'
+        WHERE target_source_id = OLD.id AND status = 'approved';
+      END;
+    `);
+    try {
+      // The simulated second apply already won: A's apply must refuse
+      // (not_approved — the conditional marking found 0 rows), the
+      // transaction must roll back, and the source must survive.
+      expect(() => forgetSourceByRequest(handle, reqId)).toThrow(/not_approved/);
+      expect(repo.getById(source.id)).toBeDefined();
+      expect(sourceCount()).toBe(1);
+      // The rolled-back erasure left no applied audit row; the refusal
+      // itself is audited exactly once, content-free.
+      const applied = handle.sqlite.prepare(
+        `SELECT COUNT(*) AS c FROM agent_logs WHERE action = 'forget_source_applied' AND targets LIKE ?`,
+      ).get(`%"request_id":${reqId}%`) as { c: number };
+      expect(applied.c).toBe(0);
+      expect(refusedAudits(reqId).length).toBe(1);
+      // The request row is untouched by the rolled-back race: still
+      // approved, still bound to the surviving source.
+      const row = handle.sqlite.prepare(`SELECT status, target_source_id FROM forget_requests WHERE id = ?`).get(reqId) as {
+        status: string; target_source_id: number | null;
+      };
+      expect(row.status).toBe("approved");
+      expect(row.target_source_id).toBe(source.id);
+    } finally {
+      handle.sqlite.exec(`DROP TRIGGER IF EXISTS d7_race_sim_flip`);
+    }
+  });
 });

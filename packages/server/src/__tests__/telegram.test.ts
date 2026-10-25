@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createHash } from "node:crypto";
 import { createDb, type DbHandle } from "../db/client.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { HeuristicProvider } from "../llm/heuristic.js";
@@ -9,6 +10,7 @@ import { UsageTracker } from "../usage.js";
 import { handleTelegramUpdate, sendDailyDigests, type TelegramUpdate } from "../telegram/bot.js";
 import { TelegramLinksRepo } from "../telegram/links.js";
 import { SpacesRepo } from "../auth/spaces.js";
+import { SourcesRepo } from "../repositories/sources.repo.js";
 
 let handle: DbHandle;
 let ctx: AppContext;
@@ -88,6 +90,75 @@ describe("telegram multi-brain routing", () => {
     await handleTelegramUpdate(ctx, update(1, "/unlink"), send);
     expect(outbox.at(-1)!.text).toMatch(/Unlinked/i);
     expect(new TelegramLinksRepo(handle).get(1)).toBeUndefined();
+  });
+});
+
+describe("telegram /log — verbatim whitespace (fix round 4, re-audit P1)", () => {
+  const sha = (t: string) => createHash("sha256").update(Buffer.from(t, "utf8")).digest("hex");
+
+  /** The persisted source behind the first node in the space (§18.2). */
+  function firstSource(spaceId: string) {
+    const nodes = handle.sqlite
+      .prepare(`SELECT id FROM nodes WHERE space_id = ? ORDER BY id ASC LIMIT 1`)
+      .get(spaceId) as { id: number };
+    const repo = new SourcesRepo(handle, spaceId);
+    const links = repo.activeLinksForNode(nodes.id);
+    expect(links.length).toBeGreaterThan(0);
+    const source = repo.getById(links[0]!.sourceId);
+    expect(source).toBeDefined();
+    return source!;
+  }
+
+  it("/log persists the body byte-for-byte, trailing spaces included", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
+    const spaceId = new TelegramLinksRepo(handle).get(1)!.spaceId;
+
+    const body = "call mom on Sunday   ";
+    await handleTelegramUpdate(ctx, update(1, `/log ${body}`), send);
+    expect(outbox.at(-1)!.text).toMatch(/Logged/i);
+
+    const source = firstSource(spaceId);
+    expect(source.rawText).toBe(body);
+    expect(source.rawBytes.equals(Buffer.from(body, "utf8"))).toBe(true);
+    expect(source.contentHash).toBe(sha(body));
+  });
+
+  it("/log with leading whitespace before the token still preserves the body verbatim", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
+    const spaceId = new TelegramLinksRepo(handle).get(1)!.spaceId;
+
+    const body = "padded body  ";
+    await handleTelegramUpdate(ctx, update(1, `  /log ${body}`), send);
+    expect(outbox.at(-1)!.text).toMatch(/Logged/i);
+
+    const source = firstSource(spaceId);
+    expect(source.rawText).toBe(body);
+    expect(source.rawBytes.equals(Buffer.from(body, "utf8"))).toBe(true);
+    expect(source.contentHash).toBe(sha(body));
+  });
+
+  it("/log with two spaces after the token keeps the second space (one delimiter consumed)", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
+    const spaceId = new TelegramLinksRepo(handle).get(1)!.spaceId;
+
+    const body = " double-spaced body";
+    await handleTelegramUpdate(ctx, update(1, `/log ${body}`), send); // "/log  double-spaced body"
+    expect(outbox.at(-1)!.text).toMatch(/Logged/i);
+
+    const source = firstSource(spaceId);
+    expect(source.rawText).toBe(body);
+    expect(source.contentHash).toBe(sha(body));
+  });
+
+  it("/log with only whitespace after the token still asks for the memory", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
+    await handleTelegramUpdate(ctx, update(1, "/log    "), send);
+    expect(outbox.at(-1)!.text).toMatch(/Add the memory after \/log/i);
+    const spaceId = new TelegramLinksRepo(handle).get(1)!.spaceId;
+    const count = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS c FROM nodes WHERE space_id = ?`)
+      .get(spaceId) as { c: number };
+    expect(count.c).toBe(0);
   });
 });
 

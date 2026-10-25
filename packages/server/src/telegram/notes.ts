@@ -295,6 +295,21 @@ export function isNoteCommand(trimmedText: string): boolean {
   );
 }
 
+/**
+ * Fix round 4 (§18.2 byte-exact contract): strip a command token from the
+ * RAW message text — the token plus exactly ONE following whitespace
+ * delimiter character (if present) — and preserve everything else
+ * byte-for-byte (leading spaces beyond the delimiter, trailing spaces).
+ * Command DETECTION still runs on the trimmed copy; only the persisted
+ * payload is derived here. When the raw text does not start with the
+ * token (a direct caller with no raw input), there is no body to keep.
+ */
+export function stripCommandBody(rawText: string, command: "/log" | "/note"): string {
+  const m = new RegExp(`^(\\s*)${command}(\\s|$)`).exec(rawText);
+  if (!m) return "";
+  return rawText.slice(m[0].length);
+}
+
 function statusText(draft: TelegramNoteDraft): string {
   return (
     `${draft.partCount} part${draft.partCount === 1 ? "" : "s"}, ` +
@@ -306,6 +321,11 @@ function statusText(draft: TelegramNoteDraft): string {
  * Handle /note, /done and /cancel. Returns the reply to send, or null when
  * the message is not a note command (the caller then continues its normal
  * dispatch — this is what keeps commands and chat untouched by note code).
+ *
+ * `trimmedText` drives command detection; `rawText` (the message exactly
+ * as received, when the caller has it) supplies the /note initial part
+ * verbatim — see stripCommandBody. Without it, the initial part falls
+ * back to the trimmed text (the pre-fix-round-4 behavior).
  */
 export async function handleNoteCommand(
   ctx: AppContext,
@@ -313,6 +333,7 @@ export async function handleNoteCommand(
   chatId: number,
   trimmedText: string,
   nowMs: number,
+  rawText?: string,
 ): Promise<string | null> {
   if (!isNoteCommand(trimmedText)) return null;
   const repo = new TelegramNoteDraftsRepo(ctx.handle);
@@ -357,15 +378,19 @@ export async function handleNoteCommand(
       `If you leave it untouched for 24 hours, the draft is discarded.`
     );
   }
-  const initial = trimmedText.slice("/note".length).trim();
-  if (initial.length > NOTE_MAX_CHARS) {
+  // Fix round 4 (§18.2): the initial part is the RAW text after the token
+  // (one delimiter consumed, the rest byte-for-byte); length/empty checks
+  // use the trimmed copy.
+  const initial = stripCommandBody(rawText ?? trimmedText, "/note");
+  const trimmedInitial = initial.trim();
+  if (trimmedInitial.length > NOTE_MAX_CHARS) {
     return (
-      `That first part alone is ${initial.length} characters — a note can hold at most ` +
+      `That first part alone is ${trimmedInitial.length} characters — a note can hold at most ` +
       `${NOTE_MAX_CHARS}. Note not started; try a shorter opening or split it up after /note.`
     );
   }
-  const started = repo.insert(spaceId, chatId, initial, initial ? 1 : 0, iso(nowMs));
-  return initial
+  const started = repo.insert(spaceId, chatId, initial, trimmedInitial ? 1 : 0, iso(nowMs));
+  return trimmedInitial
     ? `📝 Note started — part 1 saved (${statusText(started)}). Keep sending, /done to save, /cancel to discard. If you leave the draft untouched for 24 hours, it's discarded.`
     : "📝 Note started — send your note in as many messages as you like; I'll keep every word exactly as sent. /done saves it, /cancel discards it. If you leave the draft untouched for 24 hours, it's discarded.";
 }

@@ -973,9 +973,11 @@ function toFtsMatch(raw: string, phrase: boolean): string {
 export interface ChunkSearchResult {
   hits: { chunk: SourceChunkRow; source: SourceRow }[];
   /** 12E degradation signal: true when vector search contributed
-   *  nothing (unavailable or unindexed) and results are FTS-only. */
+   *  nothing (unavailable or unindexed) and results are FTS-only.
+   *  It is about vector availability, not about FTS returning zero
+   *  hits: a vector-only result (mode "vec_only") is not degraded. */
   degraded: boolean;
-  mode: "fts+vec" | "fts_only";
+  mode: "fts+vec" | "fts_only" | "vec_only";
   /** True when some chunks in this space still await vec backfill. */
   vecLag: boolean;
 }
@@ -1010,7 +1012,10 @@ export function searchSourceChunks(
     const vecHits = repo.searchChunksVector(opts.queryVec, k);
     if (vecHits.length > 0) {
       degraded = false;
-      mode = "fts+vec";
+      // Report only the paths that actually contributed: "fts+vec"
+      // when both did, "vec_only" when FTS found nothing (fix round 4,
+      // re-audit P2 — the old code claimed "fts+vec" here too).
+      mode = ftsHits.length > 0 ? "fts+vec" : "vec_only";
       for (const h of vecHits) {
         if (!byChunk.has(h.chunk.id)) byChunk.set(h.chunk.id, { chunk: h.chunk, source: h.source });
       }

@@ -25,7 +25,7 @@ import {
   resolveReplyDeps,
   type TelegramReplyDeps,
 } from "./voiceReply.js";
-import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand } from "./notes.js";
+import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand, stripCommandBody } from "./notes.js";
 import { chunkTelegramText } from "./chunking.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
 import type { DbHandle } from "../db/client.js";
@@ -559,7 +559,7 @@ export async function handleTelegramUpdate(
   // telegram/notes.ts; this is only the dispatch. Commands are handled here,
   // before any append interception, so a command mid-note always runs as a
   // command and is never swallowed as note text.
-  const noteReply = await handleNoteCommand(ctx, spaceId, chatId, text, Date.now());
+  const noteReply = await handleNoteCommand(ctx, spaceId, chatId, text, Date.now(), rawText);
   if (noteReply !== null) {
     await send(chatId, noteReply);
     return;
@@ -567,9 +567,14 @@ export async function handleTelegramUpdate(
 
   // TG-05: only the real /log command token (followed by whitespace or
   // end-of-string) saves a memory — "/logistics …" is an ordinary message.
+  // Fix round 4 (§18.2): command DETECTION stays on the trimmed `text`,
+  // but the persisted body is derived from the RAW message — the token
+  // plus exactly ONE following whitespace delimiter is stripped, and the
+  // rest is preserved byte-for-byte (leading spaces beyond the delimiter,
+  // trailing spaces). Only the empty check uses the trimmed copy.
   if (text === "/log" || /^\/log\s/.test(text)) {
-    const body = text.slice("/log".length).trim();
-    if (!body) {
+    const body = stripCommandBody(rawText, "/log");
+    if (!body.trim()) {
       await send(chatId, "Add the memory after /log — e.g. /log call mom on Sunday");
       return;
     }

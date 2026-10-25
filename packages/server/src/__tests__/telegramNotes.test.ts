@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as nodePath from "node:path";
@@ -13,6 +14,7 @@ import { handleTelegramUpdate, clearTelegramHistory, type TelegramUpdate } from 
 import { TelegramLinksRepo } from "../telegram/links.js";
 import { TelegramNoteDraftsRepo } from "../repositories/telegramNoteDrafts.repo.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
+import { SourcesRepo } from "../repositories/sources.repo.js";
 import { GraphService } from "../graph/service.js";
 import { NOTE_MAX_PARTS, NOTE_MAX_CHARS, NOTE_IDLE_EXPIRY_MS } from "../telegram/notes.js";
 import { requestApproval } from "../agent/approvals.js";
@@ -402,5 +404,68 @@ describe("telegram notes — bounds & expiry", () => {
     expect(outbox.at(-1)!.text).toBe("fresh reply after expiry");
     expect(drafts().get(spaceId, 7)).toBeUndefined();
     expect(new NodesRepo(handle, spaceId).all()).toHaveLength(0);
+  });
+});
+
+describe("telegram notes — verbatim initial part (fix round 4, re-audit P1)", () => {
+  const sha = (t: string) => createHash("sha256").update(Buffer.from(t, "utf8")).digest("hex");
+
+  /** The persisted source behind the saved note node (§18.2). */
+  function noteSource(spaceId: string) {
+    const node = new NodesRepo(handle, spaceId).all().find((n) => n.tags?.includes("note"));
+    expect(node).toBeDefined();
+    const repo = new SourcesRepo(handle, spaceId);
+    const links = repo.activeLinksForNode(node!.id);
+    expect(links.length).toBeGreaterThan(0);
+    const source = repo.getById(links[0]!.sourceId);
+    expect(source).toBeDefined();
+    return source!;
+  }
+
+  it("/note <text> keeps the initial part's trailing spaces in the draft and the saved source", async () => {
+    const spaceId = await linkChat(7);
+    const initial = "opening words  ";
+
+    await handleTelegramUpdate(ctx, update(7, `/note ${initial}`), send);
+    expect(outbox.at(-1)!.text).toMatch(/Note started/i);
+    expect(drafts().get(spaceId, 7)!.text).toBe(initial);
+    expect(drafts().get(spaceId, 7)!.partCount).toBe(1);
+
+    await handleTelegramUpdate(ctx, update(7, "/done"), send);
+    expect(outbox.at(-1)!.text).toMatch(/Note saved/i);
+
+    const source = noteSource(spaceId);
+    expect(source.rawText).toBe(initial);
+    expect(source.rawBytes.equals(Buffer.from(initial, "utf8"))).toBe(true);
+    expect(source.contentHash).toBe(sha(initial));
+  });
+
+  it("/note with leading whitespace before the token keeps the initial part verbatim", async () => {
+    const spaceId = await linkChat(7);
+    const initial = "padded start  ";
+
+    await handleTelegramUpdate(ctx, update(7, `  /note ${initial}`), send);
+    expect(outbox.at(-1)!.text).toMatch(/Note started/i);
+    expect(drafts().get(spaceId, 7)!.text).toBe(initial);
+
+    await handleTelegramUpdate(ctx, update(7, "/done"), send);
+    expect(noteSource(spaceId).rawText).toBe(initial);
+  });
+
+  it("/note with two spaces after the token keeps the second space in the initial part", async () => {
+    const spaceId = await linkChat(7);
+    const initial = " double-spaced start";
+
+    await handleTelegramUpdate(ctx, update(7, `/note ${initial}`), send); // "/note  double-spaced start"
+    expect(drafts().get(spaceId, 7)!.text).toBe(initial);
+  });
+
+  it("/note with only whitespace after the token starts an empty note", async () => {
+    const spaceId = await linkChat(7);
+    await handleTelegramUpdate(ctx, update(7, "/note    "), send);
+    expect(outbox.at(-1)!.text).toMatch(/Note started/i);
+    const draft = drafts().get(spaceId, 7);
+    expect(draft).toBeDefined();
+    expect(draft!.partCount).toBe(0);
   });
 });
