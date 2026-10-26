@@ -102,21 +102,40 @@ export interface GradeResult {
   nextReviewAt?: string;
   /** Whole days until that review (IM-114) — "next review in ~N days". */
   nextIntervalDays?: number;
+  /** REG-200 (RC-07): the fuel the grade paid, in the earn sheet's terms. */
+  fuelEarned?: number;
+  /** REG-200 (RC-07): true when the grade advanced the streak to a new day. */
+  streakAdvanced?: boolean;
+  /** REG-197 (RC-04): true when this response replays an already-committed attempt. */
+  duplicate?: boolean;
 }
 
 /** IM-114: like gradeReview, but also surfaces WHEN the memory comes back —
  *  the grade response already carried nextReviewAt; the boolean wrapper
  *  discarded it, so the panel could never give reschedule feedback. */
-export async function gradeReviewDetailed(id: number, remembered: boolean): Promise<GradeResult> {
+export async function gradeReviewDetailed(id: number, remembered: boolean, attemptKey?: string): Promise<GradeResult> {
   try {
     const res = await afetch(`${API}/review/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ remembered }),
+      body: JSON.stringify(attemptKey ? { remembered, attemptKey } : { remembered }),
     });
     if (!res.ok) return { ok: false };
-    const d = (await res.json().catch(() => ({}))) as { nextReviewAt?: string; nextIntervalDays?: number };
-    return { ok: true, nextReviewAt: d.nextReviewAt, nextIntervalDays: d.nextIntervalDays };
+    const d = (await res.json().catch(() => ({}))) as {
+      nextReviewAt?: string;
+      nextIntervalDays?: number;
+      fuelEarned?: number;
+      streakAdvanced?: boolean;
+      duplicate?: boolean;
+    };
+    return {
+      ok: true,
+      nextReviewAt: d.nextReviewAt,
+      nextIntervalDays: d.nextIntervalDays,
+      fuelEarned: d.fuelEarned,
+      streakAdvanced: d.streakAdvanced,
+      duplicate: d.duplicate,
+    };
   } catch {
     return { ok: false };
   }

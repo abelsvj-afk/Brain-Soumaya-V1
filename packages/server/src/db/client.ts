@@ -669,6 +669,30 @@ function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS inbox_notifications_space_idx ON inbox_notifications(space_id, id);
     CREATE UNIQUE INDEX IF NOT EXISTS inbox_notifications_dedupe_idx ON inbox_notifications(space_id, dedupe_key);
   `);
+  // Batch E (REG-197 / REG-051): same DDL as BOOTSTRAP_SQL in
+  // db/schemaSql.ts — CREATE TABLE IF NOT EXISTS makes this a no-op on fresh
+  // volumes and the creation path on volumes that predate the tables.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS review_grade_attempts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      attempt_key TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      remembered INTEGER NOT NULL,
+      next_review_at TEXT NOT NULL,
+      next_interval_days INTEGER NOT NULL,
+      fuel_earned INTEGER NOT NULL,
+      streak_advanced INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, attempt_key)
+    );
+    CREATE TABLE IF NOT EXISTS daily_earn_counts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, day, kind)
+    );
+  `);
   // Life Vision (docs/specs/life-vision.md): optional one-to-many link from a Financial
   // Goal to the Life Vision node it helps fund. Nullable, no SQL FK (matches bucket_id's
   // own style in this table) — validated at the application layer only. `tcols.length > 0`

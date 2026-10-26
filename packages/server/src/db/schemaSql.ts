@@ -249,6 +249,32 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, reward_key)
     );
+    -- REG-197 (RC-04): one receipt per grade attempt, so a retry of the same
+    -- attempt replays the committed outcome instead of re-grading, re-paying,
+    -- and re-running SM-2. Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS review_grade_attempts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      attempt_key TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      remembered INTEGER NOT NULL,
+      next_review_at TEXT NOT NULL,
+      next_interval_days INTEGER NOT NULL,
+      fuel_earned INTEGER NOT NULL,
+      streak_advanced INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, attempt_key)
+    );
+    -- REG-051 (PG-08): per-day paid-earn counts (space-local day, one row per
+    -- kind). The count survives dismiss/delete — the earned rows don't — so
+    -- this is what bounds the thought add/dismiss and Mind create/delete
+    -- cycles server-side. Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS daily_earn_counts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, day, kind)
+    );
     -- Undertakings (Level 2): a multi-day arc Soumaya commits to, so her autonomy
     -- has narrative ("Day 3 of 5 — Warming the cold belt") instead of 5-min ticks.
     CREATE TABLE IF NOT EXISTS undertakings (

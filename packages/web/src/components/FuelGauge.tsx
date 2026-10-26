@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Fuel } from "@brain/shared";
+import { LOW_FUEL_THRESHOLD, type Fuel } from "@brain/shared";
 import { playSfx } from "../graph/sfx.js";
 import { pushToast } from "./Toasts.js";
 
@@ -56,7 +56,10 @@ export function FuelGauge({
 
   if (!fuel) return null;
   const pct = Math.max(0, Math.min(1, fuel.fuel / fuel.capacity));
-  const low = pct < 0.2;
+  // REG-048 (PG-05): one low-fuel definition, shared with the Notifications-bar
+  // alert (LOW_FUEL_THRESHOLD in @brain/shared) — the gauge used to glow at
+  // <20% of cap while the alert fired at <15, so they disagreed for 25 units.
+  const low = fuel.fuel < LOW_FUEL_THRESHOLD;
 
   // aria-value* (valuenow/min/max) are only valid on the range-widget roles
   // (meter/progressbar/slider/spinbutton) — they used to stay attached even

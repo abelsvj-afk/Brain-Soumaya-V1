@@ -35,7 +35,7 @@ describe("ReviewPanel (recall session)", () => {
     expect(screen.queryByText("I remembered")).toBeNull();
     fireEvent.click(screen.getByText("Reveal & rate my recall"));
     fireEvent.click(screen.getByText("I remembered"));
-    await waitFor(() => expect(gradeReviewDetailed).toHaveBeenCalledWith(1, true));
+    await waitFor(() => expect(gradeReviewDetailed).toHaveBeenCalledWith(1, true, expect.any(String)));
   });
 });
 

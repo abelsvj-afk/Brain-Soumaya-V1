@@ -164,7 +164,7 @@ export function resolveDailyQuests(
     {
       id: "log",
       icon: "✍️",
-      text: fedToday ? "Fed your brain today" : "Log a memory today",
+      text: fedToday ? "Tended your brain today" : "Tend your brain today",
       done: fedToday,
       action: "capture",
     },

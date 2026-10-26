@@ -66,6 +66,21 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
   const [why, setWhy] = useState(false);
   const [cappedForToday, setCappedForToday] = useState(false);
   const [grading, setGrading] = useState(false);
+  // REG-197 (RC-04): one idempotency key per grade attempt (one card, one
+  // tap-series). Minted on the first grade tap for a card and reused for
+  // every retry of that card, so a retry of a grade the server committed but
+  // the client never heard replays the committed outcome instead of grading,
+  // paying, and rescheduling twice. Discarded once the card advances, so the
+  // next genuine grade of the same memory mints a fresh key and applies.
+  const attemptKeysRef = useRef<Map<number, string>>(new Map());
+  const attemptKeyFor = (id: number): string => {
+    let k = attemptKeysRef.current.get(id);
+    if (!k) {
+      k = `${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      attemptKeysRef.current.set(id, k);
+    }
+    return k;
+  };
   // IM-114: after a grade, when this memory comes back ("next review in ~N
   // days") — the reschedule used to be invisible, so grading felt consequence-free.
   const [lastFeedback, setLastFeedback] = useState<string | null>(null);
@@ -93,20 +108,33 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
       // Honour that: a failed grade must NOT advance the session, bump the
       // daily count, or earn the streak nudge. It gets the same toast + retry
       // posture as a thrown error (previously unreachable for HTTP failures).
-      const result = await gradeReviewDetailed(current.id, remembered);
+      const result = await gradeReviewDetailed(current.id, remembered, attemptKeyFor(current.id));
       if (!result.ok) {
         pushToast("Couldn't save that — try again.", "⚠️", 3500);
         return;
       }
+      // REG-200 (RC-07): name the reward the grade paid, in the earn sheet's
+      // terms — the fuel and any streak advance — alongside the reschedule, so
+      // the reward is visible at the moment it is paid instead of moving the
+      // HUD numbers silently behind the overlay. A replayed retry (REG-197)
+      // reports the same reward as the first attempt; it is counted once here
+      // because the lost first response was never counted.
+      let schedule: string;
       if (typeof result.nextIntervalDays === "number") {
         const n = result.nextIntervalDays;
-        setLastFeedback(n <= 0 ? "Next review tomorrow." : n === 1 ? "Next review in ~1 day." : `Next review in ~${n} days.`);
+        schedule = n <= 0 ? "Next review tomorrow." : n === 1 ? "Next review in ~1 day." : `Next review in ~${n} days.`;
       } else if (result.nextReviewAt) {
         const days = Math.max(0, Math.round((Date.parse(result.nextReviewAt) - Date.now()) / 86_400_000));
-        setLastFeedback(days <= 1 ? "Next review in ~1 day." : `Next review in ~${days} days.`);
+        schedule = days <= 1 ? "Next review in ~1 day." : `Next review in ~${days} days.`;
       } else {
-        setLastFeedback(null);
+        schedule = "";
       }
+      const rewardBits: string[] = [];
+      if (typeof result.fuelEarned === "number" && result.fuelEarned > 0) rewardBits.push(`+${result.fuelEarned} ⛽`);
+      if (result.streakAdvanced) rewardBits.push("streak kept alive");
+      const parts = [...(schedule ? [schedule] : []), ...rewardBits];
+      setLastFeedback(parts.length > 0 ? parts.join(" · ") : null);
+      attemptKeysRef.current.delete(current.id);
       bumpToday();
       // A recall earns Fuel + keeps the streak alive — nudge the HUD to refresh.
       window.dispatchEvent(new Event("brain-memory-added"));

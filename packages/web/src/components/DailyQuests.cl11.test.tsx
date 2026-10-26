@@ -33,7 +33,7 @@ describe("IM-90 — DailyQuests in Progress", () => {
     const { getByText } = render(
       <DailyQuests graph={graph} fedToday={false} onFocus={() => {}} onCapture={() => {}} />,
     );
-    expect(getByText(/Log a memory today/)).toBeTruthy();
+    expect(getByText(/Tend your brain today/)).toBeTruthy();
     expect(getByText(/Warm a cooling memory/)).toBeTruthy();
     expect(getByText(/Reconnect a drifting memory/)).toBeTruthy();
   });
@@ -44,7 +44,7 @@ describe("IM-90 — DailyQuests in Progress", () => {
     const { getByText } = render(
       <DailyQuests graph={graph} fedToday={false} onFocus={onFocus} onCapture={onCapture} />,
     );
-    fireEvent.click(getByText(/Log a memory today/));
+    fireEvent.click(getByText(/Tend your brain today/));
     expect(onCapture).toHaveBeenCalledTimes(1);
     fireEvent.click(getByText(/Warm a cooling memory/));
     expect(onFocus).toHaveBeenCalledWith(7);
@@ -54,7 +54,7 @@ describe("IM-90 — DailyQuests in Progress", () => {
     const { getByText } = render(
       <DailyQuests graph={graph} fedToday={true} onFocus={() => {}} onCapture={() => {}} />,
     );
-    const btn = getByText(/Fed your brain today/).closest("button") as HTMLButtonElement;
+    const btn = getByText(/Tended your brain today/).closest("button") as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
   });
 });

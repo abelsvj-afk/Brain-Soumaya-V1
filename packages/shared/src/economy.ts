@@ -57,3 +57,25 @@ export const FUEL_REGEN_PER_HOUR = 3.5;
  * tooltip did exactly that).
  */
 export const ACTION_DONE_MIN_AGE_MINUTES = 10;
+
+/**
+ * One definition of "low fuel" (REG-048 / PG-05, GH-10): the gauge used to glow
+ * at <20% of the 200 cap (<40) while the Notifications-bar alert fired at <15,
+ * so the gauge glowed red through a long stretch with no alert. The alert
+ * semantics win — a threshold should mean "act soon", and 40/200 with regen at
+ * 3.5/hr is not soon. Both surfaces (and any future consumer) read this one
+ * absolute threshold.
+ */
+export const LOW_FUEL_THRESHOLD = 15;
+
+/**
+ * Farm-hardening caps (REG-051 / PG-08): per-day, server-enforced bounds on the
+ * two per-call earns whose rows vanish on dismiss/delete, so no live-row count
+ * can bound them. 10/day each is generous for honest use (a real session
+ * captures a handful of thoughts / builds a few Mind entries) and only binds
+ * the add→dismiss→add / create→delete→create loop. The review-grading cap is
+ * deliberately NOT here — it stays client-side; REG-197 covers only the
+ * retry-ambiguity case for grades.
+ */
+export const EARN_THOUGHT_DAILY_CAP = 10;
+export const EARN_MIND_DAILY_CAP = 10;

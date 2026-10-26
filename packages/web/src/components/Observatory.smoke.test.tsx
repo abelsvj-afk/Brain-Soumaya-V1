@@ -97,7 +97,7 @@ describe("Observatory — Today's tending quest card (CL1)", () => {
     expect(await screen.findByText("Today's tending")).toBeTruthy();
     expect(screen.getByText("1/1 done")).toBeTruthy();
     expect(screen.getByText("All tended for today ✓")).toBeTruthy();
-    const logQuest = screen.getByText("Fed your brain today").closest("button")!;
+    const logQuest = screen.getByText("Tended your brain today").closest("button")!;
     expect(logQuest.hasAttribute("disabled")).toBe(true);
   });
 

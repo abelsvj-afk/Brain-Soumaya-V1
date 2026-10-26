@@ -10,7 +10,8 @@ import { personProfile } from "../../analysis/people.js";
 import { upcomingEvents } from "../../analysis/future.js";
 import { GraphService } from "../../graph/service.js";
 import { spaceOf } from "../middleware.js";
-import { EconomyRepo, EARN_MIND } from "../../economy.js";
+import { EconomyRepo, EARN_MIND, EARN_MIND_DAILY_CAP, claimDailyEarn } from "../../economy.js";
+import { spaceTimezone, localDay } from "../../agent/notify/policy.js";
 
 const AliasList = z.array(z.string().min(1).max(60)).max(12);
 const CreateBody = z.object({
@@ -86,9 +87,18 @@ export function cognitiveRoutes(ctx: AppContext): Router {
       }
     }
     // Building your Mind is real work — reward it with Fuel (your income, not just memories).
-    const fuel = new EconomyRepo(ctx.handle, spaceId).add(EARN_MIND);
+    // REG-051 (PG-08): the earn is server-capped per space-local day — a Mind node
+    // is hard-deleted, so only this durable count can see the create→delete→
+    // create loop. Past the cap the entry is still created; it pays 0.
+    const day = localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
+    let fuelEarned = 0;
+    let fuel = new EconomyRepo(ctx.handle, spaceId).get();
+    if (claimDailyEarn(ctx.handle, spaceId, day, "mind", EARN_MIND_DAILY_CAP)) {
+      fuel = new EconomyRepo(ctx.handle, spaceId).add(EARN_MIND);
+      fuelEarned = EARN_MIND;
+    }
     const node = new GraphService(ctx.handle, spaceId).getNode(id);
-    res.json({ ...node, fuelEarned: EARN_MIND, fuel });
+    res.json({ ...node, fuelEarned, fuel });
   });
 
   // PATCH /api/cognitive/:id { label?, content?, aliases?, date? } -> edit + re-embed +

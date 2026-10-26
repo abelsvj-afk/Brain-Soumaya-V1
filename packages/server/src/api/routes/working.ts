@@ -10,7 +10,8 @@ import {
   editThought,
 } from "../../analysis/workingMemory.js";
 import { spaceOf } from "../middleware.js";
-import { EconomyRepo, EARN_THOUGHT } from "../../economy.js";
+import { EconomyRepo, EARN_THOUGHT, EARN_THOUGHT_DAILY_CAP, claimDailyEarn } from "../../economy.js";
+import { spaceTimezone, localDay } from "../../agent/notify/policy.js";
 
 const AddBody = z.object({
   text: z.string().min(1).max(500),
@@ -38,10 +39,17 @@ export function workingRoutes(ctx: AppContext): Router {
     const id = addThought(ctx, spaceOf(res), parsed.data.text, source);
     // A thought you personally capture earns a little Fuel; system-seeded thoughts
     // (chat/goal/priority/emotion) don't, so it can't be farmed by the autonomy loop.
+    // REG-051 (PG-08): the manual earn is server-capped per space-local day — the
+    // thought row is hard-deleted on dismiss, so only this durable count can see
+    // the add→dismiss→add loop. Past the cap the thought is still saved; it pays 0.
     let fuelEarned = 0;
     if (source === "manual") {
-      new EconomyRepo(ctx.handle, spaceOf(res)).add(EARN_THOUGHT);
-      fuelEarned = EARN_THOUGHT;
+      const spaceId = spaceOf(res);
+      const day = localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
+      if (claimDailyEarn(ctx.handle, spaceId, day, "thought", EARN_THOUGHT_DAILY_CAP)) {
+        new EconomyRepo(ctx.handle, spaceId).add(EARN_THOUGHT);
+        fuelEarned = EARN_THOUGHT;
+      }
     }
     res.json({ id, fuelEarned });
   });

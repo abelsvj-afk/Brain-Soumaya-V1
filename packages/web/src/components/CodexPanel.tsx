@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GraphData, GraphNode } from "@brain/shared";
 import { buildCodex, codexProgress, CODEX_CATEGORIES, fieldNoteEntries, type CodexEntry, type CodexCategory } from "./codex.js";
-import { claimCodexReward, getCodexDiscoveries, type AgentDiscovery } from "../api/client.js";
-import { pushToast } from "./Toasts.js";
-import { playSfx } from "../graph/sfx.js";
+import { getCodexDiscoveries, type AgentDiscovery } from "../api/client.js";
+import { useCodexDiscoveryClaims } from "./useCodexDiscoveryClaims.js";
 
 /**
  * The Codex — a gamified, living atlas of the galaxy. Entries start locked, unlock as
@@ -60,7 +59,12 @@ export function CodexPanel({
   }, [graph, discoveries]);
   const progress = useMemo(() => codexProgress(entries), [entries]);
   const [tab, setTab] = useState<CodexCategory>("sectors");
-  const seenRef = useRef<Set<string>>(new Set());
+
+  // REG-047 (PG-04): discovery claiming lives in the shared hook (App mounts
+  // it globally, so discoveries announce + pay at the moment they first become
+  // true). The panel mounts it too with its full entry list — opening the
+  // panel afterwards shows no backlog burst, because both share one seen-store.
+  const { seenRef } = useCodexDiscoveryClaims(entries, spaceId, onReward);
 
   // IM-91 "recently discovered": when each entry was first seen on this
   // device, recorded going forward (same honesty rule as IM-92 — entries seen
@@ -75,90 +79,6 @@ export function CodexPanel({
     }
   }, [spaceId]);
 
-  const claimingRef = useRef<Set<string>>(new Set());
-
-  // Fire a discovery toast + claim the reward once per newly-discovered entry.
-  // IM-93: an entry is marked seen ONLY once its claim has settled successfully —
-  // a failed claim (server rejection, offline) leaves it fresh so the fuel can
-  // still be claimed on a later visit, and the failure surfaces as a toast
-  // instead of being swallowed.
-  useEffect(() => {
-    if (!spaceId) return;
-    const key = `codex.seen.${spaceId}`;
-    const atKey = `codex.seenAt.${spaceId}`;
-    let seen: Set<string>;
-    try {
-      seen = new Set(JSON.parse(localStorage.getItem(key) || "[]"));
-    } catch {
-      seen = new Set();
-    }
-    seenRef.current = seen;
-    const fresh = entries.filter((e) => e.discovered && !seen.has(e.id) && !claimingRef.current.has(e.id));
-    if (fresh.length === 0) return;
-    for (const e of fresh) claimingRef.current.add(e.id);
-    for (const e of fresh.slice(0, 4)) {
-      pushToast(`Codex: discovered “${e.title}”`, "📖", 6000, "high");
-    }
-    let cancelled = false;
-    void (async () => {
-      let failed = 0;
-      const nowIso = new Date().toISOString();
-      const newTimes: Record<string, string> = {};
-      for (const e of fresh) {
-        try {
-          const r = await claimCodexReward(e.id);
-          if (r?.failed) {
-            failed++;
-          } else {
-            seen.add(e.id);
-            newTimes[e.id] = nowIso;
-            // `claimCodexReward` is async, so the chime has to fire from inside
-            // this callback — checking a flag synchronously after the loop (as
-            // before) always read it as false.
-            if (r?.awarded) {
-              onReward?.();
-              playSfx("achievement");
-            }
-          }
-        } catch {
-          failed++;
-        } finally {
-          claimingRef.current.delete(e.id);
-        }
-      }
-      try {
-        localStorage.setItem(key, JSON.stringify([...seen]));
-        if (Object.keys(newTimes).length > 0) {
-          setSeenAt((prev) => {
-            const merged = { ...prev };
-            for (const [id, at] of Object.entries(newTimes)) if (!merged[id]) merged[id] = at;
-            try {
-              localStorage.setItem(atKey, JSON.stringify(merged));
-            } catch {
-              /* ignore */
-            }
-            return merged;
-          });
-        }
-      } catch {
-        /* ignore */
-      }
-      if (!cancelled && failed > 0) {
-        pushToast(
-          `Codex: ${failed} reward claim${failed === 1 ? "" : "s"} didn't go through — will retry on your next visit`,
-          "⛽",
-          6000,
-          "high",
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, spaceId]);
-
-  // IM-91: search across the whole atlas + a "recently discovered" view.
   const [query, setQuery] = useState("");
   const [recentView, setRecentView] = useState(false);
   const q = query.trim().toLowerCase();

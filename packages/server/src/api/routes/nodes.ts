@@ -8,7 +8,7 @@ import { ftsUpsert } from "../../db/fts.js";
 import { GraphService } from "../../graph/service.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { AttachmentsRepo } from "../../repositories/attachments.repo.js";
-import { EconomyRepo, EARN_ACTION_DONE } from "../../economy.js";
+import { EconomyRepo, EARN_ACTION_DONE, actionEarnsFuel } from "../../economy.js";
 import { JourneysRepo } from "../../repositories/journeys.repo.js";
 import { requestMaintenance } from "../../maintenance/agent.js";
 import { spaceOf, rateLimit } from "../middleware.js";
@@ -345,13 +345,11 @@ export function nodesRoutes(ctx: AppContext): Router {
     const existing = graph.getNode(id); // check kind before removing
     // Only actions that have existed a little while pay out — a create-then-delete
     // loop was a free offline fuel farm. (Checked before the row is removed.)
-    const oldEnough =
-      existing?.kind === "action" &&
-      ctx.handle.sqlite
-        .prepare(
-          `SELECT 1 FROM nodes WHERE id = ? AND space_id = ? AND created_at <= datetime('now', '-10 minutes')`,
-        )
-        .get(id, spaceId) != null;
+    // REG-141 (AG-02): true elapsed-time math on the stored timestamp. The old
+    // gate compared the ISO `created_at` string against SQLite's
+    // `datetime('now', '-10 minutes')` output — `T` > ` ` at byte 10, so every
+    // same-UTC-date comparison failed and same-day completions never paid.
+    const oldEnough = existing?.kind === "action" && actionEarnsFuel(existing.createdAt);
     // Living Galaxy (IM-140): completing an ACTION item is completing a
     // mission — capture its linked journeys BEFORE the node (and the meaning
     // of its links) is gone, then auto-credit them after the delete lands.

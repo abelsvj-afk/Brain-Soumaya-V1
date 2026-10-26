@@ -24,7 +24,7 @@ export function StreakEmber({ streak, best, atRisk, shields = 0, onClick }: { st
   );
   const title =
     (atRisk
-      ? `${streak}-day streak — log one memory today to keep it alive!`
+      ? `${streak}-day streak — tend your brain today to keep it alive!`
       : `${streak}-day streak — safe for today. Come back tomorrow.`) + shieldNote + bestNote +
     (onClick ? " Tap for streak details." : "");
   if (onClick) {

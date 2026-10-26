@@ -126,6 +126,10 @@ export const SPACE_SCOPED_TABLES = [
   "instruction_profiles",
   "knowledge_docs",
   "codex_claims",
+  // Batch E: grade-attempt receipts (REG-197) and per-day earn counts
+  // (REG-051) are per-space rows — brain deletion must remove them too.
+  "review_grade_attempts",
+  "daily_earn_counts",
   "undertakings",
   "daily_contact",
   "user_persona",

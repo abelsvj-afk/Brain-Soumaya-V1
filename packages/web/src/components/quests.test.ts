@@ -55,7 +55,7 @@ describe("questLocalDay — space-local day, never UTC", () => {
 describe("dailyQuests — log quest", () => {
   it("mirrors fedToday exactly", () => {
     expect(dailyQuests([], false, opts())[0]).toMatchObject({ id: "log", done: false });
-    expect(dailyQuests([], true, opts())[0]).toMatchObject({ id: "log", done: true, text: "Fed your brain today" });
+    expect(dailyQuests([], true, opts())[0]).toMatchObject({ id: "log", done: true, text: "Tended your brain today" });
   });
 
   it("returns only the log quest when nothing is cooling or drifting", () => {

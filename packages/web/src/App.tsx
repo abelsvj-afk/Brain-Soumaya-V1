@@ -68,7 +68,7 @@ import { PerfHUD } from "./components/PerfHUD.js";
 import { setFocusCalm } from "./graph/motion.js";
 import { ACHIEVEMENTS, unlockedIds, loadUnlocked, recordUnlocked } from "./components/achievements.js";
 import { pilotRank } from "./components/rank.js";
-import { buildCodex, codexProgress } from "./components/codex.js";
+import { buildCodex, codexProgress, fieldNoteEntries } from "./components/codex.js";
 import {
   buildUnlockStats,
   firstUnlockedTrackIndex,
@@ -78,6 +78,7 @@ import {
   unlockableForTrack,
 } from "./components/unlockables.js";
 import { useUnlockWatcher } from "./hooks/useUnlockWatcher.js";
+import { useCodexDiscoveryClaims } from "./components/useCodexDiscoveryClaims.js";
 import { UnlockCelebration } from "./components/UnlockCelebration.js";
 import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
@@ -103,6 +104,8 @@ import {
   tendNode,
   getCandidates,
   burnFuel,
+  getCodexDiscoveries,
+  type AgentDiscovery,
   type Health,
   type ProactiveContext,
   type ProactiveContextSource,
@@ -1174,6 +1177,53 @@ export default function App() {
       setUnlockMoment(item);
       pushToast(`🔓 Unlocked! ${item.label} — ${item.description}`, "🔓", 9000, "high");
     },
+  });
+
+  // REG-047 (PG-04): Soumaya's autonomously-charted field notes, fetched at App
+  // level so the global Codex claim hook covers them too — not just the
+  // graph-derived entries. The Codex panel fetches the same endpoint for
+  // display; this is the claim-side copy (a failed fetch here is silent —
+  // the panel surfaces it visibly, IM-91 — and the entries are re-claimed
+  // when the panel opens).
+  const [codexDiscoveries, setCodexDiscoveries] = useState<AgentDiscovery[]>([]);
+  useEffect(() => {
+    if (!space) return;
+    let alive = true;
+    void getCodexDiscoveries()
+      .then((d) => {
+        if (alive) setCodexDiscoveries(d);
+      })
+      .catch(() => {
+        /* panel surfaces the failure visibly (IM-91) */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [space]);
+
+  // REG-047: the full Codex entry list at App level (graph-derived + field
+  // notes), so a discovery is announced and its reward claimed at the moment
+  // it first becomes true, on any surface — not only when the Codex panel
+  // opens. A claim refreshes the fuel gauge immediately; the 30s poll would
+  // pick it up anyway, this just names the moment.
+  const codexEntries = useMemo(() => {
+    if (!space || !loaded) return [];
+    const allNodes = data.nodes as GraphNode[];
+    return [
+      ...buildCodex({
+        memories: allNodes.filter((n) => n.kind !== "moc" && n.kind !== "action"),
+        constellations: allNodes.filter((n) => n.kind === "moc"),
+        links: data.links.length,
+      }),
+      ...fieldNoteEntries(codexDiscoveries),
+    ];
+  }, [space, loaded, data.nodes, data.links, codexDiscoveries]);
+  useCodexDiscoveryClaims(codexEntries, space?.id ?? null, () => {
+    void getFuel()
+      .then((f) => {
+        if (f) setFuel(f);
+      })
+      .catch(() => {});
   });
 
   // Random idle FLY-BY: when you're just watching the galaxy (nothing open or focused),

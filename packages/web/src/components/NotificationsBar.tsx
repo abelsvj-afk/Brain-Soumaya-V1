@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type GraphNode, type Fuel } from "@brain/shared";
+import { type GraphNode, type Fuel, LOW_FUEL_THRESHOLD } from "@brain/shared";
 import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
 import { isReminderDue } from "../utils/dueReminders.js";
@@ -31,8 +31,9 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
 
   const alerts: { id: string; type: "warning" | "info" | "error"; text: string; icon: string; actionText?: string; onClick?: () => void }[] = [];
 
-  // 1. Low Fuel Alert (under 15 units)
-  if (fuel && fuel.fuel < 15) {
+  // 1. Low Fuel Alert (under LOW_FUEL_THRESHOLD units — REG-048: the same
+  // definition the fuel gauge glows by, so gauge and alert always agree).
+  if (fuel && fuel.fuel < LOW_FUEL_THRESHOLD) {
     alerts.push({
       id: "low-fuel",
       type: "warning",

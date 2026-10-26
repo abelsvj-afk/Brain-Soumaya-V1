@@ -6,7 +6,26 @@ import { EconomyRepo, EARN_REVIEW } from "../../economy.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../../streak.js";
 import { spaceOf } from "../middleware.js";
 
-const gradeSchema = z.object({ remembered: z.boolean() });
+const gradeSchema = z.object({
+  remembered: z.boolean(),
+  /**
+   * REG-197 (RC-04): opaque idempotency key, minted by the client per grade
+   * attempt (one card, one tap-series). A retry that carries the same key
+   * replays the committed outcome instead of re-grading, re-paying, and
+   * re-running SM-2. Absent (old clients) the route behaves exactly as
+   * before — idempotency is opt-in per attempt, never a breaking change.
+   */
+  attemptKey: z.string().min(1).max(80).optional(),
+});
+
+interface GradeAttemptRow {
+  node_id: number;
+  remembered: number;
+  next_review_at: string;
+  next_interval_days: number;
+  fuel_earned: number;
+  streak_advanced: number;
+}
 
 /** Spaced-repetition review (NEURO_ALIGNMENT #1): list what's due, grade a recall. */
 export function reviewRoutes(ctx: AppContext): Router {
@@ -28,25 +47,76 @@ export function reviewRoutes(ctx: AppContext): Router {
     res.json(due);
   });
 
-  // POST /api/review/:id { remembered } -> grade a recall attempt, reschedule (SM-2).
+  // POST /api/review/:id { remembered, attemptKey? } -> grade a recall attempt, reschedule (SM-2).
   r.post("/:id", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: "bad id" });
     const parsed = gradeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
     const spaceId = spaceOf(res);
-    const next = gradeReview(ctx, spaceId, id, parsed.data.remembered, Date.now());
-    if (next === null) return res.status(404).json({ error: "not found" });
-    // Retrieval IS the point (memory is made by recall, not storage) — so a completed
-    // review feeds the same loop as logging: it keeps the daily streak alive and earns
-    // Fuel. This was the game layer's biggest blind spot: it rewarded storage, not recall.
-    const { advanced } = new StreakRepo(ctx.handle, spaceId).touch();
-    const fuelEarned = EARN_REVIEW + (advanced ? STREAK_DAY_BONUS : 0);
-    new EconomyRepo(ctx.handle, spaceId).add(fuelEarned);
-    // IM-114 (additive): the interval until that next review, in whole days, so
-    // the client can say "next review in ~N days" without re-deriving SM-2.
-    const nextIntervalDays = Math.max(0, Math.round((Date.parse(next) - Date.now()) / 86_400_000));
-    res.json({ ok: true, nextReviewAt: next, nextIntervalDays, fuelEarned, streakAdvanced: advanced });
+    const { remembered, attemptKey } = parsed.data;
+    const now = Date.now();
+
+    // REG-197: a retry of the same attempt replays the committed outcome —
+    // no second grade, no second payment, no second SM-2 run. The same key
+    // with a different grade is a protocol violation (the first tap wins for
+    // that card), refused without moving anything.
+    if (attemptKey) {
+      const prior = ctx.handle.sqlite
+        .prepare(
+          `SELECT node_id, remembered, next_review_at, next_interval_days, fuel_earned, streak_advanced
+           FROM review_grade_attempts WHERE space_id = ? AND attempt_key = ?`,
+        )
+        .get(spaceId, attemptKey) as GradeAttemptRow | undefined;
+      if (prior) {
+        if (prior.node_id !== id || (prior.remembered === 1) !== remembered) {
+          return res.status(409).json({ error: "attempt key already used with a different grade" });
+        }
+        return res.json({
+          ok: true,
+          nextReviewAt: prior.next_review_at,
+          nextIntervalDays: prior.next_interval_days,
+          fuelEarned: prior.fuel_earned,
+          streakAdvanced: prior.streak_advanced === 1,
+          duplicate: true,
+        });
+      }
+    }
+
+    // Grade + streak touch + fuel credit + receipt insert commit together or
+    // not at all, so a receipt never exists without its grade and a grade
+    // never exists without its receipt.
+    const outcome = ctx.handle.sqlite.transaction(() => {
+      const next = gradeReview(ctx, spaceId, id, remembered, now);
+      if (next === null) return null;
+      // Retrieval IS the point (memory is made by recall, not storage) — so a completed
+      // review feeds the same loop as logging: it keeps the daily streak alive and earns
+      // Fuel. This was the game layer's biggest blind spot: it rewarded storage, not recall.
+      const { advanced } = new StreakRepo(ctx.handle, spaceId).touch();
+      const fuelEarned = EARN_REVIEW + (advanced ? STREAK_DAY_BONUS : 0);
+      new EconomyRepo(ctx.handle, spaceId).add(fuelEarned);
+      // IM-114 (additive): the interval until that next review, in whole days, so
+      // the client can say "next review in ~N days" without re-deriving SM-2.
+      const nextIntervalDays = Math.max(0, Math.round((Date.parse(next) - now) / 86_400_000));
+      if (attemptKey) {
+        ctx.handle.sqlite
+          .prepare(
+            `INSERT INTO review_grade_attempts
+             (space_id, attempt_key, node_id, remembered, next_review_at, next_interval_days, fuel_earned, streak_advanced)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(spaceId, attemptKey, id, remembered ? 1 : 0, next, nextIntervalDays, fuelEarned, advanced ? 1 : 0);
+      }
+      return { next, nextIntervalDays, fuelEarned, advanced };
+    })();
+    if (outcome === null) return res.status(404).json({ error: "not found" });
+    res.json({
+      ok: true,
+      nextReviewAt: outcome.next,
+      nextIntervalDays: outcome.nextIntervalDays,
+      fuelEarned: outcome.fuelEarned,
+      streakAdvanced: outcome.advanced,
+    });
   });
 
   return r;

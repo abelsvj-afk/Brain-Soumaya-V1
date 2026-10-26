@@ -14,6 +14,7 @@ import { InboxPanel } from "./InboxPanel.js";
 import { LibraryPanel } from "./LibraryPanel.js";
 import { CodexPanel } from "./CodexPanel.js";
 import { DailyQuests } from "./DailyQuests.js";
+import { questDayStorageKey } from "./quests.js";
 import { MindPanel } from "./MindPanel.js";
 import { FinancePanel } from "./FinancePanel.js";
 import { JourneysPanel } from "./JourneysPanel.js";
@@ -440,6 +441,10 @@ export function RightDock({
               onFocus={onFocus}
               onCapture={onCapture}
               onOpenInsights={() => setTab("insights")}
+              // REG-045 (PG-01): the same persisted dayState key the Observatory
+              // uses (`questDayStorageKey(spaceId)`), so both surfaces render
+              // the same quests, targets, and done states for the day.
+              questKey={questDayStorageKey(spaceId || spaceName || "default")}
             />
             <div className="subtabs" role="tablist" aria-label="Progress view">
               <button className={progressView === "codex" ? "on" : ""} onClick={() => setProgressView("codex")}>

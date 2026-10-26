@@ -37,6 +37,9 @@ export {
   EARN_JOURNEY_DRIFT,
   FUEL_REGEN_PER_HOUR,
   ACTION_DONE_MIN_AGE_MINUTES,
+  LOW_FUEL_THRESHOLD,
+  EARN_THOUGHT_DAILY_CAP,
+  EARN_MIND_DAILY_CAP,
 } from "@brain/shared";
 import {
   FUEL_START,
@@ -44,6 +47,7 @@ import {
   FUEL_JOB_COST,
   FUEL_REGEN_PER_HOUR,
   WARP_COST,
+  ACTION_DONE_MIN_AGE_MINUTES,
 } from "@brain/shared";
 
 const clamp = (x: number, lo: number, hi: number) => (x < lo ? lo : x > hi ? hi : x);
@@ -139,6 +143,64 @@ export class EconomyRepo {
   toFuel(): Fuel {
     return { fuel: Math.round(this.get() * 10) / 10, capacity: FUEL_CAP, jobCost: FUEL_JOB_COST, warpCost: WARP_COST };
   }
+}
+
+/** Parse a stored timestamp the way the review scheduler does: a naive
+ *  "YYYY-MM-DD HH:MM:SS" (SQLite) value is UTC; ISO values parse as-is. */
+export function parseStoredMs(ts: string | null | undefined): number {
+  if (!ts) return 0;
+  const s = ts.includes("T") ? ts : ts.replace(" ", "T");
+  const z = s.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`;
+  const t = Date.parse(z);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/**
+ * REG-141 (AG-02): the action-completion age gate, as true elapsed-time math.
+ * The old gate was a SQL string comparison (`created_at <= datetime('now',
+ * '-10 minutes')`) between an ISO timestamp and SQLite's space-separated
+ * output — at byte 10 `T` (0x54) > ` ` (0x20), so every same-UTC-date
+ * comparison failed and the predicate reduced to "created on an earlier UTC
+ * calendar date". This is the same rule the Agenda client already states
+ * (`earnsFuel()` in ActionsPanel): an action earns once it has existed
+ * ACTION_DONE_MIN_AGE_MINUTES, on both sides of UTC midnight.
+ */
+export function actionEarnsFuel(createdAt: string | null | undefined, nowMs: number = Date.now()): boolean {
+  const createdMs = parseStoredMs(createdAt);
+  if (!createdMs) return false;
+  return nowMs - createdMs >= ACTION_DONE_MIN_AGE_MINUTES * 60_000;
+}
+
+/**
+ * REG-051 (PG-08): server-enforced per-day earn bound. `daily_earn_counts`
+ * records how many paid earns of one kind a space has taken on one
+ * space-local day; the count survives dismiss/delete (the rows themselves
+ * don't), which is exactly why a live-row count can't bound these paths.
+ * Returns true when this call is within the cap (count incremented); false
+ * once the cap is reached (count untouched, no fuel paid). The day is the
+ * SPACE-local day, like the streak — never a UTC day.
+ */
+export function claimDailyEarn(
+  h: DbHandle,
+  spaceId: string,
+  day: string,
+  kind: "thought" | "mind",
+  cap: number,
+): boolean {
+  const run = h.sqlite.transaction(() => {
+    const row = h.sqlite
+      .prepare(`SELECT count FROM daily_earn_counts WHERE space_id = ? AND day = ? AND kind = ?`)
+      .get(spaceId, day, kind) as { count: number } | undefined;
+    if ((row?.count ?? 0) >= cap) return false;
+    h.sqlite
+      .prepare(
+        `INSERT INTO daily_earn_counts (space_id, day, kind, count) VALUES (?, ?, ?, 1)
+         ON CONFLICT(space_id, day, kind) DO UPDATE SET count = count + 1`,
+      )
+      .run(spaceId, day, kind);
+    return true;
+  });
+  return run();
 }
 
 /**
