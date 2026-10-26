@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Deep Past — Chronicle descent mockup (FIXTURE)</title>
+<style>
+  html,body{margin:0;padding:0;background:#120c1e;overflow:hidden;font-family:system-ui,sans-serif}
+  #fixture{position:fixed;top:0;left:0;right:0;z-index:10;background:#3d2a5a;color:#e9ddff;
+    text-align:center;font-weight:700;letter-spacing:.08em;padding:6px 4px;font-size:13px}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+  #hud{position:fixed;top:34px;left:8px;z-index:9;background:rgba(14,10,24,.74);color:#e6dcff;
+    border:1px solid rgba(190,160,255,.35);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.5;max-width:62vw}
+  #hud b{color:#ffd9a0}
+  #panel{position:fixed;left:8px;right:8px;bottom:8px;z-index:9;display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+    background:rgba(14,10,24,.74);border:1px solid rgba(190,160,255,.35);border-radius:10px;padding:8px}
+  #panel button{background:#241a38;color:#efe6ff;border:1px solid rgba(190,160,255,.5);border-radius:8px;
+    padding:9px 12px;font-size:13px;cursor:pointer}
+  #panel button:disabled{opacity:.45;cursor:default}
+  #panel label{color:#e6dcff;font-size:13px}
+  #panel select{background:#241a38;color:#efe6ff;border:1px solid rgba(190,160,255,.5);border-radius:6px;padding:6px}
+  #measureOut{width:100%;color:#bfe8c8;font-size:11px;white-space:pre-wrap}
+  #behavOut{width:100%;font-size:11px;color:#ffd9a0;white-space:pre-wrap;max-height:26vh;overflow-y:auto}
+  #loading{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:20;background:rgba(12,10,28,.92);color:#ffd977;border:1px solid rgba(255,217,119,.55);border-radius:99px;padding:12px 20px;font:700 14px system-ui,sans-serif;box-shadow:0 8px 26px rgba(10,6,40,.5)}
+  /* Phones: the banner, HUD and panel must not eat the scene. The banner is
+     one line, the HUD keeps only Stage + the piece lines, and the panel is a
+     single sideways-scroll row instead of a wrapping block. */
+  @media (max-width:600px){
+    #fixture{font-size:11px;padding:5px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #hud{top:30px;max-width:78vw;max-height:34vh;overflow-y:auto}
+    /* HUD rows (children of #hud): 1 title, 2 Seed, 3 Stage, 4 FPS,
+       5 Draw calls, 6 Cold load, 7 Fuel, 8–12 the five pieces, 13 Local
+       time. Phones keep only Stage + the pieces. */
+    #hud>div:nth-child(1),#hud>div:nth-child(2),#hud>div:nth-child(4),
+    #hud>div:nth-child(5),#hud>div:nth-child(6),#hud>div:nth-child(7),
+    #hud>div:nth-child(13){display:none}
+    #panel{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+    #panel::-webkit-scrollbar{display:none}
+    #panel button,#panel label,#panel select{flex-shrink:0}
+  }
+</style>
+<script type="importmap">{"imports":{"three":"./three.module.min.js","three/addons/loaders/GLTFLoader.js":"../man-god/GLTFLoader-stub.js"}}</script>
+</head>
+<body>
+<div id="fixture">DEEP PAST · v6 · Basin + terrace + rim + stair + lantern: your GLBs · rest fixture · PHASE 1 · NOT THE PRODUCT</div>
+<div id="app"></div>
+<div id="loading">Loading Deep Past… (v6)</div>
+<script>
+/* Heartbeat (v6): proves JavaScript runs at all. It sits right after the
+   loading pill, before the scene source and the GLB blocks, so it executes
+   even if the rest of the file never arrives (truncated download). If the
+   main boot never starts, the watchdog says so plainly instead of a silent
+   black screen. */
+(function(){
+  var lp = document.getElementById('loading');
+  if (lp) lp.textContent = 'Starting Deep Past… (v6)';
+  window.__dpHeartbeat = true;
+  setTimeout(function(){
+    if (!window.__dpMainBooted) {
+      var el = document.getElementById('loading');
+      if (el && el.style.display !== 'none') {
+        el.textContent = 'The file may not have downloaded fully — please download it again from the chat, then reopen it';
+        el.style.pointerEvents = 'auto'; el.style.cursor = 'pointer';
+        el.addEventListener('click', function(){ el.style.display = 'none'; });
+      }
+    }
+  }, 10000);
+})();
+</script>
+<div id="hud">
+  <div><b>Deep Past</b> — Chronicle descent mockup</div>
+  <div>Seed: <span id="seedOut"></span></div>
+  <div>Stage: <b id="stageOut">rim</b></div>
+  <div>FPS avg: <b id="fpsOut">—</b> · 1% low: <b id="lowOut">—</b></div>
+  <div>Draw calls (both passes): <b id="callsOut">—</b> · Tris: <b id="trisOut">—</b></div>
+  <div>Cold load: <b id="coldOut">—</b></div>
+  <div>Fixture fuel: <b id="fuelOut">100</b> · Cargo: <b id="cargoOut">none</b></div>
+  <div>Basin: <span id="basinOut">loading your GLB…</span></div>
+  <div>Terrace: <span id="terraceOut">loading your GLB…</span></div>
+  <div>Rim: <span id="rimOut">loading your GLB…</span></div>
+  <div>Stair: <span id="stairOut">loading your GLB…</span></div>
+  <div>Lantern: <span id="lanternOut">loading your GLB…</span></div>
+  <div>Local time: <span id="clockOut">—</span></div>
+</div>
+<div id="panel">
+  <button data-stage="rim">Rim</button>
+  <button data-stage="descent">Descent</button>
+  <button data-stage="basin">Basin</button>
+  <button id="warpBtn">Warp Rim→Basin</button>
+  <button id="driftBtn">Drift Rim↔Basin</button>
+  <button id="shotBtn">Capture still</button>
+  <button id="measureBtn">Run measurement</button>
+  <label>Length
+    <select id="durSel">
+      <option value="60">60s (diagnostic)</option>
+      <option value="300" selected>300s (§11 session)</option>
+      <option value="900">900s (soak)</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="rmToggle"> Reduced motion</label>
+  <button id="cargoBtn">Load cargo (A1)</button>
+  <button id="placeBtn">Carry &amp; place on stratum (A2–A3)</button>
+  <button id="chronBtn">Chronicle: guided descent (A21)</button>
+  <button id="pauseBtn">Pause Chronicle</button>
+  <button id="riseBtn">Resurface a memory (A22)</button>
+  <button id="settleBtn">Return it to its stratum</button>
+  <button id="cancelBtn">Cancel departure</button>
+  <button id="turnBtn">Turn back</button>
+  <button id="homeBtn">Return home (free)</button>
+  <button id="drainBtn">Drain fuel (test)</button>
+  <div id="measureOut"></div>
+  <div id="behavOut"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* ============ Seeded RNG (V4: every scatter derives from the one seed) ============ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function seedFromString(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+const SEED_LABEL = 'deep-past / helix-1';
+const rand = mulberry32(seedFromString(SEED_LABEL));
+document.getElementById('seedOut').textContent = SEED_LABEL;
+
+/* ============ Renderer / scenes (backdrop void + the helix) ============ */
+/* Phones and software-rendered devices (SwiftShader) take the LIGHT path:
+   no antialias, pixel ratio 1, no warm-up compile — the full settings make
+   the first frame take minutes on a phone GPU doing software rendering,
+   which is exactly the "stuck on loading" the owner hit twice. Probe the
+   real renderer string first; fall back to screen width when the probe
+   cannot run. If there is no WebGL at all, say so on the page and stop —
+   never a silent loading screen. */
+function probeGL(){
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl2') || c.getContext('webgl');
+    if (!gl) return 'none';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const r = dbg ? (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '') : '';
+    return /swiftshader|llvmpipe|software|basic render/i.test(r) ? 'software' : 'hardware';
+  } catch (e) { return 'unknown'; }
+}
+const glKind = probeGL();
+const lightPath = innerWidth < 700 || glKind === 'software';
+function loadingStage(msg){ const el = document.getElementById('loading'); if (el) el.textContent = msg; }
+if (glKind === 'none') {
+  loadingStage('This device can\u2019t run 3D (WebGL unavailable) — try another device');
+  throw new Error('WebGL unavailable on this device');
+}
+loadingStage('Building the scene…');
+const renderer = new THREE.WebGLRenderer({antialias: !lightPath, preserveDrawingBuffer:true});
+renderer.setPixelRatio(lightPath ? 1 : Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.autoReset = false;
+/* The scene renders in two passes — backdrop first, then the helix over it —
+   with a manual clear() + clearDepth() between them. That only works with
+   autoClear off: with it on (the default), the second render() wipes the
+   backdrop's colour buffer, so the dome, the far rings, the basin glow and
+   the stars never showed — the sky read as pure black. */
+renderer.autoClear = false;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x1d1430, 0.0011); // violet dusk, palette-matched
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+
+const bgScene = new THREE.Scene();
+const bgCamera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+bgCamera.position.set(0,0,0.001);
+
+function glowTexture(inner, outer){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128,128,0,128,128,128);
+  gr.addColorStop(0, inner); gr.addColorStop(1, outer);
+  g.fillStyle = gr; g.fillRect(0,0,256,256);
+  return new THREE.CanvasTexture(c);
+}
+const dummy = new THREE.Object3D();
+
+/* ============ Backdrop: violet void, far strata silhouettes, the basin's glow below ============ */
+{
+  const c = document.createElement('canvas'); c.width = 64; c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0,0,0,512);
+  gr.addColorStop(0,'#0d0918'); gr.addColorStop(0.55,'#1d1430'); gr.addColorStop(1,'#33204a');
+  g.fillStyle = gr; g.fillRect(0,0,64,512);
+  /* The dome texture is a colour map, so it needs sRGB — without it the
+     gradient renders gamma-lifted (washed lavender) instead of deep violet. */
+  const domeTex = new THREE.CanvasTexture(c);
+  domeTex.colorSpace = THREE.SRGBColorSpace;
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1800, 24, 16),
+    new THREE.MeshBasicMaterial({map: domeTex, side: THREE.BackSide, fog:false}));
+  bgScene.add(dome);
+  /* (The four far silhouette rings used to live here. Once the sky actually
+     rendered they read as black ribbons across it, so they were removed —
+     they were invisible in every build before the backdrop fix.) */
+  const basinGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,205,130,0.85)','rgba(255,170,80,0)'), fog:false, depthWrite:false}));
+  basinGlow.position.set(0, -560, -1250); basinGlow.scale.setScalar(560); bgScene.add(basinGlow);
+  /* Stars: the earlier two-piece build had a starfield and this one never
+     did — the sky read as empty black. White points on a shell inside the
+     dome, so the sky reads again from any angle. */
+  {
+    const N = 900, pos = new Float32Array(N * 3);
+    for(let i=0;i<N;i++){
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      const r = 1500 + Math.random() * 250;
+      pos[i*3]   = r * Math.sin(ph) * Math.cos(th);
+      pos[i*3+1] = r * Math.cos(ph);
+      pos[i*3+2] = r * Math.sin(ph) * Math.sin(th);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    bgScene.add(new THREE.Points(g, new THREE.PointsMaterial({
+      color: 0xdfe8ff, size: 2, sizeAttenuation: false, fog: false,
+      transparent: true, opacity: 0.9, depthWrite: false})));
+  }
+}
+
+/* ============ The helix: nine lit strata descending to the First Light basin ============ */
+const STRATA = 9, DROP = 18;
+const stratumY = i => -i * DROP;
+const stratumR = i => 88 - i * 3.5;
+const stratumA = i => i * 0.85; // arc start angle — the helix twist (recipe-fixed)
+{
+  const tints = [0x4a3a63, 0x44355c];
+  for(let i=0;i<STRATA;i++){
+    const seg = new THREE.Mesh(
+      new THREE.CylinderGeometry(stratumR(i), stratumR(i), 2.6, 26, 1, false, stratumA(i), 4.4),
+      new THREE.MeshLambertMaterial({color: tints[i%2], emissive: 0x120b20}));
+    seg.position.y = stratumY(i); scene.add(seg);
+    const lip = new THREE.Mesh(
+      new THREE.TorusGeometry(stratumR(i), 0.5, 6, 40, 4.4),
+      new THREE.MeshBasicMaterial({color: 0x8a6a4a}));
+    lip.rotation.x = Math.PI/2; lip.rotation.z = stratumA(i);
+    lip.position.y = stratumY(i) + 1.3; scene.add(lip);
+  }
+}
+/* Lanterns — the memories' own light. Same warmth at every depth: equal dignity, nothing dims. */
+const LANT_N = 130;
+{
+  const lant = new THREE.InstancedMesh(new THREE.SphereGeometry(0.9, 10, 8),
+    new THREE.MeshBasicMaterial({color: 0xffcf8f}), LANT_N);
+  let n = 0;
+  for(let i=0;i<STRATA && n<LANT_N;i++){
+    const per = Math.min(15, LANT_N - n);
+    for(let j=0;j<per && n<LANT_N;j++){
+      const a = stratumA(i) + 0.25 + (j/per)*3.9 + (rand()-0.5)*0.12;
+      const rr = stratumR(i) - 3 - rand()*7;
+      dummy.position.set(Math.cos(a)*rr, stratumY(i) + 2.6 + rand()*0.8, Math.sin(a)*rr);
+      dummy.scale.setScalar(0.8 + rand()*0.5); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+      lant.setMatrixAt(n++, dummy.matrix);
+    }
+  }
+  lant.count = n; scene.add(lant);
+}
+/* First Light basin — YOUR GLB (the bottom is the warmest place, not a pit).
+   The fixture disc is gone: his real stone dish sits here, and its light is
+   REAL — a warm point light just above the gold pool, a visible shaft rising
+   the full height of the helix, and dust motes drifting in the beam.
+   The dish decodes after the first frame (setTimeout below), so a slow
+   decode can never freeze the scene open — the Eternity loading lesson. */
+const BASIN_Y = -166;
+const BASIN_SPAN = 116; /* the fixture disc was radius 58; the real dish spans the same width */
+const basinGroup = new THREE.Group(); scene.add(basinGroup);
+const basinOut = document.getElementById('basinOut');
+let basinLoaded = false;
+function loadBasin(){
+  if (!document.getElementById('glb-basin')) { /* the GLB text sits at the end of the page; if the browser has not reached it yet, wait a beat */
+    loadBasin._retry = (loadBasin._retry || 0) + 1;
+    if (loadBasin._retry > 20) { basinOut.textContent = 'GLB failed to load — try reopening the page'; return; }
+    setTimeout(loadBasin, 500); return;
+  }
+  new GLTFLoader().load('./first-light-basin-web-256.glb', (g) => {
+    const m = g.scene;
+    const box = new THREE.Box3().setFromObject(m);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    m.position.sub(c);                        /* centre it on the origin */
+    m.scale.setScalar(BASIN_SPAN / size.x);  /* 1.17 wide in-scene -> 116 across */
+    basinGroup.add(m);
+    basinLoaded = true;
+    basinOut.textContent = 'your GLB, ×' + (BASIN_SPAN / size.x).toFixed(1) + ' (' + Math.round(BASIN_SPAN) + ' across) — First Light, real';
+  }, undefined, (e) => {
+    basinOut.textContent = 'GLB failed to load — ' + (e && e.message ? e.message : 'see console');
+    behavOut.textContent += (behavOut.textContent ? '\n' : '') + '• The basin GLB did not load — the fixture disc is back in its place so the world is not empty.';
+    /* fallback: the old fixture disc, so a failed load never leaves a hole */
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(58, 36),
+      new THREE.MeshBasicMaterial({color: 0xffbe78}));
+    disc.rotation.x = -Math.PI/2; disc.position.y = BASIN_Y; scene.add(disc);
+  });
+}
+/* the dish: centre it so the pool lands near BASIN_Y. After centring +
+   scaling the bowl spans ~±15 around the group origin and the pool sits
+   a little below the rim, so the group rides 15 below the basin line. */
+basinGroup.position.y = BASIN_Y - 15;
+/* the light made visible: a soft shaft rising the full height of the helix,
+   a glow at the pool, and dust motes drifting in the beam. */
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(7, 16, 172, 20, 1, true),
+  new THREE.MeshBasicMaterial({color: 0xffc98a, transparent: true, opacity: 0.045, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending}));
+shaft.position.set(0, BASIN_Y + 86, 0); scene.add(shaft);
+const shaftCore = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 6, 172, 14, 1, true),
+  new THREE.MeshBasicMaterial({color: 0xffe2b0, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending}));
+shaftCore.position.set(0, BASIN_Y + 86, 0); scene.add(shaftCore);
+const poolGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTexture('rgba(255,214,150,0.95)','rgba(255,175,85,0)'), depthWrite:false}));
+poolGlow.position.set(0, BASIN_Y - 8, 0); poolGlow.scale.setScalar(70); scene.add(poolGlow);
+/* dust motes in the beam — gold dust rising slowly through the light */
+const MOTES_N = 130;
+const moteGeo = new THREE.BufferGeometry();
+{
+  const pos = new Float32Array(MOTES_N * 3);
+  for(let i=0;i<MOTES_N;i++){
+    const a = rand()*Math.PI*2, r = 2 + rand()*18;
+    pos[i*3] = Math.cos(a)*r; pos[i*3+1] = BASIN_Y + rand()*172; pos[i*3+2] = Math.sin(a)*r;
+  }
+  moteGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+}
+const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({color: 0xffd9a0, size: 1.6,
+  map: glowTexture('rgba(255,220,160,1)','rgba(255,190,100,0)'), transparent: true, opacity: 0.55,
+  depthWrite: false, blending: THREE.AdditiveBlending}));
+scene.add(motes);
+
+/* Piece 2: a stratum terrace segment — one real slice of the ring.
+   Scale 50: the wall rises exactly one stratum drop (18), the shelf is
+   57 along the arc and 25 deep. It sits on stratum 1, concave side to
+   the axis, wall on the outer edge — the riser to the level above.
+   Convention (for the pieces still to come): centre radius 72, centre
+   angle stratumA(1)+0.35, rotation.y = -angle - PI/2, shelf on the
+   stratum's top surface. */
+const TERRACE_SCALE = 50;
+const terraceGroup = new THREE.Group(); scene.add(terraceGroup);
+const terraceOut = document.getElementById('terraceOut');
+let terraceLoaded = false;
+function loadTerrace(){
+  if (!document.getElementById('glb-terrace')) {
+    loadTerrace._retry = (loadTerrace._retry || 0) + 1;
+    if (loadTerrace._retry > 20) { terraceOut.textContent = 'GLB failed to load — try reopening the page'; return; }
+    setTimeout(loadTerrace, 500); return;
+  }
+  new GLTFLoader().load('./stratum-terrace-web-256.glb', (g) => {
+    const m = g.scene;
+    const box = new THREE.Box3().setFromObject(m);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    m.position.sub(c);
+    m.scale.setScalar(TERRACE_SCALE);
+    terraceGroup.add(m);
+    terraceLoaded = true;
+    terraceOut.textContent = 'your GLB, ×' + TERRACE_SCALE + ' — stratum 1, real';
+  }, undefined, (e) => {
+    terraceOut.textContent = 'GLB failed to load — ' + (e && e.message ? e.message : 'see console');
+  });
+}
+{
+  const ang = stratumA(1) + 0.35, rad = 72;
+  terraceGroup.position.set(Math.cos(ang)*rad, stratumY(1) + 1.3 + 9, Math.sin(ang)*rad);
+  terraceGroup.rotation.y = -ang - Math.PI/2;
+}
+
+/* Piece 3: the rim — a C-shaped stone ring around the top of the chasm.
+   Scale 176: outer radius 88, the top stratum's edge. The band is 46
+   tall, so its base is sunk into the upper strata and only a lip shows
+   above stratum 0 — the edge you stand at before descending. The gap
+   (83°, local +X) aims at the descent entry, angle 0. */
+const RIM_SCALE = 176;
+const rimGroup = new THREE.Group(); scene.add(rimGroup);
+const rimOut = document.getElementById('rimOut');
+let rimLoaded = false;
+function loadRim(){
+  if (!document.getElementById('glb-rim')) {
+    loadRim._retry = (loadRim._retry || 0) + 1;
+    if (loadRim._retry > 20) { rimOut.textContent = 'GLB failed to load — try reopening the page'; return; }
+    setTimeout(loadRim, 500); return;
+  }
+  new GLTFLoader().load('./rim-web-256.glb', (g) => {
+    const m = g.scene;
+    const box = new THREE.Box3().setFromObject(m);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    m.position.sub(c);
+    m.scale.setScalar(RIM_SCALE);
+    rimGroup.add(m);
+    rimLoaded = true;
+    rimOut.textContent = 'your GLB, ×' + RIM_SCALE + ' — the rim, real';
+  }, undefined, (e) => {
+    rimOut.textContent = 'GLB failed to load — ' + (e && e.message ? e.message : 'see console');
+  });
+}
+rimGroup.position.set(0, -9, 0); /* top lip ~13 above stratum 0, base sunk to stratum 2 */
+rimGroup.rotation.y = 0; /* the gap aims at the descent entry, angle 0 */
+
+/* Piece 4: the descent stair — 5 rough stone steps with cheek walls.
+   Scale 50 (same as the terrace): 50 along the flight, ~34 wide, the
+   treads rise 16.2 — just short of one stratum drop (18), so the 1.8 is
+   split: top step just below stratum 0, bottom step just above stratum 1.
+   It runs tangentially from the rim gap (angle 0) in the helix travel
+   direction (+Z at the entry). Honest caveat: the flight is straight and
+   the helix curves, so the bottom step straddles stratum 1's outer edge —
+   its outer corner overhangs ~9 and it lands just before the disc's arc
+   starts. A longer flight would reach the disc; this one is the sample. */
+const STAIR_SCALE = 50;
+const stairGroup = new THREE.Group(); scene.add(stairGroup);
+const stairOut = document.getElementById('stairOut');
+let stairLoaded = false;
+function loadStair(){
+  if (!document.getElementById('glb-stair')) {
+    loadStair._retry = (loadStair._retry || 0) + 1;
+    if (loadStair._retry > 20) { stairOut.textContent = 'GLB failed to load — try reopening the page'; return; }
+    setTimeout(loadStair, 500); return;
+  }
+  new GLTFLoader().load('./descent-stair-web-256.glb', (g) => {
+    const m = g.scene;
+    const box = new THREE.Box3().setFromObject(m);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    m.position.sub(c);
+    m.scale.setScalar(STAIR_SCALE);
+    stairGroup.add(m);
+    stairLoaded = true;
+    stairOut.textContent = 'your GLB, ×' + STAIR_SCALE + ' — the descent stair, real';
+  }, undefined, (e) => {
+    stairOut.textContent = 'GLB failed to load — ' + (e && e.message ? e.message : 'see console');
+  });
+}
+stairGroup.position.set(62, -5.9, 25);
+stairGroup.rotation.y = -Math.PI/2; /* local +X (downhill) maps to +Z, the travel direction at angle 0 */
+/* Hero memory lanterns on stands — one (deepest) is the rise candidate */
+function heroOrb(i, angFrac){
+  const a = stratumA(i) + angFrac * 4.4;
+  const rr = stratumR(i) - 13;
+  const grp = new THREE.Group();
+  const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 2.4, 8),
+    new THREE.MeshLambertMaterial({color: 0x2c2142}));
+  stand.position.y = 1.2; grp.add(stand);
+  const orbM = new THREE.Mesh(new THREE.SphereGeometry(2.1, 18, 14),
+    new THREE.MeshBasicMaterial({color: 0xffd9a0}));
+  orbM.position.y = 4.4; grp.add(orbM);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,215,150,0.8)','rgba(255,185,95,0)'), depthWrite:false}));
+  spr.scale.setScalar(13); spr.position.y = 4.4; grp.add(spr);
+  grp.position.set(Math.cos(a)*rr, stratumY(i) + 1.3, Math.sin(a)*rr);
+  scene.add(grp);
+  return grp;
+}
+heroOrb(1, 0.3); heroOrb(4, 0.55); heroOrb(6, 0.25);
+const SHELF_PLACE = new THREE.Vector3(Math.cos(stratumA(3)+1.4)*(stratumR(3)-13), stratumY(3) + 5.7, Math.sin(stratumA(3)+1.4)*(stratumR(3)-13));
+const heroLanternFixture = heroOrb(3, 0.62); // a neighbor near the placement shelf — replaced by the real GLB when it loads
+const risenOrb = heroOrb(7, 0.45);
+
+/* Piece 5: a stratum lantern — the real GLB replaces the fixture hero
+   lantern beside the placement shelf. Scale 20: 20 tall, ~11 wide — a
+   landmark on its stratum, not a beacon. The glow is painted into the
+   texture (no emissive in the file), so the lantern gets a real warm
+   point light in its glass + a glow sprite, the basin's treatment. On
+   load failure the fixture hero lantern stays and the HUD says so. */
+const LANTERN_SCALE = 20;
+const lanternGroup = new THREE.Group(); scene.add(lanternGroup);
+const lanternOut = document.getElementById('lanternOut');
+let lanternLoaded = false;
+function loadLantern(){
+  if (!document.getElementById('glb-lantern')) {
+    loadLantern._retry = (loadLantern._retry || 0) + 1;
+    if (loadLantern._retry > 20) { lanternOut.textContent = 'GLB failed to load — try reopening the page'; return; }
+    setTimeout(loadLantern, 500); return;
+  }
+  new GLTFLoader().load('./stratum-lantern-web-256.glb', (g) => {
+    const m = g.scene;
+    const box = new THREE.Box3().setFromObject(m);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    m.position.sub(c);
+    m.scale.setScalar(LANTERN_SCALE);
+    lanternGroup.add(m);
+    /* Physical falloff (decay 2): sized in candela so the lantern throws a
+       real warm pool onto its stratum instead of barely registering. */
+    const glow = new THREE.PointLight(0xffc98a, 500, 200, 2.0);
+    lanternGroup.add(glow);
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTexture('rgba(255,215,150,0.8)','rgba(255,185,95,0)'), depthWrite:false,
+      blending: THREE.AdditiveBlending, opacity: 0.9}));
+    spr.scale.setScalar(26); lanternGroup.add(spr);
+    scene.remove(heroLanternFixture);
+    lanternLoaded = true;
+    lanternOut.textContent = 'your GLB, ×' + LANTERN_SCALE + ' — stratum 3, real';
+  }, undefined, (e) => {
+    lanternOut.textContent = 'GLB failed to load — fixture lantern stays — ' + (e && e.message ? e.message : 'see console');
+  });
+}
+lanternGroup.position.set(heroLanternFixture.position.x, heroLanternFixture.position.y + 10, heroLanternFixture.position.z);
+const RISEN_HOME = risenOrb.position.clone();
+const RISE_SHELF = new THREE.Vector3(26, 6, 92); // presentation shelf near the rim — a VIEW, not a home
+/* Light column for the rise */
+const column = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 1, 14, 1, true),
+  new THREE.MeshBasicMaterial({color: 0xffd9a0, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false}));
+column.visible = false; scene.add(column);
+/* Gate + spiral route (cyan = navigation truth only) */
+const gate = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 10, 40),
+  new THREE.MeshBasicMaterial({color: 0x7fe7ff}));
+gate.position.set(0, 10, 152); scene.add(gate);
+const spiralPts = [];
+for(let i=0;i<=60;i++){
+  const k = i/60, a = k * Math.PI * 3.4 + 0.6;
+  spiralPts.push(new THREE.Vector3(Math.cos(a)*(86-k*38), 6 - k*158, Math.sin(a)*(86-k*38)));
+}
+const spiralCurve = new THREE.CatmullRomCurve3(spiralPts);
+scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(spiralPts),
+  new THREE.LineBasicMaterial({color: 0x7fe7ff, transparent: true, opacity: 0.4})));
+/* Chronicle thread — kindles along the spiral (drawRange growth) */
+const threadGeo = new THREE.BufferGeometry().setFromPoints(spiralCurve.getPoints(220));
+threadGeo.setDrawRange(0, 0);
+const thread = new THREE.Line(threadGeo, new THREE.LineBasicMaterial({color: 0xffd9a0}));
+scene.add(thread);
+/* Ship */
+const ship = new THREE.Group();
+{
+  const hull = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6.5, 8),
+    new THREE.MeshLambertMaterial({color: 0xb9c4d6, emissive: 0x222a36}));
+  hull.rotation.x = Math.PI/2; ship.add(hull);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(160,240,255,0.9)','rgba(120,200,255,0)'), depthWrite:false}));
+  glow.scale.setScalar(7); glow.position.z = 3.4; ship.add(glow);
+}
+ship.position.set(0, 8, 146); scene.add(ship);
+/* Cargo orb (the fixture memory) */
+const ORB_OFF = new THREE.Vector3(0, 4.6, 0);
+const orb = new THREE.Mesh(new THREE.SphereGeometry(1.7, 18, 14),
+  new THREE.MeshBasicMaterial({color: 0xffe2b8}));
+orb.visible = false; orb.position.set(0, 6, 162); scene.add(orb);
+/* Lights — sized for physical falloff (decay 2, candela). The old values
+   were sized for the legacy falloff model, so the basin and lantern point
+   lights lit almost nothing. */
+scene.add(new THREE.AmbientLight(0x8a76c9, 0.85));
+/* Warm hemisphere bounce: violet sky above, the basin's warmth below, so
+   the strata lift instead of going black on their shadowed faces. */
+scene.add(new THREE.HemisphereLight(0x9a86d9, 0x6a4a30, 0.55));
+/* the basin's light is REAL: a warm point light just above the gold pool.
+   It throws light up the helix — the strata are Lambert, so they catch it.
+   (The old fixture light sat 24 above the basin; the real one sits in the bowl.) */
+const basinLight = new THREE.PointLight(0xffc98a, 4000, 700, 2.0);
+basinLight.position.set(0, BASIN_Y + 2, 0); scene.add(basinLight);
+const rimLight = new THREE.DirectionalLight(0x9a86d9, 1.2);
+rimLight.position.set(60, 120, 80); scene.add(rimLight);
+/* Soft warm spill above the rim, so the rim and the top stratum read
+   instead of going black. */
+const topSpill = new THREE.PointLight(0xffd9a0, 1200, 400, 2.0);
+topSpill.position.set(0, 70, 100); scene.add(topSpill);
+
+/* ============ Camera stages & travel (trio chassis) ============ */
+const STAGES = {
+  rim:     {pos: new THREE.Vector3(95, 52, 150),  look: new THREE.Vector3(0, -55, 0)},
+  descent: {pos: new THREE.Vector3(-70, -55, 100), look: new THREE.Vector3(0, -84, 0)},
+  basin:   {pos: new THREE.Vector3(34, -130, 78), look: new THREE.Vector3(0, -160, 0)},
+};
+let currentStage = 'rim';
+let camAnim = null;
+let lastDeparture = null;
+let currentLook = STAGES.rim.look.clone();
+camera.position.copy(STAGES.rim.pos);
+/* Portrait phones: widen the view and pull the rim camera back, or the
+   rim ring fills the whole frame and the helix never reads. The resize
+   handler below keeps the FOV matched to the aspect on rotation. */
+function applyPortraitFraming(){
+  const portrait = innerWidth < innerHeight;
+  camera.fov = bgCamera.fov = portrait ? 68 : 55;
+  camera.updateProjectionMatrix(); bgCamera.updateProjectionMatrix();
+  STAGES.rim.pos.set(portrait ? 128 : 95, portrait ? 64 : 52, portrait ? 196 : 150);
+}
+applyPortraitFraming();
+if (currentStage === 'rim') camera.position.copy(STAGES.rim.pos);
+/* Idle drift: until the user takes over, the camera slowly circles the
+   descent (about 9°/s) so the stair, terrace, basin and lantern all come
+   around on their own. Starts 2 s after load; ends for good on the first
+   pointerdown/wheel or any flight. The Reduced motion toggle stills it. */
+let driftOn = true;
+const bootMs = performance.now();
+const driftOff = new THREE.Vector3();
+const endDrift = () => { driftOn = false; };
+addEventListener('pointerdown', endDrift, {once: true});
+addEventListener('wheel', endDrift, {once: true});
+const reducedMotion = () => document.getElementById('rmToggle').checked;
+let targetShipK = 0;
+let shipK = 0;
+
+function flyTo(stageName, mode, onDone, target){
+  driftOn = false; /* any flight ends the idle drift for good */
+  const s = STAGES[stageName];
+  const tPos = target ? target.pos : s.pos;
+  const tLook = target ? target.look : s.look;
+  lastDeparture = {pos: camera.position.clone(), look: currentLook.clone(), stage: currentStage,
+                   cargo: {id: cargo.id, home: cargo.home, aboard: cargo.aboard, placed: cargo.placed}};
+  const dur = mode === 'warp' ? 2600 : mode === 'drift' ? 12000 : 1400;
+  targetShipK = stageName === 'basin' ? 0.92 : stageName === 'descent' ? 0.45 : 0;
+  if(target && target.shipK !== undefined) targetShipK = target.shipK;
+  if(reducedMotion() || mode === 'cut'){
+    camera.position.copy(tPos); bgCamera.position.set(0,0,0.001);
+    camAnim = null; currentLook.copy(tLook);
+    shipK = targetShipK;
+    if(onDone) onDone();
+  } else {
+    camAnim = {t:0, dur, from: camera.position.clone(), to: tPos.clone(),
+               fromLook: currentLook.clone(), toLook: tLook.clone(), mode, onDone, toStage: stageName};
+  }
+  currentStage = stageName;
+  document.getElementById('stageOut').textContent = stageName + (mode ? ' ('+mode+')' : '');
+}
+
+/* ============ Fixture state ============ */
+const WARP_COST = 20;
+let fuel = 100;
+const cargo = {id: 'fixture-memory-01', home: 'fixture-home', aboard: false, placed: null};
+let cargoAnim = null, placeAnim = null, riseAnim = null, pendingPlace = false;
+let risen = false;
+const behavOut = document.getElementById('behavOut');
+function behav(msg){ behavOut.textContent += (behavOut.textContent ? '\n' : '') + '• ' + msg; behavOut.scrollTop = behavOut.scrollHeight; }
+function setFuelOut(){ document.getElementById('fuelOut').textContent = fuel; }
+function setCargoOut(){
+  document.getElementById('cargoOut').textContent = cargo.aboard ? cargo.id + ' · home: ' + cargo.home + ' · aboard'
+    : cargo.placed ? cargo.id + ' · home: ' + cargo.home + ' · resting at ' + cargo.placed : 'none';
+}
+
+/* ============ Chronicle (A21) — guided descent, place always kept ============ */
+const CHRON_STOPS = [
+  {stage:'rim',     shipK:0,    pos: new THREE.Vector3(95, 52, 150),   look: new THREE.Vector3(0, -55, 0)},
+  {stage:'descent', shipK:0.24, pos: new THREE.Vector3(-54, -18, 92), look: new THREE.Vector3(-28, -44, 8)},
+  {stage:'descent', shipK:0.48, pos: new THREE.Vector3(60, -66, 74),  look: new THREE.Vector3(8, -86, -12)},
+  {stage:'descent', shipK:0.72, pos: new THREE.Vector3(-32, -114, 68), look: new THREE.Vector3(0, -142, 0)},
+  {stage:'basin',   shipK:0.92, pos: new THREE.Vector3(34, -130, 78), look: new THREE.Vector3(0, -160, 0)},
+];
+const chronicle = {active: false, paused: false, idx: 0, k: 0, dwell: 0};
+function chronHop(){
+  const s = CHRON_STOPS[chronicle.idx];
+  flyTo(s.stage, 'drift', () => { chronicle.dwell = 2000; }, {pos: s.pos, look: s.look, shipK: s.shipK});
+}
+function chronLeave(){
+  if(chronicle.active && !chronicle.paused){
+    chronicle.paused = true;
+    behav('You left the Chronicle — your place is kept at stop ' + (chronicle.idx+1) + ' of ' + CHRON_STOPS.length + '. Resume anytime; nothing about any memory changed.');
+  }
+}
+document.getElementById('chronBtn').addEventListener('click', () => {
+  if(armedBlock('Chronicle')) return;
+  if(chronicle.active && !chronicle.paused){ behav('The Chronicle is already descending.'); return; }
+  if(chronicle.active && chronicle.paused){
+    chronicle.paused = false; chronicle.dwell = 600;
+    behav('Chronicle resumed at stop ' + (chronicle.idx+1) + ' of ' + CHRON_STOPS.length + ' — your place was kept.');
+    return;
+  }
+  chronicle.active = true; chronicle.paused = false; chronicle.idx = 0; chronicle.k = 0;
+  behav('A21 Chronicle — a guided descent along a fixture saved route (' + CHRON_STOPS.length + ' stops). The thread kindles as you descend. Pause anytime, leave anytime — your place is kept.');
+  chronHop();
+});
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  if(!chronicle.active){ behav('Pause pressed with no Chronicle running — no-op.'); return; }
+  chronicle.paused = !chronicle.paused;
+  behav(chronicle.paused ? 'Chronicle paused at stop ' + (chronicle.idx+1) + ' — stay as long as you like; nothing moves, nothing fades.'
+                         : 'Chronicle resumed.');
+});
+
+/* ============ HUD ============ */
+const clockFmt = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hour12:true});
+const frameTimes = [];
+let lastT = performance.now();
+function hud(now){
+  const dt = now - lastT; lastT = now;
+  frameTimes.push(dt); if(frameTimes.length > 600) frameTimes.shift();
+  const avg = frameTimes.reduce((a,b)=>a+b,0)/frameTimes.length;
+  const sorted = [...frameTimes].sort((a,b)=>b-a);
+  const low1 = sorted[Math.floor(sorted.length*0.01)] || avg;
+  document.getElementById('fpsOut').textContent = (1000/avg).toFixed(1);
+  document.getElementById('lowOut').textContent = (1000/low1).toFixed(1);
+  const info = renderer.info.render;
+  document.getElementById('callsOut').textContent = info.calls;
+  document.getElementById('trisOut').textContent = info.triangles.toLocaleString('en-US');
+  document.getElementById('clockOut').textContent = clockFmt.format(new Date()) + ' ET';
+}
+
+/* ============ Travel controls ============ */
+let departing = null;
+function snapState(){ return {pos: camera.position.clone(), look: currentLook.clone(), fuel,
+                              camAnim: !!camAnim, aboard: cargo.aboard, placed: cargo.placed}; }
+function armedBlock(action){
+  if(!departing) return false;
+  behav(action + ' pressed during the cancel window — only Cancel departure is live; nothing changed.');
+  return true;
+}
+function busyBlock(action){
+  if(!placeAnim && !riseAnim) return false;
+  behav(action + ' pressed while a memory is in motion — that motion is atomic and cannot be interrupted; nothing changed.');
+  return true;
+}
+document.querySelectorAll('[data-stage]').forEach(b => b.addEventListener('click', () => {
+  if(armedBlock('Stage ' + b.dataset.stage)) return;
+  if(busyBlock('Stage change')) return;
+  chronLeave(); pendingPlace = false;
+  flyTo(b.dataset.stage, 'cut');
+}));
+document.getElementById('warpBtn').addEventListener('click', () => {
+  if(departing){ behav('INCONCLUSIVE: a departure is already armed — re-arming refused.'); return; }
+  if(camAnim){ behav('INCONCLUSIVE: cannot arm a departure during an active transition — the cancel check would be invalid. Wait for the current flight to finish.'); return; }
+  if(fuel < WARP_COST){ behav('CHECK zero-fuel: warp refused at fuel ' + fuel + ' (needs ' + WARP_COST + '). Drift and Return home remain available.'); return; }
+  chronLeave();
+  departing = {at: performance.now() + 1200, snap: snapState()};
+  behav('Warp departure armed — 1.2s cancel window open. Before-state captured for the cancel assertion.');
+});
+document.getElementById('driftBtn').addEventListener('click', () => {
+  if(armedBlock('Drift')) return;
+  if(busyBlock('Drift')) return;
+  chronLeave(); pendingPlace = false;
+  flyTo(currentStage === 'basin' ? 'rim' : 'basin', 'drift');
+  behav('Drift departure — the free gait (no fuel).');
+});
+document.getElementById('cancelBtn').addEventListener('click', () => {
+  if(!departing){ behav('Cancel pressed with no departure armed — nothing to cancel.'); return; }
+  const s = departing.snap; departing = null;
+  const posOk = camera.position.distanceTo(s.pos) < 0.01;
+  const lookOk = currentLook.distanceTo(s.look) < 0.01;
+  const fuelOk = fuel === s.fuel;
+  const cargoOk = cargo.aboard === s.aboard && cargo.placed === s.placed;
+  const idleOk = !camAnim && !s.camAnim;
+  const pass = posOk && lookOk && fuelOk && cargoOk && idleOk;
+  behav('CHECK cancel-before-departure: ' + (pass ? 'PASS' : 'FAIL') +
+    ' — camera unmoved: ' + posOk + ' · look unchanged: ' + lookOk +
+    ' · no fuel spent: ' + fuelOk + ' (fuel ' + fuel + ')' +
+    ' · cargo state unchanged: ' + cargoOk + ' · no transition was running: ' + idleOk + '.');
+});
+document.getElementById('turnBtn').addEventListener('click', () => {
+  if(armedBlock('Turn back')) return;
+  if(busyBlock('Turn back')) return;
+  if(!camAnim || !lastDeparture){ behav('Turn back pressed while not in transit — no-op.'); return; }
+  const origin = lastDeparture;
+  if(pendingPlace){ pendingPlace = false; behav('Placement held — cargo remains aboard; nothing was half-placed.'); }
+  chronLeave();
+  camAnim = null;
+  flyTo(origin.stage, 'drift', () => {
+    const posOk = camera.position.distanceTo(origin.pos) < 0.5;
+    const lookOk = currentLook.distanceTo(origin.look) < 0.5;
+    const idOk = cargo.id === origin.cargo.id && cargo.home === origin.cargo.home;
+    const aboardOk = cargo.aboard === origin.cargo.aboard && cargo.placed === origin.cargo.placed;
+    const pass = posOk && lookOk && idOk && aboardOk;
+    behav('CHECK turn-back: ' + (pass ? 'PASS' : 'FAIL') +
+      ' — back at origin pose: ' + (posOk && lookOk) +
+      ' · cargo identity/home match the pre-transit snapshot: ' + idOk + ' (' + cargo.id + ' / ' + cargo.home + ')' +
+      ' · cargo state preserved: ' + aboardOk + '.');
+  }, {pos: origin.pos, look: origin.look});
+  behav('Turning back mid-transit…');
+});
+document.getElementById('homeBtn').addEventListener('click', () => {
+  if(armedBlock('Return home')) return;
+  if(busyBlock('Return home')) return;
+  chronLeave(); pendingPlace = false;
+  const before = fuel;
+  flyTo('rim', 'drift', () => {
+    const fuelOk = fuel === before;
+    const posOk = camera.position.distanceTo(STAGES.rim.pos) < 0.5;
+    behav('CHECK return-home: ' + ((fuelOk && posOk) ? 'PASS' : 'FAIL') +
+      ' — arrived at home pose: ' + posOk + ' · fuel unchanged: ' + fuelOk + ' (' + fuel + '). Return is always free, even at zero fuel.');
+  });
+});
+document.getElementById('drainBtn').addEventListener('click', () => {
+  if(armedBlock('Drain fuel')) return;
+  fuel = 0; setFuelOut();
+  behav('Fixture fuel drained to 0 for the zero-fuel checks — try Warp (refused), then Return home (works, free).');
+});
+
+/* ============ A1 + A2–A3: carry, transit, place on a stratum ============ */
+document.getElementById('cargoBtn').addEventListener('click', () => {
+  if(armedBlock('Load cargo')) return;
+  if(busyBlock('Load cargo')) return;
+  if(cargo.aboard){ behav('Cargo already aboard.'); return; }
+  if(cargo.placed){ behav('Cargo already resting at ' + cargo.placed + ' — it stays there.'); return; }
+  cargoAnim = {t: 0, from: new THREE.Vector3(0, 6, 162)};
+  orb.visible = true; orb.position.copy(cargoAnim.from);
+  behav('A1 carry started — ship taking fixture cargo aboard at the gate.');
+});
+document.getElementById('placeBtn').addEventListener('click', () => {
+  if(armedBlock('Place cargo')) return;
+  if(busyBlock('Place cargo')) return;
+  if(!cargo.aboard){ behav('Place pressed with no cargo aboard — load cargo first (A1).'); return; }
+  if(camAnim){ behav('Place pressed during a transition — wait for the flight to finish.'); return; }
+  pendingPlace = true;
+  behav('A2 transit — carrying the fixture memory down the helix, visible aboard the ship.');
+  flyTo('descent', 'drift', () => {
+    if(!pendingPlace) return;
+    pendingPlace = false;
+    placeAnim = {t: 0, dur: 2600, from: orb.position.clone(), to: SHELF_PLACE.clone(),
+                 snap: {id: cargo.id, home: cargo.home}};
+    behav('A3 placement — the memory settles onto its stratum shelf.');
+  });
+});
+
+/* ============ A22: the resurfacing rise — presentation only, cause visible ============ */
+document.getElementById('riseBtn').addEventListener('click', () => {
+  if(armedBlock('Resurface')) return;
+  if(busyBlock('Resurface')) return;
+  if(risen){ behav('The deep memory is already risen — resting on the presentation shelf near the rim.'); return; }
+  behav('A22 resurfacing — risen because: this fixture memory links to the route you just walked (fixture cause, shown on purpose). Watch: only the VIEW rises — its stratum, its home, and its history do not change.');
+  if(reducedMotion()){
+    risenOrb.position.copy(RISE_SHELF); risen = true;
+    behav('A22 complete (reduced motion: shown risen, no travel). It rests on the presentation shelf; its home stratum is unchanged.');
+  } else {
+    riseAnim = {t: 0, dur: 5200, from: risenOrb.position.clone(), to: RISE_SHELF.clone(), dir: 'up'};
+  }
+});
+document.getElementById('settleBtn').addEventListener('click', () => {
+  if(armedBlock('Return to stratum')) return;
+  if(busyBlock('Return to stratum')) return;
+  if(!risen && !riseAnim){ behav('The deep memory already rests on its own stratum.'); return; }
+  behav('Returning by the same rule that raised it — never a timer, never neglect. It settles back onto its own stratum, unchanged.');
+  if(reducedMotion()){
+    risenOrb.position.copy(RISEN_HOME); risen = false; column.visible = false;
+    behav('Returned (reduced motion). Home again, exactly as it was.');
+  } else {
+    riseAnim = {t: 0, dur: 5200, from: risenOrb.position.clone(), to: RISEN_HOME.clone(), dir: 'down'};
+  }
+});
+
+/* ============ Capture still ============ */
+let coldLoadMs = null;
+document.getElementById('shotBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = 'deep-past-' + currentStage + '.png';
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});
+
+/* ============ Measurement harness ============ */
+let measurePeaks = null;
+document.getElementById('measureBtn').addEventListener('click', () => {
+  const out = document.getElementById('measureOut');
+  const durS = parseInt(document.getElementById('durSel').value, 10);
+  measurePeaks = {calls: 0, tris: 0};
+  out.textContent = 'Measuring ' + durS + 's — keep this tab in front, fly around (include a warp and the approach)…';
+  const samples = [];
+  let prev = performance.now();
+  const t0 = prev;
+  let maxCtx = null;
+  function sample(now){
+    const dt = now - prev; prev = now;
+    samples.push(dt);
+    if(!maxCtx || dt > maxCtx.ms) maxCtx = {ms: dt, atS: ((now - t0)/1000).toFixed(1),
+      stage: currentStage, mode: camAnim ? camAnim.mode : (departing ? 'arming departure' : 'no transition')};
+    if(now - t0 < durS*1000){ requestAnimationFrame(sample); return; }
+    const sorted = [...samples].sort((a,b)=>a-b);
+    const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
+    const low1ms = sorted[Math.floor(sorted.length*0.99)];
+    const maxMs = sorted[sorted.length-1];
+    const info = renderer.info.render;
+    out.textContent =
+      'MEASUREMENT (this device — the §11 verdict requires the owner\u2019s phone)\n' +
+      'duration: ' + durS + 's' + (durS >= 300 ? ' (§11 session length)' : ' (DIAGNOSTIC ONLY — below §11 session length)') +
+      ' · cold load: ' + coldLoadMs + 'ms' +
+      ' · frames: ' + samples.length +
+      ' · fps avg: ' + (1000/avg).toFixed(1) +
+      ' · 1% low fps: ' + (1000/low1ms).toFixed(1) +
+      ' · longest frame: ' + maxMs.toFixed(1) + 'ms' +
+      (maxCtx ? ' (at ~' + maxCtx.atS + 's in · stage ' + maxCtx.stage + ' · ' + maxCtx.mode + ')' : '') +
+      ' · draw calls PEAK (both passes): ' + (measurePeaks ? measurePeaks.calls : info.calls) +
+      ' · triangles PEAK: ' + (measurePeaks ? measurePeaks.tris : info.triangles) +
+      ' · final-frame calls/tris: ' + info.calls + '/' + info.triangles +
+      ' · devicePixelRatio: ' + renderer.getPixelRatio() +
+      ' · viewport: ' + innerWidth + 'x' + innerHeight;
+    measurePeaks = null;
+  }
+  requestAnimationFrame(sample);
+});
+
+/* ============ Main loop ============ */
+const clock = new THREE.Clock();
+let lastTickMs = null;
+let loadingEl = document.getElementById('loading');
+function tick(){
+  requestAnimationFrame(tick);
+  if (loadingEl) { loadingEl.style.display = 'none'; loadingEl = null; } /* first rendered frame: the scene is up */
+  const t = clock.getElapsedTime();
+  const nowMs = performance.now();
+  const dtMs = lastTickMs === null ? 16.7 : Math.min(100, nowMs - lastTickMs);
+  lastTickMs = nowMs;
+  const rm = reducedMotion();
+
+  if(camAnim){
+    camAnim.t += dtMs;
+    const k = Math.min(1, camAnim.t / camAnim.dur);
+    const e = camAnim.mode === 'warp' ? (k<0.5 ? 4*k*k*k : 1-Math.pow(-2*k+2,3)/2) : (1-Math.cos(Math.PI*k))/2;
+    camera.position.lerpVectors(camAnim.from, camAnim.to, e);
+    currentLook.lerpVectors(camAnim.fromLook, camAnim.toLook, e);
+    if(k >= 1){ const cb = camAnim.onDone; camAnim = null; if(cb) cb(); }
+  }
+  /* Idle drift (see the camera setup): circle currentLook until the user
+     takes over. Gated on no flight in progress and Reduced motion off. */
+  if(driftOn && !camAnim && !rm && nowMs - bootMs > 2000){
+    driftOff.copy(camera.position).sub(currentLook);
+    const a = -0.00016 * dtMs;
+    const c = Math.cos(a), s = Math.sin(a);
+    const x = driftOff.x * c - driftOff.z * s, z = driftOff.x * s + driftOff.z * c;
+    driftOff.x = x; driftOff.z = z;
+    camera.position.copy(currentLook).add(driftOff);
+  }
+  camera.lookAt(currentLook);
+  bgCamera.quaternion.copy(camera.quaternion);
+
+  shipK += THREE.MathUtils.clamp(targetShipK - shipK, -dtMs/14000, dtMs/14000);
+  {
+    const p = spiralCurve.getPoint(THREE.MathUtils.clamp(shipK, 0, 1));
+    ship.position.set(p.x, p.y + 5, p.z);
+    if(!rm) ship.position.y += Math.sin(t*0.7)*0.5;
+  }
+
+  /* motes rise through the shaft, slow as dust in a sunbeam */
+  {
+    const p = moteGeo.attributes.position;
+    for(let i=0;i<MOTES_N;i++){
+      let y = p.getY(i) + dtMs * 0.0012;
+      if (y > BASIN_Y + 172) y = BASIN_Y;
+      p.setY(i, y);
+    }
+    p.needsUpdate = true;
+  }
+
+  if(departing && performance.now() >= departing.at){
+    departing = null;
+    fuel = Math.max(0, fuel - WARP_COST); setFuelOut();
+    pendingPlace = false;
+    flyTo('basin', 'warp');
+    behav('Warp departed — fixture fuel spent: ' + WARP_COST + '.');
+  }
+
+  if(cargoAnim){
+    cargoAnim.t += dtMs;
+    const k = Math.min(1, cargoAnim.t/1200);
+    const e = (1-Math.cos(Math.PI*k))/2;
+    orb.position.lerpVectors(cargoAnim.from, ship.position.clone().add(ORB_OFF), e);
+    if(k >= 1){ cargoAnim = null; cargo.aboard = true; setCargoOut(); behav('A1 carry complete — cargo aboard, identity unchanged.'); }
+  }
+  if(cargo.aboard && !placeAnim) orb.position.copy(ship.position).add(ORB_OFF);
+
+  if(placeAnim){
+    placeAnim.t += dtMs;
+    const k = Math.min(1, placeAnim.t / placeAnim.dur);
+    const e = (1-Math.cos(Math.PI*k))/2;
+    orb.position.lerpVectors(placeAnim.from, placeAnim.to, e);
+    if(k >= 1){
+      const s = placeAnim.snap; placeAnim = null;
+      cargo.aboard = false; cargo.placed = 'stratum-3-shelf'; setCargoOut();
+      const atOk = orb.position.distanceTo(SHELF_PLACE) < 1.0;
+      const idOk = cargo.id === s.id && cargo.home === s.home;
+      behav('CHECK placement (A3): ' + ((atOk && idOk) ? 'PASS' : 'FAIL') +
+        ' — memory resting on its stratum: ' + atOk + ' · identity/home unchanged: ' + idOk +
+        ' (' + cargo.id + ' / ' + cargo.home + ') · placed atomically, never half-placed.');
+    }
+  }
+
+  /* Chronicle: thread kindles while descending; hops chain after a dwell */
+  if(chronicle.active && !chronicle.paused){
+    chronicle.k = Math.min(1, chronicle.k + dtMs/24000);
+    threadGeo.setDrawRange(0, Math.floor(chronicle.k * 220));
+    if(rm) chronicle.k = Math.max(chronicle.k, (chronicle.idx+1)/CHRON_STOPS.length);
+    if(!camAnim){
+      if(chronicle.idx < CHRON_STOPS.length - 1){
+        chronicle.dwell -= dtMs;
+        if(chronicle.dwell <= 0){ chronicle.idx++; chronHop(); }
+      } else if(chronicle.k >= 1){
+        chronicle.active = false;
+        behav('A21 complete — the route rests, fully lit, all the way to the First Light. Leave anytime; the thread stays.');
+      }
+    }
+  }
+
+  /* A22 rise / return */
+  if(riseAnim){
+    riseAnim.t += dtMs;
+    const k = Math.min(1, riseAnim.t / riseAnim.dur);
+    const e = (1-Math.cos(Math.PI*k))/2;
+    risenOrb.position.lerpVectors(riseAnim.from, riseAnim.to, e);
+    const top = Math.max(riseAnim.from.y, riseAnim.to.y), bot = Math.min(riseAnim.from.y, riseAnim.to.y);
+    column.visible = true;
+    column.position.set(risenOrb.position.x, (top+bot)/2, risenOrb.position.z);
+    column.scale.y = Math.max(1, top - bot);
+    column.material.opacity = 0.16 * Math.sin(Math.PI * Math.min(1, k*1.15));
+    if(k >= 1){
+      const dir = riseAnim.dir; riseAnim = null;
+      if(dir === 'up'){ risen = true; column.material.opacity = 0.1; behav('A22 complete — risen, and resting on the presentation shelf. Its stratum below is exactly as it was.'); }
+      else { risen = false; column.visible = false; behav('Returned — the memory rests on its own stratum again, unchanged in every way.'); }
+    }
+  }
+
+  renderer.info.reset();
+  renderer.clear();
+  renderer.render(bgScene, bgCamera);
+  renderer.clearDepth();
+  renderer.render(scene, camera);
+  if(measurePeaks){
+    measurePeaks.calls = Math.max(measurePeaks.calls, renderer.info.render.calls);
+    measurePeaks.tris  = Math.max(measurePeaks.tris,  renderer.info.render.triangles);
+  }
+  if(coldLoadMs === null){
+    coldLoadMs = Math.round(performance.now());
+    document.getElementById('coldOut').textContent = coldLoadMs + ' ms (this device)';
+  }
+  hud(performance.now());
+}
+
+/* ============ Warm-up: compile + render everything once at load ============ */
+/* Desktop only. On the light path (phones / software rendering) this block
+   is skipped — the shaders compile lazily on first render instead, so the
+   first frame arrives in seconds rather than after minutes of compiling. */
+if (!lightPath) {
+  loadingStage('Warming up the engine…');
+  const keepPos = camera.position.clone(), keepLook = currentLook.clone(), keepOrb = orb.visible;
+  orb.visible = true;
+  threadGeo.setDrawRange(0, 220);
+  column.visible = true; column.material.opacity = 0.15;
+  column.position.set(RISEN_HOME.x, -60, RISEN_HOME.z); column.scale.y = 120;
+  camera.position.copy(STAGES.basin.pos); currentLook.copy(STAGES.basin.look); camera.lookAt(currentLook);
+  bgCamera.quaternion.copy(camera.quaternion);
+  renderer.compile(bgScene, bgCamera);
+  renderer.compile(scene, camera);
+  renderer.render(bgScene, bgCamera);
+  renderer.render(scene, camera);
+  camera.position.copy(keepPos); currentLook.copy(keepLook); camera.lookAt(currentLook);
+  orb.visible = keepOrb; threadGeo.setDrawRange(0, 0); column.visible = false;
+}
+
+tick();
+setTimeout(loadBasin, 1200); /* the pieces decode one at a time after the first frame, ~1.2 s apart, so a phone stays responsive while they land */
+setTimeout(loadTerrace, 2400); /* the terrace follows, same rule */
+setTimeout(loadRim, 3600); /* the rim follows, same rule */
+setTimeout(loadStair, 4800); /* the stair follows, same rule */
+setTimeout(loadLantern, 6000); /* the lantern follows, same rule */
+/* If the first frame still hasn't rendered after 20 s, say so plainly and
+   offer a reload — never a loading screen with no way out. The pill's text
+   at that moment names the boot stage it stopped on (Starting / Loading the
+   scene code / Building the scene), which is the diagnostic for a stuck load. */
+setTimeout(() => {
+  const el = document.getElementById('loading');
+  if (el && el.style.display !== 'none') {
+    const stage = el.textContent;
+    el.textContent = 'Still loading (' + stage + ') — tap to reload';
+    el.style.pointerEvents = 'auto'; el.style.cursor = 'pointer';
+    el.addEventListener('click', () => { location.reload(); });
+  }
+}, 20000);
+
+/* Phone fix: the Menus pill is a toggle, not a one-way door. The patch's
+   pill only opens the menus and then hides itself, so once the HUD + panel
+   are open the only way back is the tiny × on each. Clone the pill (which
+   drops the patch's one-way listener) and make the clone open AND close. */
+{
+  const oldPill = document.getElementById('menusPill');
+  if (oldPill) {
+    const pill = oldPill.cloneNode(true);
+    oldPill.replaceWith(pill);
+    pill.style.display = 'block';
+    const menus = ['hud', 'panel', 'word'].map((id) => document.getElementById(id)).filter(Boolean);
+    pill.addEventListener('click', () => {
+      const anyVisible = menus.some((m) => m.style.display !== 'none');
+      menus.forEach((m) => { m.style.display = anyVisible ? 'none' : ''; });
+      pill.textContent = anyVisible ? 'Menus' : 'Hide menus';
+      /* sit above the panel row while it is open, so the pill never
+         covers the last buttons */
+      pill.style.bottom = anyVisible ? '10px' : '70px';
+    });
+  }
+}
+
+window.__dp = { scene, camera, terraceGroup, basinGroup, rimGroup, stairGroup, lanternGroup,
+  lookAt: (x, y, z) => { currentLook.set(x, y, z); } }; // fixture debug hook (not part of the design)
+
+addEventListener('resize', () => {
+  camera.aspect = bgCamera.aspect = innerWidth/innerHeight;
+  applyPortraitFraming();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
