@@ -23,6 +23,38 @@ by ricksticky (https://sketchfab.com/ricksticky) licensed under CC-BY-4.0
 (http://creativecommons.org/licenses/by/4.0/).
 Converted from glTF to Draco + KTX2 for web use; materials re-tinted in-app.
 
+**Her ship (Station hero and transit ship)** — `soumaya-ship.glb`
+Model by 3DHaupt aka Dennis Haupt (in-file copyright). No license
+statement ships with the file and no credit line existed for it —
+provenance UNVERIFIED, a pre-existing open audit item; the file already
+ships in the home galaxy. Recorded in the P2-6 provenance inventory.
+Converted from glTF to Draco + KTX2 for web use; materials re-tinted
+in-app. Scaled to a 12-unit forward length in the Station and transit
+scenes.
+
+**Traffic fleet (Station)** — `quaternius-*.glb` (11 hulls: bob,
+challenger, dispatcher, executioner, imperial, insurgent, omen, pancake,
+spitfire, striker, zenith)
+Models by Quaternius, licensed CC0 1.0 in-file (the pack's website now
+shows QAL v1.0 — see the P2-6 provenance inventory for the flag).
+Converted from the native glTF mirror (yolanother/QuaterniusUltimateSpaceships)
+to GLB; textures resized 2048×2048 to 1024×1024.
+
+**Traffic, docked ships, and dressing (Station)** — `kenney-space-*.glb`
+and `kenney-station-*.glb`
+Models by Kenney (https://kenney.nl), licensed CC0 1.0
+(http://creativecommons.org/publicdomain/zero/1.0/).
+Converted to GLB; materials re-expressed in-app. Space Kit ships
+(craft_cargoA, craft_cargoB, craft_miner, craft_racer) fly the traffic
+lanes and moor at the arms; Space Kit and Station Kit pieces dress the
+Station. The Station Kit is interior furniture — it supplies dressing
+only, never the hauler or drydock witnesses.
+
+**Traffic regular (Station)** — `wato-spaceship.glb`
+Model by XCVG, licensed CC-BY 3.0
+(http://creativecommons.org/licenses/by/3.0/).
+Converted to GLB; materials re-expressed in-app.
+
 ## Data
 
 **Worlds starfield** — brightest-stars subset

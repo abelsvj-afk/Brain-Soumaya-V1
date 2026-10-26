@@ -5,7 +5,14 @@ import type { GraphData, Journey, JourneyLinkSummary } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { createStationScene } from "../graph/stationScene.js";
-import { STATION_PALETTE } from "../graph/stationLayout.js";
+import {
+  STATION_ARRIVAL_MS,
+  STATION_ORBIT_HEIGHT,
+  STATION_ORBIT_RADIUS,
+  STATION_PALETTE,
+  approachPose,
+} from "../graph/stationLayout.js";
+import { ensureKtx2Support } from "../graph/gltf.js";
 import { buildGardenLayout, type GardenLayout } from "../graph/gardenLayout.js";
 import { createGardenScene } from "../graph/gardenScene.js";
 import {
@@ -54,11 +61,15 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * Transit (P2-5): while a journey is in_transit or returning, the surface
  * shows the transit scene instead of a destination scene — her ship flying
  * from the departure gate to the arrival gate, warp rich / drift plain.
- * The ship is the procedural hull: the soumaya-ship.glb license is
- * unconfirmed (see the P2-5 audit brief), so the GLB is not loaded here.
- * Engine audio rides along, gated by the interface-sounds setting.
- * Arming still shows nothing — the user is still at the origin world and
- * the panel owns the countdown.
+ * The ship is her own `soumaya-ship.glb` (P2-6 hero; the procedural hull
+ * is the load-failure fallback). Engine audio rides along, gated by the
+ * interface-sounds setting. Arming still shows nothing — the user is
+ * still at the origin world and the panel owns the countdown.
+ *
+ * Station arrival (P2-6, A13): on a Station stay the camera flies the
+ * approach (far → handoff → arrival, 12 s) and settles into the 600-unit
+ * resting orbit; any pointer press skips straight to the orbit, and
+ * reduced motion never plays the glide — the orbit holds from the start.
  *
  * Guided descent (P3-2, A21, follow-only): at the Deep Past, when a
  * Chronicle thread exists, one button starts the slow descent along the
@@ -102,8 +113,8 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     title: "The Great Station",
     background: STATION_PALETTE.indigo,
     fogDensity: 0.00016,
-    orbitRadius: 1250,
-    orbitHeight: 240,
+    orbitRadius: STATION_ORBIT_RADIUS,
+    orbitHeight: STATION_ORBIT_HEIGHT,
     lookAtY: 0,
     fallback: "The Station view needs graphics support on this device — your journeys are unaffected.",
     build: () => createStationScene(),
@@ -156,6 +167,8 @@ export default function WorldsSurface({
   const descentFromRef = useRef(0);
   const parkedProgressRef = useRef(0);
   const lastProgressRef = useRef(0);
+  // Station arrival glide (A13): any pointer press skips it. Reset per stay.
+  const arrivalSkippedRef = useRef(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const currentWorld = travel.state?.currentWorld;
@@ -191,6 +204,7 @@ export default function WorldsSurface({
     guidedRef.current = false;
     parkedProgressRef.current = 0;
     lastProgressRef.current = 0;
+    arrivalSkippedRef.current = false;
   }, [mode, currentWorld, journeyId]);
 
   // Landmarks (garden) and Chronicle routes (Deep Past) need the user's
@@ -286,6 +300,9 @@ export default function WorldsSurface({
     const reducedMotion =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Her ship's textures are KTX2 — the loader must know the renderer
+    // before any KTX2 model loads (see graph/gltf.ts).
+    ensureKtx2Support(renderer);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(host.clientWidth, host.clientHeight);
     host.appendChild(renderer.domElement);
@@ -327,6 +344,12 @@ export default function WorldsSurface({
       camera.updateProjectionMatrix();
     };
     window.addEventListener("resize", onResize);
+    // Any pointer press skips the Station arrival glide (A13) and drops
+    // straight into the resting orbit.
+    const skipArrival = () => {
+      arrivalSkippedRef.current = true;
+    };
+    host.addEventListener("pointerdown", skipArrival);
 
     let raf = 0;
     const startedAt = performance.now();
@@ -367,6 +390,33 @@ export default function WorldsSurface({
             );
             camera.lookAt(0, pose.lookAt[1], 0);
           }
+        } else if (currentWorld === "great-station" && !reducedMotion && !arrivalSkippedRef.current) {
+          // Station arrival (A13): fly the approach over 12 s, then
+          // settle into the resting orbit over 3 s — radius, height,
+          // and azimuth all ease from the arrival pose, so there is no
+          // pop when the glide hands over to the orbit.
+          const smoothstep = (x: number) => x * x * (3 - 2 * x);
+          const orbitAngle = BASE_ANGLE + elapsed * 0.0000045;
+          const arrival = approachPose(1);
+          const arrivalHeight = Math.sin(arrival.elevation) * arrival.distance;
+          const t = elapsed / STATION_ARRIVAL_MS;
+          if (t < 1) {
+            const pose = approachPose(t);
+            const d = pose.distance;
+            camera.position.set(
+              Math.sin(pose.azimuth) * Math.cos(pose.elevation) * d,
+              Math.sin(pose.elevation) * d,
+              Math.cos(pose.azimuth) * Math.cos(pose.elevation) * d,
+            );
+            camera.lookAt(0, 0, 0);
+          } else {
+            const s = smoothstep(Math.min(1, (elapsed - STATION_ARRIVAL_MS) / 3000));
+            const radius = arrival.distance + (orbit.orbitRadius - arrival.distance) * s;
+            const height = arrivalHeight + (orbit.orbitHeight - arrivalHeight) * s;
+            const az = arrival.azimuth + (orbitAngle - arrival.azimuth) * s;
+            camera.position.set(Math.sin(az) * radius, height, Math.cos(az) * radius);
+            camera.lookAt(0, orbit.lookAtY, 0);
+          }
         } else {
           const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
           camera.position.set(
@@ -390,6 +440,7 @@ export default function WorldsSurface({
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      host.removeEventListener("pointerdown", skipArrival);
       engine?.dispose();
       world.dispose();
       renderer.dispose();
