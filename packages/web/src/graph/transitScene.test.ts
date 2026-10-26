@@ -37,8 +37,23 @@ describe("createTransitScene", () => {
     expect((find(scene.group, "transit-streaks") as THREE.InstancedMesh).count).toBe(
       TRANSIT_STREAK_COUNT,
     );
-    // Sky 1 · ship 4 · gates 6 · streaks 1 = 12 draw calls, ceiling 40.
+    // Sky 1 · ship 10 (her GLB) · gates 6 · streaks 1 = 18 draw
+    // calls, ceiling 40. The procedural fallback is 4 meshes, so
+    // the synchronous count is 12 — the sketch budgets the hero.
     expect(countMeshes(scene.group)).toBeLessThanOrEqual(TRANSIT_BUDGET.maxDrawCalls);
+    scene.dispose();
+  });
+
+  it("the transit-ship holder carries the procedural fallback until her ship lands", () => {
+    const scene = createTransitScene({
+      kind: "warp",
+      totalMs: 12_000,
+      origin: "home",
+      destination: "great-station",
+    });
+    const holder = find(scene.group, "transit-ship") as THREE.Group;
+    expect(holder).toBeTruthy();
+    expect(find(holder, "transit-ship-procedural")).toBeTruthy();
     scene.dispose();
   });
 

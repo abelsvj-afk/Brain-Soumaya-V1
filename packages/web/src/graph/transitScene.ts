@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { buildHygStarfield } from "./hygStars.js";
 import { buildGate } from "./gateScene.js";
+import { loadSoumayaShip } from "./soumayaShip.js";
 
 /**
  * Transit scene (Phase 2, P2-5) — the space you fly through between
@@ -12,24 +13,25 @@ import { buildGate } from "./gateScene.js";
  * are dignified (D-1). Reduced motion holds the corridor: no streaks,
  * no bobbing, same duration, same arrival.
  *
- * The ship is the procedural hull, tinted the way the home galaxy tints
- * her (blue-steel body, cyan sheen). The `soumaya-ship.glb` is NOT
- * loaded here: its license is unconfirmed (author 3DHaupt/Dennis Haupt
- * per the file's own copyright; his Sketchfab works are typically
- * CC-BY-NC / CC-BY-NC-ND; the shipped file was recompressed and
- * re-tinted, i.e. modified) and no credit line exists for it — see the
- * P2-5 audit brief. The procedural hull is the design's own fallback,
- * and the GLB stays out of transit until provenance clears. This scene
- * newly distributes nothing.
+ * The ship is HER ship — `soumaya-ship.glb`, loaded through the same
+ * `loadSoumayaShip()` treatment as the home galaxy (blue-steel tint,
+ * cyan sheen, scaled to a 12-unit forward length, nose at −z down the
+ * corridor). The procedural hull below is the load-failure fallback
+ * only: it renders until the GLB lands, and stays if the load fails.
+ * Provenance: the file carries in-file copyright "Modeled and Textured
+ * by 3DHaupt aka DennisH2010 (Dennis Haupt)" with NO license statement
+ * in the repo and no CREDITS.md entry — a pre-existing open audit item
+ * (the file already ships in the app), recorded UNVERIFIED in the P2-6
+ * build record and provenance inventory, not newly introduced here.
  *
  * No reflection content in the MVP (review 28, Q2): HYG stars and motion
  * only. The §2.2 reflection allowance stays a future option, not built
  * here.
  *
- * Draw-call sketch (ceiling 40): sky 1 · ship 4 · gates 6 · streaks 1 =
- * 12. Tris: ship ~500 · gates ~7k · streaks ~1.4k — far inside the
- * 150k ceiling. Runtime measurement belongs to the device check (C4's
- * measured half); these constants are the static half.
+ * Draw-call sketch (ceiling 40): sky 1 · ship 10 · gates 6 · streaks 1 =
+ * 18. Tris: ship 37,026 · gates ~7k · streaks ~1.4k — ~45k, far inside
+ * the 150k ceiling. Runtime measurement belongs to the device check
+ * (C4's measured half); these constants are the static half.
  */
 
 export const TRANSIT_BUDGET = { maxDrawCalls: 40, maxTris: 150_000 };
@@ -55,10 +57,12 @@ function mulberry32(seed: number) {
   };
 }
 
-/** The procedural ship: fuselage + wings + engine glow, her colors. */
+/** The procedural ship: fuselage + wings + engine glow, her colors.
+ *  The load-failure fallback — the holder is named "transit-ship",
+ *  this child is named for what it is. */
 function buildProceduralShip(): THREE.Group {
   const ship = new THREE.Group();
-  ship.name = "transit-ship";
+  ship.name = "transit-ship-procedural";
   const hullMat = new THREE.MeshStandardMaterial({
     color: 0xc2d4f5,
     emissive: 0x7af9ff,
@@ -111,8 +115,23 @@ export function createTransitScene(opts: {
   key.position.set(60, 120, 80);
   group.add(key);
 
-  const ship = buildProceduralShip();
+  const ship = new THREE.Group();
+  ship.name = "transit-ship";
+  const proceduralShip = buildProceduralShip();
+  ship.add(proceduralShip);
   group.add(ship);
+  // Her ship swaps in when the GLB lands; the procedural hull stays
+  // until then (and forever, if the load fails) — the proxy pattern.
+  let disposed = false;
+  void loadSoumayaShip().then((hero) => {
+    if (!hero || disposed) {
+      if (hero) disposeObject3D(hero);
+      return;
+    }
+    ship.remove(proceduralShip);
+    disposeObject3D(proceduralShip);
+    ship.add(hero);
+  });
 
   const departureGate = buildGate(origin);
   departureGate.group.position.set(0, 0, 40);
@@ -162,7 +181,6 @@ export function createTransitScene(opts: {
   streaks.visible = kind === "warp";
   group.add(streaks);
 
-  let disposed = false;
   return {
     group,
     update: (elapsedMs: number, opts?: { reducedMotion?: boolean }) => {
