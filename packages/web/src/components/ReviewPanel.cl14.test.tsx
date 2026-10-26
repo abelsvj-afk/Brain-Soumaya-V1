@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 
 const getDueReviews = vi.fn();
+const getDueReviewsResult = vi.fn();
 const gradeReviewDetailed = vi.fn();
 vi.mock("../api/client.js", () => ({
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
+  getDueReviewsResult: (...a: unknown[]) => getDueReviewsResult(...a),
   gradeReviewDetailed: (...a: unknown[]) => gradeReviewDetailed(...a),
 }));
 vi.mock("./Toasts.js", () => ({ pushToast: vi.fn() }));
@@ -17,6 +19,13 @@ beforeEach(() => {
     { id: 1, label: "first memory", content: "first content", strength: 0.4, reviewCount: 3 },
     { id: 2, label: "second memory", content: "second content", strength: 0.85, reviewCount: 7 },
   ]);
+  getDueReviewsResult.mockResolvedValue({
+    ok: true,
+    reviews: [
+      { id: 1, label: "first memory", content: "first content", strength: 0.4, reviewCount: 3 },
+      { id: 2, label: "second memory", content: "second content", strength: 0.85, reviewCount: 7 },
+    ],
+  });
   gradeReviewDetailed.mockResolvedValue({ ok: true, nextIntervalDays: 6 });
 });
 afterEach(cleanup);

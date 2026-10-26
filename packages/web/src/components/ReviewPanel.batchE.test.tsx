@@ -3,10 +3,14 @@ import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/re
 
 // Mock the API module so the component's fetch-on-mount is deterministic.
 const getDueReviews = vi.fn();
+const getDueReviewsResult = vi.fn();
 const gradeReview = vi.fn();
 const gradeReviewDetailed = vi.fn();
 vi.mock("../api/client.js", () => ({
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
+  // Batch G (REG-195) switched ReviewPanel's fetch to the strict sibling;
+  // this file's mock must provide it or the component throws on mount.
+  getDueReviewsResult: (...a: unknown[]) => getDueReviewsResult(...a),
   gradeReview: (...a: unknown[]) => gradeReview(...a),
   gradeReviewDetailed: (...a: unknown[]) => gradeReviewDetailed(...a),
 }));
@@ -31,6 +35,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
   getDueReviews.mockResolvedValue(dueTwo);
+  getDueReviewsResult.mockResolvedValue({ ok: true, reviews: dueTwo });
   gradeReview.mockResolvedValue(true);
 });
 afterEach(cleanup);

@@ -15,9 +15,13 @@ export interface ToolsMenuProps {
   onSearch: () => void;
   onLenses: () => void;
   onConnections: () => void;
-  candCount: number;
+  /** Batch G (REG-196): null = UNKNOWN (no successful count poll yet, or the
+   *  last refresh failed) — never rendered as 0. */
+  candCount: number | null;
   onReview: () => void;
-  dueCount: number;
+  /** Batch G (REG-196): null = UNKNOWN — the red-dot due count must never
+   *  present a failed refresh as "0 due". */
+  dueCount: number | null;
   onTimeline: () => void;
   onLegend: () => void;
   onWorldMap: () => void;
@@ -33,7 +37,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
   // Escape/focus-trap/focus-restore — this popover previously had none of the
   // three, only a scrim click to dismiss.
   useDialogA11y(menuRef, () => setOpen(false), open);
-  const items: { icon: string; label: string; on: () => void; badge?: number }[] = [
+  const items: { icon: string; label: string; on: () => void; badge?: number | null }[] = [
     { icon: "🔍", label: "Search", on: p.onSearch },
     { icon: "⧉", label: "Lenses", on: p.onLenses },
     { icon: "🔗", label: "Connections", on: p.onConnections, badge: p.candCount },
@@ -51,14 +55,19 @@ export function ToolsMenu(p: ToolsMenuProps) {
   // "9+" on the FAB when opening the menu could reveal individual counts well
   // under 10, which reads as inconsistent. One shared cap for both.
   const BADGE_CAP = 9;
-  const fmtBadge = (n: number) => (n > BADGE_CAP ? `${BADGE_CAP}+` : String(n));
+  // Batch G (REG-196): an unknown count renders "?" — never 0, never hidden
+  // as if nothing were waiting. The title names the unknown so a screen
+  // reader (and a hover) doesn't read a failed poll as "0 due".
+  const fmtBadge = (n: number | null) => (n === null ? "?" : n > BADGE_CAP ? `${BADGE_CAP}+` : String(n));
+  const fmtCount = (n: number | null, singular: string, plural: string) =>
+    n === null ? `unknown ${plural}` : `${n} ${n === 1 ? singular : plural}`;
   const tap = (fn: () => void) => {
     setOpen(false);
     fn();
   };
   const alertsTitle =
-    alerts > 0
-      ? `Tools — ${p.candCount || 0} connection suggestion${p.candCount === 1 ? "" : "s"}, ${p.dueCount || 0} recall${p.dueCount === 1 ? "" : "s"} due`
+    alerts > 0 || p.candCount === null || p.dueCount === null
+      ? `Tools — ${fmtCount(p.candCount, "connection suggestion", "connection suggestions")}, ${fmtCount(p.dueCount, "recall", "recalls")} due`
       : "Tools — search, lenses, recall, legend & more";
   return (
     <>
@@ -81,7 +90,11 @@ export function ToolsMenu(p: ToolsMenuProps) {
               <button key={it.label} className="tools-item" role="menuitem" onClick={() => tap(it.on)}>
                 <span className="tools-ic">{it.icon}</span>
                 <span className="tools-lbl">{it.label}</span>
-                {it.badge != null && it.badge > 0 && <span className="tools-badge">{fmtBadge(it.badge)}</span>}
+                {it.badge !== undefined && (it.badge === null || it.badge > 0) && (
+                  <span className="tools-badge" title={it.badge === null ? "Couldn't check — count unknown" : undefined}>
+                    {fmtBadge(it.badge)}
+                  </span>
+                )}
               </button>
             ))}
           </div>

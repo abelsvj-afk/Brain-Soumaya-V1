@@ -356,17 +356,48 @@ export async function linkMemories(source: number, target: number): Promise<bool
   }
 }
 /** Declutter: sever bogus anchor links + move the weakest associative links to the queue. */
-export async function pruneWeakLinks(): Promise<{ pruned: number; anchorPruned: number; weakPruned: number }> {
+export interface PruneReport {
+  pruned: number;
+  anchorPruned: number;
+  /** Batch G (REG-203): anchor links permanently removed as wrong (non-naming). */
+  wrongPruned: number;
+  /** Batch G (REG-203): legitimate links trimmed only because the anchor exceeded its 12-link cap. */
+  capTrimmed: number;
+  weakPruned: number;
+}
+
+export async function pruneWeakLinks(): Promise<PruneReport> {
+  const r = await pruneWeakLinksResult();
+  return r.ok
+    ? { pruned: r.pruned, anchorPruned: r.anchorPruned, wrongPruned: r.wrongPruned, capTrimmed: r.capTrimmed, weakPruned: r.weakPruned }
+    : { pruned: 0, anchorPruned: 0, wrongPruned: 0, capTrimmed: 0, weakPruned: 0 };
+}
+
+/**
+ * Batch G (REG-204): strict sibling of `pruneWeakLinks` — `{ ok: false }` on
+ * any failure (network, non-OK, malformed body, client timeout) instead of the
+ * fail-soft zeros, so the panel can tell a failed declutter from a confirmed
+ * tidy galaxy. Follows the codebase's established Result-variant pattern.
+ */
+export async function pruneWeakLinksResult(): Promise<
+  { ok: true; pruned: number; anchorPruned: number; wrongPruned: number; capTrimmed: number; weakPruned: number } | { ok: false }
+> {
   try {
     const res = await afetch(`${API}/candidates/prune`, { method: "POST" }, 60_000);
-    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false };
+    const d = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false };
+    const num = (k: string) => (typeof d[k] === "number" ? (d[k] as number) : 0);
     return {
-      pruned: typeof d.pruned === "number" ? d.pruned : 0,
-      anchorPruned: typeof d.anchorPruned === "number" ? d.anchorPruned : 0,
-      weakPruned: typeof d.weakPruned === "number" ? d.weakPruned : 0,
+      ok: true,
+      pruned: num("pruned"),
+      anchorPruned: num("anchorPruned"),
+      wrongPruned: num("wrongPruned"),
+      capTrimmed: num("capTrimmed"),
+      weakPruned: num("weakPruned"),
     };
   } catch {
-    return { pruned: 0, anchorPruned: 0, weakPruned: 0 };
+    return { ok: false };
   }
 }
 

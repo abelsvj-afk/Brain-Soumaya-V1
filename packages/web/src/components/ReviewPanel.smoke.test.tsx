@@ -4,10 +4,12 @@ import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-libra
 // Mock the API module so the component's fetch-on-mount is deterministic. This is the
 // pattern for testing any data-driven component (the majority) under the new harness.
 const getDueReviews = vi.fn();
+const getDueReviewsResult = vi.fn();
 const gradeReview = vi.fn();
 const gradeReviewDetailed = vi.fn();
 vi.mock("../api/client.js", () => ({
   getDueReviews: (...a: unknown[]) => getDueReviews(...a),
+  getDueReviewsResult: (...a: unknown[]) => getDueReviewsResult(...a),
   gradeReview: (...a: unknown[]) => gradeReview(...a),
   gradeReviewDetailed: (...a: unknown[]) => gradeReviewDetailed(...a),
 }));
@@ -20,6 +22,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
   getDueReviews.mockResolvedValue([{ id: 1, label: "the studio lease", content: "Signed a 12-month lease on the King Street studio, $900 a month, keys collected on the 3rd.", strength: 0.1, reviewCount: 0 }]);
+  getDueReviewsResult.mockResolvedValue({ ok: true, reviews: [{ id: 1, label: "the studio lease", content: "Signed a 12-month lease on the King Street studio, $900 a month, keys collected on the 3rd.", strength: 0.1, reviewCount: 0 }] });
   gradeReview.mockResolvedValue(true);
   gradeReviewDetailed.mockResolvedValue({ ok: true, nextIntervalDays: 6 });
 });
@@ -87,6 +90,13 @@ describe("ReviewPanel — a grade the server refused (boolean false) is not coun
       { id: 1, label: "the studio lease", content: "lease content", strength: 0.1, reviewCount: 0 },
       { id: 2, label: "grandma's recipe", content: "recipe content", strength: 0.2, reviewCount: 1 },
     ]);
+    getDueReviewsResult.mockResolvedValue({
+      ok: true,
+      reviews: [
+        { id: 1, label: "the studio lease", content: "lease content", strength: 0.1, reviewCount: 0 },
+        { id: 2, label: "grandma's recipe", content: "recipe content", strength: 0.2, reviewCount: 1 },
+      ],
+    });
     gradeReviewDetailed.mockResolvedValue({ ok: false }); // HTTP failure: the grade call reports ok:false
     render(<ReviewPanel onClose={vi.fn()} />);
     await screen.findByText("the studio lease");

@@ -411,6 +411,10 @@ function migrateSchema(sqlite: RawDb): void {
     ["next_review_at", `ALTER TABLE nodes ADD COLUMN next_review_at TEXT`],
     ["last_reviewed_at", `ALTER TABLE nodes ADD COLUMN last_reviewed_at TEXT`],
     ["review_count", `ALTER TABLE nodes ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0`],
+    // Batch G (REG-198): when a proactive nudge snoozes a memory, the snooze
+    // is marked here so tending the memory can tell a nudge snooze apart from
+    // a grade-set SM-2 schedule (which must never be disturbed by a visit).
+    ["review_snoozed_at", `ALTER TABLE nodes ADD COLUMN review_snoozed_at TEXT`],
     // Lifecycle status: an archived memory rests — kept, but out of the galaxy + retrieval
     // by default (not deleted). Feature runway #5a.
     ["status", `ALTER TABLE nodes ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`],

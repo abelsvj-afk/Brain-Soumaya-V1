@@ -66,20 +66,26 @@ export interface DueReview {
   strength: number;
   reviewCount: number;
 }
+/**
+ * Batch G (REG-196): the due list is the badge count's source
+ * (`getDueReviews().length` in App's poll), so it must THROW on failure
+ * instead of fail-softing to `[]` — a dead server used to read as "0 due".
+ * Callers that need a count hold their last value / report unknown on a
+ * throw (usePolledCount); callers that need failure-vs-empty (ReviewPanel,
+ * Observatory) use the strict `getDueReviewsResult` sibling below.
+ */
 export async function getDueReviews(): Promise<DueReview[]> {
-  try {
-    const res = await afetch(`${API}/review/due`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
-  } catch {
-    return [];
-  }
+  const res = await afetch(`${API}/review/due`);
+  if (!res.ok) throw new Error(`due reviews fetch failed (${res.status})`);
+  const d = await res.json().catch(() => null);
+  if (!Array.isArray(d)) throw new Error("due reviews fetch returned a malformed payload");
+  return d as DueReview[];
 }
 /**
  * IM-124 residual: strict sibling of `getDueReviews` — `{ ok: false }` on
- * any failure (network, non-OK, malformed body) instead of the fail-soft
- * `[]`, for callers (the Observatory) that must distinguish a failed fetch
- * from "nothing due". `getDueReviews` keeps its contract for everyone else.
+ * any failure (network, non-OK, malformed body) instead of a throw, for
+ * callers (the Observatory, ReviewPanel) that must distinguish a failed fetch
+ * from "nothing due" without a try/catch at the call site.
  */
 export async function getDueReviewsResult(): Promise<{ ok: true; reviews: DueReview[] } | { ok: false }> {
   try {

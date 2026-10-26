@@ -45,9 +45,10 @@ export function candidateRoutes(ctx: AppContext): Router {
 
   // POST /api/candidates/prune -> declutter: sever bogus anchor (person/…) links AND
   // move the weakest associative links into the review queue (restorable).
+  // Batch G (REG-203): the response separates wrong-link removals from cap trims.
   r.post("/prune", (_req, res) => {
-    const { anchorPruned, weakPruned } = declutterGraph(ctx, spaceOf(res));
-    res.json({ pruned: anchorPruned + weakPruned, anchorPruned, weakPruned });
+    const { anchorPruned, wrongPruned, capTrimmed, weakPruned } = declutterGraph(ctx, spaceOf(res));
+    res.json({ pruned: anchorPruned + weakPruned, anchorPruned, wrongPruned, capTrimmed, weakPruned });
   });
 
   // POST /api/candidates/:id/accept -> connect it (creates the edge).

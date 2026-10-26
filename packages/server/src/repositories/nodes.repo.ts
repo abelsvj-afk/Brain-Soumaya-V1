@@ -4,6 +4,7 @@ import type { DbHandle } from "../db/client.js";
 import { nodes, DEFAULT_SPACE, type NodeRow } from "../db/schema.js";
 import { upsertEmbedding, deleteEmbedding } from "../db/vec.js";
 import { ftsUpsert, ftsDelete } from "../db/fts.js";
+import { clearReviewSnooze } from "../analysis/review.js";
 
 export interface NewNode {
   label: string;
@@ -237,9 +238,14 @@ export class NodesRepo {
 
   /** "Tend" a memory — reset its entropy clock (visiting/editing/linking). */
   tend(id: number): boolean {
+    const now = new Date();
     const info = this.h.sqlite
       .prepare(`UPDATE nodes SET last_tended_at = ? WHERE id = ? AND space_id = ?`)
-      .run(new Date().toISOString(), id, this.spaceId);
+      .run(now.toISOString(), id, this.spaceId);
+    // Batch G (REG-198): visiting the memory also clears a nudge snooze on it —
+    // the user followed the nudge's instruction, so the memory stops hiding from
+    // Recall. A grade-set schedule carries no snooze marker and is untouched.
+    if (info.changes > 0) clearReviewSnooze(this.h, this.spaceId, id, now.getTime());
     return info.changes > 0;
   }
 

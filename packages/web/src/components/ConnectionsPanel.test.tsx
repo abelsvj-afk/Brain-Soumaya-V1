@@ -14,6 +14,7 @@ vi.mock("../api/client.js", () => ({
   dismissCandidate: (...a: unknown[]) => dismissCandidate(...a),
   linkMemories: vi.fn().mockResolvedValue(true),
   pruneWeakLinks: vi.fn().mockResolvedValue({ pruned: 0, anchorPruned: 0, weakPruned: 0 }),
+  pruneWeakLinksResult: vi.fn().mockResolvedValue({ ok: true, pruned: 0, anchorPruned: 0, wrongPruned: 0, capTrimmed: 0, weakPruned: 0 }),
   search: vi.fn().mockResolvedValue([]),
 }));
 const pushToast = vi.fn();

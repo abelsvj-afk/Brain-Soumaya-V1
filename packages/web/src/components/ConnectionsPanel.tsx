@@ -4,13 +4,14 @@ import {
   acceptCandidate,
   dismissCandidate,
   linkMemories,
-  pruneWeakLinks,
+  pruneWeakLinksResult,
   restoreCandidate,
   search,
   type Candidate,
   type SearchHit,
 } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
 import { playSfx } from "../graph/sfx.js";
 
 /**
@@ -33,6 +34,9 @@ export function ConnectionsPanel({
 }) {
   const [items, setItems] = useState<Candidate[]>([]);
   const [pruning, setPruning] = useState(false);
+  // Batch G (REG-203): declutter is destructive in its anchor half, so it asks
+  // first — the confirm dialog states the full scope before anything runs.
+  const [confirmDeclutter, setConfirmDeclutter] = useState(false);
   // IM-120 (honesty subset): loading / error / true-empty are distinct states.
   // This used to be one `items` array + a swallowed catch, so "Nothing waiting"
   // was simultaneously the loading state, the error state, and the empty state.
@@ -110,10 +114,22 @@ export function ConnectionsPanel({
   const declutter = async () => {
     setPruning(true);
     try {
-      const { pruned, anchorPruned, weakPruned } = await pruneWeakLinks();
+      // Batch G (REG-204): the strict variant distinguishes a failed declutter
+      // from a confirmed tidy galaxy — the old fail-soft zeros reported every
+      // failure as "your galaxy's already tidy".
+      const r = await pruneWeakLinksResult();
+      if (!r.ok) {
+        pushToast("Couldn't declutter — nothing was changed. Tap Declutter to try again.", "⚠️", 4000);
+        return;
+      }
+      const { pruned, wrongPruned, capTrimmed, weakPruned } = r;
       if (pruned > 0) {
+        // Batch G (REG-203): wrong-link removals and cap trims are reported
+        // separately — a cap-trimmed link is a legitimate thematic link that
+        // exceeded the anchor cap, not a "wrong" link.
         const bits = [
-          anchorPruned > 0 ? `${anchorPruned} wrong link${anchorPruned === 1 ? "" : "s"} removed` : "",
+          wrongPruned > 0 ? `${wrongPruned} wrong link${wrongPruned === 1 ? "" : "s"} permanently removed` : "",
+          capTrimmed > 0 ? `${capTrimmed} link${capTrimmed === 1 ? "" : "s"} trimmed to the 12-link anchor cap` : "",
           weakPruned > 0 ? `${weakPruned} weak one${weakPruned === 1 ? "" : "s"} sent here to review` : "",
         ].filter(Boolean);
         pushToast(`Decluttered — ${bits.join(", ")}.`, "🧹", 6000);
@@ -122,6 +138,10 @@ export function ConnectionsPanel({
       } else {
         pushToast("Nothing to clear — your galaxy's already tidy.", "✨", 4000);
       }
+    } catch {
+      // A thrown prune (transport failure the strict variant didn't convert)
+      // is the same failure state as { ok: false } — never "already tidy".
+      pushToast("Couldn't declutter — nothing was changed. Tap Declutter to try again.", "⚠️", 4000);
     } finally {
       setPruning(false);
     }
@@ -140,10 +160,19 @@ export function ConnectionsPanel({
         <section className="connections-section">
           <div className="row" style={{ justifyContent: "space-between" }}>
             <h3 style={{ margin: 0 }}>Suggested {items.length > 0 ? `(${items.length})` : ""}</h3>
-            <button className="mini ghost" onClick={() => void declutter()} disabled={pruning} title="Move the weakest links here so you can review them">
+            <button className="mini ghost" onClick={() => setConfirmDeclutter(true)} disabled={pruning} title="Declutter moves the weakest links here for your review — but it also permanently removes anchor links whose memory doesn't name the anchor, and trims over-linked anchors to 12 links">
               {pruning ? "Clearing…" : "🧹 Declutter weak links"}
             </button>
           </div>
+          {confirmDeclutter && (
+            <ConfirmDialog
+              title="Declutter weak links?"
+              message="Declutter moves Soumaya's weakest links into this queue for your review. It also permanently removes anchor links whose memory doesn't name the anchor — those links won't be suggested again — and trims over-linked anchors down to 12 links."
+              confirmLabel="Declutter"
+              onConfirm={() => { setConfirmDeclutter(false); void declutter(); }}
+              onCancel={() => setConfirmDeclutter(false)}
+            />
+          )}
           <p className="connections-note" style={{ fontSize: "12px", opacity: 0.75, margin: "2px 0 10px" }}>
             Links Soumaya wasn't sure about, or that you decluttered — connect the real ones, dismiss the rest.
           </p>

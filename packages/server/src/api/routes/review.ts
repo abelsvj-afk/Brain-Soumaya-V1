@@ -32,9 +32,13 @@ export function reviewRoutes(ctx: AppContext): Router {
   const r = Router();
 
   // GET /api/review/due -> memories due for recall, with current strength.
+  // Batch G (REG-196): the list is NOT capped — the badge count in App is
+  // `getDueReviews().length`, so a cap here silently reported "20 due" on a
+  // brain with 35 due. The panel slices to its session size itself, and the
+  // Observatory takes only the first row; the full due set is small.
   r.get("/due", (_req, res) => {
     const now = Date.now();
-    const due = dueForReview(ctx, spaceOf(res), now, 20).map((m) => ({
+    const due = dueForReview(ctx, spaceOf(res), now, Number.MAX_SAFE_INTEGER).map((m) => ({
       id: m.id,
       label: m.label,
       // IM-111: the memory's actual content — Reveal in the Recall panel shows
