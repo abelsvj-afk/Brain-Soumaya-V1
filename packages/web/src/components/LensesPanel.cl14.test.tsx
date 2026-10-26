@@ -4,7 +4,7 @@ import { LensesPanel } from "./LensesPanel.js";
 import * as api from "../api/lenses.js";
 
 afterEach(cleanup);
-beforeEach(() => { vi.restoreAllMocks(); vi.spyOn(api, "previewLens").mockResolvedValue(3); });
+beforeEach(() => { vi.restoreAllMocks(); vi.spyOn(api, "previewLens").mockResolvedValue({ count: 3, capped: false, totalIsLowerBound: false, shown: 3 }); });
 
 const LENS = { id: 1, name: "Heavy work", query: { emotion: "heavy" as const, kinds: ["project"], tags: ["Work"] }, pinned: false, count: 4 };
 

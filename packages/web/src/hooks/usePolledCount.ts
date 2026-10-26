@@ -12,6 +12,9 @@ import { useEffect, useState } from "react";
  * to hold the badge at 0 — indistinguishable from "nothing due" — because the
  * hook swallowed poll errors and held its initial 0. Callers render null as an
  * unknown state (ToolsMenu shows "?"); a successful poll restores the number.
+ *
+ * Batch H (REG-201 / CN-02) relies on the same unknown-state contract for the
+ * connections badge: null is unknown, never 0.
  */
 export function usePolledCount(
   fetchCount: () => Promise<number>,

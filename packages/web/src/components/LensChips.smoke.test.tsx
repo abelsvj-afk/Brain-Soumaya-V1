@@ -12,7 +12,7 @@ describe("LensChips", () => {
       { id: 1, name: "Pinned view", query: {}, pinned: true, count: 3 },
       { id: 2, name: "Unpinned", query: {}, pinned: false, count: 9 },
     ]);
-    vi.spyOn(api, "lensNodes").mockResolvedValue([5, 6]);
+    vi.spyOn(api, "lensNodes").mockResolvedValue({ ids: [5, 6], total: 2, capped: false, totalIsLowerBound: false, shown: 2 });
     const onOpen = vi.fn();
 
     render(<LensChips activeLens={null} onOpen={onOpen} onExit={vi.fn()} />);
@@ -20,7 +20,7 @@ describe("LensChips", () => {
     expect(screen.queryByText("Unpinned")).toBeNull(); // only pinned show
 
     fireEvent.click(screen.getByText("Pinned view"));
-    await waitFor(() => expect(onOpen).toHaveBeenCalledWith([5, 6], "Pinned view"));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith([5, 6], "Pinned view", 2));
   });
 
   it("tapping the ACTIVE chip exits instead of re-opening", async () => {

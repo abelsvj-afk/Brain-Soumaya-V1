@@ -121,7 +121,10 @@ describe("HelpPanel — reading the whole manual is finally rewarded", () => {
     for (const tab of tabs) {
       act(() => tab.click());
     }
-    expect(playSfx).toHaveBeenCalledWith("achievement");
+    // Batch H (REG-212 / CN-13): reading the manual pays no fuel and unlocks
+    // nothing, so the celebration is the neutral "complete", not the
+    // achievement jingle — the jingle is reserved for moments that pay/unlock.
+    expect(playSfx).toHaveBeenCalledWith("complete");
     expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Pilot Manual"), "📖", expect.any(Number));
   });
 

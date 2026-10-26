@@ -1,4 +1,5 @@
 import { API, afetch } from "./http.js";
+import { recordLensCreated } from "./lenses.js";
 
 /**
  * Client calls for the Mind / cognitive layer — cognitive items (goals/ideas/skills/
@@ -85,7 +86,12 @@ export async function confirmInquiry(id: number): Promise<{ ok: boolean; hubId?:
   try {
     const res = await afetch(`${API}/inquiries/${id}/confirm`, { method: "POST" });
     if (!res.ok) return { ok: false };
-    const d = (await res.json().catch(() => ({}))) as { hubId?: number | null };
+    const d = (await res.json().catch(() => ({}))) as { hubId?: number | null; lens?: unknown };
+    // Batch H (REG-209 / CN-10): confirming a lens suggestion CREATES a lens
+    // (server-side, pinned) — the third creation door — so it counts toward
+    // Lenscrafter exactly once, like the panel and Views doors. Other confirms
+    // create no lens and count nothing.
+    if (d.lens != null) recordLensCreated();
     return { ok: true, hubId: d.hubId ?? null };
   } catch {
     return { ok: false };

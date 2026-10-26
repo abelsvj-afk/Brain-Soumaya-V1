@@ -33,6 +33,10 @@ export function ConnectionsPanel({
   onFocus?: (id: number) => void;
 }) {
   const [items, setItems] = useState<Candidate[]>([]);
+  // Batch H (REG-201 / CN-02): the route returns the TRUE total alongside the
+  // capped (50) list — keep it, so the header agrees with the badge instead
+  // of rendering the list length as the queue size.
+  const [total, setTotal] = useState(0);
   const [pruning, setPruning] = useState(false);
   // Batch G (REG-203): declutter is destructive in its anchor half, so it asks
   // first — the confirm dialog states the full scope before anything runs.
@@ -51,6 +55,7 @@ export function ConnectionsPanel({
     try {
       const d = await getCandidates();
       setItems(d.candidates);
+      setTotal(d.count);
       setLoadState("ready");
     } catch {
       setLoadState("error");
@@ -69,9 +74,16 @@ export function ConnectionsPanel({
     const idx = items.findIndex((x) => x.id === c.id);
     setItems((xs) => xs.filter((x) => x.id !== c.id));
     if (await acceptCandidate(c.id)) {
-      playSfx("achievement");
+      // Batch H (REG-212 / CN-13): accepting pays no fuel and the earn sheet
+      // names no link income — so this is a neutral confirmation ("complete"),
+      // not the achievement jingle, which is reserved for moments that
+      // actually pay or unlock.
+      playSfx("complete");
       pushToast("Connected ✦", "🔗", 2500);
       setLastAction({ c, kind: "accept", idx });
+      // Batch H (REG-201 D1): the header shows the true total — a resolved
+      // candidate leaves the queue, so the total drops with the row.
+      setTotal((t) => Math.max(0, t - 1));
       onChanged?.();
     } else {
       // IM-120: a failed accept used to vanish exactly like a successful one.
@@ -84,6 +96,8 @@ export function ConnectionsPanel({
     setItems((xs) => xs.filter((x) => x.id !== c.id));
     if (await dismissCandidate(c.id)) {
       setLastAction({ c, kind: "dismiss", idx });
+      // Batch H (REG-201 D1): see accept — a resolved candidate leaves the queue.
+      setTotal((t) => Math.max(0, t - 1));
     } else {
       restore(c, idx);
       pushToast("Couldn't dismiss that — try again.", "⚠️", 3500);
@@ -95,6 +109,8 @@ export function ConnectionsPanel({
     setLastAction(null);
     if (await restoreCandidate(c.id)) {
       restore(c, idx);
+      // Batch H (REG-201 D1): undo returns the suggestion to the queue.
+      setTotal((t) => t + 1);
       pushToast("Undone — the suggestion is back.", "↩️", 3000);
       onChanged?.();
     } else {
@@ -159,11 +175,16 @@ export function ConnectionsPanel({
 
         <section className="connections-section">
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <h3 style={{ margin: 0 }}>Suggested {items.length > 0 ? `(${items.length})` : ""}</h3>
+            <h3 style={{ margin: 0 }}>Suggested {total > 0 ? `(${total})` : ""}</h3>
             <button className="mini ghost" onClick={() => setConfirmDeclutter(true)} disabled={pruning} title="Declutter moves the weakest links here for your review — but it also permanently removes anchor links whose memory doesn't name the anchor, and trims over-linked anchors to 12 links">
               {pruning ? "Clearing…" : "🧹 Declutter weak links"}
             </button>
           </div>
+          {total > items.length && items.length > 0 && (
+            <p className="connections-note" style={{ fontSize: "12px", opacity: 0.75, margin: "2px 0 10px" }}>
+              Showing the first {items.length} of {total} — the rest are queued behind them.
+            </p>
+          )}
           {confirmDeclutter && (
             <ConfirmDialog
               title="Declutter weak links?"
@@ -214,8 +235,16 @@ export function ConnectionsPanel({
                   </div>
                   {/* IM-120: score + age were fetched but never rendered — every
                       suggestion looked equally certain in a triage panel. */}
+                  {/* Batch H (REG-202 / CN-03): a pruned row's number is the
+                      weight of the link Soumaya already drew and removed — not
+                      a match score. "% match" is reserved for measured
+                      similarity (withheld/suggested rows). */}
                   <div className="cand-meta">
-                    <span className="cand-score">{Math.round(c.score * 100)}% match</span>
+                    {c.origin === "pruned" ? (
+                      <span className="cand-score" title="Weight of the removed link — not a match score">{Math.round(c.score * 100)}% link weight</span>
+                    ) : (
+                      <span className="cand-score">{Math.round(c.score * 100)}% match</span>
+                    )}
                     {c.createdAt && <span className="cand-age">suggested {new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>}
                   </div>
                   {c.reason && <div className="cand-reason">{c.origin === "pruned" ? "🧹 " : "💭 "}{c.reason}</div>}
@@ -279,7 +308,9 @@ function ManualLink({ onLinked }: { onLinked: () => void }) {
   const connect = async () => {
     if (!a || !b) return;
     if (await linkMemories(a.id, b.id)) {
-      playSfx("achievement");
+      // Batch H (REG-212 / CN-13): hand-linking pays no fuel either — neutral
+      // confirmation, not the achievement jingle.
+      playSfx("complete");
       pushToast("Linked ✦", "🔗", 2500);
       setA(null);
       setB(null);

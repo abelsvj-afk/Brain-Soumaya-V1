@@ -50,9 +50,11 @@ describe("ToolsMenu — unknown counts (REG-196)", () => {
     cleanup();
   });
 
-  it("both counts unknown hides the FAB badge (no false zero-alert)", () => {
+  it("both counts unknown shows '?' on the FAB badge (Batch H F1 — never a false zero-alert)", () => {
     render(<ToolsMenu {...props({ dueCount: null, candCount: null })} />);
-    expect(document.querySelector(".fab-badge")).toBeNull();
+    const badge = document.querySelector(".fab-badge");
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toBe("?");
     cleanup();
   });
 });

@@ -49,7 +49,13 @@ export function ToolsMenu(p: ToolsMenuProps) {
     { icon: p.focusMode ? "🌐" : "🌌", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
     { icon: "❓", label: "Help", on: p.onHelp },
   ];
-  const alerts = (p.candCount || 0) + (p.dueCount || 0);
+  const alerts = (p.candCount ?? 0) + (p.dueCount ?? 0);
+  // Batch H (REG-201 / CN-02, F1 from the Batch G review): the closed FAB's
+  // badge must never read as a total while either count is unknown — both
+  // unknown showed NO badge (visually identical to "0 alerts"), and one
+  // unknown showed the known partial as if it were the total. "?" whenever
+  // either count is null; a numeric badge only when BOTH are known.
+  const anyUnknown = p.candCount === null || p.dueCount === null;
   // The closed FAB's badge and the open menu's per-item badges are both small
   // numeric counters, but capped at different ceilings (9+ vs 99+) — showing
   // "9+" on the FAB when opening the menu could reveal individual counts well
@@ -80,7 +86,11 @@ export function ToolsMenu(p: ToolsMenuProps) {
       >
         🧰
         <span className="fab-cap">Tools</span>
-        {alerts > 0 && !open && <span className="fab-badge">{fmtBadge(alerts)}</span>}
+        {((anyUnknown || alerts > 0) && !open) && (
+          <span className="fab-badge" title={anyUnknown ? "Couldn't check — count unknown" : undefined}>
+            {anyUnknown ? "?" : fmtBadge(alerts)}
+          </span>
+        )}
       </button>
       {open && (
         <>

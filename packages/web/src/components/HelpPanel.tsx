@@ -497,7 +497,10 @@ export function HelpPanel({ onClose, installPrompt, onInstall }: Props) {
       seen.add(activeTab);
       localStorage.setItem(key, JSON.stringify([...seen]));
       if (!wasComplete && seen.size >= CATEGORIES.length) {
-        playSfx("achievement");
+        // Batch H (REG-212 / CN-13, pass-21 C-09): reading the manual pays no
+        // fuel and unlocks nothing — neutral confirmation, not the achievement
+        // jingle, which is reserved for moments that actually pay or unlock.
+        playSfx("complete");
         pushToast("📖 You've read the whole Pilot Manual! ✦", "📖", 5000);
       }
     } catch {

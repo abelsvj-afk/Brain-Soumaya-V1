@@ -3,6 +3,7 @@ import type { GraphNode } from "@brain/shared";
 import { getMoneySky } from "../api/finance.js";
 import { getJourneys } from "../api/journeys.js";
 import { createLens } from "../api/lenses.js";
+import { getCategoryCounts, getCategoryIds, type CategoryKey } from "../api/views.js";
 import { getSpaceId } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
 import { LensChips } from "./LensChips.js";
@@ -45,7 +46,9 @@ export function GalaxyViews({
   nodes: GraphNode[];
   /** The label of the active view/lens (so we can highlight + toggle). */
   activeView: string | null;
-  onOpen: (ids: number[], name: string) => void;
+  /** Isolate the galaxy to these ids under this view/lens name. `total` is the
+   *  view's true match count (Batch H, REG-207/208) — the banner states it. */
+  onOpen: (ids: number[], name: string, total?: number) => void;
   /** View only an overlay layer that physically populates the galaxy (money-sky / journeys). */
   onLayer?: (layer: "money" | "journeys", name: string) => void;
   onExit: () => void;
@@ -73,19 +76,34 @@ export function GalaxyViews({
   const [moneyCount, setMoneyCount] = useState(0);
   const [journeyCount, setJourneyCount] = useState(0);
   const [savingLens, setSavingLens] = useState(false);
+  // Batch H (REG-207 / CN-08): full-set member counts per category, from
+  // GET /api/graph/categories — the chips used to count from the loaded
+  // payload, so a category whose members all sat off-payload vanished. Null
+  // until the fetch lands (or when it fails — then the chips fall back to the
+  // payload-only counts they always had).
+  const [catCounts, setCatCounts] = useState<Record<string, number> | null>(null);
 
   // These are separate render layers (not graph nodes), so we count them directly.
   useEffect(() => {
     if (!open) return;
     getMoneySky().then((s) => setMoneyCount(s?.length ?? 0)).catch(() => {});
     getJourneys().then((j) => setJourneyCount((j ?? []).filter((x) => x.status !== "done").length)).catch(() => {});
+    getCategoryCounts().then((c) => { if (c) setCatCounts(c); }).catch(() => {});
   }, [open]);
 
-  // Which categories actually have bodies, with their ids (computed from the loaded graph).
+  // Which categories actually have bodies, with their ids. `ids` is the
+  // loaded payload's intersection; `total` is the full-set count — a category
+  // renders whenever its TOTAL is > 0, so members sitting off-payload can no
+  // longer make the whole category disappear from Views. `shown` is the
+  // count the chip displays: the full-set total, but never less than the
+  // bodies actually in hand (a stale-low count must not hide loaded members).
   const cats = useMemo(() => {
-    return VIEWS.map((v) => ({ ...v, ids: nodes.filter((n) => n.kind !== "action" && v.pred(n)).map((n) => n.id) }))
-      .filter((v) => v.ids.length > 0);
-  }, [nodes]);
+    return VIEWS.map((v) => {
+      const ids = nodes.filter((n) => n.kind !== "action" && v.pred(n)).map((n) => n.id);
+      const total = catCounts?.[v.key] ?? null;
+      return { ...v, ids, total, shown: Math.max(total ?? 0, ids.length) };
+    }).filter((v) => v.shown > 0);
+  }, [nodes, catCounts]);
 
   // Keep an active CATEGORY view in sync with the galaxy: when you dump a new memory (or
   // Soumaya places one) that matches the active category, the graph updates → recompute this
@@ -95,6 +113,10 @@ export function GalaxyViews({
     if (!activeView) { lastSig.current = ""; return; }
     const cat = cats.find((c) => `${c.icon} ${c.label}` === activeView);
     if (!cat) { lastSig.current = ""; return; } // active view is a lens/layer, not our category
+    // Batch H (REG-207): never re-isolate a partial category — re-isolating
+    // to the payload's intersection would shrink an open full view back to
+    // its subset the moment a new memory lands.
+    if (cat.total != null && cat.total > cat.ids.length) { lastSig.current = ""; return; }
     const sig = cat.ids.join(",");
     if (sig === lastSig.current) return;
     lastSig.current = sig;
@@ -103,10 +125,22 @@ export function GalaxyViews({
 
   if (hidden || (cats.length === 0 && nodes.length === 0)) return null;
 
-  const tap = (v: (typeof cats)[number]) => {
+  const tap = async (v: (typeof cats)[number]) => {
     const name = `${v.icon} ${v.label}`;
     if (activeView === name) { onExit(); return; }
-    if (v.ids.length > 0) onOpen(v.ids, name);
+    // Batch H (REG-207): when members sit off-payload, fetch the full id list
+    // first — isolating to the payload's intersection would silently show a
+    // subset as the whole category.
+    if (v.total != null && v.total > v.ids.length) {
+      const all = await getCategoryIds(v.key as CategoryKey);
+      if (!all) {
+        pushToast(`Couldn't load all ${v.label} — try again.`, "⚠️", 3500);
+        return;
+      }
+      onOpen(all, name, v.total);
+      return;
+    }
+    if (v.ids.length > 0) onOpen(v.ids, name, v.total ?? v.ids.length);
   };
 
   // Only a category View (not the money/journeys overlay layers) maps to a LensQuery —
@@ -149,10 +183,12 @@ export function GalaxyViews({
             const name = `${v.icon} ${v.label}`;
             const on = activeView === name;
             return (
-              <button key={v.key} className={`gv-chip ${on ? "on" : ""}`} onClick={() => tap(v)} aria-pressed={on}
+              <button key={v.key} className={`gv-chip ${on ? "on" : ""}`} onClick={() => void tap(v)} aria-pressed={on}
                 title={on ? `Show everything again` : `View only ${v.label} (renders fewer bodies)`}>
                 <span>{v.icon} {v.label}</span>
-                <span className="gv-count">{on ? "✕" : v.ids.length}</span>
+                {/* Batch H (REG-207): the count is the full-set total, not the
+                    payload's intersection — a category never understates itself. */}
+                <span className="gv-count">{on ? "✕" : v.shown}</span>
               </button>
             );
           })}

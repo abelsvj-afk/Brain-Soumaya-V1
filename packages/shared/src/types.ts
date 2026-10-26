@@ -635,13 +635,26 @@ export interface LensQuery {
   text?: string;
 }
 
-/** A persisted lens (with a live match count when listed). */
+/** A persisted lens (with a live match count when listed). Batch H (REG-208 /
+ *  REG-214): `count` is the TRUE total (uncapped); `capped` says the shown set
+ *  was truncated at a cap, `totalIsLowerBound` says the total itself is only a
+ *  lower bound (an inner FTS/due leg truncated first), `shown` is how many ids
+ *  the isolate actually carries, and `broken` marks a lens whose stored query
+ *  JSON could not be parsed at all — never an all-matching lens. */
 export interface Lens {
   id: number;
   name: string;
   query: LensQuery;
   pinned: boolean;
-  count?: number;
+  count?: number | null;
+  /** True when the shown set was truncated at one of evalLens's caps. */
+  capped?: boolean;
+  /** True when `count` is a lower bound, not the exact total (an inner leg hit its cap). */
+  totalIsLowerBound?: boolean;
+  /** How many ids the isolate actually carries (<= count). */
+  shown?: number;
+  /** The stored query JSON is corrupt — the lens is unreadable, not broad. */
+  broken?: boolean;
 }
 
 // ---- Investigator + typed research (docs/INVESTIGATOR_RESEARCH.md) ---------------------

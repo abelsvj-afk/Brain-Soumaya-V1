@@ -517,6 +517,11 @@ export default function App() {
   // The active Smart Lens (its name), shown as a dismissable banner while the galaxy is
   // isolated to it. Clearing it exits the isolated view.
   const [activeLens, setActiveLens] = useState<string | null>(null);
+  // Batch H (REG-207/208 / CN-08/09): the banner states the lens's TRUE match
+  // total, and how many the isolate actually shows when the match list itself
+  // was capped. Null = no count known (e.g. an overlay layer).
+  const [activeLensCount, setActiveLensCount] = useState<number | null>(null);
+  const [activeLensShown, setActiveLensShown] = useState<number | null>(null);
   // Ambient Level-2 read on you (foresight or newest belief) shown as a HUD pill.
   const [selfInsight, setSelfInsight] = useState<{ kind: "foresight" | "belief"; text: string; inDays?: number } | null>(null);
   const [clustered, setClustered] = useState(false);
@@ -1752,21 +1757,47 @@ export default function App() {
   // in Graph3D (isolateSet/isolateLayer/isolateSystem all call the same setCluster), so
   // each entry point must clear the OTHER's exit-UI flag or both exit controls (the
   // "⧉ Lens" banner and "✕ Exit system view" button) can show at once.
-  const openLens = useCallback((ids: number[], name: string) => {
+  // Batch H (REG-207 / CN-08): a lens evaluates over the FULL node set, but the
+  // galaxy only renders the loaded payload — opening one used to isolate to the
+  // payload's intersection with its matches, silently showing a subset as the
+  // whole lens. Force-include the missing bodies first via the existing
+  // includeIds machinery (getGraphWithCompletion), then isolate; the banner
+  // states the true match total, and the shown subset when the match list
+  // itself was capped (REG-208). A failed force-include is disclosed, and the
+  // isolate still runs over what is loaded.
+  const openLens = useCallback(async (ids: number[], name: string, total?: number) => {
+    const shown = ids.length;
+    const matchTotal = total ?? shown;
+    const loaded = new Set(data.nodes.map((n) => n.id));
+    const missing = ids.filter((id) => !loaded.has(id));
+    if (missing.length > 0) {
+      try {
+        const g = await getGraphWithCompletion(missing);
+        setData((prev) => mergeGraphData(prev, g));
+      } catch {
+        pushToast("Couldn't load every match — showing the ones already here.", "⚠️", 4000);
+      }
+    }
     graphRef.current?.isolateSet(ids);
     setActiveLens(name);
+    setActiveLensCount(matchTotal);
+    setActiveLensShown(shown);
     setClustered(false);
     setSelected(null);
-  }, []);
+  }, [data.nodes]);
   const exitLens = useCallback(() => {
     graphRef.current?.exitCluster();
     setActiveLens(null);
+    setActiveLensCount(null);
+    setActiveLensShown(null);
     setClustered(false);
   }, []);
   // View only an overlay layer (money-sky / journey hubs) — their own category view.
   const openLayer = useCallback((layer: "money" | "journeys", name: string) => {
     graphRef.current?.isolateLayer(layer);
     setActiveLens(name);
+    setActiveLensCount(null);
+    setActiveLensShown(null);
     setClustered(false);
     setSelected(null);
   }, []);
@@ -2314,10 +2345,16 @@ export default function App() {
         </ErrorBoundary>
       )}
 
-      {/* Active-lens banner — mirrors "Exit system view"; ✕ restores the full galaxy. */}
+      {/* Active-lens banner — mirrors "Exit system view"; ✕ restores the full galaxy.
+          Batch H (REG-207/208): states the true match total, and the shown subset
+          when the match list itself was capped — the view never silently passes
+          for the whole lens. */}
       {activeLens && panel === null && (
         <button className="lens-banner" onClick={exitLens} title="Exit this lens">
-          ⧉ Lens: {activeLens} &nbsp;✕
+          ⧉ Lens: {activeLens}
+          {activeLensCount != null ? ` · ${activeLensCount.toLocaleString()} match${activeLensCount === 1 ? "" : "es"}` : ""}
+          {activeLensCount != null && activeLensShown != null && activeLensShown < activeLensCount ? ` — showing first ${activeLensShown.toLocaleString()}` : ""}
+          &nbsp;✕
         </button>
       )}
 

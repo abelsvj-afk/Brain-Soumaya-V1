@@ -10,6 +10,7 @@ import {
   associativeLink,
   mapWithConcurrency,
   DEFAULT_LINK_OPTIONS,
+  linkOptionsFor,
   type AssociativeLinkOptions,
 } from "./associativeLink.js";
 import type { AppContext } from "../context.js";
@@ -132,6 +133,11 @@ async function ingestCore(
   // concurrent per-node jobs — with each job's max 3 concurrent validations,
   // the aggregate in-flight bound is 2 × 3 = 6 (structural, not timing-based).
   // Per-node results are collected by index so output order stays deterministic.
+  // Batch H (REG-215 / CN-17): the gate adapts to the embeddings provider
+  // (linkOptionsFor — 0.5 under hash, 0.72 for real embeddings) when the
+  // caller didn't pass explicit options; an explicit linkOptions still wins,
+  // and a missing ctx falls back to the documented default.
+  const linkOpts = deps.linkOptions ?? (ctx ? linkOptionsFor(ctx.embeddings.model) : DEFAULT_LINK_OPTIONS);
   const perNodeLinks = await mapWithConcurrency(
     createdNodes,
     2,
@@ -141,7 +147,7 @@ async function ingestCore(
         { nodes: nodesRepo, edges: edgesRepo, llm: deps.llm },
         node,
         vectors[i]!,
-        deps.linkOptions ?? DEFAULT_LINK_OPTIONS,
+        linkOpts,
         spaceId,
       ),
   );

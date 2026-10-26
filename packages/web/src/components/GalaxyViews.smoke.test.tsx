@@ -8,7 +8,7 @@ const createLens = vi.fn().mockResolvedValue({ id: 1, name: "Goals", query: { ki
 vi.mock("../api/lenses.js", () => ({
   createLens: (...a: unknown[]) => createLens(...a),
   getLenses: vi.fn().mockResolvedValue([]),
-  lensNodes: vi.fn().mockResolvedValue([]),
+  lensNodes: vi.fn().mockResolvedValue({ ids: [], total: 0, capped: false, totalIsLowerBound: false, shown: 0 }),
 }));
 vi.mock("../api/finance.js", () => ({ getMoneySky: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/journeys.js", () => ({ getJourneys: vi.fn().mockResolvedValue([]) }));

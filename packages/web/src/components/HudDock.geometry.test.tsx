@@ -549,7 +549,7 @@ describe("Mobile HUD — streak ember leaves the mid-left band (S7)", () => {
 vi.mock("../api/lenses.js", () => ({
   createLens: vi.fn().mockResolvedValue(null),
   getLenses: vi.fn().mockResolvedValue([]),
-  lensNodes: vi.fn().mockResolvedValue([]),
+  lensNodes: vi.fn().mockResolvedValue({ ids: [], total: 0, capped: false, totalIsLowerBound: false, shown: 0 }),
 }));
 vi.mock("../api/finance.js", () => ({ getMoneySky: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/journeys.js", () => ({ getJourneys: vi.fn().mockResolvedValue([]) }));
