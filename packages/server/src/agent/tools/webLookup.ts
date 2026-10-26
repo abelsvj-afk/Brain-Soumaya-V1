@@ -95,7 +95,10 @@ export const webLookupTool: Tool = {
     const msg = `🔎 I looked that up: ${result.text.slice(0, 240)}${result.text.length > 240 ? "…" : ""}`;
     let delivered = false;
     try {
-      await tc.notify(msg);
+      // REG-027: tool identity + a stable per-source-node occurrence (one
+      // lookup notification per memory) so the outbox's notif_key dedup
+      // and audit attribution apply here.
+      await tc.notify(msg, { tool: "web_lookup", nodeId });
       delivered = true;
     } catch {
       /* router logs it regardless */

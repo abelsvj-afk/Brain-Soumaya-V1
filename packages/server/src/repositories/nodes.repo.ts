@@ -54,6 +54,9 @@ function toGraphNode(row: NodeRow): GraphNode {
     lastTendedAt: row.lastTendedAt ?? undefined,
     occurredAt: row.occurredAt ?? undefined,
     remindAt: row.remindAt ?? undefined,
+    // REG-140: the web needs the fired state to show it where the time can
+    // be changed (Agenda due list / edit). NULL = never fired / re-armed.
+    reminderFiredAt: row.reminderFiredAt ?? undefined,
     tags: parseTags(row.tags),
     researchQuestions: parseJson<string[]>(row.researchQuestions),
     researchAnswers: parseJson<Record<string, string>>(row.researchAnswers),
@@ -246,6 +249,12 @@ export class NodesRepo {
    * fields present in `patch` are touched. Returns the updated node, or
    * undefined when the node isn't in this space. Keeps FTS in sync when the
    * label/content change, and tends the node (editing = visiting it).
+   *
+   * REG-140: moving `remindAt` (to a new time, or to null) RE-ARMS the
+   * reminder — `reminder_fired_at` / `fired_by_approval` are cleared, so the
+   * firing tool's `detect()` (which only proposes unfired rows) proposes it
+   * again at the new time. A label/content-only edit leaves the fired state
+   * alone: re-saving the same reminder must not silently re-fire it.
    */
   updateAgenda(
     id: number,
@@ -257,7 +266,13 @@ export class NodesRepo {
     const vals: unknown[] = [];
     if (patch.label !== undefined) { sets.push("label = ?"); vals.push(patch.label); }
     if (patch.content !== undefined) { sets.push("content = ?"); vals.push(patch.content); }
-    if (patch.remindAt !== undefined) { sets.push("remind_at = ?"); vals.push(patch.remindAt); }
+    if (patch.remindAt !== undefined) {
+      sets.push("remind_at = ?");
+      vals.push(patch.remindAt);
+      // REG-140 re-arm: a moved remind_at fires again at its new time.
+      sets.push("reminder_fired_at = NULL");
+      sets.push("fired_by_approval = NULL");
+    }
     if (patch.expiresAt !== undefined) { sets.push("expires_at = ?"); vals.push(patch.expiresAt); }
     if (sets.length === 0) return existing;
     sets.push("last_tended_at = ?");

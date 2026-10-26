@@ -59,6 +59,10 @@ export interface NotifyMeta {
   billDueAt?: string;
   /** Stable bill identifier (billRisk). */
   billId?: number;
+  /** chart_discovery: the stable Codex key of the newly charted entry. */
+  discoveryKey?: string;
+  /** goal_trend: the goal whose funding trend fired. */
+  goalId?: number;
 }
 
 /** ISO week string (YYYY-Www) in the given timezone. */
@@ -85,11 +89,25 @@ export function buildOccurrenceId(sqlite: RawDb, spaceId: string, meta: NotifyMe
       return `action:${meta.actionId}`;
     case "checkin":
     case "reviewNudge":
+    case "finance_freshness":
+      // Periodic nudges: one occurrence per space-local day.
       return `day:${day}`;
     case "weeklyReview":
       return `week:${isoWeek(now, prefs.timezone)}`;
     case "billRisk":
       return `bill:${meta.billId}:day:${day}`;
+    case "chart_discovery":
+      // One occurrence per charted entry — the Codex key is unique per
+      // discovery and add() refuses duplicates, so this never re-fires.
+      return meta.discoveryKey ? `discovery:${meta.discoveryKey}` : `event:${day}:${meta.tool}`;
+    case "goal_trend":
+      return meta.goalId !== undefined ? `goal:${meta.goalId}:day:${day}` : `event:${day}:${meta.tool}`;
+    case "surface_orphan":
+      return meta.nodeId !== undefined ? `node:${meta.nodeId}:day:${day}` : `event:${day}:${meta.tool}`;
+    case "web_lookup":
+      // One lookup notification per source memory — detect() already
+      // refuses a second lookup of the same memory.
+      return meta.nodeId !== undefined ? `node:${meta.nodeId}` : `event:${day}:${meta.tool}`;
     default:
       return `event:${day}:${meta.tool}`;
   }
@@ -343,11 +361,20 @@ export function occurrenceIdFor(tool: string, parts: Record<string, string>): st
       return `action:${parts.actionNodeId}`;
     case "checkin":
     case "reviewNudge":
+    case "finance_freshness":
       return `day:${parts.localDay}`;
     case "weeklyReview":
       return `week:${parts.isoWeek}`;
     case "billRisk":
       return `bill:${parts.billId}:day:${parts.localDay}`;
+    case "chart_discovery":
+      return `discovery:${parts.discoveryKey}`;
+    case "goal_trend":
+      return `goal:${parts.goalId}:day:${parts.localDay}`;
+    case "surface_orphan":
+      return `node:${parts.nodeId}:day:${parts.localDay}`;
+    case "web_lookup":
+      return `node:${parts.nodeId}`;
     default:
       return `event:${parts.eventId ?? createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 16)}`;
   }

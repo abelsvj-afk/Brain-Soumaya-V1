@@ -36,6 +36,11 @@ export const nodes = sqliteTable("nodes", {
   occurredAt: text("occurred_at"),
   // Future reminder to resurface this memory.
   remindAt: text("remind_at"),
+  // REG-140: when the reminder was last delivered. Mapped here so the web
+  // can see the fired state; the COLUMN itself is created by migrateSchema
+  // (db/client.ts, PRAGMA-guarded ALTER) — never added to BOOTSTRAP_SQL
+  // (v252 rule: new columns migrateSchema ONLY).
+  reminderFiredAt: text("reminder_fired_at"),
   // JSON array of tag strings (curated + free-form).
   tags: text("tags"),
   researchQuestions: text("research_questions"),

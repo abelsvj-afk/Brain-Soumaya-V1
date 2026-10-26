@@ -156,6 +156,10 @@ export interface GraphNode {
   occurredAt?: string;
   /** Optional user-set future reminder date/time to resurface this memory. */
   remindAt?: string;
+  /** ISO timestamp this reminder was last delivered (fired); undefined =
+   *  never fired / pending. A reschedule re-arms the reminder by clearing
+   *  this (REG-140) — the web shows it wherever the time can be changed. */
+  reminderFiredAt?: string;
   /** Free + curated labels for filtering/context (e.g. "Work", "Idea", "Anxious"). */
   tags?: string[];
   researchQuestions?: string[];

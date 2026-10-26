@@ -249,7 +249,9 @@ export function nodesRoutes(ctx: AppContext): Router {
 
   // POST /api/nodes/:id/ack-reminder -> acknowledge a due reminder. Without this,
   // remind_at lived forever: the digest's 5 oldest-first slots filled with stale
-  // reminders and newer ones never surfaced.
+  // reminders and newer ones never surfaced. REG-140: acking also clears the
+  // fired state — the fired state never outlives its remind_at, so a later
+  // re-scheduled remind_at starts clean.
   r.post("/:id/ack-reminder", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -258,7 +260,7 @@ export function nodesRoutes(ctx: AppContext): Router {
     }
     const spaceId = spaceOf(res);
     const changed = ctx.handle.sqlite
-      .prepare(`UPDATE nodes SET remind_at = NULL WHERE id = ? AND space_id = ?`)
+      .prepare(`UPDATE nodes SET remind_at = NULL, reminder_fired_at = NULL, fired_by_approval = NULL WHERE id = ? AND space_id = ?`)
       .run(id, spaceId).changes;
     if (changed === 0) {
       res.status(404).json({ error: "Not found" });

@@ -536,7 +536,9 @@ export function SettingsPanel({
           <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "0 0 10px" }}>
             Your timezone drives her sense of "today" — the daily digest, streaks and reminders.
             Quiet hours, the digest time and the daily cap are enforced by the server: they decide
-            when Soumaya may reach out proactively, and your Inbox still keeps everything she sends.
+            when Soumaya may reach out proactively. Your Inbox keeps the digests, insights,
+            discoveries, and bill-risk warnings she sends — other messages, like reminders and
+            check-ins, live only in the chat where they arrived.
           </p>
           {prefs ? (
             <>

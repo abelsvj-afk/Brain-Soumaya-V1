@@ -269,6 +269,104 @@ describe("occurrence identity + dedup", () => {
     expect(buildOccurrenceId(sqlite, "s1", { tool: "checkin" }, now)).toBe("day:2026-10-19");
     expect(buildOccurrenceId(sqlite, "s1", { tool: "billRisk", billId: 9 }, now)).toBe("bill:9:day:2026-10-19");
   });
+
+  // REG-027 (RE-07): the five late producers carry tool identity + a stable
+  // occurrence (the pattern the other six already follow) — never
+  // tool="generic" with a per-call occurrence.
+  it("buildOccurrenceId is stable per tool for the five late producers", () => {
+    const sqlite = testDb();
+    const now = new Date("2026-10-19T12:00:00Z"); // 08:00 ET, not quiet
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "chart_discovery", discoveryKey: "codex:orion" }, now)).toBe("discovery:codex:orion");
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "finance_freshness" }, now)).toBe("day:2026-10-19");
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "goal_trend", goalId: 4 }, now)).toBe("goal:4:day:2026-10-19");
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "surface_orphan", nodeId: 9 }, now)).toBe("node:9:day:2026-10-19");
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "web_lookup", nodeId: 9 }, now)).toBe("node:9");
+    // A retry later the same day builds the same id (day-scoped occurrences);
+    // a per-entry occurrence is stable across days.
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "finance_freshness" }, new Date("2026-10-19T18:00:00Z"))).toBe("day:2026-10-19");
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "chart_discovery", discoveryKey: "codex:orion" }, new Date("2026-10-25T12:00:00Z"))).toBe("discovery:codex:orion");
+    expect(buildOccurrenceId(sqlite, "s1", { tool: "goal_trend", goalId: 5 }, now)).not.toBe(
+      buildOccurrenceId(sqlite, "s1", { tool: "goal_trend", goalId: 4 }, now),
+    );
+  });
+});
+
+describe("REG-027 boundary records real tool identity, never generic", () => {
+  it("all five late producers land with their tool + stable occurrence, and a repeat dedups", async () => {
+    const h = createDb(":memory:");
+    const sqlite = h.sqlite;
+    const sent: string[] = [];
+    const deps = makeDeps(sqlite, sent, false, h);
+    const notify = createPolicyNotify(deps);
+    try {
+      const metas = [
+        { tool: "chart_discovery", discoveryKey: "codex:orion" },
+        { tool: "finance_freshness" },
+        { tool: "goal_trend", goalId: 4 },
+        { tool: "surface_orphan", nodeId: 9 },
+        { tool: "web_lookup", nodeId: 9 },
+      ] as const;
+      for (const meta of metas) {
+        await notify("s1", `msg ${meta.tool}`, meta);
+        await notify("s1", `msg ${meta.tool}`, meta); // repeat: deduped, no second row
+      }
+      const rows = sqlite
+        .prepare(`SELECT tool, occurrence_id FROM notification_outbox ORDER BY tool`)
+        .all() as { tool: string; occurrence_id: string }[];
+      expect(rows).toHaveLength(5);
+      expect(rows.map((r) => r.tool)).toEqual([
+        "chart_discovery",
+        "finance_freshness",
+        "goal_trend",
+        "surface_orphan",
+        "web_lookup",
+      ]);
+      expect(rows.find((r) => r.tool === "chart_discovery")!.occurrence_id).toBe("discovery:codex:orion");
+      expect(rows.find((r) => r.tool === "web_lookup")!.occurrence_id).toBe("node:9");
+      expect(rows.some((r) => r.tool === "generic")).toBe(false);
+    } finally {
+      h.sqlite.close();
+    }
+  });
+
+  it("a deferred late-producer message ages from its event (enqueue) time: fresh delivers, 25h-old drops as stale", async () => {
+    const h = createDb(":memory:");
+    const sqlite = h.sqlite;
+    const sent: string[] = [];
+    const deps = makeDeps(sqlite, sent, false, h);
+    const sweepNow = new Date("2026-10-20T09:00:00Z"); // 05:00 ET, not quiet
+    const past = "2026-10-19T08:00:00.000Z"; // due long before the sweep
+    const stale = enqueue(sqlite, {
+      spaceId: "s1",
+      meta: { tool: "chart_discovery", occurrenceId: "discovery:codex:old" },
+      message: "old discovery",
+      urgency: { isUrgent: false },
+      deliverAfter: past,
+      queueReason: "test",
+    });
+    const fresh = enqueue(sqlite, {
+      spaceId: "s1",
+      meta: { tool: "chart_discovery", occurrenceId: "discovery:codex:new" },
+      message: "new discovery",
+      urgency: { isUrgent: false },
+      deliverAfter: past,
+      queueReason: "test",
+    });
+    // Backdate only the stale row's created_at: its event (the discovery)
+    // happened 25h before the sweep, past the 24h staleness limit.
+    sqlite
+      .prepare(`UPDATE notification_outbox SET created_at = ? WHERE id = ?`)
+      .run("2026-10-19T08:00:00.000Z", stale.id);
+    try {
+      const stats = await sweepNotifications(deps, sweepNow);
+      expect(getRow(sqlite, stale.id)!.status).toBe("dropped");
+      expect(getRow(sqlite, fresh.id)!.status).toBe("sent");
+      expect(sent).toHaveLength(1);
+      expect(stats.sent).toBe(1);
+    } finally {
+      h.sqlite.close();
+    }
+  });
 });
 
 describe("policy decisions", () => {

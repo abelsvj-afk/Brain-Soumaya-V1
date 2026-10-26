@@ -290,6 +290,29 @@ export function markPushSent(sqlite: RawDb, id: number): void {
 }
 
 /**
+ * Partial delivery (REG-029): at least one subscription accepted the push
+ * but at least one definitively failed. Recorded as its own terminal state
+ * — never indistinguishable from full delivery — with the counts in
+ * last_error. The cap claim transitions to 'sent': the occurrence WAS
+ * delivered (to some devices) and consumed its slot. NOT re-queued: a
+ * retry of the whole row would re-deliver to the subscriptions that
+ * already accepted it (the duplicate-delivery harm); a retry scoped to
+ * only the failed subscriptions would need per-subscription outcome
+ * tracking, which this store does not have — so the honest record is the
+ * fix, and the failed devices simply miss this occurrence.
+ */
+export function markPushPartial(sqlite: RawDb, id: number, sent: number, failed: number): void {
+  sqlite.transaction(() => {
+    sqlite
+      .prepare(
+        `UPDATE push_outbox SET status = 'partial', last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      )
+      .run(`push delivered to ${sent} subscription(s); ${failed} failed`, id);
+    transitionClaimForRow(sqlite, id, "sent");
+  })();
+}
+
+/**
  * Definite failure. Releases the ledger slot (claim → released,
  * atomically with the outbox update) and either re-queues with backoff
  * (row returns to 'pending') or marks terminal 'failed'.
@@ -473,6 +496,13 @@ async function executePushSend(
         markPushDropped(sqlite, row.id, "no subscriptions remain");
         return { outcome: "dropped" };
       }
+    } else if (res.failed > 0) {
+      // REG-029: partial delivery — some subscriptions accepted, some
+      // definitively failed. Record it as partial (never as full success);
+      // the outcome is still "sent" for the caller's counts, since the
+      // occurrence did reach devices.
+      markPushPartial(sqlite, row.id, res.sent, res.failed);
+      return { outcome: "sent", sentCount };
     }
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);

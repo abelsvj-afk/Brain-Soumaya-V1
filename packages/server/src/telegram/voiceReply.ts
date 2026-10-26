@@ -173,9 +173,12 @@ export async function handleVoiceCommand(
 ): Promise<void> {
   const arg = text.slice("/voice".length).trim().toLowerCase();
   if (!isTtsEnabled()) {
+    // REG-023: plain language only — no env var, file, or internal setting
+    // key in a user-facing string. The actionable fact is that voice isn't
+    // turned on for this brain yet, not which setting is missing.
     await send(
       chatId,
-      "🔇 Voice replies aren't enabled on this server (the TELEGRAM_TTS_* settings aren't configured), so my replies stay text.",
+      "🔇 Voice replies aren't turned on for this brain yet, so my replies stay text.",
     );
     return;
   }
@@ -193,10 +196,17 @@ export async function handleVoiceCommand(
     return;
   }
   const mode = ttsConfig()?.mode ?? "selective";
+  const on = isChatVoiceEnabled(spaceId, chatId);
+  // REG-023: the status speaks in plain language — "server mode: selective"
+  // is internal vocabulary. What the user needs is whether their replies
+  // will be spoken, and which replies that covers.
+  const scope =
+    mode === "all"
+      ? "every reply is spoken"
+      : "short answers are spoken; long answers stay text";
   await send(
     chatId,
-    `🔊 Voice replies for this chat: ${isChatVoiceEnabled(spaceId, chatId) ? "ON" : "OFF"} · server mode: ${mode}` +
-      (mode === "all" ? " (every reply is spoken)" : "") +
+    `🔊 Voice replies for this chat: ${on ? "ON" : "OFF"} — ${on ? scope : "my replies stay text"}` +
       "\n/voice on — hear my replies · /voice off — text only",
   );
 }

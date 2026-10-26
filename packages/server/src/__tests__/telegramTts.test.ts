@@ -520,7 +520,10 @@ describe("bot reply path with the env gate", () => {
 
     await handleTelegramUpdate(ctx, update(7, "/link soumaya hunter222"), send, { sendVoice });
     await handleTelegramUpdate(ctx, update(7, "/voice on"), send, { sendVoice });
-    expect(outbox.at(-1)!.text).toMatch(/aren't enabled/i);
+    // REG-023: plain language — the refusal names no env var, file, or
+    // internal setting key.
+    expect(outbox.at(-1)!.text).toMatch(/aren't turned on for this brain yet/i);
+    expect(outbox.at(-1)!.text).not.toMatch(/TELEGRAM_TTS|env|setting/i);
 
     outbox = [];
     await handleTelegramUpdate(ctx, update(7, "what do you remember?"), send, { sendVoice });
@@ -672,5 +675,76 @@ describe("tgSendVoice", () => {
       }),
     );
     await expect(tgSendVoice("TOKEN", 42, speech)).resolves.toBe(false);
+  });
+});
+
+// REG-023 (TG-07): /voice status speaks in plain language — no env var,
+// file, or internal setting key in any user-facing Telegram string.
+// Grep-verifiable: the only TELEGRAM_TTS_* mentions left are in code
+// comments and test scaffolding, never in a reply string.
+describe("REG-023 /voice status in plain language", () => {
+  let handle: DbHandle;
+  let ctx: AppContext;
+  let outbox: { chatId: number; text: string }[];
+
+  const send: Send = async (chatId, text) => {
+    outbox.push({ chatId, text });
+  };
+  const update = (chatId: number, text: string): TelegramUpdate => ({
+    message: { chat: { id: chatId }, text },
+  });
+
+  beforeEach(() => {
+    savedEnv = {};
+    for (const k of TTS_ENV_KEYS) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+    handle = createDb(":memory:");
+    ctx = {
+      handle,
+      embeddings: new HashEmbeddingProvider(EMBED_DIM),
+      llm: new HeuristicProvider(),
+      usage: new UsageTracker(handle),
+    };
+    outbox = [];
+    loopStub.impl = async () => ({ text: "Here is your answer, plain and simple." });
+    clearTelegramHistory();
+    clearChatVoiceModes();
+  });
+
+  afterEach(() => {
+    handle.sqlite.close();
+    vi.unstubAllGlobals();
+    for (const k of TTS_ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  it("gate-off refusal names no env var or internal key", async () => {
+    clearTtsEnv();
+    await handleTelegramUpdate(ctx, update(7, "/link soumaya hunter222"), send);
+    await handleTelegramUpdate(ctx, update(7, "/voice"), send);
+    const text = outbox.at(-1)!.text;
+    expect(text).toMatch(/aren't turned on for this brain yet/i);
+    expect(text).not.toMatch(/TELEGRAM_TTS|_[A-Z]{2,}_|server mode|selective/i);
+  });
+
+  it("status with the gate on states ON/OFF and scope in plain words", async () => {
+    setTtsEnvOn();
+    await handleTelegramUpdate(ctx, update(7, "/link soumaya hunter222"), send);
+    await handleTelegramUpdate(ctx, update(7, "/voice"), send);
+    const off = outbox.at(-1)!.text;
+    expect(off).toMatch(/Voice replies for this chat: OFF/i);
+    expect(off).toMatch(/my replies stay text/i);
+    expect(off).not.toMatch(/server mode|selective/i);
+
+    await handleTelegramUpdate(ctx, update(7, "/voice on"), send);
+    await handleTelegramUpdate(ctx, update(7, "/voice"), send);
+    const on = outbox.at(-1)!.text;
+    expect(on).toMatch(/Voice replies for this chat: ON/i);
+    expect(on).toMatch(/short answers are spoken/i);
+    expect(on).not.toMatch(/server mode|selective/i);
   });
 });

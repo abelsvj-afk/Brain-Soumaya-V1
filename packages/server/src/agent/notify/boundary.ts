@@ -342,6 +342,12 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
     // persisted due time ages explicitly from bill_due_at (decidePolicy's
     // staleness reads remindAt only). All other tools — and legacy
     // billRisk rows lacking bill_due_at — keep the created_at aging check.
+    // REG-027: that check measures from EVENT time for these producers —
+    // their event IS the detection moment, so enqueue time (created_at) is
+    // the event time; there is no earlier event time to measure from. The
+    // two producers whose event time differs materially from enqueue time
+    // (fire_reminder's remind_at, billRisk's bill_due_at) age from those
+    // persisted event times instead, never from created_at.
     if (row.tool === "billRisk" && row.billDueAt) {
       const limit = stalenessLimitMs("billRisk");
       if (limit !== null) {

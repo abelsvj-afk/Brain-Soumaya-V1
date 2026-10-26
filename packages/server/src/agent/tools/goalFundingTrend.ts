@@ -203,7 +203,9 @@ export const goalFundingTrendTool: Tool = {
 
     let delivered = false;
     try {
-      await tc.notify(msg);
+      // REG-027: tool identity + a stable per-goal-per-day occurrence so
+      // the outbox's notif_key dedup and audit attribution apply here.
+      await tc.notify(msg, { tool: "goal_trend", goalId });
       delivered = true;
     } catch {
       /* router logs it regardless */

@@ -240,6 +240,11 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
 
   const editForm = (n: GraphNode, field: "remindAt" | "expiresAt") => editingId === n.id && (
     <div className="agenda-edit" style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+      {/* REG-140: the fired state is visible wherever the time can be changed —
+          saving a new time re-arms the reminder, so say so at the edit site. */}
+      {field === "remindAt" && n.reminderFiredAt && (
+        <span style={{ fontSize: "11px", opacity: 0.75 }}>✓ Already delivered {formatLocalTime(ms(n.reminderFiredAt))} — saving a new time will remind you again.</span>
+      )}
       <input aria-label="Edit label" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} />
       <textarea aria-label="Edit details" value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={2} />
       <input aria-label="Edit date and time" type="datetime-local" value={editWhen} onChange={(e) => setEditWhen(e.target.value)} />
@@ -343,7 +348,11 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
                         <span className="agenda-label">{n.label}</span>
                         <RowMeta n={n} />
                       </span>
-                      <span className="agenda-due urgent">due now{c.text ? ` · ${c.text}` : ""}<br /><span style={{ fontSize: "0.85em", opacity: 0.8 }}>{formatLocalTime(at)}</span></span>
+                      <span className="agenda-due urgent">due now{c.text ? ` · ${c.text}` : ""}<br /><span style={{ fontSize: "0.85em", opacity: 0.8 }}>{formatLocalTime(at)}</span>
+                        {/* REG-140: a due reminder that already fired says so —
+                            snoozing it re-arms it, so the state must be visible here. */}
+                        {n.reminderFiredAt && (<><br /><span style={{ fontSize: "0.85em", opacity: 0.8 }}>✓ Delivered {formatLocalTime(ms(n.reminderFiredAt))} — snooze to hear it again</span></>)}
+                      </span>
                     </button>
                     <button className="mini agenda-done" onClick={() => ack(n.id)} title="Acknowledge — stop reminding">✓</button>
                   </div>

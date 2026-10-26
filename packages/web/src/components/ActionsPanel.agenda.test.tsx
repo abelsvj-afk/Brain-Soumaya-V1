@@ -155,3 +155,28 @@ describe("IM-55 confirmations + success feedback", () => {
     await waitFor(() => expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Couldn't acknowledge"), "⚠️", expect.any(Number)));
   });
 });
+
+describe("REG-140 fired reminders show their state where the time can be changed", () => {
+  it("a due reminder that already fired shows when it was delivered", async () => {
+    const past = new Date(Date.now() - 2 * 3600_000).toISOString();
+    const fired = new Date(Date.now() - 2 * 3600_000 + 60_000).toISOString();
+    render(<ActionsPanel nodes={[node({ id: 1, label: "Call mum", remindAt: past, reminderFiredAt: fired })]} onFocus={() => {}} />);
+    await screen.findByText("Call mum");
+    expect(screen.getByText(/Delivered/)).toBeTruthy();
+    expect(screen.getByText(/snooze to hear it again/)).toBeTruthy();
+  });
+  it("an unfired due reminder shows no Delivered marker", async () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    render(<ActionsPanel nodes={[node({ id: 1, label: "Due thing", remindAt: past })]} onFocus={() => {}} />);
+    await screen.findByText("Due thing");
+    expect(screen.queryByText(/Delivered/)).toBeNull();
+  });
+  it("editing a fired reminder states the re-arm at the edit site", async () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const fired = new Date(Date.now() - 50_000).toISOString();
+    render(<ActionsPanel nodes={[node({ id: 1, label: "Due thing", remindAt: past, reminderFiredAt: fired })]} onFocus={() => {}} />);
+    await act(async () => { (await screen.findByText("Edit")).click(); });
+    expect(screen.getByText(/Already delivered/)).toBeTruthy();
+    expect(screen.getByText(/saving a new time will remind you again/)).toBeTruthy();
+  });
+});

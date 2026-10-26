@@ -26,6 +26,7 @@ import {
   type TelegramReplyDeps,
 } from "./voiceReply.js";
 import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand } from "./notes.js";
+import { TelegramNoteDraftsRepo } from "../repositories/telegramNoteDrafts.repo.js";
 import { chunkTelegramText } from "./chunking.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
 import type { DbHandle } from "../db/client.js";
@@ -284,13 +285,13 @@ const HELP =
   "Then, any time:\n" +
   "• Send me anything and I'll answer from your memories (with what I drew on).\n" +
   "• /log <thought> — save a new memory; I'll tell you what landed.\n" +
-  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it. A draft left untouched for 24 hours is discarded.\n" +
+  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it. Typed messages only — voice notes can't join a note yet. A draft left untouched for 24 hours is discarded.\n" +
   "• /digest — get today's digest now (I also send it once a day on my own).\n" +
   "• /digest 07:00 — change when the daily digest arrives.\n" +
   "• /quiet 21:00 04:30 — set quiet hours (I won't ping you then unless it's urgent).\n" +
   "• /cap 5 — max proactive pings per day (urgent ones don't count; your daily digest is scheduled separately and doesn't count against the cap).\n" +
   "• /tz America/Chicago — set your timezone for quiet hours + digest.\n" +
-  "• /settings — show your current notification settings.\n" +
+  "• /settings — show this chat's state: linked brain, voice, note in progress, and notification settings.\n" +
   "• /voice on — hear my replies as voice notes (when voice is enabled on the server); /voice off — back to text.\n" +
   "• /unlink — disconnect this chat.\n" +
   "• /help — show this again.";
@@ -431,6 +432,29 @@ export function formatDigest(digest: DailyDigest, spaceName: string): string {
 
   lines.push("", digest.closing);
   return lines.join("\n");
+}
+
+/**
+ * REG-031 (CAP-11): the /log confirmation accounts for EVERY node the
+ * capture created — the count always, labels where the channel allows
+ * (first five, truncated, with a (+N more) tail so nothing is silently
+ * dropped). A single-node capture keeps the exact pre-existing form.
+ */
+export function formatLogConfirmation(
+  nodes: { label: string }[],
+  linkCount: number,
+  fuel: number,
+  streakNote: string,
+): string {
+  const links = `${linkCount} link${linkCount === 1 ? "" : "s"} formed`;
+  const reward = `+${fuel.toFixed(1)} ⛽${streakNote}`;
+  if (nodes.length <= 1) {
+    const label = nodes[0]?.label ?? "a memory";
+    return `✦ Logged "${label}" — ${links} · ${reward}`;
+  }
+  const shown = nodes.slice(0, 5).map((n) => `"${n.label.slice(0, 40)}"`);
+  const more = nodes.length > 5 ? ` (+${nodes.length - 5} more)` : "";
+  return `✦ Logged ${nodes.length} memories — ${shown.join(", ")}${more} · ${links} · ${reward}`;
 }
 
 /**
@@ -640,9 +664,20 @@ export async function handleTelegramUpdate(
 
   if (text === "/settings") {
     const p = getPreferences(ctx.handle.sqlite, spaceId);
+    // REG-032: one command reports the whole chat state — link target,
+    // voice state, note-in-progress state, and notification settings
+    // together — so a user returning after days away can answer "what
+    // state is this chat in?" from one place.
+    const draft = new TelegramNoteDraftsRepo(ctx.handle).get(spaceId, chatId);
+    const noteState = draft
+      ? `a note is in progress (${draft.partCount} part${draft.partCount === 1 ? "" : "s"}, ${draft.text.length} characters) — /done saves it, /cancel discards it`
+      : "no note in progress — /note starts one";
     await send(
       chatId,
-      `🔔 Notification settings:\n` +
+      `🔔 This chat's state:\n` +
+        `• Linked brain: "${link.spaceName}"\n` +
+        `• Voice replies: ${isChatVoiceEnabled(spaceId, chatId) ? "ON — short answers are spoken" : "OFF — replies stay text"} (/voice on/off)\n` +
+        `• Note: ${noteState}\n` +
         `• Timezone: ${p.timezone}\n` +
         `• Quiet hours: ${p.quietStart}–${p.quietEnd}\n` +
         `• Digest time: ${p.digestTime}\n` +
@@ -697,12 +732,8 @@ export async function handleTelegramUpdate(
     const { streak, advanced } = new StreakRepo(ctx.handle, spaceId).touch();
     const fuel = EARN_MEMORY + EARN_LINK * linkCount + (advanced ? STREAK_DAY_BONUS : 0);
     new EconomyRepo(ctx.handle, spaceId).add(fuel);
-    const label = result.nodes[0]?.label ?? "a memory";
     const streakNote = advanced ? ` · 🔥 day ${streak.current}` : "";
-    await send(
-      chatId,
-      `✦ Logged "${label}" — ${linkCount} link${linkCount === 1 ? "" : "s"} formed · +${fuel.toFixed(1)} ⛽${streakNote}`,
-    );
+    await send(chatId, formatLogConfirmation(result.nodes, linkCount, fuel, streakNote));
     return;
   }
 
@@ -755,7 +786,14 @@ export async function handleTelegramUpdate(
   } catch (err) {
     console.error("[telegram] agent loop failed, falling back to chat:", err);
     const answer = await chat(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, text, undefined, spaceId);
-    let reply = answer.answer?.trim() || "I don't have anything on that yet — add a memory with /log.";
+    // REG-033 (TG-15): a fallback-delivered reply must be distinguishable
+    // as such in the channel. The full agent (tools, approvals,
+    // memory-writing) was unavailable for this turn — say so up front
+    // instead of answering as if nothing happened. Wording is the design
+    // choice; silent equivalence is the defect.
+    let reply =
+      "⚠️ My full self couldn't run just now, so this is a simpler answer drawn only from your memories — I couldn't take actions or save anything this turn.\n\n" +
+      (answer.answer?.trim() || "I don't have anything on that yet — add a memory with /log.");
     if (answer.citations.length > 0) {
       reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
     }
