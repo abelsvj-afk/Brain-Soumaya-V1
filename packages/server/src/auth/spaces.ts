@@ -165,6 +165,7 @@ export const SPACE_SCOPED_TABLES = [
   "episode_enrichments",
   "user_model",
   "forget_requests",
+  "forget_unresolved_flags",
   "enrichment_quota",
   "consolidation_runs",
   "consolidation_episodes",

@@ -799,7 +799,7 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(text);
 -- INSERT INTO packages/server/src/db/schemaSql.ts BOOTSTRAP_SQL
--- AFTER line 633 (the interaction_preferences_unique index), BEFORE line 634 (the closing `;`).
+-- AFTER line 633 (the interaction_preferences_unique index), BEFORE line 634 (the closing ';').
 --
 -- W2 episodic memory + user model (wisdom layer). Design doc §3.2, §3.3, §3.7, §3.5, §4.2.
 -- Columns, CHECK constraints, defaults, and indexes copied from the design DDL;
@@ -962,6 +962,34 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       applied_at TEXT
     );
+
+    -- Review surface for flagged forget rows (design note
+    -- unresolved-flag-review-surface-design-2026-10-25.md section 1):
+    -- one row per quoting row left in place by policy, per forget
+    -- act. Written by the apply path in the same transaction
+    -- as the erasure, immediately after the unresolved array is
+    -- built — a failed apply rolls the flags back with the erasure,
+    -- so a flag can never name a forget that did not happen. No FK
+    -- (repo convention, cf. D1); no backfill (pre-surface applies
+    -- never persisted their lists and the forgotten text is gone).
+    -- The CREATE TABLE text must stay byte-identical to the
+    -- migrateSchema() copy in db/client.ts — keep commentary OUTSIDE
+    -- the statement, never inside it.
+    CREATE TABLE IF NOT EXISTS forget_unresolved_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      request_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      table_name TEXT NOT NULL CHECK (table_name IN ('user_model', 'instruction_profiles')),
+      row_id INTEGER NOT NULL,
+      policy_reason TEXT NOT NULL CHECK (policy_reason IN ('stated_user_model', 'instruction_profile')),
+      status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'reviewed', 'resolved_deleted', 'dismissed')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      reviewed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_forget_unresolved_flags_space
+      ON forget_unresolved_flags(space_id, status);
 
     -- W2 enrichment quota ledger (B4, Rev 3): atomic check-and-increment
     -- reservation for the daily enrichment cap. quota_date is YYYY-MM-DD in the

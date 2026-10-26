@@ -5,9 +5,13 @@ import {
   ForgetSourceRefusal,
   approveForgetSourceRequest,
   createForgetSourceRequest,
+  deleteUnresolvedFlagRow,
+  dismissUnresolvedFlag,
   forgetSourceByRequest,
   inspectForgetSourceRequest,
+  listUnresolvedFlags,
   rejectForgetSourceRequest,
+  reviewUnresolvedFlag,
 } from "../../sources/forgetSource.js";
 
 // Verbatim-Recall V1 — source-forget routes (fix round 3, binding
@@ -67,6 +71,92 @@ export function sourceForgetRequestRoutes(ctx: AppContext): Router {
  */
 export function forgetRequestsRoutes(ctx: AppContext): Router {
   const r = Router();
+
+  // Review surface for flagged forget rows (design note
+  // `unresolved-flag-review-surface-design-2026-10-25.md` §2). These
+  // four routes MUST be registered BEFORE GET /:id — Express matches
+  // "unresolved" as :id otherwise, and the list would 400. The
+  // surface cannot initiate a forget: it only lists, reviews, and
+  // deletes rows a forget already flagged. A flag from another space,
+  // or one already acted on, is a 404 — never a second effect.
+  //
+  // GET /api/forget-requests/unresolved -> { open, reviewed, reviewedCount }.
+  r.get("/unresolved", (_req, res) => {
+    res.json(listUnresolvedFlags(ctx.handle, spaceOf(res)));
+  });
+
+  // POST /api/forget-requests/unresolved/:flagId/review -> mark reviewed.
+  r.post("/unresolved/:flagId/review", (req, res) => {
+    const flagId = Number(req.params.flagId);
+    if (!Number.isInteger(flagId)) {
+      invalidId(res);
+      return;
+    }
+    try {
+      const view = reviewUnresolvedFlag(ctx.handle, spaceOf(res), flagId);
+      if (!view) {
+        res.status(404).json({ error: "not_found", message: `flag ${flagId} does not exist or is already acted on` });
+        return;
+      }
+      res.json(view);
+    } catch (err) {
+      if (err instanceof ForgetSourceRefusal) {
+        refusal(res, err);
+        return;
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/forget-requests/unresolved/:flagId/delete -> delete the
+  // underlying row and resolve the flag as resolved_deleted.
+  r.post("/unresolved/:flagId/delete", (req, res) => {
+    const flagId = Number(req.params.flagId);
+    if (!Number.isInteger(flagId)) {
+      invalidId(res);
+      return;
+    }
+    try {
+      const view = deleteUnresolvedFlagRow(ctx.handle, spaceOf(res), flagId);
+      if (!view) {
+        res.status(404).json({ error: "not_found", message: `flag ${flagId} does not exist or is already acted on` });
+        return;
+      }
+      res.json(view);
+    } catch (err) {
+      if (err instanceof ForgetSourceRefusal) {
+        refusal(res, err);
+        return;
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/forget-requests/unresolved/:flagId/dismiss -> close a
+  // flag whose target row is already gone (design §4). Refuses while
+  // the target still exists: dismiss is not a way to keep a quoting
+  // row and hide the flag.
+  r.post("/unresolved/:flagId/dismiss", (req, res) => {
+    const flagId = Number(req.params.flagId);
+    if (!Number.isInteger(flagId)) {
+      invalidId(res);
+      return;
+    }
+    try {
+      const view = dismissUnresolvedFlag(ctx.handle, spaceOf(res), flagId);
+      if (!view) {
+        res.status(404).json({ error: "not_found", message: `flag ${flagId} does not exist or is already acted on` });
+        return;
+      }
+      res.json(view);
+    } catch (err) {
+      if (err instanceof ForgetSourceRefusal) {
+        refusal(res, err);
+        return;
+      }
+      throw err;
+    }
+  });
 
   // GET /api/forget-requests/:id -> the content-free binding summary.
   r.get("/:id", (req, res) => {

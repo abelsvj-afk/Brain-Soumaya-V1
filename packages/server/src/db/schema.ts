@@ -691,6 +691,35 @@ export const forgetRequests = sqliteTable(
 export type ForgetRequestRow = typeof forgetRequests.$inferSelect;
 
 /**
+ * Review surface for flagged forget rows (design note
+ * `unresolved-flag-review-surface-design-2026-10-25.md` §1): one row
+ * per quoting row left in place by policy, per forget act. Written in
+ * the apply transaction; status is the per-row lifecycle
+ * (open/reviewed/resolved_deleted/dismissed).
+ */
+export const forgetUnresolvedFlags = sqliteTable(
+  "forget_unresolved_flags",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull(),
+    requestId: integer("request_id").notNull(),
+    sourceId: integer("source_id").notNull(),
+    tableName: text("table_name").notNull(),
+    rowId: integer("row_id").notNull(),
+    policyReason: text("policy_reason").notNull(),
+    status: text("status").notNull().default("open"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    reviewedAt: text("reviewed_at"),
+  },
+  (t) => [
+    index("idx_forget_unresolved_flags_space").on(t.spaceId, t.status),
+  ],
+);
+export type ForgetUnresolvedFlagRow = typeof forgetUnresolvedFlags.$inferSelect;
+
+/**
  * W2 enrichment quota ledger (B4, Rev 3): atomic check-and-increment
  * reservation for the daily enrichment cap. quota_date is YYYY-MM-DD in the
  * SPACE's local timezone, computed by spaceLocalDate() — never SQLite

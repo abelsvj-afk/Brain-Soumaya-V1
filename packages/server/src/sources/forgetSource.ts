@@ -1,6 +1,6 @@
 import type { DbHandle } from "../db/client.js";
 import { ftsUpsert } from "../db/fts.js";
-import { isVectorEnabled } from "../db/vec.js";
+import { isVectorEnabled, deleteProfileEmbedding } from "../db/vec.js";
 import { SourcesRepo } from "../repositories/sources.repo.js";
 import { refreshPersona } from "../persona/derive.js";
 
@@ -1167,8 +1167,8 @@ export function forgetSourceByRequest(
     // somehow missed, so a survivor can never be silent.
     const unresolved: { table: string; rowId: number }[] = [];
     const umAllRows = sqlite
-      .prepare(`SELECT id, content FROM user_model WHERE space_id = ? ORDER BY id`)
-      .all(spaceId) as { id: number; content: string }[];
+      .prepare(`SELECT id, content, origin FROM user_model WHERE space_id = ? ORDER BY id`)
+      .all(spaceId) as { id: number; content: string; origin: string }[];
     for (const um of umAllRows) {
       if (containsVerbatimSpan(um.content, chunkTexts)) {
         unresolved.push({ table: "user_model", rowId: um.id });
@@ -1184,6 +1184,33 @@ export function forgetSourceByRequest(
           unresolved.push({ table: "instruction_profiles", rowId: p.id });
         }
       }
+    }
+
+    // Review surface (design note
+    // `unresolved-flag-review-surface-design-2026-10-25.md` §1):
+    // persist one flag per quoting row left in place, in this same
+    // transaction — a failed apply rolls the flags back with the
+    // erasure, so a flag can never name a forget that did not happen.
+    // policy_reason derives from the row: a stated user_model row is
+    // 'stated_user_model'; an instruction profile is
+    // 'instruction_profile'. A non-stated user_model survivor is
+    // unreachable in a single transaction — the span pass above
+    // deletes every quoting inferred/consolidated row — but if one
+    // ever survives, it stays in the `unresolved` response (honesty)
+    // without a flag, since the CHECK admits no reason for it.
+    const umOrigins = new Map(umAllRows.map((r) => [r.id, r.origin]));
+    const flagInsert = sqlite.prepare(
+      `INSERT INTO forget_unresolved_flags (space_id, request_id, source_id, table_name, row_id, policy_reason)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const u of unresolved) {
+      const reason =
+        u.table === "instruction_profiles"
+          ? "instruction_profile"
+          : umOrigins.get(u.rowId) === "stated"
+            ? "stated_user_model"
+            : null;
+      if (reason) flagInsert.run(spaceId, requestId, sourceId, u.table, u.rowId, reason);
     }
 
     // Mark the authorizing request applied (content-free audit, as in
@@ -1263,4 +1290,290 @@ export function forgetSourceByRequest(
     }
     throw err;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Review surface for flagged forget rows (design note               */
+/* `unresolved-flag-review-surface-design-2026-10-25.md`). The       */
+/* `unresolved` list a forget returns is transient — one apply-route */
+/* response and a count in the apply log line. These helpers persist */
+/* it as durable, content-free flag rows so the owner can review    */
+/* and act on each quoting row the policy left in place. The surface */
+/* cannot initiate a forget and adds no create/approve/apply UI.    */
+/*                                                                    */
+/* Content-free invariant (§2.1, structural): the view serializes   */
+/* only allow-listed fields. `instruction_profiles.name` is NEVER    */
+/* selected, so it can never be sent; `user_model` descriptors are  */
+/* controlled-vocabulary only (slot, origin, topic_labels,          */
+/* confidence, valid_at).                                            */
+/* ------------------------------------------------------------------ */
+
+interface ForgetUnresolvedFlagRow {
+  id: number;
+  space_id: string;
+  request_id: number;
+  source_id: number;
+  table_name: string;
+  row_id: number;
+  policy_reason: string;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+/** Content-free view of one flag, hydrated with the target row's
+ *  allow-listed descriptors — or `targetMissing: true` when the
+ *  underlying row is already gone (deleted elsewhere, or by an
+ *  earlier flag action on a sibling flag for the same row). */
+export interface UnresolvedFlagView {
+  flagId: number;
+  requestId: number;
+  sourceId: number;
+  table: "user_model" | "instruction_profiles";
+  rowId: number;
+  policyReason: string;
+  status: "open" | "reviewed" | "resolved_deleted" | "dismissed";
+  createdAt: string;
+  reviewedAt: string | null;
+  targetMissing: boolean;
+  /** user_model descriptors (controlled vocabulary only). */
+  slot?: string;
+  origin?: string;
+  topicLabels?: string[];
+  confidence?: number | null;
+  validAt?: string | null;
+  /** instruction_profiles descriptors (name is never included). */
+  mode?: string;
+  priority?: number;
+  enabled?: boolean;
+  profileCreatedAt?: string;
+}
+
+export interface UnresolvedFlagsList {
+  open: UnresolvedFlagView[];
+  reviewed: UnresolvedFlagView[];
+  reviewedCount: number;
+}
+
+function flagViewOf(h: DbHandle, spaceId: string, flag: ForgetUnresolvedFlagRow): UnresolvedFlagView {
+  const view: UnresolvedFlagView = {
+    flagId: flag.id,
+    requestId: flag.request_id,
+    sourceId: flag.source_id,
+    table: flag.table_name as "user_model" | "instruction_profiles",
+    rowId: flag.row_id,
+    policyReason: flag.policy_reason,
+    status: flag.status as UnresolvedFlagView["status"],
+    createdAt: flag.created_at,
+    reviewedAt: flag.reviewed_at,
+    targetMissing: false,
+  };
+  if (flag.table_name === "user_model") {
+    const row = h.sqlite
+      .prepare(
+        `SELECT slot, origin, topic_labels, confidence, valid_at
+         FROM user_model WHERE id = ? AND space_id = ?`,
+      )
+      .get(flag.row_id, spaceId) as
+      | {
+          slot: string;
+          origin: string;
+          topic_labels: string | null;
+          confidence: number | null;
+          valid_at: string | null;
+        }
+      | undefined;
+    if (!row) {
+      view.targetMissing = true;
+      return view;
+    }
+    view.slot = row.slot;
+    view.origin = row.origin;
+    view.topicLabels = parseJsonStringArray(row.topic_labels);
+    view.confidence = row.confidence;
+    view.validAt = row.valid_at;
+  } else {
+    const row = h.sqlite
+      .prepare(
+        `SELECT mode, priority, enabled, created_at
+         FROM instruction_profiles WHERE id = ? AND space_id = ?`,
+      )
+      .get(flag.row_id, spaceId) as
+      | { mode: string; priority: number; enabled: number; created_at: string }
+      | undefined;
+    if (!row) {
+      view.targetMissing = true;
+      return view;
+    }
+    view.mode = row.mode;
+    view.priority = row.priority;
+    view.enabled = row.enabled === 1;
+    view.profileCreatedAt = row.created_at;
+  }
+  return view;
+}
+
+/** The one open flag for (space, flagId), or undefined — a flag from
+ *  another space, or one already acted on, is indistinguishable from
+ *  missing (existence must not leak across spaces; a second action
+ *  on the same flag is a 404, never a second effect). */
+function openFlagOf(
+  h: DbHandle,
+  spaceId: string,
+  flagId: number,
+): ForgetUnresolvedFlagRow | undefined {
+  return h.sqlite
+    .prepare(
+      `SELECT * FROM forget_unresolved_flags WHERE id = ? AND space_id = ? AND status = 'open'`,
+    )
+    .get(flagId, spaceId) as ForgetUnresolvedFlagRow | undefined;
+}
+
+/** List this space's flags: open ones plus reviewed ones (Q1 —
+ *  reviewed rows stay visible under a "Reviewed" filter, never
+ *  silently dropped). Dismissed / resolved_deleted flags are terminal
+ *  history and live in the DB only, never in the response. */
+export function listUnresolvedFlags(h: DbHandle, spaceId: string): UnresolvedFlagsList {
+  const rows = h.sqlite
+    .prepare(
+      `SELECT * FROM forget_unresolved_flags
+       WHERE space_id = ? AND status IN ('open', 'reviewed')
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all(spaceId) as ForgetUnresolvedFlagRow[];
+  const open: UnresolvedFlagView[] = [];
+  const reviewed: UnresolvedFlagView[] = [];
+  for (const row of rows) {
+    const view = flagViewOf(h, spaceId, row);
+    if (row.status === "open") open.push(view);
+    else reviewed.push(view);
+  }
+  return { open, reviewed, reviewedCount: reviewed.length };
+}
+
+/** Mark one open flag reviewed. The underlying row is untouched —
+ *  review is a record that the owner has seen the flag, nothing
+ *  more. Returns the updated view, or undefined when there is no
+ *  open flag with this id in this space. */
+export function reviewUnresolvedFlag(
+  h: DbHandle,
+  spaceId: string,
+  flagId: number,
+): UnresolvedFlagView | undefined {
+  const flag = openFlagOf(h, spaceId, flagId);
+  if (!flag) return undefined;
+  const now = new Date().toISOString();
+  h.sqlite
+    .prepare(
+      `UPDATE forget_unresolved_flags SET status = 'reviewed', reviewed_at = ? WHERE id = ?`,
+    )
+    .run(now, flagId);
+  return flagViewOf(h, spaceId, { ...flag, status: "reviewed", reviewed_at: now });
+}
+
+/** Delete the underlying row a flag names, and resolve the flag as
+ *  `resolved_deleted` — in ONE transaction, so the row and the flag
+ *  can never disagree. Refuses (404) unless the flag is open AND the
+ *  row still exists in this space; a target already gone is a
+ *  `target_missing` refusal (the UI then offers dismiss instead).
+ *  user_model: inbound `replaced_by` is nulled first (the span
+ *  pass's own pattern). instruction_profiles: its `vec_profiles`
+ *  rows go too. The deletion is recorded in `agent_logs` as
+ *  `forget_flag_row_deleted`, ids only — never content. */
+export function deleteUnresolvedFlagRow(
+  h: DbHandle,
+  spaceId: string,
+  flagId: number,
+): UnresolvedFlagView | undefined {
+  const flag = openFlagOf(h, spaceId, flagId);
+  if (!flag) return undefined;
+  const target =
+    flag.table_name === "user_model"
+      ? h.sqlite
+          .prepare(`SELECT id FROM user_model WHERE id = ? AND space_id = ?`)
+          .get(flag.row_id, spaceId)
+      : h.sqlite
+          .prepare(`SELECT id FROM instruction_profiles WHERE id = ? AND space_id = ?`)
+          .get(flag.row_id, spaceId);
+  if (!target) {
+    throw new ForgetSourceRefusal(
+      "target_missing",
+      `flag ${flagId} names a ${flag.table_name} row that no longer exists — dismiss the flag instead`,
+      { status: 404 },
+    );
+  }
+  const sqlite = h.sqlite;
+  const now = new Date().toISOString();
+  sqlite.transaction(() => {
+    if (flag.table_name === "user_model") {
+      sqlite
+        .prepare(`UPDATE user_model SET replaced_by = NULL WHERE replaced_by = ?`)
+        .run(flag.row_id);
+      sqlite
+        .prepare(`DELETE FROM user_model WHERE id = ? AND space_id = ?`)
+        .run(flag.row_id, spaceId);
+    } else {
+      deleteProfileEmbedding(sqlite, flag.row_id);
+      sqlite
+        .prepare(`DELETE FROM instruction_profiles WHERE id = ? AND space_id = ?`)
+        .run(flag.row_id, spaceId);
+    }
+    sqlite
+      .prepare(
+        `UPDATE forget_unresolved_flags SET status = 'resolved_deleted', reviewed_at = ? WHERE id = ?`,
+      )
+      .run(now, flagId);
+  })();
+  sqlite
+    .prepare(
+      `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
+       VALUES (?, 'soumaya', 'forget_flag_row_deleted', ?, ?, 'ok')`,
+    )
+    .run(
+      spaceId,
+      `forget_flag_row_deleted flag_id=${flagId} table=${flag.table_name} row_id=${flag.row_id} request_id=${flag.request_id}`,
+      JSON.stringify({
+        flag_id: flagId,
+        table: flag.table_name,
+        row_id: flag.row_id,
+        request_id: flag.request_id,
+      }),
+    );
+  return flagViewOf(h, spaceId, { ...flag, status: "resolved_deleted", reviewed_at: now });
+}
+
+/** Dismiss an open flag whose target row is already gone. Flags are
+ *  never silently auto-deleted — the flag row is the audit trail, so
+ *  a dangling flag is closed explicitly, by hand. Refuses (409) while
+ *  the target still exists: dismiss is not a way to keep a quoting
+ *  row and hide the flag — review it, or delete the row. */
+export function dismissUnresolvedFlag(
+  h: DbHandle,
+  spaceId: string,
+  flagId: number,
+): UnresolvedFlagView | undefined {
+  const flag = openFlagOf(h, spaceId, flagId);
+  if (!flag) return undefined;
+  const target =
+    flag.table_name === "user_model"
+      ? h.sqlite
+          .prepare(`SELECT id FROM user_model WHERE id = ? AND space_id = ?`)
+          .get(flag.row_id, spaceId)
+      : h.sqlite
+          .prepare(`SELECT id FROM instruction_profiles WHERE id = ? AND space_id = ?`)
+          .get(flag.row_id, spaceId);
+  if (target) {
+    throw new ForgetSourceRefusal(
+      "target_exists",
+      `flag ${flagId} still names an existing ${flag.table_name} row — review it, or delete the row`,
+      { status: 409 },
+    );
+  }
+  const now = new Date().toISOString();
+  h.sqlite
+    .prepare(
+      `UPDATE forget_unresolved_flags SET status = 'dismissed', reviewed_at = ? WHERE id = ?`,
+    )
+    .run(now, flagId);
+  return flagViewOf(h, spaceId, { ...flag, status: "dismissed", reviewed_at: now });
 }

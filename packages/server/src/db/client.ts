@@ -972,6 +972,27 @@ export function migrateSchema(sqlite: RawDb): void {
       applied_at TEXT
     );
 
+    -- Review surface for flagged forget rows (design note
+    -- unresolved-flag-review-surface-design-2026-10-25.md section 1):
+    -- one row per quoting row left in place by policy, per forget
+    -- act. DDL identical to BOOTSTRAP_SQL in db/schemaSql.ts — a
+    -- no-op on fresh volumes, the migration on legacy ones.
+    CREATE TABLE IF NOT EXISTS forget_unresolved_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      request_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      table_name TEXT NOT NULL CHECK (table_name IN ('user_model', 'instruction_profiles')),
+      row_id INTEGER NOT NULL,
+      policy_reason TEXT NOT NULL CHECK (policy_reason IN ('stated_user_model', 'instruction_profile')),
+      status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'reviewed', 'resolved_deleted', 'dismissed')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      reviewed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_forget_unresolved_flags_space
+      ON forget_unresolved_flags(space_id, status);
+
     CREATE TABLE IF NOT EXISTS enrichment_quota (
       space_id TEXT NOT NULL,
       quota_date TEXT NOT NULL,
@@ -1275,6 +1296,10 @@ export function migrateSchema(sqlite: RawDb): void {
       "status", "created_at", "applied_at", "target_source_id",
     ],
     enrichment_quota: ["space_id", "quota_date", "claimed"],
+    forget_unresolved_flags: [
+      "id", "space_id", "request_id", "source_id", "table_name", "row_id",
+      "policy_reason", "status", "created_at", "reviewed_at",
+    ],
     // FTS5 virtual table: rowid is implicit (not listed by PRAGMA table_info).
     episodes_fts: ["summary", "detail"],
   };
