@@ -1,4 +1,5 @@
 import type { DbHandle } from "../db/client.js";
+import { ftsUpsert } from "../db/fts.js";
 import { isVectorEnabled } from "../db/vec.js";
 import { SourcesRepo } from "../repositories/sources.repo.js";
 import { refreshPersona } from "../persona/derive.js";
@@ -32,6 +33,10 @@ import { refreshPersona } from "../persona/derive.js";
  * forgotten chunk text. Found and not regenerable -> tombstoned.
  * Unverifiable-clean -> tombstoned. (No regeneration-from-sources
  * machinery exists in V1, so a dirty scrub always tombstones.)
+ * A surviving node's METADATA is scrubbed, not tombstoned: its label,
+ * tags, aliases, and celestial title are excised of verbatim spans in
+ * place (fix round 5) — they are short derived labels, and the node
+ * itself is clean. Its FTS row is re-indexed with the scrubbed label.
  *
  * Everything runs in ONE transaction, mirroring applyForgetRequest.
  */
@@ -46,6 +51,13 @@ export interface SourceForgetResult {
   nodesErased: number[];
   /** Multi-origin nodes that survived scrub verification clean. */
   nodesSurvivedClean: number[];
+  /**
+   * Surviving nodes whose label, tags, aliases, or celestial title
+   * quoted the forgotten source and were excised in place (fix round
+   * 5). A subset of nodesSurvivedClean — the node itself survived;
+   * only its metadata was scrubbed, and its FTS row re-indexed.
+   */
+  nodesLabelScrubbed: number[];
   /** Multi-origin nodes tombstoned because forgotten text remained. */
   nodesTombstoned: number[];
   /** Episodes tombstoned because their summary/detail quoted the source. */
@@ -114,6 +126,103 @@ export function containsVerbatimSpan(content: string, chunkTexts: string[]): boo
     if (content.includes(joined.slice(i, i + SCRUB_SPAN_CHARS))) return true;
   }
   return false;
+}
+
+/**
+ * Excise every verbatim span of the forgotten chunk text from `text`:
+ * each quoting interval is cut out, whitespace is collapsed, and the
+ * result is trimmed. Iterative — cutting one span can join two halves
+ * into a new quoting window, so the pass repeats until the text is
+ * span-free (bounded: every pass shortens the string). The caller
+ * still checks the result with containsVerbatimSpan and falls back to
+ * the tombstone marker when excision cannot produce a clean string.
+ * Mirrors containsVerbatimSpan exactly (short chunks whole + every
+ * 24-char window of the joined chunk text, cross-boundary included).
+ */
+export function exciseVerbatimSpans(text: string, chunkTexts: string[]): string {
+  let out = text;
+  for (let pass = 0; pass < 10; pass++) {
+    if (!containsVerbatimSpan(out, chunkTexts)) break;
+    const intervals = quotingIntervals(out, chunkTexts);
+    if (intervals.length === 0) break; // defensive: never spin if the two disagree
+    out = removeIntervals(out, intervals).replace(/\s+/g, " ").trim();
+  }
+  return out;
+}
+
+/** All [start, end) intervals of `text` covered by a quoting window. */
+function quotingIntervals(text: string, chunkTexts: string[]): { start: number; end: number }[] {
+  const intervals: { start: number; end: number }[] = [];
+  const addAll = (needle: string): void => {
+    if (!needle) return;
+    let from = 0;
+    for (;;) {
+      const at = text.indexOf(needle, from);
+      if (at === -1) break;
+      intervals.push({ start: at, end: at + needle.length });
+      from = at + 1; // +1, not +length: overlapping occurrences count
+    }
+  };
+  for (const t of chunkTexts) {
+    if (!t) continue;
+    if (t.length <= SCRUB_SPAN_CHARS && t.length >= 4) addAll(t);
+  }
+  const joined = chunkTexts.filter(Boolean).join("");
+  for (let i = 0; i + SCRUB_SPAN_CHARS <= joined.length; i++) {
+    addAll(joined.slice(i, i + SCRUB_SPAN_CHARS));
+  }
+  return intervals;
+}
+
+/** Delete merged intervals from `text` (overlaps/adjacency coalesced).
+ * Word repair: where a removal glues two word characters together
+ * ("a label[ SPAN ]here" -> "a labelhere"), a single space is kept
+ * between them, so excision never fuses two words into one. */
+function removeIntervals(text: string, intervals: { start: number; end: number }[]): string {
+  const sorted = [...intervals].sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  for (const iv of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && iv.start <= last.end) {
+      last.end = Math.max(last.end, iv.end);
+    } else {
+      merged.push({ ...iv });
+    }
+  }
+  const isWordChar = (ch: string): boolean => /[\p{L}\p{N}]/u.test(ch);
+  let out = "";
+  let cursor = 0;
+  for (const iv of merged) {
+    const kept = text.slice(cursor, iv.start);
+    if (kept.length > 0 && out.length > 0) {
+      const prev = out[out.length - 1];
+      const next = kept[0];
+      if (isWordChar(prev) && isWordChar(next)) out += " ";
+    }
+    out += kept;
+    cursor = iv.end;
+  }
+  const tail = text.slice(cursor);
+  if (tail.length > 0 && out.length > 0) {
+    const prev = out[out.length - 1];
+    const next = tail[0];
+    if (isWordChar(prev) && isWordChar(next)) out += " ";
+  }
+  out += tail;
+  return out;
+}
+
+/** Parse a JSON-array text column (tags/aliases); malformed -> []. */
+function parseJsonStringArray(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const arr: unknown = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr.map(String);
+  } catch {
+    /* malformed — treated as empty; the raw value is left untouched
+       unless a quote is found in it, which an unparseable value cannot be */
+  }
+  return [];
 }
 
 interface ForgetRequestRow {
@@ -518,6 +627,71 @@ export function forgetSourceByRequest(
       .run(spaceId, sourceId).changes;
     sqlite.prepare(`DELETE FROM sources WHERE id = ? AND space_id = ?`).run(sourceId, spaceId);
 
+    // Fix round 5 (re-review blocker): label/tag/alias/celestial-title
+    // scrub for SURVIVING nodes. Rounds 2–4 checked `content` only, so
+    // a node whose content was clean but whose label or tags quoted the
+    // forgotten source survived with the quote intact — still
+    // MATCH-retrievable through its nodes_fts label column, and
+    // re-injected into the persona on re-derivation (derivePersona
+    // reads labels/tags, never content). A surviving node gets its
+    // metadata excised in place: every verbatim span is cut out of the
+    // label, each tag, each alias, and the celestial title; tags /
+    // aliases that excise to nothing are dropped; a label that excises
+    // to nothing becomes the forget tombstone (labels are NOT NULL and
+    // the marker is honest about what happened); a celestial title
+    // that excises to nothing becomes NULL. The FTS row is re-indexed
+    // with the scrubbed label so no quoting token survives in the
+    // index. Columns whose values do not quote are written back
+    // byte-identical — the scrub never rewrites clean metadata.
+    const nodesLabelScrubbed: number[] = [];
+    const scrubNodeMetadata = (
+      nodeId: number,
+      label: string,
+      tagsRaw: string | null,
+      aliasesRaw: string | null,
+      celestialTitle: string | null,
+      content: string,
+    ): void => {
+      const labelQuotes = containsVerbatimSpan(label, chunkTexts);
+      const tags = parseJsonStringArray(tagsRaw);
+      const aliases = parseJsonStringArray(aliasesRaw);
+      const tagsQuote = tags.some((t) => containsVerbatimSpan(t, chunkTexts));
+      const aliasesQuote = aliases.some((a) => containsVerbatimSpan(a, chunkTexts));
+      const titleQuotes = celestialTitle != null && containsVerbatimSpan(celestialTitle, chunkTexts);
+      if (!labelQuotes && !tagsQuote && !aliasesQuote && !titleQuotes) return;
+      let newLabel = label;
+      if (labelQuotes) {
+        newLabel = exciseVerbatimSpans(label, chunkTexts);
+        if (!newLabel || containsVerbatimSpan(newLabel, chunkTexts)) newLabel = FORGET_TOMBSTONE;
+      }
+      const scrubList = (list: string[]): string[] =>
+        list
+          .map((t) => (containsVerbatimSpan(t, chunkTexts) ? exciseVerbatimSpans(t, chunkTexts).trim() : t))
+          .filter((t) => t.length > 0 && !containsVerbatimSpan(t, chunkTexts));
+      const tagsSql: string | null = tagsQuote
+        ? (() => {
+            const cleaned = scrubList(tags);
+            return cleaned.length > 0 ? JSON.stringify(cleaned) : null;
+          })()
+        : tagsRaw;
+      const aliasesSql: string | null = aliasesQuote
+        ? (() => {
+            const cleaned = scrubList(aliases);
+            return cleaned.length > 0 ? JSON.stringify(cleaned) : null;
+          })()
+        : aliasesRaw;
+      let titleSql: string | null = celestialTitle;
+      if (titleQuotes) {
+        const cleaned = exciseVerbatimSpans(celestialTitle as string, chunkTexts);
+        titleSql = cleaned && !containsVerbatimSpan(cleaned, chunkTexts) ? cleaned : null;
+      }
+      sqlite
+        .prepare(`UPDATE nodes SET label = ?, tags = ?, aliases = ?, celestial_title = ? WHERE id = ? AND space_id = ?`)
+        .run(newLabel, tagsSql, aliasesSql, titleSql, nodeId, spaceId);
+      ftsUpsert(sqlite, nodeId, newLabel, content);
+      nodesLabelScrubbed.push(nodeId);
+    };
+
     // Dependency-aware node handling.
     const nodesErased: number[] = [];
     const nodesSurvivedClean: number[] = [];
@@ -530,8 +704,8 @@ export function forgetSourceByRequest(
         )
         .get(spaceId, nodeId) as { c: number };
       const nodeRow = sqlite
-        .prepare(`SELECT content FROM nodes WHERE id = ? AND space_id = ?`)
-        .get(nodeId, spaceId) as { content: string } | undefined;
+        .prepare(`SELECT label, tags, aliases, celestial_title, content FROM nodes WHERE id = ? AND space_id = ?`)
+        .get(nodeId, spaceId) as { label: string; tags: string | null; aliases: string | null; celestial_title: string | null; content: string } | undefined;
       if (!nodeRow) continue;
       if (remaining.c === 0) {
         // Sole remaining origin forgotten: the node is erased with it —
@@ -557,6 +731,10 @@ export function forgetSourceByRequest(
         sqlite.prepare(`DELETE FROM nodes_fts WHERE rowid = ?`).run(nodeId);
         nodesTombstoned.push(nodeId);
       } else {
+        // Content clean and other origins remain: the node survives —
+        // but its label/tags/aliases/title may still quote the source
+        // (fix round 5). Scrub metadata in place, then re-index.
+        scrubNodeMetadata(nodeId, nodeRow.label, nodeRow.tags, nodeRow.aliases, nodeRow.celestial_title, nodeRow.content);
         nodesSurvivedClean.push(nodeId);
       }
     }
@@ -684,13 +862,19 @@ export function forgetSourceByRequest(
 
     // Unlinked nodes quoting the source: tombstone (linked nodes were
     // already decided by the loop above; clean survivors match no span).
+    // A node whose content is clean but whose label/tags/aliases/title
+    // quote the source gets the same in-place metadata scrub as a
+    // linked survivor (fix round 5) — it survives, scrubbed.
     const linkedSet = new Set(linkedNodeIds);
     const liveNodes = sqlite
-      .prepare(`SELECT id, content FROM nodes WHERE space_id = ? AND deleted_at IS NULL`)
-      .all(spaceId) as { id: number; content: string }[];
+      .prepare(`SELECT id, label, tags, aliases, celestial_title, content FROM nodes WHERE space_id = ? AND deleted_at IS NULL`)
+      .all(spaceId) as { id: number; label: string; tags: string | null; aliases: string | null; celestial_title: string | null; content: string }[];
     for (const n of liveNodes) {
       if (linkedSet.has(n.id)) continue;
-      if (!containsVerbatimSpan(n.content, chunkTexts)) continue;
+      if (!containsVerbatimSpan(n.content, chunkTexts)) {
+        scrubNodeMetadata(n.id, n.label, n.tags, n.aliases, n.celestial_title, n.content);
+        continue;
+      }
       sqlite
         .prepare(
           `UPDATE nodes SET content = ?, deleted_at = COALESCE(deleted_at, ?)
@@ -785,9 +969,15 @@ export function forgetSourceByRequest(
     //   * user_persona: the singleton row is DELETEd when it quotes the
     //     span, then re-derived from the surviving nodes (force=true —
     //     the 6h staleness cache would otherwise keep the quoting body).
-    //     Re-derivation reads only node labels/tags/degree, never
-    //     content, so it is clean by construction once the quoting
-    //     nodes are gone.
+    //     Re-derivation reads node labels/tags — which CAN quote the
+    //     source, so it is clean ONLY because the node loop above
+    //     scrubbed every surviving node's metadata first (fix round 5:
+    //     the earlier claim that re-derivation is "clean by
+    //     construction" was wrong — labels/tags quote, and the
+    //     re-derived body re-injected the span). Belt-and-braces: the
+    //     re-derived body is verified after derivation, and a body that
+    //     still quotes is deleted outright rather than served — no
+    //     persona is better than a quoting persona.
     //   * tts_audio_cache: a targeted scrub is impossible (no text
     //     column; the key is a SHA-256 over the entire reply text), so
     //     the space's cache is purged outright. The cache is purely
@@ -886,6 +1076,17 @@ export function forgetSourceByRequest(
     if (personaRow && containsVerbatimSpan(personaRow.body, chunkTexts)) {
       sqlite.prepare(`DELETE FROM user_persona WHERE space_id = ?`).run(spaceId);
       refreshPersona(h, spaceId, true);
+      // Fix round 5: verify the re-derived body. The label/tag scrub
+      // above should have made re-derivation clean; if the body still
+      // quotes, some representation was missed — delete the row rather
+      // than serve (or store) a quoting persona. The sweep test proves
+      // the clean case; this is the fail-safe for the missed one.
+      const rederived = sqlite
+        .prepare(`SELECT body FROM user_persona WHERE space_id = ?`)
+        .get(spaceId) as { body: string } | undefined;
+      if (rederived && containsVerbatimSpan(rederived.body, chunkTexts)) {
+        sqlite.prepare(`DELETE FROM user_persona WHERE space_id = ?`).run(spaceId);
+      }
       personaScrubbed = true;
     }
 
@@ -967,6 +1168,7 @@ export function forgetSourceByRequest(
       linksErased,
       nodesErased,
       nodesSurvivedClean,
+      nodesLabelScrubbed,
       nodesTombstoned,
       episodesTombstoned,
       derivedRowsScrubbed,
