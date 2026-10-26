@@ -9,6 +9,7 @@
 ## 1. What an NPC is (and what it is not)
 
 - **An NPC is a presence with a job.** It acts in a world, speaks or gestures, and does things on its own — within its fence. It is not decoration (traffic, birds, particulate are set dressing: no agency, no decisions) and it is not progression (an NPC never gates access, never scores the user, never unlocks or withholds anything).
+- **NPCs fly ships (owner, 2026-10-25).** The worlds are filled with NPC ships until real users start playing; then NPC ships + real users' ships. Every ship in a world belongs to someone. Every NPC ship is a real free sci-fi asset — never a procedural placeholder (no fake triangle floating blue things). In this increment the ships fly as ambient traffic (A17/B-4: presentation-only, no decisions, no log entries); the vessel is an NPC's ship, the traffic behavior is not yet an NPC act.
 - **An NPC never punishes.** No loss, no shame, nothing real ever taken. An NPC's acts are wondrous, protective, or reordering — never destructive (D-54: destruction is out, for the Man-God and by extension for every NPC).
 - **An NPC never touches the brain.** It reads what the brain surfaces only with the visitor's consent, and it never writes to a brain — no new node, no edit, no deletion, no re-ranking. The worlds layer holds nothing the brain doesn't (failure-independence).
 - **Few NPCs, each with one job.** The worlds feel alive through a small number of distinct presences, not a crowd. The roster is an owner decision (open question Q4); the framework below is the same for all of them.
@@ -56,7 +57,7 @@ The Man-God is the first autonomous NPC in the owner's plan, and the framework's
 - **Growing Place:** a keeper — walks the terraces, tends nothing (nothing needs tending), answers "what is this plot?" One job: witness.
 - **Deep Past:** a guide for the Chronicle descent — walks the thread with you, narrates from node content. One job: accompany.
 - **Fleets (D-55):** Soumaya dispatches fleets on automated missions, bounded, with end-game costs. Fleets are dispatched agents, not NPCs — but they run the same loop and the same fence, with missions as their allow-list.
-- Traffic, birds, particulate, and ambient life are **not** NPCs. They have no decisions and no log entries.
+- Traffic, birds, particulate, and ambient life are **not** NPCs. They have no decisions and no log entries. **Refinement (owner, 2026-10-25):** the SHIPS are NPCs' ships — until real users arrive, every ship you see is an NPC's ship; then NPC ships + real users' ships. The ships are real free assets, never procedural placeholders. In this increment they fly as ambient traffic (A17/B-4); the vessel belongs to an NPC, the traffic behavior carries no decision and no log entry.
 
 ## 6. Shared-world questions (the Man-God forces these; the framework must answer them)
 
