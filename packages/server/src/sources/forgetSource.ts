@@ -36,7 +36,8 @@ import { refreshPersona } from "../persona/derive.js";
  * A surviving node's METADATA is scrubbed, not tombstoned: its label,
  * tags, aliases, and celestial title are excised of verbatim spans in
  * place (fix round 5) — they are short derived labels, and the node
- * itself is clean. Its FTS row is re-indexed with the scrubbed label.
+ * itself is clean. Its research questions and answers are excised the
+ * same way (fix round 6). Its FTS row is re-indexed with the scrubbed label.
  *
  * Everything runs in ONE transaction, mirroring applyForgetRequest.
  */
@@ -189,7 +190,7 @@ function removeIntervals(text: string, intervals: { start: number; end: number }
       merged.push({ ...iv });
     }
   }
-  const isWordChar = (ch: string): boolean => /[\p{L}\p{N}]/u.test(ch);
+  const isWordChar = (ch: string | undefined): boolean => ch != null && /[\p{L}\p{N}]/u.test(ch);
   let out = "";
   let cursor = 0;
   for (const iv of merged) {
@@ -223,6 +224,23 @@ function parseJsonStringArray(raw: string | null): string[] {
        unless a quote is found in it, which an unparseable value cannot be */
   }
   return [];
+}
+
+/** Parse a JSON-object text column (research_answers); malformed -> {}. */
+function parseJsonStringMap(raw: string | null): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const obj: unknown = JSON.parse(raw);
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+      return Object.fromEntries(
+        Object.entries(obj as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+      );
+    }
+  } catch {
+    /* malformed — treated as empty; same negligible corner as
+       parseJsonStringArray (no production writer emits malformed JSON) */
+  }
+  return {};
 }
 
 interface ForgetRequestRow {
@@ -643,6 +661,20 @@ export function forgetSourceByRequest(
     // with the scrubbed label so no quoting token survives in the
     // index. Columns whose values do not quote are written back
     // byte-identical — the scrub never rewrites clean metadata.
+    //
+    // Fix round 6 (round-5 re-review finding 2): the same in-place
+    // excision covers `research_questions` / `research_answers`.
+    // Questions are LLM-generated from label+content and served daily;
+    // answers are user-typed and re-shown in NodeInspector — both are
+    // stored representations that can return the span verbatim, and
+    // the sweep never touched them. Excision, not deletion: quoting
+    // entries keep their clean remainder, entries that excise to
+    // nothing are dropped, and a column that empties out becomes NULL
+    // (the same treatment as tags/aliases). Answer keys are excised
+    // too — a key is question text and can quote the span the same
+    // way a value can. `nodesLabelScrubbed` keeps its round-5 meaning
+    // (label/tags/aliases/title only); a research-only scrub is proven
+    // by the row itself, not by that list.
     const nodesLabelScrubbed: number[] = [];
     const scrubNodeMetadata = (
       nodeId: number,
@@ -651,6 +683,8 @@ export function forgetSourceByRequest(
       aliasesRaw: string | null,
       celestialTitle: string | null,
       content: string,
+      researchQuestionsRaw: string | null,
+      researchAnswersRaw: string | null,
     ): void => {
       const labelQuotes = containsVerbatimSpan(label, chunkTexts);
       const tags = parseJsonStringArray(tagsRaw);
@@ -658,7 +692,13 @@ export function forgetSourceByRequest(
       const tagsQuote = tags.some((t) => containsVerbatimSpan(t, chunkTexts));
       const aliasesQuote = aliases.some((a) => containsVerbatimSpan(a, chunkTexts));
       const titleQuotes = celestialTitle != null && containsVerbatimSpan(celestialTitle, chunkTexts);
-      if (!labelQuotes && !tagsQuote && !aliasesQuote && !titleQuotes) return;
+      const questions = parseJsonStringArray(researchQuestionsRaw);
+      const questionsQuote = questions.some((q) => containsVerbatimSpan(q, chunkTexts));
+      const answers = parseJsonStringMap(researchAnswersRaw);
+      const answersQuote = Object.entries(answers).some(
+        ([k, v]) => containsVerbatimSpan(k, chunkTexts) || containsVerbatimSpan(v, chunkTexts),
+      );
+      if (!labelQuotes && !tagsQuote && !aliasesQuote && !titleQuotes && !questionsQuote && !answersQuote) return;
       let newLabel = label;
       if (labelQuotes) {
         newLabel = exciseVerbatimSpans(label, chunkTexts);
@@ -685,11 +725,30 @@ export function forgetSourceByRequest(
         const cleaned = exciseVerbatimSpans(celestialTitle as string, chunkTexts);
         titleSql = cleaned && !containsVerbatimSpan(cleaned, chunkTexts) ? cleaned : null;
       }
+      const questionsSql: string | null = questionsQuote
+        ? (() => {
+            const cleaned = scrubList(questions);
+            return cleaned.length > 0 ? JSON.stringify(cleaned) : null;
+          })()
+        : researchQuestionsRaw;
+      const answersSql: string | null = answersQuote
+        ? (() => {
+            const cleaned: Record<string, string> = {};
+            for (const [k, v] of Object.entries(answers)) {
+              const newKey = containsVerbatimSpan(k, chunkTexts) ? exciseVerbatimSpans(k, chunkTexts).trim() : k;
+              if (!newKey || containsVerbatimSpan(newKey, chunkTexts)) continue;
+              const newVal = containsVerbatimSpan(v, chunkTexts) ? exciseVerbatimSpans(v, chunkTexts).trim() : v;
+              if (!newVal || containsVerbatimSpan(newVal, chunkTexts)) continue;
+              cleaned[newKey] = newVal;
+            }
+            return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
+          })()
+        : researchAnswersRaw;
       sqlite
-        .prepare(`UPDATE nodes SET label = ?, tags = ?, aliases = ?, celestial_title = ? WHERE id = ? AND space_id = ?`)
-        .run(newLabel, tagsSql, aliasesSql, titleSql, nodeId, spaceId);
+        .prepare(`UPDATE nodes SET label = ?, tags = ?, aliases = ?, celestial_title = ?, research_questions = ?, research_answers = ? WHERE id = ? AND space_id = ?`)
+        .run(newLabel, tagsSql, aliasesSql, titleSql, questionsSql, answersSql, nodeId, spaceId);
       ftsUpsert(sqlite, nodeId, newLabel, content);
-      nodesLabelScrubbed.push(nodeId);
+      if (labelQuotes || tagsQuote || aliasesQuote || titleQuotes) nodesLabelScrubbed.push(nodeId);
     };
 
     // Dependency-aware node handling.
@@ -704,8 +763,8 @@ export function forgetSourceByRequest(
         )
         .get(spaceId, nodeId) as { c: number };
       const nodeRow = sqlite
-        .prepare(`SELECT label, tags, aliases, celestial_title, content FROM nodes WHERE id = ? AND space_id = ?`)
-        .get(nodeId, spaceId) as { label: string; tags: string | null; aliases: string | null; celestial_title: string | null; content: string } | undefined;
+        .prepare(`SELECT label, tags, aliases, celestial_title, content, research_questions, research_answers FROM nodes WHERE id = ? AND space_id = ?`)
+        .get(nodeId, spaceId) as { label: string; tags: string | null; aliases: string | null; celestial_title: string | null; content: string; research_questions: string | null; research_answers: string | null } | undefined;
       if (!nodeRow) continue;
       if (remaining.c === 0) {
         // Sole remaining origin forgotten: the node is erased with it —
@@ -734,7 +793,7 @@ export function forgetSourceByRequest(
         // Content clean and other origins remain: the node survives —
         // but its label/tags/aliases/title may still quote the source
         // (fix round 5). Scrub metadata in place, then re-index.
-        scrubNodeMetadata(nodeId, nodeRow.label, nodeRow.tags, nodeRow.aliases, nodeRow.celestial_title, nodeRow.content);
+        scrubNodeMetadata(nodeId, nodeRow.label, nodeRow.tags, nodeRow.aliases, nodeRow.celestial_title, nodeRow.content, nodeRow.research_questions, nodeRow.research_answers);
         nodesSurvivedClean.push(nodeId);
       }
     }
@@ -867,12 +926,12 @@ export function forgetSourceByRequest(
     // linked survivor (fix round 5) — it survives, scrubbed.
     const linkedSet = new Set(linkedNodeIds);
     const liveNodes = sqlite
-      .prepare(`SELECT id, label, tags, aliases, celestial_title, content FROM nodes WHERE space_id = ? AND deleted_at IS NULL`)
-      .all(spaceId) as { id: number; label: string; tags: string | null; aliases: string | null; celestial_title: string | null; content: string }[];
+      .prepare(`SELECT id, label, tags, aliases, celestial_title, content, research_questions, research_answers FROM nodes WHERE space_id = ? AND deleted_at IS NULL`)
+      .all(spaceId) as { id: number; label: string; tags: string | null; aliases: string | null; celestial_title: string | null; content: string; research_questions: string | null; research_answers: string | null }[];
     for (const n of liveNodes) {
       if (linkedSet.has(n.id)) continue;
       if (!containsVerbatimSpan(n.content, chunkTexts)) {
-        scrubNodeMetadata(n.id, n.label, n.tags, n.aliases, n.celestial_title, n.content);
+        scrubNodeMetadata(n.id, n.label, n.tags, n.aliases, n.celestial_title, n.content, n.research_questions, n.research_answers);
         continue;
       }
       sqlite
