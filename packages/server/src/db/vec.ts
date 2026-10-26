@@ -292,13 +292,16 @@ export function knn(db: RawDb, queryVec: Float32Array, k: number, spaceId?: stri
 
   if (spaceId) {
     const lookup = db.prepare(
-      `SELECT space_id AS s, deleted_at AS d, status AS st FROM nodes WHERE id = ?`,
+      `SELECT space_id AS s, deleted_at AS d, status AS st, superseded_at AS sup FROM nodes WHERE id = ?`,
     );
     hits = hits
       .filter((h) => {
-        const row = lookup.get(h.nodeId) as { s: string; d: string | null; st: string | null } | undefined;
-        // Space-scoped, not deleted, and not archived (archived rests out of retrieval).
-        return row !== undefined && row.s === spaceId && row.d === null && row.st !== "archived";
+        const row = lookup.get(h.nodeId) as { s: string; d: string | null; st: string | null; sup: string | null } | undefined;
+        // Space-scoped, not deleted, not archived (archived rests out of
+        // retrieval), and not superseded — a superseded node must not consume
+        // a vector fusion slot (REG-186 / SP-03: the keyword side already
+        // excludes superseded in-WHERE; the vector side is the same rule).
+        return row !== undefined && row.s === spaceId && row.d === null && row.st !== "archived" && row.sup === null;
       })
       .slice(0, k);
   }

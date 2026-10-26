@@ -5,7 +5,9 @@ import { spaceOf } from "../middleware.js";
 
 export function searchRoutes(ctx: AppContext): Router {
   const r = Router();
-  // GET /api/search?q=...&k=10 -> semantic KNN hits with similarity
+  // GET /api/search?q=...&k=10 -> hybrid RRF search envelope
+  // { hits, total, hasMore, totalCapped } (REG-186: the old bare array could
+  // never say more matches existed than the top-k page showed).
   r.get("/", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     if (q.trim().length === 0) {

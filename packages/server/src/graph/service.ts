@@ -5,14 +5,41 @@ import { DEFAULT_SPACE } from "../db/schema.js";
 import { heuristicImportance } from "../llm/heuristic.js";
 import type { EmbeddingProvider } from "../embeddings/adapter.js";
 import { knn } from "../db/vec.js";
-import { keywordSearch, fuseRrf } from "../db/fts.js";
+import { keywordSearch, tagSearch, fuseRrf } from "../db/fts.js";
 import { multiHopNeighbors } from "./traversal.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
 
+export type SearchMatchKind = "keyword" | "vector" | "both";
+
 export interface SearchHit extends GraphNode {
-  similarity: number;
+  /** Real vector cosine when the hit came from the vector side, else null.
+   * Keyword-only hits carry no cosine, and no invented constant is shipped
+   * (REG-185 / SP-02: the old `?? 0.5` wore a fake "50%" on every such hit,
+   * and the list was never sorted by the number it displayed). */
+  similarity: number | null;
+  /** Which retrieval side(s) produced this hit — what the UI renders instead
+   * of a percentage. The RRF fusion score that actually ranked the hit is
+   * not a per-hit measurement, so no number is displayed as a match score. */
+  matchKind: SearchMatchKind;
 }
+
+export interface SearchResult {
+  hits: SearchHit[];
+  /** Live fused matches found within the probe pool (see SEARCH_PROBE). */
+  total: number;
+  /** True when more matches exist than the returned page shows. */
+  hasMore: boolean;
+  /** True when a retrieval side hit its probe ceiling, so `total` is a lower
+   * bound ("more than N") rather than an exact count. */
+  totalCapped: boolean;
+}
+
+/** Retrieval probe pool (REG-186 / SP-03): the search page is top-k, but the
+ * response must be able to say how many matches exist — a bare top-k fetch
+ * could never do that. 200 per side is effectively exhaustive for a personal
+ * brain while staying cheap (FTS LIMIT + vec0 over-fetch). */
+const SEARCH_PROBE = 200;
 
 /**
  * Populate-path repair D3 (docs/repairs/galaxy-populate-render-stall.md):
@@ -217,21 +244,55 @@ export class GraphService {
    * HYBRID search: semantic KNN fused with BM25 keyword hits via Reciprocal Rank
    * Fusion. Embeddings alone missed exact names/keywords (badly so under the
    * offline hash provider); BM25 alone misses paraphrase. Fused order wins.
+   *
+   * Returns a page plus its honesty envelope (REG-186 / SP-03): `total` /
+   * `hasMore` say when more matches exist than the page shows, and the page
+   * never silently shrinks below `k` because an ineligible node consumed a
+   * fusion slot — both retrieval sides exclude superseded nodes before any
+   * slicing (keyword in-WHERE, vector in knn's post-filter), and hydration
+   * drops nothing further for eligible ids.
    */
-  async search(embeddings: EmbeddingProvider, query: string, k = 10): Promise<SearchHit[]> {
+  async search(embeddings: EmbeddingProvider, query: string, k = 10): Promise<SearchResult> {
     const vec = await embeddings.embed(query);
-    const vecHits = knn(this.h.sqlite, vec, k, this.spaceId);
-    const kwHits = keywordSearch(this.h.sqlite, this.spaceId, query, k);
+    const vecHits = knn(this.h.sqlite, vec, SEARCH_PROBE, this.spaceId);
+    const kwHits = keywordSearch(this.h.sqlite, this.spaceId, query, SEARCH_PROBE);
+    // REG-118 / BR-07: tags are searchable too — a tag query otherwise found
+    // nothing here while Hubs search matched member tags. Tag hits join the
+    // keyword side after the BM25 hits (lower RRF rank) and never duplicate a
+    // node the BM25 side already returned.
+    const kwIds = new Set(kwHits.map((h) => h.nodeId));
+    const tagHits = tagSearch(this.h.sqlite, this.spaceId, query, SEARCH_PROBE).filter(
+      (h) => !kwIds.has(h.nodeId),
+    );
+    const kwSide = [...kwHits, ...tagHits];
+    // Fuse the whole probe pool (no top-k slicing here): the envelope needs
+    // the full live count, and the page slices after hydration.
+    const fused = fuseRrf(vecHits, kwSide, vecHits.length + kwSide.length + 1);
+    const byId = new Map(this.nodes.byIds(fused).map((n) => [n.id, n]));
     const simById = new Map(vecHits.map((h) => [h.nodeId, h.similarity]));
-    const ordered = fuseRrf(vecHits, kwHits, k);
-    const byId = new Map(this.nodes.byIds(ordered).map((n) => [n.id, n]));
-    return ordered
+    const vecIds = new Set(vecHits.map((h) => h.nodeId));
+    const kwSideIds = new Set(kwSide.map((h) => h.nodeId));
+    const live = fused
       .map((id) => {
         const node = byId.get(id);
-        // Keyword-only hits carry no cosine — surface them with a neutral score.
-        return node ? { ...node, similarity: simById.get(id) ?? 0.5 } : undefined;
+        if (!node) return undefined;
+        const inVec = vecIds.has(id);
+        const inKw = kwSideIds.has(id);
+        return {
+          ...node,
+          similarity: inVec ? (simById.get(id) ?? null) : null,
+          matchKind: inVec && inKw ? "both" : inVec ? "vector" : "keyword",
+        } satisfies SearchHit;
       })
       .filter((x): x is SearchHit => x !== undefined);
+    const totalCapped =
+      vecHits.length >= SEARCH_PROBE || kwHits.length >= SEARCH_PROBE || tagHits.length >= SEARCH_PROBE;
+    return {
+      hits: live.slice(0, k),
+      total: live.length,
+      hasMore: live.length > k,
+      totalCapped,
+    };
   }
 
   getNode(id: number): GraphNode | undefined {

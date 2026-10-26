@@ -95,7 +95,10 @@ async function ingestCore(
   const extraction = await deps.llm.extract(rawText, context);
 
   // 2 + 3. Embed each new node and store it (relational + vector).
-  const contents = extraction.nodes.map((n) => n.content);
+  // REG-190: embed the same "label. content" composition the Details edit path
+  // uses — content-only here made a memory's semantic findability depend on
+  // whether it had ever been edited in Details.
+  const contents = extraction.nodes.map((n) => `${n.label}. ${n.content}`);
   const vectors = await deps.embeddings.embedBatch(contents);
   const createdNodes: GraphNode[] = [];
   const labelToId = new Map<string, number>();

@@ -112,8 +112,11 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
       span = days > 365 ? `~${Math.round(days / 365)}y` : days > 45 ? `~${Math.round(days / 30)}mo` : days > 0 ? `~${days}d` : "same day";
     }
     // Emotional tone.
+    // REG-115: an all-unscored member set has no tone — the old code defaulted
+    // the empty average to 0 and displayed an "even" tone for memories that
+    // were never scored. A null tone renders no tone label at all.
     const ews = members.map((m) => m.emotionalWeight).filter((x): x is number => typeof x === "number");
-    const tone = toneOf(ews.length ? ews.reduce((s, x) => s + x, 0) / ews.length : 0);
+    const tone = ews.length ? toneOf(ews.reduce((s, x) => s + x, 0) / ews.length) : null;
     // IM-41: absolute local dates alongside the relative span — the earliest
     // and latest member dates in the viewer's own calendar.
     const validTimes = times.filter((t) => !Number.isNaN(t));
@@ -197,14 +200,17 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
       <ul className="neighbors sector-list">
         {visibleSectors.map((s) => {
           const ctx = contextByHubId.get(s.id)!;
-          // The server's own `degree` is enriched from the full edge set; the
-          // locally-recomputed member count silently drops any neighbor whose
-          // node object isn't present client-side (e.g. archived/filtered out),
-          // which used to under-report "N memories orbiting" in that case.
-          const orbiting = s.degree ?? Math.max(ctx.count - 1, 0);
+          const orbiters = ctx.members.filter((m) => m.id !== s.id);
+          // REG-117: the card used to headline the server's degree (over the
+          // full edge set) above a list that can only show client-present
+          // members — the same card disagreed with itself whenever a neighbour
+          // wasn't in the payload. Headline the listable count; name any
+          // remainder instead of silently dropping it.
+          const serverOrbiting = s.degree ?? Math.max(ctx.count - 1, 0);
+          const hiddenOrbiting = Math.max(serverOrbiting - orbiters.length, 0);
+          const orbiting = orbiters.length;
           const expanded = expandedHubs.has(s.id);
           const hubDate = fmtBrowseDate(s.occurredAt ?? s.createdAt);
-          const orbiters = ctx.members.filter((m) => m.id !== s.id);
           return (
             <li key={s.id} className="sector-card">
               <div className="sector-header">
@@ -216,14 +222,19 @@ export function SectorView({ graph, onFocus, onIsolate }: Props) {
               </div>
               {s.celestialTitle && <p className="sector-title">"{s.celestialTitle}"</p>}
               <div className="sector-stats">
-                <span>{orbiting} memories orbiting</span>
+                <span>
+                  {orbiting} memories orbiting
+                  {hiddenOrbiting > 0 ? ` (+${hiddenOrbiting} more not in this view)` : ""}
+                </span>
                 {/* IM-41: the hub's own local date was never shown. */}
                 {hubDate && <span title="when this hub's memory is from"> · since {hubDate}</span>}
               </div>
               <div className="sector-context">
-                <span className="sector-ctx" title="emotional tone">
-                  <span className="nl-emodot" style={{ background: ctx.tone.color }} /> {ctx.tone.label}
-                </span>
+                {ctx.tone && (
+                  <span className="sector-ctx" title="emotional tone">
+                    <span className="nl-emodot" style={{ background: ctx.tone.color }} /> {ctx.tone.label}
+                  </span>
+                )}
                 {ctx.span && (
                   <span className="sector-ctx" title="time span">
                     🗓 {ctx.span}

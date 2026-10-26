@@ -194,10 +194,16 @@ describe("REST API", () => {
   it("semantic search returns the relevant node with a similarity score", async () => {
     const { status, body } = await get(`/api/search?q=${encodeURIComponent("coffee subscription")}`);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(1);
-    expect(body[0]).toHaveProperty("similarity");
-    expect(body[0].content.toLowerCase()).toContain("coffee");
+    // REG-186: the route returns the { hits, total, hasMore, totalCapped }
+    // envelope now, not a bare array — the page is top-k and the envelope
+    // says whether more matches exist.
+    expect(Array.isArray(body.hits)).toBe(true);
+    expect(body.hits.length).toBeGreaterThanOrEqual(1);
+    expect(body.hits[0]).toHaveProperty("similarity");
+    expect(body.hits[0].content.toLowerCase()).toContain("coffee");
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.hasMore).toBe("boolean");
+    expect(body.total).toBeGreaterThanOrEqual(body.hits.length);
   });
 
   it("returns a node's neighborhood subgraph", async () => {
@@ -439,7 +445,7 @@ describe("REST API", () => {
     expect(fetched.body.label).toBe("Renamed by edit");
     // FTS was refreshed: the new body text is searchable, the old isn't the hit.
     const hits = await get(`/api/search?q=${encodeURIComponent("zebrafish")}`);
-    expect(hits.body.some((n: { id: number }) => n.id === id)).toBe(true);
+    expect(hits.body.hits.some((n: { id: number }) => n.id === id)).toBe(true);
   });
 
   it("PATCH /api/nodes/:id still adjusts importance alone, and rejects an empty patch", async () => {

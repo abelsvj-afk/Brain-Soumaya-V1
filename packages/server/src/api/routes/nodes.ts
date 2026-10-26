@@ -221,19 +221,23 @@ export function nodesRoutes(ctx: AppContext): Router {
           text = research.content;
           const expandedContent = `${node.content}\n\n--- Research Deep Dive ---\n${text}`;
           const newImp = Math.min(1.0, (node.importance ?? 0.5) + 0.2);
+          const newLabel = research.label || node.label;
           ctx.handle.db
             .update(nodes)
             .set({
               content: expandedContent,
               importance: newImp,
-              label: research.label || node.label,
+              label: newLabel,
               researchQuestions: null,
               researchAnswers: null
             })
             .where(and(eq(nodes.id, id), eq(nodes.spaceId, spaceId)))
             .run();
-          upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(expandedContent));
-          ftsUpsert(ctx.handle.sqlite, id, research.label || node.label, expandedContent);
+          // REG-190: embed the same "label. content" composition the edit path
+          // uses — content-only here made semantic findability depend on which
+          // doors the node had passed through.
+          upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(`${newLabel}. ${expandedContent}`));
+          ftsUpsert(ctx.handle.sqlite, id, newLabel, expandedContent);
         }
       }
     } catch (err) {
@@ -420,21 +424,26 @@ export function nodesRoutes(ctx: AppContext): Router {
       const research = await ctx.llm.research({ label: node.label, content: node.content }, `${researchSteer(node as any)}\n\n${userAnswersText}`);
       const expandedContent = `${node.content}\n\n--- Research Deep Dive ---\n${research.content}`;
       const newImp = Math.min(1.0, (node.importance ?? 0.5) + 0.2);
+      // REG-104: FTS must index the POST-update label — the old code passed
+      // node.label (the pre-update label), so BM25 matched a title the memory
+      // no longer had and missed the title it now has.
+      const newLabel = research.label || node.label;
 
       ctx.handle.db
         .update(nodes)
         .set({
           content: expandedContent,
           importance: newImp,
-          label: research.label || node.label,
+          label: newLabel,
           researchQuestions: null,
           researchAnswers: JSON.stringify(answersMap),
         })
         .where(and(eq(nodes.id, id), eq(nodes.spaceId, spaceId)))
         .run();
 
-      upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(expandedContent));
-      ftsUpsert(ctx.handle.sqlite, id, node.label, expandedContent);
+      // REG-190: same "label. content" composition as the edit path.
+      upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(`${newLabel}. ${expandedContent}`));
+      ftsUpsert(ctx.handle.sqlite, id, newLabel, expandedContent);
       nodesRepo.tend(id);
 
       const updatedNode = graphFor(res).getNode(id);

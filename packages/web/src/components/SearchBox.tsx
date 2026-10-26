@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { NODE_TYPE_LABEL, type NodeType } from "@brain/shared";
 import { searchDetailed, type SearchHit } from "../api/client.js";
+import { matchLabel, moreMatchesText } from "../utils/searchFormat.js";
 
 interface Props {
   onFocus: (id: number) => void;
@@ -46,6 +47,11 @@ function snippet(content?: string): string {
 export function SearchBox({ onFocus, onClose }: Props) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
+  // REG-186: the top-k page's honesty envelope — whether more matches exist
+  // than the page shows, and whether the total is exact or a lower bound.
+  const [total, setTotal] = useState<number | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCapped, setTotalCapped] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +71,9 @@ export function SearchBox({ onFocus, onClose }: Props) {
     if (seq !== requestSeq.current || !r) return; // a newer search superseded this one
     setBusy(false);
     setHits(r.hits);
+    setTotal(r.total);
+    setHasMore(r.hasMore ?? false);
+    setTotalCapped(r.totalCapped ?? false);
     setError(r.error ?? null);
     setActive(r.hits.length > 0 ? 0 : -1);
     setOpen(true);
@@ -190,10 +199,16 @@ export function SearchBox({ onFocus, onClose }: Props) {
                       {fmtDate(h.createdAt) ? ` · ${fmtDate(h.createdAt)}` : ""}
                     </span>
                   </span>
-                  <em>{typeof h.similarity === "number" ? `${(h.similarity * 100).toFixed(0)}%` : ""}</em>
+                  {/* REG-185: no invented percentage — the row names which
+                      retrieval side produced the hit instead. */}
+                  <em>{matchLabel(h)}</em>
                 </button>
               </li>
             ))}
+          {/* REG-186: the page is top-k — say so when more matches exist. */}
+          {!error && hasMore && (
+            <li className="empty small">{moreMatchesText(hits.length, total ?? hits.length, totalCapped)}</li>
+          )}
         </ul>
       )}
     </div>

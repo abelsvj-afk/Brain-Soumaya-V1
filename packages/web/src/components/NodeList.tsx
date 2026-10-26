@@ -22,7 +22,7 @@ interface Props {
   onTagChange?: (tag: string | null) => void;
 }
 
-type Emotion = "all" | "positive" | "neutral" | "negative";
+type Emotion = "all" | "positive" | "neutral" | "negative" | "unscored";
 type Sort = "mass" | "recent" | "links" | "name";
 
 function relative(raw?: string): string {
@@ -36,7 +36,11 @@ function relative(raw?: string): string {
   return `${Math.round(d / 365)}y ago`;
 }
 function emotionBucket(ew?: number): Exclude<Emotion, "all"> {
-  if (typeof ew !== "number") return "neutral";
+  // REG-115: an absent weight is "unscored", NOT "neutral" — the old mapping
+  // presented a derived label as a fact about the memory, and filed
+  // never-scored memories under the neutral filter indistinguishably from
+  // scored-neutral ones. Rows render no emotion label for "unscored".
+  if (typeof ew !== "number") return "unscored";
   if (ew > 0.2) return "positive";
   if (ew < -0.2) return "negative";
   return "neutral";
@@ -45,6 +49,7 @@ const EMOTION_DOT: Record<Exclude<Emotion, "all">, string> = {
   positive: "#ffcf6b",
   neutral: "#9b96c4",
   negative: "#6bb7ff",
+  unscored: "#4a4a5e",
 };
 /** Same vocabulary the emotion filter dropdown already shows the user
  *  ("● warm"/"● neutral"/"● heavy") — the dot alone (title-only) was the one
@@ -54,6 +59,7 @@ const EMOTION_LABEL: Record<Exclude<Emotion, "all">, string> = {
   positive: "warm",
   neutral: "neutral",
   negative: "heavy",
+  unscored: "unscored",
 };
 
 /** Bucket a timestamp into a human time period (for timeline grouping). */
@@ -174,11 +180,19 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
   const allTagsWithCounts = useMemo(() => {
     const f = new Map<string, number>();
     for (const n of memories) for (const t of n.tags ?? []) f.set(t, (f.get(t) ?? 0) + 1);
-    return [...f.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([name, count]) => ({ name, count }));
+    return [...f.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
   }, [memories]);
+  // REG-114: the facet used to silently truncate at 12 tags — a memory whose
+  // only tag ranked 13th or lower could not be reached through it at all.
+  // The top 12 show by default with a "+N more tags" affordance that reveals
+  // the rest, so every tag present on a shown memory stays filter-reachable.
+  const TAG_FACET_LIMIT = 12;
+  const [showAllTags, setShowAllTags] = useState(false);
+  const shownTags = showAllTags ? allTagsWithCounts : allTagsWithCounts.slice(0, TAG_FACET_LIMIT);
+  const hiddenTagCount = allTagsWithCounts.length - shownTags.length;
   // Was recomputed via a fresh Math.max(...spread) inside the tag-row render map —
   // once per tag, every render.
-  const maxTagCount = useMemo(() => Math.max(...allTagsWithCounts.map((tc) => tc.count), 1), [allTagsWithCounts]);
+  const maxTagCount = useMemo(() => Math.max(...shownTags.map((tc) => tc.count), 1), [shownTags]);
 
   // Distinct kinds present (legacy values normalized to the canonical taxonomy).
   const types = useMemo(
@@ -189,7 +203,15 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const out = memories.filter((n) => {
-      if (needle && !n.label.toLowerCase().includes(needle) && !n.content.toLowerCase().includes(needle))
+      // REG-118: tags are part of the text match — Hubs search already
+      // matched member tags while All/Folders matched label/content only, so
+      // the same query returned different memories across sibling views.
+      if (
+        needle &&
+        !n.label.toLowerCase().includes(needle) &&
+        !n.content.toLowerCase().includes(needle) &&
+        !(n.tags ?? []).some((t) => t.toLowerCase().includes(needle))
+      )
         return false;
       if (tier !== "all" && (n.celestial ?? "moon") !== tier) return false;
       if (type !== "all" && normalizeNodeType(n.type) !== type) return false;
@@ -269,6 +291,15 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
     return `in ${d}d`;
   };
 
+  // REG-119: the strip used to append "…" unconditionally, so a short label
+  // rendered as "Call mom..." — implying truncation that didn't happen.
+  const soonestReminder = upcomingReminders[0];
+  const soonestReminderLabel = soonestReminder
+    ? soonestReminder.label.length > 30
+      ? `${soonestReminder.label.slice(0, 30)}...`
+      : soonestReminder.label
+    : "";
+
   if (memories.length === 0) {
     return <p className="empty">No memories yet — dump a thought to begin.</p>;
   }
@@ -310,9 +341,13 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
                   )}
                 </span>
               )}
-              <span title={`${emo} feeling`}>
-                · <span className="nl-emodot" style={{ background: EMOTION_DOT[emo] }} /> {EMOTION_LABEL[emo]}
-              </span>
+              {/* REG-115: an unscored memory shows no emotion label at all —
+                  neither a dot nor a "neutral" verdict. */}
+              {emo !== "unscored" && (
+                <span title={`${emo} feeling`}>
+                  · <span className="nl-emodot" style={{ background: EMOTION_DOT[emo] }} /> {EMOTION_LABEL[emo]}
+                </span>
+              )}
               {(n.entropy ?? 0) >= COOLING_ENTROPY && <span title="cooling">· ❄️</span>}
               {v && <span title={`visited ${v.visits}× · last ${relative(v.lastAt)}`}>· 👽 {v.visits}</span>}
               {constel && <span className="nl-constel" title={`constellation: ${constel}`}>· 🌌 {constel}</span>}
@@ -387,7 +422,7 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <span>🔔</span>
               <span>
-                <strong>Reminder incoming:</strong> "{upcomingReminders[0]!.label.slice(0, 30)}..." {relativeFuture(upcomingReminders[0]!.remindAt)}
+                <strong>Reminder incoming:</strong> "{soonestReminderLabel}" {relativeFuture(upcomingReminders[0]!.remindAt)}
                 {upcomingReminders.length > 1 && ` (+${upcomingReminders.length - 1} more)`}
               </span>
             </div>
@@ -409,6 +444,9 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
           <option value="positive">● warm</option>
           <option value="neutral">● neutral</option>
           <option value="negative">● heavy</option>
+          {/* REG-115: unscored is its own bucket — the neutral filter must not
+              silently include memories that were never scored. */}
+          <option value="unscored">○ unscored</option>
         </select>
         <select value={type} onChange={(e) => setType(e.target.value as NodeType | "all")} title="Memory kind">
           <option value="all">any kind</option>
@@ -465,7 +503,7 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
 
       {allTagsWithCounts.length > 0 && (
         <div className="discovery-tags" style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
-          {allTagsWithCounts.map(({ name: t, count }) => {
+          {shownTags.map(({ name: t, count }) => {
             const fontSize = `${11 + (count / maxTagCount) * 5}px`;
             const isHot = count >= 3 || (count / maxTagCount) >= 0.5;
             return (
@@ -480,6 +518,24 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
               </button>
             );
           })}
+          {hiddenTagCount > 0 && (
+            <button
+              className="tag-chip"
+              onClick={() => setShowAllTags(true)}
+              title={`Show the ${hiddenTagCount} remaining tags`}
+            >
+              +{hiddenTagCount} more tags
+            </button>
+          )}
+          {showAllTags && allTagsWithCounts.length > TAG_FACET_LIMIT && (
+            <button
+              className="tag-chip"
+              onClick={() => setShowAllTags(false)}
+              title="Show only the top tags"
+            >
+              Show fewer
+            </button>
+          )}
         </div>
       )}
 

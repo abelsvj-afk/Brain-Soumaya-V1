@@ -593,7 +593,9 @@ export async function executeJob(
           })
           .where(and(eq(nodes.id, original.id), eq(nodes.spaceId, spaceId)))
           .run();
-        upsertEmbedding(ctx.handle.sqlite, original.id, await ctx.embeddings.embed(expandedContent));
+        // REG-190: same "label. content" composition as the edit path (the
+        // autonomous research expansion is the same write shape as synthesize).
+        upsertEmbedding(ctx.handle.sqlite, original.id, await ctx.embeddings.embed(`${research.label || original.label}. ${expandedContent}`));
         ftsUpsert(ctx.handle.sqlite, original.id, research.label || original.label, expandedContent);
         nodesRepo.tend(original.id);
         nodesRepo.setAgent(original.id, "soumaya"); // attribute the deep-dive to her

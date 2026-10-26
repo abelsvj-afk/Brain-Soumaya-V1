@@ -132,7 +132,7 @@ describe("telegram notes — full verbatim flow", () => {
 
     // Findable in-app: the nodes repository/search path (galaxy/Browse/Search
     // all read nodes) returns it — via GraphService.search (hybrid vec+FTS).
-    const hits = await new GraphService(handle, spaceId).search(ctx.embeddings, "My Title Line", 10);
+    const { hits } = await new GraphService(handle, spaceId).search(ctx.embeddings, "My Title Line", 10);
     expect(hits.map((h) => h.id)).toContain(node.id);
     expect(new NodesRepo(handle, spaceId).getById(node.id)!.content).toBe(expected);
   });

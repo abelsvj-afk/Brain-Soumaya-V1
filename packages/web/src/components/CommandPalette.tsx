@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { searchDetailed, type SearchHit } from "../api/client.js";
+import { matchLabel, moreMatchesText } from "../utils/searchFormat.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { filterPaletteCommands, type PaletteCommand } from "../lib/commandPalette.js";
 
@@ -28,6 +29,10 @@ const MIN_SEARCH_CHARS = 2;
 export function CommandPalette({ onClose, onCommand, onFocusNode }: Props) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
+  // REG-186: the top-k page's honesty envelope (see SearchBox).
+  const [total, setTotal] = useState<number | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCapped, setTotalCapped] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
@@ -50,6 +55,9 @@ export function CommandPalette({ onClose, onCommand, onFocusNode }: Props) {
   useEffect(() => {
     setActive(0);
     setHits([]);
+    setTotal(undefined);
+    setHasMore(false);
+    setTotalCapped(false);
     setError(null);
     setSearched(false);
   }, [q]);
@@ -64,11 +72,14 @@ export function CommandPalette({ onClose, onCommand, onFocusNode }: Props) {
     setBusy(true);
     const seq = ++requestSeq.current;
     const t = setTimeout(() => {
-      void searchDetailed(query).then(({ hits: found, error: err }) => {
+      void searchDetailed(query).then(({ hits: found, error: err, total: tot, hasMore: more, totalCapped: capped }) => {
         if (seq !== requestSeq.current) return;
         setBusy(false);
         setSearched(true);
         setHits(found);
+        setTotal(tot);
+        setHasMore(more ?? false);
+        setTotalCapped(capped ?? false);
         setError(err ?? null);
       });
     }, SEARCH_DEBOUNCE_MS);
@@ -162,12 +173,17 @@ export function CommandPalette({ onClose, onCommand, onFocusNode }: Props) {
                     >
                       <span className="cmdk-ic">✦</span>
                       <span className="cmdk-title">{h.label}</span>
-                      {typeof h.similarity === "number" && (
-                        <span className="cmdk-hint">{`${(h.similarity * 100).toFixed(0)}%`}</span>
+                      {/* REG-185: no invented percentage — name the match kind. */}
+                      {matchLabel(h) && (
+                        <span className="cmdk-hint">{matchLabel(h)}</span>
                       )}
                     </button>
                   );
                 })}
+              {/* REG-186: the page is top-k — say so when more matches exist. */}
+              {!busy && !error && searched && hasMore && (
+                <p className="cmdk-empty">{moreMatchesText(hits.length, total ?? hits.length, totalCapped)}</p>
+              )}
             </>
           )}
           {query.length === 1 && (

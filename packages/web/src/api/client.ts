@@ -92,7 +92,23 @@ export interface IngestResult {
 }
 
 export interface SearchHit extends GraphNode {
-  similarity: number;
+  /** Real vector cosine for vector hits, null for keyword-only hits — the
+   * server never invents a score (REG-185). Absent on older payloads. */
+  similarity: number | null;
+  /** Which retrieval side(s) produced the hit; drives the match marker. */
+  matchKind?: "keyword" | "vector" | "both";
+}
+
+/** The search envelope the server returns (REG-186): the page plus whether
+ * more matches exist than the page shows. */
+export interface SearchDetails {
+  hits: SearchHit[];
+  error?: string;
+  /** Live matches found within the probe pool. */
+  total?: number;
+  hasMore?: boolean;
+  /** True when `total` is a lower bound ("more than N"), not an exact count. */
+  totalCapped?: boolean;
 }
 
 /** Mirrors server/llm/adapter.ts's DegradeReason — kept as a plain string union here
@@ -411,7 +427,11 @@ export async function search(q: string): Promise<SearchHit[]> {
   try {
     const res = await afetch(`${API}/search?q=${encodeURIComponent(q)}`);
     const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    // The route returns the { hits, total, hasMore, totalCapped } envelope
+    // (REG-186); older bare-array payloads are still accepted.
+    if (Array.isArray(d)) return d;
+    const hits = (d as { hits?: unknown }).hits;
+    return Array.isArray(hits) ? hits : [];
   } catch {
     return [];
   }
@@ -420,7 +440,7 @@ export async function search(q: string): Promise<SearchHit[]> {
 /** Same request as search(), but distinguishes a real failure from "zero
  *  matches" instead of collapsing both into an empty array — SearchBox.tsx
  *  used to render a network error as an indistinguishable "No matches". */
-export async function searchDetailed(q: string): Promise<{ hits: SearchHit[]; error?: string }> {
+export async function searchDetailed(q: string): Promise<SearchDetails> {
   try {
     const res = await afetch(`${API}/search?q=${encodeURIComponent(q)}`);
     if (!res.ok) {
@@ -428,7 +448,14 @@ export async function searchDetailed(q: string): Promise<{ hits: SearchHit[]; er
       return { hits: [], error: body.error ?? `Search failed (${res.status})` };
     }
     const d = await res.json().catch(() => []);
-    return { hits: Array.isArray(d) ? d : [] };
+    if (Array.isArray(d)) return { hits: d };
+    const obj = d as { hits?: unknown; total?: unknown; hasMore?: unknown; totalCapped?: unknown };
+    return {
+      hits: Array.isArray(obj.hits) ? obj.hits : [],
+      total: typeof obj.total === "number" ? obj.total : undefined,
+      hasMore: typeof obj.hasMore === "boolean" ? obj.hasMore : undefined,
+      totalCapped: typeof obj.totalCapped === "boolean" ? obj.totalCapped : undefined,
+    };
   } catch {
     return { hits: [], error: "Couldn't reach the server." };
   }
