@@ -430,7 +430,13 @@ export interface PushDispatchResult {
   dropped: string | null;
 }
 
-type SendOutcome = { outcome: "sent"; sentCount: number } | { outcome: "retry" | "dropped" };
+type SendOutcome =
+  | { outcome: "sent"; sentCount: number }
+  | { outcome: "retry" | "dropped" }
+  // H-3 (REG-192): a terminal failure is its own outcome — the old code
+  // returned "retry" for it too, so the sweep counted a push that will
+  // never be delivered as deferred.
+  | { outcome: "failed" };
 
 /**
  * Execute the send for a CLAIMED row (claimed_by/at already set by the
@@ -475,9 +481,9 @@ async function executePushSend(
     const attempts = row.attempts + 1;
     if (attempts >= MAX_ATTEMPTS) {
       markPushFailed(sqlite, row.id, failure, null);
-    } else {
-      markPushFailed(sqlite, row.id, failure, retryAfter(attempts, opts.now));
+      return { outcome: "failed" };
     }
+    markPushFailed(sqlite, row.id, failure, retryAfter(attempts, opts.now));
     return { outcome: "retry" };
   }
   markPushSent(sqlite, row.id);
@@ -569,6 +575,8 @@ export interface PushSweepStats {
   deferred: number;
   dropped: number;
   ambiguous: number;
+  /** H-3 (REG-192): pushes that reached the terminal failure state — never deferred, never delivered. */
+  failed: number;
 }
 
 /**
@@ -582,7 +590,7 @@ export async function sweepPendingPushes(
   handle: DbHandle,
   opts: PushDeliveryOptions = {}
 ): Promise<PushSweepStats> {
-  const stats: PushSweepStats = { sent: 0, deferred: 0, dropped: 0, ambiguous: 0 };
+  const stats: PushSweepStats = { sent: 0, deferred: 0, dropped: 0, ambiguous: 0, failed: 0 };
   const config = opts.config !== undefined ? opts.config : getVapidConfig();
   if (!config) return stats;
 
@@ -675,6 +683,7 @@ export async function sweepPendingPushes(
     const outcome = await executePushSend(handle, fresh, { config, sender: opts.sender, now });
     if (outcome.outcome === "sent") stats.sent++;
     else if (outcome.outcome === "dropped") stats.dropped++;
+    else if (outcome.outcome === "failed") stats.failed++;
     else stats.deferred++;
   }
   return stats;

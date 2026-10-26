@@ -57,7 +57,7 @@ describe("T8: bill-risk due date survives the tool-router tick path (ADR-019 §3
 
     // The exact index.ts composition: policyNotify is passed straight
     // through as the router's notify.
-    const policyNotify = createPolicyNotify({ sqlite: handle.sqlite, handle, send: async () => {}, audit: () => {}, workerId: "t8-router-test" });
+    const policyNotify = createPolicyNotify({ sqlite: handle.sqlite, handle, send: async () => ({ attempted: [{ chatId: 1, outcome: "sent" as const }] }), audit: () => {}, workerId: "t8-router-test" });
     const results = await runToolRouter(appCtx, S, { now: JAN10_MS, notify: policyNotify });
 
     expect(results.some((r) => r.summary.includes("bill-risk"))).toBe(true);

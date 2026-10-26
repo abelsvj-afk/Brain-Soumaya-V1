@@ -315,7 +315,7 @@ export function classifyUrgency(sqlite: RawDb, spaceId: string, meta: NotifyMeta
         .prepare(
           `SELECT 1 FROM notification_outbox WHERE space_id = ? AND tool = 'billRisk'
            AND occurrence_id LIKE ? AND substr(occurrence_id, -10) = ?
-           AND is_urgent = 1 AND status IN ('sending','sent','ambiguous') LIMIT 1`
+           AND is_urgent = 1 AND status IN ('sending','sent','ambiguous','partial') LIMIT 1`
         )
         .get(spaceId, `bill:${meta.billId}:%`, day);
       if (!existing) {

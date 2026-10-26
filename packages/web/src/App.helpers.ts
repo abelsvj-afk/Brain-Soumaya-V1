@@ -155,6 +155,40 @@ export function mergeGraphData(prev: GraphData, fresh: GraphData): GraphData {
 }
 
 /**
+ * SP-01 / REG-184 — resolve the node a focus request targets against the
+ * LOADED payload, force-including it when it lives outside the top-300
+ * overview cut.
+ *
+ * The loaded galaxy is only the top-`limit` nodes by degree, but Search,
+ * the command palette, Recall's due list, Observatory's due-review card,
+ * and NoticingCard chips all present ids from the FULL node set — so a
+ * presented hit can be absent from `nodes`. The old `goTo` answered that
+ * with a silent `return`: the click did nothing, and the palette had
+ * already closed, mimicking a successful jump.
+ *
+ * Resolution: present in the payload → return it with no fetch. Absent →
+ * fetch through `fetchIncluding` (the caller's `getGraphWithCompletion`,
+ * i.e. `getGraph(limit, includeIds)` + edge completion) and return the
+ * node together with the fetched graph when the server can produce it.
+ * When the server cannot — deleted / archived / foreign-space id, which
+ * `overview` skips silently — return `node: null` so the caller can say
+ * so visibly instead of no-op-ing. A fetch failure (network / server)
+ * throws, so the caller can distinguish "couldn't load" from "doesn't
+ * exist".
+ */
+export async function resolveFocusNode(
+  nodes: GraphNode[],
+  id: number,
+  fetchIncluding: (ids: number[]) => Promise<GraphData>,
+): Promise<{ node: GraphNode | null; fetched: GraphData | null }> {
+  const inPayload = nodes.find((x) => x.id === id);
+  if (inPayload) return { node: inPayload, fetched: null };
+  const g = await fetchIncluding([id]);
+  const fetched = g.nodes.find((x) => x.id === id) ?? null;
+  return { node: fetched, fetched: fetched ? g : null };
+}
+
+/**
  * Focus-fan geometry (Mobile HUD layout pass, screenshot round 2 S3).
  *
  * The fan opens UPWARD from the 🎯 cluster (bottom slot

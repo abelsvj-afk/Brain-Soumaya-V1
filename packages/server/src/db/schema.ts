@@ -155,6 +155,12 @@ export const toolApprovals = sqliteTable("tool_approvals", {
     .default(sql`CURRENT_TIMESTAMP`),
   expiresAt: text("expires_at").notNull(),
   decidedAt: text("decided_at"),
+  /** When the current execution attempt STARTED (set when a row is claimed
+   *  by executeApproval). The sweep's stale-`executing` predicate measures
+   *  from here, not from decided_at: a row confirmed 6 min ago but
+   *  executing for 10 s is NOT stale. NULL = never claimed (legacy rows
+   *  backfilled from decided_at on first migration; see migrateSchema). */
+  executionStartedAt: text("execution_started_at"),
   executionAttempts: integer("execution_attempts").notNull().default(0),
   lastError: text("last_error"),
   /** agent_logs.id of the successful execution audit row (set on executed). */

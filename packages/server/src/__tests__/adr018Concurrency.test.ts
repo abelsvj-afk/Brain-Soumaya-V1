@@ -85,6 +85,9 @@ describe("ADR-018 criterion 13: interleaved Telegram + push drains on one handle
         tgParked.resolve();
         await tgGate.promise; // ← barrier: Telegram holds its claim, parked mid-send
         tgSends.push(text);
+        // H-2: the send reports per-chat outcomes; this double stands in
+        // for a one-chat space that accepted.
+        return { attempted: [{ chatId: 1, outcome: "sent" as const }] };
       },
       audit: () => {},
       workerId: "race-telegram",
@@ -160,6 +163,9 @@ describe("ADR-018 criterion 13: interleaved Telegram + push drains on one handle
       handle,
       send: async (_spaceId: string, text: string) => {
         tgCalls.push(text);
+        // H-2: the send reports per-chat outcomes; this double stands in
+        // for a one-chat space that accepted.
+        return { attempted: [{ chatId: 1, outcome: "sent" as const }] };
       },
       audit: () => {},
       workerId: "race-telegram",

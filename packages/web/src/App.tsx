@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanTargetCaption, measureSafeBottomInset } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, resolveFocusNode, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanTargetCaption, measureSafeBottomInset } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
@@ -1484,15 +1484,45 @@ export default function App() {
   }, [space, refresh]);
 
   // Navigate to a memory, recording where we came from so Back works.
+  // Returns true when the jump landed, false when it could not — every
+  // door (Search, palette, Recall, Observatory, NoticingCard chips) funnels
+  // through here, so a false lets the caller say so instead of mimicking
+  // success.
   const goTo = useCallback(
-    (id: number, record = true, ripple = false) => {
-      const n = view.nodes.find((x) => x.id === id);
-      if (!n) return;
+    async (id: number, record = true, ripple = false): Promise<boolean> => {
+      // SP-01 / REG-184: the loaded galaxy is only the top-300 nodes by
+      // degree, but Search, the palette, Recall, Observatory, and
+      // NoticingCard chips all present ids from the FULL node set. A
+      // presented hit outside the cut used to die here in a silent
+      // `return` — force-include it through the existing
+      // getGraph(limit, includeIds) machinery instead. When the node
+      // genuinely cannot be loaded (deleted / archived / foreign space),
+      // or the fetch itself fails, say so visibly: no silent no-op may
+      // remain on this path.
+      let resolved: { node: GraphNode | null; fetched: GraphData | null };
+      try {
+        resolved = await resolveFocusNode(view.nodes, id, (ids) => getGraphWithCompletion(ids));
+      } catch {
+        pushToast("Couldn't open that memory — the galaxy didn't load. Try again.", "⚠️", 8000);
+        return false;
+      }
+      const n = resolved.node;
+      if (!n) {
+        pushToast("Couldn't open that memory — it may have been deleted or archived.", "⚠️", 8000);
+        return false;
+      }
+      if (resolved.fetched) {
+        // Merge exactly like refresh() does, then fly once the node has
+        // reached the renderer (the same 550ms settle refresh() uses).
+        const fetched = resolved.fetched;
+        setData((prev) => mergeGraphData(prev, fetched));
+        window.setTimeout(() => graphRef.current?.focusNode(id), 550);
+      }
       setHistory((h) => (record && selected && selected.id !== id ? [...h, selected.id] : h));
       setSelected(n);
       setTab("details");
       setPanel("dock");
-      graphRef.current?.focusNode(id);
+      if (!resolved.fetched) graphRef.current?.focusNode(id);
       if (ripple) graphRef.current?.spawnBurst(id, "user");
       if (space) {
         void tendNode(id); // revisiting a memory warms it back up (entropy)
@@ -1524,6 +1554,7 @@ export default function App() {
         // Force evaluation of achievements
         setTimeout(() => handleChanged(-1), 100);
       }
+      return true;
     },
     [view, selected, space],
   );
@@ -2856,8 +2887,11 @@ export default function App() {
           onClose={() => setShowPalette(false)}
           onCommand={runPaletteCommand}
           onFocusNode={(id) => {
-            setShowPalette(false);
-            focus(id);
+            // SP-01: only close once the jump actually landed — closing
+            // first mimicked a successful jump when focus silently no-opped.
+            void focus(id).then((ok) => {
+              if (ok) setShowPalette(false);
+            });
           }}
         />
       )}

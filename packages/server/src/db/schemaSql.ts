@@ -1060,6 +1060,23 @@ export const BOOTSTRAP_SQL = `
     CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
       ON notification_cap_claims(space_id, local_day, state, cap_exempt);
 
+    -- H-2 (REG-191): per-chat delivery outcomes for the Telegram outbox —
+    -- one row per (outbox row, chat), so a retry re-attempts only the chats
+    -- still pending instead of re-delivering to chats that already accepted.
+    -- Identical DDL runs in db/client.ts migrateSchema() for existing
+    -- volumes. No new columns on notification_outbox; no drizzle entry
+    -- (raw-SQL table, like notification_cap_claims).
+    CREATE TABLE IF NOT EXISTS notification_outbox_deliveries (
+      outbox_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed', 'ambiguous', 'skipped')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (outbox_id, chat_id)
+    );
+
     -- Worlds travel (Phase 2, P2-2): the travel journey ledger. Events are
     -- append-only — every state transition writes exactly one, in the same
     -- transaction as the transition. The current world is DERIVED from

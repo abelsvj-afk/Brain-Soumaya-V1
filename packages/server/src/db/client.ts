@@ -730,6 +730,23 @@ function migrateSchema(sqlite: RawDb): void {
   `);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_space_idx ON tool_approvals(space_id, status)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_principal_idx ON tool_approvals(principal, status)`);
+  // Execution-start stamp on tool_approvals — migrateSchema-only
+  // PRAGMA-guarded ALTER, NEVER in BOOTSTRAP_SQL (same v252 rule as
+  // above). The sweep's stale-`executing` predicate measures from here,
+  // not from decided_at (confirmation time): a row confirmed 6 min ago
+  // but executing for 10 s must NOT be flipped back to `confirmed` and
+  // re-executed concurrently. One-time backfill (= decided_at) runs ONLY
+  // in the first-add step: legacy rows have no recorded start, and
+  // confirmation is the earliest the execution could have begun, so the
+  // old confirmation-time semantics apply to them exactly once; every
+  // row claimed after this migration carries a real start stamp.
+  const approvalCols = sqlite.prepare(`PRAGMA table_info(tool_approvals)`).all() as { name: string }[];
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "execution_started_at")) {
+    sqlite.exec(`ALTER TABLE tool_approvals ADD COLUMN execution_started_at TEXT`);
+    sqlite.exec(
+      `UPDATE tool_approvals SET execution_started_at = decided_at WHERE execution_started_at IS NULL`,
+    );
+  }
 
   // Telegram open-ended notes (parity Phase 3): durable /note drafts. Same
   // column set as BOOTSTRAP_SQL in db/schemaSql.ts — CREATE TABLE IF NOT
@@ -1118,6 +1135,21 @@ function migrateSchema(sqlite: RawDb): void {
     );
     CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
       ON notification_cap_claims(space_id, local_day, state, cap_exempt);
+  `);
+  // H-2 (REG-191): per-chat delivery outcomes for the Telegram outbox.
+  // New table, both paths: identical DDL to BOOTSTRAP_SQL in
+  // db/schemaSql.ts (fresh DBs already have it; this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS notification_outbox_deliveries (
+      outbox_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed', 'ambiguous', 'skipped')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (outbox_id, chat_id)
+    );
   `);
   // Worlds travel (Phase 2, P2-2): the travel journey ledger. New tables,
   // both paths: identical DDL to BOOTSTRAP_SQL in db/schemaSql.ts (fresh

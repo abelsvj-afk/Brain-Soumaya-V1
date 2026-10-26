@@ -30,7 +30,6 @@ import {
   claimUrgentForSend,
   setUrgency,
   markSendStarted,
-  markSent,
   markFailed,
   markDropped,
   markAmbiguous,
@@ -38,26 +37,40 @@ import {
   dueRows,
   getRow,
   retryAfter,
+  applySendReport,
+  pendingChatIds,
+  deliveredChildCount,
   MAX_ATTEMPTS,
   type OutboxRow,
 } from "./outbox.js";
 import { AmbiguousSendError, NoRecipientsError } from "./sendErrors.js";
+import type { TelegramSpaceSendReport } from "../../telegram/bot.js";
 
 export interface BoundaryDeps {
   sqlite: RawDb;
   /**
-   * Raw send to all linked chats. Outcome contract (Batch A, RE-01/RE-02):
-   * - resolve: delivered to at least one recipient.
-   * - throw a plain Error: definite failure — a response was received and
-   *   it refused the send. Retried with backoff; the cap claim is released.
-   * - throw AmbiguousSendError: no response came back, so the outcome is
-   *   genuinely unknown. Recorded ambiguous (terminal, cap retained,
-   *   never auto-retried) via the outbox's existing markAmbiguous.
-   * - throw NoRecipientsError: zero recipients (no linked chat). Recorded
-   *   dropped, cap claim released, and re-thrown to the notify caller so a
-   *   firing tool can defer instead of consuming its event.
+   * Raw send to the space's linked chats. Outcome contract (H-2, REG-191):
+   * returns a per-chat report — one entry per attempted chat — instead of
+   * collapsing to a single throw. The boundary retries only the chats
+   * still pending (see executeSend), so a chat that already accepted never
+   * receives the same proactive message twice from one send.
+   * - report entry "sent": Telegram accepted for that chat.
+   * - "refused": a response refused that chat (definite, retryable).
+   * - "ambiguous": no response for that chat (terminal for that chat,
+   *   never retried — Batch A, now per-chat).
+   * - "skipped": the chat unlinked between attempts (terminal, not a
+   *   failure).
+   * - `onlyChatIds` restricts the attempt set (a retry); omitted means
+   *   all currently linked chats (first attempt).
+   * - Throws ONLY NoRecipientsError: zero linked chats — recorded
+   *   dropped, cap claim released, and re-thrown to the notify caller so
+   *   a firing tool can defer instead of consuming its event.
+   * - Any OTHER throw is unexpected (a bug, a DB error reading links):
+   *   executeSend keeps today's definite-failure handling for it
+   *   (re-queue / terminal via row attempts). No children exist in that
+   *   path, so there is nothing to reconcile.
    */
-  send: (spaceId: string, text: string) => Promise<void>;
+  send: (spaceId: string, text: string, onlyChatIds?: number[]) => Promise<TelegramSpaceSendReport>;
   /** Content-free audit log: (spaceId, action, detail). */
   audit: (spaceId: string, action: string, detail: string) => void;
   /** Unique ID for this worker (for claim attribution). */
@@ -117,7 +130,7 @@ export function createPolicyNotify(deps: BoundaryDeps) {
 }
 
 /** What executeSend concluded about one claimed row. */
-type SendOutcome = "sent" | "retry" | "failed" | "ambiguous" | "no-recipients";
+type SendOutcome = "sent" | "retry" | "failed" | "ambiguous" | "no-recipients" | "partial-retry" | "partial" | "dropped";
 
 /**
  * Attempt immediate delivery: atomic cap claim → send → record.
@@ -167,12 +180,29 @@ async function deliverNow(
   return executeSend(deps, id, spaceId, text, now);
 }
 
-/** Execute the actual send for a claimed row, handling all outcomes. */
+/**
+ * Execute the actual send for a claimed row, handling all outcomes.
+ *
+ * H-2 (REG-191): the sender returns a per-chat report; the row is decided
+ * from the child states (outbox.applySendReport, one transaction with the
+ * parent transition). A partially-delivered row stays retryable until every
+ * chat has a terminal outcome, and the retry attempts ONLY the chats still
+ * pending — no chat ever receives the same proactive message twice from
+ * one send. Terminality moved from row-attempts to "no pending children
+ * remain"; row attempts is now just a counter (backoff input).
+ */
 async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text: string, now: Date): Promise<SendOutcome> {
   const { sqlite } = deps;
   markSendStarted(sqlite, id, nowIso(now));
+  // W2 §5.1, exactly once: the delivered-child count BEFORE this attempt —
+  // the episode fires at first delivery and never again for this row.
+  const deliveredBefore = deliveredChildCount(sqlite, id);
+  // Retry scoping: pending children only. Empty (first attempt, or a
+  // legacy row) → unrestricted send to all currently linked chats.
+  const pending = pendingChatIds(sqlite, id);
+  let report: TelegramSpaceSendReport;
   try {
-    await deps.send(spaceId, text);
+    report = await deps.send(spaceId, text, pending.length > 0 ? pending : undefined);
   } catch (err) {
     // No response came back: the outcome is genuinely unknown. Use the
     // outbox's existing ambiguous mechanism — terminal, cap retained,
@@ -190,6 +220,10 @@ async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text
       deps.audit(spaceId, "notify:dropped", `${getRow(sqlite, id)?.tool ?? "?"} no recipients`);
       return "no-recipients";
     }
+    // Unexpected sender throw (a bug, a DB error reading links — the
+    // production sender never throws this): today's definite-failure
+    // handling, re-queue / terminal via row attempts. No children exist
+    // in this path, so there is nothing to reconcile.
     const msg = err instanceof Error ? err.message : String(err);
     const row = getRow(sqlite, id);
     const attempts = (row?.attempts ?? 0) + 1;
@@ -202,30 +236,75 @@ async function executeSend(deps: BoundaryDeps, id: number, spaceId: string, text
     deps.audit(spaceId, "notify:retry", `${row?.tool} attempt ${attempts} failed`);
     return "retry";
   }
-  markSent(sqlite, id);
-  deps.audit(spaceId, "notify:sent", `${getRow(sqlite, id)?.tool ?? "?"} delivered`);
-  const outcome: SendOutcome = "sent";
-  // W2 §5.1: proactive message delivered — capture after delivery,
+  const result = applySendReport(sqlite, id, report.attempted, now);
+  const tool = getRow(sqlite, id)?.tool ?? "?";
+  // Per-attempt audit: outcome classes + refusal statuses, never message text.
+  const refusedDetail = report.attempted
+    .filter((a) => a.outcome === "refused")
+    .map((a) => `chat ${a.chatId}: ${a.error ?? "refused"}`)
+    .join("; ");
+  const summary =
+    `row ${id}: ${result.sentCount} sent, ${result.failedCount} failed, ` +
+    `${result.ambiguousCount} ambiguous, ${result.skippedCount} skipped, ${result.pendingCount} pending` +
+    (refusedDetail ? ` (${refusedDetail})` : "");
+  if (result.outcome === "sent") {
+    deps.audit(spaceId, "notify:sent", `${tool} delivered (${summary})`);
+  } else if (result.outcome === "partial-retry") {
+    deps.audit(spaceId, "notify:partial-retry", `${tool} partially delivered, retrying pending chats (${summary})`);
+  } else if (result.outcome === "partial") {
+    deps.audit(spaceId, "notify:partial", `${tool} partially delivered, terminal (${summary})`);
+  } else if (result.outcome === "ambiguous") {
+    deps.audit(spaceId, "notify:ambiguous", `${tool} send outcome unknown for some chats, cap retained (${summary})`);
+  } else if (result.outcome === "failed") {
+    deps.audit(spaceId, "notify:failed", `${tool} terminal, no chat accepted (${summary})`);
+  } else {
+    deps.audit(spaceId, "notify:dropped", `${tool} all recipients unlinked (${summary})`);
+  }
+  // W2 §5.1: proactive message delivered — capture at FIRST delivery,
   // best-effort, never throws. `executeSend` is the single choke point for
   // both immediate and sweeper-deferred sends, so this covers every path.
-  void Promise.resolve()
-    .then(() =>
-      captureEpisode(deps.handle, spaceId, {
-        kind: "proactive_msg",
-        summary: `Proactive message delivered via outbox (row ${id}, tool ${getRow(sqlite, id)?.tool ?? "?"})`,
-      }),
-    )
-    .catch(() => {});
-  return outcome;
+  if (deliveredBefore === 0 && result.deliveredCount >= 1) {
+    void Promise.resolve()
+      .then(() =>
+        captureEpisode(deps.handle, spaceId, {
+          kind: "proactive_msg",
+          summary: `Proactive message delivered via outbox (row ${id}, tool ${tool})`,
+        }),
+      )
+      .catch(() => {});
+  }
+  return result.outcome;
+}
+
+/**
+ * What one sweepNotifications() run concluded about each row it touched.
+ * H-3 (REG-192): every outcome gets its own bucket — a retry or a terminal
+ * failure is never counted as sent, and drops are counted too (previously
+ * the sweep only reported {sent, queued, ambiguous}, so failed/retried
+ * sends inflated `sent` and dropped rows vanished from the log entirely).
+ */
+export interface NotifySweepStats {
+  /** Rows delivered on this sweep. */
+  sent: number;
+  /** Rows held for a later sweep (quiet hours, cap full). */
+  queued: number;
+  /** Rows whose send outcome is unknown (terminal, cap retained). */
+  ambiguous: number;
+  /** Definite failures re-queued with backoff (attempts < MAX_ATTEMPTS). */
+  retried: number;
+  /** Definite failures that reached the terminal state (attempts >= MAX_ATTEMPTS). */
+  failed: number;
+  /** Rows dropped without sending (stale, unverifiable, policy drop, no recipients). */
+  dropped: number;
 }
 
 /**
  * Sweeper: recover crashed leases, then deliver due queued notifications.
  * Called on the router tick (or a dedicated interval). Idempotent.
  */
-export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Date()): Promise<{ sent: number; queued: number; ambiguous: number }> {
+export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Date()): Promise<NotifySweepStats> {
   const { sqlite } = deps;
-  const stats = { sent: 0, queued: 0, ambiguous: 0 };
+  const stats: NotifySweepStats = { sent: 0, queued: 0, ambiguous: 0, retried: 0, failed: 0, dropped: 0 };
 
   // 1. Recover crashed leases (two cases).
   const recovered = recoverExpiredLeases(sqlite, now);
@@ -254,6 +333,7 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
     if (row.tool === "fire_reminder" && row.remindAt === null) {
       markDropped(sqlite, row.id, "unverifiable legacy reminder: no persisted due time");
       deps.audit(row.spaceId, "notify:dropped", `${row.tool} unverifiable legacy reminder`);
+      stats.dropped++;
       continue;
     }
 
@@ -269,6 +349,7 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
         if (age > limit) {
           markDropped(sqlite, row.id, `stale at delivery (${Math.round(age / 3600000)}h old)`);
           deps.audit(row.spaceId, "notify:dropped", `${row.tool} stale at delivery`);
+          stats.dropped++;
           continue;
         }
       }
@@ -279,6 +360,7 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
         if (age > limit) {
           markDropped(sqlite, row.id, `stale at delivery (${Math.round(age / 3600000)}h old)`);
           deps.audit(row.spaceId, "notify:dropped", `${row.tool} stale at delivery`);
+          stats.dropped++;
           continue;
         }
       }
@@ -290,6 +372,7 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
     if (decision.action === "drop") {
       markDropped(sqlite, row.id, decision.reason);
       deps.audit(row.spaceId, "notify:dropped", `${row.tool} ${decision.reason}`);
+      stats.dropped++;
       continue;
     }
     if (decision.action === "queue") {
@@ -324,8 +407,21 @@ export async function sweepNotifications(deps: BoundaryDeps, now: Date = new Dat
       continue;
     }
     const outcome = await executeSend(deps, row.id, row.spaceId, row.message, now);
+    // H-3 (REG-192): count each outcome in its own bucket. The old code
+    // was `if (ambiguous) ambiguous++; else sent++;` — every retry and
+    // terminal failure inflated `sent`.
+    // H-2 (REG-191): a "partial-retry" row IS queued (truthful — it will
+    // be re-attempted for its pending chats only). A terminal "partial"
+    // counts as sent (a delivery occurred) — the stats object still has
+    // no `partial` bucket, so this overstates full delivery; REG-192/H-3
+    // owns the buckets.
     if (outcome === "ambiguous") stats.ambiguous++;
-    else stats.sent++;
+    else if (outcome === "sent") stats.sent++;
+    else if (outcome === "retry") stats.retried++;
+    else if (outcome === "failed") stats.failed++;
+    else if (outcome === "partial-retry") stats.queued++;
+    else if (outcome === "partial") stats.sent++;
+    else stats.dropped++; // "no-recipients" or "dropped": executeSend marked the row dropped
   }
   return stats;
 }

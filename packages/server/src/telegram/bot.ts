@@ -57,6 +57,64 @@ export interface TelegramUpdate {
 export type Send = (chatId: number, text: string) => Promise<void>;
 
 /**
+ * Max send attempts for one on-demand command reply (H-4, REG-193).
+ * Mirrors the notify outbox's MAX_ATTEMPTS = 3 — the scheduled digest
+ * sweep already retries on later sweeps; the on-demand reply path had no
+ * equivalent, so a transient send failure ended in silence (the webhook
+ * had already acked 200, so Telegram never retries the update).
+ */
+export const TELEGRAM_REPLY_MAX_ATTEMPTS = 3;
+/**
+ * Backoff between reply-send attempts: the outbox's retryAfter doubles
+ * in minutes (2/4/8m) for background sweeps; a user is waiting on a
+ * command reply, so the same doubling shape runs in seconds.
+ */
+export const TELEGRAM_REPLY_BACKOFF_MS: readonly number[] = [1000, 2000];
+
+/**
+ * Send one reply (chunked to Telegram's limit) with bounded retries.
+ * Retries PER CHUNK: a failure on chunk 2 must not re-send chunk 1.
+ *
+ * Retries on any throw, mirroring the scheduled digest sweep's catch-all
+ * retry — including AmbiguousSendError (no response: Telegram may or may
+ * not have received it). That carries the same duplicate risk the sweep
+ * already accepts on later sweeps, bounded here to 3 attempts per chunk;
+ * a definite refusal is provably undelivered, so retrying it is safe.
+ * Throws the last error when every attempt fails, so the caller still
+ * sees (and logs) the failure instead of silently dropping the reply.
+ */
+export async function sendTelegramReplyWithRetry(
+  sendRaw: Send,
+  chatId: number,
+  text: string,
+  opts: {
+    maxAttempts?: number;
+    backoffMs?: readonly number[];
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const maxAttempts = opts.maxAttempts ?? TELEGRAM_REPLY_MAX_ATTEMPTS;
+  const backoffMs = opts.backoffMs ?? TELEGRAM_REPLY_BACKOFF_MS;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  for (const chunk of chunkTelegramText(text)) {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await sendRaw(chatId, chunk);
+        lastErr = undefined;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          await sleep(backoffMs[Math.min(attempt - 1, backoffMs.length - 1)] ?? 0);
+        }
+      }
+    }
+    if (lastErr !== undefined) throw lastErr;
+  }
+}
+
+/**
  * Send a text message to a chat (real network). Reports the outcome
  * honestly (Batch A, RE-01) — classification (see notify/sendErrors.ts):
  * - resolves: Telegram accepted the message.
@@ -96,35 +154,71 @@ export async function tgSend(token: string, chatId: number, text: string): Promi
 }
 
 /**
+ * H-2 (REG-191): one chat's outcome inside a Telegram space-send report.
+ * - "sent": Telegram accepted (HTTP 200, ok:true).
+ * - "refused": a response was received and it refused (HTTP error, or an
+ *   ok:false body) — a definite failure, safe to retry.
+ * - "ambiguous": no response came back — Telegram may or may not have
+ *   received it, never retried (Batch A).
+ * - "skipped": the chat unlinked between attempts — no fetch was attempted.
+ */
+export type TelegramChatOutcome = "sent" | "refused" | "ambiguous" | "skipped";
+
+/** Per-chat report for one space send: every attempted chat, exactly once. */
+export interface TelegramSpaceSendReport {
+  attempted: { chatId: number; outcome: TelegramChatOutcome; error?: string }[];
+}
+
+/**
  * The production raw sender the notification boundary wraps (index.ts):
  * deliver one proactive message to every chat linked to a space.
  * - No linked chat → NoRecipientsError (a known non-delivery to nobody).
- * - Every linked chat is attempted, even when one fails.
- * - Any definite refusal → a definite throw (wins over ambiguity: at
- *   least one recipient provably did not receive it).
- * - Otherwise any no-response failure → AmbiguousSendError.
+ * - Every chat in the attempt set is attempted, even when one fails.
+ * - Returns a per-chat report instead of collapsing to a single throw
+ *   (H-2, REG-191): a definite refusal or an ambiguity for one chat no
+ *   longer throws, so the boundary can retry only the chats still pending
+ *   instead of re-delivering to chats that already accepted.
+ * - `onlyChatIds`, when given, restricts the attempt set to those chats
+ *   (a retry); a requested chat that is no longer linked is reported
+ *   "skipped" with no fetch attempted. When omitted, the attempt set is
+ *   all currently linked chats (first attempt).
+ * - Throws ONLY NoRecipientsError (zero linked chats).
  */
 export function createTelegramSpaceSender(
   handle: DbHandle,
   token: string,
-): (spaceId: string, text: string) => Promise<void> {
-  return async (spaceId: string, text: string) => {
+): (spaceId: string, text: string, onlyChatIds?: number[]) => Promise<TelegramSpaceSendReport> {
+  return async (spaceId: string, text: string, onlyChatIds?: number[]) => {
     const links = new TelegramLinksRepo(handle).all().filter((l) => l.spaceId === spaceId);
     if (links.length === 0) {
       throw new NoRecipientsError("no linked chats for this space");
     }
-    let definite: Error | null = null;
-    let ambiguous: AmbiguousSendError | null = null;
+    const wanted = onlyChatIds && onlyChatIds.length > 0 ? new Set(onlyChatIds) : null;
+    const attempted: TelegramSpaceSendReport["attempted"] = [];
     for (const l of links) {
+      if (wanted && !wanted.has(l.chatId)) continue;
       try {
         await tgSend(token, l.chatId, text);
+        attempted.push({ chatId: l.chatId, outcome: "sent" });
       } catch (err) {
-        if (err instanceof AmbiguousSendError) ambiguous ??= err;
-        else definite ??= err instanceof Error ? err : new Error(String(err));
+        if (err instanceof AmbiguousSendError) {
+          attempted.push({ chatId: l.chatId, outcome: "ambiguous", error: err.message });
+        } else {
+          attempted.push({
+            chatId: l.chatId,
+            outcome: "refused",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
-    if (definite) throw definite;
-    if (ambiguous) throw ambiguous;
+    if (wanted) {
+      const linkedIds = new Set(links.map((l) => l.chatId));
+      for (const chatId of onlyChatIds!) {
+        if (!linkedIds.has(chatId)) attempted.push({ chatId, outcome: "skipped" });
+      }
+    }
+    return { attempted };
   };
 }
 
@@ -354,9 +448,11 @@ export async function handleTelegramUpdate(
   // answers (tab lists, weekly reviews) exceed Telegram's 4096-char limit
   // and a single send would fail. Short messages pass through untouched
   // (chunkTelegramText returns [text]), so existing behavior is identical
-  // under the limit. The wrapper is transparent to all handlers below.
+  // under the limit. H-4 (REG-193): the wrapper also retries each chunk
+  // (bounded, 3 attempts) — before this, one transient send failure ended
+  // in silence because the webhook had already acked 200.
   const send: Send = async (chatId, text) => {
-    for (const chunk of chunkTelegramText(text)) await sendRaw(chatId, chunk);
+    await sendTelegramReplyWithRetry(sendRaw, chatId, text);
   };
   const msg = update.message;
   const chatId = msg?.chat?.id;

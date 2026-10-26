@@ -331,6 +331,284 @@ export function markAmbiguous(sqlite: RawDb, id: number): void {
   })();
 }
 
+// ---------------------------------------------------------------------------
+// H-2 (REG-191): per-chat delivery outcomes (notification_outbox_deliveries).
+//
+// One child row per (outbox row, chat). The boundary applies the sender's
+// per-chat report and decides the parent row from the child states, in ONE
+// transaction (applySendReport) — child writes and the parent transition
+// commit or roll back together, so a crashed 'sending' row has no children
+// by construction and lease recovery needs no child handling.
+// ---------------------------------------------------------------------------
+
+/** Terminal + retryable states of one child's delivery. */
+export type DeliveryChildStatus = "pending" | "sent" | "failed" | "ambiguous" | "skipped";
+
+export interface DeliveryChild {
+  chatId: number;
+  status: DeliveryChildStatus;
+  attempts: number;
+  lastError: string | null;
+}
+
+/** One chat's outcome in a sender report (telegram/bot.ts shape, mirrored). */
+export type ChatDeliveryOutcome = "sent" | "refused" | "ambiguous" | "skipped";
+
+export interface ChatDelivery {
+  chatId: number;
+  outcome: ChatDeliveryOutcome;
+  /** Refusal / ambiguity detail (e.g. "Telegram send failed: HTTP 403"). Never message text. */
+  error?: string;
+}
+
+/** Chats of this row still awaiting delivery (retryable). Frozen at first attempt. */
+export function pendingChatIds(sqlite: RawDb, id: number): number[] {
+  const rows = sqlite
+    .prepare(
+      `SELECT chat_id FROM notification_outbox_deliveries WHERE outbox_id = ? AND status = 'pending' ORDER BY chat_id`
+    )
+    .all(id) as { chat_id: number }[];
+  return rows.map((r) => r.chat_id);
+}
+
+/** How many chats have accepted this row (for the exactly-once episode capture). */
+export function deliveredChildCount(sqlite: RawDb, id: number): number {
+  const row = sqlite
+    .prepare(`SELECT COUNT(*) AS c FROM notification_outbox_deliveries WHERE outbox_id = ? AND status = 'sent'`)
+    .get(id) as { c: number };
+  return row.c;
+}
+
+/** All per-chat outcomes for a row, in chat order. */
+export function listDeliveryChildren(sqlite: RawDb, id: number): DeliveryChild[] {
+  const rows = sqlite
+    .prepare(
+      `SELECT chat_id, status, attempts, last_error FROM notification_outbox_deliveries WHERE outbox_id = ? ORDER BY chat_id`
+    )
+    .all(id) as { chat_id: number; status: DeliveryChildStatus; attempts: number; last_error: string | null }[];
+  return rows.map((r) => ({ chatId: r.chat_id, status: r.status, attempts: r.attempts, lastError: r.last_error }));
+}
+
+export type PartialSendOutcome = "sent" | "partial-retry" | "partial" | "ambiguous" | "failed" | "dropped";
+
+export interface ApplySendReportResult {
+  outcome: PartialSendOutcome;
+  deliveredCount: number;
+  pendingCount: number;
+  sentCount: number;
+  failedCount: number;
+  ambiguousCount: number;
+  skippedCount: number;
+}
+
+/**
+ * Terminal partial delivery (no pending child remains, ≥1 sent, ≥1 failed,
+ * none ambiguous): the row is done — the refused chat never receives this
+ * occurrence. Claim → sent (a delivery occurred; the slot is retained).
+ * Standalone form of the transition applySendReport performs inline.
+ */
+export function markPartial(sqlite: RawDb, id: number, error: string): void {
+  sqlite.transaction(() => {
+    sqlite
+      .prepare(
+        `UPDATE notification_outbox SET status = 'partial', last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      )
+      .run(error, id);
+    transitionClaimForRow(sqlite, id, "sent");
+  })();
+}
+
+/**
+ * Apply one sender report to a row's children and decide the parent row,
+ * atomically: child writes + parent transition + claim transition commit or
+ * roll back together.
+ *
+ * Per child (reported chats only): INSERT OR IGNORE the child row, then
+ * attempts + 1 — but only while the child is still 'pending', so a stale or
+ * duplicate report can never flip a terminal child back. 'refused' stays
+ * pending until its attempts reach MAX_ATTEMPTS, then 'failed' with the
+ * refusal recorded; 'ambiguous' and 'skipped' are terminal at once.
+ *
+ * Parent decision (from the child states after applying the report):
+ * - ≥1 pending → re-queue with backoff (row attempts + 1), claim released.
+ * - 0 pending, ≥1 sent, rest sent/skipped → 'sent', claim → sent.
+ * - 0 pending, ≥1 sent, ≥1 failed, none ambiguous → 'partial', claim → sent.
+ * - 0 pending, ≥1 ambiguous → 'ambiguous', claim → ambiguous (unknown
+ *   outcome dominates terminal reporting — Batch A).
+ * - 0 pending, 0 sent, ≥1 failed → 'failed', claim released.
+ * - 0 pending, 0 sent, all skipped → 'dropped', claim released.
+ * - Empty report (a sender that attempted nothing — production senders
+ *   never do this): re-queued like a definite failure, so the message is
+ *   never silently lost; the next attempt re-reads the pending set.
+ *
+ * Row-level attempts stays a counter (backoff input + observability) and no
+ * longer decides terminality — per-chat attempts (capped at MAX_ATTEMPTS)
+ * is the terminal gate for refusals.
+ */
+export function applySendReport(sqlite: RawDb, id: number, report: ChatDelivery[], now: Date): ApplySendReportResult {
+  const run = sqlite.transaction((): ApplySendReportResult => {
+    for (const d of report) {
+      sqlite
+        .prepare(
+          `INSERT OR IGNORE INTO notification_outbox_deliveries (outbox_id, chat_id, status) VALUES (?, ?, 'pending')`
+        )
+        .run(id, d.chatId);
+      // Only a still-pending child moves: a duplicate/stale report entry
+      // for an already-terminal child is a no-op (RETURNING yields nothing).
+      const moved = sqlite
+        .prepare(
+          `UPDATE notification_outbox_deliveries
+           SET attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE outbox_id = ? AND chat_id = ? AND status = 'pending'
+           RETURNING attempts`
+        )
+        .get(id, d.chatId) as { attempts: number } | undefined;
+      if (!moved) continue;
+      if (d.outcome === "sent") {
+        sqlite
+          .prepare(`UPDATE notification_outbox_deliveries SET status = 'sent' WHERE outbox_id = ? AND chat_id = ?`)
+          .run(id, d.chatId);
+      } else if (d.outcome === "refused") {
+        if (moved.attempts >= MAX_ATTEMPTS) {
+          sqlite
+            .prepare(
+              `UPDATE notification_outbox_deliveries SET status = 'failed', last_error = ? WHERE outbox_id = ? AND chat_id = ?`
+            )
+            .run(d.error ?? "refused", id, d.chatId);
+        }
+        // Else stays 'pending': still within its attempt budget.
+      } else if (d.outcome === "ambiguous") {
+        sqlite
+          .prepare(`UPDATE notification_outbox_deliveries SET status = 'ambiguous' WHERE outbox_id = ? AND chat_id = ?`)
+          .run(id, d.chatId);
+      } else {
+        // 'skipped': chat unlinked between attempts — terminal, not a failure.
+        sqlite
+          .prepare(`UPDATE notification_outbox_deliveries SET status = 'skipped' WHERE outbox_id = ? AND chat_id = ?`)
+          .run(id, d.chatId);
+      }
+    }
+
+    const children = listDeliveryChildren(sqlite, id);
+    const sentCount = children.filter((c) => c.status === "sent").length;
+    const pendingCount = children.filter((c) => c.status === "pending").length;
+    const failedChildren = children.filter((c) => c.status === "failed");
+    const ambiguousCount = children.filter((c) => c.status === "ambiguous").length;
+    const skippedCount = children.filter((c) => c.status === "skipped").length;
+    const failedDesc = (c: DeliveryChild) =>
+      `chat ${c.chatId} failed after ${c.attempts} attempts (${c.lastError ?? "refused"})`;
+
+    const result = (outcome: PartialSendOutcome): ApplySendReportResult => ({
+      outcome,
+      deliveredCount: sentCount,
+      pendingCount,
+      sentCount,
+      failedCount: failedChildren.length,
+      ambiguousCount,
+      skippedCount,
+    });
+
+    // Empty report: nothing was attempted — re-queue like a definite
+    // failure so the occurrence is never silently lost.
+    if (children.length === 0) {
+      const row = sqlite.prepare(`SELECT attempts FROM notification_outbox WHERE id = ?`).get(id) as
+        | { attempts: number }
+        | undefined;
+      const attempts = (row?.attempts ?? 0) + 1;
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'queued', cap_day = NULL, send_started_at = NULL,
+               attempts = ?, last_error = ?, deliver_after = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        )
+        .run(attempts, "sender reported no per-chat outcomes", retryAfter(attempts, now), id);
+      transitionClaimForRow(sqlite, id, "released");
+      return result("partial-retry");
+    }
+
+    if (pendingCount > 0) {
+      const row = sqlite.prepare(`SELECT attempts FROM notification_outbox WHERE id = ?`).get(id) as
+        | { attempts: number }
+        | undefined;
+      const attempts = (row?.attempts ?? 0) + 1;
+      const refused = children.filter((c) => c.status === "pending");
+      const detail = refused.map((c) => `chat ${c.chatId} refused`).join("; ");
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'queued', cap_day = NULL, send_started_at = NULL,
+               attempts = ?, last_error = ?, deliver_after = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        )
+        .run(
+          attempts,
+          `partial delivery: ${sentCount} of ${children.length} chats delivered; ${pendingCount} still pending${detail ? ` (${detail})` : ""}`,
+          retryAfter(attempts, now),
+          id
+        );
+      transitionClaimForRow(sqlite, id, "released");
+      return result("partial-retry");
+    }
+
+    if (sentCount > 0 && failedChildren.length === 0 && ambiguousCount === 0) {
+      sqlite
+        .prepare(`UPDATE notification_outbox SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(id);
+      transitionClaimForRow(sqlite, id, "sent");
+      return result("sent");
+    }
+
+    if (sentCount > 0 && failedChildren.length > 0 && ambiguousCount === 0) {
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox SET status = 'partial', last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+        )
+        .run(`partial delivery: ${failedChildren.map(failedDesc).join("; ")}`, id);
+      transitionClaimForRow(sqlite, id, "sent");
+      return result("partial");
+    }
+
+    if (ambiguousCount > 0) {
+      const ambiguousChats = children.filter((c) => c.status === "ambiguous").map((c) => c.chatId);
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'ambiguous', last_error = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        )
+        .run(
+          `partial delivery: send outcome unknown for chat ${ambiguousChats.join(", ")}; not retried to avoid duplicate`,
+          id
+        );
+      transitionClaimForRow(sqlite, id, "ambiguous");
+      return result("ambiguous");
+    }
+
+    if (failedChildren.length > 0) {
+      sqlite
+        .prepare(
+          `UPDATE notification_outbox
+           SET status = 'failed', cap_day = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        )
+        .run(failedChildren.map(failedDesc).join("; "), id);
+      transitionClaimForRow(sqlite, id, "released");
+      return result("failed");
+    }
+
+    // All remaining children are 'skipped': every recipient unlinked.
+    sqlite
+      .prepare(
+        `UPDATE notification_outbox SET status = 'dropped', cap_day = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      )
+      .run("all recipients unlinked", id);
+    transitionClaimForRow(sqlite, id, "released");
+    return result("dropped");
+  });
+  return run();
+}
+
 export interface RecoveryStats {
   requeued: number;
   ambiguous: number;

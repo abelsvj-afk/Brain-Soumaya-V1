@@ -307,7 +307,7 @@ describe("T8: bill-risk due date is threaded through (D4)", () => {
     expect(inv[0]!.args.dueDate).toBe("2026-01-18"); // the at-risk occurrence's due date, threaded
 
     // run() through the REAL notify boundary → the persisted outbox row.
-    const policyNotify = createPolicyNotify({ sqlite: handle.sqlite, handle, send: async () => {}, audit: () => {}, workerId: "t8-test" });
+    const policyNotify = createPolicyNotify({ sqlite: handle.sqlite, handle, send: async () => ({ attempted: [{ chatId: 1, outcome: "sent" as const }] }), audit: () => {}, workerId: "t8-test" });
     const tcRun: ToolContext = { ctx: appCtx, spaceId: S, now: JAN10_MS, notify: (text, meta) => policyNotify(S, text, meta) };
     const res = await billRiskTool.run(tcRun, inv[0]!.args);
     expect(res.ok).toBe(true);
