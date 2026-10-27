@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Build the single-file Deep Past live mockup (v2) from mockups/deep-past/index.html.
+"""Build the single-file Deep Past live mockup (v7) from mockups/deep-past/index.html.
 
 Embeds: three core+module (base64, as the station standalone does),
-GLTFLoader-stub (base64, importmap-mapped to three/addons/loaders/GLTFLoader.js),
+GLTFLoader-stub (base64; its 'three' import is rewritten to the generated
+module Blob URL at boot, and the scene's two imports are rewritten to the
+generated Blob URLs — v7 removed the dynamic import map per the ChatGPT
+audit, so there is no import-map timing to fail silently),
 the five placed GLBs (base64), plus the orbit-camera and collapsible-menus
 live-viewing patches. Each new piece adds one load call + one base64 block;
 keep them paired.
@@ -24,24 +27,19 @@ import base64, pathlib, re, sys
 
 BASE = pathlib.Path('/home/hatch/workspace/worlds-vision')
 SRC = BASE / 'mockups/deep-past/index.html'
-OUT = pathlib.Path('/home/hatch/workspace/your_files/worlds-mockups-live/deep-past-5pieces-v6.html')
+OUT = pathlib.Path('/home/hatch/workspace/your_files/worlds-mockups-live/deep-past-5pieces-v7.html')
 
 def b64(p):
     return base64.b64encode(pathlib.Path(p).read_bytes()).decode()
 
 # (web slim filename, inert-text block id) — one row per placed piece.
-# 2026-10-26: the web slims are the 256-texture versions. The 512-texture
-# slims made the standalone 11.4 MB and the owner's phone ran NO JavaScript
-# at all on it (his v5 screenshot proved it: the loading pill still showed
-# its static initial text, the HUD its static placeholders, black scene —
-# the wrapper near the end of the file never executed). The two-piece file
-# and Eternity (8.7 MB) loaded fine on the same phone, so the file got too
-# big to download/open reliably. 256 textures cut the five GLBs from 7.7 MB
-# to 4.2 MB, so the standalone is now ~8 MB, under Eternity's working size.
-# A heartbeat script now sits right after the loading pill and proves JS
-# runs; if the main boot never starts it says the file may not have
-# downloaded fully. The output is renamed again (deep-past-5pieces-v6.html)
-# so his phone cannot serve a cached copy of the old file by mistake.
+# 2026-10-26: the web slims are the 256-texture versions (file 11.4 → 6.9 MB;
+# the owner's phone ran no JS at all on the 11.4 MB file). v7 (ChatGPT audit,
+# owner-approved) reworks the boot: stage markers for every step, no dynamic
+# import map (the imports are rewritten to the generated Blob URLs), and a
+# stage-aware failure report on the pill. The output is renamed again
+# (deep-past-5pieces-v7.html) so his phone cannot serve a cached copy of the
+# old file by mistake.
 PIECES = [
     ('first-light-basin-web-256.glb', 'glb-basin'),
     ('stratum-terrace-web-256.glb', 'glb-terrace'),
@@ -94,44 +92,71 @@ glb_blocks = ''.join(
 wrapper = """
 <script>
 (async () => {
+/* v7 boot stages (ChatGPT audit): window.__dpBootStage names the current
+   step — wrapper-entered, core-decoding, module-decoding, blob-creation,
+   module-loading — and the module adds renderer-creation and first-frame.
+   The heartbeat watchdog reads this, so a wrapper that starts and then
+   stalls is diagnosable instead of invisible. The old single
+   __dpMainBooted flag (set the moment the wrapper started) could not tell
+   "never started" from "started but stalled". */
+function setStage(s){ window.__dpBootStage = s; }
+function fail(msg){
+  var stage = window.__dpBootStage || 'unknown';
+  var text = 'The scene failed at ' + stage + ': ' + msg + ' — tap to reload';
+  var lp = document.getElementById('loading');
+  if (lp) { lp.textContent = text; lp.style.pointerEvents = 'auto'; lp.style.cursor = 'pointer'; lp.addEventListener('click', function(){ location.reload(); }); }
+  var b = document.getElementById('behavOut');
+  if (b){ b.textContent += (b.textContent ? '\\n' : '') + '• ' + text; }
+}
+/* Replace a specifier exactly once; throw if it is missing or duplicated,
+   so a bad replacement can never silently produce a broken module. */
+function replaceOnce(text, from, to, label){
+  var i = text.indexOf(from);
+  if (i === -1) throw new Error('missing import ' + label);
+  if (text.indexOf(from, i + from.length) !== -1) throw new Error('import ' + label + ' occurs more than once');
+  return text.slice(0, i) + to + text.slice(i + from.length);
+}
 try {
-/* Say where the boot is, so a stall is visible instead of a frozen pill. */
+setStage('wrapper-entered');
 var _lp = document.getElementById('loading');
-if (_lp) _lp.textContent = 'Starting Deep Past… (v6)';
-window.__dpMainBooted = true; /* the heartbeat watchdog watches for this */
-/* Surface any failure (module error, WebGL throw) on the loading pill
-   itself — a silent loading screen is how the owner's phone got stuck. */
-window.addEventListener('error', function (ev) {
-  var el = document.getElementById('loading');
-  if (el && el.style.display !== 'none') {
-    el.textContent = 'The scene hit a problem: ' + (ev.message || 'unknown error') + ' — tap to dismiss';
-    el.style.pointerEvents = 'auto'; el.style.cursor = 'pointer';
-    el.addEventListener('click', function () { el.style.display = 'none'; });
-  }
+if (_lp) _lp.textContent = 'Starting Deep Past… (v7)';
+/* Surface any failure on the loading pill — a silent loading screen is how
+   the owner's phone got stuck. */
+window.addEventListener('error', function (ev) { fail(ev.message || 'unknown error'); });
+window.addEventListener('unhandledrejection', function (ev) {
+  var r = ev.reason;
+  fail('unhandled rejection: ' + (r && r.message ? r.message : r));
 });
 const CORE_B64 = '""" + b64(BASE / 'mockups/deep-past/three.core.min.js') + """';
 const MOD_B64 = '""" + b64(BASE / 'mockups/deep-past/three.module.min.js') + """';
 const LOADER_B64 = '""" + b64(BASE / 'mockups/man-god/GLTFLoader-stub.js') + """';
 const dec = new TextDecoder();
+setStage('core-decoding');
 const coreUrl = URL.createObjectURL(new Blob([Uint8Array.from(atob(CORE_B64), c => c.charCodeAt(0))], {type: 'text/javascript'}));
+setStage('module-decoding');
 const modText = dec.decode(Uint8Array.from(atob(MOD_B64), c => c.charCodeAt(0))).split('./three.core.min.js').join(coreUrl);
 const modUrl = URL.createObjectURL(new Blob([modText], {type: 'text/javascript'}));
-const loaderUrl = URL.createObjectURL(new Blob([dec.decode(Uint8Array.from(atob(LOADER_B64), c => c.charCodeAt(0)))], {type: 'text/javascript'}));
-const im = document.createElement('script');
-im.type = 'importmap';
-im.textContent = JSON.stringify({imports: {'three': modUrl, 'three/addons/loaders/GLTFLoader.js': loaderUrl}});
-document.head.appendChild(im);
-const sceneUrl = URL.createObjectURL(new Blob([document.getElementById('scene-src').textContent], {type: 'text/javascript'}));
-const s = document.createElement('script'); s.type = 'module'; s.src = sceneUrl; document.body.appendChild(s);
+/* No import map (v7): the loader stub's 'three' import is rewritten to the
+   generated module URL, so the loader and the scene share one Three.js
+   instance without a runtime import map that can fail silently. */
+const loaderText = replaceOnce(dec.decode(Uint8Array.from(atob(LOADER_B64), c => c.charCodeAt(0))), "'three'", JSON.stringify(modUrl), 'three');
+const loaderUrl = URL.createObjectURL(new Blob([loaderText], {type: 'text/javascript'}));
+setStage('blob-creation');
+/* Rewrite the scene's imports to the generated Blob URLs (longer specifier
+   first, so it cannot be shadowed by the shorter one). */
+let sceneText = document.getElementById('scene-src').textContent;
+sceneText = replaceOnce(sceneText, "'three/addons/loaders/GLTFLoader.js'", JSON.stringify(loaderUrl), 'GLTFLoader');
+sceneText = replaceOnce(sceneText, "'three'", JSON.stringify(modUrl), 'three');
+const sceneUrl = URL.createObjectURL(new Blob([sceneText], {type: 'text/javascript'}));
+setStage('module-loading');
+const s = document.createElement('script'); s.type = 'module'; s.src = sceneUrl;
+s.addEventListener('error', function(){ fail('module script failed to load'); });
+document.body.appendChild(s);
 /* The module is now fetching/evaluating; if it never starts, the pill
    stays on this stage, which names exactly where the boot stopped. */
-if (_lp) _lp.textContent = 'Loading the scene code… (v6)';
+if (_lp) _lp.textContent = 'Loading the scene code… (v7)';
 } catch (err) {
-  var msg = 'The scene failed to start (' + (err && err.message ? err.message : err) + ') — tap to reload';
-  var lp = document.getElementById('loading');
-  if (lp) { lp.textContent = msg; lp.style.pointerEvents = 'auto'; lp.style.cursor = 'pointer'; lp.addEventListener('click', function () { location.reload(); }); }
-  var b = document.getElementById('behavOut');
-  if (b){ b.textContent += (b.textContent ? '\\n' : '') + '• ' + msg; }
+  fail(err && err.message ? err.message : err);
 }
 })();
 </script>
@@ -141,4 +166,4 @@ if (_lp) _lp.textContent = 'Loading the scene code… (v6)';
 """ + glb_blocks + """</body>"""
 html = html.replace('</body>', wrapper)
 OUT.write_text(html)
-print('deep-past-5pieces-v6.html', len(html), 'bytes')
+print('deep-past-5pieces-v7.html', len(html), 'bytes')

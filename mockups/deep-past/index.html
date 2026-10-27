@@ -43,27 +43,36 @@
 <script type="importmap">{"imports":{"three":"./three.module.min.js","three/addons/loaders/GLTFLoader.js":"../man-god/GLTFLoader-stub.js"}}</script>
 </head>
 <body>
-<div id="fixture">DEEP PAST · v6 · Basin + terrace + rim + stair + lantern: your GLBs · rest fixture · PHASE 1 · NOT THE PRODUCT</div>
+<div id="fixture">DEEP PAST · v7 · Basin + terrace + rim + stair + lantern: your GLBs · rest fixture · PHASE 1 · NOT THE PRODUCT</div>
 <div id="app"></div>
-<div id="loading">Loading Deep Past… (v6)</div>
+<div id="loading">Loading Deep Past… (v7)</div>
 <script>
-/* Heartbeat (v6): proves JavaScript runs at all. It sits right after the
+/* Heartbeat (v7): proves JavaScript runs at all. It sits right after the
    loading pill, before the scene source and the GLB blocks, so it executes
-   even if the rest of the file never arrives (truncated download). If the
-   main boot never starts, the watchdog says so plainly instead of a silent
-   black screen. */
+   even if the rest of the file never arrives (truncated download). The
+   watchdog reads window.__dpBootStage, which the wrapper updates at every
+   boot step — so it can tell "the wrapper never started" (no stage / still
+   'heartbeat') apart from "the wrapper started but stalled" (a stage is set
+   but the first frame never rendered). The old check (a single
+   __dpMainBooted flag set the moment the wrapper started) could not make
+   that distinction, so a stalled wrapper was invisible. */
 (function(){
   var lp = document.getElementById('loading');
-  if (lp) lp.textContent = 'Starting Deep Past… (v6)';
+  if (lp) lp.textContent = 'Starting Deep Past… (v7)';
   window.__dpHeartbeat = true;
+  window.__dpBootStage = 'heartbeat';
   setTimeout(function(){
-    if (!window.__dpMainBooted) {
-      var el = document.getElementById('loading');
-      if (el && el.style.display !== 'none') {
+    var stage = window.__dpBootStage;
+    if (stage === 'first-frame') return; /* the scene is up; the pill is already hidden */
+    var el = document.getElementById('loading');
+    if (el && el.style.display !== 'none') {
+      if (!stage || stage === 'heartbeat') {
         el.textContent = 'The file may not have downloaded fully — please download it again from the chat, then reopen it';
-        el.style.pointerEvents = 'auto'; el.style.cursor = 'pointer';
-        el.addEventListener('click', function(){ el.style.display = 'none'; });
+      } else {
+        el.textContent = 'Still loading (stalled at ' + stage + ') — tap to reload';
       }
+      el.style.pointerEvents = 'auto'; el.style.cursor = 'pointer';
+      el.addEventListener('click', function(){ location.reload(); });
     }
   }, 10000);
 })();
@@ -150,6 +159,11 @@ if (glKind === 'none') {
   throw new Error('WebGL unavailable on this device');
 }
 loadingStage('Building the scene…');
+/* v7: name the boot stage so a stall here is diagnosable. probeGL() only
+   proves a probe context could be obtained; it does not prove this renderer
+   can be created. If the constructor throws, the wrapper's error handler
+   reports it on the pill with this stage. */
+window.__dpBootStage = 'renderer-creation';
 const renderer = new THREE.WebGLRenderer({antialias: !lightPath, preserveDrawingBuffer:true});
 renderer.setPixelRatio(lightPath ? 1 : Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -875,7 +889,7 @@ let lastTickMs = null;
 let loadingEl = document.getElementById('loading');
 function tick(){
   requestAnimationFrame(tick);
-  if (loadingEl) { loadingEl.style.display = 'none'; loadingEl = null; } /* first rendered frame: the scene is up */
+  if (loadingEl) { loadingEl.style.display = 'none'; loadingEl = null; window.__dpBootStage = 'first-frame'; } /* first rendered frame: the scene is up */
   const t = clock.getElapsedTime();
   const nowMs = performance.now();
   const dtMs = lastTickMs === null ? 16.7 : Math.min(100, nowMs - lastTickMs);
