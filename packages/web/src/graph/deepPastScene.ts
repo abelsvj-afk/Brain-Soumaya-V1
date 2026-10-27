@@ -1,6 +1,21 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { fadeSwapIn } from "./gltf.js";
 import { buildHygStarfield } from "./hygStars.js";
+import {
+  DEEP_PAST_BASIN_GLB_Y,
+  DEEP_PAST_BASIN_SPAN,
+  DEEP_PAST_LANTERN,
+  DEEP_PAST_LANTERN_GLOW_SPAN,
+  DEEP_PAST_LANTERN_LIGHT,
+  DEEP_PAST_MODELS,
+  DEEP_PAST_RIM,
+  DEEP_PAST_STAIR,
+  DEEP_PAST_TERRACE,
+  fitDeepPastAsset,
+  fitDeepPastAssetToSpan,
+  loadDeepPastAsset,
+} from "./deepPastAssets.js";
 import {
   DEEP_PAST_STRATA_COUNT,
   DEEP_PAST_STRATUM_RADIUS,
@@ -30,8 +45,22 @@ import {
  * Draw-call sketch (recipe ceiling 90): strata walls 9 · rim bands 9 · plinths 1
  * · alcoves ≤3 (one instanced mesh per form) · lanterns 1 · thread ≤1 · anchors ≤1
  * · particulate 1 · HYG sky 1 · basin 4 (floor + rim ring + glow + rock) · rise
- * shelf 1 + shelf glow 1 · ships 1 = ~34. Runtime measurement belongs to the
- * device check (C4's measured half); these constants are the static half.
+ * shelf 1 + shelf glow 1 · ships 1 = ~34. The GLB layer adds 6 more calls once
+ * loaded (five meshes + the lantern's glow sprite) and 88,168 measured tris —
+ * the budget still holds with the layer in (see deepPastAssets.test.ts).
+ * Runtime measurement belongs to the device check (C4's measured half);
+ * these constants are the static half.
+ *
+ * The five real pieces (basin, terrace, rim, stair, lantern) load async
+ * from the manifest in deepPastAssets.ts and swap into the holders named
+ * `glb-*` below. Until a piece lands, the procedural form stays — the
+ * basin's floor and rim ring are the load fallback, hidden only once the
+ * real dish fades in; the other four have no procedural form in this
+ * scene, so a failed load simply leaves that holder empty and the
+ * failure is noted for diagnostics. Three positions are still waiting
+ * on the owner's pieces (orb, spire, bead) and keep their procedural
+ * forms as explicitly-marked interim — see the TODOs at the basin light,
+ * the anchors, and the thread.
  *
  * Kindness is structural here: the scene has no state for decline. Every member
  * carries the same light at every depth; an empty layout renders the helix, the
@@ -187,6 +216,15 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   // The First Light basin: the finished bottom. A warm floor of light and
   // stone, a lit rim ring, a breathing glow — and solid rock below it, so
   // there is no "underneath the Deep Past" to fall into (C9).
+  //
+  // The real dish (deepPastAssets: basin) is the primary: it loads into
+  // `glb-basin` and fades in, hiding the procedural floor + rim ring.
+  // Until it lands, that procedural pair IS the basin — the load fallback,
+  // never the primary. The solid rock, the glow, and the basin light stay
+  // in both cases: the rock is the finished bottom, and the glow + light
+  // are the basin's light until the First Light orb arrives (TODO below).
+  const basinFallback = new THREE.Group();
+  basinFallback.name = "basin-fallback";
   const basinFloor = new THREE.Mesh(
     new THREE.CircleGeometry(DEEP_PAST_BASIN_RADIUS, 48),
     new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.85, metalness: 0 }),
@@ -194,7 +232,7 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   basinFloor.rotation.x = -Math.PI / 2;
   basinFloor.position.y = DEEP_PAST_BASIN_Y;
   basinFloor.name = "basin-floor";
-  group.add(basinFloor);
+  basinFallback.add(basinFloor);
   const basinRing = new THREE.Mesh(
     new THREE.TorusGeometry(DEEP_PAST_BASIN_RADIUS, 1.1, 8, 48),
     new THREE.MeshBasicMaterial({ color: LANTERN }),
@@ -202,7 +240,8 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   basinRing.rotation.x = Math.PI / 2;
   basinRing.position.y = DEEP_PAST_BASIN_Y + 0.6;
   basinRing.name = "basin-rim";
-  group.add(basinRing);
+  basinFallback.add(basinRing);
+  group.add(basinFallback);
   const basinGlow = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false }),
   );
@@ -217,6 +256,106 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   basinRock.position.y = DEEP_PAST_BASIN_Y - 100;
   basinRock.name = "basin-rock";
   group.add(basinRock);
+
+  // Real-asset layer: one holder per piece, placed at the manifest's
+  // verified positions. A holder is empty until its GLB lands; a load
+  // that fails leaves it empty and notes the failure (see
+  // loadDeepPastAsset) — the world is never left with a hole.
+  const basinHolder = new THREE.Group();
+  basinHolder.name = "glb-basin";
+  basinHolder.position.y = DEEP_PAST_BASIN_GLB_Y;
+  group.add(basinHolder);
+  const terraceHolder = new THREE.Group();
+  terraceHolder.name = "glb-terrace";
+  terraceHolder.position.set(
+    Math.cos(DEEP_PAST_TERRACE.angle) * DEEP_PAST_TERRACE.radius,
+    DEEP_PAST_TERRACE.y,
+    Math.sin(DEEP_PAST_TERRACE.angle) * DEEP_PAST_TERRACE.radius,
+  );
+  terraceHolder.rotation.y = -DEEP_PAST_TERRACE.angle - Math.PI / 2;
+  group.add(terraceHolder);
+  const rimHolder = new THREE.Group();
+  rimHolder.name = "glb-rim";
+  rimHolder.position.y = DEEP_PAST_RIM.y;
+  group.add(rimHolder);
+  const stairHolder = new THREE.Group();
+  stairHolder.name = "glb-stair";
+  stairHolder.position.set(
+    DEEP_PAST_STAIR.position.x,
+    DEEP_PAST_STAIR.position.y,
+    DEEP_PAST_STAIR.position.z,
+  );
+  stairHolder.rotation.y = -Math.PI / 2;
+  group.add(stairHolder);
+  const lanternHolder = new THREE.Group();
+  lanternHolder.name = "glb-lantern";
+  lanternHolder.position.set(
+    Math.cos(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius,
+    DEEP_PAST_LANTERN.y,
+    Math.sin(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius,
+  );
+  group.add(lanternHolder);
+
+  const hideBasinFallback = () => {
+    if (basinFallback.parent !== group) return;
+    group.remove(basinFallback);
+    disposeObject3D(basinFallback);
+  };
+  const loadInto = (
+    model: (typeof DEEP_PAST_MODELS)[number],
+    holder: THREE.Group,
+    fit: (root: THREE.Object3D) => void,
+    onLanded?: (root: THREE.Object3D) => void,
+  ) => {
+    void loadDeepPastAsset(model.url).then((loaded) => {
+      if (!loaded || disposed) {
+        if (loaded) disposeObject3D(loaded);
+        return;
+      }
+      fit(loaded);
+      holder.add(loaded);
+      onLanded?.(loaded);
+    });
+  };
+  // The dish fades in over the procedural floor; the fallback is hidden
+  // only once the real dish is mostly visible (a crossfade, not a cut).
+  loadInto(
+    DEEP_PAST_MODELS[0]!,
+    basinHolder,
+    (root) => fitDeepPastAssetToSpan(root, DEEP_PAST_BASIN_SPAN),
+    (root) => fadeSwapIn(root, hideBasinFallback),
+  );
+  loadInto(DEEP_PAST_MODELS[1]!, terraceHolder, (root) =>
+    fitDeepPastAsset(root, DEEP_PAST_TERRACE.scale),
+  );
+  loadInto(DEEP_PAST_MODELS[2]!, rimHolder, (root) =>
+    fitDeepPastAsset(root, DEEP_PAST_RIM.scale),
+  );
+  loadInto(DEEP_PAST_MODELS[3]!, stairHolder, (root) =>
+    fitDeepPastAsset(root, DEEP_PAST_STAIR.scale),
+  );
+  loadInto(
+    DEEP_PAST_MODELS[4]!,
+    lanternHolder,
+    (root) => fitDeepPastAsset(root, DEEP_PAST_LANTERN.scale),
+    () => {
+      // The lantern's glow is painted into its texture (no emissive in
+      // the file), so it gets a real warm light + glow sprite on load —
+      // the basin's treatment, at this lantern's scale.
+      const light = new THREE.PointLight(
+        0xffc98a,
+        DEEP_PAST_LANTERN_LIGHT.intensity,
+        DEEP_PAST_LANTERN_LIGHT.distance,
+      );
+      lanternHolder.add(light);
+      const glow = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.9, depthWrite: false }),
+      );
+      glow.scale.setScalar(DEEP_PAST_LANTERN_GLOW_SPAN);
+      glow.name = "glb-lantern-glow";
+      lanternHolder.add(glow);
+    },
+  );
 
   // The rim-side resting place for risen members: a finished stone platform
   // with its own lamp, empty when nothing is risen.
@@ -309,6 +448,10 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
 
   // Anchors (D-8): a fine line of light rising from a member's alcove toward
   // the rim — a visit-path to its other appearance, never a relocation.
+  // TODO (missing GLB — anchor-spire, needed from the owner): each anchor
+  // line rises from its alcove with no physical foot yet — the INTERIM
+  // form. When the spire lands, one stands at each anchor's foot and the
+  // line rises from its tip. Do not invent a substitute spire.
   if (layout.anchors.length > 0) {
     const byId = new Map(members.map((m) => [m.nodeId, m]));
     const positions: number[] = [];
@@ -329,6 +472,10 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
 
   // The Chronicle thread (A21): a lit ribbon through the active route's stops,
   // in chronological order — the route, made visible before it is traveled.
+  // TODO (missing GLB — route-bead, needed from the owner): the thread line
+  // marks the route but its stops have no markers yet — the INTERIM form.
+  // When the bead lands, one floats above each stop. Do not invent a
+  // substitute bead.
   if (layout.thread && layout.thread.stops.length >= 2) {
     const points = layout.thread.stops.map((s) => new THREE.Vector3(s.x, s.y + 8, s.z));
     const curve = new THREE.CatmullRomCurve3(points);
@@ -374,6 +521,13 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
 
   // Violet dusk light: the memories' own lanterns do the warming; the ambient
   // is low and calm, the basin's ember is the one true warmth below.
+  // TODO (missing GLB — first-light-orb, needed from the owner): the warm
+  // glow sprite + point light above the basin is the INTERIM light — it
+  // keeps the basin reading as the warmest place until the orb lands.
+  // When it does, a glowing sphere hovers just above the pool and this
+  // glow becomes its halo; the basin light stays as the light source.
+  // The orb is the focal light: without it the basin still reads, with
+  // it the light gains a visible body. Do not invent a substitute orb.
   group.add(new THREE.AmbientLight(0x8a76c9, 0.85));
   const basinLight = new THREE.PointLight(0xffc98a, 2.2, 500);
   basinLight.position.set(0, DEEP_PAST_BASIN_Y + 24, 0);

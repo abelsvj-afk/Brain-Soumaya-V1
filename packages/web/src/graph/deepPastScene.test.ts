@@ -2,6 +2,13 @@ import { describe, it, expect } from "vitest";
 import * as THREE from "three";
 import { buildDeepPastLayout, DEEP_PAST_BUDGET, DEEP_PAST_STRATA_COUNT } from "./deepPastLayout.js";
 import {
+  DEEP_PAST_BASIN_GLB_Y,
+  DEEP_PAST_LANTERN,
+  DEEP_PAST_RIM,
+  DEEP_PAST_STAIR,
+  DEEP_PAST_TERRACE,
+} from "./deepPastAssets.js";
+import {
   createDeepPastScene,
   deepPastDescentCamera,
   deepPastDescentStage,
@@ -95,6 +102,41 @@ describe("deep past scene (P3-2)", () => {
     expect(rings.count).toBe(1); // node 4 is a gathering ring
     const lanterns = scene.group.getObjectByName("memory-lanterns") as THREE.Points;
     expect((lanterns.geometry.getAttribute("position") as THREE.BufferAttribute).count).toBe(4);
+    scene.dispose();
+  });
+
+  it("the real-asset layer has one holder per piece at the manifest's placements", () => {
+    const scene = createDeepPastScene(layout);
+    // The basin's procedural floor + rim ring stay as the load fallback
+    // until the real dish fades in.
+    expect(scene.group.getObjectByName("basin-fallback")).toBeTruthy();
+    expect(scene.group.getObjectByName("basin-floor")).toBeTruthy();
+    expect(scene.group.getObjectByName("basin-rim")).toBeTruthy();
+    // Holders start empty: the GLBs land async; a failed load leaves a
+    // holder empty and noted, never a hole in the world.
+    for (const name of ["glb-basin", "glb-terrace", "glb-rim", "glb-stair", "glb-lantern"]) {
+      const holder = scene.group.getObjectByName(name) as THREE.Group;
+      expect(holder).toBeTruthy();
+      expect(holder.children.length).toBe(0);
+    }
+    const basin = scene.group.getObjectByName("glb-basin") as THREE.Group;
+    expect(basin.position.y).toBe(DEEP_PAST_BASIN_GLB_Y);
+    const terrace = scene.group.getObjectByName("glb-terrace") as THREE.Group;
+    expect(terrace.position.x).toBeCloseTo(Math.cos(DEEP_PAST_TERRACE.angle) * DEEP_PAST_TERRACE.radius, 5);
+    expect(terrace.position.y).toBe(DEEP_PAST_TERRACE.y);
+    expect(terrace.position.z).toBeCloseTo(Math.sin(DEEP_PAST_TERRACE.angle) * DEEP_PAST_TERRACE.radius, 5);
+    expect(terrace.rotation.y).toBeCloseTo(-DEEP_PAST_TERRACE.angle - Math.PI / 2, 5);
+    const rim = scene.group.getObjectByName("glb-rim") as THREE.Group;
+    expect(rim.position.y).toBe(DEEP_PAST_RIM.y);
+    const stair = scene.group.getObjectByName("glb-stair") as THREE.Group;
+    expect(stair.position.x).toBe(DEEP_PAST_STAIR.position.x);
+    expect(stair.position.y).toBe(DEEP_PAST_STAIR.position.y);
+    expect(stair.position.z).toBe(DEEP_PAST_STAIR.position.z);
+    expect(stair.rotation.y).toBeCloseTo(-Math.PI / 2, 5);
+    const lantern = scene.group.getObjectByName("glb-lantern") as THREE.Group;
+    expect(lantern.position.x).toBeCloseTo(Math.cos(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius, 5);
+    expect(lantern.position.y).toBe(DEEP_PAST_LANTERN.y);
+    expect(lantern.position.z).toBeCloseTo(Math.sin(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius, 5);
     scene.dispose();
   });
 
