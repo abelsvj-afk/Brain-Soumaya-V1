@@ -1,4 +1,4 @@
-import { API, afetch } from "./http.js";
+import { API, afetch, DEFAULT_TIMEOUT_MS } from "./http.js";
 import type {
   FinAccount, FinBill, FinBillOccurrence, FinIncome, FinExpense, BudgetSummary, BillFrequency,
   ExpenseDirection, FinExtractionResult, MoneyStar, FinBucket, FinGoal, FinAllocation, WealthSummary,
@@ -20,9 +20,9 @@ export interface FinanceSummary {
   upcomingTotal: number;
 }
 
-async function getJson<T>(path: string): Promise<T | null> {
+async function getJson<T>(path: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T | null> {
   try {
-    const res = await afetch(`${API}/finance${path}`);
+    const res = await afetch(`${API}/finance${path}`, {}, timeoutMs);
     return res.ok ? ((await res.json()) as T) : null;
   } catch {
     return null;
@@ -77,7 +77,7 @@ async function sendChecked<T>(path: string, method: string, body?: unknown): Pro
   }
 }
 
-export const getFinanceSummary = () => getJson<FinanceSummary>("/summary");
+export const getFinanceSummary = (timeoutMs: number = DEFAULT_TIMEOUT_MS) => getJson<FinanceSummary>("/summary", timeoutMs);
 export const getMoneySky = () => getJson<MoneyStar[]>("/sky");
 
 export interface AffordResult {

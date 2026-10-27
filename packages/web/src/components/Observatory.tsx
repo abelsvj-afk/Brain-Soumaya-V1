@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AwayDigest, GraphNode, Constellation, Insight } from "@brain/shared";
 import {
   getConstellationsResult,
@@ -20,8 +20,10 @@ import { playSfx } from "../graph/sfx.js";
 import { pushToast } from "./Toasts.js";
 import { SoumayaEye } from "./SoumayaEye.js";
 import type { Journey } from "@brain/shared";
+import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { getFinanceSummary, type FinanceSummary } from "../api/finance.js";
 import { getJourneys } from "../api/journeys.js";
+import { BOOT_TIMEOUT_MS } from "../api/http.js";
 import { isReminderDue } from "../utils/dueReminders.js";
 import { useSpaceTimeZone } from "../utils/spaceTimezone.js";
 
@@ -187,6 +189,15 @@ export function Observatory({
    *  until the Observatory closed. */
   onAnswered?: () => void;
 }) {
+  // REG-078 (OBS-07): the guaranteed exit — Escape dismisses from any
+  // focus state inside the overlay, via the shared dialog hook the other
+  // overlays already use (Escape + Tab trap + focus restore), and a click
+  // on the bare overlay dismisses too. The backdrop handler is inline on
+  // the root (e.target === e.currentTarget): a click on a card is not a
+  // click on the backdrop, so cards keep their own actions.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, onEnter);
+
   const [insights, setInsights] = useState<Insight[]>([]);
   const [constellations, setConstellations] = useState<Constellation[]>([]);
   // The Daily Contact — she initiates; answering right here feeds the brain.
@@ -219,7 +230,7 @@ export function Observatory({
   const loadDigest = async () => {
     markSource("digest", "loading");
     try {
-      const r = await getDigestResult();
+      const r = await getDigestResult(BOOT_TIMEOUT_MS);
       if (!r.ok) {
         markSource("digest", "error");
         return;
@@ -233,7 +244,7 @@ export function Observatory({
   const loadConstellations = async () => {
     markSource("constellations", "loading");
     try {
-      const r = await getConstellationsResult();
+      const r = await getConstellationsResult(BOOT_TIMEOUT_MS);
       if (!r.ok) {
         markSource("constellations", "error");
         return;
@@ -247,7 +258,7 @@ export function Observatory({
   const loadContact = async () => {
     markSource("contact", "loading");
     try {
-      const c = await getDailyContact();
+      const c = await getDailyContact(BOOT_TIMEOUT_MS);
       // Null here is the helper's failure signal, not an empty day — the
       // server always answers with a DailyContact object on success.
       if (c === null) {
@@ -263,7 +274,7 @@ export function Observatory({
   const loadFinance = async () => {
     markSource("finance", "loading");
     try {
-      const f = await getFinanceSummary();
+      const f = await getFinanceSummary(BOOT_TIMEOUT_MS);
       if (f === null) {
         markSource("finance", "error");
         return;
@@ -277,7 +288,7 @@ export function Observatory({
   const loadJourneys = async () => {
     markSource("journeys", "loading");
     try {
-      const j = await getJourneys();
+      const j = await getJourneys(BOOT_TIMEOUT_MS);
       // Same null-means-failure contract JourneysPanel relies on.
       if (j === null) {
         markSource("journeys", "error");
@@ -292,7 +303,7 @@ export function Observatory({
   const loadReviews = async () => {
     markSource("reviews", "loading");
     try {
-      const r = await getDueReviewsResult();
+      const r = await getDueReviewsResult(BOOT_TIMEOUT_MS);
       if (!r.ok) {
         markSource("reviews", "error");
         return;
@@ -424,7 +435,7 @@ export function Observatory({
   // fetched sections, so there is no fetched section to be "loading".)
   if (count === 0) {
     return (
-      <div className="observatory" role="dialog" aria-label="Welcome">
+      <div className="observatory" role="dialog" aria-label="Welcome" ref={dialogRef} onClick={(e) => { if (e.target === e.currentTarget) onEnter(); }}>
         <div className="obs-stack">
           <div className="obs-card obs-hero">
             <h2>Welcome, {spaceName}.</h2>
@@ -443,7 +454,7 @@ export function Observatory({
   }
 
   return (
-    <div className="observatory" role="dialog" aria-label="Observatory home">
+    <div className="observatory" role="dialog" aria-label="Observatory home" ref={dialogRef} onClick={(e) => { if (e.target === e.currentTarget) onEnter(); }}>
       <div className="obs-stack">
         <header className="obs-head">
           <h2>Welcome back, {spaceName}.</h2>
@@ -493,7 +504,7 @@ export function Observatory({
                     away.expiredActions > 0
                       ? `⏰ ${away.expiredActions} action${away.expiredActions === 1 ? "" : "s"} expired`
                       : null,
-                    away.cooling > 0 ? `❄️ ${away.cooling} cooling` : null,
+                    away.cooling > 0 ? `❄️ ${away.cooling} cooling in total` : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}

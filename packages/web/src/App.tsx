@@ -26,7 +26,7 @@ import { ReviewPanel } from "./components/ReviewPanel.js";
 import { getDueReviews } from "./api/client.js";
 import { FuelGauge } from "./components/FuelGauge.js";
 import { StreakEmber } from "./components/StreakEmber.js";
-import { SearchBox } from "./components/SearchBox.js";
+import { SearchBox, type SearchSession } from "./components/SearchBox.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { isCaptureShortcut, isPaletteShortcut, isTextEntryTarget, parseShareLanding } from "./lib/quickCapture.js";
 import type { PaletteCommand } from "./lib/commandPalette.js";
@@ -327,6 +327,13 @@ export default function App() {
   // keys the panel so a share arriving while capture is already open still
   // remounts it with the shared text; cleared when the panel closes.
   const [ingestSeed, setIngestSeed] = useState<{ text: string; nonce: number } | null>(null);
+  // REG-187 (SP-04): the search session, held above the panel switch so a
+  // search survives choosing a hit (which unmounts Search) and returning.
+  const [searchSession, setSearchSession] = useState<SearchSession | null>(null);
+  // REG-188 (SP-05): a seed question carried in from a zero-results escape
+  // hatch — the exact text already typed, prefilled in ChatDock instead of
+  // making the user retype it. Cleared when Chat closes.
+  const [chatSeed, setChatSeed] = useState<{ text: string; nonce: number } | null>(null);
   // Startup recovery: set when initialization fails/stalls so we show a recovery
   // screen (Retry / Performance Mode / Diagnostics) instead of freezing on the sun.
   const [initError, setInitError] = useState<null | "timeout" | "error">(null);
@@ -1677,17 +1684,29 @@ export default function App() {
   // open a tab/panel, or open chat) — so every notification can take you to the thing.
   useEffect(() => {
     const onAction = (e: Event) => {
-      const a = (e as CustomEvent).detail as { kind: string; value?: string | number } | undefined;
+      const a = (e as CustomEvent).detail as { kind: string; value?: string | number; text?: string } | undefined;
       if (!a) return;
       if (a.kind === "focus" && a.value != null) { focus(Number(a.value)); }
       else if (a.kind === "tab" && a.value != null) { dismissObs(); setTab(String(a.value) as any); setPanel("dock"); }
-      else if (a.kind === "panel" && a.value != null) { setPanel(String(a.value) as any); }
+      else if (a.kind === "panel" && a.value != null) {
+        // REG-188: a panel-kind action may carry the text the user already
+        // typed (SearchBox's "Add as memory" hatch) — seed the capture box
+        // with it instead of opening an empty one.
+        if (String(a.value) === "ingest" && typeof a.text === "string" && a.text.trim()) {
+          setIngestSeed({ text: a.text.trim(), nonce: Date.now() });
+        }
+        setPanel(String(a.value) as any);
+      }
       else if (a.kind === "chat") {
         // Phase Y/Z: a proactive toast's "chat" action carries "<source>:<targetId>"
         // (goal_trend or bill_risk) — any other chat-kind action (there are none today,
         // but any future one) falls through to opening Chat with no proactive context.
         const m = typeof a.value === "string" ? /^(goal_trend|bill_risk):(\d+)$/.exec(a.value) : null;
         if (m) setPendingProactiveContext({ source: m[1] as ProactiveContextSource, targetId: Number(m[2]) });
+        // REG-188: a chat-kind action carrying plain text (not a proactive
+        // "<source>:<id>") is a seed question from an escape hatch —
+        // prefill the chat input with the text already typed.
+        else if (typeof a.value === "string" && a.value) setChatSeed({ text: a.value, nonce: Date.now() });
         setShowChat(true);
       }
     };
@@ -2973,7 +2992,8 @@ export default function App() {
         <ChatDock
           spaceName={space.name}
           hasMemories={data.nodes.length > 0}
-          onClose={() => setShowChat(false)}
+          onClose={() => { setShowChat(false); setChatSeed(null); }}
+          seedQuestion={chatSeed}
           onFocus={(id) => focus(id)}
           onRecall={(ids) => graphRef.current?.fireRecall(ids)}
           onCreated={(ids) => void refresh(ids)}
@@ -3048,7 +3068,7 @@ export default function App() {
         />
       )}
 
-      {panel === "search" && <SearchBox onFocus={focus} onClose={() => setPanel(null)} />}
+      {panel === "search" && <SearchBox onFocus={focus} onClose={() => setPanel(null)} initialSession={searchSession} onSessionChange={setSearchSession} />}
       {panel === "ingest" && (
         <IngestPanel
           key={ingestSeed ? `share-${ingestSeed.nonce}` : "capture"}

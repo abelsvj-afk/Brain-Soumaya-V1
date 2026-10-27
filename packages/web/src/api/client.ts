@@ -2,7 +2,7 @@ import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, 
 import { useState, useEffect } from "react";
 // Transport primitives live in http.ts (Post-MVP D4 split); re-export the public ones
 // so existing `import { getSpaceId, BOOT_TIMEOUT_MS } from "../api/client"` keep working.
-import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS } from "./http.js";
+import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } from "./http.js";
 import { CHAT_TIMEOUT_MS, ChatRequestError, chatErrorForStatus, chatTimeoutError, sanitizeChatPayload } from "./chatSend.js";
 
 export * from "./chatSend.js";
@@ -637,9 +637,9 @@ export async function getDigest(): Promise<Insight[]> {
  * to report" from "the server didn't answer" (the Observatory) use this.
  * Same Result-variant pattern as api/mind.ts's `getCognitiveResult`.
  */
-export async function getDigestResult(): Promise<{ ok: true; insights: Insight[] } | { ok: false }> {
+export async function getDigestResult(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<{ ok: true; insights: Insight[] } | { ok: false }> {
   try {
-    const res = await afetch(`${API}/digest`);
+    const res = await afetch(`${API}/digest`, {}, timeoutMs);
     if (!res.ok) return { ok: false };
     const d = await res.json().catch(() => null);
     return Array.isArray(d) ? { ok: true, insights: d as Insight[] } : { ok: false };
@@ -766,9 +766,9 @@ export async function getConstellations(): Promise<Constellation[]> {
  * must not mistake a dead endpoint for "no constellations" can tell the
  * difference. `getConstellations` keeps its fail-soft contract.
  */
-export async function getConstellationsResult(): Promise<{ ok: true; constellations: Constellation[] } | { ok: false }> {
+export async function getConstellationsResult(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<{ ok: true; constellations: Constellation[] } | { ok: false }> {
   try {
-    const res = await afetch(`${API}/constellations`);
+    const res = await afetch(`${API}/constellations`, {}, timeoutMs);
     if (!res.ok) return { ok: false };
     const d = await res.json().catch(() => null);
     return Array.isArray(d) ? { ok: true, constellations: d as Constellation[] } : { ok: false };
@@ -1168,9 +1168,9 @@ export interface DailyContact {
   answered: boolean;
 }
 
-export async function getDailyContact(): Promise<DailyContact | null> {
+export async function getDailyContact(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<DailyContact | null> {
   try {
-    const res = await afetch(`${API}/contact`);
+    const res = await afetch(`${API}/contact`, {}, timeoutMs);
     return res.ok ? ((await res.json()) as DailyContact) : null;
   } catch {
     return null;

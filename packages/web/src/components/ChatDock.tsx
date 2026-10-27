@@ -229,6 +229,7 @@ export function ChatDock({
   onConsumeProactiveContext,
   journeyId,
   onConsumeJourneyContext,
+  seedQuestion,
 }: {
   spaceName?: string;
   /** CH-11: whether the brain holds any memories at all — the empty-state
@@ -264,6 +265,15 @@ export function ChatDock({
   journeyId?: number | null;
   /** Called once this dock has used `journeyId` for a send, so the caller can clear it. */
   onConsumeJourneyContext?: () => void;
+  /**
+   * REG-188 (SP-05): a seed question carried in from a zero-results escape
+   * hatch ("Ask Soumaya" in SearchBox, or "Ask Soumaya instead" in Help) —
+   * the exact text the user already typed, prefilled in the input instead
+   * of making them retype it. One-shot: the dock mounts fresh on every
+   * open, so the initializer reads it; App clears it on close, so a later
+   * FAB-opened chat never replays an old hatch query.
+   */
+  seedQuestion?: { text: string; nonce: number } | null;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
@@ -272,7 +282,7 @@ export function ChatDock({
       return [];
     }
   });
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(seedQuestion?.text ?? "");
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [speakOn, setSpeakOn] = useState(isVoiceEnabled());
@@ -310,6 +320,24 @@ export function ChatDock({
   const attachFileRef = useRef<HTMLInputElement>(null);
   const distilledRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // REG-086 (CH-06): a reply landing while the reader is scrolled up in
+  // history must not yank them to the bottom. Track whether the list is
+  // near its bottom; a reply that lands while it isn't parks a "new reply"
+  // pill instead of scrolling. The user's own just-sent message always
+  // scrolls (they typed it; it belongs in view).
+  const nearBottomRef = useRef(true);
+  const [showJumpPill, setShowJumpPill] = useState(false);
+  const jumpToLatest = () => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+    setShowJumpPill(false);
+  };
+  const onListScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+    nearBottomRef.current = near;
+    if (near) setShowJumpPill(false);
+  };
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recRef = useRef<any>(null);
   const micTimerRef = useRef<number | null>(null);
@@ -324,7 +352,10 @@ export function ChatDock({
     [...messages].reverse().find((m) => m.role === "soumaya" && m.mood)?.mood ?? "neutral";
   const eyeState = busy ? "thinking" : listening ? "listening" : "idle";
 
-  // Persist + autoscroll on every change.
+  // Persist + autoscroll on every change — but the scroll is no longer
+  // unconditional (REG-086): only the user's own just-sent message and a
+  // reply landing while already near the bottom scroll; a reply landing
+  // while the reader is up in history parks the jump pill instead.
   useEffect(() => {
     try {
       // Deliberately bounded — an unbounded chat log growing forever in
@@ -333,7 +364,14 @@ export function ChatDock({
     } catch {
       /* storage unavailable */
     }
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    if (last.role === "you" || nearBottomRef.current) {
+      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+      setShowJumpPill(false);
+    } else if (last.role === "soumaya") {
+      setShowJumpPill(true);
+    }
   }, [messages]);
 
   // IM-103: elapsed ticker for the in-flight reply's presence cue.
@@ -759,10 +797,12 @@ export function ChatDock({
       if (ids.length) onCreated?.(ids);
       playSfx("chime");
       pushToast("Soumaya is charting it into your galaxy ✦", "🛰️", 4000);
+      // REG-089 (CAP-15): the proposal leaves ONLY on a verified save —
+      // removing it after a failed capture destroyed the one-tap retry.
+      setProposals((p) => (p ? p.filter((_, idx) => idx !== i) : p));
     } catch (err) {
       pushToast((err as Error).message || "Couldn't save that.", "⚠️", 4000);
     }
-    setProposals((p) => (p ? p.filter((_, idx) => idx !== i) : p));
   };
 
   const toggleSpeak = () => {
@@ -796,20 +836,29 @@ export function ChatDock({
           <SoumayaEye state={eyeState} mood={lastMood} size={30} /> {spaceName}
         </span>
         <div className="chatdock-tools">
+          {/* REG-084 (CH-04): every header tool carries its name VISIBLY —
+              on a phone there is no hover, so a title-only glyph is an
+              unexplained glyph. Captions follow the program's round-3
+              standard (same shape as Batch M's AG-06 captions); the tools
+              meet the surface's own 44px input-row standard. */}
           <button
             className={`chatdock-tool ${showPersona ? "on" : ""}`}
             onClick={() => setShowPersona((v) => !v)}
             title="Who she is to you — About Me, custom roles, knowledge"
+            aria-label="Persona — who she is to you"
           >
-            🎭
+            <span aria-hidden="true">🎭</span>
+            <span className="chatdock-tool-label">Persona</span>
           </button>
           {voiceSupported && (
             <button
               className={`chatdock-tool ${speakOn ? "on" : ""}`}
               onClick={toggleSpeak}
               title={speakOn ? "Voice replies on" : "Voice replies off"}
+              aria-label={speakOn ? "Voice replies on" : "Voice replies off"}
             >
-              {speakOn ? "🔊" : "🔈"}
+              <span aria-hidden="true">{speakOn ? "🔊" : "🔈"}</span>
+              <span className="chatdock-tool-label">Voice</span>
             </button>
           )}
           {userTurns >= 2 && !showPersona && (
@@ -818,8 +867,10 @@ export function ChatDock({
               onClick={() => void runDistill()}
               disabled={distilling}
               title="Wrap up — let Soumaya pick out anything worth saving"
+              aria-label="Wrap up — let Soumaya pick out anything worth saving"
             >
-              ✨
+              <span aria-hidden="true">✨</span>
+              <span className="chatdock-tool-label">Wrap up</span>
             </button>
           )}
           {messages.length > 0 && !showPersona && (
@@ -828,17 +879,31 @@ export function ChatDock({
               onClick={() => setShowQuickTools((v) => !v)}
               title="Explore Soumaya's other tools"
               aria-pressed={showQuickTools}
+              aria-label="Explore Soumaya's other tools"
             >
-              🧭
+              <span aria-hidden="true">🧭</span>
+              <span className="chatdock-tool-label">Tools</span>
             </button>
           )}
           {messages.length > 0 && !showPersona && (
-            <button className="chatdock-tool" onClick={() => setShowClearConfirm(true)} title="Clear conversation">
-              🗑
+            <button
+              className="chatdock-tool"
+              onClick={() => setShowClearConfirm(true)}
+              title="Clear conversation"
+              aria-label="Clear conversation"
+            >
+              <span aria-hidden="true">🗑</span>
+              <span className="chatdock-tool-label">Clear</span>
             </button>
           )}
-          <button className="chatdock-tool" onClick={() => void handleClose()} title="Close" aria-label="Close">
-            ×
+          <button
+            className="chatdock-tool"
+            onClick={() => void handleClose()}
+            title="Close"
+            aria-label="Close"
+          >
+            <span aria-hidden="true">×</span>
+            <span className="chatdock-tool-label">Close</span>
           </button>
         </div>
       </header>
@@ -848,7 +913,7 @@ export function ChatDock({
           <CompanionPanel spaceName={spaceName} />
         </div>
       ) : (
-        <div className="chatdock-msgs" ref={listRef}>
+        <div className="chatdock-msgs" ref={listRef} onScroll={onListScroll}>
           {messages.length === 0 && (
             <>
               <p className="chatdock-empty">
@@ -1022,6 +1087,16 @@ export function ChatDock({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* REG-086: her reply landed while the reader was up in history —
+          one tap reaches it, without ever moving their position for them. */}
+      {showJumpPill && !showPersona && (
+        <div className="chatdock-jump">
+          <button className="mini" onClick={jumpToLatest}>
+            ↓ New reply
+          </button>
         </div>
       )}
 

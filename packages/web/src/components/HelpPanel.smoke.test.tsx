@@ -64,7 +64,9 @@ describe("HelpPanel — zero search results is no longer a dead end", () => {
     fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "zzzznomatch" } });
     const askBtn = screen.getByText("💬 Ask Soumaya instead");
     fireEvent.click(askBtn);
-    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "chat" } }));
+    // REG-188 (C-06): the hatch carries the searched text as the question,
+    // so Chat opens prefilled instead of empty.
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "chat", value: "zzzznomatch" } }));
     window.removeEventListener("brain-toast-action", onAction);
   });
 });

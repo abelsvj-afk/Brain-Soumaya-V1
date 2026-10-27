@@ -3541,7 +3541,21 @@ button {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.obs-head { text-align: center; margin-bottom: 4px; }
+.obs-head {
+  text-align: center;
+  margin-bottom: 4px;
+  /* REG-074: sticky at the top of the scrolling stack — the × and 🔍 stay
+     on screen while the cards scroll beneath them. (position: sticky is a
+     positioned value, so the absolute escape buttons still anchor to it.) */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: rgba(8, 11, 26, 0.92);
+  backdrop-filter: blur(8px);
+  padding-top: 2px;
+  padding-bottom: 6px;
+}
 .obs-head h2 { margin: 0 0 4px; font-size: 1.25rem; font-weight: 600; }
 .obs-sub { font-size: 0.85rem; color: #9fd0ff; font-variant-numeric: tabular-nums; }
 .obs-card {
@@ -3566,8 +3580,8 @@ button {
   transition: border-color 0.2s, transform 0.12s, background 0.2s;
 }
 .obs-card:hover { border-color: rgba(122, 200, 255, 0.5); transform: translateY(-1px); }
-.obs-constellations, .obs-recent { cursor: default; }
-.obs-constellations:hover, .obs-recent:hover { transform: none; border-color: rgba(122, 200, 255, 0.18); }
+.obs-constellations, .obs-recent, .obs-away, .obs-contact, .obs-foresight, .obs-observations { cursor: default; }
+.obs-constellations:hover, .obs-recent:hover, .obs-away:hover, .obs-contact:hover, .obs-foresight:hover, .obs-observations:hover { transform: none; border-color: rgba(122, 200, 255, 0.18); }
 .obs-ic { font-size: 1.4rem; flex: 0 0 auto; line-height: 1.2; }
 .obs-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
 .obs-title { font-weight: 600; font-size: 0.92rem; }
@@ -3626,13 +3640,12 @@ button {
 }
 .obs-enter:hover { background: rgba(122, 200, 255, 0.14); border-color: rgba(122, 200, 255, 0.7); }
 /* Top-right escape hatch — closing must never require scrolling. */
-.obs-head { position: relative; }
 .obs-close {
   position: absolute;
   top: -2px;
   right: 0;
-  width: 32px;
-  height: 32px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   border: 1px solid rgba(122, 200, 255, 0.3);
   background: rgba(8, 11, 26, 0.7);
@@ -3645,9 +3658,9 @@ button {
 .obs-search {
   position: absolute;
   top: -2px;
-  right: 38px;
-  width: 32px;
-  height: 32px;
+  right: 52px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   border: 1px solid rgba(122, 200, 255, 0.3);
   background: rgba(8, 11, 26, 0.7);
@@ -4274,7 +4287,16 @@ button {
 .chatdock-tool {
   background: transparent; border: none; color: #aebbd6; cursor: pointer;
   font-size: 1rem; padding: 2px 6px; border-radius: 6px; transition: color 0.2s, background 0.2s;
+  /* REG-084 (CH-04): header tools meet the surface's own 44px input-row
+     standard — a captioned tool is a column (glyph above its name). */
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-width: 44px; min-height: 44px;
 }
+.chatdock-tool-label { font-size: 0.6rem; line-height: 1.1; color: #aebbd6; white-space: nowrap; }
+/* REG-086: the "new reply" pill — parked above the input while the reader
+   is up in history; one tap reaches the latest message. */
+.chatdock-jump { display: flex; justify-content: center; padding: 6px 0 2px; }
+.chatdock-jump .mini { font-size: 0.82rem; padding: 6px 14px; border-radius: 999px; }
 .chatdock-tool:hover { color: #fff; background: rgba(122, 200, 255, 0.12); }
 .chatdock-tool.on { color: #5bd6ff; }
 .chatdock-msgs { flex: 1 1 auto; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }

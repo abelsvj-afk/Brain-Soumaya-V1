@@ -1,5 +1,5 @@
 import type { LifeSeasonsTimeline, TimelineChapter } from "@brain/shared";
-import { API, afetch } from "./http.js";
+import { API, afetch, DEFAULT_TIMEOUT_MS } from "./http.js";
 
 /**
  * Client calls for the newest cohesive domains — the Chronicle timeline and
@@ -87,9 +87,9 @@ export async function getDueReviews(): Promise<DueReview[]> {
  * callers (the Observatory, ReviewPanel) that must distinguish a failed fetch
  * from "nothing due" without a try/catch at the call site.
  */
-export async function getDueReviewsResult(): Promise<{ ok: true; reviews: DueReview[] } | { ok: false }> {
+export async function getDueReviewsResult(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<{ ok: true; reviews: DueReview[] } | { ok: false }> {
   try {
-    const res = await afetch(`${API}/review/due`);
+    const res = await afetch(`${API}/review/due`, {}, timeoutMs);
     if (!res.ok) return { ok: false };
     const d = await res.json().catch(() => null);
     return Array.isArray(d) ? { ok: true, reviews: d as DueReview[] } : { ok: false };

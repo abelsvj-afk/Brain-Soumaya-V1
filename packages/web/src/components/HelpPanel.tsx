@@ -622,7 +622,10 @@ export function HelpPanel({ onClose, installPrompt, onInstall }: Props) {
                   </p>
                   <button
                     className="mini"
-                    onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "chat" } }))}
+                    // REG-188 (C-06): carry the searched text as the question —
+                    // App seeds ChatDock's input with it instead of opening an
+                    // empty chat the user must retype into.
+                    onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "chat", value: search } }))}
                   >
                     💬 Ask Soumaya instead
                   </button>
