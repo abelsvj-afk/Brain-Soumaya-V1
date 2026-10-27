@@ -219,7 +219,7 @@ describe("IM-32 — synthesis failure goes to an error surface, never the insigh
 
 describe("IM-34 — node delete confirms through the app dialog, not window.confirm", () => {
   it("opens the dialog first; deleting only happens on confirm", async () => {
-    vi.mocked(deleteNode).mockResolvedValue(undefined);
+    vi.mocked(deleteNode).mockResolvedValue({});
     // jsdom has no native confirm to spy on — install a trap: if the component
     // still used window.confirm, this records it.
     const confirmSpy = vi.fn(() => true);

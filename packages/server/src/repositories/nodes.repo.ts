@@ -261,6 +261,11 @@ export class NodesRepo {
    * firing tool's `detect()` (which only proposes unfired rows) proposes it
    * again at the new time. A label/content-only edit leaves the fired state
    * alone: re-saving the same reminder must not silently re-fire it.
+   *
+   * REG-144 (AG-05): an action can NEVER carry a remindAt — the agenda write
+   * paths can never create that state, so a non-null remindAt on an action
+   * patch is dropped here (the repo backstop; the route's only caller). A
+   * null remindAt is still honoured: clearing can only remove the state.
    */
   updateAgenda(
     id: number,
@@ -268,6 +273,9 @@ export class NodesRepo {
   ): GraphNode | undefined {
     const existing = this.getById(id);
     if (!existing) return undefined;
+    if (existing.kind === "action" && patch.remindAt !== undefined && patch.remindAt !== null) {
+      patch = { ...patch, remindAt: undefined };
+    }
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (patch.label !== undefined) { sets.push("label = ?"); vals.push(patch.label); }

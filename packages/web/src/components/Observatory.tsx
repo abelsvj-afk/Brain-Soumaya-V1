@@ -424,9 +424,10 @@ export function Observatory({
   const recent = [...memories]
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
     .slice(0, 3);
-  // Today's agenda — due reminders (memories carry remind_at; actions never do,
-  // isReminderDue already excludes them) plus the open action-item count passed
-  // in separately, since actions aren't part of `memories`.
+  // Today's agenda — due reminders (memories carry remind_at; actions never
+  // do — the ingest paths enforce it: IngestPanel refuses the combination and
+  // the server's action branch drops remindAt (REG-144/AG-05) — plus the open
+  // action-item count passed in separately, since actions aren't part of `memories`.
   const dueReminders = memories.filter((n) => isReminderDue(n));
 
   // New brain: a single calm hero, not an empty card grid. (IM-124: if a fetch

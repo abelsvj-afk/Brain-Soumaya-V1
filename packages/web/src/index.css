@@ -4346,6 +4346,12 @@ button {
 /* IM-108: error surface outside her voice, above the input. */
 .chatdock-notice { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 8px 10px; border-radius: 10px; background: rgba(120, 30, 30, 0.28); border: 1px solid rgba(255, 120, 120, 0.4); font-size: 0.8rem; color: #ffd9d9; flex: 0 0 auto; }
 .chatdock-notice-text { flex: 1 1 auto; }
+/* REG-159/JN-01: the armed-journey scope banner — visible while a Journey
+   context is armed, so the next send's scoping is never silent. */
+.chatdock-journey-banner { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 8px 10px; border-radius: 10px; background: rgba(91, 214, 255, 0.1); border: 1px solid rgba(91, 214, 255, 0.35); font-size: 0.8rem; color: #b9cdf0; flex: 0 0 auto; }
+.chatdock-journey-banner-text { flex: 1 1 auto; }
+.chatdock-journey-banner-dismiss { flex: 0 0 auto; background: none; border: 1px solid rgba(91, 214, 255, 0.35); color: #b9cdf0; border-radius: 999px; padding: 2px 10px; font-size: 0.74rem; cursor: pointer; }
+.chatdock-journey-banner-dismiss:hover { background: rgba(91, 214, 255, 0.2); color: #fff; }
 /* Finding 2: a degraded (offline-fallback) reply is visibly marked — an amber
    limited-mode banner above the bubble and a dashed, muted bubble — so it
    never wears a full answer's clothes. */
@@ -5721,6 +5727,9 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 .jn-links-note { color: var(--muted); font-size: 0.78rem; }
 .jn-form { display: flex; flex-direction: column; gap: 8px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; }
 .jn-form-row { display: flex; gap: 8px; }
+/* REG-161/JN-04: the span date fields on the create/edit forms. */
+.jn-date-field { display: flex; flex-direction: column; gap: 4px; flex: 1; font-size: 0.8rem; color: var(--muted); }
+.jn-date-field input { width: 100%; }
 .jn-icon-in { width: 52px; text-align: center; }
 .jn-title-in { flex: 1; }
 .jn-form input { background: rgba(0,0,0,0.25); color: var(--text); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; min-height: 44px; font-size: 1rem; }

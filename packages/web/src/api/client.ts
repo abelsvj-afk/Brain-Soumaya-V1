@@ -515,13 +515,20 @@ export async function updateNodeDetails(
   return res.json() as Promise<GraphNode>;
 }
 
-/** Permanently delete a memory. */
-export async function deleteNode(id: number): Promise<void> {
+/** Permanently delete a memory. Returns the journey progress the delete
+ *  credited, if any (REG-160/JN-03): completing a linked mission advances its
+ *  journey server-side, and the caller surfaces it at the moment of completion
+ *  instead of the response being discarded. Empty when nothing was linked. */
+export interface DeleteNodeResult {
+  journeyProgress?: { journeyId: number; title: string; progress: number; missionsCompleted: number }[];
+}
+export async function deleteNode(id: number): Promise<DeleteNodeResult> {
   const res = await afetch(`${API}/nodes/${id}`, { method: "DELETE" });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Delete failed (${res.status})`);
   }
+  return (await res.json().catch(() => ({}))) as DeleteNodeResult;
 }
 
 /** Archive (rest) a memory — kept, but out of the galaxy + retrieval — or restore it. */

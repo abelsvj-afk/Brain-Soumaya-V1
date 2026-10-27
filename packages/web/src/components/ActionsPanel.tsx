@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { type GraphNode, EARN_ACTION_DONE, ACTION_DONE_MIN_AGE_MINUTES } from "@brain/shared";
 import { deleteNode, ackReminder, ingestText, updateAgendaItem } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
@@ -112,15 +112,10 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
     () => nodes.filter((n) => n.kind === "action").map((n) => ({ n, due: ms(n.expiresAt) })).sort((a, b) => (a.due || Infinity) - (b.due || Infinity)),
     [nodes],
   );
-  const prevActionCount = useRef<number | null>(null);
-  useEffect(() => {
-    const count = actionsAll.length;
-    if (prevActionCount.current !== null && prevActionCount.current > 0 && count === 0) {
-      playSfx("milestone");
-      pushToast("Agenda Zero — every action item cleared. 🎯", "🎯", 4500);
-    }
-    prevActionCount.current = count;
-  }, [actionsAll.length]);
+  // REG-147/AG-08: the "Agenda Zero" celebration used to fire from an effect
+  // on actionsAll.length — ANY >0 → 0 transition celebrated, including a
+  // brain switch to an empty brain. It now fires only inside done(), guarded
+  // on the user's own completion of the final item (see there). No effect here.
 
   const [acked, setAcked] = useState<Set<number>>(new Set());
   useEffect(() => {
@@ -154,13 +149,27 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
 
   const done = (n: GraphNode) => {
     setConfirming(null);
+    // REG-147/AG-08: capture "was this the last action?" HERE, on the user's
+    // own tap — the celebration below fires only for this completion, never
+    // for a count transition caused by anything else (brain switch, refresh).
+    const wasLastAction = actionsAll.length === 1;
     // Living Galaxy (IM-140a): the completed task becomes a satellite —
     // dispatched BEFORE the delete so the galaxy can still see its position.
     window.dispatchEvent(new CustomEvent("brain-task-completed", { detail: { id: n.id } }));
     deleteNode(n.id)
-      .then(() => {
+      .then((result) => {
         playSfx("complete");
         pushToast(earnsFuel(n) ? `"${n.label.slice(0, 30)}" cleared (+${EARN_ACTION_DONE} ⛽)` : `"${n.label.slice(0, 30)}" cleared ✓`, "✅", 3000);
+        // REG-160/JN-03: the server credits linked journeys on this delete and
+        // returns the new progress — surface it at the moment of completion,
+        // naming the journey and its new progress, instead of discarding it.
+        for (const p of result?.journeyProgress ?? []) {
+          pushToast(`🧭 "${p.title}" advanced — ${p.missionsCompleted} mission${p.missionsCompleted === 1 ? "" : "s"} done, ${Math.round(p.progress * 100)}%`, "🧭", 4500);
+        }
+        if (wasLastAction) {
+          playSfx("milestone");
+          pushToast("Agenda Zero — every action item cleared. 🎯", "🎯", 4500);
+        }
         onChanged?.();
       })
       .catch(() => pushToast("Couldn't clear that — try again.", "⚠️", 3500));
@@ -212,7 +221,13 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
       const whenMs = newWhen ? new Date(newWhen).getTime() : NaN;
       if (Number.isNaN(whenMs)) { setCreating(false); pushToast("Pick a date and time for the reminder.", "⚠️", 3000); return; }
       ingestText(text, { remindAt: new Date(whenMs).toISOString() })
-        .then(() => finish(`Reminder added for ${formatLocalTime(whenMs)} ✓`))
+        // REG-143/AG-04: the pipeline stamps the reminder on the FIRST node
+        // only, so the toast names exactly that carrier node — one reminder,
+        // one firing, one identifiable memory.
+        .then((result) => {
+          const carrier = result?.nodes?.[0]?.label;
+          finish(carrier ? `Reminder added for ${formatLocalTime(whenMs)} on "${carrier.slice(0, 30)}" ✓` : `Reminder added for ${formatLocalTime(whenMs)} ✓`);
+        })
         .catch(fail);
     } else {
       const whenMs = newWhen ? new Date(newWhen).getTime() : NaN;
@@ -354,7 +369,7 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
                         {n.reminderFiredAt && (<><br /><span style={{ fontSize: "0.85em", opacity: 0.8 }}>✓ Delivered {formatLocalTime(ms(n.reminderFiredAt))} — snooze to hear it again</span></>)}
                       </span>
                     </button>
-                    <button className="mini agenda-done" onClick={() => ack(n.id)} title="Acknowledge — stop reminding">✓</button>
+                    <button className="mini agenda-done" onClick={() => ack(n.id)} title="Acknowledge — stop reminding" aria-label="Acknowledge reminder">✓ Acknowledge</button>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     <button className="mini" onClick={() => startEdit(n, at)}>Edit</button>
@@ -389,7 +404,7 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
                         {c.text && <span className={`agenda-due ${c.urgent ? "urgent" : ""}`}>⏰ {c.text}<br /><span style={{ fontSize: "0.85em", opacity: 0.8 }}>{formatLocalTime(due)}</span></span>}
                         {!c.text && <span className="agenda-due">No due date</span>}
                       </button>
-                      <button className="mini agenda-done" onClick={() => setConfirming({ kind: "done", id: n.id, label: n.label })} title={earnsFuel(n) ? `Mark done (+${EARN_ACTION_DONE} ⛽)` : `Mark done · earns ⛽ after ${ACTION_DONE_MIN_AGE_MINUTES} min`}>✓</button>
+                      <button className="mini agenda-done" onClick={() => setConfirming({ kind: "done", id: n.id, label: n.label })} title={earnsFuel(n) ? `Mark done (+${EARN_ACTION_DONE} ⛽)` : `Mark done · earns ⛽ after ${ACTION_DONE_MIN_AGE_MINUTES} min`} aria-label="Mark done">✓ Done</button>
                     </div>
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       <button className="mini" onClick={() => startEdit(n, due)}>Edit</button>
@@ -422,7 +437,7 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
                       </span>
                       <span className={`agenda-due ${c.urgent ? "urgent" : ""}`}>{c.text}<br /><span style={{ fontSize: "0.85em", opacity: 0.8 }}>{formatLocalTime(at)}</span></span>
                     </button>
-                    <button className="mini agenda-done" onClick={() => setConfirming({ kind: "dismiss", id: n.id, label: n.label })} title="Dismiss — cancel this reminder">✕</button>
+                    <button className="mini agenda-done" onClick={() => setConfirming({ kind: "dismiss", id: n.id, label: n.label })} title="Dismiss — cancel this reminder" aria-label="Dismiss reminder">✕ Dismiss</button>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     <button className="mini" onClick={() => startEdit(n, at)}>Edit</button>

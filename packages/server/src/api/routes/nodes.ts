@@ -369,7 +369,7 @@ export function nodesRoutes(ctx: AppContext): Router {
     const journeyProgress = linkedJourneys
       .map((j) => new JourneysRepo(ctx.handle, spaceId).creditCompletedMission(j.id, id))
       .filter((c): c is NonNullable<typeof c> => c != null)
-      .map((c) => ({ journeyId: c.journey.id, progress: c.journey.progress, missionsCompleted: c.completedCount }));
+      .map((c) => ({ journeyId: c.journey.id, title: c.journey.title, progress: c.journey.progress, missionsCompleted: c.completedCount }));
     res.json({ ok: true, id, ...(journeyProgress.length > 0 ? { journeyProgress } : {}) });
   });
 
