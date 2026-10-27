@@ -53,3 +53,14 @@ describe("LifeSeasonsBand render — lanes + legend (finding #4)", () => {
     expect(legend.textContent).not.toContain("Recovery Era");
   });
 });
+
+describe("LifeSeasonsBand render — header range is the TRUE plotted range (CHR-10, REG-129)", () => {
+  it("the header range ends on the last season's true end date, matching the legend", () => {
+    render(<LifeSeasonsBand seasons={[season({ startDate: "2026-01-01", endDate: "2026-03-10" })]} spans={[]} />);
+    const range = document.querySelector(".tl-seasons-range")!;
+    // Same date-only rendering the component uses (UTC-midnight ms for a
+    // fixed calendar date — the day cannot shift under the viewer's zone).
+    const fmtDay = (ms: number) => new Date(ms).toLocaleDateString(undefined, { timeZone: "UTC" });
+    expect(range.textContent).toBe(`${fmtDay(Date.UTC(2026, 0, 1))} – ${fmtDay(Date.UTC(2026, 2, 10))}`);
+  });
+});

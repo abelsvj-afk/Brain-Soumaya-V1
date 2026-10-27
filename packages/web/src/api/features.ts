@@ -1,4 +1,4 @@
-import type { LifeSeasonsTimeline, TimelineChapter } from "@brain/shared";
+import type { LifeSeason, LifeSeasonsTimeline, JourneySpan, TimelineChapter } from "@brain/shared";
 import { API, afetch, DEFAULT_TIMEOUT_MS } from "./http.js";
 
 /**
@@ -11,38 +11,102 @@ import { API, afetch, DEFAULT_TIMEOUT_MS } from "./http.js";
 export type { TimelineChapter } from "@brain/shared";
 
 // --- The Chronicle: the 3D flowing-river life timeline ---
-export async function getTimeline(): Promise<TimelineChapter[]> {
+/**
+ * CHR-01: strict sibling of `getTimeline` — `{ ok: false }` on any failure
+ * (network, non-OK, malformed body) instead of the fail-soft `[]`, for
+ * callers (TimelineView) that must distinguish a failed fetch from "no
+ * chapters yet". Carries the server's `total` so the surface can state the
+ * 500-chapter truncation (CHR-07). Accepts the legacy bare-array shape too,
+ * so an older server still reads as a success with total = length.
+ * `getTimeline` keeps its contract for everyone else.
+ */
+export async function getTimelineResult(): Promise<
+  { ok: true; chapters: TimelineChapter[]; total: number } | { ok: false }
+> {
   try {
     const res = await afetch(`${API}/timeline`);
-    const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    if (!res.ok) return { ok: false };
+    const d = (await res.json().catch(() => null)) as
+      | { chapters?: unknown; total?: unknown }
+      | unknown[] | null;
+    if (Array.isArray(d)) return { ok: true, chapters: d as TimelineChapter[], total: d.length };
+    if (d && Array.isArray(d.chapters)) {
+      return {
+        ok: true,
+        chapters: d.chapters as TimelineChapter[],
+        total: typeof d.total === "number" ? d.total : d.chapters.length,
+      };
+    }
+    return { ok: false };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+export async function getTimeline(): Promise<TimelineChapter[]> {
+  const r = await getTimelineResult();
+  return r.ok ? r.chapters : [];
 }
 /** Mark a chapter now (manual add). Returns the new chapter or null. */
 export async function addTimelineChapter(title?: string): Promise<TimelineChapter | null> {
+  const r = await addTimelineChapterResult(title);
+  return r.ok ? r.chapter : null;
+}
+/**
+ * CHR-12: strict sibling of `addTimelineChapter` — names the empty-window
+ * refusal (`{ ok: false, empty: true }`, HTTP 409 `empty-window`) so the
+ * surface can explain "nothing new to narrate yet" instead of toasting a
+ * generic failure. Any other failure is plain `{ ok: false }`.
+ */
+export async function addTimelineChapterResult(
+  title?: string,
+): Promise<{ ok: true; chapter: TimelineChapter } | { ok: false; empty?: boolean }> {
   try {
     const res = await afetch(`${API}/timeline`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(title ? { title } : {}),
     });
-    if (!res.ok) return null;
-    return (await res.json()) as TimelineChapter;
+    if (!res.ok) {
+      if (res.status === 409) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        if (d.error === "empty-window") return { ok: false, empty: true };
+      }
+      return { ok: false };
+    }
+    return { ok: true, chapter: (await res.json()) as TimelineChapter };
   } catch {
-    return null;
+    return { ok: false };
   }
 }
 /** Life Seasons + Journey spans for the Timeline's real time axis (IM-132).
  *  Returns null on any failure so the Timeline can show a distinct state for
- *  this section without taking down the chapters list. */
+ *  this section without taking down the chapters list.
+ *  CHR-11: pages (limit/offset) until the server's totals have arrived, so
+ *  beyond the window the band shows the whole story instead of silently
+ *  showing the first page. A page that adds nothing ends the loop. */
 export async function getLifeSeasons(): Promise<LifeSeasonsTimeline | null> {
   try {
-    const res = await afetch(`${API}/timeline/seasons`);
-    if (!res.ok) return null;
-    const d = (await res.json()) as LifeSeasonsTimeline;
-    return Array.isArray(d?.seasons) && Array.isArray(d?.journeySpans) ? d : null;
+    const limit = 500; // server max per page
+    let offset = 0;
+    let seasons: LifeSeason[] = [];
+    let journeySpans: JourneySpan[] = [];
+    let totalSeasons = 0;
+    let totalJourneySpans = 0;
+    for (;;) {
+      const res = await afetch(`${API}/timeline/seasons?limit=${limit}&offset=${offset}`);
+      if (!res.ok) return null;
+      const d = (await res.json()) as LifeSeasonsTimeline;
+      if (!Array.isArray(d?.seasons) || !Array.isArray(d?.journeySpans)) return null;
+      const before = seasons.length + journeySpans.length;
+      seasons = seasons.concat(d.seasons);
+      journeySpans = journeySpans.concat(d.journeySpans);
+      totalSeasons = typeof d.totalSeasons === "number" ? d.totalSeasons : seasons.length;
+      totalJourneySpans = typeof d.totalJourneySpans === "number" ? d.totalJourneySpans : journeySpans.length;
+      if (seasons.length >= totalSeasons && journeySpans.length >= totalJourneySpans) break;
+      if (seasons.length + journeySpans.length === before) break; // no progress — never spin
+      offset += limit;
+    }
+    return { seasons, journeySpans, totalSeasons, totalJourneySpans };
   } catch {
     return null;
   }

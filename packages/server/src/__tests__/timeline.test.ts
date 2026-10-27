@@ -82,7 +82,7 @@ describe("The Chronicle — 3D life timeline", () => {
   it("narrates a sane day-span for the first/backfill chapter (not the epoch)", () => {
     const base = Date.UTC(2026, 0, 1);
     for (let i = 0; i < 5; i++) mem("early history", 0.3, iso(base + i * DAY));
-    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(base + 6 * DAY) });
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(base + 6 * DAY) })!;
     // Before the fix this read "Across about 20454 days" (span measured from epoch 0).
     expect(ch.summary).not.toMatch(/\d{4,}\s*days/);
   });
@@ -90,7 +90,7 @@ describe("The Chronicle — 3D life timeline", () => {
   it("lets you add a manual chapter regardless of the change threshold", () => {
     const base = Date.UTC(2026, 0, 1);
     mem("just one small thing", 0.0, iso(base));
-    const ch = createManualChapter(ctx, "legacy", { title: "My milestone", nowISO: iso(base + DAY) });
+    const ch = createManualChapter(ctx, "legacy", { title: "My milestone", nowISO: iso(base + DAY) })!;
     expect(ch.origin).toBe("user");
     expect(ch.title).toBe("My milestone");
     expect(listChapters(ctx, "legacy")).toHaveLength(1);
@@ -142,7 +142,7 @@ describe("The Chronicle — 3D life timeline", () => {
   it("can delete a chapter", () => {
     const base = Date.UTC(2026, 0, 1);
     mem("x", 0.2, iso(base));
-    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(base + DAY) });
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(base + DAY) })!;
     expect(deleteChapter(ctx, "legacy", ch.id)).toBe(true);
     expect(listChapters(ctx, "legacy")).toHaveLength(0);
   });

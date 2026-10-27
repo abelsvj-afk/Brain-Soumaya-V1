@@ -17,7 +17,9 @@ import type { GraphNode, TimelineChapter } from "@brain/shared";
  */
 
 const getTimeline = vi.fn();
+const getTimelineResult = vi.fn();
 const addTimelineChapter = vi.fn();
+const addTimelineChapterResult = vi.fn();
 const deleteTimelineChapter = vi.fn();
 const listAttachments = vi.fn();
 const attachmentObjectUrl = vi.fn();
@@ -30,7 +32,9 @@ const pushToast = vi.fn();
 
 vi.mock("../api/client.js", () => ({
   getTimeline: (...a: unknown[]) => getTimeline(...a),
+  getTimelineResult: (...a: unknown[]) => getTimelineResult(...a),
   addTimelineChapter: (...a: unknown[]) => addTimelineChapter(...a),
+  addTimelineChapterResult: (...a: unknown[]) => addTimelineChapterResult(...a),
   deleteTimelineChapter: (...a: unknown[]) => deleteTimelineChapter(...a),
   listAttachments: (...a: unknown[]) => listAttachments(...a),
   attachmentObjectUrl: (...a: unknown[]) => attachmentObjectUrl(...a),
@@ -45,12 +49,16 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   getTimeline.mockResolvedValue([]);
+  getTimelineResult.mockResolvedValue({ ok: true, chapters: [], total: 0 });
   addTimelineChapter.mockResolvedValue(null);
+  addTimelineChapterResult.mockResolvedValue({ ok: false });
   deleteTimelineChapter.mockResolvedValue(true);
   listAttachments.mockResolvedValue([]);
   attachmentObjectUrl.mockResolvedValue(null);
   getUpcomingEventsResult.mockResolvedValue({ ok: true, events: [] });
-  getLifeSeasons.mockResolvedValue(null);
+  // Batch K (CHR-11): null from getLifeSeasons now MEANS a failed fetch, so
+  // the no-data default is the confirmed-empty success object, not null.
+  getLifeSeasons.mockResolvedValue({ seasons: [], journeySpans: [], totalSeasons: 0, totalJourneySpans: 0 });
 });
 
 function chapter(over: Partial<TimelineChapter>): TimelineChapter {
@@ -79,6 +87,7 @@ const CHAPTERS: TimelineChapter[] = [
 
 async function renderWithChapters(chapters: TimelineChapter[], nodes: GraphNode[] = []) {
   getTimeline.mockResolvedValue(chapters);
+  getTimelineResult.mockResolvedValue({ ok: true, chapters, total: chapters.length });
   const onFocus = vi.fn();
   render(<TimelineView spaceName="You" nodes={nodes} onClose={vi.fn()} onFocus={onFocus} />);
   await screen.findByText(chapters[0]!.title);
@@ -144,7 +153,7 @@ describe("IM-122 — jump, search, honest failures, confirm, photos", () => {
   });
 
   it("add failure toasts instead of silently doing nothing", async () => {
-    addTimelineChapter.mockResolvedValue(null);
+    addTimelineChapterResult.mockResolvedValue({ ok: false });
     await renderWithChapters(CHAPTERS);
     fireEvent.click(screen.getByText("✍️ Mark this moment"));
     await waitFor(() => expect(pushToast).toHaveBeenCalled());
