@@ -34,6 +34,11 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     name: "The People",
     blurb: "The people of your life, gathered warm — who is with you, and what do you owe each other.",
   },
+  {
+    key: "quiet-archive",
+    name: "Quiet/Archive",
+    blurb: "The resting place — where what you put away rests, whole, for a deliberate visit.",
+  },
 ];
 
 export interface RouteOption {

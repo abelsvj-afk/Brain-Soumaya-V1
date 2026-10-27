@@ -283,6 +283,18 @@ describe("machine legality, drift, and current-world derivation", () => {
     expect(back?.state).toBe("arrived");
     expect(t.currentWorld(T0)).toBe("home");
   });
+  it("admits Quiet/Archive (Wave 2): warp there and back, same ledger — no gate", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "qa-1", kind: "warp", destination: "quiet-archive" }, T0);
+    expect(out.destination).toBe("quiet-archive");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("quiet-archive");
+    const home = t.depart({ clientKey: "qa-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
 });
 
 describe("two connections, one file (the concurrency proof)", () => {

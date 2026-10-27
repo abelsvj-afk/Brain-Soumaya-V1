@@ -27,32 +27,37 @@ describe("buildGate", () => {
     gate.dispose();
   });
 
-  it("dresses per world — Station steel/amber, garden dawn-gold, Deep Past violet/lantern, People warm amber", () => {
+  it("dresses per world — Station steel/amber, garden dawn-gold, Deep Past violet/lantern, People warm amber, Quiet/Archive dim slate/pale cyan", () => {
     const station = buildGate("great-station");
     const garden = buildGate("growing-place");
     const past = buildGate("deep-past");
     const people = buildGate("people");
+    const archive = buildGate("quiet-archive");
     const stationRing = find(station.group, "gate-ring") as THREE.Mesh;
     const gardenRing = find(garden.group, "gate-ring") as THREE.Mesh;
     const pastRing = find(past.group, "gate-ring") as THREE.Mesh;
     const peopleRing = find(people.group, "gate-ring") as THREE.Mesh;
+    const archiveRing = find(archive.group, "gate-ring") as THREE.Mesh;
     const stationColor = (stationRing.material as THREE.MeshStandardMaterial).color.getHex();
     const gardenColor = (gardenRing.material as THREE.MeshStandardMaterial).color.getHex();
     const pastColor = (pastRing.material as THREE.MeshStandardMaterial).color.getHex();
     const peopleColor = (peopleRing.material as THREE.MeshStandardMaterial).color.getHex();
+    const archiveColor = (archiveRing.material as THREE.MeshStandardMaterial).color.getHex();
     expect(stationColor).toBe(GATE_DRESSINGS["great-station"]!.ring);
     expect(gardenColor).toBe(GATE_DRESSINGS["growing-place"]!.ring);
     expect(pastColor).toBe(GATE_DRESSINGS["deep-past"]!.ring);
     expect(peopleColor).toBe(GATE_DRESSINGS["people"]!.ring);
-    expect(new Set([stationColor, gardenColor, pastColor, peopleColor]).size).toBe(4);
+    expect(archiveColor).toBe(GATE_DRESSINGS["quiet-archive"]!.ring);
+    expect(new Set([stationColor, gardenColor, pastColor, peopleColor, archiveColor]).size).toBe(5);
     station.dispose();
     garden.dispose();
     past.dispose();
     people.dispose();
+    archive.dispose();
   });
 
   it("unknown worlds fall back to the home dressing, never a missing gate", () => {
-    const gate = buildGate("quiet-archive");
+    const gate = buildGate("scale");
     const ring = find(gate.group, "gate-ring") as THREE.Mesh;
     expect((ring.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
       GATE_DRESSINGS["home"]!.ring,

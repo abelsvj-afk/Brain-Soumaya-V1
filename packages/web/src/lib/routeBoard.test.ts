@@ -12,7 +12,7 @@ const state = (currentWorld: string, fuel: number, peopleGateOpen?: boolean): Tr
 describe("buildRouteBoard", () => {
   it("charts both worlds and marks the current one (no options to stay put)", () => {
     const board = buildRouteBoard(state("home", 25));
-    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past"]);
+    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "quiet-archive"]);
     expect(board[0]!.isCurrent).toBe(true);
     expect(board[0]!.options).toEqual([]);
   });
@@ -46,10 +46,21 @@ describe("buildRouteBoard", () => {
 
   it("charts People once the server says the gate is open, same warp/drift options", () => {
     const board = buildRouteBoard(state("home", 25, true));
-    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "people"]);
+    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive"]);
     const people = board[4]!;
     expect(people.name).toBe("The People");
     expect(people.options).toEqual([
+      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "drift", label: "Drift", cost: 0, affordable: true },
+    ]);
+  });
+
+  it("charts Quiet/Archive always — no gate, a deliberate visit, same warp/drift options", () => {
+    const board = buildRouteBoard(state("home", 25));
+    expect(board.map((e) => e.world)).toContain("quiet-archive");
+    const archive = board.find((e) => e.world === "quiet-archive")!;
+    expect(archive.name).toBe("Quiet/Archive");
+    expect(archive.options).toEqual([
       { kind: "warp", label: "Warp", cost: 10, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);

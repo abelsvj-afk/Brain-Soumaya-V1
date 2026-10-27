@@ -3,15 +3,22 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import WorldsSurface from "./WorldsSurface.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
+import { getArchivedNodesStrict, getIncidentEdges } from "../api/client.js";
 
 vi.mock("../hooks/useTravel.js", () => ({ useTravel: vi.fn() }));
 vi.mock("../api/journeys.js", () => ({
   getJourneys: vi.fn(async () => []),
   journeyLinks: vi.fn(async () => null),
 }));
+vi.mock("../api/client.js", () => ({
+  getArchivedNodesStrict: vi.fn(async () => []),
+  getIncidentEdges: vi.fn(async () => ({ edges: [], nextCursor: null })),
+}));
 const mockUseTravel = vi.mocked(useTravel);
 const mockGetJourneys = vi.mocked(getJourneys);
 const mockJourneyLinks = vi.mocked(journeyLinks);
+const mockGetArchivedNodesStrict = vi.mocked(getArchivedNodesStrict);
+const mockGetIncidentEdges = vi.mocked(getIncidentEdges);
 
 function fakeTravel(over: Partial<UseTravel> = {}): UseTravel {
   return {
@@ -216,7 +223,7 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
     mockUseTravel.mockReturnValue(
       fakeTravel({
         state: {
-          currentWorld: "quiet-archive",
+          currentWorld: "scale",
           activeJourney: null,
           fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
         },
@@ -330,5 +337,81 @@ describe("WorldsSurface — the People (P3-3)", () => {
     render(<WorldsSurface enabled graph={{ nodes: [], links: [] } as never} />);
     expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+  });
+});
+
+describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+    mockGetArchivedNodesStrict.mockResolvedValue([]);
+    mockGetIncidentEdges.mockResolvedValue({ edges: [], nextCursor: null });
+  });
+
+  const atQuietArchive = () =>
+    fakeTravel({
+      state: {
+        currentWorld: "quiet-archive",
+        activeJourney: null,
+        fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+      },
+    });
+
+  const archivedNodes = [
+    { id: 1, label: "Shaqavia", type: "daily", content: "", createdAt: "2026-01-01T00:00:00.000Z", kind: "person_entity", status: "archived" },
+    { id: 10, label: "first day", type: "daily", content: "", createdAt: "2026-01-01T00:00:00.000Z", status: "archived" },
+  ];
+  const archivedEdges = [
+    { id: 100, source: 10, target: 1, relationship: "relates_to", weight: 0.5, createdAt: "2026-01-01T00:00:00.000Z" },
+  ];
+
+  it("at the Archive it fetches the archived input (never the live graph) and mounts the field", async () => {
+    mockGetArchivedNodesStrict.mockResolvedValue(archivedNodes as never);
+    mockGetIncidentEdges.mockResolvedValue({ edges: archivedEdges, nextCursor: null } as never);
+    mockUseTravel.mockReturnValue(atQuietArchive());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(screen.getByRole("dialog", { name: "Quiet/Archive" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
+    expect(mockGetArchivedNodesStrict).toHaveBeenCalled();
+    expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], null);
+  });
+
+  it("while the archive is still loading it says so and builds nothing", () => {
+    mockGetArchivedNodesStrict.mockReturnValue(new Promise(() => {}) as never);
+    mockUseTravel.mockReturnValue(atQuietArchive());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(screen.getByRole("dialog", { name: "Quiet/Archive" })).toBeTruthy();
+    expect(screen.getByText(/Your archive is resting/)).toBeTruthy();
+    expect(screen.queryByText(/needs graphics support/)).toBeNull();
+  });
+
+  it("an empty archive mounts the still field and says so plainly — never a locked door", async () => {
+    mockUseTravel.mockReturnValue(atQuietArchive());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(await screen.findByText(/Nothing rests here yet/)).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+  });
+
+  it("a failed archive fetch renders the error and a retry — never an empty field", async () => {
+    mockGetArchivedNodesStrict.mockRejectedValue(new Error("down"));
+    mockUseTravel.mockReturnValue(atQuietArchive());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(await screen.findByText(/couldn't load/)).toBeTruthy();
+    // Retry re-fetches: the mock now succeeds, and the field mounts.
+    mockGetArchivedNodesStrict.mockResolvedValue([]);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/Nothing rests here yet/)).toBeTruthy();
+  });
+
+  it("incident edges are paged to completion — a cursor is followed, not dropped", async () => {
+    mockGetArchivedNodesStrict.mockResolvedValue(archivedNodes as never);
+    mockGetIncidentEdges
+      .mockResolvedValueOnce({ edges: [archivedEdges[0]], nextCursor: 100 } as never)
+      .mockResolvedValueOnce({ edges: [], nextCursor: null } as never);
+    mockUseTravel.mockReturnValue(atQuietArchive());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], null);
+    expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], 100);
   });
 });
