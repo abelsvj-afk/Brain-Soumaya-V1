@@ -65,6 +65,16 @@ const atDeepPast = (over: Partial<UseTravel> = {}) =>
     ...over,
   });
 
+const atPeople = (over: Partial<UseTravel> = {}) =>
+  fakeTravel({
+    state: {
+      currentWorld: "people",
+      activeJourney: null,
+      fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+    },
+    ...over,
+  });
+
 const gardenGraph = {
   nodes: [
     { id: 1, label: "a", type: "memory", content: "", createdAt: "2026-10-01T00:00:00.000Z" },
@@ -278,5 +288,47 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.queryByText(/Chronicle route:/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Descend the Chronicle" })).toBeNull();
+  });
+});
+
+describe("WorldsSurface — the People (P3-3)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+  });
+
+  const peopleGraph = {
+    nodes: [
+      { id: 1, label: "Shaqavia", type: "daily", content: "", createdAt: "2026-01-01T00:00:00.000Z", kind: "person_entity" },
+      { id: 2, label: "Syncere", type: "daily", content: "", createdAt: "2026-01-01T00:00:00.000Z", kind: "person_entity" },
+      { id: 10, label: "first day", type: "daily", content: "", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: 11, label: "shared supper", type: "daily", content: "", createdAt: "2026-01-01T00:00:00.000Z" },
+    ],
+    links: [
+      { id: 100, source: 10, target: 1, relationship: "relates_to", weight: 0.5, createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: 101, source: 11, target: 1, relationship: "relates_to", weight: 0.5, createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: 102, source: 11, target: 2, relationship: "relates_to", weight: 0.5, createdAt: "2026-01-01T00:00:00.000Z" },
+    ],
+  } as never;
+
+  it("at People with the graph it mounts the field; without WebGL it degrades honestly", async () => {
+    mockUseTravel.mockReturnValue(atPeople());
+    render(<WorldsSurface enabled graph={peopleGraph} />);
+    expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your people are unaffected/)).toBeTruthy();
+  });
+
+  it("at People without the graph yet it shows a loading line and builds nothing", () => {
+    mockUseTravel.mockReturnValue(atPeople());
+    render(<WorldsSurface enabled graph={null} />);
+    expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
+    expect(screen.getByText(/Your people are gathering/)).toBeTruthy();
+  });
+
+  it("an empty graph still mounts the field — honest resting ground, never a locked door", async () => {
+    mockUseTravel.mockReturnValue(atPeople());
+    render(<WorldsSurface enabled graph={{ nodes: [], links: [] } as never} />);
+    expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
   });
 });

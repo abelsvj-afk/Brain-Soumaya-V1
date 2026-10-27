@@ -105,6 +105,30 @@ describe("TravelPanel", () => {
     expect(t.depart).toHaveBeenCalledWith("warp", "deep-past");
   });
 
+  it("shows People only when the server says the gate is open (P3-3, Q1)", () => {
+    // Gate closed (the default mock carries no flag): no People entry.
+    const { unmount } = render(<TravelPanel enabled />);
+    expect(screen.queryByText("The People")).toBeNull();
+    unmount();
+    // Gate open: People appears as a fifth entry, wired like any world.
+    const t = fakeTravel({
+      state: {
+        currentWorld: "home",
+        activeJourney: null,
+        fuel: { fuel: 25, capacity: 200, jobCost: 2, warpCost: 10 },
+        peopleGateOpen: true,
+      },
+    });
+    mockUseTravel.mockReturnValue(t);
+    render(<TravelPanel enabled />);
+    expect(screen.getByText("The People")).toBeTruthy();
+    const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
+    expect(entries).toHaveLength(5);
+    const people = within(entries[4] as HTMLElement);
+    fireEvent.click(people.getByRole("button", { name: /Warp · 10 fuel/ }));
+    expect(t.depart).toHaveBeenCalledWith("warp", "people");
+  });
+
   it("arming shows the server's cancel window as a countdown and a free cancel", () => {
     mockUseTravel.mockReturnValue(
       fakeTravel({

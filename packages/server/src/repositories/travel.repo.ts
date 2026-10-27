@@ -6,6 +6,9 @@ import { spaceTimezone } from "../agent/notify/policy.js";
 import {
   EARN_JOURNEY_COMPLETE,
   EARN_JOURNEY_DRIFT,
+  PEOPLE_GATE_MIN_MEMORIES_EACH,
+  PEOPLE_GATE_MIN_PEOPLE,
+  PEOPLE_GATE_MIN_SHARED_MEMORIES,
   TRAVEL_CANCEL_WINDOW_SECONDS,
   WARP_COST,
   type TravelJourney,
@@ -44,14 +47,17 @@ import {
 
 /** World keys a journey may target. Server-side allow-list: a
  *  client-invented destination would corrupt the derived current world.
- *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past"];
+ *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world.
+ *  P3-2 adds the Deep Past; P3-3 adds the People (gated — see
+ *  peopleGateOpen: the key alone does not admit travel there). */
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people"];
 export const HOME_WORLD = "home";
 
 export type TravelErrorCode =
   | "INVALID_CLIENT_KEY"
   | "INVALID_KIND"
   | "UNKNOWN_DESTINATION"
+  | "PEOPLE_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
   | "JOURNEY_NOT_DEPARTED";
 
@@ -276,6 +282,16 @@ export class TravelRepo implements JourneyBonusCreditor {
         throw new TravelError("INVALID_KIND", "A journey is either a warp or a drift.");
       if (!TRAVEL_WORLD_KEYS.includes(input.destination))
         throw new TravelError("UNKNOWN_DESTINATION", "That destination isn't on the chart yet.");
+      // The People gate (P3-3, Q1) is enforced here, on the server, never
+      // by the client: a departure to People is admitted only while the
+      // brain meets the threshold. A same-key retry still returns the
+      // original journey (the F-01 replay contract above) — the gate
+      // guards creation, not replay.
+      if (input.destination === "people" && !this.peopleGateOpen())
+        throw new TravelError(
+          "PEOPLE_GATE_CLOSED",
+          "The People isn't open yet — it appears once your brain holds at least three people with two linked memories each, and one memory shared between two of them.",
+        );
       if (this.activeRow())
         throw new TravelError("ACTIVE_JOURNEY_EXISTS", "A journey is already in progress — finish or cancel it first.");
       const origin = this.deriveWorld(this.latestRow());
@@ -514,13 +530,90 @@ export class TravelRepo implements JourneyBonusCreditor {
   }
 
   /** The state P2-3 renders: where the brain is, and its active journey. */
-  getState(nowMs: number = Date.now()): { currentWorld: string; activeJourney: TravelJourney | null } {
+  getState(nowMs: number = Date.now()): {
+    currentWorld: string;
+    activeJourney: TravelJourney | null;
+    /** Whether the People gate is open (Q1, P3-3) — the board offers
+     *  People only when the server says so; the client never decides. */
+    peopleGateOpen: boolean;
+  } {
     this.settleActive(nowMs);
     const active = this.activeRow();
     return {
       currentWorld: this.deriveWorld(this.latestRow()),
       activeJourney: active ? this.map(active, nowMs) : null,
+      peopleGateOpen: this.peopleGateOpen(),
     };
+  }
+
+  /**
+   * The People gate (P3-3, Q1 — settled by the build-all delegation,
+   * 2026-10-26): the gate is open when the brain holds at least
+   * PEOPLE_GATE_MIN_PEOPLE people with at least
+   * PEOPLE_GATE_MIN_MEMORIES_EACH linked memories each, plus at least
+   * PEOPLE_GATE_MIN_SHARED_MEMORIES memories shared between two people.
+   * A "person" is a node the brain knows as one — `kind =
+   * 'person_entity'` (the tracked person) or extraction-typed `type =
+   * 'person'` (the legacy `relationship_reflection` alias included, the
+   * same rule the web layout applies via normalizeNodeType). A "linked
+   * memory" is an incident edge to a live, non-archived, non-person node.
+   * Archived people never count (P4 — the archive wins everywhere), and
+   * a person linked only to another person has no linked memory.
+   * This reads the database, never the client's graph window — the
+   * overview caps at 300 nodes, so the window can hold fewer people than
+   * the brain does.
+   */
+  peopleGateOpen(): boolean {
+    const personWhere = `(kind = 'person_entity' OR type = 'person' OR type = 'relationship_reflection')`;
+    // Null-safe negation: a memory node has kind NULL, and in SQLite
+    // `NOT (NULL = 'person_entity')` is NULL, not true — a bare NOT
+    // would silently drop every kind-less memory from this set and the
+    // gate could never open. Spell the complement out instead.
+    const nonPersonWhere = `((kind IS NULL OR kind <> 'person_entity') AND type <> 'person' AND type <> 'relationship_reflection')`;
+    const people = this.h.sqlite
+      .prepare(
+        `SELECT id FROM nodes WHERE space_id = ? AND deleted_at IS NULL AND status IS NOT 'archived' AND ${personWhere}`,
+      )
+      .all(this.spaceId) as { id: number }[];
+    if (people.length < PEOPLE_GATE_MIN_PEOPLE) return false;
+    const personIds = new Set(people.map((p) => p.id));
+    const others = this.h.sqlite
+      .prepare(
+        `SELECT id FROM nodes WHERE space_id = ? AND deleted_at IS NULL AND status IS NOT 'archived' AND ${nonPersonWhere}`,
+      )
+      .all(this.spaceId) as { id: number }[];
+    const otherIds = new Set(others.map((o) => o.id));
+    const placeholders = [...personIds].map(() => "?").join(",");
+    const edges = this.h.sqlite
+      .prepare(
+        `SELECT source, target FROM edges WHERE space_id = ? AND (source IN (${placeholders}) OR target IN (${placeholders}))`,
+      )
+      .all(this.spaceId, ...personIds, ...personIds) as { source: number; target: number }[];
+    const memoryCounts = new Map<number, Set<number>>();
+    const personsByMemory = new Map<number, Set<number>>();
+    for (const e of edges) {
+      for (const [personSide, otherSide] of [
+        [e.source, e.target],
+        [e.target, e.source],
+      ] as const) {
+        if (!personIds.has(personSide) || !otherIds.has(otherSide)) continue;
+        const mems = memoryCounts.get(personSide) ?? new Set<number>();
+        mems.add(otherSide);
+        memoryCounts.set(personSide, mems);
+        const persons = personsByMemory.get(otherSide) ?? new Set<number>();
+        persons.add(personSide);
+        personsByMemory.set(otherSide, persons);
+      }
+    }
+    let qualifying = 0;
+    for (const mems of memoryCounts.values()) {
+      if (mems.size >= PEOPLE_GATE_MIN_MEMORIES_EACH) qualifying++;
+    }
+    let shared = 0;
+    for (const persons of personsByMemory.values()) {
+      if (persons.size >= 2) shared++;
+    }
+    return qualifying >= PEOPLE_GATE_MIN_PEOPLE && shared >= PEOPLE_GATE_MIN_SHARED_MEMORIES;
   }
 
   /** The append-only record for one journey (tests; future "World Changes"). */
