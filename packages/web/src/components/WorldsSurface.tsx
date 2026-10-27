@@ -31,6 +31,15 @@ import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
+import { createEternityScene } from "../graph/eternityScene.js";
+import {
+  ETERNITY_GESTURE_NAMES,
+  ETERNITY_ORBIT_HEIGHT,
+  ETERNITY_ORBIT_LOOK_AT_Y,
+  ETERNITY_ORBIT_RADIUS,
+  ETERNITY_PALETTE,
+  ETERNITY_TOOL_NAMES,
+} from "../graph/eternityLayout.js";
 
 /**
  * The worlds surface view — the mount the P2-3 audit's F-01 reconciled as
@@ -86,6 +95,16 @@ interface WorldSceneHandle {
   group: THREE.Group;
   update: (ms: number, opts?: { reducedMotion?: boolean }) => void;
   dispose: () => void;
+  /** Eternity only: his gestures, his tools, and the heavens-shake.
+   *  The host owns the camera, so the shake arrives as a number the
+   *  host applies after lookAt — the scene never moves a camera it
+   *  does not own. */
+  eternity?: {
+    setGesture: (name: string) => void;
+    useTool: (name: string) => void;
+    shakeAt: (ms: number) => number;
+    currentGesture: () => string;
+  };
 }
 
 function isGardenLayout(
@@ -155,6 +174,35 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     build: (layout) =>
       createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT),
   },
+  // Eternity's world (B-01 gated — the server admits the journey, the
+  // board offers it only when the gate stands open): the white void
+  // where Eternity himself stands. The host's orbit frames the whole
+  // figure; his gestures and tools ride the header buttons below, and
+  // his words appear in the world, near his mouth — never as a panel
+  // over the view.
+  eternity: {
+    title: "Eternity's World",
+    background: ETERNITY_PALETTE.voidWhite,
+    fogDensity: ETERNITY_PALETTE.fogDensity,
+    orbitRadius: ETERNITY_ORBIT_RADIUS,
+    orbitHeight: ETERNITY_ORBIT_HEIGHT,
+    lookAtY: ETERNITY_ORBIT_LOOK_AT_Y,
+    fallback: "Eternity's world needs graphics support on this device — your journeys are unaffected.",
+    build: () => {
+      const s = createEternityScene();
+      return {
+        group: s.group,
+        update: s.update,
+        dispose: s.dispose,
+        eternity: {
+          setGesture: s.setGesture,
+          useTool: s.useTool,
+          shakeAt: s.shakeAt,
+          currentGesture: s.currentGesture,
+        },
+      };
+    },
+  },
 };
 
 export default function WorldsSurface({
@@ -180,6 +228,10 @@ export default function WorldsSurface({
   // Station arrival glide (A13): any pointer press skips it. Reset per stay.
   const arrivalSkippedRef = useRef(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  // The mounted scene handle — the Eternity gesture/tool buttons below
+  // call into it. Set in the mount effect, cleared in its cleanup.
+  const sceneHandleRef = useRef<WorldSceneHandle | null>(null);
+  const [eternityGesture, setEternityGesture] = useState<string | null>(null);
 
   const currentWorld = travel.state?.currentWorld;
   const journey = travel.state?.activeJourney ?? null;
@@ -196,6 +248,7 @@ export default function WorldsSurface({
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
   const atDeepPast = atWorld && currentWorld === "deep-past";
+  const atEternity = atWorld && currentWorld === "eternity";
   const worldName = (key: string) =>
     WORLD_CHART.find((w) => w.key === key)?.name ?? key;
   const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
@@ -215,6 +268,7 @@ export default function WorldsSurface({
     parkedProgressRef.current = 0;
     lastProgressRef.current = 0;
     arrivalSkippedRef.current = false;
+    setEternityGesture(null);
   }, [mode, currentWorld, journeyId]);
 
   // Landmarks (garden) and Chronicle routes (Deep Past) need the user's
@@ -328,6 +382,10 @@ export default function WorldsSurface({
       1,
       9000,
     );
+    // The world build stays typed (WorldSceneHandle) before it joins
+    // the transit union — Eternity's controls come from here, so the
+    // frame loop never has to narrow the union.
+    const built = mode === "transit" ? null : entry ? entry.build(sceneLayout) : null;
     const world =
       mode === "transit"
         ? createTransitScene({
@@ -336,11 +394,11 @@ export default function WorldsSurface({
             origin: journey?.origin ?? "home",
             destination: journey?.destination ?? "home",
           })
-        : entry
-          ? entry.build(sceneLayout)
-          : null;
+        : built;
     if (!world) return;
     scene.add(world.group);
+    sceneHandleRef.current = world;
+    const eternityCtl = currentWorld === "eternity" ? built?.eternity : undefined;
     // Engine audio rides the transit only; it is gated internally by the
     // interface-sounds setting, and it stops when the surface unmounts.
     const engine = mode === "transit" ? makeEngineAudio() : null;
@@ -441,6 +499,16 @@ export default function WorldsSurface({
         if (orbit.cameraFloorY !== undefined) {
           camera.position.y = clampToGardenFloor(camera.position.y);
         }
+        // The heavens shake when Eternity speaks — the scene reports
+        // the shudder, the host applies it to its own camera after
+        // lookAt, so it can never accumulate.
+        if (eternityCtl) {
+          const shake = eternityCtl.shakeAt(elapsed);
+          if (shake > 0.01) {
+            camera.rotation.x += (Math.random() - 0.5) * 0.02 * shake;
+            camera.rotation.y += (Math.random() - 0.5) * 0.02 * shake;
+          }
+        }
       }
       try {
         renderer.render(scene, camera);
@@ -458,6 +526,7 @@ export default function WorldsSurface({
       host.removeEventListener("pointerdown", skipArrival);
       engine?.dispose();
       world.dispose();
+      sceneHandleRef.current = null;
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -478,10 +547,53 @@ export default function WorldsSurface({
             {guided ? "Back to the rim" : "Descend the Chronicle"}
           </button>
         )}
+        {atEternity && (
+          <>
+            <span className="worlds-surface-eternity-label">His gestures</span>
+            {ETERNITY_GESTURE_NAMES.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => {
+                  // The label names what he holds only when the scene
+                  // actually mounted — a fallback world holds nothing.
+                  const e = sceneHandleRef.current?.eternity;
+                  if (!e) return;
+                  e.setGesture(name);
+                  setEternityGesture(name);
+                }}
+              >
+                {name[0]!.toUpperCase() + name.slice(1)}
+              </button>
+            ))}
+            <span className="worlds-surface-eternity-label">His tools</span>
+            {ETERNITY_TOOL_NAMES.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => sceneHandleRef.current?.eternity?.useTool(name)}
+              >
+                {name === "reorder"
+                  ? "Reorder the heavens"
+                  : name === "part-veil"
+                    ? "Part the veil"
+                    : name === "shield"
+                      ? "Raise the shield"
+                      : "Send a comet"}
+              </button>
+            ))}
+          </>
+        )}
         <button type="button" onClick={() => setDismissed(true)}>
           Back to your galaxy
         </button>
       </header>
+      {mode === "world" && atEternity && (
+        <p className="worlds-surface-fallback">
+          When he speaks, his words appear in the world near his mouth — never over your view.
+          {eternityGesture ? ` He is holding ${eternityGesture}.` : ""}
+        </p>
+      )}
       {mode === "world" && currentWorld === "growing-place" && !layout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}

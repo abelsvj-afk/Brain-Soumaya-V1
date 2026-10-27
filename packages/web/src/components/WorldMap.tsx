@@ -147,15 +147,19 @@ export default function WorldMap({
               ))}
               {/* The shimmer (Q6): faint, unnamed, unclickable. It is not a
                   button, has no label and no handler, and never takes a
-                  pointer event — it says something is out there, nothing more. */}
-              <circle
-                cx={data.shimmer.x}
-                cy={data.shimmer.y}
-                r={30}
-                fill="url(#world-map-shimmer)"
-                pointerEvents="none"
-                aria-hidden="true"
-              />
+                  pointer event — it says something is out there, nothing more.
+                  Once Eternity's world is discovered the node itself is on
+                  the map and the shimmer retires (data.shimmer is null). */}
+              {data.shimmer && (
+                <circle
+                  cx={data.shimmer.x}
+                  cy={data.shimmer.y}
+                  r={30}
+                  fill="url(#world-map-shimmer)"
+                  pointerEvents="none"
+                  aria-hidden="true"
+                />
+              )}
               {data.edges.map((e) => {
                 const a = nodeByKey.get(e.from);
                 const b = nodeByKey.get(e.to);
@@ -232,6 +236,26 @@ export default function WorldMap({
               <span> {selectedNode.blurb}</span>
               {selectedNode.isCurrent ? (
                 <span className="world-map-here">You are here.</span>
+              ) : selectedNode.key === "eternity" ? (
+                <>
+                  {/* Eternity's world: the map never states a one-leg price
+                      for it — the way there is a three-leg chain through
+                      two other worlds, and the server settles the chain
+                      at departure. The button focuses the travel panel;
+                      the panel and the server enforce the rest. */}
+                  <span className="world-map-chain">
+                    Warp there · 10 fuel a leg — the way runs through two other worlds first, so travel step by step.
+                  </span>
+                  {activeJourney ? (
+                    <span className="world-map-note">
+                      You&rsquo;re already travelling — finish this trip first.
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => onTravelTo(selectedNode.key)}>
+                      Travel to {selectedNode.name}
+                    </button>
+                  )}
+                </>
               ) : selectedChain ? (
                 <>
                   <span className="world-map-chain">

@@ -547,3 +547,115 @@ describe("HTTP contract", () => {
     expect(clash.body.code).toBe("ACTIVE_JOURNEY_EXISTS");
   });
 });
+
+describe("Eternity's gate (B-01): key + two relics, then a three-leg chain", () => {
+  const HOLDINGS = () => ({ witnessWithoutName: true, otherRelicCount: 2 });
+  const travelWithHoldings = (space = "spaceA") => new TravelRepo(handle, space, HOLDINGS);
+  const codeOf = (fn: () => unknown): string => {
+    try {
+      fn();
+    } catch (e) {
+      return (e as TravelError).code;
+    }
+    return "NO_ERROR";
+  };
+  /** Warp to a destination and arrive — one leg of a chain. */
+  function warpTo(t: TravelRepo, key: string, dest: string, at: number): void {
+    const j = t.depart({ clientKey: key, kind: "warp", destination: dest }, at);
+    const arrived = t.arrive(j.id, past(j.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+  }
+  /** Drift to a destination and arrive — a free leg of a chain. */
+  function driftTo(t: TravelRepo, key: string, dest: string, at: number): void {
+    const j = t.depart({ clientKey: key, kind: "drift", destination: dest }, at);
+    const arrived = t.arrive(j.id, past(j.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+  }
+
+  it("no relics, no way in: the gate refuses and nothing is written", () => {
+    const t = travel();
+    expect(codeOf(() => t.depart({ clientKey: "e1", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_GATE_CLOSED",
+    );
+    expect(journeyCount()).toBe(0);
+    expect(t.getState(T0).eternityReachable).toBe(false);
+  });
+
+  it("the key and two relics open the gate — but not from home: the chain refuses", () => {
+    const t = travelWithHoldings();
+    expect(t.getState(T0).eternityReachable).toBe(true);
+    expect(codeOf(() => t.depart({ clientKey: "e2", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+    expect(journeyCount()).toBe(0);
+  });
+
+  it("one intermediate is not a chain — and repeating the same world does not count twice", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e3a", "great-station", T0);
+    expect(codeOf(() => t.depart({ clientKey: "e3b", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+    warpTo(t, "e3c", "great-station", T0 + 60_000);
+    expect(codeOf(() => t.depart({ clientKey: "e3d", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+  });
+
+  it("the full chain admits: home → station → garden → eternity", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e4a", "great-station", T0);
+    warpTo(t, "e4b", "growing-place", T0 + 60_000);
+    const j = t.depart({ clientKey: "e4c", kind: "warp", destination: "eternity" }, T0 + 120_000);
+    expect(j.state).toBe("arming");
+    expect(j.origin).toBe("growing-place");
+    const arrived = t.arrive(j.id, past(j.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("eternity");
+  });
+
+  it("a turn-back breaks the chain: only arrived legs count", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e5a", "great-station", T0);
+    const out = t.depart({ clientKey: "e5b", kind: "warp", destination: "growing-place" }, T0);
+    const turned = t.turnBack(out.id, past(out.cancelDeadline));
+    expect(turned?.state).toBe("returning");
+    const back = t.arrive(out.id, past(out.cancelDeadline) + 30_000);
+    expect(back?.state).toBe("returned");
+    expect(t.currentWorld(T0)).toBe("great-station");
+    expect(codeOf(() => t.depart({ clientKey: "e5c", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+  });
+
+  it("once opened, the gate stays open: a later chain admits with no holdings", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e6a", "great-station", T0);
+    warpTo(t, "e6b", "growing-place", T0 + 60_000);
+    warpTo(t, "e6c", "eternity", T0 + 120_000);
+    expect(t.currentWorld(T0)).toBe("eternity");
+    // Drift home (free), then walk the chain again — this time the
+    // repo holds nothing, and the ledger itself remembers the opening.
+    const home = t.depart({ clientKey: "e6d", kind: "drift", destination: "home" }, T0 + 180_000);
+    expect(t.arrive(home.id, past(home.cancelDeadline))?.state).toBe("arrived");
+    const plain = travel();
+    expect(plain.getState(T0).eternityReachable).toBe(true);
+    // The second chain drifts (free legs still count — fuel buys
+    // speed, never access; five net −5 warps would drain the 25
+    // starting fuel before the chain completes).
+    driftTo(plain, "e6e", "great-station", T0 + 240_000);
+    driftTo(plain, "e6f", "growing-place", T0 + 300_000);
+    const again = plain.depart({ clientKey: "e6g", kind: "warp", destination: "eternity" }, T0 + 360_000);
+    expect(again.state).toBe("arming");
+  });
+
+  it("the key alone, or two others without the key, does not open the gate", () => {
+    const keyOnly = new TravelRepo(handle, "spaceA", () => ({ witnessWithoutName: true, otherRelicCount: 0 }));
+    expect(keyOnly.getState(T0).eternityReachable).toBe(false);
+    const othersOnly = new TravelRepo(handle, "spaceA", () => ({
+      witnessWithoutName: false,
+      otherRelicCount: 5,
+    }));
+    expect(othersOnly.getState(T0).eternityReachable).toBe(false);
+  });
+});

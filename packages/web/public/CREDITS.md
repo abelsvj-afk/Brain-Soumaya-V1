@@ -63,6 +63,23 @@ Model by XCVG, licensed CC-BY 3.0
 (http://creativecommons.org/licenses/by/3.0/).
 Converted to GLB; materials re-expressed in-app.
 
+**Eternity's figure (Eternity's world)** — `man-god-halo.glb`
+The owner's own file — his uploaded figure, split into body + halo
+meshes for this app so the halo can glow on its own (222,118
+triangles, measured from the file). No third-party source; no license
+applies. Scaled ×170 in Eternity's world.
+
+**Eternity's visitor fleet (Eternity's world)** — `kenney-space-craft_speederA.glb`,
+`kenney-space-craft_speederB.glb`, `kenney-space-craft_speederC.glb`,
+`kenney-space-craft_speederD.glb`
+Models by Kenney (https://kenney.nl), licensed CC0 1.0
+(http://creativecommons.org/publicdomain/zero/1.0/).
+The four speeders are new to the app with this world (the Station
+shipped only cargoA/cargoB/miner/racer). The files carry no in-file
+license statement — verified from the files, matching the shipped
+Kenney siblings. Triangles, measured from the files: speederA 280,
+speederB 270, speederC 292, speederD 322.
+
 ## Not shipped
 
 **Held-back ships** — EXCLUDED. Eleven hulls (15,539 triangles) from

@@ -6,8 +6,14 @@ import { spaceTimezone } from "../agent/notify/policy.js";
 import {
   EARN_JOURNEY_COMPLETE,
   EARN_JOURNEY_DRIFT,
+  ETERNITY_CHAIN_INTERMEDIATES,
+  ETERNITY_CHAIN_LEGS,
+  ETERNITY_WORLD_KEY,
+  NO_ETERNITY_HOLDINGS,
   TRAVEL_CANCEL_WINDOW_SECONDS,
   WARP_COST,
+  eternityGateOpens,
+  type EternityGateHoldings,
   type TravelJourney,
   type TravelJourneyState,
   type TravelKind,
@@ -44,16 +50,35 @@ import {
 
 /** World keys a journey may target. Server-side allow-list: a
  *  client-invented destination would corrupt the derived current world.
- *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past"];
+ *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world.
+ *  Eternity's world joins the list as a GATED world (B-01): it is on the
+ *  chart, but depart() admits it only through the gate below — the
+ *  allow-list alone never opens the way there. */
+export const TRAVEL_WORLD_KEYS: readonly string[] = [
+  "home",
+  "great-station",
+  "growing-place",
+  "deep-past",
+  ETERNITY_WORLD_KEY,
+];
 export const HOME_WORLD = "home";
+
+/** Plain-language refusals for the Eternity gate (B-01): a closed gate
+ *  or a short chain is never an error in the traveller's record — the
+ *  journey simply is not admitted, and the server says what the way
+ *  needs. Nothing is charged, nothing is lost, nothing is lesser. */
+export const ETERNITY_GATE_CLOSED_MESSAGE =
+  "The way to Eternity's world opens only for those carrying the Witness Without a Name and two other relics — the gate has not opened for you yet.";
+export const ETERNITY_CHAIN_REQUIRED_MESSAGE = `The way to Eternity's world runs through ${ETERNITY_CHAIN_INTERMEDIATES} other worlds first — travel there step by step, and the last leg opens from the far end of the chain.`;
 
 export type TravelErrorCode =
   | "INVALID_CLIENT_KEY"
   | "INVALID_KIND"
   | "UNKNOWN_DESTINATION"
   | "ACTIVE_JOURNEY_EXISTS"
-  | "JOURNEY_NOT_DEPARTED";
+  | "JOURNEY_NOT_DEPARTED"
+  | "ETERNITY_GATE_CLOSED"
+  | "ETERNITY_CHAIN_REQUIRED";
 
 export class TravelError extends Error {
   constructor(
@@ -143,7 +168,73 @@ export class TravelRepo implements JourneyBonusCreditor {
   constructor(
     private h: DbHandle,
     private spaceId: string = DEFAULT_SPACE,
+    /**
+     * Relic holdings for the Eternity gate (B-01). The relic increment
+     * owns the source of truth (discovery + codex) and supplies it
+     * here; the default is "holds nothing", so the gate is honestly
+     * closed until that wiring lands. The provider is read inside the
+     * departure transaction, so a holdings change between admission
+     * and arrival cannot smuggle a traveller through.
+     */
+    private holdings: () => EternityGateHoldings = () => NO_ETERNITY_HOLDINGS,
   ) {}
+
+  /** Arrived journeys for this space, newest first — the chain walk's input. */
+  private arrivedRowsNewest(): JourneyRow[] {
+    return this.h.sqlite
+      .prepare(
+        `SELECT * FROM travel_journeys WHERE space_id = ? AND state = 'arrived' ORDER BY created_at DESC, rowid DESC`,
+      )
+      .all(this.spaceId) as JourneyRow[];
+  }
+
+  /**
+   * B-01, persistence half: once the gate has opened for a traveller
+   * it stays open to them. "Opened" is derivable — an arrived journey
+   * to Eternity's world — so no new table and no migration carries it:
+   * the ledger itself remembers the first crossing.
+   */
+  eternityGateOpened(): boolean {
+    const row = this.h.sqlite
+      .prepare(
+        `SELECT COUNT(*) AS n FROM travel_journeys WHERE space_id = ? AND destination = ? AND state = 'arrived'`,
+      )
+      .get(this.spaceId, ETERNITY_WORLD_KEY) as { n: number };
+    return row.n > 0;
+  }
+
+  /** The gate is open for this traveller: opened before, or the
+   *  holdings satisfy B-01 right now (key + any two other relics). */
+  eternityGateReachable(): boolean {
+    return this.eternityGateOpened() || eternityGateOpens(this.holdings());
+  }
+
+  /**
+   * B-01, chain half: the journey to Eternity's world is the last leg
+   * of a three-leg chain through at least two intermediate worlds. The
+   * current outing — the arrived legs since the traveller last left
+   * home — must hold at least two legs through at least two distinct
+   * non-home worlds, and the traveller must be standing at the far end
+   * of it (not home). A turn-back or a cancellation breaks the chain:
+   * only arrived legs count, and the walk stops at the leg that left
+   * home. Pure over the ledger rows — no new state.
+   */
+  eternityChainSatisfied(): boolean {
+    const latest = this.latestRow();
+    if (!latest) return false;
+    if (this.deriveWorld(latest) === HOME_WORLD) return false;
+    if (this.deriveWorld(latest) === ETERNITY_WORLD_KEY) return false;
+    const arrived = this.arrivedRowsNewest();
+    let legs = 0;
+    const intermediates = new Set<string>();
+    for (const row of arrived) {
+      legs++;
+      if (row.destination !== HOME_WORLD && row.destination !== ETERNITY_WORLD_KEY)
+        intermediates.add(row.destination);
+      if (row.origin === HOME_WORLD) break;
+    }
+    return legs >= ETERNITY_CHAIN_LEGS - 1 && intermediates.size >= ETERNITY_CHAIN_INTERMEDIATES;
+  }
 
   // --- row access (all space-scoped: another space's journeys are invisible) ---
 
@@ -276,6 +367,18 @@ export class TravelRepo implements JourneyBonusCreditor {
         throw new TravelError("INVALID_KIND", "A journey is either a warp or a drift.");
       if (!TRAVEL_WORLD_KEYS.includes(input.destination))
         throw new TravelError("UNKNOWN_DESTINATION", "That destination isn't on the chart yet.");
+      // B-01 (Eternity's gate): the allow-list admits the world onto
+      // the chart, but only the gate admits a traveller to it. The
+      // credential first (key + two relics, or opened before), then the
+      // chain (three legs through two intermediates). Either refusal
+      // writes nothing and charges nothing — the traveller simply stays
+      // where they are, and the server says what the way needs.
+      if (input.destination === ETERNITY_WORLD_KEY) {
+        if (!this.eternityGateReachable())
+          throw new TravelError("ETERNITY_GATE_CLOSED", ETERNITY_GATE_CLOSED_MESSAGE);
+        if (!this.eternityChainSatisfied())
+          throw new TravelError("ETERNITY_CHAIN_REQUIRED", ETERNITY_CHAIN_REQUIRED_MESSAGE);
+      }
       if (this.activeRow())
         throw new TravelError("ACTIVE_JOURNEY_EXISTS", "A journey is already in progress — finish or cancel it first.");
       const origin = this.deriveWorld(this.latestRow());
@@ -513,13 +616,22 @@ export class TravelRepo implements JourneyBonusCreditor {
     return this.settle(journeyId, nowMs);
   }
 
-  /** The state P2-3 renders: where the brain is, and its active journey. */
-  getState(nowMs: number = Date.now()): { currentWorld: string; activeJourney: TravelJourney | null } {
+  /** The state P2-3 renders: where the brain is, and its active journey.
+   *  `eternityReachable` tells the board whether the gate to Eternity's
+   *  world stands open for this traveller (opened before, or the
+   *  holdings satisfy B-01 now) — the board offers the world only then,
+   *  so it never offers a journey the server would refuse. */
+  getState(nowMs: number = Date.now()): {
+    currentWorld: string;
+    activeJourney: TravelJourney | null;
+    eternityReachable: boolean;
+  } {
     this.settleActive(nowMs);
     const active = this.activeRow();
     return {
       currentWorld: this.deriveWorld(this.latestRow()),
       activeJourney: active ? this.map(active, nowMs) : null,
+      eternityReachable: this.eternityGateReachable(),
     };
   }
 

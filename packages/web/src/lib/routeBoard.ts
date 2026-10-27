@@ -1,4 +1,4 @@
-import { WARP_COST, type TravelKind } from "@brain/shared";
+import { ETERNITY_WORLD_KEY, WARP_COST, type TravelKind } from "@brain/shared";
 import type { TravelState } from "../api/travel.js";
 
 /**
@@ -11,8 +11,19 @@ import type { TravelState } from "../api/travel.js";
  * it rejects anything off-list; this chart only decides what the board
  * offers. When discovery lands in Phase 3, the chart moves into the
  * state response and this mirror goes away.
+ *
+ * Eternity's world is on the chart as a GATED world (B-01): the board
+ * offers it only when the server's state says the gate stands open
+ * for this traveller (`eternityReachable`). Until then the world is
+ * not offered at all — the board never shows a journey the server
+ * would refuse, and the gate's key stays a discovery, not a menu item.
  */
-export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[] = [
+export const WORLD_CHART: readonly {
+  key: string;
+  name: string;
+  blurb: string;
+  gated?: boolean;
+}[] = [
   { key: "home", name: "Home", blurb: "Your galaxy — every memory, always here." },
   {
     key: "great-station",
@@ -28,6 +39,12 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     key: "deep-past",
     name: "The Deep Past",
     blurb: "Where your earlier life is kept — descend gently to what has waited longest.",
+  },
+  {
+    key: ETERNITY_WORLD_KEY,
+    name: "Eternity's World",
+    blurb: "The furthest world — a white void where Eternity himself stands. The way there runs through two other worlds, and the gate opens only for those carrying the Witness and two other relics.",
+    gated: true,
   },
 ];
 
@@ -67,7 +84,7 @@ function option(kind: TravelKind, world: string, balance: number): RouteOption {
 }
 
 export function buildRouteBoard(state: TravelState): RouteEntry[] {
-  return WORLD_CHART.map((w) => {
+  return WORLD_CHART.filter((w) => !w.gated || state.eternityReachable === true).map((w) => {
     const isCurrent = state.currentWorld === w.key;
     return {
       world: w.key,
