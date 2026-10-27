@@ -11,13 +11,15 @@ import { HERO_SHIP_FORWARD_LENGTH } from "./stationLayout.js";
  * 35:1 wheel-to-ship ratio holds. The procedural hull stays the
  * load-failure fallback (the Profondo pattern), never the hero.
  *
- * PROVENANCE — open audit item, PRE-EXISTING (recorded, not resolved
- * here): the file carries the in-file copyright "Modeled and Textured
- * by 3DHaupt aka DennisH2010 (Dennis Haupt)" with NO license statement
- * in the repo and no CREDITS.md entry. The file already ships in the
- * app; making it the hero raises the stakes on closing the gap but
- * does not newly introduce it. Recorded as UNVERIFIED in the P2-6
- * provenance inventory (`docs/worlds/p2-6-provenance-inventory.md`).
+ * PROVENANCE — IDENTIFIED (2026-10-26, from the file itself): the
+ * model is 3DHaupt's "Intergalactic Spaceship Version 2", licensed
+ * CC-BY-NC (non-commercial use only) — in-file copyright "Modeled and
+ * Textured by 3DHaupt aka DennisH2010 (Dennis Haupt)", node named
+ * `Intergalactic_Spaceships_Version_2`. Before any commercial use of
+ * the worlds, the hero must be replaced with the verified CC-BY-4.0
+ * fallback (`organic-spaceship.glb`). Full record in the P2-6
+ * provenance inventory (`docs/worlds/p2-6-provenance-inventory.md`)
+ * and `public/CREDITS.md`.
  *
  * Measured from the deployed file (2026-10-25, Blender world-space):
  * 37,026 tris, 10 meshes, 3 materials (Material.001/002/003), KTX2

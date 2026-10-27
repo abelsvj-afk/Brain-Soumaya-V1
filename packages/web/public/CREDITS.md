@@ -24,10 +24,14 @@ by ricksticky (https://sketchfab.com/ricksticky) licensed under CC-BY-4.0
 Converted from glTF to Draco + KTX2 for web use; materials re-tinted in-app.
 
 **Her ship (Station hero and transit ship)** — `soumaya-ship.glb`
-Model by 3DHaupt aka Dennis Haupt (in-file copyright). No license
-statement ships with the file and no credit line existed for it —
-provenance UNVERIFIED, a pre-existing open audit item; the file already
-ships in the home galaxy. Recorded in the P2-6 provenance inventory.
+"Intergalactic Spaceship Version 2" by 3DHaupt (Dennis Haupt), licensed
+under CC-BY-NC (non-commercial use only). Identity verified from the
+file itself: the model's node is named `Intergalactic_Spaceships_Version_2`
+and the in-file copyright reads "Modeled and Textured by 3DHaupt aka
+DennisH2010 (Dennis Haupt)". Before any commercial use of the worlds,
+this ship must be replaced with the verified CC-BY-4.0 fallback,
+`organic-spaceship.glb` (ricksticky, above). Full record in the P2-6
+provenance inventory.
 Converted from glTF to Draco + KTX2 for web use; materials re-tinted
 in-app. Scaled to a 12-unit forward length in the Station and transit
 scenes.
@@ -35,8 +39,12 @@ scenes.
 **Traffic fleet (Station)** — `quaternius-*.glb` (11 hulls: bob,
 challenger, dispatcher, executioner, imperial, insurgent, omen, pancake,
 spitfire, striker, zenith)
-Models by Quaternius, licensed CC0 1.0 in-file (the pack's website now
-shows QAL v1.0 — see the P2-6 provenance inventory for the flag).
+Models by Quaternius, licensed CC0 1.0 in-file — the CC0 grant inside
+the downloaded packs governs the files as shipped. The pack's website
+now shows QAL v1.0 (last updated 2026-08-28); that change does not
+reach back to files already distributed under CC0. The raw packs are
+not redistributed — only the converted hulls ship inside the app. See
+the P2-6 provenance inventory for the full flag record.
 Converted from the native glTF mirror (yolanother/QuaterniusUltimateSpaceships)
 to GLB; textures resized 2048×2048 to 1024×1024.
 
@@ -54,6 +62,16 @@ only, never the hauler or drydock witnesses.
 Model by XCVG, licensed CC-BY 3.0
 (http://creativecommons.org/licenses/by/3.0/).
 Converted to GLB; materials re-expressed in-app.
+
+## Not shipped
+
+**Held-back ships** — EXCLUDED. Eleven hulls (15,539 triangles) from
+six sources — Luxwing kit (6), Starship Corvette, Star Ship low-poly,
+Space.blend, CWU, archfan7411 — were measured but never shipped: their
+pages say "free" but no license travels with the files, and a license
+must be verified from the file itself before a ship can sail here.
+None of these files is in the app. Full record in the P2-6 provenance
+inventory.
 
 ## Data
 
