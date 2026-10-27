@@ -675,6 +675,16 @@ export function forgetSourceByRequest(
     // way a value can. `nodesLabelScrubbed` keeps its round-5 meaning
     // (label/tags/aliases/title only); a research-only scrub is proven
     // by the row itself, not by that list.
+    // Fix round 7 (ChatGPT re-audit P1): the two tombstone paths
+    // below must scrub metadata too. A node whose content quotes is
+    // tombstoned — but its label/tags/aliases/title/research columns
+    // quoted the same source, and the tombstone UPDATE left them
+    // intact. The zero-hit sweep covers tombstoned rows, so a quoting
+    // tombstone is a surviving quote, not a follow-up. The scrub runs
+    // in the same transaction as the tombstone, with FTS re-indexing
+    // skipped (the tombstone drops the FTS row; re-indexing would
+    // resurrect it). `nodesLabelScrubbed` keeps its round-5 meaning;
+    // a tombstoned node whose label was scrubbed is listed there too.
     const nodesLabelScrubbed: number[] = [];
     const scrubNodeMetadata = (
       nodeId: number,
@@ -685,6 +695,7 @@ export function forgetSourceByRequest(
       content: string,
       researchQuestionsRaw: string | null,
       researchAnswersRaw: string | null,
+      opts: { reindexFts?: boolean } = {},
     ): void => {
       const labelQuotes = containsVerbatimSpan(label, chunkTexts);
       const tags = parseJsonStringArray(tagsRaw);
@@ -747,7 +758,9 @@ export function forgetSourceByRequest(
       sqlite
         .prepare(`UPDATE nodes SET label = ?, tags = ?, aliases = ?, celestial_title = ?, research_questions = ?, research_answers = ? WHERE id = ? AND space_id = ?`)
         .run(newLabel, tagsSql, aliasesSql, titleSql, questionsSql, answersSql, nodeId, spaceId);
-      ftsUpsert(sqlite, nodeId, newLabel, content);
+      // Tombstoned nodes drop their FTS row (the tombstone branch
+      // deletes it); re-indexing here would resurrect it.
+      if (opts.reindexFts !== false) ftsUpsert(sqlite, nodeId, newLabel, content);
       if (labelQuotes || tagsQuote || aliasesQuote || titleQuotes) nodesLabelScrubbed.push(nodeId);
     };
 
@@ -786,6 +799,10 @@ export function forgetSourceByRequest(
              WHERE id = ? AND space_id = ?`,
           )
           .run(FORGET_TOMBSTONE, now, nodeId, spaceId);
+        // Fix round 7: the tombstone must not keep quoting metadata —
+        // scrub label/tags/aliases/title/research in the same
+        // transaction, without re-indexing FTS (dropped below).
+        scrubNodeMetadata(nodeId, nodeRow.label, nodeRow.tags, nodeRow.aliases, nodeRow.celestial_title, nodeRow.content, nodeRow.research_questions, nodeRow.research_answers, { reindexFts: false });
         try { sqlite.prepare(`DELETE FROM vec_nodes WHERE node_id = ?`).run(BigInt(nodeId)); } catch { /* vec absent */ }
         sqlite.prepare(`DELETE FROM nodes_fts WHERE rowid = ?`).run(nodeId);
         nodesTombstoned.push(nodeId);
@@ -940,6 +957,10 @@ export function forgetSourceByRequest(
            WHERE id = ? AND space_id = ?`,
         )
         .run(FORGET_TOMBSTONE, now, n.id, spaceId);
+      // Fix round 7: same tombstone-metadata scrub as the linked path
+      // above — quoting label/tags/aliases/title/research must not
+      // survive on a tombstoned row. No FTS re-index (dropped below).
+      scrubNodeMetadata(n.id, n.label, n.tags, n.aliases, n.celestial_title, n.content, n.research_questions, n.research_answers, { reindexFts: false });
       try { sqlite.prepare(`DELETE FROM vec_nodes WHERE node_id = ?`).run(BigInt(n.id)); } catch { /* vec absent */ }
       sqlite.prepare(`DELETE FROM nodes_fts WHERE rowid = ?`).run(n.id);
       nodesTombstoned.push(n.id);
