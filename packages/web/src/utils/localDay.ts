@@ -48,3 +48,49 @@ export function localDateOfStored(
   const ms = parseMs(t);
   return Number.isFinite(ms) ? spaceLocalDay(new Date(ms), timeZone) : null;
 }
+
+/**
+ * Batch L (MIN-01, REG-132) — a Life Vision target date as a `YYYY-MM-DD` key.
+ *
+ * A Life Vision's target date has NO time-of-day meaning (docs/specs/
+ * life-vision.md §9), so the stored value is read as a DATE, never as an
+ * instant: a bare date-only value is returned verbatim, and any timestamp
+ * form contributes its WRITTEN calendar date (its first 10 chars). The
+ * written-date rule also heals legacy rows: the only writers that ever
+ * produced a timestamp for this kind emitted `new Date(picked).toISOString()`
+ * — UTC midnight of the picked date — so the written date IS the picked
+ * date, where the old tolerant-parser reading (instant → device-zone date)
+ * named the day before in America/New_York. Returns null when the value
+ * carries no readable calendar date at all.
+ */
+export function visionTargetDateKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  // Reject impossible calendar dates (e.g. 2030-02-31) by round-tripping.
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
+/**
+ * Batch L (MIN-01) — format a `YYYY-MM-DD` key as a human date
+ * ("Jun 1, 2030"), anchored to UTC so the rendered day never depends on
+ * the viewer's zone. A date-only value has no zone to interpret; formatting
+ * it through the device zone is exactly the one-day-early defect.
+ */
+export function formatCalendarDate(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString(undefined, {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}

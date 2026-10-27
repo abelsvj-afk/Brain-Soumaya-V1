@@ -11,13 +11,14 @@ import { GraphService } from "../graph/service.js";
 import {
   createCognitive,
   listCognitive,
+  countCognitive,
   setCognitiveProgress,
   applyCognitiveGravity,
   updateCognitive,
   cognitiveSnapshotText,
 } from "../analysis/cognitive.js";
 import { recordRejection } from "../analysis/rejections.js";
-import { COGNITIVE_META } from "@brain/shared";
+import { COGNITIVE_META, IDEA_PROMOTE_SUPPORT } from "@brain/shared";
 import { chat, DEFAULT_CHAT } from "../chat/graphrag.js";
 import type { AnswerOptions, ContextNode } from "../llm/adapter.js";
 
@@ -362,5 +363,53 @@ describe("cognitiveSnapshotText — the rest of the Mind tab, for chat context",
     await chat(handle, { embeddings, llm }, "how am I doing", DEFAULT_CHAT, "legacy");
     expect(llm.lastOpts?.systemExtra ?? "").toContain("MIND TAB");
     expect(llm.lastOpts?.systemExtra ?? "").toContain("Buy a house");
+  });
+});
+
+describe("Batch L — MIN-05/MIN-06: support counts and true totals", () => {
+  async function memory(label: string) {
+    const repo = new NodesRepo(handle, "legacy");
+    return repo.create({ label, type: "daily", content: label } as never, await embeddings.embed(label));
+  }
+
+  it("MIN-05: listCognitive reports incoming supports distinctly from total degree", async () => {
+    const idea = await createCognitive(ctx, "legacy", "idea", "Boat project", "");
+    const edges = new EdgesRepo(handle, "legacy");
+    // 1 supporting memory + 4 relates_to links of other kinds/directions:
+    // degree 5, supports 1 — ripe is defined on supports, so this is NOT ripe.
+    const supporter = await memory("sailing is freedom");
+    edges.create({ source: supporter.id, target: idea, relationship: "supports", weight: 0.7 });
+    for (let i = 0; i < 4; i++) {
+      const m = await memory(`related note ${i}`);
+      edges.create({ source: m.id, target: idea, relationship: "relates_to", weight: 0.5 });
+    }
+    const row = listCognitive(ctx, "legacy", "idea").find((x) => x.id === idea)!;
+    expect(row.degree).toBe(5);
+    expect(row.supportCount).toBe(1);
+    expect(row.supportCount).toBeLessThan(IDEA_PROMOTE_SUPPORT);
+
+    // 4 incoming supports IS ripe by the shared threshold.
+    const ripe = await createCognitive(ctx, "legacy", "idea", "Sail the coast", "");
+    for (let i = 0; i < 4; i++) {
+      const m = await memory(`backer ${i}`);
+      edges.create({ source: m.id, target: ripe, relationship: "supports", weight: 0.7 });
+    }
+    const ripeRow = listCognitive(ctx, "legacy", "idea").find((x) => x.id === ripe)!;
+    expect(ripeRow.supportCount).toBe(4);
+    expect(ripeRow.supportCount).toBeGreaterThanOrEqual(IDEA_PROMOTE_SUPPORT);
+  });
+
+  it("MIN-06: countCognitive is the true total past the 100-row page", async () => {
+    const repo = new NodesRepo(handle, "legacy");
+    const emb = await embeddings.embed("seed");
+    for (let i = 0; i < 105; i++) {
+      repo.create({ label: `Goal ${i}`, type: "concept", kind: "goal", content: "" } as never, emb);
+    }
+    await createCognitive(ctx, "legacy", "skill", "Guitar", "");
+    expect(listCognitive(ctx, "legacy").length).toBe(100); // the page cap
+    expect(countCognitive(ctx, "legacy")).toBe(106);
+    expect(countCognitive(ctx, "legacy", "goal")).toBe(105);
+    expect(countCognitive(ctx, "legacy", "skill")).toBe(1);
+    expect(countCognitive(ctx, "legacy", "idea")).toBe(0);
   });
 });

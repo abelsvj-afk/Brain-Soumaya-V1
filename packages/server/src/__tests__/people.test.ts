@@ -199,3 +199,18 @@ describe("peopleSnapshotText — aggregated Mind-tab summary for chat context", 
     expect(llm.lastOpts?.systemExtra ?? "").toContain("Priya");
   });
 });
+
+describe("Batch L — MIN-06: personProfile count is the true total", () => {
+  it("reports 101 interactions with a 100-row page, not the cap", async () => {
+    const id = await createCognitive(ctx, "legacy", "person_entity", "Maya", "");
+    const edges = new EdgesRepo(handle, "legacy");
+    for (let i = 0; i < 101; i++) {
+      const m = await mem(`m${i}`, `coffee with Maya ${i}`, 0.5);
+      edges.create({ source: m.id, target: id, relationship: "supports", weight: 0.7 });
+    }
+    const profile = personProfile(ctx, "legacy", id)!;
+    expect(profile.count).toBe(101);
+    expect(profile.interactions.length).toBe(100); // the page stays capped
+    expect(profile.lastAt).not.toBeNull();
+  });
+});
