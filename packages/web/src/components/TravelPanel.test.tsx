@@ -60,12 +60,13 @@ describe("TravelPanel", () => {
     expect(screen.getByText("The Growing Place")).toBeTruthy();
     expect(screen.getByText("The Deep Past")).toBeTruthy();
     expect(screen.getByText("Quiet/Archive")).toBeTruthy();
+    expect(screen.getByText("Scale")).toBeTruthy();
     expect(screen.getByText("You are here")).toBeTruthy();
-    // Four off-world destinations now: each offers warp at the shared cost
-    // and drift free. Scoped per destination so a fifth world cannot hide
+    // Five off-world destinations now: each offers warp at the shared cost
+    // and drift free. Scoped per destination so a sixth world cannot hide
     // behind a single-element query.
     const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
-    expect(entries).toHaveLength(5);
+    expect(entries).toHaveLength(6);
     for (const entry of entries.slice(1)) {
       const scoped = within(entry as HTMLElement);
       expect(scoped.getByRole("button", { name: /Warp · 10 fuel/ })).toBeTruthy();
@@ -85,9 +86,9 @@ describe("TravelPanel", () => {
     );
     render(<TravelPanel enabled />);
     const warps = screen.getAllByRole("button", { name: /Warp/ });
-    expect(warps).toHaveLength(4); // Station + Garden + Deep Past + Quiet/Archive: warp is unaffordable to all
+    expect(warps).toHaveLength(5); // Station + Garden + Deep Past + Quiet/Archive + Scale: warp is unaffordable to all
     for (const w of warps) expect((w as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByText(/drifting is always free/)).toHaveLength(4);
+    expect(screen.getAllByText(/drifting is always free/)).toHaveLength(5);
   });
 
   it("depart is wired to the chosen route and kind", () => {
@@ -107,6 +108,9 @@ describe("TravelPanel", () => {
     const archive = within(entries[4] as HTMLElement);
     fireEvent.click(archive.getByRole("button", { name: /Warp · 10 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "quiet-archive");
+    const scale = within(entries[5] as HTMLElement);
+    fireEvent.click(scale.getByRole("button", { name: /Warp · 10 fuel/ }));
+    expect(t.depart).toHaveBeenCalledWith("warp", "scale");
   });
 
   it("shows People only when the server says the gate is open (P3-3, Q1)", () => {
@@ -114,7 +118,7 @@ describe("TravelPanel", () => {
     const { unmount } = render(<TravelPanel enabled />);
     expect(screen.queryByText("The People")).toBeNull();
     unmount();
-    // Gate open: People appears as a sixth entry, wired like any world.
+    // Gate open: People appears as a seventh entry, wired like any world.
     const t = fakeTravel({
       state: {
         currentWorld: "home",
@@ -127,10 +131,13 @@ describe("TravelPanel", () => {
     render(<TravelPanel enabled />);
     expect(screen.getByText("The People")).toBeTruthy();
     const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
-    expect(entries).toHaveLength(6);
+    expect(entries).toHaveLength(7);
     const people = within(entries[4] as HTMLElement);
     fireEvent.click(people.getByRole("button", { name: /Warp · 10 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "people");
+    const scale = within(entries[6] as HTMLElement);
+    fireEvent.click(scale.getByRole("button", { name: /Warp · 10 fuel/ }));
+    expect(t.depart).toHaveBeenCalledWith("warp", "scale");
   });
 
   it("arming shows the server's cancel window as a countdown and a free cancel", () => {

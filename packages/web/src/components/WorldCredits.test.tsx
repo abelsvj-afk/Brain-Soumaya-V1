@@ -16,4 +16,10 @@ describe("WorldCredits", () => {
       expect(screen.getByText(new RegExp(c.asset.split("—")[0]!.trim().slice(0, 12)))).toBeTruthy();
     }
   });
+
+  it("credits the Scale models as NASA public domain (no license to get wrong)", () => {
+    render(<WorldCredits />);
+    expect(screen.getByText(/International Space Station/)).toBeTruthy();
+    expect(screen.getByText(/NASA 3D Resources, public domain/)).toBeTruthy();
+  });
 });

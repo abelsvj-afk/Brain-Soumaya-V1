@@ -41,7 +41,77 @@ export const GATE_DRESSINGS: Record<string, GateDressing> = {
   // Quiet/Archive (Wave 2): the low still threshold — dim slate ring,
   // amber beads (grammar), pale cyan shimmer. Quiet, never bright.
   "quiet-archive": { ring: 0x2a3442, beads: 0xffb347, accent: 0x9fd8e0 },
+  scale: { ring: 0x5a6a72, beads: 0xffb347, accent: 0xffc95e },
 };
+
+/** Scale's gate silhouette (adopted EVE/NMS amendment, Rev 123): the
+ *  survey frame — a clean rectangular measurement frame of thin light,
+ *  like a surveyor's mark held against the dark. The gate that measures:
+ *  you pass through a frame that says, plainly, how big the thing beyond
+ *  it is. Same interaction contract as the ring gate (pass through →
+ *  transit); only the silhouette differs, per world. */
+export const SURVEY_FRAME_BEACON_COUNT = 4;
+
+export interface SurveyFrame {
+  group: THREE.Group;
+  dispose: () => void;
+}
+
+/** Build Scale's survey frame at the origin, facing +Z — the caller positions it on the approach axis. */
+export function buildSurveyFrame(width = 130, height = 50): SurveyFrame {
+  const group = new THREE.Group();
+  group.name = "gate-scale-survey-frame";
+  const barMat = new THREE.MeshBasicMaterial({ color: 0x7af9ff });
+  const barThickness = 0.8;
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(width, barThickness, barThickness), barMat);
+  top.position.set(0, halfH, 0);
+  top.name = "survey-frame-top";
+  group.add(top);
+  const bottom = new THREE.Mesh(new THREE.BoxGeometry(width, barThickness, barThickness), barMat);
+  bottom.position.set(0, -halfH, 0);
+  bottom.name = "survey-frame-bottom";
+  group.add(bottom);
+  const left = new THREE.Mesh(new THREE.BoxGeometry(barThickness, height, barThickness), barMat);
+  left.position.set(-halfW, 0, 0);
+  left.name = "survey-frame-left";
+  group.add(left);
+  const right = new THREE.Mesh(new THREE.BoxGeometry(barThickness, height, barThickness), barMat);
+  right.position.set(halfW, 0, 0);
+  right.name = "survey-frame-right";
+  group.add(right);
+  // Corner beacons (amber by grammar — working light, not navigation
+  // truth): four small lights so the frame reads at distance.
+  const beaconGeo = new THREE.SphereGeometry(1.6, 8, 6);
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xffb347 });
+  const beacons = new THREE.InstancedMesh(beaconGeo, beaconMat, SURVEY_FRAME_BEACON_COUNT);
+  beacons.name = "survey-frame-beacons";
+  const dummy = new THREE.Object3D();
+  const corners: [number, number][] = [
+    [-halfW, halfH],
+    [halfW, halfH],
+    [-halfW, -halfH],
+    [halfW, -halfH],
+  ];
+  corners.forEach(([x, y], i) => {
+    dummy.position.set(x, y, 0);
+    dummy.updateMatrix();
+    beacons.setMatrixAt(i, dummy.matrix);
+  });
+  beacons.instanceMatrix.needsUpdate = true;
+  group.add(beacons);
+
+  let disposed = false;
+  return {
+    group,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      disposeObject3D(group);
+    },
+  };
+}
 
 export const GATE_RADIUS = 60;
 export const GATE_BEAD_COUNT = 24;

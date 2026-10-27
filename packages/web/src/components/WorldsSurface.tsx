@@ -43,6 +43,14 @@ import {
   createQuietArchiveScene,
   EMPTY_QUIET_ARCHIVE_LAYOUT,
 } from "../graph/quietArchiveScene.js";
+import {
+  buildScaleLayout,
+  type ScaleLayout,
+} from "../graph/scaleLayout.js";
+import {
+  createScaleScene,
+  EMPTY_SCALE_LAYOUT,
+} from "../graph/scaleScene.js";
 import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { createTransitScene } from "../graph/transitScene.js";
@@ -64,15 +72,19 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * anchors = links to their other appearances, the Chronicle thread = the
  * earliest done Journey with two member stops), the People (P3-3 —
  * the warm field: one cluster per person with linked memories, lights =
- * their memories, bridges = memories shared between two people), and
+ * their memories, bridges = memories shared between two people),
  * Quiet/Archive (Wave 2 — the still field: one lamp per archived person,
  * lights = their archived memories, lone lights = archived memories with
  * no person, bridges = archived memories shared between two archived
  * people; the archived input is fetched on entry, never from the graph
- * prop). Each world renders the graph data the app already holds — the
- * same window the home galaxy sees — via the `graph` prop from App; none
- * fetches its own copy of the brain (the Archive's exception is its own
- * archived input, which the graph window cannot carry).
+ * prop), and Scale (the actual station, actual size — the real ISS at its
+ * real size beside your ship, real probes as small true things at real
+ * distances, the survey frame as its gate). Each world renders the graph
+ * data the app already holds — the same window the home galaxy sees — via
+ * the `graph` prop from App; none fetches its own copy of the brain (the
+ * Archive's exception is its own archived input, which the graph window
+ * cannot carry; Scale renders no graph data at all: it surfaces no
+ * memories of its own).
  * Journeys are fetched on garden/deep-past entry (landmarks / routes); if a
  * fetch fails, the world renders without that layer and says so honestly.
  * The Archive fetches its own input on entry — the archived nodes plus
@@ -120,27 +132,33 @@ interface WorldSceneHandle {
 }
 
 function isGardenLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout | undefined,
 ): layout is GardenLayout {
   return !!layout && "plots" in layout;
 }
 
 function isDeepPastLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout | undefined,
 ): layout is DeepPastLayout {
   return !!layout && "members" in layout;
 }
 
 function isPeopleLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout | undefined,
 ): layout is PeopleLayout {
   return !!layout && "clusters" in layout && "eligibleCount" in layout;
 }
 
 function isQuietArchiveLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout | undefined,
 ): layout is QuietArchiveLayout {
   return !!layout && "loneLights" in layout;
+}
+
+function isScaleLayout(
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout | undefined,
+): layout is ScaleLayout {
+  return !!layout && "iss" in layout;
 }
 
 interface WorldSceneEntry {
@@ -157,7 +175,16 @@ interface WorldSceneEntry {
    * lowest terrace, so no view can ever sink under the garden.
    */
   cameraFloorY?: number;
-  build: (layout?: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout) => WorldSceneHandle;
+  build: (
+    layout?: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout,
+    /**
+     * Relic visibility (relics increment): the scene calls this per relic
+     * whose real GLB has actually loaded. WorldsSurface passes nothing on
+     * this tip — the relics store does not exist here yet — but the
+     * wiring point is the relics increment's rebase, not a second edit.
+     */
+    onRelicVisible?: (slug: string) => void,
+  ) => WorldSceneHandle;
 }
 
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
@@ -220,6 +247,17 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     build: (layout) =>
       createQuietArchiveScene(isQuietArchiveLayout(layout) ? layout : EMPTY_QUIET_ARCHIVE_LAYOUT),
   },
+  scale: {
+    title: "Scale",
+    background: 0x000000,
+    fogDensity: 0,
+    orbitRadius: 320,
+    orbitHeight: 60,
+    lookAtY: 0,
+    fallback: "The Scale view needs graphics support on this device — your journeys are unaffected.",
+    build: (layout, onRelicVisible) =>
+      createScaleScene(isScaleLayout(layout) ? layout : EMPTY_SCALE_LAYOUT, { onRelicVisible }),
+  },
 };
 
 export default function WorldsSurface({
@@ -268,6 +306,7 @@ export default function WorldsSurface({
   const atDeepPast = atWorld && currentWorld === "deep-past";
   const atPeople = atWorld && currentWorld === "people";
   const atQuietArchive = atWorld && currentWorld === "quiet-archive";
+  const atScale = atWorld && currentWorld === "scale";
   const worldName = (key: string) =>
     WORLD_CHART.find((w) => w.key === key)?.name ?? key;
   const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
@@ -400,6 +439,13 @@ export default function WorldsSurface({
     return buildQuietArchiveLayout(archivedGraph);
   }, [atQuietArchive, archivedGraph]);
 
+  // Scale carries no memories, so its layout needs no graph: the same
+  // real station, the same real probes, every visit, every device.
+  const scaleLayout = useMemo<ScaleLayout | undefined>(() => {
+    if (!atScale) return undefined;
+    return buildScaleLayout();
+  }, [atScale]);
+
   const sceneLayout =
     currentWorld === "growing-place"
       ? layout
@@ -409,7 +455,9 @@ export default function WorldsSurface({
           ? peopleLayout
           : currentWorld === "quiet-archive"
             ? quietArchiveLayout
-            : undefined;
+            : currentWorld === "scale"
+              ? scaleLayout
+              : undefined;
 
   const toggleGuided = () => {
     if (guidedRef.current) {
@@ -646,6 +694,9 @@ export default function WorldsSurface({
         <p className="worlds-surface-fallback">
           Nothing rests here yet — when something is archived, it will rest here.
         </p>
+      )}
+      {mode === "world" && currentWorld === "scale" && !scaleLayout && (
+        <p className="worlds-surface-fallback">The station is coming into view — your journeys are unaffected.</p>
       )}
       {mode === "world" && atDeepPast && thread && (
         <p className="worlds-surface-fallback">

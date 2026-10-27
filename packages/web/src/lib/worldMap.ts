@@ -47,7 +47,12 @@ export const WORLD_MAP_SHIMMER = { x: 920, y: 80 } as const;
  *  its key, so the map never has to guess twice. People (P3-3, Q2) sits
  *  close to the Station — a close moon, a short hop away. Quiet/Archive
  *  (Wave 2) sits far and low in a quiet corner — the last world in the
- *  roster order, and the map keeps it that way: far, never central. */
+ *  roster order, and the map keeps it that way: far, never central.
+ *  Scale sits far below too, alone in the empty part of the chart — the
+ *  vast space is the point. (Rebased onto PR #116: Quiet/Archive landed
+ *  at (130, 620), so Scale moved from (180, 620) — 50 units apart would
+ *  crowd the node labels — to the empty bottom-right corner (850, 620);
+ *  nearest neighbour is People at 285, every other node farther.) */
 export const WORLD_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   home: { x: 500, y: 380 },
   "great-station": { x: 760, y: 250 },
@@ -55,11 +60,12 @@ export const WORLD_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   "deep-past": { x: 300, y: 180 },
   people: { x: 845, y: 335 },
   "quiet-archive": { x: 130, y: 620 },
+  scale: { x: 850, y: 620 },
 };
 
 /** Node colours follow the settled world palettes (station amber, garden
  *  green, deep-past violet, people warm amber, quiet-archive dim slate blue,
- *  home warm white) — never colour alone: the
+ *  scale solar gold, home warm white) — never colour alone: the
  *  current world is also named in words. */
 export const WORLD_NODE_COLORS: Record<string, string> = {
   home: "#fff6e0",
@@ -68,6 +74,7 @@ export const WORLD_NODE_COLORS: Record<string, string> = {
   "deep-past": "#8a76c9",
   people: "#ffb070",
   "quiet-archive": "#9fb4c8",
+  scale: "#ffc95e",
 };
 const FALLBACK_NODE_COLOR = "#cfe0ff";
 

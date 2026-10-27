@@ -74,6 +74,22 @@ Slimmed for web use (textures to 256, 88,168 triangles across the
 five pieces); the First Light orb, anchor spire, and route bead are
 still to come from the owner and are not in this set.
 
+**The International Space Station (Scale world)** — `ISS-A.glb`
+The catalog's low-poly International Space Station model from NASA 3D
+Resources (https://github.com/nasa/NASA-3D-Resources), public domain.
+6,642 triangles, 1 mesh, 6 flat materials, no embedded images;
+Draco-compressed. The heavier ISS variant (174,440 triangles) was
+measured and not used. No geometry-level insignia was found in the file
+(single node named "ISS"); nothing was scrubbed.
+
+**NASA probes (Scale world)** — `nasa-probes/Kepler-A.glb`,
+`nasa-probes/Pioneer10.glb`, `nasa-probes/Dawn.glb`,
+`nasa-probes/Voyager-A.glb`
+Spacecraft models from NASA 3D Resources
+(https://github.com/nasa/NASA-3D-Resources), public domain.
+Measured from the files: Kepler 9,042 triangles, Pioneer 10 8,189,
+Dawn 32,096, Voyager 1 29,911; all Draco-compressed.
+
 ## Not shipped
 
 **Held-back ships** — EXCLUDED. Eleven hulls (15,539 triangles) from

@@ -50,6 +50,11 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
     credit:
       "Procedural work made for this app — shared gate rings and the fly-through corridor are atmosphere, not information. The corridor sky is the same HYG data credited above. The transit ship is her own ship, credited above; the procedural hull is its load-failure fallback.",
   },
+  {
+    asset: "Scale — the International Space Station and NASA probes",
+    credit:
+      "The ISS model and the Kepler, Pioneer 10, Dawn, and Voyager 1 models are NASA 3D Resources, public domain. The ISS is the catalog's low-poly model (6,642 triangles); the heavier ISS variant was not used. Probe models are the NASA 3D Resources versions; the starfield is the same HYG data credited above.",
+  },
 ];
 
 export default function WorldCredits() {
