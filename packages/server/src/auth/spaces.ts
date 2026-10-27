@@ -181,6 +181,11 @@ export const SPACE_SCOPED_TABLES = [
   "npc_state",
   "npc_relic_holdings",
   "npc_gate",
+  // Guided tours (Wave 2, N7): the saved route, its rail log, and its
+  // playback sessions are per-space rows — brain deletion removes them.
+  "tours",
+  "tour_log",
+  "tour_sessions",
 ] as const;
 
 /**

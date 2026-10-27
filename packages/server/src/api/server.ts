@@ -10,6 +10,7 @@ import { digestRoutes } from "./routes/digest.js";
 import { chatRoutes } from "./routes/chat.js";
 import { maintenanceRoutes } from "./routes/maintenance.js";
 import { travelRoutes } from "./routes/travel.js";
+import { toursRoutes } from "./routes/tours.js";
 import { npcsRoutes } from "./routes/npcs.js";
 import { usageRoutes } from "./routes/usage.js";
 import { constellationRoutes } from "./routes/constellations.js";
@@ -105,6 +106,7 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/chat", guard, llmLimiter, chatRoutes(ctx));
   app.use("/api/maintenance", guard, maintenanceRoutes(ctx));
   app.use("/api/travel", guard, travelRoutes(ctx));
+  app.use("/api/tours", guard, toursRoutes(ctx));
   app.use("/api/npcs", guard, npcsRoutes(ctx));
   app.use("/api/constellations", guard, constellationRoutes(ctx));
   app.use("/api/lore", guard, loreRoutes(ctx));

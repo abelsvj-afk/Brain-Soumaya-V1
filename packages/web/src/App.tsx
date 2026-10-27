@@ -40,6 +40,7 @@ import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
 import { GalaxyErrorCard } from "./components/GalaxyErrorCard.js";
 import TravelPanel from "./components/TravelPanel.js";
+import ToursPanel from "./components/ToursPanel.js";
 import WorldsSurface from "./components/WorldsSurface.js";
 import WorldMap from "./components/WorldMap.js";
 import { getMoneySky } from "./api/finance.js";
@@ -2404,6 +2405,15 @@ export default function App() {
       {space && (
         <ErrorBoundary label="travel" fallback={null}>
           <TravelPanel focusWorld={travelFocus} />
+        </ErrorBoundary>
+      )}
+
+      {/* Guided tours (Wave 2, N7) — saved Chronicle routes with a voice.
+          Same dark contract as travel: ships dark while the worlds flag
+          is off, and the panel itself fetches nothing then. */}
+      {space && (
+        <ErrorBoundary label="tours" fallback={null}>
+          <ToursPanel />
         </ErrorBoundary>
       )}
 

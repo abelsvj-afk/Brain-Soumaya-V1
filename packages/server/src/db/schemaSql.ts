@@ -1194,4 +1194,55 @@ export const BOOTSTRAP_SQL = `
       opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, npc_id)
     );
+
+    -- Guided tours (Wave 2, N7): a saved Chronicle route with a voice.
+    -- tours is the read model (the route + its stops, snapshotted at
+    -- creation); tour_log is the §17 rail — append-only, one entry per
+    -- structural change (created / renamed / deleted / restored), and
+    -- undo is a compensating entry (restored), never a rewrite. The row
+    -- and its log entry commit in ONE transaction, the travel pattern.
+    -- tour_sessions is playback state: a position, not progress — no
+    -- counts of done stops, no percentages, no score. A session ends
+    -- free whenever the traveler steps off, or when the route runs out.
+    -- Identical DDL also runs in db/client.ts migrateSchema() for
+    -- existing volumes.
+    CREATE TABLE IF NOT EXISTS tours (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      journey_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      stops TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tours_space_created
+      ON tours(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tour_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_log_tour_created
+      ON tour_log(tour_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_sessions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      tour_id TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('playing','ended')),
+      ended_reason TEXT CHECK (ended_reason IN ('left','last-stop')),
+      current_stop_index INTEGER NOT NULL DEFAULT 0,
+      pending_leg_journey_id TEXT,
+      pending_leg_target INTEGER,
+      leg_attempt INTEGER NOT NULL DEFAULT 0,
+      skipped_note TEXT,
+      started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      ended_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_sessions_space_updated
+      ON tour_sessions(space_id, updated_at);
 `;

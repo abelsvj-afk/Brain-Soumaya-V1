@@ -1258,6 +1258,51 @@ function migrateSchema(sqlite: RawDb): void {
     );
   `);
 
+  // Guided tours (Wave 2, N7): the saved route, its §17 rail log, and
+  // playback sessions. Identical DDL to BOOTSTRAP_SQL in db/schemaSql.ts
+  // (fresh DBs already have them; this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS tours (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      journey_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      stops TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tours_space_created
+      ON tours(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tour_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_log_tour_created
+      ON tour_log(tour_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_sessions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      tour_id TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('playing','ended')),
+      ended_reason TEXT CHECK (ended_reason IN ('left','last-stop')),
+      current_stop_index INTEGER NOT NULL DEFAULT 0,
+      pending_leg_journey_id TEXT,
+      pending_leg_target INTEGER,
+      leg_attempt INTEGER NOT NULL DEFAULT 0,
+      skipped_note TEXT,
+      started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      ended_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_sessions_space_updated
+      ON tour_sessions(space_id, updated_at);
+  `);
+
   // P2-4 journey-bonus outcome columns on existing travel_journeys volumes
   // (additive; the marker is the exactly-once crediting record).
   const travelCols = sqlite.prepare(`PRAGMA table_info(travel_journeys)`).all() as { name: string }[];
