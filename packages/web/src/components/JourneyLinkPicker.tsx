@@ -128,21 +128,31 @@ export function JourneyLinkPicker({
       {!loading && !loadError && candidates !== null && visible.length === 0 && (
         <p className="jn-hint">{candidates.length === 0 ? "Nothing available to link yet — capture a memory or add a transaction first." : "Nothing unlinked matches that search."}</p>
       )}
-      {sections.map((section) => (
-        <div key={section} className="jn-links-group">
-          <div className="jn-links-label">{section}</div>
-          {visible.filter((c) => c.section === section).slice(0, 20).map((c) => (
-            <button
-              key={`${c.kind}:${c.refId}`}
-              className="jn-link-row"
-              disabled={busyKey === `${c.kind}:${c.refId}`}
-              onClick={() => void link(c)}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      ))}
+      {sections.map((section) => {
+        // REG-163/JN-06: the picker used to slice each section at 20 with no
+        // note — five of 25 memories simply never appeared, indistinguishable
+        // from absent. Disclose shown/total like the panel's own links section.
+        const inSection = visible.filter((c) => c.section === section);
+        const shown = inSection.slice(0, 20);
+        return (
+          <div key={section} className="jn-links-group">
+            <div className="jn-links-label">{section}</div>
+            {shown.map((c) => (
+              <button
+                key={`${c.kind}:${c.refId}`}
+                className="jn-link-row"
+                disabled={busyKey === `${c.kind}:${c.refId}`}
+                onClick={() => void link(c)}
+              >
+                {c.label}
+              </button>
+            ))}
+            {inSection.length > shown.length && (
+              <p className="jn-hint">Showing {shown.length} of {inSection.length} — search to find the rest.</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

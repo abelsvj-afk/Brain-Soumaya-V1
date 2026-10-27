@@ -60,6 +60,11 @@ export function JourneysPanel({
   // has always accepted description (≤2000) + color — both are collected now.
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<string | undefined>(undefined);
+  // REG-161/JN-04: the explicit span dates the server has always accepted
+  // (startedAt/endedAt) — collected here so a journey's span is settable,
+  // not API-only. Bare calendar dates, stored as given.
+  const [startedAt, setStartedAt] = useState("");
+  const [endedAt, setEndedAt] = useState("");
   // IM-88: search / status filter / sort over the panel's own lists.
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<JourneyStatusFilter>("all");
@@ -79,19 +84,21 @@ export function JourneysPanel({
   };
   useEffect(() => { void refresh(); }, []);
 
-  const add = async (t: string, ic: string, desc?: string, col?: string) => {
+  const add = async (t: string, ic: string, desc?: string, col?: string, spanStart?: string, spanEnd?: string) => {
     if (!t.trim()) return;
     const created = await createJourney({
       title: t.trim(),
       icon: ic.trim() || "🧭",
       ...(desc?.trim() ? { description: desc.trim() } : {}),
       ...(col ? { color: col } : {}),
+      ...(spanStart ? { startedAt: spanStart } : {}),
+      ...(spanEnd ? { endedAt: spanEnd } : {}),
     });
     if (!created) {
       pushToast("Couldn't create that Journey — try again.", "⚠️", 3500);
       return;
     }
-    setTitle(""); setDescription(""); setColor(undefined); setAdding(false);
+    setTitle(""); setDescription(""); setColor(undefined); setStartedAt(""); setEndedAt(""); setAdding(false);
     await refresh();
   };
 
@@ -158,7 +165,11 @@ export function JourneysPanel({
         </div>
       )}
 
-      {(query.trim() !== "" || statusFilter !== "all") && shownActive.length === 0 && active.length > 0 && (
+      {/* REG-165/JN-08: the no-match hint is keyed on BOTH lists being empty
+          under the filter — the old check looked at the active list only, so
+          filter "Done" printed "No journeys match" directly above the matching
+          completed journeys. It still shows when journeys exist but none match. */}
+      {(query.trim() !== "" || statusFilter !== "all") && shownActive.length === 0 && shownDone.length === 0 && journeys.length > 0 && (
         <p className="jn-hint">No journeys match your search/filter.</p>
       )}
 
@@ -187,8 +198,18 @@ export function JourneysPanel({
             aria-label="Description"
           />
           <JourneyColorPicker value={color} onChange={setColor} />
+          <div className="jn-form-row">
+            <label className="jn-date-field">
+              <span>Starts</span>
+              <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} aria-label="Journey start date" />
+            </label>
+            <label className="jn-date-field">
+              <span>Ends</span>
+              <input type="date" value={endedAt} onChange={(e) => setEndedAt(e.target.value)} aria-label="Journey end date" />
+            </label>
+          </div>
           <div className="jn-form-actions">
-            <button className="jn-primary" onClick={() => add(title, icon, description, color)}>Create</button>
+            <button className="jn-primary" onClick={() => add(title, icon, description, color, startedAt || undefined, endedAt || undefined)}>Create</button>
             <button className="jn-secondary" onClick={() => setAdding(false)}>Cancel</button>
           </div>
         </div>
@@ -277,6 +298,9 @@ function JourneyCard({
   const [editIcon, setEditIcon] = useState("🧭");
   const [editDescription, setEditDescription] = useState("");
   const [editColor, setEditColor] = useState<string | undefined>(undefined);
+  // REG-161/JN-04: the explicit span dates, editable from the card.
+  const [editStartedAt, setEditStartedAt] = useState("");
+  const [editEndedAt, setEditEndedAt] = useState("");
 
   // Galaxy entity detail focus (Phase O): every JourneyCard in the `active` list is
   // always mounted (unlike WealthPanel's goals, which sit behind a collapsed bucket),
@@ -369,6 +393,8 @@ function JourneyCard({
     setEditIcon(src.icon ?? "🧭");
     setEditDescription(src.description ?? "");
     setEditColor(src.color);
+    setEditStartedAt(src.startedAt ?? "");
+    setEditEndedAt(src.endedAt ?? "");
     setEditing(true);
   };
 
@@ -384,6 +410,10 @@ function JourneyCard({
       // "" clears the colour server-side (an omitted/undefined field would
       // leave the old colour in place — see JourneysRepo.update's merge).
       color: editColor ?? "",
+      // REG-161/JN-04: blank clears the explicit span date (null), a picked
+      // date sets it; omitted would leave a stale span in place.
+      startedAt: editStartedAt || null,
+      endedAt: editEndedAt || null,
     });
     if (!updated) {
       pushToast("Couldn't save those changes — try again.", "⚠️", 3500);
@@ -398,6 +428,17 @@ function JourneyCard({
   const dj = detailJourney ?? j;
   const created = formatJourneyDate(dj.createdAt);
   const updated = formatJourneyDate(dj.updatedAt);
+  // REG-161/JN-04: the card's start line reflects the span start — an explicit
+  // startedAt IS the span start (spanFor: explicit wins), so it is shown as
+  // "Started"; without one, the line is honestly relabeled "Created" (the
+  // record's creation date, not the span — the link-inferred span start lives
+  // on the Chronicle band). An explicit end date is shown whenever present.
+  const spanStart = dj.startedAt ? formatJourneyDate(dj.startedAt) : null;
+  const spanEnd = dj.endedAt ? formatJourneyDate(dj.endedAt) : null;
+  // REG-160/JN-03: the missions-completed count the server ships on every
+  // list/get payload — displayed so the derived progress share is checkable
+  // against the bar.
+  const missionsDone = dj.missionsCompleted ?? j.missionsCompleted;
   const nextStep = links
     ? nextStepFor({
         status: j.status,
@@ -424,14 +465,21 @@ function JourneyCard({
       </div>
       {open && (
         <div className="jn-detail">
-          {/* IM-88: the journey's own dates, in local time. "Last moved" is the
-              record's updatedAt — links and edits both touch it server-side. */}
-          {(created || updated) && (
+          {/* REG-161/JN-04: explicit span dates are visible on the card when
+              present; otherwise the creation date is labeled as created, not
+              as the journey's start. "Last moved" is the record's updatedAt —
+              links and edits both touch it server-side. */}
+          {(created || updated || spanStart) && (
             <p className="jn-meta">
-              {created && <>Started {created}</>}
-              {created && updated && <> · </>}
+              {spanStart ? <>Started {spanStart}</> : created ? <>Created {created}</> : null}
+              {spanEnd && <> · Ends {spanEnd}</>}
+              {((spanStart || created) && updated) && <> · </>}
               {updated && <>Last moved {updated}</>}
             </p>
+          )}
+          {/* REG-160/JN-03: missions completed — the count behind the bar. */}
+          {missionsDone != null && missionsDone > 0 && (
+            <p className="jn-meta">🧭 {missionsDone} mission{missionsDone === 1 ? "" : "s"} completed</p>
           )}
           {editing ? (
             <div className="jn-form">
@@ -454,6 +502,16 @@ function JourneyCard({
                 placeholder="What is this chapter about? (optional)"
               />
               <JourneyColorPicker value={editColor} onChange={setEditColor} />
+              <div className="jn-form-row">
+                <label className="jn-date-field">
+                  <span>Starts</span>
+                  <input type="date" value={editStartedAt} onChange={(e) => setEditStartedAt(e.target.value)} aria-label="Journey start date" />
+                </label>
+                <label className="jn-date-field">
+                  <span>Ends</span>
+                  <input type="date" value={editEndedAt} onChange={(e) => setEditEndedAt(e.target.value)} aria-label="Journey end date" />
+                </label>
+              </div>
               <div className="jn-form-actions">
                 <button className="jn-primary" onClick={() => void saveEdit()}>Save changes</button>
                 <button className="jn-secondary" onClick={() => setEditing(false)}>Cancel</button>

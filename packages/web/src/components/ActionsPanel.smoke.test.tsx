@@ -78,17 +78,28 @@ describe("ActionsPanel — clearing a task is celebrated, not silent", () => {
 });
 
 describe("ActionsPanel — Agenda Zero is celebrated, not silent", () => {
-  it("plays a milestone sound only on the real >0 → 0 transition, never on an empty mount", async () => {
+  it("plays a milestone sound only when the user clears the final item, never on an empty mount or a bare count transition", async () => {
+    deleteNode.mockResolvedValue({});
     const { rerender } = render(<ActionsPanel nodes={[]} onFocus={() => {}} />);
     expect(playSfx).not.toHaveBeenCalled();
 
-    rerender(<ActionsPanel nodes={[node({ id: 1, label: "One task", kind: "action" })]} onFocus={() => {}} />);
+    rerender(<ActionsPanel nodes={[node({ id: 1, label: "One task", kind: "action", expiresAt: new Date(Date.now() + 3600_000).toISOString() })]} onFocus={() => {}} />);
     await screen.findByText("One task");
     expect(playSfx).not.toHaveBeenCalled();
 
+    // REG-147/AG-08: a bare >0 → 0 transition (e.g. a brain switch to an empty
+    // brain) must NOT celebrate — only the user's own completion does.
     rerender(<ActionsPanel nodes={[]} onFocus={() => {}} />);
+    expect(playSfx).not.toHaveBeenCalledWith("milestone");
+    expect(pushToast).not.toHaveBeenCalledWith(expect.stringContaining("Agenda Zero"), expect.anything(), expect.anything());
+
+    // The celebration still fires when the user completes the final item.
+    rerender(<ActionsPanel nodes={[node({ id: 1, label: "One task", kind: "action", expiresAt: new Date(Date.now() + 3600_000).toISOString() })]} onFocus={() => {}} />);
+    await act(async () => { (await screen.findByTitle(/Mark done/)).click(); });
+    await act(async () => { (await screen.findByText("Confirm done")).click(); });
+    await waitFor(() => expect(deleteNode).toHaveBeenCalledWith(1));
     expect(playSfx).toHaveBeenCalledWith("milestone");
-    expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Agenda Zero"), "🎯", expect.any(Number));
+    expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Agenda Zero"), "🎯", 4500);
   });
 });
 

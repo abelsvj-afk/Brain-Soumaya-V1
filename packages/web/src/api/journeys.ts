@@ -22,7 +22,7 @@ async function send<T>(path: string, method: string, body?: unknown): Promise<T 
 
 export const getJourneys = (timeoutMs: number = DEFAULT_TIMEOUT_MS) => getJson<Journey[]>("/", timeoutMs);
 export const getJourney = (id: number) => getJson<Journey & { links: JourneyLink[] }>(`/${id}`);
-export interface JourneyInput { title: string; description?: string; color?: string; icon?: string }
+export interface JourneyInput { title: string; description?: string; color?: string; icon?: string; startedAt?: string | null; endedAt?: string | null }
 export const createJourney = (j: JourneyInput) => send<Journey>("/", "POST", j);
 export const patchJourney = (id: number, patch: Partial<JourneyInput> & { status?: "active" | "paused" | "done"; progress?: number }) => send<Journey>(`/${id}`, "PATCH", patch);
 export const deleteJourney = (id: number) => send<{ ok: boolean }>(`/${id}`, "DELETE");

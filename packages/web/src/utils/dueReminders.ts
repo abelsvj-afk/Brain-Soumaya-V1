@@ -24,6 +24,11 @@ export function parseTolerantMs(raw?: string): number {
 export function isReminderDue(n: Pick<GraphNode, "kind" | "remindAt">, nowMs: number = Date.now()): boolean {
   // A Life Vision's remindAt is a target date, not a reminder (docs/specs/life-vision.md,
   // C2.1-locked) — it must never enter any reminder-notification/agenda/toast surface.
+  // Actions are excluded the same way — and the exclusion is now an enforced
+  // invariant, not an assumption: the ingest paths refuse remindAt on actions
+  // (REG-144/AG-05; IngestPanel refuses the combination, the server's action
+  // branch drops it), so no write path can create the state this predicate
+  // would otherwise hide from every reminder surface.
   if (n.kind === "action" || n.kind === "life_vision" || !n.remindAt) return false;
   return parseTolerantMs(n.remindAt) <= nowMs;
 }

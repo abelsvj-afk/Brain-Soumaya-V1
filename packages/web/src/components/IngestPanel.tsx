@@ -161,6 +161,17 @@ export function IngestPanel({
   async function submit() {
     const body = details.trim() ? `${text.trim()}\n\n${details.trim()}` : text.trim();
     if (!body) return;
+    // REG-144/AG-05: an action item can never carry a reminder — the firing
+    // tool would deliver it while every web reminder surface excludes
+    // actions, so it would fire invisibly (unseeable, unsnoozeable,
+    // unacknowledgeable). Refuse the combination up front and say so, instead
+    // of silently dropping the remindAt the user asked for; the server's
+    // action branch drops it too as a backstop. An action's due time is its
+    // expiry (ttl), which Agenda already shows and counts down.
+    if (action && toIso(remind)) {
+      setError("Action items can't carry a separate reminder — their due time is the expiry above. Untick \"📌 Action item\" to set a reminder, or clear the reminder time.");
+      return;
+    }
     stopMic();
     setBusy(true);
     setMsg("");
@@ -180,10 +191,13 @@ export function IngestPanel({
       const fuelBit = r.fuelEarned ? ` · +${r.fuelEarned.toFixed(1)} ⛽` : "";
       const weighty = r.nodes.some((x: any) => (x.importance ?? 0) >= 0.6);
       const researchBit = action ? "" : weighty ? " · 🔬 may deep-dive in Research Mode" : " · 🗃️ stored, no research needed";
+      // REG-143/AG-04: the pipeline stamps the reminder on the FIRST node
+      // only — name that carrier here so the user knows which memory holds it.
+      const reminderBit = !action && toIso(remind) && r.nodes[0] ? ` · 🔔 reminder on "${(r.nodes[0].label ?? "").slice(0, 30)}"` : "";
       setMsg(
         action
           ? `Action item added (expires in ${ttl}h)${fuelBit}`
-          : `+${n} node${n !== 1 ? "s" : ""}, ${e} connection${e !== 1 ? "s" : ""}${fuelBit}${researchBit}`,
+          : `+${n} node${n !== 1 ? "s" : ""}, ${e} connection${e !== 1 ? "s" : ""}${fuelBit}${researchBit}${reminderBit}`,
       );
       setCreatedNodes(r.nodes.map((x: any) => ({ id: x.id, label: x.label })));
       clearAfterSave();
@@ -418,6 +432,11 @@ export function IngestPanel({
       <label className="action-toggle">
         <input type="checkbox" checked={action} onChange={(e) => setAction(e.target.checked)} />
         📌 Action item (a to-do that times out)
+        {action && remind && (
+          <span className="ingest-warn" style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
+            ⚠️ A reminder time is set above — action items can't carry one (their due time is the expiry). Clear it, or untick this to save a reminder.
+          </span>
+        )}
         {action && (
           <select value={ttl} onChange={(e) => setTtl(Number(e.target.value))}>
             <option value={24}>today (24h)</option>

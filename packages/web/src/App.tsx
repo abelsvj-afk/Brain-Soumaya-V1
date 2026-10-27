@@ -181,6 +181,20 @@ export default function App() {
   // real "Ask Soumaya about this" click in JourneysPanel; consumed by ChatDock on the
   // very next message it actually sends, then cleared.
   const [pendingJourneyId, setPendingJourneyId] = useState<number | null>(null);
+  // REG-159/JN-01: the armed journey's title, carried alongside its id so the
+  // chat banner can NAME the scope (an id alone names nothing on screen).
+  const [pendingJourneyTitle, setPendingJourneyTitle] = useState<string | null>(null);
+  // REG-159/JN-01: the armed journey context dies with the chat — every path
+  // that hides the dock (×, Escape, FAB toggle, quick-tool navigation) flows
+  // through showChat going false, so disarm here, once, instead of hunting
+  // each close call site. An unrelated question later must never silently
+  // inherit a stale journey scope.
+  useEffect(() => {
+    if (!showChat) {
+      setPendingJourneyId(null);
+      setPendingJourneyTitle(null);
+    }
+  }, [showChat]);
   const [showWealthFullscreen, setShowWealthFullscreen] = useState(false);
   const [showFinanceFullscreen, setShowFinanceFullscreen] = useState(false);
   const [chatPulse, setChatPulse] = useState(false); // she's hailing — pulse the FAB
@@ -2331,6 +2345,15 @@ export default function App() {
               setData({ nodes: [], links: [] });
               setSelected(null);
               setPanel(null);
+              // REG-159 (JN-01): disarm the chat too — without setShowChat(false)
+              // the dock unmounts with showChat still true, and on the next login
+              // it remounts with the old journey armed, its stale id resolving
+              // in the NEW space. The showChat-false effect clears the pending
+              // journey as well; clear it explicitly so the disarm does not
+              // depend on effect timing.
+              setShowChat(false);
+              setPendingJourneyId(null);
+              setPendingJourneyTitle(null);
             }}
           >
             {space.name} ⏏
@@ -2937,12 +2960,17 @@ export default function App() {
             // The brain is deleted server-side and AccountSettings already
             // cleared the local credential via logoutSpace(); mirror the
             // switch-brain handler above so the app returns to the login
-            // screen with no stale in-memory state.
+            // screen with no stale in-memory state — including the armed
+            // journey (REG-159/JN-01): the dock must not remount on the next
+            // login with the old journey armed in the new space.
             logoutSpace();
             setSpace(null);
             setData({ nodes: [], links: [] });
             setSelected(null);
             setPanel(null);
+            setShowChat(false);
+            setPendingJourneyId(null);
+            setPendingJourneyTitle(null);
             setShowSettings(false);
           }}
           focusAudio={settingsFocusAudio}
@@ -3010,7 +3038,8 @@ export default function App() {
           proactiveContext={pendingProactiveContext}
           onConsumeProactiveContext={() => setPendingProactiveContext(null)}
           journeyId={pendingJourneyId}
-          onConsumeJourneyContext={() => setPendingJourneyId(null)}
+          journeyTitle={pendingJourneyTitle}
+          onConsumeJourneyContext={() => { setPendingJourneyId(null); setPendingJourneyTitle(null); }}
           onNavigate={(nav) => {
             // Maya Chat → Galaxy Navigation: user clicked the chip — this is the ONLY
             // trigger, never automatic. Same imperative path + safety as a direct click
@@ -3160,6 +3189,7 @@ export default function App() {
             // Phase Y/Z already established for proactiveContext, just keyed by a
             // Journey id instead of a proactive source. No new scoping system.
             setPendingJourneyId(j.id);
+            setPendingJourneyTitle(j.title);
             setShowChat(true);
             pushToast(`🧭 Opening chat about "${j.title}"`, "🧭", 3500);
           }}

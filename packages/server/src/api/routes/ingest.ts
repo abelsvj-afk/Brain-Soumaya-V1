@@ -38,6 +38,12 @@ export function ingestRoutes(ctx: AppContext): Router {
 
     // Action items are quick to-dos: a small body, no LLM extraction or linking,
     // and an expiry. (Keeps them cheap + transient, distinct from real memories.)
+    // REG-144/AG-05: an action NEVER carries remindAt — the firing tool would
+    // deliver it while every web reminder surface excludes actions, so the
+    // reminder would fire invisibly. The capture paths refuse the combination
+    // up front (IngestPanel) and say so; this branch is the backstop that
+    // drops a remindAt any other caller sends, so the write paths can never
+    // create the data state the read surfaces assert is impossible.
     if (kind === "action") {
       const expiresAt = new Date(Date.now() + (ttlHours ?? 24) * 3_600_000).toISOString();
       const label = text.trim().split(/\s+/).slice(0, 6).join(" ") || "Action item";
@@ -51,7 +57,6 @@ export function ingestRoutes(ctx: AppContext): Router {
           kind: "action",
           expiresAt,
           occurredAt,
-          remindAt,
           tags,
         },
         vec,

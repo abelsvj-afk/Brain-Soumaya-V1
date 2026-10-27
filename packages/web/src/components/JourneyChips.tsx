@@ -58,7 +58,14 @@ export function JourneyChips({ kind, refId }: { kind: JourneyLinkKind; refId: nu
           <span key={j.id} className="jn-chip on">
             {j.icon ?? "🧭"} {j.title}
             <button className="jn-chip-x" aria-label={`Remove from ${j.title}`}
-              onClick={async () => { await unlinkFromJourney(j.id, kind, refId); await refresh(); }}>×</button>
+              onClick={async () => {
+                // REG-164/JN-07: a failed unlink used to fail silently (the
+                // boolean result was discarded) — toast like the picker and
+                // panel already do, so the user knows the chip didn't come off.
+                const ok = await unlinkFromJourney(j.id, kind, refId);
+                if (!ok) { pushToast("Couldn't remove that from the Journey — try again.", "⚠️", 3500); return; }
+                await refresh();
+              }}>×</button>
           </span>
         ))}
         {mine.length === 0 && suggested.length === 0 && !adding && <span className="ni-journeys-empty">Not part of a journey yet.</span>}
@@ -69,7 +76,13 @@ export function JourneyChips({ kind, refId }: { kind: JourneyLinkKind; refId: nu
       {suggested.length > 0 && (
         <div className="ni-journeys-row ni-journeys-suggested">
           {suggested.map((j) => (
-            <button key={j.id} className="jn-chip suggest" onClick={async () => { await linkToJourney(j.id, kind, refId); await refresh(); }}>
+            <button key={j.id} className="jn-chip suggest" onClick={async () => {
+              // REG-164/JN-07: check the link result — a failed tap used to
+              // close nothing and say nothing.
+              const ok = await linkToJourney(j.id, kind, refId);
+              if (!ok) { pushToast("Couldn't link that — try again.", "⚠️", 3500); return; }
+              await refresh();
+            }}>
               ✨ {j.icon ?? "🧭"} {j.title}
             </button>
           ))}
@@ -78,7 +91,13 @@ export function JourneyChips({ kind, refId }: { kind: JourneyLinkKind; refId: nu
       {adding && (
         <div className="ni-journeys-add">
           {addable.map((j) => (
-            <button key={j.id} className="jn-chip" onClick={async () => { await linkToJourney(j.id, kind, refId); setAdding(false); await refresh(); }}>
+            <button key={j.id} className="jn-chip" onClick={async () => {
+              // REG-164/JN-07: same failure honesty as the suggested chips.
+              const ok = await linkToJourney(j.id, kind, refId);
+              if (!ok) { pushToast("Couldn't link that — try again.", "⚠️", 3500); return; }
+              setAdding(false);
+              await refresh();
+            }}>
               {j.icon ?? "🧭"} {j.title}
             </button>
           ))}

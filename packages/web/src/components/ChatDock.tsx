@@ -228,6 +228,7 @@ export function ChatDock({
   proactiveContext,
   onConsumeProactiveContext,
   journeyId,
+  journeyTitle,
   onConsumeJourneyContext,
   seedQuestion,
 }: {
@@ -263,7 +264,12 @@ export function ChatDock({
    * message actually sent (see `onConsumeJourneyContext`), never replayed on later turns.
    */
   journeyId?: number | null;
-  /** Called once this dock has used `journeyId` for a send, so the caller can clear it. */
+  /** Title of the armed journey, for the visible scope banner (REG-159/JN-01):
+   *  an id alone names nothing on screen, and an unnamed scope is exactly the
+   *  invisible-context defect. Supplied by App alongside journeyId. */
+  journeyTitle?: string | null;
+  /** Called once this dock has used `journeyId` for a send, so the caller can
+   *  clear it — or when the user dismisses the armed scope from the banner. */
   onConsumeJourneyContext?: () => void;
   /**
    * REG-188 (SP-05): a seed question carried in from a zero-results escape
@@ -907,6 +913,26 @@ export function ChatDock({
           </button>
         </div>
       </header>
+
+      {/* REG-159/JN-01: an armed journey context is visible while it lasts —
+          the chat names the journey whose scope the next send will carry, with
+          a one-tap dismiss. Without this, closing the chat unsent left a stale
+          scope armed invisibly for a later, unrelated question. */}
+      {journeyId != null && (
+        <div className="chatdock-journey-banner" role="status">
+          <span className="chatdock-journey-banner-text">
+            🧭 Chatting about “{journeyTitle ?? "this journey"}” — answers stay inside it.
+          </span>
+          <button
+            className="chatdock-journey-banner-dismiss"
+            onClick={() => onConsumeJourneyContext?.()}
+            title="Remove the journey scope — ask about the whole galaxy instead"
+            aria-label="Remove journey scope"
+          >
+            ✕ Remove scope
+          </button>
+        </div>
+      )}
 
       {showPersona ? (
         <div className="chatdock-msgs chatdock-persona">

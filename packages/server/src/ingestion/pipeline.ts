@@ -105,9 +105,13 @@ async function ingestCore(
   const labelToId = new Map<string, number>();
   for (let i = 0; i < extraction.nodes.length; i++) {
     const n = extraction.nodes[i]!;
-    // Stamp the user's event date / reminder / tags on each node from this dump.
+    // Stamp the user's event date / tags on each node from this dump — but
+    // the reminder on the FIRST node only (REG-143/AG-04): stamping remindAt
+    // on every node turned one "add reminder" into N independent reminders
+    // (N firings, N cap slots, N due rows, one toast claiming a single one).
+    // occurredAt/tags describe the whole dump, so they still stamp everywhere.
     const node = nodesRepo.create(
-      { ...n, occurredAt: meta?.occurredAt, remindAt: meta?.remindAt, tags: meta?.tags },
+      { ...n, occurredAt: meta?.occurredAt, remindAt: i === 0 ? meta?.remindAt : undefined, tags: meta?.tags },
       vectors[i]!,
     );
     createdNodes.push(node);
