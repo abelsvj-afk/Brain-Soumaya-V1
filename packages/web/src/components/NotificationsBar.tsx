@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type GraphNode, type Fuel, LOW_FUEL_THRESHOLD } from "@brain/shared";
 import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
@@ -13,19 +13,35 @@ interface NotificationsBarProps {
   onOpenTab: (tab: DockTab) => void;
   /** Open the "Ways to earn Fuel" cheat-sheet (from the low-fuel alert). */
   onEarnFuel?: () => void;
+  /** Batch I (REG-069 / GH-16): the space these alerts belong to.
+   * Dismissals are scoped per space — dismissing an alert in one brain
+   * must never hide it in another. */
+  spaceId?: string | null;
 }
 
-const DISMISS_KEY = "brain.dismissedAlerts";
+/** Per-space dismissal key — the session evaporation is the intended
+ * half (a dismissal lasts the session); only the cross-brain bleed is
+ * the defect. Spaces without an id share the legacy key. */
+export function dismissedAlertsKey(spaceId?: string | null): string {
+  return `brain.dismissedAlerts.${spaceId ?? "legacy"}`;
+}
 
-export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, onEarnFuel }: NotificationsBarProps) {
+export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, onEarnFuel, spaceId }: NotificationsBarProps) {
+  const dismissKey = dismissedAlertsKey(spaceId);
   const [dismissed, setDismissed] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(sessionStorage.getItem(DISMISS_KEY) || "[]")); } catch { return new Set(); }
+    try { return new Set(JSON.parse(sessionStorage.getItem(dismissKey) || "[]")); } catch { return new Set(); }
   });
+  // The bar stays mounted across brain switches — re-read the new
+  // space's dismissals when the space changes, or brain A's dismissals
+  // would leak into brain B's render until a remount.
+  useEffect(() => {
+    try { setDismissed(new Set(JSON.parse(sessionStorage.getItem(dismissKey) || "[]"))); } catch { setDismissed(new Set()); }
+  }, [dismissKey]);
   const dismiss = (id: string) =>
     setDismissed((prev) => {
       const next = new Set(prev);
       next.add(id);
-      try { sessionStorage.setItem(DISMISS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      try { sessionStorage.setItem(dismissKey, JSON.stringify([...next])); } catch { /* ignore */ }
       return next;
     });
 

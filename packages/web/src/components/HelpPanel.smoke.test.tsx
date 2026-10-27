@@ -184,3 +184,15 @@ describe("HelpPanel — IM-131 remainder: Connections card, Getting Started land
     window.removeEventListener("brain-toast-action", onAction);
   });
 });
+
+describe("HelpPanel — MindSpace discoverability (REG-071 / GH-18)", () => {
+  it("has a MindSpace card naming the ambient layer and its Mind-tab switch", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "MindSpace" } });
+    // The card's own title — not the search header's echo of the query,
+    // and not the icon (the icon renders in its own element).
+    expect(screen.getByText("MindSpace — thoughts drifting in your galaxy")).toBeTruthy();
+    expect(screen.getByText(/off until switched on/i)).toBeTruthy();
+    expect(screen.getByText("🧠 Open Mind")).toBeTruthy();
+  });
+});

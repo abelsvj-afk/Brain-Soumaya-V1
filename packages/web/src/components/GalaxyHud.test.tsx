@@ -262,3 +262,30 @@ describe("HUD round 3 — useShipStatusOpen (per-brain persistence + defaults)",
     expect(resolveShipStatusOpen("brain-d", 1440, 900)).toEqual({ open: false, reveal: false });
   });
 });
+
+describe("Batch I — useShipStatusOpen resolves before the first paint (REG-068 / GH-14)", () => {
+  it("a stored collapsed preference is already collapsed on the FIRST render — no expanded flash", () => {
+    localStorage.setItem("ship.status.brain-flash", "0");
+    const seen: boolean[] = [];
+    function Probe() {
+      const [open] = useShipStatusOpen("brain-flash");
+      seen.push(open);
+      return null;
+    }
+    render(<Probe />);
+    expect(seen[0]).toBe(false);
+    expect(seen[seen.length - 1]).toBe(false);
+  });
+
+  it("a stored expanded preference is already expanded on the FIRST render", () => {
+    localStorage.setItem("ship.status.brain-open", "1");
+    const seen: boolean[] = [];
+    function Probe() {
+      const [open] = useShipStatusOpen("brain-open");
+      seen.push(open);
+      return null;
+    }
+    render(<Probe />);
+    expect(seen[0]).toBe(true);
+  });
+});

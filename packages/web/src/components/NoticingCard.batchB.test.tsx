@@ -98,3 +98,30 @@ describe("GH-19 — dismiss honesty", () => {
     expect(pushToast).not.toHaveBeenCalledWith(expect.stringMatching(/couldn't wave/i), expect.anything(), expect.anything());
   });
 });
+
+describe("REG-110 — reject honesty (the GH-19 defect class on reject)", () => {
+  it("a FAILED reject keeps the inquiry and explains, instead of a false success", async () => {
+    rejectInquiry.mockResolvedValue(false);
+    await openCard();
+    await act(async () => { screen.getByText("Not related").click(); });
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.stringMatching(/couldn't/i), "⚠️", expect.any(Number)),
+    );
+    expect(screen.getByText("Are these two memories connected?")).toBeTruthy();
+    expect(pushToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("won't tie those together"),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("a VERIFIED reject removes the inquiry with the success note", async () => {
+    rejectInquiry.mockResolvedValue(true);
+    await openCard();
+    await act(async () => { screen.getByText("Not related").click(); });
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("won't tie those together"), "🧠", expect.any(Number)),
+    );
+    await waitFor(() => expect(screen.queryByText("Are these two memories connected?")).toBeNull());
+  });
+});

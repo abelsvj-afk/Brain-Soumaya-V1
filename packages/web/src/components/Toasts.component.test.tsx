@@ -115,3 +115,24 @@ describe("Toasts — hover must not reset the shared countdown", () => {
     setIntervalSpy.mockRestore();
   });
 });
+
+describe("Toasts — the overflow chip opens the Inbox (REG-072 / GH-21)", () => {
+  it("clicking the overflow chip dispatches the Inbox tab action", async () => {
+    const onAction = vi.fn();
+    window.addEventListener("brain-toast-action", onAction);
+    try {
+      const { Toasts, pushToast } = await freshToasts();
+      render(<Toasts />);
+      act(() => {
+        for (let i = 0; i < 6; i++) pushToast(`Toast ${i}`, "✨", 8000);
+      });
+      const chip = screen.getByText("2 more notifications — see Inbox");
+      fireEvent.click(chip);
+      expect(onAction).toHaveBeenCalledWith(
+        expect.objectContaining({ detail: { kind: "tab", value: "inbox" } }),
+      );
+    } finally {
+      window.removeEventListener("brain-toast-action", onAction);
+    }
+  });
+});

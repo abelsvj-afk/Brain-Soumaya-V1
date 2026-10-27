@@ -2611,6 +2611,71 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                 mq.t += motionDt * 0.36;
                 mat.map!.offset.x = (Math.sin(mq.t) * 0.5 + 0.5) * mq.range;
               }
+              // Batch I (REG-061 / GH-02): sector titles get the same
+              // whole-box edge clamp the planet labels carry — a wide
+              // title anchored near the screen edge slides its CENTRE
+              // until the whole box lands inside the safe frame, instead
+              // of running off-screen. Same machinery, same guarantee:
+              // the base position is captured once and every pass
+              // recomputes from it, so as the camera moves the title
+              // restores exactly — no drift. Runs AFTER the scale is
+              // set above, so the half extents are the on-screen size.
+              if (IS_PHONE_PORTRAIT) {
+                if (!child.userData.titleBasePos) {
+                  child.userData.titleBasePos = child.position.clone();
+                }
+                const titleBasePos = child.userData.titleBasePos as THREE.Vector3;
+                const titleParentScale = o.scale.x > 0 ? o.scale.x : 1;
+                labelProjScratch.set(
+                  tmp.x + titleBasePos.x * titleParentScale,
+                  tmp.y + titleBasePos.y * titleParentScale,
+                  tmp.z + titleBasePos.z * titleParentScale,
+                );
+                const titleDistCam = camera.position.distanceTo(labelProjScratch);
+                labelProjScratch.project(camera);
+                if (labelProjScratch.z < 1 && titleDistCam > 0) {
+                  const titlePersp = camera as THREE.PerspectiveCamera;
+                  const titleVw = window.innerWidth;
+                  const titleVh = window.innerHeight;
+                  const titleTanV = Math.tan((titlePersp.fov * Math.PI) / 360);
+                  const titleDepth = cameraDepthFromNdc(
+                    titleDistCam,
+                    labelProjScratch.x,
+                    labelProjScratch.y,
+                    titleTanV,
+                    titlePersp.aspect,
+                  );
+                  const { halfW: titleHalfW, halfH: titleHalfH } = labelHalfExtentsPx(
+                    child.scale.x * titleParentScale,
+                    child.scale.y * titleParentScale,
+                    titleDepth,
+                    titlePersp.fov,
+                    titlePersp.aspect,
+                    titleVw,
+                    titleVh,
+                  );
+                  const titleClamped = clampLabelCenter(
+                    (labelProjScratch.x * 0.5 + 0.5) * titleVw,
+                    (0.5 - labelProjScratch.y * 0.5) * titleVh,
+                    titleHalfW,
+                    titleHalfH,
+                    titleVw,
+                    titleVh,
+                  );
+                  if (titleClamped.clamped) {
+                    labelProjScratch
+                      .set((titleClamped.x / titleVw) * 2 - 1, 1 - (titleClamped.y / titleVh) * 2, labelProjScratch.z)
+                      .unproject(camera);
+                    child.position.set(
+                      (labelProjScratch.x - tmp.x) / titleParentScale,
+                      (labelProjScratch.y - tmp.y) / titleParentScale,
+                      (labelProjScratch.z - tmp.z) / titleParentScale,
+                    );
+                  } else {
+                    child.position.copy(titleBasePos);
+                  }
+                }
+              }
             }
           }
 

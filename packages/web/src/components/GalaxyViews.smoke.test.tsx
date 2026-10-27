@@ -111,3 +111,28 @@ describe("GalaxyViews — first-use discoverability", () => {
     expect(second.container.querySelector(".gv-chips")).toBeNull(); // second mount: back to normal
   });
 });
+
+/**
+ * Batch I — GH-05 (REG-067): the Money/Journeys layer counts must not
+ * fail silently — a failed fetch leaves a distinguishable trace (error
+ * + retry), never a silently absent chip. Fail-before: the catches
+ * swallow the failure and no error UI exists.
+ */
+describe("GalaxyViews — a failed layer load is disclosed with a retry", () => {
+  it("shows a retryable error when the Money sky fetch fails, and clears it on retry", async () => {
+    const { getMoneySky } = await import("../api/finance.js");
+    vi.mocked(getMoneySky).mockRejectedValueOnce(new Error("boom"));
+    render(
+      <GalaxyViews nodes={[goalNode(1)]} activeView={null} onOpen={vi.fn()} onExit={vi.fn()} onLayer={vi.fn()} />,
+    );
+    screen.getByText(/Views/).click();
+    const err = await screen.findByText(/couldn't load the money sky/i);
+    expect(err).toBeTruthy();
+    // The Money sky chip itself is absent — but the absence is now disclosed, not silent.
+    expect(screen.queryByText("💵 Money sky")).toBeNull();
+    vi.mocked(getMoneySky).mockResolvedValueOnce([{ id: 1 } as never]);
+    screen.getByText(/retry/i).click();
+    await waitFor(() => expect(screen.queryByText(/couldn't load the money sky/i)).toBeNull());
+    expect(await screen.findByText("💵 Money sky")).toBeTruthy();
+  });
+});

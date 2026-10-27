@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphNode } from "@brain/shared";
 import { getMoneySky } from "../api/finance.js";
 import { getJourneys } from "../api/journeys.js";
@@ -82,14 +82,36 @@ export function GalaxyViews({
   // until the fetch lands (or when it fails — then the chips fall back to the
   // payload-only counts they always had).
   const [catCounts, setCatCounts] = useState<Record<string, number> | null>(null);
+  // Batch I (REG-067 / GH-05): a failed layer load is a visible state,
+  // not a silently absent chip. Which layers failed to load — null when
+  // everything loaded (or nothing has been attempted yet).
+  const [layerError, setLayerError] = useState<"money" | "journeys" | "both" | null>(null);
 
   // These are separate render layers (not graph nodes), so we count them directly.
+  const loadLayers = useCallback(async () => {
+    const [money, journeys] = await Promise.allSettled([getMoneySky(), getJourneys()]);
+    if (money.status === "fulfilled") {
+      setMoneyCount(money.value?.length ?? 0);
+    }
+    if (journeys.status === "fulfilled") {
+      setJourneyCount((journeys.value ?? []).filter((x) => x.status !== "done").length);
+    }
+    setLayerError(
+      money.status === "rejected" && journeys.status === "rejected"
+        ? "both"
+        : money.status === "rejected"
+          ? "money"
+          : journeys.status === "rejected"
+            ? "journeys"
+            : null,
+    );
+  }, []);
+
   useEffect(() => {
     if (!open) return;
-    getMoneySky().then((s) => setMoneyCount(s?.length ?? 0)).catch(() => {});
-    getJourneys().then((j) => setJourneyCount((j ?? []).filter((x) => x.status !== "done").length)).catch(() => {});
+    void loadLayers();
     getCategoryCounts().then((c) => { if (c) setCatCounts(c); }).catch(() => {});
-  }, [open]);
+  }, [open, loadLayers]);
 
   // Which categories actually have bodies, with their ids. `ids` is the
   // loaded payload's intersection; `total` is the full-set count — a category
@@ -214,6 +236,21 @@ export function GalaxyViews({
             </button>
           )}
           {activeView && <button className="gv-chip gv-all" onClick={onExit}>★ Show all</button>}
+          {/* Batch I (REG-067 / GH-05): a failed layer load leaves a
+              visible trace — which layer failed, and a retry — instead
+              of its chip silently vanishing from the sheet. */}
+          {layerError && (
+            <div className="gv-layer-error" role="alert">
+              <span>
+                Couldn&apos;t load the{" "}
+                {layerError === "both" ? "Money sky and Journeys" : layerError === "money" ? "Money sky" : "Journeys"}
+                {" "}— those views are hidden for now.
+              </span>
+              <button type="button" className="gv-chip" onClick={() => void loadLayers()}>
+                Retry
+              </button>
+            </div>
+          )}
         </div>
       {/* Pinned Smart Lenses live in this SAME dropdown now, not their own floating overlay
           (see .lens-list's CSS comment) — Views and Lens are already "two legitimate,
