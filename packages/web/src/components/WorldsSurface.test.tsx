@@ -82,6 +82,16 @@ const atPeople = (over: Partial<UseTravel> = {}) =>
     ...over,
   });
 
+const atScale = (over: Partial<UseTravel> = {}) =>
+  fakeTravel({
+    state: {
+      currentWorld: "scale",
+      activeJourney: null,
+      fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+    },
+    ...over,
+  });
+
 const gardenGraph = {
   nodes: [
     { id: 1, label: "a", type: "memory", content: "", createdAt: "2026-10-01T00:00:00.000Z" },
@@ -223,7 +233,7 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
     mockUseTravel.mockReturnValue(
       fakeTravel({
         state: {
-          currentWorld: "scale",
+          currentWorld: "not-a-world",
           activeJourney: null,
           fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
         },
@@ -413,5 +423,28 @@ describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], null);
     expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], 100);
+  });
+});
+
+describe("WorldsSurface — Scale (Phase 3)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+  });
+
+  it("at Scale it mounts the station view; without WebGL it degrades honestly", async () => {
+    mockUseTravel.mockReturnValue(atScale());
+    render(<WorldsSurface enabled graph={null} />);
+    expect(screen.getByRole("dialog", { name: "Scale" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your journeys are unaffected/)).toBeTruthy();
+  });
+
+  it("at Scale it needs no graph — the space carries no memories of its own", async () => {
+    mockUseTravel.mockReturnValue(atScale());
+    render(<WorldsSurface enabled graph={null} />);
+    expect(screen.getByRole("dialog", { name: "Scale" })).toBeTruthy();
+    // No loading line: Scale's layout builds without the graph.
+    expect(screen.queryByText(/coming into view/)).toBeNull();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
   });
 });

@@ -51,8 +51,9 @@ import {
  *  P3-2 adds the Deep Past; P3-3 adds the People (gated — see
  *  peopleGateOpen: the key alone does not admit travel there). Wave 2
  *  adds Quiet/Archive — ungated: any traveller may visit, and an empty
- *  archive renders the still field itself (the note's C1–C3). */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive"];
+ *  archive renders the still field itself (the note's C1–C3). Wave 2
+ *  also adds Scale — ungated, public: the real ISS at real size. */
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale"];
 export const HOME_WORLD = "home";
 
 export type TravelErrorCode =

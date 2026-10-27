@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { buildGate, GATE_DRESSINGS, GATE_RADIUS, GATE_BEAD_COUNT } from "./gateScene.js";
+import {
+  buildGate,
+  buildSurveyFrame,
+  GATE_DRESSINGS,
+  GATE_RADIUS,
+  GATE_BEAD_COUNT,
+  SURVEY_FRAME_BEACON_COUNT,
+} from "./gateScene.js";
 
 function find(group: THREE.Group, name: string): THREE.Object3D | undefined {
   let found: THREE.Object3D | undefined;
@@ -57,7 +64,7 @@ describe("buildGate", () => {
   });
 
   it("unknown worlds fall back to the home dressing, never a missing gate", () => {
-    const gate = buildGate("scale");
+    const gate = buildGate("not-a-world");
     const ring = find(gate.group, "gate-ring") as THREE.Mesh;
     expect((ring.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
       GATE_DRESSINGS["home"]!.ring,
@@ -80,6 +87,53 @@ describe("buildGate", () => {
     expect(() => {
       gate.dispose();
       gate.dispose();
+    }).not.toThrow();
+  });
+});
+
+describe("buildSurveyFrame (Scale's gate silhouette)", () => {
+  it("builds a rectangular frame of thin light — four bars, four corner beacons (5 draw calls)", () => {
+    const frame = buildSurveyFrame(130, 50);
+    expect(find(frame.group, "survey-frame-top")).toBeTruthy();
+    expect(find(frame.group, "survey-frame-bottom")).toBeTruthy();
+    expect(find(frame.group, "survey-frame-left")).toBeTruthy();
+    expect(find(frame.group, "survey-frame-right")).toBeTruthy();
+    const beacons = find(frame.group, "survey-frame-beacons") as THREE.InstancedMesh;
+    expect(beacons).toBeTruthy();
+    expect(beacons.count).toBe(SURVEY_FRAME_BEACON_COUNT);
+    // Four bars + one instanced beacon mesh = 5.
+    let meshes = 0;
+    frame.group.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh || (o as THREE.InstancedMesh).isInstancedMesh) meshes++;
+    });
+    expect(meshes).toBe(5);
+    frame.dispose();
+  });
+
+  it("the frame is a rectangle, not a ring — wider than tall, corners at the beacons", () => {
+    const frame = buildSurveyFrame(130, 50);
+    const top = find(frame.group, "survey-frame-top")!;
+    const left = find(frame.group, "survey-frame-left")!;
+    expect(top.position.y).toBe(25);
+    expect(left.position.x).toBe(-65);
+    const beacons = find(frame.group, "survey-frame-beacons") as THREE.InstancedMesh;
+    const m = new THREE.Matrix4();
+    beacons.getMatrixAt(0, m);
+    const p = new THREE.Vector3().setFromMatrixPosition(m);
+    expect([Math.abs(p.x), Math.abs(p.y)]).toEqual([65, 25]);
+    frame.dispose();
+  });
+
+  it("Scale's transit gate dresses solar gold — the station's own light, cyan reserved for the frame", () => {
+    expect(GATE_DRESSINGS["scale"]).toBeTruthy();
+    expect(GATE_DRESSINGS["scale"]!.accent).toBe(0xffc95e);
+  });
+
+  it("dispose is safe, including twice", () => {
+    const frame = buildSurveyFrame();
+    expect(() => {
+      frame.dispose();
+      frame.dispose();
     }).not.toThrow();
   });
 });

@@ -47,6 +47,19 @@ describe("worldMap — discovery (Q2/Q3)", () => {
     expect(Math.hypot(archive!.x - home.x, archive!.y - home.y)).toBeGreaterThan(300);
   });
 
+  it("Scale appears once travelled — far below, alone in the empty part of the chart, solar gold", () => {
+    const data = atHome([{ origin: "home", destination: "scale" }]);
+    const scale = data.nodes.find((n) => n.key === "scale");
+    expect(scale).toBeTruthy();
+    expect(scale!.name).toBe("Scale");
+    expect(scale!.color).toBe("#ffc95e");
+    // The vast space is the point: far from every other node.
+    for (const other of data.nodes) {
+      if (other.key === "scale") continue;
+      expect(Math.hypot(scale!.x - other.x, scale!.y - other.y)).toBeGreaterThan(200);
+    }
+  });
+
   it("a journey in progress counts as discovery in motion — the map shows where you are going", () => {
     const data = deriveMapData({
       currentWorld: "home",
@@ -67,7 +80,7 @@ describe("worldMap — discovery (Q2/Q3)", () => {
   });
 
   it("off-chart keys never appear, even when the record names them", () => {
-    const data = atHome([{ origin: "home", destination: "scale" }]);
+    const data = atHome([{ origin: "home", destination: "not-a-world" }]);
     expect(data.nodes.map((n) => n.key)).toEqual(["home"]);
   });
 

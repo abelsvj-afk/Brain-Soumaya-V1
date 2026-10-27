@@ -39,6 +39,11 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     name: "Quiet/Archive",
     blurb: "The resting place — where what you put away rests, whole, for a deliberate visit.",
   },
+  {
+    key: "scale",
+    name: "Scale",
+    blurb: "The actual station, actual size — the real ISS beside your ship, so the size is felt, not stated.",
+  },
 ];
 
 export interface RouteOption {

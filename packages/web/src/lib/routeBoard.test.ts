@@ -12,7 +12,7 @@ const state = (currentWorld: string, fuel: number, peopleGateOpen?: boolean): Tr
 describe("buildRouteBoard", () => {
   it("charts both worlds and marks the current one (no options to stay put)", () => {
     const board = buildRouteBoard(state("home", 25));
-    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "quiet-archive"]);
+    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "quiet-archive", "scale"]);
     expect(board[0]!.isCurrent).toBe(true);
     expect(board[0]!.options).toEqual([]);
   });
@@ -46,7 +46,7 @@ describe("buildRouteBoard", () => {
 
   it("charts People once the server says the gate is open, same warp/drift options", () => {
     const board = buildRouteBoard(state("home", 25, true));
-    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive"]);
+    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale"]);
     const people = board[4]!;
     expect(people.name).toBe("The People");
     expect(people.options).toEqual([
@@ -61,6 +61,17 @@ describe("buildRouteBoard", () => {
     const archive = board.find((e) => e.world === "quiet-archive")!;
     expect(archive.name).toBe("Quiet/Archive");
     expect(archive.options).toEqual([
+      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "drift", label: "Drift", cost: 0, affordable: true },
+    ]);
+  });
+
+  it("charts Scale (Phase 3) with the same warp/drift options — no gate, it is public", () => {
+    const board = buildRouteBoard(state("home", 25));
+    const scale = board.find((e) => e.world === "scale")!;
+    expect(scale.name).toBe("Scale");
+    expect(scale.blurb).toMatch(/actual station, actual size/);
+    expect(scale.options).toEqual([
       { kind: "warp", label: "Warp", cost: 10, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
