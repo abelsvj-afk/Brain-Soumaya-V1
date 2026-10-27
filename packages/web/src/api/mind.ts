@@ -18,6 +18,13 @@ export interface CognitiveItem {
   /** Set once a goal actually finished (never cleared). Always null for other kinds. */
   completedAt: string | null;
   degree: number;
+  /**
+   * Batch L (MIN-05, REG-136) — incoming `supports` edges: the count the
+   * "Ripe" label is DEFINED on (the server's ripeIdeaIds counts exactly
+   * this; `degree` counts every edge, either direction, any relationship).
+   * Optional for older payloads — absent reads as 0, never as ripe.
+   */
+  supportCount?: number;
   aliases: string[];
   createdAt: string;
   /** Life Vision's target date (docs/specs/life-vision.md) — never a reminder for
@@ -32,15 +39,25 @@ export interface CognitiveItem {
  * The Mind panel renders those two states differently (error + retry vs
  * "Nothing mapped yet"); getCognitive below keeps the old fail-soft contract
  * for any caller that doesn't care about the distinction.
+ *
+ * Batch L (MIN-06, REG-137): the list read truncates at 100 server-side, so
+ * the payload carries the true `total` alongside the page — the panel states
+ * shown-vs-total instead of presenting the returned count as the mapped
+ * count. A bare-array payload (the pre-Batch-L shape) is malformed now.
  */
 export async function getCognitiveResult(
   kind?: string,
-): Promise<{ ok: true; items: CognitiveItem[] } | { ok: false }> {
+): Promise<{ ok: true; items: CognitiveItem[]; total: number } | { ok: false }> {
   try {
     const res = await afetch(`${API}/cognitive${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`);
     if (!res.ok) return { ok: false };
-    const d = await res.json().catch(() => null);
-    return Array.isArray(d) ? { ok: true, items: d as CognitiveItem[] } : { ok: false };
+    const d = (await res.json().catch(() => null)) as { items?: unknown; total?: unknown } | null;
+    if (!d || !Array.isArray(d.items)) return { ok: false };
+    // A malformed total is a contract failure, not a fallback to the page
+    // size: substituting items.length would re-introduce exactly the silent
+    // cap MIN-06 removes (a 100-row page would read as "100 of 100").
+    if (typeof d.total !== "number") return { ok: false };
+    return { ok: true, items: d.items as CognitiveItem[], total: d.total };
   } catch {
     return { ok: false };
   }
@@ -73,13 +90,21 @@ export async function unlinkCognitive(id: number, memoryId: number): Promise<boo
     return false;
   }
 }
-export async function pruneCognitive(id: number): Promise<number> {
+/**
+ * Batch L (MIN-03, REG-134) — strict Result: a failed prune is
+ * `{ ok: false }`, never the number 0. The old wrapper mapped EVERY failure
+ * (HTTP, network, malformed) to 0, and the panel rendered 0 as the verified
+ * certification "Nothing to clean" — a failed cleanup and a genuinely clean
+ * anchor were indistinguishable.
+ */
+export async function pruneCognitive(id: number): Promise<{ ok: true; pruned: number } | { ok: false }> {
   try {
     const res = await afetch(`${API}/cognitive/${id}/prune`, { method: "POST" });
-    const d = res.ok ? await res.json().catch(() => ({})) : {};
-    return typeof d.pruned === "number" ? d.pruned : 0;
+    if (!res.ok) return { ok: false };
+    const d = (await res.json().catch(() => null)) as { pruned?: unknown } | null;
+    return typeof d?.pruned === "number" ? { ok: true, pruned: d.pruned } : { ok: false };
   } catch {
-    return 0;
+    return { ok: false };
   }
 }
 export async function confirmInquiry(id: number): Promise<{ ok: boolean; hubId?: number | null }> {

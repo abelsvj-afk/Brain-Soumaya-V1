@@ -3957,7 +3957,14 @@ button {
 /* Removable interaction chip (person profile) — label + unlink ×. */
 .mind-ev-chip.removable { display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px 2px 7px; }
 .mind-ev-chip-label { background: transparent; border: none; color: inherit; cursor: pointer; font-size: 0.68rem; }
-.mind-ev-chip-x { background: transparent; border: none; color: #ff9e9e; cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 2px; }
+/* Batch L (MIN-08): the person/goal unlink control is now visible "Unlink" text
+   (not a bare ×) with a larger hit area — 32px, not 46px. RECORDED SURFACE
+   EXCEPTION: the unlink lives inside a wrapping inline chip row; a 46px
+   target there would triple chip height and break the row. The name is
+   visible + announced (aria-label), the hit area is more than doubled from
+   ~14px, and the action is a low-frequency correction control, not a
+   repeated primary verb like the thought actions above. */
+.mind-ev-chip-x { background: transparent; border: none; color: #ff9e9e; cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 6px 8px; min-height: 32px; min-width: 32px; }
 .mind-prune {
   margin-top: 8px; width: 100%; padding: 5px 8px; border-radius: 8px; font-size: 0.72rem; cursor: pointer;
   background: rgba(255, 205, 70, 0.1); border: 1px solid rgba(255, 205, 70, 0.3); color: #ffe0a0;
@@ -4087,6 +4094,7 @@ button {
 .mind-mote {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 5px 7px;
   border-radius: 8px;
@@ -4113,8 +4121,17 @@ button {
 .mind-mote-text { flex: 1 1 auto; font-size: 0.82rem; color: #eaf4ff; }
 .mind-mote-fade { flex: 0 0 auto; font-size: 0.62rem; opacity: 0.6; color: #9fd4ff; white-space: nowrap; }
 .mind-mote-fade.low { color: #ffb46b; opacity: 0.9; }
-.mind-mote-actions { flex: 0 0 auto; display: flex; gap: 2px; }
-.mind-mote-actions .mini { padding: 1px 6px; font-size: 0.8rem; line-height: 1.2; }
+/* Batch L (MIN-08, REG-139): the repeated thought lifecycle targets meet the
+   46px round-3 touch standard (OB-01 precedent) and carry visible captions —
+   they were ~19px glyph-only buttons 2px apart, Dismiss sitting 2px from Keep.
+   The row wraps so the captioned 46px targets can drop below the thought text
+   on narrow screens instead of squeezing it. */
+.mind-mote-actions { flex: 0 0 auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.mind-mote-actions .mini { padding: 6px 10px; font-size: 0.8rem; line-height: 1.2; min-height: 46px; }
+/* Batch L (MIN-08): the cognitive-card Edit/Delete targets meet the same 46px
+   standard. Scoped to the card row so the edit form's own Save/Cancel
+   buttons (inside .mind-edit) are untouched. */
+.mind-card-row > .mini { min-height: 46px; }
 .mind-ws-toggle {
   font-size: 0.62rem;
   padding: 2px 7px;
@@ -6320,6 +6337,18 @@ button.mindspace-more { cursor: pointer; }
 .mindspace-card-text { margin: 0 0 5px; font-size: 0.85rem; line-height: 1.45; }
 .mindspace-card-meta { margin: 0 0 9px; font-size: 0.68rem; opacity: 0.75; }
 .mindspace-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Batch L (MIN-08): MindSpace's selected-card actions were visibly labelled
+   but rode the ~28px .mini height — they meet the 46px standard now. */
+.mindspace-card-actions .mini { min-height: 46px; }
+/* Batch L (MIN-04): the stale-refresh indication on the ambient overlay —
+   a failed poll keeps the last good motes and says so, with Retry. */
+.mindspace-stale {
+  position: absolute; right: 14px; bottom: 132px;
+  pointer-events: auto;
+  padding: 6px 11px; border-radius: 999px;
+  background: rgba(12, 20, 40, 0.72); border: 1px solid rgba(255, 205, 70, 0.45);
+  color: #ffe0a0; font-size: 0.7rem; backdrop-filter: blur(6px); cursor: pointer;
+}
 @media (prefers-reduced-motion: reduce) {
   .beacon-readout, .visitor-chip, .scene-id-card, .mindspace-card { animation: none; }
 }

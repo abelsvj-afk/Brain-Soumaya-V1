@@ -87,6 +87,20 @@ export function personProfile(ctx: AppContext, spaceId: string, id: number): Per
     )
     .all(spaceId, id) as PersonProfile["interactions"];
 
+  // Batch L (MIN-06, REG-137) — the headline count is the TRUE total,
+  // independent of the 100-row interaction page: past 100 the old
+  // `count: interactions.length` reported the cap, not the total. Same
+  // join/filter as the page query, so the count and the page always agree
+  // on what an "interaction" is. Tone/recency still derive from the newest
+  // 100 — the same page the UI shows.
+  const total = (
+    s.prepare(
+      `SELECT COUNT(*) AS c
+       FROM edges e JOIN nodes n ON n.id = e.source
+       WHERE e.space_id = ? AND e.target = ? AND e.relationship = 'supports' AND n.deleted_at IS NULL`,
+    ).get(spaceId, id) as { c: number }
+  ).c;
+
   let pos = 0;
   let neg = 0;
   for (const it of interactions) {
@@ -96,7 +110,7 @@ export function personProfile(ctx: AppContext, spaceId: string, id: number): Per
   }
 
   return {
-    count: interactions.length,
+    count: total,
     lastAt: interactions[0]?.createdAt ?? null,
     tone: deriveTone(pos, neg),
     interactions,

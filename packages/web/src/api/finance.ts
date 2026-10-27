@@ -150,6 +150,16 @@ export const confirmIngest = (input: ConfirmInput) => send<{ committed: number; 
 // dispatches "brain-finance-changed" automatically, for free, exactly like a bill/income/
 // expense change already does. No separate event wiring needed anywhere.
 export const getWealthSummary = () => getJson<WealthSummary>("/wealth/summary");
+/**
+ * Batch L (MIN-07, REG-138) — truthful-state variant of getWealthSummary
+ * (the IM-45 pattern): a failed fetch is `{ ok: false }`, never a null that
+ * the Financial Goals expansion reads as "still loading". The fail-soft
+ * wrapper above stays for callers that only refresh an already-loaded copy.
+ */
+export async function getWealthSummaryResult(): Promise<{ ok: true; summary: WealthSummary } | { ok: false }> {
+  const s = await getWealthSummary();
+  return s ? { ok: true, summary: s } : { ok: false };
+}
 
 export const listBuckets = () => getJson<FinBucket[]>("/wealth/buckets");
 export interface BucketInput { name: string; category?: string }

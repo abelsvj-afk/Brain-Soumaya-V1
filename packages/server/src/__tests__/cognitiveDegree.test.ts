@@ -18,6 +18,12 @@ import { COGNITIVE_META, type CognitiveKind } from "@brain/shared";
  * fixtures and demands listCognitive return byte-identical results, so any
  * semantic drift in the rewrite (self-loops double-counted, cross-space
  * edges leaking in, LIMIT interplay) fails here.
+ *
+ * Batch L (MIN-05, REG-136) extends the pin the same way: the reference
+ * also computes `supportCount` as an independent per-row count of incoming
+ * `supports` edges in the node's own space, so the grouped JOIN that ships
+ * the field stays pinned to the same semantics — a self-loop `supports`
+ * counts once, a foreign-owned `supports` row counts for neither endpoint.
  */
 
 // ── The original (pre-rewrite) query + row mapping, verbatim ────────────────
@@ -28,7 +34,8 @@ function referenceListCognitive(handle: DbHandle, spaceId: string, kind?: Cognit
     .prepare(
       `SELECT n.id, n.kind, n.label, n.content, n.progress, n.completed_at AS completedAt, n.aliases, n.created_at AS createdAt,
          n.remind_at AS remindAt,
-         (SELECT COUNT(*) FROM edges e WHERE e.space_id = n.space_id AND (e.source = n.id OR e.target = n.id)) AS degree
+         (SELECT COUNT(*) FROM edges e WHERE e.space_id = n.space_id AND (e.source = n.id OR e.target = n.id)) AS degree,
+         (SELECT COUNT(*) FROM edges e WHERE e.space_id = n.space_id AND e.target = n.id AND e.relationship = 'supports') AS supportCount
        FROM nodes n
        WHERE n.space_id = ? AND n.deleted_at IS NULL AND n.kind IN (${placeholders})
        ORDER BY n.id DESC LIMIT 100`,
@@ -160,6 +167,10 @@ describe("listCognitive degree — grouped rewrite ≡ original per-row count", 
     const items = listCognitive(ctx, "main");
     expect(items.find((i) => i.id === 1)?.degree).toBe(3); // self-loop + both parallels
     expect(items.find((i) => i.id === 2)?.degree).toBe(2);
+    // Batch L (MIN-05): incoming supports only — the self-loop supports
+    // counts once for node 1; the relates_to into node 1 does not count.
+    expect(items.find((i) => i.id === 1)?.supportCount).toBe(1);
+    expect(items.find((i) => i.id === 2)?.supportCount).toBe(1);
     expect(items).toEqual(referenceListCognitive(handle, "main"));
   });
 });

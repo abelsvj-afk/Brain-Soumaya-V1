@@ -49,9 +49,11 @@ vi.mock("../api/client.js", () => ({
 }));
 
 const getWealthSummary = vi.fn();
+const getWealthSummaryResult = vi.fn();
 const patchGoal = vi.fn();
 vi.mock("../api/finance.js", () => ({
   getWealthSummary: (...a: unknown[]) => getWealthSummary(...a),
+  getWealthSummaryResult: (...a: unknown[]) => getWealthSummaryResult(...a),
   patchGoal: (...a: unknown[]) => patchGoal(...a),
 }));
 
@@ -133,6 +135,14 @@ beforeEach(() => {
   mergeIdeas.mockResolvedValue(true);
   setCognitiveProgress.mockResolvedValue(true);
   getWealthSummary.mockResolvedValue(wealth());
+  // Batch L (MIN-07): the panel loads Wealth via the truthful-state Result
+  // variant; by default it faithfully wraps the getWealthSummary mock so
+  // existing setups keep working. Failure tests override the Result mock
+  // directly with { ok: false }.
+  getWealthSummaryResult.mockImplementation(async (...a: unknown[]) => ({
+    ok: true as const,
+    summary: (await getWealthSummary(...a)) as WealthSummary,
+  }));
 });
 afterEach(() => cleanup());
 
@@ -220,18 +230,16 @@ describe("MindPanel — Life Vision target date display (never a reminder)", () 
     expect(screen.queryByText(/overdue/)).toBeNull();
   });
 
-  it("a naive SQLite-format remindAt is read as UTC (parseTolerantMs), not local time", async () => {
-    // "2026-10-20 01:30:00" is the stored column-default shape. Read as UTC it
-    // is Oct 19 evening in America/New_York; a direct new Date() reads it as
-    // local wall time (Oct 20). The label must show the tolerant-parser date —
-    // the same date every other panel shows for this instant.
-    const { parseTolerantMs } = await import("../utils/dueReminders.js");
+  it("a naive SQLite-format remindAt reads as its WRITTEN date (Batch L, MIN-01)", async () => {
+    // Batch L supersedes the old instant reading: a Life Vision target date
+    // has no time-of-day meaning (docs/specs/life-vision.md §9), so the
+    // stored value's written calendar date IS the target date. The old test
+    // pinned the tolerant-parser instant ("2026-10-20 01:30:00" read as UTC
+    // → Oct 19 evening in America/New_York) — that reading is exactly the
+    // one-day-early defect MIN-01 fixes, so the expectation moves to Oct 20.
+    const { formatCalendarDate } = await import("../utils/localDay.js");
     const remindAt = "2026-10-20 01:30:00";
-    const expectedDate = new Date(parseTolerantMs(remindAt)).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    const expectedDate = formatCalendarDate("2026-10-20");
     getCognitive.mockResolvedValue([vision({ remindAt })]);
     render(<MindPanel onFocus={() => {}} />);
     await screen.findByText("Our first house");

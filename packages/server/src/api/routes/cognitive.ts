@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { COGNITIVE_KINDS } from "@brain/shared";
 import type { AppContext } from "../../context.js";
-import { createCognitive, listCognitive, setCognitiveProgress, updateCognitive, unlinkMemory, pruneAnchorLinks } from "../../analysis/cognitive.js";
+import { createCognitive, listCognitive, countCognitive, setCognitiveProgress, updateCognitive, unlinkMemory, pruneAnchorLinks } from "../../analysis/cognitive.js";
 import { promoteIdeaToGoal, splitIdeaManual, mergeIdeasManual } from "../../analysis/ideas.js";
 import { cognitiveEvidence } from "../../analysis/identity.js";
 import { formIdentityConstellation } from "../../analysis/identityConstellation.js";
@@ -14,6 +14,16 @@ import { EconomyRepo, EARN_MIND, EARN_MIND_DAILY_CAP, claimDailyEarn } from "../
 import { spaceTimezone, localDay } from "../../agent/notify/policy.js";
 
 const AliasList = z.array(z.string().min(1).max(60)).max(12);
+/**
+ * Batch L (MIN-01, REG-132) — a Life Vision target date is date-only
+ * (`YYYY-MM-DD`); a future_event carries a full ISO datetime. Accept both
+ * shapes — the kind decides the meaning (createCognitive stores the value
+ * verbatim; only future_event/life_vision store it at all).
+ */
+const DateOrDateTime = z.string().refine(
+  (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isNaN(Date.parse(v)),
+  { message: "date must be YYYY-MM-DD or an ISO datetime" },
+);
 const CreateBody = z.object({
   kind: z.enum(COGNITIVE_KINDS as [string, ...string[]]),
   label: z.string().min(1).max(200),
@@ -22,7 +32,7 @@ const CreateBody = z.object({
   aliases: AliasList.optional(),
   // For a future_event: when it's due. For a life_vision: an optional target date
   // (never a reminder for this kind — C2.1-locked). Ignored for every other kind.
-  date: z.string().datetime().optional(),
+  date: DateOrDateTime.optional(),
 });
 const ProgressBody = z.object({ value: z.number().min(0).max(1) });
 const EditBody = z
@@ -33,7 +43,7 @@ const EditBody = z
     // Life Vision target date (docs/specs/life-vision.md). Only applied for kind
     // "life_vision" (see updateCognitive) — future_event's date remains creation-time
     // only, unchanged. null clears a previously-set date.
-    date: z.string().datetime().nullable().optional(),
+    date: DateOrDateTime.nullable().optional(),
   })
   .refine((b) => b.label !== undefined || b.content !== undefined || b.aliases !== undefined || b.date !== undefined, {
     message: "Provide label, content, aliases, and/or date",
@@ -52,11 +62,15 @@ export function cognitiveRoutes(ctx: AppContext): Router {
   const r = Router();
 
   // GET /api/cognitive?kind=goal -> cognitive objects (all, or one kind).
+  // Batch L (MIN-06, REG-137): the list read truncates at 100, so the
+  // payload carries the true `total` alongside the page — the panel states
+  // shown-vs-total instead of presenting the returned count as the mapped
+  // count. Same kind filter for both, so items/total always agree.
   r.get("/", (req, res) => {
     const kind = typeof req.query.kind === "string" && (COGNITIVE_KINDS as string[]).includes(req.query.kind)
       ? (req.query.kind as never)
       : undefined;
-    res.json(listCognitive(ctx, spaceOf(res), kind));
+    res.json({ items: listCognitive(ctx, spaceOf(res), kind), total: countCognitive(ctx, spaceOf(res), kind) });
   });
 
   // GET /api/cognitive/events/upcoming -> the future-events timeline (soonest first).

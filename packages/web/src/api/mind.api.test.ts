@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getThoughtsResult,
   getThoughts,
+  getCognitiveResult,
+  pruneCognitive,
   getPersonSuggestionsResult,
   getUpcomingEventsResult,
   getInquiriesResult,
@@ -91,5 +93,44 @@ describe("IM-136 — split/merge client calls", () => {
     const [url, init] = fetchMock().mock.calls[0]! as [string, RequestInit];
     expect(url).toContain("/cognitive/merge");
     expect(JSON.parse(init.body as string)).toEqual({ keepId: 5, dropId: 6 });
+  });
+});
+
+describe("Batch L — MIN-06/MIN-03: getCognitiveResult shape and pruneCognitive Result", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const fetchMock = () => fetch as unknown as ReturnType<typeof vi.fn>;
+
+  it("getCognitiveResult: success returns {ok:true, items, total}; a bare array is {ok:false}", async () => {
+    const items = [{ id: 1, kind: "goal", label: "Sail", content: "", degree: 0, supportCount: 0 }];
+    fetchMock().mockResolvedValue(jsonResponse({ items, total: 137 }));
+    await expect(getCognitiveResult()).resolves.toEqual({ ok: true, items, total: 137 });
+
+    // The pre-Batch-L route shape (bare array) is a contract failure, not a success.
+    fetchMock().mockResolvedValue(jsonResponse(items));
+    await expect(getCognitiveResult()).resolves.toEqual({ ok: false });
+    fetchMock().mockResolvedValue(jsonResponse({ items, total: "many" }));
+    await expect(getCognitiveResult()).resolves.toEqual({ ok: false });
+    fetchMock().mockRejectedValue(new Error("network down"));
+    await expect(getCognitiveResult()).resolves.toEqual({ ok: false });
+  });
+
+  it("pruneCognitive: success returns {ok:true, pruned}; any failure is {ok:false}", async () => {
+    fetchMock().mockResolvedValue(jsonResponse({ pruned: 2 }));
+    await expect(pruneCognitive(8)).resolves.toEqual({ ok: true, pruned: 2 });
+    fetchMock().mockResolvedValue(jsonResponse({ pruned: 0 }));
+    await expect(pruneCognitive(8)).resolves.toEqual({ ok: true, pruned: 0 });
+    // No more "0 means failure" mapping: a real failure is {ok:false},
+    // so the panel never renders a failed prune as "Nothing to clean".
+    fetchMock().mockResolvedValue(jsonResponse({ error: "boom" }, false, 500));
+    await expect(pruneCognitive(8)).resolves.toEqual({ ok: false });
+    fetchMock().mockResolvedValue(jsonResponse({ pruned: "two" }));
+    await expect(pruneCognitive(8)).resolves.toEqual({ ok: false });
+    fetchMock().mockRejectedValue(new Error("network down"));
+    await expect(pruneCognitive(8)).resolves.toEqual({ ok: false });
   });
 });

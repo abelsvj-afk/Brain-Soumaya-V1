@@ -12,6 +12,7 @@ import { JourneyChips } from "./JourneyChips.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 import { DeepDive } from "./DeepDive.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
+import { visionTargetDateKey, formatCalendarDate } from "../utils/localDay.js";
 
 interface Props {
   node: GraphNode | null;
@@ -557,8 +558,17 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
             // A Life Vision's remindAt is a target date, not a reminder
             // (docs/specs/life-vision.md) — it never fires anything, but the passive
             // "⏰ Reminder" label would still misleadingly imply it does.
+            // Batch L (MIN-01): the target date is DATE-ONLY, so it renders
+            // through the date-key helper, never fmtWhen's instant math — a
+            // date-only value through fmtWhen would print a bogus midnight
+            // time and the one-day-early date. Other kinds keep fmtWhen.
             <p className="node-when">
-              {node.kind === "life_vision" ? `🌅 Target date ${fmtWhen(node.remindAt)}` : `⏰ Reminder ${fmtWhen(node.remindAt)}`}
+              {node.kind === "life_vision"
+                ? (() => {
+                    const key = visionTargetDateKey(node.remindAt);
+                    return `🌅 Target date ${key ? formatCalendarDate(key) : "date unavailable"}`;
+                  })()
+                : `⏰ Reminder ${fmtWhen(node.remindAt)}`}
             </p>
           )}
         </div>

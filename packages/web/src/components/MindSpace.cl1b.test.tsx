@@ -17,6 +17,8 @@ const dismissThought = vi.fn(async (_id: number) => true);
 
 vi.mock("../api/client.js", () => ({
   getThoughts: () => Promise.resolve(mockThoughts),
+  // Batch L (MIN-04): MindSpace loads via the strict Result variant now.
+  getThoughtsResult: () => Promise.resolve({ ok: true as const, thoughts: mockThoughts }),
   reinforceThought: (id: number) => reinforceThought(id),
   promoteThought: (id: number) => promoteThought(id),
   dismissThought: (id: number) => dismissThought(id),
