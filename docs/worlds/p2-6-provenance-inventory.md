@@ -6,7 +6,7 @@ ledger match the actual shipped files. Full 49-row source:
 `~/workspace/worlds-vision/p2-6-assets/PROVENANCE.md` (+ `LEDGER-INPUTS.md`,
 `delta-verification-log.txt`).
 
-## Hero — Soumaya's own ship (UNVERIFIED, pre-existing)
+## Hero — Soumaya's own ship (IDENTIFIED — CC-BY-NC, commercial-use constraint)
 
 | Field | Value |
 |---|---|
@@ -15,7 +15,7 @@ ledger match the actual shipped files. Full 49-row source:
 | Measured | 37,026 tris, 10 meshes, 3 materials (Material.001/002/003), KTX2 1024×1024, Draco + clearcoat + BasisU, 2,364,720 B |
 | SHA-256 | `24c4c9df6582b06aed6fe6fa5efc326c16255888faace2e4fa1548d62dda5a24` |
 | Forward | Nose at glTF +Z, engine rings at −Z; forward length 13.53; scaled to 12 in-app |
-| License | **UNVERIFIED** — in-file copyright "Modeled and Textured by 3DHaupt aka DennisH2010 (Dennis Haupt)", NO license statement in the repo, no CREDITS.md entry. Pre-existing open audit item, NOT newly introduced by this increment. Recorded as UNVERIFIED here and in the build record. |
+| License | **IDENTIFIED — CC-BY-NC (non-commercial use only).** The model is 3DHaupt's "Intergalactic Spaceship Version 2": the GLB's own node is named `Intergalactic_Spaceships_Version_2`, the in-file copyright reads "Modeled and Textured by 3DHaupt aka DennisH2010 (Dennis Haupt)", and BlendSwap lists the model as cc-by-nc (multiple listings, consistent); the author himself on Free3D: "Personal use license means you can use it for your non-commercial personal projects!" Identification verified 2026-10-26 (inventory Job 2 §2). **Constraint: before any commercial use of the worlds, the hero must be replaced with the verified CC-BY-4.0 fallback (`organic-spaceship.glb`, ricksticky, already in the repo).** Recorded in `public/CREDITS.md` and the in-app `WorldCredits` list. |
 | Modifications | Recompressed (Draco + KTX2), materials re-tinted in-app (tint #c2d4f5, sheen #2f7bff, emissiveIntensity 0.3, metalness 0.35, roughness 0.45) |
 
 ## Traffic — Quaternius Ultimate Spaceships, native glTF source (11 hulls)
@@ -155,26 +155,31 @@ parallel to the arm, so it does not matter for the read.
 ## Excluded (do not ship)
 
 - OGA stylized spaceship — no license file in the downloaded zip (B-2 hard case).
-- Hunt §4 ships (Luxwing, Star Ship low-poly, Starship Corvette, Space.blend,
-  CWU, archfan7411) — page-only licenses, awaiting the owner's B-2 call.
+- Hunt §4 ships — **EXCLUDED, settled 2026-10-26 (build-all delegation)**:
+  eleven hulls, 15,539 tris — Luxwing kit (6), Starship Corvette, Star Ship
+  low-poly, Space.blend, CWU, archfan7411. Their pages say "free" but no
+  license travels with the files. **Rule: a page-only license is not
+  enough — the license must be verified FROM the file before a ship can
+  sail here.** Recorded in `public/CREDITS.md` ("Not shipped").
 - No OGA §4 files anywhere in the outputs; zero OGA files shipped.
 
-## OPEN LICENSE FLAG — Quaternius site license changed (owner decision needed)
+## Quaternius license — SETTLED (in-file CC0 governs the files as shipped)
 
-Recorded, NOT settled. Then (recon, 2026-10-25): quaternius.com stated CC0;
-the Godot Asset Library record (2023-02-19) says CC0; every downloaded pack
-carries `License.txt` stating CC0 1.0. Now (hunt, 2026-10-26):
-https://quaternius.com/license.html shows a "Quaternius Asset License (QAL)
-v1.0 — Last updated: 8/28/2026" (full text saved at
-`ships-hunt/quat-license.html`). What this does NOT change: the files already
-downloaded carry CC0 1.0 in-file (License.txt, SHA `20b983ae…`, identical in
-the native mirror and the Godot pack), and the Godot record says CC0. Both CC0
-and QAL permit what the app does — incorporating the ships into the product
-with no credit. The app is not redistributing the raw packs. What it DOES
-raise: whether new downloads from quaternius.com now come under QAL rather
-than CC0, and whether the in-file CC0 grant or the current site license
-governs. That is a license question for the owner. The build ships the
-Quaternius hulls on the strength of their in-file CC0, with this flag
-attached. If the owner would rather treat QAL as governing, the hulls come
-out and any future redistribution of the raw packs would need to follow QAL
-instead.
+Settled 2026-10-26 (build-all delegation). Then (recon, 2026-10-25):
+quaternius.com stated CC0; the Godot Asset Library record (2023-02-19)
+says CC0; every downloaded pack carries `License.txt` stating CC0 1.0.
+Now (hunt, 2026-10-26): https://quaternius.com/license.html shows a
+"Quaternius Asset License (QAL) v1.0 — Last updated: 8/28/2026" (full
+text saved at `ships-hunt/quat-license.html`). **Settlement: the in-file
+CC0 governs the files as shipped** — the files already downloaded carry
+CC0 1.0 in-file (License.txt, SHA `20b983ae…`, identical in the native
+mirror and the Godot pack), and the Godot record says CC0. Both CC0 and
+QAL permit what the app does — incorporating the ships into the product
+with no credit. **The app does not redistribute the raw packs** — only
+the converted hulls ship inside the app. What the QAL change DOES mean:
+new downloads from quaternius.com now come under QAL rather than CC0,
+so any future Quaternius pull must be checked against QAL, not assumed
+CC0. The build ships the Quaternius hulls on the strength of their
+in-file CC0, with this record attached. If the owner would rather treat
+QAL as governing, the hulls come out and any future redistribution of
+the raw packs would need to follow QAL instead.

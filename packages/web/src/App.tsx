@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
 import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, resolveFocusNode, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanTargetCaption, measureSafeBottomInset } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, resolveFocusNode, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanDownBottomPx, fanTargetCaption, galaxyEntityToastText, hudChromeHidden, shieldSavedToastText, measureSafeBottomInset } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
@@ -38,6 +38,7 @@ import { Legend } from "./components/Legend.js";
 import { WelcomeIntro } from "./components/WelcomeIntro.js";
 import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
+import { GalaxyErrorCard } from "./components/GalaxyErrorCard.js";
 import TravelPanel from "./components/TravelPanel.js";
 import WorldsSurface from "./components/WorldsSurface.js";
 import WorldMap from "./components/WorldMap.js";
@@ -71,10 +72,15 @@ import { pilotRank } from "./components/rank.js";
 import { buildCodex, codexProgress, fieldNoteEntries } from "./components/codex.js";
 import {
   buildUnlockStats,
+  firstAlwaysUnlockedTrackIndex,
   firstUnlockedTrackIndex,
+  isTrackAlwaysUnlocked,
   isTrackUnlocked,
+  lockedTrackNotes,
+  nextAlwaysUnlockedTrackIndex,
   nextUnlockedTrackIndex,
   readDevUnlockAll,
+  trackLocked,
   unlockableForTrack,
 } from "./components/unlockables.js";
 import { useUnlockWatcher } from "./hooks/useUnlockWatcher.js";
@@ -144,6 +150,20 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   // Fuel on the main HUD (was buried in the Soumaya tab) — polled while signed in.
   const [fuel, setFuel] = useState<Fuel | null>(null);
+  // Batch I (REG-067 / GH-09): whether the fuel load has FAILED. The
+  // gauge keeps the last known value while offline, but when fuel has
+  // never arrived the gauge must say the load failed (with a retry),
+  // not render nothing at all.
+  const [fuelError, setFuelError] = useState(false);
+  const retryFuel = useCallback(() => {
+    setFuelError(false);
+    void getFuel()
+      .then((f) => {
+        setFuel(f);
+        setFuelError(false);
+      })
+      .catch(() => setFuelError(true));
+  }, []);
   const [fuelPops, setFuelPops] = useState<{ id: number; text: string; spend?: boolean }[]>([]);
   const prevFuelRef = useRef<number | null>(null);
   // Daily-tending streak (flame on the HUD + Awards tab) — polled while signed in.
@@ -253,9 +273,14 @@ export default function App() {
     let alive = true;
     const load = () => {
       void getFuel().then((f) => {
-        if (alive) setFuel(f);
+        if (alive) {
+          setFuel(f);
+          setFuelError(false);
+        }
       }).catch(() => {
-        /* retain the last known gauge value while offline */
+        // Retain the last known gauge value while offline — but if fuel
+        // has never arrived, the gauge must say the load failed (REG-067).
+        if (alive) setFuelError(true);
       });
       void getStreak().then((s) => {
         if (alive) setStreak(s);
@@ -650,10 +675,13 @@ export default function App() {
     // Unlockables gate (IM-133): if the remembered track has since been
     // locked (or was never earned), start from the first unlocked track
     // instead of playing a locked loop. Deep Space is always unlocked.
+    // Batch I (REG-065 / GH-07): while stats are still in flight, only
+    // an `always` track may start — a possibly-locked remembered track
+    // must not play before the gate has been evaluated.
     if (!a.playing) {
       const { stats, devUnlockAll: dev } = unlockGateRef.current;
+      const ids = TRACKS.map((t) => t.id);
       if (stats) {
-        const ids = TRACKS.map((t) => t.id);
         if (!isTrackUnlocked(ids[a.index]!, stats, { devUnlockAll: dev })) {
           const first = firstUnlockedTrackIndex(ids, stats, { devUnlockAll: dev });
           if (first >= 0 && first !== a.index) {
@@ -661,6 +689,13 @@ export default function App() {
             setMusic(a.playing);
             return;
           }
+        }
+      } else if (!dev && !isTrackAlwaysUnlocked(ids[a.index]!)) {
+        const first = firstAlwaysUnlockedTrackIndex(ids);
+        if (first >= 0 && first !== a.index) {
+          a.playTrack(first);
+          setMusic(a.playing);
+          return;
         }
       }
     }
@@ -670,9 +705,12 @@ export default function App() {
     if (!audioRef.current) audioRef.current = makeAmbientAudio();
     const a = audioRef.current;
     // Unlockables gate (IM-133): skip advances only across UNLOCKED tracks.
+    // Batch I (REG-065 / GH-07): while stats are in flight, only `always`
+    // tracks are playable — the skip stays on Deep Space rather than
+    // landing on a possibly-locked loop.
     const { stats, devUnlockAll: dev } = unlockGateRef.current;
+    const ids = TRACKS.map((t) => t.id);
     if (stats) {
-      const ids = TRACKS.map((t) => t.id);
       const nxt = nextUnlockedTrackIndex(a.index, ids, stats, { devUnlockAll: dev });
       if (nxt !== a.index) {
         a.playTrack(nxt);
@@ -682,13 +720,30 @@ export default function App() {
       setMusic(a.playing);
       return;
     }
-    a.next();
+    if (dev) {
+      a.next();
+      setMusic(a.playing);
+      return;
+    }
+    const nxt = nextAlwaysUnlockedTrackIndex(a.index, ids);
+    if (nxt !== a.index) {
+      a.playTrack(nxt);
+    } else if (!a.playing) {
+      a.toggle(); // the current track is the only playable one — just start it
+    }
     setMusic(a.playing);
   }, []);
   const playSong = useCallback((i: number) => {
     // Unlockables gate (IM-133): a locked track never plays; say why instead.
     const track = TRACKS[i];
     const { stats, devUnlockAll: dev } = unlockGateRef.current;
+    // Batch I (REG-065 / GH-07): while stats are still in flight, only
+    // an `always` track may play — anything else waits for the gate.
+    if (track && !dev && !stats && !isTrackAlwaysUnlocked(track.id)) {
+      pushToast("Still checking what's unlocked — try again in a moment.", "⏳", 4000);
+      setSongMenuOpen(false);
+      return;
+    }
     if (track && stats && !isTrackUnlocked(track.id, stats, { devUnlockAll: dev })) {
       const item = unlockableForTrack(track.id);
       pushToast(
@@ -797,8 +852,10 @@ export default function App() {
   // A banked nebula shield just forgave a missed day — celebrate the save gently so the
   // forgiving-streak mechanic is actually FELT (a broken streak is data, not punishment).
   useEffect(() => {
+    // Batch I (REG-070 / GH-13): the toast explains what a shield
+    // forgives — the StreakEmber's hover text is not the explanation.
     const onShield = () =>
-      pushToast("A nebula shield forgave your missed day — your streak is safe.", "🛡️", 7000, "normal", { kind: "tab", value: "awards" });
+      pushToast(shieldSavedToastText(), "🛡️", 7000, "normal", { kind: "tab", value: "awards" });
     window.addEventListener("brain-shield-saved", onShield);
     return () => window.removeEventListener("brain-shield-saved", onShield);
   }, []);
@@ -1940,10 +1997,11 @@ export default function App() {
           Settings or ?perf=1, and polls at 2Hz rather than reading anything per frame. */}
       <PerfHUD nodeCount={view.nodes.length} />
       {/* Left-edge HUD (fuel + streak) — hidden whenever a panel/chat/Observatory is up
-          so it never overlaps their content. */}
-      {panel === null && !showChat && !showObs && !showSettings && !showConnections && !showTimeline && (
+          so it never overlaps their content. Batch I (REG-068 / GH-15):
+          one shared hide rule with the stack and the empty-galaxy cue. */}
+      {!hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <>
-          <FuelGauge fuel={fuel} pops={fuelPops} busy={aiBusy > 0} onClick={() => setShowFuelWays(true)} />
+          <FuelGauge fuel={fuel} pops={fuelPops} busy={aiBusy > 0} onClick={() => setShowFuelWays(true)} loadState={fuel ? "ready" : fuelError ? "error" : "loading"} onRetry={retryFuel} />
           <StreakEmber streak={streak?.current ?? 0} best={streak?.best} atRisk={streakAtRisk} shields={streak?.shields ?? 0} onClick={() => { setTab("awards"); setPanel("dock"); }} />
         </>
       )}
@@ -1989,10 +2047,10 @@ export default function App() {
         fallback={
           <>
             <div className="lite-backdrop" aria-hidden />
-            <div className="galaxy-off-note galaxy-err" role="alert">
-              <span>⚠️ The 3D galaxy hit an error</span>
-              <button onClick={() => window.location.reload()}>Reload</button>
-            </div>
+            {/* Batch I (REG-060 / GH-01): the error card offers the Lite
+                escape, not only Reload — a device that cannot render
+                WebGL loops on Reload otherwise. */}
+            <GalaxyErrorCard onReload={() => window.location.reload()} />
           </>
         }
       >
@@ -2033,8 +2091,18 @@ export default function App() {
           void galaxyEntity(kind, id).then((r) => {
             if (!r) return;
             const flew = graphRef.current?.flyToGalaxyEntity(kind, id) ?? false;
-            const icon = kind === "journey" ? "🧭" : "💵";
-            pushToast(`${icon} ${r.descriptor.ref.label} — ${r.navigation.reason}`, icon, flew ? 7000 : 5000);
+            // Batch I (REG-111): the toast must not say the same thing
+            // whether the flight happened or not.
+            pushToast(
+              galaxyEntityToastText(
+                kind,
+                r.descriptor.ref.label ?? (kind === "journey" ? "this journey" : "this item"),
+                r.navigation.reason,
+                flew,
+              ),
+              kind === "journey" ? "🧭" : "💵",
+              flew ? 7000 : 5000,
+            );
             // Galaxy entity detail focus (Phase O, docs/specs/galaxy-entity-citizenship-audit.md
             // §14/§18): the fly-to above already proved "that's a real thing" — this additionally
             // opens the SAME domain panel/card that already shows its full detail (JourneysPanel/
@@ -2255,6 +2323,7 @@ export default function App() {
           fuel={fuel}
           nodes={view.nodes as GraphNode[]}
           health={health}
+          spaceId={space?.id}
           onFocusNode={goTo}
           onOpenTab={(t) => {
             setTab(t);
@@ -2415,8 +2484,10 @@ export default function App() {
           beacon box = body, sounds pill = footer) with a single negotiated
           anchor + height cap, instead of three independently-fixed boxes
           that grew through each other. While the noticed card is up, the
-          stack docks in its low slot (§6.5.5). */}
-      {panel === null && !showObs && (
+          stack docks in its low slot (§6.5.5). Batch I (REG-068 / GH-15):
+          the stack hides under the same shared rule as the Fuel/Streak
+          block — it used to stay up over chat/settings/connections. */}
+      {!hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <ShipStatusStack
           belowNoticing={noticingOpen}
           collapsed={!shipStatusOpen}
@@ -2446,8 +2517,10 @@ export default function App() {
 
       {/* CL-1b (IM-23): an empty galaxy names where the first star goes,
           in-scene — the Observatory hero covers arrival, this covers the
-          galaxy itself once you're standing in it. */}
-      {loaded && data.nodes.length === 0 && panel === null && !showObs && !showChat && !showSettings && (
+          galaxy itself once you're standing in it. Batch I (REG-068 /
+          GH-15): same shared hide rule — the cue used to stay up over
+          Connections and the Timeline. */}
+      {loaded && data.nodes.length === 0 && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <EmptyGalaxyCue onAdd={() => toggle("ingest")} />
       )}
 
@@ -2658,7 +2731,7 @@ export default function App() {
                 ariaLabel: `Focus ${getFigurineLabel(equippedFig1)}`,
                 title: `Focus ${getFigurineLabel(equippedFig1)}`,
                 icon: getFigurineIcon(equippedFig1),
-                caption: fanTargetCaption("fig1"),
+                caption: fanTargetCaption("fig1", undefined, equippedFig1),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.toggleFollowFig1() ?? false;
@@ -2680,7 +2753,7 @@ export default function App() {
                 ariaLabel: `Focus ${getFigurineLabel(equippedFig2)}`,
                 title: `Focus ${getFigurineLabel(equippedFig2)}`,
                 icon: getFigurineIcon(equippedFig2),
-                caption: fanTargetCaption("fig2"),
+                caption: fanTargetCaption("fig2", undefined, equippedFig2),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.toggleFollowFig2() ?? false;
@@ -2704,7 +2777,7 @@ export default function App() {
                   <button
                     key={t.key}
                     className={t.className}
-                    style={focusItemStyle(i, focusMenuOpen, layout.step)}
+                    style={focusItemStyle(i, focusMenuOpen, layout.step, layout.direction)}
                     onClick={t.onClick}
                     aria-label={t.ariaLabel}
                     title={t.title}
@@ -2716,7 +2789,7 @@ export default function App() {
                 {layout.folded && (
                   <button
                     className="fab focus-item fan-more"
-                    style={focusItemStyle(visible.length, focusMenuOpen, layout.step)}
+                    style={focusItemStyle(visible.length, focusMenuOpen, layout.step, layout.direction)}
                     onClick={() => setFanPage((p) => (p + 1) % layout.pageCount)}
                     aria-label={`More focus targets (page ${win.page + 1} of ${layout.pageCount})`}
                     title="More focus targets"
@@ -2756,13 +2829,17 @@ export default function App() {
           </button>
           {/* Radial song menu — dots circling the music button (press-and-hold to open).
               Unlockables gate (IM-133): locked tracks render locked with their
-              requirement and cannot be picked (playSong also guards). */}
-          {songMenuOpen &&
-            TRACKS.map((t, i) => {
+              requirement and cannot be picked (playSong also guards). Batch I
+              (REG-065 / GH-07): the dots gate on trackLocked, which fails
+              CLOSED while stats are in flight — they used to render unlocked
+              until the stats arrived. Batch I (REG-066 / GH-08): the gesture
+              hint and the locked-track requirements are visible text, not
+              hover-only. */}
+          {songMenuOpen && (
+            <>
+            {TRACKS.map((t, i) => {
               const gateItem = unlockableForTrack(t.id);
-              const locked = unlockStats
-                ? !isTrackUnlocked(t.id, unlockStats, { devUnlockAll })
-                : false;
+              const locked = trackLocked(t.id, unlockStats, { devUnlockAll });
               return (
                 <button
                   key={t.id}
@@ -2778,6 +2855,18 @@ export default function App() {
                 </button>
               );
             })}
+            <div className="song-menu-notes">
+              <div className="song-menu-hint" role="note">
+                Tap play/pause · double-tap skip · hold for songs
+              </div>
+              {lockedTrackNotes(TRACKS.map((t) => t.id), unlockStats, { devUnlockAll }).map((n) => (
+                <div key={n.id} className="song-lock-notes" role="note">
+                  🔒 {TRACKS.find((t) => t.id === n.id)?.title ?? n.id} — unlocks at {n.requirement}
+                </div>
+              ))}
+            </div>
+            </>
+          )}
           {music && musicTrack && nowPlayingVisible && (
             <button
               className="now-playing"
@@ -2788,7 +2877,9 @@ export default function App() {
               <span className="np-eq"><i /><i /><i /></span>
               <span className="np-title">{musicTrack.title}</span>
               <span className="np-count">{musicTrack.index + 1}/{musicTrack.total}</span>
-              <span className="np-skip">⏭</span>
+              {/* Batch I (REG-066 / GH-08): the skip is labelled in visible
+                  text — the ⏭ glyph alone said nothing on touch. */}
+              <span className="np-skip">⏭ Skip</span>
             </button>
           )}
           <ActionRail

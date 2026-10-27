@@ -133,8 +133,14 @@ export function NoticingCard({
     void afterAct();
   };
   const reject = async () => {
+    // Batch I (REG-110): mirror wave() — a failed reject must say so and
+    // keep the inquiry, never toast a success it did not earn.
+    const ok = await rejectInquiry(q.id).catch(() => false);
+    if (!ok) {
+      pushToast("Couldn't mark those as unrelated — it's still here.", "⚠️", 3500);
+      return;
+    }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    await rejectInquiry(q.id);
     pushToast("Got it — I won't tie those together.", "🧠", 3500);
     onAnswered?.(); // the galaxy may lose an edge → refresh
     void afterAct();

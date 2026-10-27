@@ -18,11 +18,12 @@ import { loadSoumayaShip } from "./soumayaShip.js";
  * cyan sheen, scaled to a 12-unit forward length, nose at −z down the
  * corridor). The procedural hull below is the load-failure fallback
  * only: it renders until the GLB lands, and stays if the load fails.
- * Provenance: the file carries in-file copyright "Modeled and Textured
- * by 3DHaupt aka DennisH2010 (Dennis Haupt)" with NO license statement
- * in the repo and no CREDITS.md entry — a pre-existing open audit item
- * (the file already ships in the app), recorded UNVERIFIED in the P2-6
- * build record and provenance inventory, not newly introduced here.
+ * Provenance: "Intergalactic Spaceship Version 2" by 3DHaupt (Dennis
+ * Haupt), CC-BY-NC (non-commercial use only) — identified from the
+ * file itself; before any commercial use of the worlds the hero must
+ * be replaced with the verified CC-BY-4.0 fallback
+ * (`organic-spaceship.glb`). Full record in the P2-6 provenance
+ * inventory and `public/CREDITS.md`.
  *
  * No reflection content in the MVP (review 28, Q2): HYG stars and motion
  * only. The §2.2 reflection allowance stays a future option, not built

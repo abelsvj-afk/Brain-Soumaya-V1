@@ -1264,6 +1264,33 @@ body,
   background: rgba(143, 220, 255, 0.25); color: #eaf4ff;
 }
 .song-dot-name { font-size: 0.74rem; white-space: nowrap; }
+/* Batch I (REG-066 / GH-08): the song menu's visible gesture hint and
+   locked-track requirements — fixed above the dot arc (the dots top out
+   ~260px from the bottom), so they never cover a dot or land in the
+   wrong place like a plain in-flow div would. */
+.song-menu-notes {
+  position: fixed;
+  left: 14px;
+  bottom: calc(272px + env(safe-area-inset-bottom));
+  z-index: 56;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 78vw;
+}
+.song-menu-hint,
+.song-lock-notes {
+  font-size: 0.72rem;
+  color: rgba(217, 236, 255, 0.85);
+  background: rgba(16, 24, 46, 0.9);
+  border: 1px solid rgba(143, 220, 255, 0.25);
+  border-radius: 999px;
+  padding: 4px 10px;
+  width: fit-content;
+  white-space: nowrap;
+}
+.song-lock-notes { border-color: rgba(160, 160, 190, 0.3); }
 @keyframes song-pop { from { opacity: 0; transform: translate(-50%, 50%) scale(0.4); } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .song-dot { animation: none; } }
 .now-playing .np-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2718,6 +2745,26 @@ button {
    left edge), but the visible parts become click targets whose event bubbles to the
    div's onClick — so tapping the gauge opens "Ways to earn Fuel". */
 .fuel-gauge.tappable { cursor: pointer; }
+/* Batch I (REG-067 / GH-09): the gauge's loading/error states reuse the
+   same left-edge slot, but they are TEXT, not a tube — readable, and the
+   error one is tappable (pointer-events live on the button itself). */
+.fuel-gauge-loading,
+.fuel-gauge-error {
+  pointer-events: auto;
+  flex-direction: row;
+  gap: 8px;
+  max-width: 150px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(16, 24, 46, 0.9);
+  border: 1px solid rgba(143, 220, 255, 0.25);
+  color: #d9ecff;
+  font: inherit;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  text-align: left;
+}
+.fuel-gauge-error { border-color: rgba(255, 180, 120, 0.5); cursor: pointer; }
 .fuel-gauge.tappable .fg-ic,
 .fuel-gauge.tappable .fg-tube,
 .fuel-gauge.tappable .fg-val { pointer-events: auto; }

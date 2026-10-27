@@ -5,6 +5,8 @@ import {
   GARDEN_TERRACE_COUNT,
   GARDEN_TERRACE_RADIUS,
   GARDEN_TERRACE_HEIGHT,
+  GARDEN_UNDERSIDE_DEPTH,
+  GARDEN_FLOOR_Y,
   type GardenLayout,
 } from "./gardenLayout.js";
 
@@ -23,8 +25,15 @@ import {
  *
  * Draw-call sketch (recipe ceiling 95): terraces ≤6 · tree 4 · vegetation 1
  * · plots 3 (one instanced mesh per form) · paths 1 · landmarks ≤3 each
- * · sky 1 · mist 3. Runtime measurement belongs to the device check
- * (C4's measured half); these constants are the static half.
+ * · sky 1 · mist 3 · underside 2 (skirt + bottom cap). Runtime measurement
+ * belongs to the device check (C4's measured half); these constants are
+ * the static half.
+ *
+ * The garden is a finished solid: a stone skirt drops from the lowest
+ * terrace to a solid floor, and a bottom cap closes it — from below,
+ * the garden reads as ground, never void. The worlds camera is floored
+ * above the lowest terrace as well (see GARDEN_CAMERA_FLOOR_Y), so no
+ * view can ever sink under the garden.
  *
  * Kindness is structural here: the scene has no state for decline. An
  * empty layout renders terraces, tree, and sky — honest resting ground.
@@ -95,6 +104,38 @@ export function createGardenScene(layout: GardenLayout): GardenScene {
   crownDisc.rotation.x = -Math.PI / 2;
   crownDisc.position.y = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]!;
   group.add(crownDisc);
+
+  // Finished underside: the garden is a solid, not flat rings over void.
+  // A stone skirt drops from the lowest terrace (y=0) to the solid floor,
+  // and a bottom cap closes it — from below, the garden reads as ground.
+  const undersideMat = new THREE.MeshStandardMaterial({
+    color: 0x3a2f24,
+    roughness: 1,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  const skirt = new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      GARDEN_TERRACE_RADIUS[0]!,
+      GARDEN_TERRACE_RADIUS[0]!,
+      GARDEN_UNDERSIDE_DEPTH,
+      64,
+      1,
+      true,
+    ),
+    undersideMat,
+  );
+  skirt.position.y = GARDEN_FLOOR_Y + GARDEN_UNDERSIDE_DEPTH / 2;
+  skirt.name = "garden-underside-skirt";
+  group.add(skirt);
+  const cap = new THREE.Mesh(
+    new THREE.CircleGeometry(GARDEN_TERRACE_RADIUS[0]!, 64),
+    undersideMat,
+  );
+  cap.rotation.x = Math.PI / 2; // face down: the bottom seen from below
+  cap.position.y = GARDEN_FLOOR_Y;
+  cap.name = "garden-underside-cap";
+  group.add(cap);
 
   // The witness tree: a trunk you could lose a ship inside, a canopy dome
   // wide enough to shade the top terraces.

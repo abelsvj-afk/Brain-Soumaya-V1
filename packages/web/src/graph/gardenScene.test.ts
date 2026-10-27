@@ -54,6 +54,49 @@ describe("garden scene (P3-1)", () => {
     empty.dispose();
   });
 
+  it("the garden has a finished underside: skirt + solid bottom cap below the lowest terrace", () => {
+    const scene = createGardenScene(layout);
+    const skirt = scene.group.getObjectByName("garden-underside-skirt") as THREE.Mesh;
+    const cap = scene.group.getObjectByName("garden-underside-cap") as THREE.Mesh;
+    expect(skirt).toBeTruthy();
+    expect(cap).toBeTruthy();
+    // Skirt: full outer radius, drops 60 below the lowest terrace (y=0) to the floor.
+    const skirtGeo = skirt.geometry as THREE.CylinderGeometry;
+    expect(skirtGeo.parameters.height).toBe(60);
+    expect(skirtGeo.parameters.radiusTop).toBe(900);
+    expect(skirtGeo.parameters.radiusBottom).toBe(900);
+    expect(skirt.position.y).toBe(-30);
+    // Cap: a solid disc of the full outer radius, closing the bottom at y=-60.
+    const capGeo = cap.geometry as THREE.CircleGeometry;
+    expect(capGeo.parameters.radius).toBe(900);
+    expect(cap.position.y).toBe(-60);
+    scene.dispose();
+  });
+
+  it("a camera below the old void sees solid ground, not void — a ray from underneath hits the cap", () => {
+    const scene = createGardenScene(layout);
+    scene.group.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(0, -200, 0),
+      new THREE.Vector3(0, 1, 0),
+    );
+    const hits = ray.intersectObjects(scene.group.children, true);
+    expect(hits.length).toBeGreaterThan(0);
+    // The first thing the ray meets is the solid bottom cap, at the floor.
+    expect(hits[0]!.object.name).toBe("garden-underside-cap");
+    expect(hits[0]!.point.y).toBeCloseTo(-60, 6);
+    // And from the side below: a low ray meets the skirt wall, not empty space.
+    const sideRay = new THREE.Raycaster(
+      new THREE.Vector3(1200, -30, 0),
+      new THREE.Vector3(-1, 0, 0),
+    );
+    const sideHits = sideRay.intersectObjects(scene.group.children, true);
+    expect(sideHits.length).toBeGreaterThan(0);
+    expect(sideHits[0]!.object.name).toBe("garden-underside-skirt");
+    expect(sideHits[0]!.point.x).toBeCloseTo(900, 6);
+    scene.dispose();
+  });
+
   it("update animates gently, freezes under reduced motion, and dispose is safe twice", () => {
     const scene = createGardenScene(layout);
     expect(() => scene.update(1000)).not.toThrow();

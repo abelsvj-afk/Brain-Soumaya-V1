@@ -13,7 +13,7 @@ import {
   approachPose,
 } from "../graph/stationLayout.js";
 import { ensureKtx2Support } from "../graph/gltf.js";
-import { buildGardenLayout, type GardenLayout } from "../graph/gardenLayout.js";
+import { buildGardenLayout, clampToGardenFloor, GARDEN_CAMERA_FLOOR_Y, type GardenLayout } from "../graph/gardenLayout.js";
 import { createGardenScene } from "../graph/gardenScene.js";
 import {
   buildDeepPastLayout,
@@ -65,7 +65,10 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * nothing, fetches nothing, and never touches three.js or any scene. The
  * host owns the renderer, camera, and fog; each scene module owns its
  * group and its per-frame motion. The camera is presentation — a slow,
- * monumental orbit, frozen under reduced motion. Closing the surface is
+ * monumental orbit, frozen under reduced motion. The garden's camera is
+ * floored above its lowest terrace (GARDEN_CAMERA_FLOOR_Y), so no view
+ * can ever sink under the garden — and the garden itself is a finished
+ * solid with a skirt and bottom cap, not flat rings over void. Closing the surface is
  * view-only: the brain stays where the server says it is, and the travel
  * panel is how it journeys on.
  *
@@ -122,6 +125,12 @@ interface WorldSceneEntry {
   orbitHeight: number;
   lookAtY: number;
   fallback: string;
+  /**
+   * Lowest camera height allowed in this world. Set only where the scene
+   * has a floor to respect — the garden's camera never drops below its
+   * lowest terrace, so no view can ever sink under the garden.
+   */
+  cameraFloorY?: number;
   build: (layout?: GardenLayout | DeepPastLayout | PeopleLayout) => WorldSceneHandle;
 }
 
@@ -143,6 +152,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitRadius: 1150,
     orbitHeight: 300,
     lookAtY: 60,
+    cameraFloorY: GARDEN_CAMERA_FLOOR_Y,
     fallback: "The garden view needs graphics support on this device — your memories are unaffected.",
     build: (layout) =>
       createGardenScene(
@@ -469,6 +479,11 @@ export default function WorldsSurface({
             Math.cos(angle) * orbit.orbitRadius,
           );
           camera.lookAt(0, orbit.lookAtY, 0);
+        }
+        // Camera floor: where the world sets one (the garden), the view
+        // never drops below it — no pose can ever sink under the garden.
+        if (orbit.cameraFloorY !== undefined) {
+          camera.position.y = clampToGardenFloor(camera.position.y);
         }
       }
       try {
