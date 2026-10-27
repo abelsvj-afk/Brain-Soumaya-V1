@@ -23,6 +23,17 @@ describe("worldMap — discovery (Q2/Q3)", () => {
     expect(data.nodes.map((n) => n.key)).toEqual(["home", "great-station"]);
     expect(data.nodes.find((n) => n.key === "growing-place")).toBeUndefined();
     expect(data.nodes.find((n) => n.key === "deep-past")).toBeUndefined();
+    expect(data.nodes.find((n) => n.key === "people")).toBeUndefined();
+  });
+
+  it("People (P3-3, Q2) appears once travelled — a close moon of the Station, warm amber", () => {
+    const data = atHome([{ origin: "great-station", destination: "people" }]);
+    const people = data.nodes.find((n) => n.key === "people");
+    expect(people).toBeTruthy();
+    expect(people!.name).toBe("The People");
+    expect(people!.color).toBe("#ffb070");
+    const station = data.nodes.find((n) => n.key === "great-station")!;
+    expect(Math.hypot(people!.x - station.x, people!.y - station.y)).toBeLessThan(200);
   });
 
   it("a journey in progress counts as discovery in motion — the map shows where you are going", () => {

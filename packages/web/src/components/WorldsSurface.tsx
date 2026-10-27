@@ -26,6 +26,14 @@ import {
   deepPastDescentStage,
   DEEP_PAST_DESCENT,
 } from "../graph/deepPastScene.js";
+import {
+  buildPeopleLayout,
+  type PeopleLayout,
+} from "../graph/peopleLayout.js";
+import {
+  createPeopleScene,
+  EMPTY_PEOPLE_LAYOUT,
+} from "../graph/peopleScene.js";
 import WorldCredits from "./WorldCredits.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -42,11 +50,14 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * Worlds (P3-2): the Great Station (P2-4), the Growing Place (the garden —
  * plots = real memories, paths = real connections, landmarks = completed
  * Journeys, all derived per-visit from the graph the app already holds),
- * and the Deep Past (the helix — members = old memories by the D-7 rule,
+ * the Deep Past (the helix — members = old memories by the D-7 rule,
  * anchors = links to their other appearances, the Chronicle thread = the
- * earliest done Journey with two member stops). Each world renders the graph
- * data the app already holds — the same window the home galaxy sees — via
- * the `graph` prop from App; none fetches its own copy of the brain.
+ * earliest done Journey with two member stops), and the People (P3-3 —
+ * the warm field: one cluster per person with linked memories, lights =
+ * their memories, bridges = memories shared between two people). Each
+ * world renders the graph data the app already holds — the same window
+ * the home galaxy sees — via the `graph` prop from App; none fetches
+ * its own copy of the brain.
  * Journeys are fetched on garden/deep-past entry (landmarks / routes); if a
  * fetch fails, the world renders without that layer and says so honestly.
  *
@@ -86,15 +97,21 @@ interface WorldSceneHandle {
 }
 
 function isGardenLayout(
-  layout: GardenLayout | DeepPastLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | undefined,
 ): layout is GardenLayout {
   return !!layout && "plots" in layout;
 }
 
 function isDeepPastLayout(
-  layout: GardenLayout | DeepPastLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | undefined,
 ): layout is DeepPastLayout {
   return !!layout && "members" in layout;
+}
+
+function isPeopleLayout(
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | undefined,
+): layout is PeopleLayout {
+  return !!layout && "clusters" in layout;
 }
 
 interface WorldSceneEntry {
@@ -105,7 +122,7 @@ interface WorldSceneEntry {
   orbitHeight: number;
   lookAtY: number;
   fallback: string;
-  build: (layout?: GardenLayout | DeepPastLayout) => WorldSceneHandle;
+  build: (layout?: GardenLayout | DeepPastLayout | PeopleLayout) => WorldSceneHandle;
 }
 
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
@@ -144,6 +161,17 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     fallback: "The Deep Past view needs graphics support on this device — your memories are unaffected.",
     build: (layout) =>
       createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT),
+  },
+  people: {
+    title: "The People",
+    background: 0x1a120c,
+    fogDensity: 0.00016,
+    orbitRadius: 700,
+    orbitHeight: 140,
+    lookAtY: 0,
+    fallback: "The People view needs graphics support on this device — your people are unaffected.",
+    build: (layout) =>
+      createPeopleScene(isPeopleLayout(layout) ? layout : EMPTY_PEOPLE_LAYOUT),
   },
 };
 
@@ -186,6 +214,7 @@ export default function WorldsSurface({
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
   const atDeepPast = atWorld && currentWorld === "deep-past";
+  const atPeople = atWorld && currentWorld === "people";
   const worldName = (key: string) =>
     WORLD_CHART.find((w) => w.key === key)?.name ?? key;
   const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
@@ -266,7 +295,22 @@ export default function WorldsSurface({
     return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map());
   }, [atDeepPast, graph, journeys, journeyLinksMap]);
 
-  const sceneLayout = currentWorld === "growing-place" ? layout : currentWorld === "deep-past" ? deepPastLayout : undefined;
+  // The People layout derives the same way, from the graph alone — one
+  // warm cluster per person with linked memories, bridges where memories
+  // are shared. The world re-reads the brain on every visit.
+  const peopleLayout = useMemo<PeopleLayout | undefined>(() => {
+    if (!atPeople || !graph) return undefined;
+    return buildPeopleLayout(graph);
+  }, [atPeople, graph]);
+
+  const sceneLayout =
+    currentWorld === "growing-place"
+      ? layout
+      : currentWorld === "deep-past"
+        ? deepPastLayout
+        : currentWorld === "people"
+          ? peopleLayout
+          : undefined;
 
   const toggleGuided = () => {
     if (guidedRef.current) {
@@ -287,7 +331,7 @@ export default function WorldsSurface({
     // A memory-bearing world needs the graph before it can build; until
     // then the dialog shows its loading line (see the render below) and
     // builds nothing.
-    if (mode === "world" && (atGarden || atDeepPast) && !sceneLayout) return;
+    if (mode === "world" && (atGarden || atDeepPast || atPeople) && !sceneLayout) return;
     const host = hostRef.current;
     if (!host) return;
     let renderer: THREE.WebGLRenderer;
@@ -472,6 +516,9 @@ export default function WorldsSurface({
       )}
       {mode === "world" && currentWorld === "deep-past" && !deepPastLayout && (
         <p className="worlds-surface-fallback">Your past is loading — your memories are unaffected.</p>
+      )}
+      {mode === "world" && currentWorld === "people" && !peopleLayout && (
+        <p className="worlds-surface-fallback">Your people are gathering — your memories are unaffected.</p>
       )}
       {mode === "world" && atDeepPast && thread && (
         <p className="worlds-surface-fallback">
