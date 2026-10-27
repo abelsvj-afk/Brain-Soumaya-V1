@@ -6545,6 +6545,51 @@ button.mindspace-more { cursor: pointer; }
   left: 1rem;
   bottom: 1rem;
 }
+
+/* Harbor controller panel (Wave 2, NPC autonomy): a readable card
+   over the Station scene, bottom-left above the credits. Functional
+   layout only — the scene carries the visuals. */
+.harbor-controller {
+  position: absolute;
+  left: 1rem;
+  bottom: 4rem;
+  max-width: min(28rem, calc(100% - 2rem));
+  max-height: calc(100% - 9rem);
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  background: rgba(11, 16, 38, 0.88);
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+  color: #e8e6df;
+  font-size: 0.9rem;
+}
+.harbor-controller-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.harbor-controller-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.harbor-controller-answer {
+  white-space: pre-line;
+}
+.harbor-controller-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.harbor-controller-log {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.harbor-controller-cause {
+  opacity: 0.8;
+}
+.harbor-controller-error {
+  color: #ffb4a2;
+}
 .travel-bonus {
   color: #ffd27a;
 }

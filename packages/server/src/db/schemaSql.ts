@@ -1145,4 +1145,53 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_travel_events_journey
       ON travel_journey_events(journey_id);
+
+    -- NPC autonomy (Wave 2): the autonomy loop's own tables. The log is
+    -- append-only — every act and every non-act, with its cause in plain
+    -- language, so anyone can ask "why did it do that?" and get an
+    -- answer. Holdings live in a SEPARATE pool from any player relic
+    -- pool (note §3): an NPC can never consume, hold, or lock away a
+    -- copy a player could otherwise find. npc_state carries the kill
+    -- switch (stopped), the tick throttle, the last welcomed arrival,
+    -- and the last explore day — the NPC remembers nothing between
+    -- visits beyond what this row needs to run the loop (note §3).
+    -- Identical DDL also runs in db/client.ts migrateSchema() for
+    -- existing volumes. kind carries no SQL CHECK: the allow-list is
+    -- enforced in TypeScript (NpcRepo.appendLog validates against
+    -- NPC_ACT_KINDS), and a CHECK would need a migration every time
+    -- the roster claims a new kind.
+    CREATE TABLE IF NOT EXISTS npc_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_log_space_npc_created
+      ON npc_log(space_id, npc_id, created_at);
+    CREATE TABLE IF NOT EXISTS npc_state (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      stopped INTEGER NOT NULL DEFAULT 0,
+      last_tick_at TEXT,
+      last_welcome_journey_id TEXT,
+      last_explore_day TEXT,
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_relic_holdings (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      found_in_world TEXT NOT NULL,
+      PRIMARY KEY (space_id, npc_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_gate (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, npc_id)
+    );
 `;

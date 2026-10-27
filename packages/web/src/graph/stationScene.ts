@@ -9,6 +9,7 @@ import {
   WITNESS_HAULER_POSITION,
   beaconRing,
   dockingMooringPose,
+  harborControllerBerthPose,
   heroMooringPose,
   mooringPose,
   rngFromSeed,
@@ -40,7 +41,8 @@ import {
  * P2-6 (owner's direction 2026-10-25): the Station is gigantic and
  * game-alive. The D-37 accessory layer is built out — beacon ring,
  * work lights, real-ship traffic (Quaternius fleet + WATO regular),
- * docked ships, dressing, witnesses — and the whole station turns
+ * docked ships, dressing, witnesses, the harbor controller's
+ * dispatcher moored at its berth — and the whole station turns
  * slowly (R-S4) while the traffic flies its lanes (A17). Her own ship
  * is moored at the primary arm (Q2: the hero is `soumaya-ship.glb`).
  *
@@ -389,6 +391,20 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
         shuttle.name = "docking-shuttle";
         group.add(shuttle);
         dockingMesh = shuttle;
+        // The harbor controller's ship (Wave 2, NPC autonomy): the
+        // controller flies the dispatcher and moors it at its berth
+        // between arms 1 and 2. Same geometry as the shuttle (one
+        // load, no second fetch), scaled to the traffic ladder, and
+        // attached to the Station so it turns with the Station like
+        // the hero and the docked ships. The berth stays empty until
+        // the dispatcher GLB lands — no faked controller.
+        const controller = new THREE.Mesh(single.geometry, single.material);
+        controller.name = "harbor-controller-ship";
+        const berth = harborControllerBerthPose();
+        controller.position.set(berth.position[0], berth.position[1], berth.position[2]);
+        controller.rotation.y = berth.rotationY;
+        controller.scale.setScalar(scale);
+        station.add(controller);
       }
       removeFallbackTraffic();
     });

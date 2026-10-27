@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   APPROACH_STAGES,
   DOCKING_ARM,
+  HARBOR_CONTROLLER_BERTH,
   HERO_MOORING,
   HERO_SHIP_FORWARD_LENGTH,
   STATION_BUDGET,
@@ -12,9 +13,11 @@ import {
   STATION_ORBIT_RADIUS,
   STATION_SCALE_RATIO,
   STATION_WHEEL_DIAMETER,
+  STATION_WHEEL_RADIUS,
   approachPose,
   beaconRing,
   dockingMooringPose,
+  harborControllerBerthPose,
   heroMooringPose,
   plannedDrawCalls,
   plannedVisibleTris,
@@ -108,8 +111,34 @@ describe("stationLayout", () => {
     expect(STATION_INTERNAL_TARGETS.visibleTris).toBe(500_000);
     // Pinned measured totals (P2-6 build record): the WATO regular is
     // 7 materials after the merge, not the hunt's 6-family count.
-    expect(plannedDrawCalls()).toBe(53);
-    expect(plannedVisibleTris()).toBe(246_056);
+    // NPC autonomy adds the controller's ship: +1 call, +748 tris.
+    expect(plannedDrawCalls()).toBe(54);
+    expect(plannedVisibleTris()).toBe(246_804);
+  });
+
+  it("the harbor controller's berth sits between arms 1 and 2, clear of docked ships and dressing", () => {
+    expect(HARBOR_CONTROLLER_BERTH.radius).toBe(222);
+    expect(HARBOR_CONTROLLER_BERTH.angle).toBeCloseTo((Math.PI * 3) / 4, 10);
+    const pose = harborControllerBerthPose();
+    // Radius 222, angle 3π/4: x and z are both negative, equal magnitude.
+    expect(pose.position[0]).toBeCloseTo(-222 * Math.SQRT1_2, 5);
+    expect(pose.position[2]).toBeCloseTo(222 * Math.SQRT1_2, 5);
+    // Nose outward, away from the Station: rotating the ship's −Z
+    // forward by rotationY must give the outward radial direction.
+    const rot = pose.rotationY;
+    expect(-Math.sin(rot)).toBeCloseTo(Math.cos(HARBOR_CONTROLLER_BERTH.angle), 5);
+    expect(-Math.cos(rot)).toBeCloseTo(Math.sin(HARBOR_CONTROLLER_BERTH.angle), 5);
+    // Clearance to the nearest docked arm (arm 1 at π/2, arm 2 at π):
+    // π/4 of arc at radius 222 is ~174 units; the docked ships sit at
+    // lateral ±8. The berth is far outside any docked ship.
+    const armGap = (Math.PI / 4) * HARBOR_CONTROLLER_BERTH.radius;
+    expect(armGap).toBeGreaterThan(150);
+    // Inside the dressing band's inner edge (radius 232): no dressing
+    // piece can sit on the berth.
+    expect(HARBOR_CONTROLLER_BERTH.radius).toBeLessThan(232);
+    // Inside the innermost traffic lane (255) and outside the rim (210).
+    expect(HARBOR_CONTROLLER_BERTH.radius).toBeGreaterThan(STATION_WHEEL_RADIUS);
+    expect(HARBOR_CONTROLLER_BERTH.radius).toBeLessThan(255);
   });
 
   it("the C7 coverage sweep enumerates only reachable, bounded poses", () => {

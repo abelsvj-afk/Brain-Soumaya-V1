@@ -40,6 +40,9 @@ describe("createStationScene", () => {
     expect(find(scene.group, "station-work-lights")).toBeTruthy();
     // The hero mooring stays empty until her GLB lands — no faked hero.
     expect(find(scene.group, "hero-ship")).toBeUndefined();
+    // The harbor controller's berth stays empty until the dispatcher
+    // GLB lands — no faked controller.
+    expect(find(scene.group, "harbor-controller-ship")).toBeUndefined();
     scene.dispose();
   });
 

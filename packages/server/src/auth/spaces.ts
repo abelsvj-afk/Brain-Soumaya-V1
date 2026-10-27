@@ -174,6 +174,13 @@ export const SPACE_SCOPED_TABLES = [
   "notification_outbox",
   "travel_journey_events",
   "travel_journeys",
+  // NPC autonomy (Wave 2): the loop's log, state, separate-pool
+  // holdings, and gate rows are per-space rows — brain deletion must
+  // remove them too.
+  "npc_log",
+  "npc_state",
+  "npc_relic_holdings",
+  "npc_gate",
 ] as const;
 
 /**
