@@ -1,6 +1,7 @@
 # NPCs and Autonomous Agents in the Worlds — Concept Note (DRAFT)
 
 **Status:** CONCEPT STAGE — for the review loop. No build authorized. No implementation is authorized by this note.
+**Revision (2026-10-26, owner settlements):** §1 — NPCs are fake/real in-game players (definition, owner's words); §9 — NPCs need the relics to reach Eternity (the NPC side of the B-01 gate rule).
 **What this note is:** the framework for NPCs — what an NPC is, what autonomy means here, and the fence every autonomous agent runs inside. It answers the owner's question (2026-10-25): think about what the Man-God is, his code, and how he could become autonomous.
 **What this note is NOT:** the Man-God himself. He stays in the other chat (the mockup maker holds his guide/design). This note is the frame any NPC runs inside — including him, when that chat settles him. Nothing here designs his form, his name, or his world; those live in `docs/worlds/man-god-world-concept.md`.
 
@@ -9,6 +10,7 @@
 ## 1. What an NPC is (and what it is not)
 
 - **An NPC is a presence with a job.** It acts in a world, speaks or gestures, and does things on its own — within its fence. It is not decoration (traffic, birds, particulate are set dressing: no agency, no decisions) and it is not progression (an NPC never gates access, never scores the user, never unlocks or withholds anything).
+- **NPCs are fake/real in-game players (SETTLED, owner, 2026-10-26, his words: "NPCs are basically fake/real in-game players").** An NPC is a fake player that behaves like a real player: it **explores the worlds like a regular player trying to figure things out** — it does not know everything; it **leaves and it comes back**; it does not just float around a world like a cute decoration. The ambient-traffic increment (A17/B-4) is presentation only — the vessel belongs to an NPC, the traffic behavior carries no decision and no log entry — and the player-behavior rules above are the direction that traffic grows into, one NPC at a time, on the owner's word. An NPC that cannot find the way does not pretend otherwise: it explores, it leaves, it comes back — it never narrates knowledge it doesn't have.
 - **NPCs fly ships (owner, 2026-10-25).** The worlds are filled with NPC ships until real users start playing; then NPC ships + real users' ships. Every ship in a world belongs to someone. Every NPC ship is a real free sci-fi asset — never a procedural placeholder (no fake triangle floating blue things). In this increment the ships fly as ambient traffic (A17/B-4: presentation-only, no decisions, no log entries); the vessel is an NPC's ship, the traffic behavior is not yet an NPC act.
 - **An NPC never punishes.** No loss, no shame, nothing real ever taken. An NPC's acts are wondrous, protective, or reordering — never destructive (D-54: destruction is out, for the Man-God and by extension for every NPC).
 - **An NPC never touches the brain.** It reads what the brain surfaces only with the visitor's consent, and it never writes to a brain — no new node, no edit, no deletion, no re-ranking. The worlds layer holds nothing the brain doesn't (failure-independence).
@@ -78,3 +80,9 @@ The Man-God is the first autonomous NPC in the owner's plan, and the framework's
 
 - This note → review loop → owner's settlement of Q1–Q5 → the framework applies when the first NPC is built. The Man-God's implementation stays in the other chat; this chat builds NPCs only on the owner's word, one at a time, in the default lane.
 - **Not in this note:** the Man-God's form, name, or world (other chat); the shared-presence infrastructure (third chat's Track B); the §17 rail itself (Phase 4); any model/key procurement (owner's call, separate from this design).
+
+## 9. NPCs and the gate to Eternity (SETTLED, owner, 2026-10-26)
+
+- **The gate rule applies to NPCs too — the NPC side of B-01.** A gate to Eternity's world requires certain artifacts (relics). **If an NPC doesn't have the right artifacts, it can't find the way and won't go; if it finds them, it will go.** The key is the same as for players: the Witness Without a Name plus any two other relics opens the gate (relic-buffs note §5, B-01); once opened for that NPC, the gate stays open and only fuel prices the journey.
+- **Finding is the same verb as for players (owner's word is "if it finds them").** The owner settled only that the NPC must find the artifacts; how an NPC's search works, how its holdings are shown, and whether an NPC can hold a scarce copy a player could otherwise find are open design questions, not settlements.
+- **An NPC never teleports past a gate it hasn't opened.** It explores, it leaves, it comes back — the gate is a real constraint on its movement, not a line it narrates around.
