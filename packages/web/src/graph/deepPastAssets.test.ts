@@ -6,6 +6,7 @@ import {
   DEEP_PAST_ASSET_URLS,
   DEEP_PAST_BASIN_GLB_Y,
   DEEP_PAST_BASIN_SPAN,
+  DEEP_PAST_CRYSTAL,
   DEEP_PAST_GLB_DRAW_CALLS,
   DEEP_PAST_GLB_TRIS_TOTAL,
   DEEP_PAST_LANTERN,
@@ -14,6 +15,7 @@ import {
   DEEP_PAST_STAIR,
   DEEP_PAST_TERRACE,
   fitDeepPastAsset,
+  fitDeepPastAssetToSize,
   fitDeepPastAssetToSpan,
   loadDeepPastAsset,
 } from "./deepPastAssets.js";
@@ -51,24 +53,29 @@ function estimateTris(group: THREE.Group): number {
 }
 
 describe("deepPastAssets manifest", () => {
-  it("is the five shipped v6 pieces, basin first, all GLBs under public/", () => {
+  it("is the five shipped v6 pieces, basin first, plus the stratum crystal — all GLBs under public/", () => {
     expect(DEEP_PAST_MODELS.map((m) => m.key)).toEqual([
       "basin",
       "terrace",
       "rim",
       "stair",
       "lantern",
+      "crystal",
     ]);
-    expect(new Set(DEEP_PAST_MODELS.map((m) => m.key)).size).toBe(5);
+    expect(new Set(DEEP_PAST_MODELS.map((m) => m.key)).size).toBe(6);
     expect(DEEP_PAST_MODELS.every((m) => m.url.startsWith("/") && m.url.endsWith(".glb"))).toBe(true);
-    expect(new Set(DEEP_PAST_ASSET_URLS).size).toBe(5);
+    expect(new Set(DEEP_PAST_ASSET_URLS).size).toBe(6);
     expect(DEEP_PAST_ASSET_URLS).toEqual(DEEP_PAST_MODELS.map((m) => m.url));
   });
 
-  it("carries the measured v6 triangle counts (88,168 total)", () => {
-    expect(DEEP_PAST_MODELS.map((m) => m.tris)).toEqual([22500, 22500, 14200, 14626, 14342]);
-    expect(DEEP_PAST_GLB_TRIS_TOTAL).toBe(88168);
-    expect(DEEP_PAST_GLB_DRAW_CALLS).toBe(6); // five meshes + the lantern's glow sprite
+  it("carries the measured triangle counts (88,220 total) and counts the crystal's two materials honestly", () => {
+    expect(DEEP_PAST_MODELS.map((m) => m.tris)).toEqual([22500, 22500, 14200, 14626, 14342, 52]);
+    expect(DEEP_PAST_GLB_TRIS_TOTAL).toBe(88220);
+    // Five pieces at 1 call each + the crystal at 2 (both materials kept)
+    // + the lantern's glow sprite = 8. The old `length + 1` formula would
+    // have said 7 and hidden the crystal's second call.
+    expect(DEEP_PAST_MODELS.map((m) => m.materials)).toEqual([1, 1, 1, 1, 1, 2]);
+    expect(DEEP_PAST_GLB_DRAW_CALLS).toBe(8);
   });
 
   it("places the pieces at the mockup's verified placements, ×5", () => {
@@ -91,6 +98,13 @@ describe("deepPastAssets manifest", () => {
     expect(DEEP_PAST_LANTERN.radius).toBe(322.5);
     expect(DEEP_PAST_LANTERN.y).toBe(-213.5);
     expect(DEEP_PAST_LANTERN.scale).toBe(100);
+    // Crystal: stratum 5, on the stratum's arc at the alcove radius, 8
+    // above the stratum floor, 30 tall — a crystal, not a monument.
+    expect(DEEP_PAST_CRYSTAL.stratum).toBe(5);
+    expect(DEEP_PAST_CRYSTAL.angle).toBeCloseTo(5 * 0.85 + 0.9, 10);
+    expect(DEEP_PAST_CRYSTAL.radius).toBe(352.5 - 15);
+    expect(DEEP_PAST_CRYSTAL.y).toBe(-450 + 8);
+    expect(DEEP_PAST_CRYSTAL.size).toBe(30);
   });
 });
 
@@ -137,10 +151,28 @@ describe("fitDeepPastAsset", () => {
     const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
     expect(size.x).toBeCloseTo(640, 2);
   });
+
+  it("fits a root to a target longest side whatever it measures", () => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(2, 4, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffffff }),
+    );
+    mesh.position.set(10, 20, 30);
+    const root = new THREE.Group();
+    root.add(mesh);
+    expect(fitDeepPastAssetToSize(root, 30)).toBeCloseTo(5, 5);
+    const box = new THREE.Box3().setFromObject(root);
+    const center = box.getCenter(new THREE.Vector3());
+    expect(center.x).toBeCloseTo(0, 5);
+    expect(center.y).toBeCloseTo(0, 5);
+    expect(center.z).toBeCloseTo(0, 5);
+    const size = box.getSize(new THREE.Vector3());
+    expect(size.z).toBeCloseTo(30, 5);
+  });
 });
 
 describe("deep past budget with the GLB layer loaded", () => {
-  it("the recipe budget still holds for a large graph with all five GLBs in", () => {
+  it("the recipe budget still holds for a large graph with all six GLBs in", () => {
     const bigNodes = Array.from({ length: 2000 }, (_, i) => ({
       id: i + 1,
       label: `node ${i + 1}`,

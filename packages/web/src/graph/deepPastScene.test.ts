@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { buildDeepPastLayout, DEEP_PAST_BUDGET, DEEP_PAST_STRATA_COUNT } from "./deepPastLayout.js";
 import {
   DEEP_PAST_BASIN_GLB_Y,
+  DEEP_PAST_CRYSTAL,
   DEEP_PAST_LANTERN,
   DEEP_PAST_RIM,
   DEEP_PAST_STAIR,
@@ -114,7 +115,7 @@ describe("deep past scene (P3-2)", () => {
     expect(scene.group.getObjectByName("basin-rim")).toBeTruthy();
     // Holders start empty: the GLBs land async; a failed load leaves a
     // holder empty and noted, never a hole in the world.
-    for (const name of ["glb-basin", "glb-terrace", "glb-rim", "glb-stair", "glb-lantern"]) {
+    for (const name of ["glb-basin", "glb-terrace", "glb-rim", "glb-stair", "glb-lantern", "glb-crystal"]) {
       const holder = scene.group.getObjectByName(name) as THREE.Group;
       expect(holder).toBeTruthy();
       expect(holder.children.length).toBe(0);
@@ -137,6 +138,10 @@ describe("deep past scene (P3-2)", () => {
     expect(lantern.position.x).toBeCloseTo(Math.cos(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius, 5);
     expect(lantern.position.y).toBe(DEEP_PAST_LANTERN.y);
     expect(lantern.position.z).toBeCloseTo(Math.sin(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius, 5);
+    const crystal = scene.group.getObjectByName("glb-crystal") as THREE.Group;
+    expect(crystal.position.x).toBeCloseTo(Math.cos(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius, 5);
+    expect(crystal.position.y).toBe(DEEP_PAST_CRYSTAL.y);
+    expect(crystal.position.z).toBeCloseTo(Math.sin(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius, 5);
     scene.dispose();
   });
 

@@ -1,9 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
+  SCALE_BELT_ASSETS,
+  SCALE_ENCOUNTER_ASSETS,
   SCALE_EXTERNAL_ASSETS,
   SCALE_ISS_ASSET,
+  SCALE_LOW_POLY_URLS,
+  SCALE_MOON_ASSET,
+  SCALE_MOON_OUTPOST_ASSETS,
   SCALE_PALETTE,
+  SCALE_PLANET_ASSETS,
   SCALE_PROBE_ASSETS,
+  SCALE_SATELLITE_ASSET,
 } from "./scaleAssets.js";
 
 describe("scaleAssets", () => {
@@ -45,5 +52,63 @@ describe("scaleAssets", () => {
       "voyager",
     ]);
     expect(new Set(SCALE_EXTERNAL_ASSETS.map((a) => a.url)).size).toBe(5);
+  });
+
+  it("the low-poly population is the measured pack — 15 models, 8,536 tris drawn, every file flat in public/", () => {
+    expect(SCALE_PLANET_ASSETS.map((p) => p.key)).toEqual([
+      "planet_earth",
+      "planet_mars",
+      "planet_jupiter",
+      "planet_saturn",
+    ]);
+    expect(SCALE_PLANET_ASSETS.map((p) => p.tris)).toEqual([140, 140, 464, 400]);
+    expect(SCALE_PLANET_ASSETS.map((p) => p.materials)).toEqual([3, 3, 3, 2]);
+    expect(SCALE_MOON_ASSET.key).toBe("moon_cratered");
+    expect(SCALE_MOON_ASSET.tris).toBe(192);
+    expect(SCALE_MOON_OUTPOST_ASSETS.map((m) => m.key)).toEqual([
+      "moon_base_dome",
+      "moon_rover",
+      "flag_pole",
+    ]);
+    expect(SCALE_MOON_OUTPOST_ASSETS.map((m) => m.tris)).toEqual([148, 232, 72]);
+    expect(SCALE_BELT_ASSETS.map((m) => m.key)).toEqual(["asteroid_big", "asteroid_small"]);
+    expect(SCALE_BELT_ASSETS.map((m) => m.materials)).toEqual([2, 1]);
+    expect(SCALE_ENCOUNTER_ASSETS.map((m) => m.key)).toEqual([
+      "alien",
+      "astronaut",
+      "flexunit-ufo",
+      "ufo",
+    ]);
+    expect(SCALE_ENCOUNTER_ASSETS.find((m) => m.key === "flexunit-ufo")!.tris).toBe(4220);
+    expect(SCALE_SATELLITE_ASSET.key).toBe("satellite_a");
+    expect(SCALE_SATELLITE_ASSET.tris).toBe(152);
+    // Measured totals: planets 1,144 + moon 192 + outpost 452 + belts 60
+    // + encounters 4,796 + satellite 152 = 6,796 file tris; the belts
+    // instance 30× each (1,800 drawn) and the rest draw once, so the
+    // drawn total is 8,536 (see the scene sketch).
+    const fileTotal = [
+      ...SCALE_PLANET_ASSETS,
+      SCALE_MOON_ASSET,
+      ...SCALE_MOON_OUTPOST_ASSETS,
+      ...SCALE_BELT_ASSETS,
+      ...SCALE_ENCOUNTER_ASSETS,
+      SCALE_SATELLITE_ASSET,
+    ].reduce((n, m) => n + m.tris, 0);
+    expect(fileTotal).toBe(6796);
+    expect(SCALE_LOW_POLY_URLS).toHaveLength(15);
+    expect(new Set(SCALE_LOW_POLY_URLS).size).toBe(15);
+    expect(SCALE_LOW_POLY_URLS.every((u) => u.startsWith("/") && u.endsWith(".glb"))).toBe(true);
+    // Every low-poly URL carries its measured SHA-256 (the upload check).
+    for (const m of [
+      ...SCALE_PLANET_ASSETS,
+      SCALE_MOON_ASSET,
+      ...SCALE_MOON_OUTPOST_ASSETS,
+      ...SCALE_BELT_ASSETS,
+      ...SCALE_ENCOUNTER_ASSETS,
+      SCALE_SATELLITE_ASSET,
+    ]) {
+      expect(m.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(m.bytes).toBeGreaterThan(0);
+    }
   });
 });

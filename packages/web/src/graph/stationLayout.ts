@@ -233,6 +233,81 @@ export function dockingMooringPose(): { position: [number, number, number]; rota
 }
 
 /**
+ * Low-poly docked ships (population increment, 2026-10-27): four new
+ * mooring spots at the docked-ship radius (222), lateral ±20 on the π
+ * and 3π/2 arms — clear of the hero (angle 0), the docking shuttle
+ * (angle π/2 — the shuttle's arm is avoided entirely, not just
+ * laterally: the docked block numbers arms by angle/(π/2), so these
+ * are its arms 2 and 3, while the shuttle flies DOCKING_ARM index 2
+ * at angle π/2), the harbor controller berth (3π/4, ≥150 units from
+ * the nearest of these), and the dressing band (radius 232+). The ±20
+ * laterals sit 12 units from the existing ±8 docked ships on the same
+ * arms: the ships moor parallel to the arm, so the gap is lateral —
+ * ship width, not length — and 12 units is ~2–3 ship-widths. Spot i ↔
+ * LOWPOLY_DOCKED_MODELS[i] (the traffic-lane pattern).
+ */
+export const LOWPOLY_DOCKED_SPOTS: readonly { arm: number; lateral: number }[] = [
+  { arm: 2, lateral: 20 },
+  { arm: 2, lateral: -20 },
+  { arm: 3, lateral: 20 },
+  { arm: 3, lateral: -20 },
+];
+
+/** Pose for a ship moored at a radius/angle with a lateral offset from
+ *  the arm axis (nose outward, parallel to the arm — the docked-ship
+ *  rule). */
+export function dockedPoseAt(
+  radius: number,
+  angle: number,
+  lateral: number,
+): { position: [number, number, number]; rotationY: number } {
+  return {
+    position: [
+      Math.cos(angle) * radius + -Math.sin(angle) * lateral,
+      0,
+      Math.sin(angle) * radius + Math.cos(angle) * lateral,
+    ],
+    rotationY: mooringPose(radius, angle).rotationY,
+  };
+}
+
+export interface LowPolyDressingSpot {
+  angle: number;
+  radius: number;
+  y: number;
+  rotationY: number;
+}
+
+/**
+ * Low-poly dressing spots (population increment): five pieces, one per
+ * model, in the dressing band — but set BETWEEN the existing dressing
+ * clusters (the existing pieces sit on the diagonals, ±0.25 rad; these
+ * sit ~0.45 rad off-diagonal), at radius 234–244, so no two dressing
+ * pieces share a neighborhood. Deterministic from the recipe seed.
+ */
+export function lowPolyDressingSpots(count = 5): LowPolyDressingSpot[] {
+  const rnd = rngFromSeed(`${STATION_SEED}:dressing-lowpoly`);
+  return Array.from({ length: count }, (_, i) => {
+    const diagonal = (i % 4) * (Math.PI / 2) + Math.PI / 4;
+    return {
+      angle: diagonal + 0.45 + (rnd() - 0.5) * 0.3,
+      radius: 234 + rnd() * 10,
+      y: (rnd() - 0.5) * 40,
+      rotationY: rnd() * Math.PI * 2,
+    };
+  });
+}
+
+/**
+ * The drydock gantry (population increment): the launch tower stands
+ * beside the drydock frame (frame center [105, 20, 177]) — ~25 units
+ * off its center, ~63 from the hauler, and ~187 from the closest
+ * approach-camera pose, so it witnesses the drydock without standing
+ * in the approach corridor.
+ */
+export const LOWPOLY_GANTRY_POSITION: readonly [number, number, number] = [88, 20, 195];
+
+/**
  * Scale witnesses (C1, B-3): the drydock frame and the hauler sit just
  * off the approach corridor, placed so both are in the handoff frame
  * beside the Station (verified by the frame arithmetic in the build
@@ -268,8 +343,11 @@ export const STATION_DRAW_CALL_PLAN: readonly { part: string; calls: number }[] 
   { part: "traffic — WATO regular (merged by material)", calls: 7 },
   { part: "docking shuttle (single mesh)", calls: 1 },
   { part: "docked ships (Kenney, merged, 4 models)", calls: 4 },
+  { part: "docked ships — low-poly (merged, 4 models)", calls: 4 },
   { part: "dressing (instanced, 6 models)", calls: 6 },
+  { part: "dressing — low-poly (merged, 5 models)", calls: 5 },
   { part: "witnesses — hauler (merged) + drydock frame (batched)", calls: 5 },
+  { part: "witness — drydock gantry (launch_tower, merged)", calls: 1 },
   { part: "starfield (HYG)", calls: 1 },
   { part: "route line + markers", calls: 0 },
   { part: "backdrop", calls: 0 },
@@ -282,10 +360,12 @@ export const STATION_DRAW_CALL_PLAN: readonly { part: string; calls: number }[] 
  * traffic 32,064 × 2 instances; WATO 730; docking shuttle 748;
  * docked 2,072 (cargoB ×2 + miner ×2 + cargoA + racer); dressing
  * 882 × 2; witnesses 264 + 1,516 (drydock composition); harbor
- * controller's ship 748 (the dispatcher, moored at its berth). Total
- * 246,804 — 49% of the internal target. Route and backdrop cost no
- * triangles: the route lives in the TravelPanel, the backdrop is a
- * clear color + fog, not a mesh.
+ * controller's ship 748 (the dispatcher, moored at its berth).
+ * Population increment (+2,096): low-poly docked 880 (224 + 184 +
+ * 272 + 200), low-poly dressing 884 (192 + 128 + 216 + 128 + 220),
+ * drydock gantry 332. Total 248,900 — 50% of the internal target.
+ * Route and backdrop cost no triangles: the route lives in the
+ * TravelPanel, the backdrop is a clear color + fog, not a mesh.
  */
 export const STATION_TRI_PLAN: readonly { part: string; tris: number }[] = [
   { part: "hull", tris: 132_432 },
@@ -297,8 +377,11 @@ export const STATION_TRI_PLAN: readonly { part: string; tris: number }[] = [
   { part: "traffic — WATO regular (merged by material)", tris: 730 },
   { part: "docking shuttle (single mesh)", tris: 748 },
   { part: "docked ships (Kenney, merged, 4 models)", tris: 2_072 },
+  { part: "docked ships — low-poly (merged, 4 models)", tris: 880 },
   { part: "dressing (instanced, 6 models)", tris: 1_764 },
+  { part: "dressing — low-poly (merged, 5 models)", tris: 884 },
   { part: "witnesses — hauler (merged) + drydock frame (batched)", tris: 1_780 },
+  { part: "witness — drydock gantry (launch_tower, merged)", tris: 332 },
   { part: "starfield (HYG)", tris: 0 },
   { part: "route line + markers", tris: 0 },
   { part: "backdrop", tris: 0 },

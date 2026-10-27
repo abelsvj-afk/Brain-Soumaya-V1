@@ -5,6 +5,7 @@ import { buildHygStarfield } from "./hygStars.js";
 import {
   DEEP_PAST_BASIN_GLB_Y,
   DEEP_PAST_BASIN_SPAN,
+  DEEP_PAST_CRYSTAL,
   DEEP_PAST_LANTERN,
   DEEP_PAST_LANTERN_GLOW_SPAN,
   DEEP_PAST_LANTERN_LIGHT,
@@ -13,6 +14,7 @@ import {
   DEEP_PAST_STAIR,
   DEEP_PAST_TERRACE,
   fitDeepPastAsset,
+  fitDeepPastAssetToSize,
   fitDeepPastAssetToSpan,
   loadDeepPastAsset,
 } from "./deepPastAssets.js";
@@ -45,13 +47,13 @@ import {
  * Draw-call sketch (recipe ceiling 90): strata walls 9 · rim bands 9 · plinths 1
  * · alcoves ≤3 (one instanced mesh per form) · lanterns 1 · thread ≤1 · anchors ≤1
  * · particulate 1 · HYG sky 1 · basin 4 (floor + rim ring + glow + rock) · rise
- * shelf 1 + shelf glow 1 · ships 1 = ~34. The GLB layer adds 6 more calls once
- * loaded (five meshes + the lantern's glow sprite) and 88,168 measured tris —
- * the budget still holds with the layer in (see deepPastAssets.test.ts).
- * Runtime measurement belongs to the device check (C4's measured half);
- * these constants are the static half.
+ * shelf 1 + shelf glow 1 · ships 1 = ~34. The GLB layer adds 8 more calls once
+ * loaded (five meshes + the crystal's two materials + the lantern's glow sprite)
+ * and 88,220 measured tris — the budget still holds with the layer in
+ * (see deepPastAssets.test.ts). Runtime measurement belongs to the device
+ * check (C4's measured half); these constants are the static half.
  *
- * The five real pieces (basin, terrace, rim, stair, lantern) load async
+ * The six real pieces (basin, terrace, rim, stair, lantern, stratum crystal) load async
  * from the manifest in deepPastAssets.ts and swap into the holders named
  * `glb-*` below. Until a piece lands, the procedural form stays — the
  * basin's floor and rim ring are the load fallback, hidden only once the
@@ -295,6 +297,17 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
     Math.sin(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius,
   );
   group.add(lanternHolder);
+  // The stratum crystal (population increment): a crystal in the deep
+  // strata, loaded as-is — both materials, 2 calls; its purple is its
+  // identity. The holder stays empty until its GLB lands.
+  const crystalHolder = new THREE.Group();
+  crystalHolder.name = "glb-crystal";
+  crystalHolder.position.set(
+    Math.cos(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius,
+    DEEP_PAST_CRYSTAL.y,
+    Math.sin(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius,
+  );
+  group.add(crystalHolder);
 
   const hideBasinFallback = () => {
     if (basinFallback.parent !== group) return;
@@ -355,6 +368,9 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
       glow.name = "glb-lantern-glow";
       lanternHolder.add(glow);
     },
+  );
+  loadInto(DEEP_PAST_MODELS[5]!, crystalHolder, (root) =>
+    fitDeepPastAssetToSize(root, DEEP_PAST_CRYSTAL.size),
   );
 
   // The rim-side resting place for risen members: a finished stone platform

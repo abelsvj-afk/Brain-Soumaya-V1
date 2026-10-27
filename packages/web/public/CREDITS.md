@@ -90,6 +90,31 @@ Spacecraft models from NASA 3D Resources
 Measured from the files: Kepler 9,042 triangles, Pioneer 10 8,189,
 Dawn 32,096, Voyager 1 29,911; all Draco-compressed.
 
+**Low Poly Space Pack (Scale, Station, Deep Past, Quiet/Archive, galaxy
+drifters)** — `lowpoly-*.glb` (26 models: alien, asteroid_big,
+asteroid_small, astronaut, crystal_cluster, flag_pole, fuel_tank,
+lander_pod, launch_tower, moon_base_dome, moon_cratered, moon_rover,
+planet_earth, planet_jupiter, planet_mars, planet_saturn,
+rocket_classic, rocket_shuttle, satellite_a, satellite_dish,
+solar_array, space_capsule, space_station_core, sputnik,
+station_module, ufo)
+Models by reodesuxz (itch.io), free for unlimited personal and
+commercial projects, modify allowed, no attribution required (credit
+appreciated). NOT permitted: reselling, sublicensing, or
+redistributing the asset files as standalone assets or in another
+pack; no AI training. In-app use only — the raw files are not
+redistributed. Measured from the files: 4,868 triangles across the 26
+models, exactly the pack README's claim. Planets load as-is (colors
+kept); encounters, outpost pieces, docked ships, dressing, and the
+gantry merge to one material each; the stratum crystal and Sputnik
+keep both materials.
+
+**FlexUnit UFO (Scale encounter)** — `flexunit-ufo.glb`
+"3D Game Ready UFO Spaceship" by FlexUnit, CC0. Converted from the
+downloaded FBX to GLB (FBX2glTF v0.9.7); 4,220 triangles, exactly the
+page claim. The converted file's bounding box measures tiny
+(0.05 units), so it is scaled up on placement.
+
 ## Not shipped
 
 **Held-back ships** — EXCLUDED. Eleven hulls (15,539 triangles) from

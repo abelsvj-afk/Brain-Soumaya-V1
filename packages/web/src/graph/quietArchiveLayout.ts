@@ -242,6 +242,24 @@ function whyLine(
   return `${name} — ${memories}${threads}${dates}.`;
 }
 
+/**
+ * Sputnik's alcove (population increment): by the arrival edge, off the
+ * threshold's axis — the threshold stands at angle 0.6, at the field's
+ * edge; Sputnik rests 0.5 rad off-axis and 40 units inside the edge,
+ * so it is beside the doorway, never in it, and never on the Stillness
+ * Seal's relic spot (angle 0.6 ± 0.2, radius 0.5–0.7 × field). A small
+ * bright thing at the field's edge, found on arrival.
+ */
+export function quietArchiveSputnikPosition(fieldRadius: number): {
+  x: number;
+  y: number;
+  z: number;
+} {
+  const angle = 1.1;
+  const radius = Math.max(60, fieldRadius - 40);
+  return { x: Math.cos(angle) * radius, y: 8, z: Math.sin(angle) * radius };
+}
+
 export function buildQuietArchiveLayout(archived: GraphData): QuietArchiveLayout {
   // Canonical input ordering (C1): id-ascending before anything is derived,
   // so the same logical data in any arrival order lays out identically.

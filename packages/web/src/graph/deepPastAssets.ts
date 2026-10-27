@@ -51,27 +51,36 @@ export interface DeepPastAssetModel {
   url: string;
   /** Measured triangles of the shipped v6 file. */
   tris: number;
+  /** Material count of the file (= draw calls for this piece when loaded as-is). */
+  materials: number;
 }
 
-/** The five shipped pieces, in the asset-components order (basin first). */
+/** The five shipped pieces, in the asset-components order (basin first) — plus the stratum crystal (population increment, 2026-10-27). */
 export const DEEP_PAST_MODELS: readonly DeepPastAssetModel[] = [
-  { key: "basin", url: "/first-light-basin-web-256.glb", tris: 22500 },
-  { key: "terrace", url: "/stratum-terrace-web-256.glb", tris: 22500 },
-  { key: "rim", url: "/rim-web-256.glb", tris: 14200 },
-  { key: "stair", url: "/descent-stair-web-256.glb", tris: 14626 },
-  { key: "lantern", url: "/stratum-lantern-web-256.glb", tris: 14342 },
+  { key: "basin", url: "/first-light-basin-web-256.glb", tris: 22500, materials: 1 },
+  { key: "terrace", url: "/stratum-terrace-web-256.glb", tris: 22500, materials: 1 },
+  { key: "rim", url: "/rim-web-256.glb", tris: 14200, materials: 1 },
+  { key: "stair", url: "/descent-stair-web-256.glb", tris: 14626, materials: 1 },
+  { key: "lantern", url: "/stratum-lantern-web-256.glb", tris: 14342, materials: 1 },
+  // A stratum crystal in the deep strata (reodesuxz Low Poly Space Pack,
+  // free commercial, no attribution required — see CREDITS.md): kept
+  // as-is, BOTH materials = 2 calls. Its purple is its identity.
+  { key: "crystal", url: "/lowpoly-crystal_cluster.glb", tris: 52, materials: 2 },
 ];
 
-/** Measured triangles across the five shipped pieces. */
+/** Measured triangles across the shipped pieces (88,168 v6 + 52 crystal). */
 export const DEEP_PAST_GLB_TRIS_TOTAL = DEEP_PAST_MODELS.reduce((n, m) => n + m.tris, 0);
 
 /**
- * Draw calls the GLB layer adds once everything has loaded: one mesh
- * per piece, plus the lantern's glow sprite (its point light is not a
- * call). The basin's glow sprite and lights already exist in the
- * procedural scene and are not counted here.
+ * Draw calls the GLB layer adds once everything has loaded: one call
+ * per material per piece, plus the lantern's glow sprite (its point
+ * light is not a call). The basin's glow sprite and lights already
+ * exist in the procedural scene and are not counted here. The crystal
+ * is 2 calls, not 1 — the sum counts materials honestly, so no
+ * `length + 1` formula can hide it.
  */
-export const DEEP_PAST_GLB_DRAW_CALLS = DEEP_PAST_MODELS.length + 1;
+export const DEEP_PAST_GLB_DRAW_CALLS =
+  DEEP_PAST_MODELS.reduce((n, m) => n + m.materials, 0) + 1;
 
 /** Every GLB URL the Deep Past scene loads (the upload manifest). */
 export const DEEP_PAST_ASSET_URLS: readonly string[] = DEEP_PAST_MODELS.map((m) => m.url);
@@ -133,6 +142,18 @@ export const DEEP_PAST_LANTERN = {
 export const DEEP_PAST_LANTERN_LIGHT = { intensity: 2.0, distance: 250 } as const;
 export const DEEP_PAST_LANTERN_GLOW_SPAN = 130;
 
+/** A stratum crystal in the deep strata (population increment): stratum
+ *  5, on the stratum's arc, at the alcove radius, 8 above the stratum
+ *  floor — the terrace pattern, one stratum deeper. It stands 30 units
+ *  tall once placed: a crystal, not a monument. */
+export const DEEP_PAST_CRYSTAL = {
+  stratum: 5,
+  angle: 5 * DEEP_PAST_STRATUM_ARC_START + 0.9,
+  radius: DEEP_PAST_STRATUM_RADIUS[5]! - 15,
+  y: DEEP_PAST_STRATUM_Y[5]! + 8,
+  size: 30,
+} as const;
+
 /**
  * Load one Deep Past asset through the app's shared glTF loader.
  * Resolves to the loaded scene, or null when the load fails — the
@@ -181,4 +202,15 @@ export function fitDeepPastAssetToSpan(root: THREE.Object3D, span: number): numb
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   return fitDeepPastAsset(root, span / Math.max(0.001, size.x));
+}
+
+/** Centre a loaded root and scale it so its longest side is `size`
+ *  (the crystal's pattern: the file's native units are not a scale the
+ *  scene can trust). Returns the scale applied. */
+export function fitDeepPastAssetToSize(root: THREE.Object3D, size: number): number {
+  const box = new THREE.Box3().setFromObject(root);
+  const extents = box.getSize(new THREE.Vector3());
+  const longest = Math.max(extents.x, extents.y, extents.z);
+  if (!Number.isFinite(longest) || longest <= 0) return 1;
+  return fitDeepPastAsset(root, size / longest);
 }

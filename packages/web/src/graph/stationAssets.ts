@@ -103,6 +103,47 @@ export const DRYDOCK_PIECES: readonly (StationAssetModel & { instances: number }
   { key: "structure", url: "/kenney-space-structure.glb", tris: 168, instances: 2 },
 ];
 
+/**
+ * Low-poly Space Pack (reodesuxz) — the population increment
+ * (2026-10-27, owner's build-all order). Measured from the files
+ * (ships-hunt/itchio-2026-10-27.md); licenses in public/CREDITS.md
+ * and WorldCredits. All URLs are flat in `public/`; the GLBs land via
+ * the GitHub web UI, and until they land every load resolves null and
+ * the mooring stays empty — never a procedural stand-in.
+ */
+
+/** Low-poly docked ships (merged to one material each, the existing
+ *  docked pattern): one instance per model. Their mooring spots live
+ *  in stationLayout.ts (LOWPOLY_DOCKED_SPOTS, same order — spot i ↔
+ *  model i, the traffic-lane pattern). */
+export const LOWPOLY_DOCKED_MODELS: readonly (StationAssetModel & { instances: number })[] = [
+  { key: "rocket_classic", url: "/lowpoly-rocket_classic.glb", tris: 224, instances: 1 },
+  { key: "rocket_shuttle", url: "/lowpoly-rocket_shuttle.glb", tris: 184, instances: 1 },
+  { key: "lander_pod", url: "/lowpoly-lander_pod.glb", tris: 272, instances: 1 },
+  { key: "space_capsule", url: "/lowpoly-space_capsule.glb", tris: 200, instances: 1 },
+];
+
+/** Low-poly dressing (merged to one material each, the existing
+ *  dressing pattern): one instance per model. Spots come from
+ *  lowPolyDressingSpots() in stationLayout.ts. */
+export const LOWPOLY_DRESSING_MODELS: readonly (StationAssetModel & { instances: number; merge: boolean })[] = [
+  { key: "space_station_core", url: "/lowpoly-space_station_core.glb", tris: 192, instances: 1, merge: true },
+  { key: "station_module", url: "/lowpoly-station_module.glb", tris: 128, instances: 1, merge: true },
+  { key: "satellite_dish", url: "/lowpoly-satellite_dish.glb", tris: 216, instances: 1, merge: true },
+  { key: "solar_array", url: "/lowpoly-solar_array.glb", tris: 128, instances: 1, merge: true },
+  { key: "fuel_tank", url: "/lowpoly-fuel_tank.glb", tris: 220, instances: 1, merge: true },
+];
+
+/** The drydock gantry witness (merged to one material): the launch
+ *  tower stands beside the drydock frame (LOWPOLY_GANTRY_POSITION in
+ *  stationLayout.ts). Its ~10-unit height reads as a gantry at
+ *  Station scale. */
+export const LOWPOLY_GANTRY: StationAssetModel = {
+  key: "launch_tower",
+  url: "/lowpoly-launch_tower.glb",
+  tris: 332,
+};
+
 /** Every GLB URL the Station scene loads (the upload manifest) — one
  *  entry per distinct file, even when the same file serves several
  *  roles (platform_large dresses and drydocks; craft_cargoA docks and
@@ -114,6 +155,9 @@ export const STATION_ASSET_URLS: readonly string[] = [
     ...DRESSING_MODELS.map((m) => m.url),
     WITNESS_HAULER.url,
     ...DRYDOCK_PIECES.map((m) => m.url),
+    ...LOWPOLY_DOCKED_MODELS.map((m) => m.url),
+    ...LOWPOLY_DRESSING_MODELS.map((m) => m.url),
+    LOWPOLY_GANTRY.url,
   ]),
 ];
 
@@ -245,4 +289,39 @@ export function mergeToSingleMaterial(
     metalness: 0.5,
   });
   return new THREE.Mesh(merged, material);
+}
+
+/**
+ * Recenter a geometry on its own bounding-box center (geometry space,
+ * no scene needed). Merged GLB geometry keeps the file's own offsets,
+ * so a merged body placed at a point would sit off-center by the
+ * model's own origin error — recentering puts the body where the
+ * placement says it is. Returns the same geometry.
+ */
+export function recenterGeometry(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return geometry;
+  const center = box.getCenter(new THREE.Vector3());
+  geometry.translate(-center.x, -center.y, -center.z);
+  return geometry;
+}
+
+/**
+ * Scale a geometry uniformly so its longest side is `size` (geometry
+ * space). Returns the scale applied, or 1 when the geometry has no
+ * measurable extent. The population increment's bodies are sized this
+ * way — the files' native units are not a scale the scenes can trust
+ * (the FlexUnit UFO measures 0.05 units long in its own file).
+ */
+export function scaleGeometryToSize(geometry: THREE.BufferGeometry, size: number): number {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return 1;
+  const extents = box.getSize(new THREE.Vector3());
+  const longest = Math.max(extents.x, extents.y, extents.z);
+  if (!Number.isFinite(longest) || longest <= 0) return 1;
+  const scale = size / longest;
+  geometry.scale(scale, scale, scale);
+  return scale;
 }

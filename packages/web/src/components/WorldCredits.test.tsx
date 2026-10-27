@@ -22,4 +22,12 @@ describe("WorldCredits", () => {
     expect(screen.getByText(/International Space Station/)).toBeTruthy();
     expect(screen.getByText(/NASA 3D Resources, public domain/)).toBeTruthy();
   });
+
+  it("credits the Low Poly Space Pack and the FlexUnit UFO (population increment)", () => {
+    render(<WorldCredits />);
+    expect(screen.getByText(/Low Poly Space Pack — reodesuxz/)).toBeTruthy();
+    expect(screen.getByText(/no attribution required/)).toBeTruthy();
+    expect(screen.getByText(/^FlexUnit UFO/)).toBeTruthy();
+    expect(screen.getByText(/by FlexUnit, CC0/)).toBeTruthy();
+  });
 });

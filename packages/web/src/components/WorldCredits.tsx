@@ -55,6 +55,16 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
     credit:
       "The ISS model and the Kepler, Pioneer 10, Dawn, and Voyager 1 models are NASA 3D Resources, public domain. The ISS is the catalog's low-poly model (6,642 triangles); the heavier ISS variant was not used. Probe models are the NASA 3D Resources versions; the starfield is the same HYG data credited above.",
   },
+  {
+    asset: "Low Poly Space Pack — reodesuxz (all worlds + galaxy drifters)",
+    credit:
+      "26 models by reodesuxz (itch.io), free for commercial use, no attribution required. The raw pack files are not redistributed — only the models used in-app ship inside the app. Planets, the Moon and its outpost, asteroid belts, encounters, docked ships, dressing, the drydock gantry, the stratum crystal, Sputnik, and the galaxy drifters.",
+  },
+  {
+    asset: "FlexUnit UFO",
+    credit:
+      "“3D Game Ready UFO Spaceship” by FlexUnit, CC0. Converted from FBX to GLB; scaled up on placement (the converted file measures tiny in its own units).",
+  },
 ];
 
 export default function WorldCredits() {

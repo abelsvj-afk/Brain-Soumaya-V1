@@ -165,6 +165,107 @@ export const SCALE_CAPSULE = {
   length: 8,
 } as const;
 
+export interface ScalePlanet {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units — all smaller than the 109-unit ISS truss. */
+  size: number;
+  /** Material count of the file (= draw calls when loaded as-is, colors kept). */
+  materials: number;
+}
+
+/**
+ * Planets as floating bodies (population increment, 2026-10-27) — loaded
+ * as-is, colors kept. Deterministic seed positions, clear of the ISS
+ * (truss half-span 54.5), the survey frame, the probe lanes, and the
+ * relic anchors (verified by the layout test's clearance assertions).
+ */
+export const SCALE_PLANETS: readonly ScalePlanet[] = [
+  { key: "planet_earth", name: "Earth", x: -220, y: 60, z: -260, size: 40, materials: 3 },
+  { key: "planet_mars", name: "Mars", x: 300, y: -40, z: 240, size: 30, materials: 3 },
+  { key: "planet_jupiter", name: "Jupiter", x: -420, y: 90, z: 320, size: 55, materials: 3 },
+  { key: "planet_saturn", name: "Saturn", x: 520, y: -70, z: -320, size: 45, materials: 2 },
+];
+
+export interface ScaleMoon {
+  key: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units. */
+  size: number;
+  materials: number;
+  /** Drift direction (unit-ish), seed-derived — the moon sways like the probes, and the outpost rides with it. */
+  drift: readonly [number, number, number];
+}
+
+/** The moon (population increment) — the outpost stands on it. */
+export const SCALE_MOON: ScaleMoon = {
+  key: "moon_cratered",
+  x: -300,
+  y: 120,
+  z: 420,
+  size: 25,
+  materials: 2,
+  drift: [-0.5, 0.1, 0.6],
+};
+
+/**
+ * The moon outpost, as fractions of the moon's scaled radius — the dome,
+ * rover, and flag sit on the moon's surface and ride with it when it
+ * drifts (they are children of the moon holder in the scene, at
+ * offset × radius). Fractions, not units, so a re-fit moon keeps its
+ * outpost on the surface.
+ */
+export const SCALE_MOON_OUTPOST_OFFSETS = {
+  dome: [0.45, 0.95, 0.25],
+  rover: [-0.7, 0.9, -0.4],
+  flag: [0.8, 1.0, -0.6],
+} as const;
+/** Longest side of each outpost piece once placed, in scene units. */
+export const SCALE_MOON_OUTPOST_SIZES = { dome: 10, rover: 8, flag: 6 } as const;
+
+export interface ScaleEncounter {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units. */
+  size: number;
+  /** Drift direction (unit-ish) for the slow sway, like the probes. */
+  drift: readonly [number, number, number];
+}
+
+/**
+ * Encounters (population increment) — rare, slow-drift, far out, long
+ * loops. An alien, an astronaut, two UFOs: things passing through the
+ * vast dark, seen sometimes, never central.
+ */
+export const SCALE_ENCOUNTERS: readonly ScaleEncounter[] = [
+  { key: "alien", name: "Alien", x: 900, y: 150, z: -700, size: 6, drift: [0.7, 0.1, -0.6] },
+  { key: "astronaut", name: "Astronaut", x: -1100, y: -100, z: 800, size: 6, drift: [-0.6, 0.08, 0.7] },
+  { key: "flexunit-ufo", name: "FlexUnit UFO", x: 1200, y: 200, z: 600, size: 3, drift: [0.8, -0.05, 0.5] },
+  { key: "ufo", name: "UFO", x: -900, y: -150, z: -900, size: 8, drift: [-0.7, -0.1, -0.6] },
+];
+
+/** A drifting debris satellite (population increment) — old hardware, still out there. */
+export const SCALE_SATELLITE_A: ScaleEncounter = {
+  key: "satellite_a",
+  name: "Satellite A",
+  x: 700,
+  y: -200,
+  z: -500,
+  size: 8,
+  drift: [0.6, 0.05, -0.7],
+};
+
+/** Belt body sizes, in scene units: the big rocks read at ~15, the small ones at ~8. */
+export const SCALE_BELT_SIZES = { big: 15, small: 8 } as const;
+
 /**
  * The four NASA probes (design note §2; Q1 settled: all four first).
  * Distances are the illustrative ordering (see module header) — Voyager
@@ -287,6 +388,14 @@ export interface ScaleLayout {
   iss: { x: number; y: number; z: number; scale: number; trussSpan: number };
   probes: ScaleProbe[];
   asteroids: ScaleAsteroid[];
+  /** Planets as floating bodies (population increment) — loaded as-is, colors kept. */
+  planets: ScalePlanet[];
+  /** The moon, with its outpost riding on it — null in the empty layout. */
+  moon: ScaleMoon | null;
+  /** Rare slow-drift encounters, far out (population increment). */
+  encounters: ScaleEncounter[];
+  /** The drifting debris satellite — null in the empty layout. */
+  satellite: ScaleEncounter | null;
   surveyFrame: {
     position: readonly [number, number, number];
     width: number;
@@ -340,6 +449,10 @@ export function buildScaleLayout(): ScaleLayout {
     iss: { x: 0, y: 0, z: 0, scale: SCALE_ISS_SCALE, trussSpan: SCALE_ISS_TRUSS_SPAN },
     probes: [...SCALE_PROBES],
     asteroids,
+    planets: [...SCALE_PLANETS],
+    moon: { ...SCALE_MOON },
+    encounters: [...SCALE_ENCOUNTERS],
+    satellite: { ...SCALE_SATELLITE_A },
     surveyFrame: {
       position: SCALE_SURVEY_FRAME.position,
       width: SCALE_SURVEY_FRAME.width,

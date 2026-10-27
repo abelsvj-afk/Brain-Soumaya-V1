@@ -85,6 +85,24 @@ describe("createStationScene", () => {
     expect(pose.position[1]).toBe(0);
     expect(pose.position[2]).toBeCloseTo(0, 5);
   });
+
+  it("the low-poly moorings, dressing, and gantry stay empty until their GLBs land — no faked ships", () => {
+    const scene = createStationScene();
+    for (const key of ["rocket_classic", "rocket_shuttle", "lander_pod", "space_capsule"]) {
+      expect(find(scene.group, `docked-lowpoly-${key}`)).toBeUndefined();
+    }
+    for (const key of [
+      "space_station_core",
+      "station_module",
+      "satellite_dish",
+      "solar_array",
+      "fuel_tank",
+    ]) {
+      expect(find(scene.group, `dressing-lowpoly-${key}`)).toBeUndefined();
+    }
+    expect(find(scene.group, "witness-drydock-gantry")).toBeUndefined();
+    scene.dispose();
+  });
 });
 
 describe("dockingPose", () => {

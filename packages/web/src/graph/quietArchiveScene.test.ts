@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { buildQuietArchiveLayout, QUIET_ARCHIVE_BUDGET, type QuietArchiveLayout } from "./quietArchiveLayout.js";
+import { buildQuietArchiveLayout, QUIET_ARCHIVE_BUDGET, quietArchiveSputnikPosition, type QuietArchiveLayout } from "./quietArchiveLayout.js";
 import { createQuietArchiveScene, EMPTY_QUIET_ARCHIVE_LAYOUT } from "./quietArchiveScene.js";
 import type { GraphData } from "@brain/shared";
 
@@ -96,6 +96,18 @@ describe("createQuietArchiveScene", () => {
     expect(n.has("still-threshold")).toBe(true);
     expect(n.has("cluster-lamps")).toBe(false);
     expect(n.has("bridges")).toBe(false);
+    scene.dispose();
+  });
+
+  it("the first artifact has its alcove by the arrival edge — empty until its GLB lands", () => {
+    const scene = createQuietArchiveScene(layout);
+    const holder = scene.group.getObjectByName("artifact-sputnik") as THREE.Group;
+    expect(holder).toBeTruthy();
+    expect(holder.children.length).toBe(0); // the GLB lands async; no stand-in
+    const spot = quietArchiveSputnikPosition(layout.fieldRadius);
+    expect(holder.position.x).toBeCloseTo(spot.x, 5);
+    expect(holder.position.y).toBe(spot.y);
+    expect(holder.position.z).toBeCloseTo(spot.z, 5);
     scene.dispose();
   });
 
