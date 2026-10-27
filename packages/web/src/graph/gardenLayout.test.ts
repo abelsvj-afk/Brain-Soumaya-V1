@@ -4,8 +4,12 @@ import {
   buildGardenLayout,
   isEligibleGardenNode,
   terraceForDate,
+  clampToGardenFloor,
   GARDEN_BUDGET,
   GARDEN_TERRACE_COUNT,
+  GARDEN_TERRACE_HEIGHT,
+  GARDEN_FLOOR_Y,
+  GARDEN_CAMERA_FLOOR_Y,
 } from "./gardenLayout.js";
 
 const NOW = new Date("2026-10-24T12:00:00");
@@ -109,5 +113,19 @@ describe("garden layout (P3-1, C1/C2)", () => {
   it("the recipe budget is asserted as constants, not as performance proof", () => {
     expect(GARDEN_BUDGET.maxDrawCalls).toBe(95);
     expect(GARDEN_BUDGET.maxTris).toBe(700_000);
+  });
+
+  it("the garden floor sits below the lowest terrace, and the camera floor holds above it", () => {
+    // Solid floor: lowest terrace (y=0) minus the 60-unit skirt.
+    expect(GARDEN_FLOOR_Y).toBe(GARDEN_TERRACE_HEIGHT[0]! - 60);
+    expect(GARDEN_FLOOR_Y).toBe(-60);
+    // Camera floor: above the lowest terrace, so no view can sink under the garden.
+    expect(GARDEN_CAMERA_FLOOR_Y).toBeGreaterThan(GARDEN_TERRACE_HEIGHT[0]!);
+    expect(GARDEN_CAMERA_FLOOR_Y).toBe(12);
+    // The clamp holds a sunken camera at the floor and leaves a high camera alone.
+    expect(clampToGardenFloor(-100)).toBe(GARDEN_CAMERA_FLOOR_Y);
+    expect(clampToGardenFloor(-60)).toBe(GARDEN_CAMERA_FLOOR_Y);
+    expect(clampToGardenFloor(0)).toBe(GARDEN_CAMERA_FLOOR_Y);
+    expect(clampToGardenFloor(300)).toBe(300);
   });
 });

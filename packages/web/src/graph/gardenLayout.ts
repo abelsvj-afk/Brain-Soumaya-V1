@@ -32,6 +32,29 @@ export const GARDEN_TERRACE_COUNT = 6;
 export const GARDEN_TERRACE_RADIUS = [900, 780, 660, 540, 400, 250] as const;
 export const GARDEN_TERRACE_HEIGHT = [0, 18, 36, 54, 72, 90] as const;
 
+/**
+ * Finished underside (garden-underside fix): the garden is a solid, not
+ * flat rings over void. A stone skirt drops this far below the lowest
+ * terrace (y=0) to the solid floor under the garden.
+ */
+export const GARDEN_UNDERSIDE_DEPTH = 60;
+
+/** The solid floor under the garden: lowest terrace height minus the skirt depth. */
+export const GARDEN_FLOOR_Y = GARDEN_TERRACE_HEIGHT[0]! - GARDEN_UNDERSIDE_DEPTH;
+
+/**
+ * Camera floor (garden-underside fix): the worlds camera never goes below
+ * this height in the garden — above the lowest terrace, far above the
+ * solid floor. The shipped orbit sits at 300; this is the guarantee
+ * that no pose can ever sink under the garden.
+ */
+export const GARDEN_CAMERA_FLOOR_Y = 12;
+
+/** Clamp a camera height to the garden floor: the view can never drop under the garden. */
+export function clampToGardenFloor(y: number): number {
+  return Math.max(y, GARDEN_CAMERA_FLOOR_Y);
+}
+
 export interface GardenPlot {
   nodeId: number;
   /** What kind of thing this is — form only, never rank. */

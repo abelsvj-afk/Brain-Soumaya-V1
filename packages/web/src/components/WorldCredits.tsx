@@ -24,12 +24,12 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
   {
     asset: "Her ship — soumaya-ship.glb",
     credit:
-      "Model by 3DHaupt aka Dennis Haupt (in-file copyright). No license statement ships with the file and no credit line existed for it — provenance UNVERIFIED, a pre-existing open audit item; the file already ships in the home galaxy. Recorded in the P2-6 provenance inventory.",
+      "“Intergalactic Spaceship Version 2” by 3DHaupt (Dennis Haupt), licensed CC-BY-NC (non-commercial use only). Before any commercial use of the worlds, this ship must be replaced with the verified CC-BY-4.0 fallback, organic-spaceship.glb. Recorded in the P2-6 provenance inventory.",
   },
   {
     asset: "Traffic fleet — Quaternius Ultimate Spaceships",
     credit:
-      "11 hulls by Quaternius, CC0 1.0 in-file (the pack's website now shows QAL v1.0 — see the P2-6 provenance inventory for the flag). Converted from the native glTF mirror to GLB; textures resized 2048×2048 to 1024×1024.",
+      "11 hulls by Quaternius, CC0 1.0 in-file — the CC0 grant inside the downloaded packs governs the files as shipped (the pack's website now shows QAL v1.0, last updated 2026-08-28). The raw packs are not redistributed. Converted from the native glTF mirror to GLB; textures resized 2048×2048 to 1024×1024.",
   },
   {
     asset: "Traffic, docked ships, and dressing — Kenney Space Kit and Station Kit",
