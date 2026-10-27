@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
-import type { GraphData, Journey, JourneyLinkSummary } from "@brain/shared";
+import { WORLDS_TRAVEL_ENABLED, relicCodexKey, relicsForWorld } from "@brain/shared";
+import type { GraphData, Journey, JourneyLinkSummary, RelicDef, RelicWorld } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { createStationScene } from "../graph/stationScene.js";
@@ -27,6 +27,8 @@ import {
   DEEP_PAST_DESCENT,
 } from "../graph/deepPastScene.js";
 import WorldCredits from "./WorldCredits.js";
+import { pushToast } from "./Toasts.js";
+import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -105,7 +107,7 @@ interface WorldSceneEntry {
   orbitHeight: number;
   lookAtY: number;
   fallback: string;
-  build: (layout?: GardenLayout | DeepPastLayout) => WorldSceneHandle;
+  build: (layout?: GardenLayout | DeepPastLayout, onRelicVisible?: (slug: string) => void) => WorldSceneHandle;
 }
 
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
@@ -117,7 +119,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: STATION_ORBIT_HEIGHT,
     lookAtY: 0,
     fallback: "The Station view needs graphics support on this device — your journeys are unaffected.",
-    build: () => createStationScene(),
+    build: (_layout, onRelicVisible) => createStationScene({ onRelicVisible }),
   },
   "growing-place": {
     title: "The Growing Place",
@@ -127,11 +129,12 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: 300,
     lookAtY: 60,
     fallback: "The garden view needs graphics support on this device — your memories are unaffected.",
-    build: (layout) =>
+    build: (layout, onRelicVisible) =>
       createGardenScene(
         isGardenLayout(layout)
           ? layout
           : { plots: [], paths: [], landmarks: [], eligibleCount: 0, excludedCount: 0, omittedEdgeCount: 0 },
+        { onRelicVisible },
       ),
   },
   "deep-past": {
@@ -142,17 +145,25 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: 150,
     lookAtY: -200,
     fallback: "The Deep Past view needs graphics support on this device — your memories are unaffected.",
-    build: (layout) =>
-      createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT),
+    build: (layout, onRelicVisible) =>
+      createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT, { onRelicVisible }),
   },
 };
+
+/** The worlds with scenes — the only worlds a relic find can happen in. */
+function isSceneRelicWorld(key: string): key is RelicWorld {
+  return key === "great-station" || key === "growing-place" || key === "deep-past";
+}
 
 export default function WorldsSurface({
   enabled = WORLDS_TRAVEL_ENABLED,
   graph = null,
+  spaceId = "",
 }: {
   enabled?: boolean;
   graph?: GraphData | null;
+  /** The brain the viewer is in; the relic find is recorded per space. */
+  spaceId?: string;
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -170,6 +181,15 @@ export default function WorldsSurface({
   // Station arrival glide (A13): any pointer press skips it. Reset per stay.
   const arrivalSkippedRef = useRef(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
+
+  // Relics (relics increment): slugs whose GLB has actually landed in the
+  // current world's scene, and the per-space found record. A find is
+  // offered only for a visible relic that has not been found yet.
+  const [visibleRelics, setVisibleRelics] = useState<string[]>([]);
+  const foundRelics = useFoundRelics(spaceId || null);
+  const handleRelicVisible = useCallback((slug: string) => {
+    setVisibleRelics((v) => (v.includes(slug) ? v : [...v, slug]));
+  }, []);
 
   const currentWorld = travel.state?.currentWorld;
   const journey = travel.state?.activeJourney ?? null;
@@ -200,6 +220,7 @@ export default function WorldsSurface({
   useEffect(() => {
     setDismissed(false);
     setGraphicsFailed(false);
+    setVisibleRelics([]);
     setGuided(false);
     guidedRef.current = false;
     parkedProgressRef.current = 0;
@@ -268,6 +289,23 @@ export default function WorldsSurface({
 
   const sceneLayout = currentWorld === "growing-place" ? layout : currentWorld === "deep-past" ? deepPastLayout : undefined;
 
+  // Relics (relics increment): the world's relics that are actually
+  // visible right now and not yet found — each one gets a plain-language
+  // "something glimmers" line with a "Look closer" button. A relic whose
+  // GLB has not landed is not visible, so its find is never offered.
+  const glimmers = useMemo(() => {
+    if (!atWorld || !currentWorld || !isSceneRelicWorld(currentWorld)) return [];
+    return relicsForWorld(currentWorld).filter(
+      (r) => r.discoverable && visibleRelics.includes(r.id) && !foundRelics.has(relicCodexKey(r.id)),
+    );
+  }, [atWorld, currentWorld, visibleRelics, foundRelics]);
+
+  const onFindRelic = (relic: RelicDef) => {
+    if (!spaceId) return;
+    markRelicFound(spaceId, relicCodexKey(relic.id));
+    pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
+  };
+
   const toggleGuided = () => {
     if (guidedRef.current) {
       // Leaving the descent parks the view at the last progress.
@@ -327,7 +365,7 @@ export default function WorldsSurface({
             destination: journey?.destination ?? "home",
           })
         : entry
-          ? entry.build(sceneLayout)
+          ? entry.build(sceneLayout, handleRelicVisible)
           : null;
     if (!world) return;
     scene.add(world.group);
@@ -446,7 +484,7 @@ export default function WorldsSurface({
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [visible, mode, entry, currentWorld, sceneLayout, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
+  }, [visible, mode, entry, currentWorld, sceneLayout, transitKind, transitTotalMs, journey?.origin, journey?.destination, handleRelicVisible]);
 
   if (!visible || !mode) return null;
   const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
@@ -467,6 +505,15 @@ export default function WorldsSurface({
           Back to your galaxy
         </button>
       </header>
+      {mode === "world" &&
+        glimmers.map((r) => (
+          <p key={r.id} className="worlds-surface-fallback">
+            Something glimmers {r.glimmer}.{" "}
+            <button type="button" onClick={() => onFindRelic(r)}>
+              Look closer
+            </button>
+          </p>
+        ))}
       {mode === "world" && currentWorld === "growing-place" && !layout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}

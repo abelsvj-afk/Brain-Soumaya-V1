@@ -74,3 +74,17 @@ Freesound page before public distribution.
 **Ship engine loop** — `ship-engine-loop.wav`
 Sustained engine loop supplied by the project owner; retain its original source license.
 
+## Relics
+
+**The fifteen relics** — `public/relics/<name>-slim.glb` (Dawn Leaf,
+Mooring Ring, Harbor Nail, Witness Seed, First Light Shard, Basin Stone,
+Lantern of Keeping, Hearth Ember, Thread of Many, Sunward Compass,
+Stillness Seal, Unopened Fold, Unnumbered Fragment, Star Hanger, Witness
+Without a Name)
+Owner-generated with a 3D generation tool (Tripo identifiers are embedded
+in the files' material names); exported with Blender (Khronos glTF
+Blender I/O) and slimmed with Draco compression and 1024-pixel textures.
+No third-party license applies; no in-file copyright statement.
+Glow treatments as made: First Light Shard slightly translucent with a
+warm-white glow; Lantern of Keeping warm light inside; Hearth Ember amber
+crack glow; Unnumbered Fragment a pale glow.
