@@ -44,22 +44,25 @@ export const WORLD_MAP_SHIMMER = { x: 920, y: 80 } as const;
 
 /** Node positions are fixed per known world (a pleasant spread); a world
  *  the chart does not know yet gets a deterministic outer-ring place from
- *  its key, so the map never has to guess twice. */
+ *  its key, so the map never has to guess twice. People (P3-3, Q2) sits
+ *  close to the Station — a close moon, a short hop away. */
 export const WORLD_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   home: { x: 500, y: 380 },
   "great-station": { x: 760, y: 250 },
   "growing-place": { x: 250, y: 480 },
   "deep-past": { x: 300, y: 180 },
+  people: { x: 845, y: 335 },
 };
 
 /** Node colours follow the settled world palettes (station amber, garden
- *  green, deep-past violet, home warm white) — never colour alone: the
+ *  green, deep-past violet, people warm amber, home warm white) — never colour alone: the
  *  current world is also named in words. */
 export const WORLD_NODE_COLORS: Record<string, string> = {
   home: "#fff6e0",
   "great-station": "#ffb454",
   "growing-place": "#6fa055",
   "deep-past": "#8a76c9",
+  people: "#ffb070",
 };
 const FALLBACK_NODE_COLOR = "#cfe0ff";
 

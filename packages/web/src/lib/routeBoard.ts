@@ -29,6 +29,11 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     name: "The Deep Past",
     blurb: "Where your earlier life is kept — descend gently to what has waited longest.",
   },
+  {
+    key: "people",
+    name: "The People",
+    blurb: "The people of your life, gathered warm — who is with you, and what do you owe each other.",
+  },
 ];
 
 export interface RouteOption {
@@ -67,7 +72,16 @@ function option(kind: TravelKind, world: string, balance: number): RouteOption {
 }
 
 export function buildRouteBoard(state: TravelState): RouteEntry[] {
-  return WORLD_CHART.map((w) => {
+  // The People gate (P3-3, Q1) is the server's verdict, read from its
+  // travel state: the board offers People only when the server says the
+  // gate is open — never on the client's own guess. A missing flag (an
+  // older server) reads as closed. The one exception is being there:
+  // if the traveller is already in People, the entry stays, so the
+  // board never hides the world they are standing in.
+  const chart = WORLD_CHART.filter(
+    (w) => w.key !== "people" || state.peopleGateOpen === true || state.currentWorld === "people",
+  );
+  return chart.map((w) => {
     const isCurrent = state.currentWorld === w.key;
     return {
       world: w.key,

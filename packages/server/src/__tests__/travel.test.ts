@@ -268,6 +268,21 @@ describe("machine legality, drift, and current-world derivation", () => {
     );
     expect(journeyCount()).toBe(0);
   });
+
+  it("admits People (P3-3) once the gate is open: warp there and back, same ledger", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    expect(t.peopleGateOpen()).toBe(true);
+    const out = t.depart({ clientKey: "pp-1", kind: "warp", destination: "people" }, T0);
+    expect(out.destination).toBe("people");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("people");
+    const home = t.depart({ clientKey: "pp-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
 });
 
 describe("two connections, one file (the concurrency proof)", () => {
@@ -545,5 +560,151 @@ describe("HTTP contract", () => {
     });
     expect(clash.status).toBe(409);
     expect(clash.body.code).toBe("ACTIVE_JOURNEY_EXISTS");
+  });
+});
+
+/**
+ * The People gate (P3-3, Q1): the server — never the client — decides
+ * whether People is open. The threshold: ≥3 people with ≥2 linked
+ * memories each, plus ≥1 memory shared between two people.
+ */
+function seedPerson(h: DbHandle, space: string, id: number, over: Record<string, unknown> = {}): void {
+  h.sqlite
+    .prepare(
+      `INSERT INTO nodes (id, space_id, label, type, content, importance, status, kind)
+       VALUES (?, ?, ?, ?, ?, 0.5, ?, ?)`,
+    )
+    .run(
+      id,
+      space,
+      over.label ?? `Person ${id}`,
+      (over.type as string) ?? "daily",
+      (over.label as string) ?? `Person ${id}`,
+      (over.status as string) ?? "active",
+      over.kind === undefined ? "person_entity" : (over.kind as string | null),
+    );
+}
+function seedMemory(h: DbHandle, space: string, id: number): void {
+  h.sqlite
+    .prepare(`INSERT INTO nodes (id, space_id, label, type, content, importance, status) VALUES (?, ?, ?, 'daily', ?, 0.5, 'active')`)
+    .run(id, space, `Memory ${id}`, `Memory ${id}`);
+}
+function seedLink(h: DbHandle, space: string, source: number, target: number, relationship = "relates_to"): void {
+  h.sqlite
+    .prepare(`INSERT INTO edges (space_id, source, target, relationship) VALUES (?, ?, ?, ?)`)
+    .run(space, source, target, relationship);
+}
+/** The minimal open gate: 3 people × 2 memories, one memory shared by two of them. */
+function seedPeopleGate(h: DbHandle, space: string): void {
+  seedPerson(h, space, 1);
+  seedPerson(h, space, 2);
+  seedPerson(h, space, 3);
+  for (const id of [10, 11, 12, 13, 14, 15]) seedMemory(h, space, id);
+  seedLink(h, space, 10, 1);
+  seedLink(h, space, 11, 1);
+  seedLink(h, space, 12, 2);
+  seedLink(h, space, 13, 2);
+  seedLink(h, space, 14, 3);
+  seedLink(h, space, 15, 3);
+  seedLink(h, space, 15, 1); // memory 15 is shared between persons 1 and 3
+}
+
+describe("C9 — the People gate (P3-3, Q1, server-enforced)", () => {
+  it("closed on an empty brain — a departure to People is refused, nothing is written", () => {
+    const t = travel();
+    expect(t.peopleGateOpen()).toBe(false);
+    expect(t.getState(T0).peopleGateOpen).toBe(false);
+    let code: string | undefined;
+    try {
+      t.depart({ clientKey: "pg-1", kind: "warp", destination: "people" }, T0);
+    } catch (e) {
+      expect(e).toBeInstanceOf(TravelError);
+      code = (e as TravelError).code;
+    }
+    expect(code).toBe("PEOPLE_GATE_CLOSED");
+    expect(journeyCount()).toBe(0);
+  });
+
+  it("open at the threshold: 3 people × 2 memories + 1 shared memory", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    expect(t.peopleGateOpen()).toBe(true);
+    expect(t.getState(T0).peopleGateOpen).toBe(true);
+  });
+
+  it("closed with only two qualifying people, however many memories they hold", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1);
+    seedPerson(handle, "spaceA", 2);
+    for (const id of [10, 11, 12, 13, 14]) seedMemory(handle, "spaceA", id);
+    seedLink(handle, "spaceA", 10, 1);
+    seedLink(handle, "spaceA", 11, 1);
+    seedLink(handle, "spaceA", 12, 1);
+    seedLink(handle, "spaceA", 13, 2);
+    seedLink(handle, "spaceA", 14, 2);
+    seedLink(handle, "spaceA", 14, 1); // shared, but only two people qualify
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("closed with three people but no memory shared between two of them", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1);
+    seedPerson(handle, "spaceA", 2);
+    seedPerson(handle, "spaceA", 3);
+    for (const id of [10, 11, 12, 13, 14, 15]) seedMemory(handle, "spaceA", id);
+    seedLink(handle, "spaceA", 10, 1);
+    seedLink(handle, "spaceA", 11, 1);
+    seedLink(handle, "spaceA", 12, 2);
+    seedLink(handle, "spaceA", 13, 2);
+    seedLink(handle, "spaceA", 14, 3);
+    seedLink(handle, "spaceA", 15, 3);
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("a person with only one linked memory does not qualify toward the three", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    // Person 3 keeps only one memory: remove its link to 14.
+    handle.sqlite.prepare(`DELETE FROM edges WHERE space_id = ? AND source = 14 AND target = 3`).run("spaceA");
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("an archived person never counts — even with linked memories", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    handle.sqlite.prepare(`UPDATE nodes SET status = 'archived' WHERE space_id = ? AND id = 3`).run("spaceA");
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("a person linked only to another person has no linked memory", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1);
+    seedPerson(handle, "spaceA", 2);
+    seedPerson(handle, "spaceA", 3);
+    seedLink(handle, "spaceA", 1, 2);
+    seedLink(handle, "spaceA", 2, 3);
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("an extraction-typed person node counts, and so does the legacy alias", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1, { kind: null, type: "person" });
+    seedPerson(handle, "spaceA", 2, { kind: null, type: "relationship_reflection" });
+    seedPerson(handle, "spaceA", 3);
+    for (const id of [10, 11, 12, 13, 14, 15]) seedMemory(handle, "spaceA", id);
+    seedLink(handle, "spaceA", 10, 1);
+    seedLink(handle, "spaceA", 11, 1);
+    seedLink(handle, "spaceA", 12, 2);
+    seedLink(handle, "spaceA", 13, 2);
+    seedLink(handle, "spaceA", 14, 3);
+    seedLink(handle, "spaceA", 15, 3);
+    seedLink(handle, "spaceA", 15, 1);
+    expect(t.peopleGateOpen()).toBe(true);
+  });
+
+  it("the gate is space-scoped: another space's people do not open this space's gate", () => {
+    seedPeopleGate(handle, "spaceB");
+    expect(travel("spaceA").peopleGateOpen()).toBe(false);
+    expect(travel("spaceB").peopleGateOpen()).toBe(true);
   });
 });
