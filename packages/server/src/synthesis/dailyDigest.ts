@@ -148,7 +148,11 @@ export function buildDailyDigest(h: DbHandle, spaceId: string = DEFAULT_SPACE): 
     .slice(0, 8)
     .map((n) => ({ node: refOf(n), snippet: snippetOf(n.content), take: takeFor(n, preferConcise) }));
 
-  const connections = new InsightsRepo(h, spaceId).recent(5);
+  // REG-148 / INS-01: the digest's connections are the SPACE-local day's
+  // own insights — recent(5) with no date predicate let last week's
+  // insights render under a "today" heading (and be counted as today's
+  // news in the closing line) until five newer ones pushed them out.
+  const connections = new InsightsRepo(h, spaceId).recentOnDay(today, tz, 5);
   const expiredActions = expiredActionsToday(h, now, tz, spaceId);
 
   // Cooling memories (high entropy from neglect) — the "tend me" nudge.

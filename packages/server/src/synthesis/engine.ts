@@ -25,6 +25,20 @@ export const DEFAULT_SYNTHESIS: SynthesisOptions = {
   maxCandidates: 12,
 };
 
+/**
+ * REG-151 / INS-04: provider-aware synthesis gate, mirroring the sibling
+ * contradiction scan's `contradictionOptionsFor`. Hash embeddings produce
+ * much lower cosines than a real model — the contradiction scan's own
+ * measurement puts an obvious planted pair at ~0.69 under hash, so the old
+ * flat 0.82 made "🔍 Find new links" effectively inert offline while
+ * honestly reporting "No new connections yet". Under hash the gate drops to
+ * 0.5, the same floor the contradiction scan uses; real embeddings keep 0.82.
+ */
+export function synthesisOptionsFor(embeddingsModel: string): SynthesisOptions {
+  const isHash = embeddingsModel.toLowerCase().includes("hash");
+  return { ...DEFAULT_SYNTHESIS, threshold: isHash ? 0.5 : DEFAULT_SYNTHESIS.threshold };
+}
+
 export interface Candidate {
   a: number;
   b: number;

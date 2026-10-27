@@ -704,6 +704,40 @@ export async function getDailyDigest(): Promise<DailyDigest> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getDailyDigest` — same
+ * endpoint and same field-by-field normalization, but FAILURE (network
+ * error, non-OK status, non-object body) returns `{ ok: false }` instead of
+ * collapsing into the fabricated empty digest. `getDailyDigest` keeps its
+ * fail-soft contract untouched for every existing caller; only the
+ * DigestPanel (which must distinguish "nothing to report" from "the server
+ * didn't answer") uses this. Same Result-variant pattern as `getDigestResult`.
+ */
+export async function getDailyDigestResult(): Promise<{ ok: true; digest: DailyDigest } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/daily`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false };
+    const empty: DailyDigest = emptyDailyDigest();
+    return {
+      ok: true,
+      digest: {
+        date: typeof d.date === "string" ? d.date : empty.date,
+        greeting: typeof d.greeting === "string" ? d.greeting : "",
+        fresh: Array.isArray(d.fresh) ? d.fresh : [],
+        connections: Array.isArray(d.connections) ? d.connections : [],
+        expiredActions: Array.isArray(d.expiredActions) ? d.expiredActions : [],
+        cooling: Array.isArray(d.cooling) ? d.cooling : [],
+        reminders: Array.isArray(d.reminders) ? d.reminders : [],
+        closing: typeof d.closing === "string" ? d.closing : "",
+      },
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** This brain's Celestial Economy fuel (free, space-scoped). */
 export async function getFuel(): Promise<Fuel | null> {
   try {
@@ -881,6 +915,36 @@ export async function getEmotionalTrajectory(): Promise<EmotionalTrajectory> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getEmotionalTrajectory`
+ * — same endpoint and normalization, `{ ok: false }` on any failure instead
+ * of the fabricated empty trajectory. Same Result-variant pattern as
+ * `getDigestResult`; the fail-soft getter above is untouched.
+ */
+export async function getEmotionalTrajectoryResult(): Promise<
+  { ok: true; trajectory: EmotionalTrajectory } | { ok: false }
+> {
+  try {
+    const res = await afetch(`${API}/digest/emotional`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false };
+    return {
+      ok: true,
+      trajectory: {
+        points: Array.isArray(d.points) ? d.points : [],
+        trend: d.trend === "rising" || d.trend === "falling" ? d.trend : "steady",
+        average: typeof d.average === "number" ? d.average : 0,
+        volatility: typeof d.volatility === "number" ? d.volatility : 0,
+        patterns: Array.isArray(d.patterns) ? d.patterns : [],
+        sampleSize: typeof d.sampleSize === "number" ? d.sampleSize : 0,
+      },
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** Distribution of memories across life-areas — the optional life-area lens (#6). */
 export async function getLifeAreas(): Promise<LifeAreaCount[]> {
   try {
@@ -889,6 +953,22 @@ export async function getLifeAreas(): Promise<LifeAreaCount[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getLifeAreas` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getLifeAreasResult(): Promise<{ ok: true; lifeAreas: LifeAreaCount[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/life-areas`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, lifeAreas: d as LifeAreaCount[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -923,6 +1003,22 @@ export async function getSelfReview(): Promise<SelfReviewItem[]> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getSelfReview` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getSelfReviewResult(): Promise<{ ok: true; selfReview: SelfReviewItem[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/self-review`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, selfReview: d as SelfReviewItem[] } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** How threads of thinking evolved over time (older → newer, free, offline-safe). */
 export async function getEvolutionLinks(): Promise<EvolutionLink[]> {
   try {
@@ -931,6 +1027,22 @@ export async function getEvolutionLinks(): Promise<EvolutionLink[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getEvolutionLinks` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getEvolutionLinksResult(): Promise<{ ok: true; evolution: EvolutionLink[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/evolution`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, evolution: d as EvolutionLink[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -943,6 +1055,22 @@ export async function getDormant(): Promise<DormantItem[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getDormant` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getDormantResult(): Promise<{ ok: true; dormant: DormantItem[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/dormant`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, dormant: d as DormantItem[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -1124,6 +1252,22 @@ export async function getBeliefs(): Promise<Belief[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getBeliefs` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getBeliefsResult(): Promise<{ ok: true; beliefs: Belief[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/beliefs`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, beliefs: d as Belief[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 

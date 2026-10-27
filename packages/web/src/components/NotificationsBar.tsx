@@ -88,7 +88,10 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
       id: "pending-questions",
       type: "info",
       icon: "🛸",
-      text: `${pendingNodes.length} memory deep-dive${pendingNodes.length === 1 ? "" : "s"} awaiting clarification.`,
+      text:
+        pendingNodes.length === 1
+          ? "1 memory with Research Mode research awaiting clarification."
+          : `${pendingNodes.length} memories with Research Mode research awaiting clarification.`,
       actionText: "Resolve",
       onClick: () => {
         onFocusNode(pendingNodes[0]!.id);

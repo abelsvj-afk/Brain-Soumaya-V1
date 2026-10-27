@@ -18,17 +18,24 @@ const runDigest = vi.fn();
 const runContradictions = vi.fn();
 const ingestText = vi.fn();
 const getSpaceId = vi.fn(() => "space1");
+// Batch N (REG-149): the panel now loads through the strict Result variants
+// (IM-124). These adapters derive the Result shape from the same fail-soft
+// mocks the assertions below already drive, so the test bodies are unchanged:
+// an array mock resolves to { ok: true, … }, a null digest/trajectory mock
+// resolves to its empty shape.
+const EMPTY_DIGEST = { date: "", greeting: "", fresh: [], connections: [], expiredActions: [], cooling: [], reminders: [], closing: "" };
+const EMPTY_TRAJECTORY = { points: [], trend: "steady", average: 0, volatility: 0, patterns: [], sampleSize: 0 };
 vi.mock("../api/client.js", () => ({
-  getDigest: (...a: unknown[]) => getDigest(...a),
-  getDailyDigest: (...a: unknown[]) => getDailyDigest(...a),
-  getConstellations: (...a: unknown[]) => getConstellations(...a),
-  getEmotionalTrajectory: (...a: unknown[]) => getEmotionalTrajectory(...a),
-  getDormant: (...a: unknown[]) => getDormant(...a),
-  getEvolutionLinks: (...a: unknown[]) => getEvolutionLinks(...a),
-  getLifeAreas: (...a: unknown[]) => getLifeAreas(...a),
-  getSelfReview: (...a: unknown[]) => getSelfReview(...a),
-  getDailyLog: (...a: unknown[]) => getDailyLog(...a),
-  getBeliefs: (...a: unknown[]) => getBeliefs(...a),
+  getDigestResult: async () => ({ ok: true, insights: (await getDigest()) ?? [] }),
+  getDailyDigestResult: async () => ({ ok: true, digest: (await getDailyDigest()) ?? EMPTY_DIGEST }),
+  getConstellationsResult: async () => ({ ok: true, constellations: (await getConstellations()) ?? [] }),
+  getEmotionalTrajectoryResult: async () => ({ ok: true, trajectory: (await getEmotionalTrajectory()) ?? EMPTY_TRAJECTORY }),
+  getDormantResult: async () => ({ ok: true, dormant: (await getDormant()) ?? [] }),
+  getEvolutionLinksResult: async () => ({ ok: true, evolution: (await getEvolutionLinks()) ?? [] }),
+  getLifeAreasResult: async () => ({ ok: true, lifeAreas: (await getLifeAreas()) ?? [] }),
+  getSelfReviewResult: async () => ({ ok: true, selfReview: (await getSelfReview()) ?? [] }),
+  getDailyLogResult: async () => ({ ok: true, log: await getDailyLog() }),
+  getBeliefsResult: async () => ({ ok: true, beliefs: (await getBeliefs()) ?? [] }),
   promoteConstellation: (...a: unknown[]) => promoteConstellation(...a),
   resolveInsight: (...a: unknown[]) => resolveInsight(...a),
   runDigest: (...a: unknown[]) => runDigest(...a),

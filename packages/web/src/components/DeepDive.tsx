@@ -8,6 +8,12 @@ import { investigateNode } from "../api/client.js";
  * the research type it assigned, the evidence (each citation is a real node,
  * tappable to fly to it), and the open questions it surfaced.
  *
+ * REG-152 / INS-05: this is the INVESTIGATOR deep-dive — internal, cited,
+ * free — and it is named as such everywhere here, because a second system
+ * shares the name "deep-dive": Research Mode research (paid, gated,
+ * persistent, mutating — it appends a `--- Research Deep Dive ---` section
+ * to the node's own content). The two must never again share a bare label.
+ *
  * Truthful states: before a run it says nothing has run yet; while running it
  * says so; on failure the error goes to a dedicated error surface with Retry —
  * never into the report body (the IM-32 lesson: server error text must not be
@@ -43,21 +49,23 @@ export function DeepDive({
     setError("");
     investigateNode(nodeId)
       .then(setReport)
-      .catch((e) => setError((e as Error).message || "The deep-dive couldn't run — try again."))
+      .catch((e) => setError((e as Error).message || "The Investigator deep-dive couldn't run — try again."))
       .finally(() => setBusy(false));
   };
 
   return (
     <div className="deep-dive">
       <div className="chronicle-head">
-        <h3>🔍 Deep-dive</h3>
+        <h3>🔍 Investigator deep-dive</h3>
         <button className="mini" onClick={run} disabled={busy}>
           {busy ? "Investigating…" : report ? "Run again" : "Investigate"}
         </button>
       </div>
       <p className="deep-dive-hint">
         Soumaya digs through your own memories around “{nodeLabel}” first — what connects,
-        what pattern it sits in — and cites everything she finds.
+        what pattern it sits in — and cites everything she finds. This is the Investigator: a free,
+        cited look through your own memories. It&apos;s different from Research Mode research, which
+        expands a memory with outside research and costs fuel.
       </p>
       {busy && (
         <p className="empty small" role="status">
@@ -66,14 +74,14 @@ export function DeepDive({
       )}
       {!busy && error && (
         <div className="deep-dive-error" role="alert">
-          <p>Couldn’t run that deep-dive. {error}</p>
+          <p>Couldn’t run that Investigator deep-dive. {error}</p>
           <button className="mini" onClick={run}>
             Retry
           </button>
         </div>
       )}
       {!busy && !error && !report && (
-        <p className="empty small">No deep-dive run yet for this memory.</p>
+        <p className="empty small">No Investigator deep-dive run yet for this memory.</p>
       )}
       {!busy && report && (
         <div className="deep-dive-report">

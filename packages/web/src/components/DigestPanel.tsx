@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Constellation, DailyDigest, DormantItem, EmotionalTrajectory, EvolutionLink, Insight, LifeAreaCount, SelfReviewItem } from "@brain/shared";
-import { getConstellations, getDailyDigest, getDailyLog, getDigest, getDormant, getEmotionalTrajectory, getEvolutionLinks, getLifeAreas, getSelfReview, getBeliefs, ingestText, getSpaceId, promoteConstellation, resolveInsight, runDigest, runContradictions, type DailyLog, type Belief } from "../api/client.js";
+import { getConstellationsResult, getDailyDigestResult, getDailyLogResult, getDigestResult, getDormantResult, getEmotionalTrajectoryResult, getEvolutionLinksResult, getLifeAreasResult, getSelfReviewResult, getBeliefsResult, ingestText, getSpaceId, promoteConstellation, resolveInsight, runDigest, runContradictions, type DailyLog, type Belief } from "../api/client.js";
 import { colorForType } from "../graph/theme.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
 import { pushToast } from "./Toasts.js";
@@ -71,7 +71,41 @@ export const EVOLUTION_STRENGTH: Record<EvolutionLink["strength"], { label: stri
   strong: { label: "Strong thread", pct: 100 },
 };
 
-/** IM-60: per-section collapse toggle, rendered in each section's header row. */
+/**
+ * REG-149 / INS-02 (IM-124, Observatory-style): the ten sources this panel
+ * loads, with the human label the error card names when one of them fails.
+ * A failed source is a loading problem, never an empty brain — each source
+ * keeps its last-good data and is named in the error state with a Retry.
+ */
+type InsightSourceKey =
+  | "insights"
+  | "daily"
+  | "constellations"
+  | "emotional"
+  | "dormant"
+  | "evolution"
+  | "lifeAreas"
+  | "selfReview"
+  | "dailyLog"
+  | "beliefs";
+const SOURCE_LABEL: Record<InsightSourceKey, string> = {
+  insights: "Latent connections",
+  daily: "Daily digest",
+  constellations: "Constellations",
+  emotional: "Emotional weather",
+  dormant: "Dormant & worth reviving",
+  evolution: "How your thinking evolved",
+  lifeAreas: "Life-area lens",
+  selfReview: "Self-check",
+  dailyLog: "Captain's Log",
+  beliefs: "What she believes about you",
+};
+
+/** REG-158 / INS-12: per-section collapse toggle, rendered in each section's
+ *  header row. The round-3 standard requires every control to carry its name
+ *  visibly — the toggle shows Collapse/Expand as text, not just a glyph (the
+ *  aria-label/title already named it for screen readers and hover). It keeps
+ *  the shared .mini sizing: no inline shrink below the panel's norm. */
 function SectionToggle({
   name,
   open,
@@ -89,9 +123,9 @@ function SectionToggle({
       aria-label={`${open ? "Collapse" : "Expand"} ${name}`}
       title={`${open ? "Collapse" : "Expand"} ${name}`}
       onClick={onToggle}
-      style={{ fontSize: "0.7rem", padding: "1px 7px", marginLeft: "auto" }}
+      style={{ marginLeft: "auto" }}
     >
-      {open ? "▾" : "▸"}
+      {open ? "▾ Collapse" : "▸ Expand"}
     </button>
   );
 }
@@ -168,6 +202,77 @@ export function DigestPanel({
   // (filters sections + the insight list) and per-section collapse.
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // REG-149 / INS-02: which sources failed their last load. A failed source
+  // keeps its last-good data (never cleared to empty) and is named in the
+  // error state with a Retry — a dead server must never render as an empty
+  // brain. Empty while loading; set on every load, mount and Retry alike.
+  const [failedSources, setFailedSources] = useState<ReadonlySet<InsightSourceKey>>(new Set());
+
+  /**
+   * Load all ten sources through the strict Result variants (IM-124): each
+   * result is applied ONLY when it reports ok, so a failed source keeps its
+   * previous (last-good) data instead of being wiped to its empty value.
+   * `isCancelled` is the mount effect's guard; Retry calls this unguarded.
+   */
+  async function loadSources(isCancelled: () => boolean = () => false) {
+    const [
+      itemsRes,
+      dailyRes,
+      constellationsRes,
+      emotionalRes,
+      dormantRes,
+      evolutionRes,
+      lifeAreasRes,
+      selfReviewRes,
+      dailyLogRes,
+      beliefsRes,
+    ] = await Promise.all([
+      getDigestResult(),
+      getDailyDigestResult(),
+      getConstellationsResult(),
+      getEmotionalTrajectoryResult(),
+      getDormantResult(),
+      getEvolutionLinksResult(),
+      getLifeAreasResult(),
+      getSelfReviewResult(),
+      getDailyLogResult(),
+      getBeliefsResult(),
+    ]);
+    if (isCancelled()) return;
+    const failed = new Set<InsightSourceKey>();
+    if (itemsRes.ok) setItems(itemsRes.insights);
+    else failed.add("insights");
+    if (dailyRes.ok) setDaily(dailyRes.digest);
+    else failed.add("daily");
+    if (constellationsRes.ok) setConstellations(constellationsRes.constellations);
+    else failed.add("constellations");
+    if (emotionalRes.ok) setEmotional(emotionalRes.trajectory);
+    else failed.add("emotional");
+    if (dormantRes.ok) setDormant(dormantRes.dormant);
+    else failed.add("dormant");
+    if (evolutionRes.ok) setEvolution(evolutionRes.evolution);
+    else failed.add("evolution");
+    if (lifeAreasRes.ok) setLifeAreas(lifeAreasRes.lifeAreas);
+    else failed.add("lifeAreas");
+    if (selfReviewRes.ok) setSelfReview(selfReviewRes.selfReview);
+    else failed.add("selfReview");
+    if (dailyLogRes.ok) {
+      if (dailyLogRes.log) setDailyLog(dailyLogRes.log);
+    } else failed.add("dailyLog");
+    if (beliefsRes.ok) setBeliefs(beliefsRes.beliefs);
+    else failed.add("beliefs");
+    setFailedSources(failed);
+  }
+
+  /** Mark one source's refresh outcome in the failure set (scan refreshes). */
+  function noteSource(key: InsightSourceKey, ok: boolean) {
+    setFailedSources((prev) => {
+      const next = new Set(prev);
+      if (ok) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     const spaceId = getSpaceId() ?? "legacy";
@@ -224,6 +329,11 @@ export function DigestPanel({
   // (identity → behavioral → situational, then most recent) and cap the list by
   // default so the digest stays scannable.
   const INSIGHT_CAP = 6;
+  // REG-157 / INS-11: the server's insight working set is itself capped —
+  // InsightsRepo.recent() defaults to 30 — so the list below states the cap
+  // where it truncates instead of letting an insight past position 30 be
+  // silently unreachable.
+  const INSIGHT_SERVER_CAP = 30;
   const rankedInsights = useMemo(
     () => [...items].sort((a, b) => (a.tier ?? 3) - (b.tier ?? 3) || b.id - a.id),
     [items],
@@ -289,48 +399,14 @@ export function DigestPanel({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      getDigest().catch(() => [] as Insight[]),
-      getDailyDigest().catch(() => null as DailyDigest | null),
-      getConstellations().catch(() => [] as Constellation[]),
-      getEmotionalTrajectory().catch(() => null as EmotionalTrajectory | null),
-      getDormant().catch(() => [] as DormantItem[]),
-      getEvolutionLinks().catch(() => [] as EvolutionLink[]),
-      getLifeAreas().catch(() => [] as LifeAreaCount[]),
-      getSelfReview().catch(() => [] as SelfReviewItem[]),
-      getDailyLog().catch(() => null as DailyLog | null),
-      getBeliefs().catch(() => [] as Belief[]),
-    ])
-      .then(([
-        itemsRes,
-        dailyRes,
-        constellationsRes,
-        emotionalRes,
-        dormantRes,
-        evolutionRes,
-        lifeAreasRes,
-        selfReviewRes,
-        dailyLogRes,
-        beliefsRes,
-      ]) => {
-        if (cancelled) return;
-        setItems(itemsRes);
-        setDaily(dailyRes);
-        setConstellations(constellationsRes);
-        setEmotional(emotionalRes);
-        setDormant(dormantRes);
-        setEvolution(evolutionRes);
-        setLifeAreas(lifeAreasRes);
-        setSelfReview(selfReviewRes);
-        if (dailyLogRes) setDailyLog(dailyLogRes);
-        setBeliefs(beliefsRes);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void loadSources(() => cancelled).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
+    // Mount-only: loadSources is stable by construction (setters only).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function run() {
@@ -341,14 +417,20 @@ export function DigestPanel({
       // several announced nothing. scanContradictions (right below this) already
       // toasts both outcomes; this button behaved completely differently.
       const found = await runDigest();
+      // REG-149 / INS-02: refresh through the Result variants and apply only
+      // what answered — a failed refresh used to resolve [] through the
+      // fail-soft getters and WIPE the list it had just scanned.
       const [freshItems, freshDaily, freshConstellations] = await Promise.all([
-        getDigest(),
-        getDailyDigest(),
-        getConstellations(),
+        getDigestResult(),
+        getDailyDigestResult(),
+        getConstellationsResult(),
       ]);
-      setItems(freshItems);
-      setDaily(freshDaily);
-      setConstellations(freshConstellations);
+      if (freshItems.ok) setItems(freshItems.insights);
+      noteSource("insights", freshItems.ok);
+      if (freshDaily.ok) setDaily(freshDaily.digest);
+      noteSource("daily", freshDaily.ok);
+      if (freshConstellations.ok) setConstellations(freshConstellations.constellations);
+      noteSource("constellations", freshConstellations.ok);
       pushToast(
         found.length > 0
           ? `Found ${found.length} new connection${found.length === 1 ? "" : "s"} ✨`
@@ -369,7 +451,11 @@ export function DigestPanel({
     setBusy(true);
     try {
       const found = await runContradictions();
-      setItems(await getDigest());
+      // REG-149 / INS-02: same last-good rule as run() — only apply a
+      // refresh that actually answered.
+      const fresh = await getDigestResult();
+      if (fresh.ok) setItems(fresh.insights);
+      noteSource("insights", fresh.ok);
       pushToast(
         found.length > 0
           ? `Found ${found.length} contradiction${found.length === 1 ? "" : "s"} to reconcile ⚡`
@@ -410,6 +496,27 @@ export function DigestPanel({
     );
   }
 
+  // REG-149 / INS-02: when the PRIMARY sources (the insight list + the daily
+  // digest) both failed and there is no last-good data for either, the panel
+  // says so outright instead of rendering the empty-brain copy. Partial
+  // failures render the normal panel with the error card below.
+  const primaryFailed =
+    failedSources.has("insights") && failedSources.has("daily") && items.length === 0 && !daily;
+  if (primaryFailed) {
+    return (
+      <div className="dock-body" role="alert">
+        <h3>⚠️ Couldn&apos;t load Insights</h3>
+        <p style={{ fontSize: "0.85rem", lineHeight: 1.5, opacity: 0.9 }}>
+          The server didn&apos;t answer, so there&apos;s nothing to show yet — that&apos;s a loading problem, not an
+          empty brain. Your memories are still there; try again.
+        </p>
+        <button className="mini" onClick={() => void loadSources()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   // IM-60: section visibility under search (data presence AND a content hit).
   const showBeliefs = beliefs.length > 0 && hit(...beliefs.map((b) => b.content));
   const showDailyLog = !!dailyLog && hit(dailyLog.content);
@@ -441,7 +548,7 @@ export function DigestPanel({
   const showEmotional =
     !!emotional &&
     emotional.sampleSize >= 3 &&
-    hit(...emotional.patterns.flatMap((p) => [p.type, p.trigger, p.intervention]));
+    hit(...emotional.patterns.flatMap((p) => [p.type, p.trigger, p.intervention, p.basis]));
   const showEvolution =
     evolution.length > 0 &&
     hit(...evolution.flatMap((e) => [e.fromLabel, e.toLabel, e.reason]));
@@ -461,6 +568,25 @@ export function DigestPanel({
 
   return (
     <div className="dock-body">
+      {/* REG-149 / INS-02: Observatory-style (IM-124) error card — a failed
+          source is named here with a Retry, and its section keeps its
+          last-good data instead of rendering as empty. */}
+      {failedSources.size > 0 && (
+        <div
+          className="insights-error"
+          role="alert"
+          style={{ marginBottom: "14px", padding: "0.75rem", backgroundColor: "rgba(255, 122, 89, 0.08)", borderLeft: "3px solid rgba(255, 122, 89, 0.6)", borderRadius: "0 4px 4px 0" }}
+        >
+          <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>⚠️ Couldn&apos;t load everything</div>
+          <div style={{ fontSize: "0.78rem", opacity: 0.85, marginTop: "0.2rem" }}>
+            {[...failedSources].map((k) => SOURCE_LABEL[k]).join(", ")} didn&apos;t answer — that&apos;s a loading
+            problem, not an empty brain.
+          </div>
+          <button className="mini" style={{ marginTop: "0.5rem" }} onClick={() => void loadSources()}>
+            Retry
+          </button>
+        </div>
+      )}
       {/* IM-60: search across every section below + the insight list. */}
       <input
         className="list-filter"
@@ -676,15 +802,24 @@ export function DigestPanel({
           {sectionOpen("constellations") && (
           <>
           <p className="constellations-sub">
-            Memories the model grouped by meaning — your galaxy&apos;s natural regions.
+            Memories grouped by similarity — your galaxy&apos;s natural regions.
           </p>
           <ul className="constellation-list">
-            {constellations.map((c) => (
+            {constellations.map((c) => {
+              // REG-156 / INS-10: a 1-member bucket is not a constellation — its
+              // cohesion is 1.0 by construction, so it renders with no cohesion
+              // figure and no Save button (the server drops singletons; this
+              // guard holds even if one ever arrives). The section copy above
+              // says "similarity", not "meaning", so it survives the
+              // hash-embeddings fallback, where the grouping is lexical
+              // bag-of-words rather than a meaning model.
+              const degenerate = c.nodes.length < 2;
+              return (
               <li key={c.id}>
                 <div className="constellation-head">
                   <strong>{c.name}</strong>
                   <span className="constellation-meta">
-                    {c.nodes.length} · {Math.round(c.cohesion * 100)}% tight
+                    {degenerate ? `${c.nodes.length} memory` : `${c.nodes.length} · ${Math.round(c.cohesion * 100)}% tight`}
                   </span>
                 </div>
                 <div className="pills">
@@ -700,7 +835,7 @@ export function DigestPanel({
                   ))}
                   {c.nodes.length > 8 && <span className="pill-more">+{c.nodes.length - 8}</span>}
                 </div>
-                {promotingId === c.id ? (
+                {degenerate ? null : promotingId === c.id ? (
                   <div className="constellation-promote">
                     <input
                       className="list-filter"
@@ -731,7 +866,8 @@ export function DigestPanel({
                   </button>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
           </>
           )}
@@ -775,10 +911,14 @@ export function DigestPanel({
           <section className="life-areas" style={{ marginBottom: "1rem" }}>
             <div className="dock-head">
               <h3>🪟 Life-area lens</h3>
-              <span style={{ fontSize: "0.72rem", opacity: 0.6 }}>where your attention goes</span>
+              {/* REG-155 / INS-08: the bars are an automatic keyword guess about
+                  themes — the builder has no attention/engagement signal at
+                  all, so the header must not claim "where your attention goes". */}
+              <span style={{ fontSize: "0.72rem", opacity: 0.6 }}>automatically sorted by keywords — a rough guess at themes</span>
               <SectionToggle name="Life-area lens" open={sectionOpen("life-areas")} onToggle={() => toggleSection("life-areas")} />
             </div>
             {sectionOpen("life-areas") && (
+            <>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
               {lifeAreas.map((a) => (
                 <li key={a.area} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -790,6 +930,11 @@ export function DigestPanel({
                 </li>
               ))}
             </ul>
+            <p className="empty small" style={{ marginTop: "0.5rem" }}>
+              Automatic keyword sort of your memory counts — not measured attention. One thought can count more than
+              once when it splits into several memories; her own belief summaries aren&apos;t counted.
+            </p>
+            </>
             )}
           </section>
         );
@@ -800,7 +945,10 @@ export function DigestPanel({
         <section className="emotional-weather" style={{ marginBottom: "1rem" }}>
           <div className="dock-head">
             <h3>🌡️ Emotional weather</h3>
-            <span style={{ fontSize: "0.72rem", opacity: 0.7 }}>
+            <span
+              style={{ fontSize: "0.72rem", opacity: 0.7 }}
+              title={`Trend over the last ${emotional.points.length} day-buckets — the sparkline's window, not all of history`}
+            >
               {emotional.trend === "rising" ? "↗ brightening" : emotional.trend === "falling" ? "↘ cooling" : "→ steady"}
             </span>
             <SectionToggle name="Emotional weather" open={sectionOpen("emotional")} onToggle={() => toggleSection("emotional")} />
@@ -808,9 +956,25 @@ export function DigestPanel({
           {sectionOpen("emotional") && (
           <>
           <MoodSparkline points={emotional.points} />
+          {/* REG-154 / INS-07: the headline used to mix two windows in one
+              statement — trend/volatility from the last 40 day-buckets beside
+              an all-history average/sample size, implying one window none of
+              them used. Each number now names its window. */}
           <p style={{ fontSize: "0.74rem", opacity: 0.7, margin: "0.35rem 0 0.6rem 0" }}>
-            Across {emotional.sampleSize} memories · avg mood {emotional.average >= 0 ? "+" : ""}
-            {emotional.average.toFixed(2)} · {emotional.volatility >= 0.5 ? "high swings" : "stable"}
+            Avg mood {emotional.average >= 0 ? "+" : ""}
+            {emotional.average.toFixed(2)} across all {emotional.sampleSize} memories (all time) · trend + swings
+            from the last {emotional.points.length} day-buckets
+            {emotional.points.length > 0
+              ? ` (${fmtAxisDate(emotional.points[0]!.date)}–${fmtAxisDate(emotional.points[emotional.points.length - 1]!.date)})`
+              : ""}{" "}
+            · {emotional.volatility >= 0.5 ? "high swings" : "stable"}
+          </p>
+          {/* REG-153 / INS-06: the chat renderer hedges these patterns to the
+              syllable ("a recurring SIGNAL, never a settled fact") — the panel
+              carries the same framing, and each pattern below shows its basis. */}
+          <p style={{ fontSize: "0.74rem", opacity: 0.7, margin: "0 0 0.6rem 0" }}>
+            These patterns are a recurring signal from a simple heuristic over your mood notes — a signal, never a
+            settled fact.
           </p>
           {emotional.patterns.filter((p) => !dismissedPatterns.has(`${p.type}|${p.trigger ?? ""}`)).length > 0 ? (
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -828,9 +992,15 @@ export function DigestPanel({
                         </span>
                       </div>
                       <div style={{ fontSize: "0.76rem", opacity: 0.85 }}>{p.intervention}</div>
+                      {/* REG-153 / INS-06: the pattern's basis (days counted,
+                          window) — a health-flavored label never stands
+                          without its evidence. */}
+                      {p.basis && (
+                        <div style={{ fontSize: "0.72rem", opacity: 0.7, marginTop: "0.15rem" }}>{p.basis}</div>
+                      )}
                       <button
                         className="mini ghost"
-                        style={{ marginTop: "0.3rem", fontSize: "0.66rem", padding: "1px 8px" }}
+                        style={{ marginTop: "0.3rem" }}
                         title="Noted — stop showing me this pattern"
                         onClick={() => dismissPattern(key)}
                       >
@@ -945,7 +1115,14 @@ export function DigestPanel({
       </div>
       {sectionOpen("insights") && (
       <>
-      {items.length === 0 && (
+      {/* REG-149 / INS-02: when the insights source failed and there is no
+          last-good list, say the load failed — never "No insights yet". */}
+      {failedSources.has("insights") && items.length === 0 && (
+        <p className="empty" role="alert">
+          Couldn&apos;t load insights — the server didn&apos;t answer. Use Retry above to try again.
+        </p>
+      )}
+      {!(failedSources.has("insights") && items.length === 0) && items.length === 0 && (
         <p className="empty">
           No insights yet. Dump a few related thoughts, then hit "🔍 Find new links" above to surface
           connections you haven&apos;t drawn.
@@ -984,7 +1161,6 @@ export function DigestPanel({
                     "Reconciled" wording, the rest read as Dismiss. */}
                 <button
                   className="mini"
-                  style={{ fontSize: "0.66rem", padding: "1px 8px" }}
                   title={
                     isConflict
                       ? "Mark reconciled — clears this and warms both memories"
@@ -1056,6 +1232,14 @@ export function DigestPanel({
         <button className="mini" style={{ marginTop: "0.4rem" }} onClick={() => setShowAllInsights((v) => !v)}>
           {showAllInsights ? "Show fewer" : `Show all ${filteredInsights.length}`}
         </button>
+      )}
+      {/* REG-157 / INS-11: the working set is capped server-side — state it
+          where the list truncates. */}
+      {items.length >= INSIGHT_SERVER_CAP && (
+        <p className="empty small" style={{ marginTop: "0.4rem" }}>
+          Showing the {INSIGHT_SERVER_CAP} most recent insights — older ones surface here as these are resolved or
+          dismissed.
+        </p>
       )}
       </>
       )}

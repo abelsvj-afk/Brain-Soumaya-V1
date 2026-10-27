@@ -51,7 +51,7 @@ export function buildSelfReview(h: DbHandle, spaceId: string = DEFAULT_SPACE): S
   if (blindSpots > 0) {
     items.push({
       title: "Important blind spots",
-      detail: `${blindSpots} important ${blindSpots === 1 ? "memory is" : "memories are"} thinly documented and under-connected — strong candidates for a deep dive in Research Mode.`,
+      detail: `${blindSpots} important ${blindSpots === 1 ? "memory is" : "memories are"} thinly documented and under-connected — strong candidates for Research Mode research (the paid research that expands the memory itself, not the Investigator's free deep-dive in Details).`,
       count: blindSpots,
     });
   }
