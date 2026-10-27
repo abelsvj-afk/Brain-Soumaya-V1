@@ -15,6 +15,9 @@ vi.mock("../api/journeys.js", () => ({
 vi.mock("../api/client.js", () => ({
   getArchivedNodesStrict: vi.fn(async () => []),
   getIncidentEdges: vi.fn(async () => ({ edges: [], nextCursor: null })),
+  // Verb 1's component also imports getSpaceId (garden ignored-suggestion key);
+  // the tip's narrow mock omitted it, breaking 3 garden tests on rebase.
+  getSpaceId: vi.fn(() => "space-1"),
 }));
 const mockUseTravel = vi.mocked(useTravel);
 const mockUseHarborController = vi.mocked(useHarborController);

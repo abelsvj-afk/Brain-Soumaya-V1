@@ -1689,6 +1689,9 @@ export default function App() {
       if (!a) return;
       if (a.kind === "focus" && a.value != null) { focus(Number(a.value)); }
       else if (a.kind === "tab" && a.value != null) { dismissObs(); setTab(String(a.value) as any); setPanel("dock"); }
+      // Verb 1 (Tend a plot): the Help card's "Travel to Growing Place"
+      // Try-It — the same travel-focus mechanism the world map uses.
+      else if (a.kind === "travel" && a.value != null) { setTravelFocus(String(a.value)); }
       else if (a.kind === "panel" && a.value != null) {
         // REG-188: a panel-kind action may carry the text the user already
         // typed (SearchBox's "Add as memory" hatch) — seed the capture box
@@ -2436,10 +2439,13 @@ export default function App() {
           garden): the scene for the world travel state places the brain
           in appears here. Same dark contract, same flag. The graph the
           app already holds is the garden's only data source — one
-          source of truth, shared with the home galaxy. */}
+          source of truth, shared with the home galaxy. Verb 1: a tend
+          in the garden re-pulls the graph (a line tend plants a new
+          node) so the garden's own warm glow refreshes from the same
+          source — no fuel toast here, the tend sheet already says it. */}
       {space && (
         <ErrorBoundary label="worlds-surface" fallback={null}>
-          <WorldsSurface graph={data} />
+          <WorldsSurface graph={data} onChanged={(result) => void refresh(result.newNodeId ? [result.newNodeId] : undefined)} />
         </ErrorBoundary>
       )}
 

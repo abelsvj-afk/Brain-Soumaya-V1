@@ -275,6 +275,25 @@ export const BOOTSTRAP_SQL = `
       count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (space_id, day, kind)
     );
+    -- Verb 1 (Tend a plot): one row per tend act in the Growing Place.
+    -- kind is line | link | affirm | visit. target_node_id is the node a
+    -- line created (line) or the memory linked to (link); edge_id is the
+    -- edge a line/link created or reused; changed is the affirm judgment
+    -- (1 = changed since, 0 = still true, NULL for other kinds). The row
+    -- is the durable history behind the garden's warm glow and lit paths;
+    -- the node's own last_tended_at is what the cold/dormant signals read.
+    -- Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS garden_tends (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      node_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      target_node_id INTEGER,
+      edge_id INTEGER,
+      changed INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_garden_tends_space_node ON garden_tends (space_id, node_id, created_at);
     -- Undertakings (Level 2): a multi-day arc Soumaya commits to, so her autonomy
     -- has narrative ("Day 3 of 5 — Warming the cold belt") instead of 5-min ticks.
     CREATE TABLE IF NOT EXISTS undertakings (

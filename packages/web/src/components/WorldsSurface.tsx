@@ -3,8 +3,19 @@ import * as THREE from "three";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
-import { getArchivedNodesStrict, getIncidentEdges } from "../api/client.js";
-import type { GraphData, GraphEdge, Journey, JourneyLinkSummary } from "@brain/shared";
+import { getArchivedNodesStrict, getIncidentEdges, getSpaceId } from "../api/client.js";
+import type { GraphData, GraphEdge, GraphNode, Journey, JourneyLinkSummary } from "@brain/shared";
+import {
+  getGardenSuggestions,
+  getRecentGardenTends,
+  readIgnoredSuggestionIds,
+  writeIgnoredSuggestionIds,
+  type GardenSuggestion,
+  type GardenTend,
+  type TendResult,
+} from "../api/garden.js";
+import { warmPlotNodeIds, litPathEdgeIds } from "../graph/gardenTend.js";
+import { GardenTendSheet } from "./GardenTendSheet.js";
 import { createStationScene } from "../graph/stationScene.js";
 import {
   STATION_ARRIVAL_MS,
@@ -15,7 +26,7 @@ import {
 } from "../graph/stationLayout.js";
 import { ensureKtx2Support } from "../graph/gltf.js";
 import { buildGardenLayout, clampToGardenFloor, GARDEN_CAMERA_FLOOR_Y, type GardenLayout } from "../graph/gardenLayout.js";
-import { createGardenScene } from "../graph/gardenScene.js";
+import { createGardenScene, type GardenScene } from "../graph/gardenScene.js";
 import {
   buildDeepPastLayout,
   type DeepPastLayout,
@@ -187,6 +198,15 @@ interface WorldSceneEntry {
   ) => WorldSceneHandle;
 }
 
+const EMPTY_GARDEN_LAYOUT: GardenLayout = {
+  plots: [],
+  paths: [],
+  landmarks: [],
+  eligibleCount: 0,
+  excludedCount: 0,
+  omittedEdgeCount: 0,
+};
+
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   "great-station": {
     title: "The Great Station",
@@ -207,12 +227,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     lookAtY: 60,
     cameraFloorY: GARDEN_CAMERA_FLOOR_Y,
     fallback: "The garden view needs graphics support on this device — your memories are unaffected.",
-    build: (layout) =>
-      createGardenScene(
-        isGardenLayout(layout)
-          ? layout
-          : { plots: [], paths: [], landmarks: [], eligibleCount: 0, excludedCount: 0, omittedEdgeCount: 0 },
-      ),
+    build: (layout) => createGardenScene(isGardenLayout(layout) ? layout : EMPTY_GARDEN_LAYOUT),
   },
   "deep-past": {
     title: "The Deep Past",
@@ -263,9 +278,17 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
 export default function WorldsSurface({
   enabled = WORLDS_TRAVEL_ENABLED,
   graph = null,
+  onChanged,
 }: {
   enabled?: boolean;
   graph?: GraphData | null;
+  /**
+   * Verb 1 (Tend a plot): fired after a tend changes the graph, so the
+   * host re-reads the brain and the garden re-renders warm. The result
+   * carries the new node id (line tends), so the host can complete the
+   * graph with it.
+   */
+  onChanged?: (result: TendResult) => void;
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -287,6 +310,17 @@ export default function WorldsSurface({
   // Station arrival glide (A13): any pointer press skips it. Reset per stay.
   const arrivalSkippedRef = useRef(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  // Verb 1 (Tend a plot): the garden's suggestions, recent tends (the warm
+  // glow and lit paths), and the plot the tend sheet is open for.
+  const [suggestions, setSuggestions] = useState<GardenSuggestion[] | null>(null);
+  const [suggestionsHidden, setSuggestionsHidden] = useState(false);
+  const [recentTends, setRecentTends] = useState<GardenTend[]>([]);
+  const [tendNode, setTendNode] = useState<GraphNode | null>(null);
+  const gardenSceneRef = useRef<GardenScene | null>(null);
+  const gardenCameraRef = useRef<THREE.Camera | null>(null);
+  const shownSuggestionsRef = useRef<number[]>([]);
+  const pickedSuggestionRef = useRef<number | null>(null);
+  const suggestionsFetchedRef = useRef(false);
 
   const currentWorld = travel.state?.currentWorld;
   const journey = travel.state?.activeJourney ?? null;
@@ -348,6 +382,55 @@ export default function WorldsSurface({
       cancelled = true;
     };
   }, [atGarden, atDeepPast]);
+
+  // Verb 1 (Tend a plot): on garden arrival Soumaya suggests 3 plots, and
+  // the garden reads its recent tends for the warm glow and lit paths.
+  // Suggestions live in-world only — this fetch is the only place they
+  // exist; nothing here notifies or digests. A failed fetch hides the
+  // panel and says nothing — the garden is still there to wander. On
+  // exit, the shown-but-not-picked suggestions are recorded (per space)
+  // so an ignored one is never suggested twice in a row.
+  useEffect(() => {
+    if (!atGarden) return;
+    let cancelled = false;
+    setSuggestions(null);
+    setSuggestionsHidden(false);
+    setTendNode(null);
+    shownSuggestionsRef.current = [];
+    pickedSuggestionRef.current = null;
+    suggestionsFetchedRef.current = false;
+    const spaceId = getSpaceId();
+    const ignored = spaceId ? readIgnoredSuggestionIds(spaceId) : [];
+    getGardenSuggestions(ignored)
+      .then((list) => {
+        if (cancelled) return;
+        suggestionsFetchedRef.current = true;
+        shownSuggestionsRef.current = list.map((s) => s.nodeId);
+        setSuggestions(list);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([]);
+      });
+    getRecentGardenTends()
+      .then((tends) => {
+        if (!cancelled) setRecentTends(tends);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentTends([]);
+      });
+    return () => {
+      cancelled = true;
+      // Record this stay's ignored suggestions for the next visit — but
+      // only if the fetch actually resolved; a failed fetch knows nothing
+      // about what was shown.
+      if (suggestionsFetchedRef.current && spaceId) {
+        writeIgnoredSuggestionIds(
+          spaceId,
+          shownSuggestionsRef.current.filter((id) => id !== pickedSuggestionRef.current),
+        );
+      }
+    };
+  }, [atGarden]);
 
   // Chronicle routes: a done Journey's linked memories, fetched per Journey
   // on Deep Past entry. A single Journey's links failing omits only that
@@ -459,6 +542,51 @@ export default function WorldsSurface({
               ? scaleLayout
               : undefined;
 
+  // Verb 1: the garden's warm glow and lit paths, from the graph's own
+  // lastTendedAt values and the recent tend records. Recomputed when the
+  // graph or the tends change — the scene rebuilds and re-renders warm.
+  const gardenGlow = useMemo(() => {
+    if (!atGarden || !graph) return { warmNodeIds: new Set<number>(), litEdgeIds: new Set<number>() };
+    return {
+      warmNodeIds: warmPlotNodeIds(graph.nodes),
+      litEdgeIds: litPathEdgeIds(recentTends),
+    };
+  }, [atGarden, graph, recentTends]);
+
+  // Verb 1: opening the tend sheet for a plot. From a suggestion, the
+  // pick is recorded so that suggestion is never counted as ignored.
+  const openTendFor = (node: GraphNode, fromSuggestion = false) => {
+    if (fromSuggestion) pickedSuggestionRef.current = node.id;
+    setTendNode(node);
+  };
+
+  // Verb 1: after a tend lands, its path lights now; the graph refresh
+  // (onChanged) warms the plot itself on the next scene build.
+  const handleTended = (result: TendResult) => {
+    setRecentTends((prev) => [result.tend, ...prev]);
+    onChanged?.(result);
+  };
+
+  // Verb 1: a tap on the garden canvas. The raycast runs against the
+  // live camera (it orbits every frame); a tap that lands on no plot
+  // does nothing — the garden stays a place to look, not a minefield.
+  const handleCanvasClick = (e: { clientX: number; clientY: number }) => {
+    if (!atGarden || mode !== "world") return;
+    const scene = gardenSceneRef.current;
+    const camera = gardenCameraRef.current;
+    const host = hostRef.current;
+    if (!scene || !camera || !host || !graph) return;
+    const rect = host.getBoundingClientRect();
+    const ndc = {
+      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    };
+    const nodeId = scene.pickPlot(ndc, camera);
+    if (nodeId === null) return;
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (node) setTendNode(node);
+  };
+
   const toggleGuided = () => {
     if (guidedRef.current) {
       // Leaving the descent parks the view at the last progress.
@@ -511,19 +639,36 @@ export default function WorldsSurface({
       1,
       9000,
     );
-    const world =
-      mode === "transit"
-        ? createTransitScene({
-            kind: transitKind ?? "warp",
-            totalMs: transitTotalMs,
-            origin: journey?.origin ?? "home",
-            destination: journey?.destination ?? "home",
-          })
-        : entry
-          ? entry.build(sceneLayout)
-          : null;
+    // Verb 1: the garden alone takes the warm glow — the registry's build
+    // knows nothing about tends, so the glow is passed here, and the built
+    // garden scene is kept in a typed local for tap-to-tend raycasting.
+    // (The branch is the proof it is a garden scene — no cast, no `in`.)
+    let world: { group: THREE.Group; update: (elapsedMs: number, opts?: { reducedMotion?: boolean }) => void; dispose: () => void } | null = null;
+    let gardenScene: GardenScene | null = null;
+    if (mode === "transit") {
+      world = createTransitScene({
+        kind: transitKind ?? "warp",
+        totalMs: transitTotalMs,
+        origin: journey?.origin ?? "home",
+        destination: journey?.destination ?? "home",
+      });
+    } else if (entry) {
+      if (currentWorld === "growing-place") {
+        gardenScene = createGardenScene(
+          isGardenLayout(sceneLayout) ? sceneLayout : EMPTY_GARDEN_LAYOUT,
+          gardenGlow,
+        );
+        world = gardenScene;
+      } else {
+        world = entry.build(sceneLayout);
+      }
+    }
     if (!world) return;
     scene.add(world.group);
+    if (gardenScene) {
+      gardenSceneRef.current = gardenScene;
+      gardenCameraRef.current = camera;
+    }
     // Engine audio rides the transit only; it is gated internally by the
     // interface-sounds setting, and it stops when the surface unmounts.
     const engine = mode === "transit" ? makeEngineAudio() : null;
@@ -643,8 +788,10 @@ export default function WorldsSurface({
       world.dispose();
       renderer.dispose();
       renderer.domElement.remove();
+      gardenSceneRef.current = null;
+      gardenCameraRef.current = null;
     };
-  }, [visible, mode, entry, currentWorld, sceneLayout, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
+  }, [visible, mode, entry, currentWorld, sceneLayout, gardenGlow, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
 
   if (!visible || !mode) return null;
   const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
@@ -653,7 +800,7 @@ export default function WorldsSurface({
 
   return (
     <section className="worlds-surface" role="dialog" aria-label={title}>
-      <div className="worlds-surface-canvas" ref={hostRef} />
+      <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
         {atStation && (
@@ -709,6 +856,57 @@ export default function WorldsSurface({
             ? "Chronicle routes couldn\u2019t load — your past is unaffected."
             : "Landmarks couldn\u2019t load — your garden is unaffected."}
         </p>
+      )}
+      {/* Verb 1 (Tend a plot): Soumaya's arrival suggestions, in-world only.
+          Picking one opens the tend sheet; dismissing hides the panel for
+          this stay. An ignored suggestion refreshes quietly next visit. */}
+      {mode === "world" && atGarden && suggestions && suggestions.length > 0 && !suggestionsHidden && !tendNode && (
+        <div
+          role="group"
+          aria-label="Soumaya suggests"
+          style={{
+            position: "absolute",
+            top: "56px",
+            left: "12px",
+            width: "min(320px, 82vw)",
+            background: "rgba(10, 16, 12, 0.92)",
+            border: "1px solid rgba(255, 210, 122, 0.4)",
+            borderRadius: "12px",
+            padding: "12px",
+            color: "#e8e4d8",
+            zIndex: 20,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <strong style={{ fontSize: "14px" }}>🌱 Soumaya suggests</strong>
+            <button type="button" className="mini" onClick={() => setSuggestionsHidden(true)} aria-label="Dismiss suggestions">
+              ✕
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {suggestions.map((s) => (
+              <button
+                key={s.nodeId}
+                type="button"
+                className="mini"
+                onClick={() => {
+                  const node = graph?.nodes.find((n) => n.id === s.nodeId);
+                  if (node) openTendFor(node, true);
+                }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px" }}
+              >
+                <span style={{ display: "block", fontSize: "14px" }}>{s.label}</span>
+                <span style={{ display: "block", opacity: 0.75, fontSize: "12px" }}>{s.why}</span>
+              </button>
+            ))}
+          </div>
+          <p style={{ margin: "8px 0 0", opacity: 0.7, fontSize: "12px" }}>
+            Or tap any plot in the garden.
+          </p>
+        </div>
+      )}
+      {mode === "world" && atGarden && tendNode && graph && (
+        <GardenTendSheet node={tendNode} graph={graph} onClose={() => setTendNode(null)} onTended={handleTended} />
       )}
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
       {mode === "world" && atStation && showController && (

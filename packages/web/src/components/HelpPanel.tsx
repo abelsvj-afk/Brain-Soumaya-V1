@@ -235,6 +235,22 @@ const CATEGORIES: {
       { icon: "📖", title: "A Journey's story so far", body: "Expand a Journey card to see everything connected to it in one place: linked memories and tasks (tap to fly there), linked transactions with a running '+earned / -spent' total, and a note for any linked recurring bills. It's the proof that a Journey is real connective tissue, not just a label.", tags: ["journey", "detail", "progress", "total", "earned", "spent", "linked"] },
       { icon: "📊", title: "Journey progress", body: "Drag a Journey's progress slider as you move forward, pause it, or mark it complete — completing one keeps its links intact (only the Journey's own status changes; nothing linked to it is touched).", tags: ["journey", "progress", "complete", "pause", "status"] },
     ]
+  },
+  {
+    // Verb 1 (Tend a plot) — the game loop's Help home. Copy is verbatim
+    // from the game-loop design of record
+    // (~/workspace/soumaya-readonly-audit/GAME-LOOP-FOUR-VERBS-2026-10-26.md,
+    // "Help menu" section). Only the two cards for the built verb are here:
+    // the overview, and Tend. Resurface, Commission, and Relic cards come
+    // with their verbs — they are designed, not built.
+    id: "play",
+    title: "🎮 Playing the game",
+    icon: "🎮",
+    desc: "Soumaya is a second brain first and a game second. These are the four things you can actually do inside the worlds — and what each one does to your real memories.",
+    items: [
+      { icon: "🎮", title: "The four verbs", body: "There are four things you can do inside the worlds. Tend a plot in Growing Place. Resurface a memory in Deep Past. Take a commission at the Station. Find a relic anywhere. Each one is a real action on your real memories — never just an animation. Do them in any order, or ignore them entirely; your brain works fine without them.", tags: ["verbs", "game", "play", "worlds", "tend", "resurface", "commission", "relic"] },
+      { icon: "🌱", title: "Tend a plot", body: "In Growing Place, every plot is one of your memories and every path is a link between two. Soumaya suggests three plots that have gone quiet. Pick one and tend it: add a line, link it to another memory, or just sit with it. The plot warms and glows. Tending with an edit earns fuel like Mind work. Just visiting warms the plot but earns nothing — so looking is never farmed.", tags: ["tend", "garden", "growing place", "plot", "warm", "cooling", "fuel"], tryIt: { label: "🌱 Travel to Growing Place", action: { kind: "travel", value: "growing-place" } } },
+    ]
   }
 ];
 
@@ -258,6 +274,8 @@ const CATEGORY_TRY_IT: Record<string, { label: string; action: { kind: string; v
   hangar: { label: "🛠️ Open Hangar", action: { kind: "tab", value: "hangar" } },
   money: { label: "💵 Open Money", action: { kind: "tab", value: "money" } },
   journeys: { label: "🧭 Open Journeys", action: { kind: "tab", value: "journeys" } },
+  // Verb 1: the game loop's category jump — the existing Journeys tab.
+  play: { label: "🧭 Open Journeys", action: { kind: "tab", value: "journeys" } },
 };
 
 /** Hoisted to module scope — this was a template literal recreated inline
