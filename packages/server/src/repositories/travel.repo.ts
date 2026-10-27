@@ -49,8 +49,10 @@ import {
  *  client-invented destination would corrupt the derived current world.
  *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world.
  *  P3-2 adds the Deep Past; P3-3 adds the People (gated — see
- *  peopleGateOpen: the key alone does not admit travel there). */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people"];
+ *  peopleGateOpen: the key alone does not admit travel there). Wave 2
+ *  adds Quiet/Archive — ungated: any traveller may visit, and an empty
+ *  archive renders the still field itself (the note's C1–C3). */
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive"];
 export const HOME_WORLD = "home";
 
 export type TravelErrorCode =

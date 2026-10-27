@@ -38,6 +38,9 @@ export const GATE_DRESSINGS: Record<string, GateDressing> = {
   "growing-place": { ring: 0xd8b36a, beads: 0xffd27a, accent: 0x8fe7c0 },
   "deep-past": { ring: 0x4a3a63, beads: 0xffd9a0, accent: 0x8a76c9 },
   people: { ring: 0x8a5a2e, beads: 0xffb347, accent: 0xffc98a },
+  // Quiet/Archive (Wave 2): the low still threshold — dim slate ring,
+  // amber beads (grammar), pale cyan shimmer. Quiet, never bright.
+  "quiet-archive": { ring: 0x2a3442, beads: 0xffb347, accent: 0x9fd8e0 },
 };
 
 export const GATE_RADIUS = 60;

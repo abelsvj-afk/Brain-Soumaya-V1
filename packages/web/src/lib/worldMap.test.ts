@@ -24,6 +24,7 @@ describe("worldMap — discovery (Q2/Q3)", () => {
     expect(data.nodes.find((n) => n.key === "growing-place")).toBeUndefined();
     expect(data.nodes.find((n) => n.key === "deep-past")).toBeUndefined();
     expect(data.nodes.find((n) => n.key === "people")).toBeUndefined();
+    expect(data.nodes.find((n) => n.key === "quiet-archive")).toBeUndefined();
   });
 
   it("People (P3-3, Q2) appears once travelled — a close moon of the Station, warm amber", () => {
@@ -34,6 +35,16 @@ describe("worldMap — discovery (Q2/Q3)", () => {
     expect(people!.color).toBe("#ffb070");
     const station = data.nodes.find((n) => n.key === "great-station")!;
     expect(Math.hypot(people!.x - station.x, people!.y - station.y)).toBeLessThan(200);
+  });
+
+  it("Quiet/Archive (Wave 2) appears once travelled — far and low, dim slate blue", () => {
+    const data = atHome([{ origin: "home", destination: "quiet-archive" }]);
+    const archive = data.nodes.find((n) => n.key === "quiet-archive");
+    expect(archive).toBeTruthy();
+    expect(archive!.name).toBe("Quiet/Archive");
+    expect(archive!.color).toBe("#9fb4c8");
+    const home = data.nodes.find((n) => n.key === "home")!;
+    expect(Math.hypot(archive!.x - home.x, archive!.y - home.y)).toBeGreaterThan(300);
   });
 
   it("a journey in progress counts as discovery in motion — the map shows where you are going", () => {
@@ -56,7 +67,7 @@ describe("worldMap — discovery (Q2/Q3)", () => {
   });
 
   it("off-chart keys never appear, even when the record names them", () => {
-    const data = atHome([{ origin: "home", destination: "quiet-archive" }]);
+    const data = atHome([{ origin: "home", destination: "scale" }]);
     expect(data.nodes.map((n) => n.key)).toEqual(["home"]);
   });
 

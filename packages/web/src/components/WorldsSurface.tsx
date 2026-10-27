@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
-import type { GraphData, Journey, JourneyLinkSummary } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
+import { getArchivedNodesStrict, getIncidentEdges } from "../api/client.js";
+import type { GraphData, GraphEdge, Journey, JourneyLinkSummary } from "@brain/shared";
 import { createStationScene } from "../graph/stationScene.js";
 import {
   STATION_ARRIVAL_MS,
@@ -34,6 +35,14 @@ import {
   createPeopleScene,
   EMPTY_PEOPLE_LAYOUT,
 } from "../graph/peopleScene.js";
+import {
+  buildQuietArchiveLayout,
+  type QuietArchiveLayout,
+} from "../graph/quietArchiveLayout.js";
+import {
+  createQuietArchiveScene,
+  EMPTY_QUIET_ARCHIVE_LAYOUT,
+} from "../graph/quietArchiveScene.js";
 import WorldCredits from "./WorldCredits.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -52,14 +61,24 @@ import { WORLD_CHART } from "../lib/routeBoard.js";
  * Journeys, all derived per-visit from the graph the app already holds),
  * the Deep Past (the helix — members = old memories by the D-7 rule,
  * anchors = links to their other appearances, the Chronicle thread = the
- * earliest done Journey with two member stops), and the People (P3-3 —
+ * earliest done Journey with two member stops), the People (P3-3 —
  * the warm field: one cluster per person with linked memories, lights =
- * their memories, bridges = memories shared between two people). Each
- * world renders the graph data the app already holds — the same window
- * the home galaxy sees — via the `graph` prop from App; none fetches
- * its own copy of the brain.
+ * their memories, bridges = memories shared between two people), and
+ * Quiet/Archive (Wave 2 — the still field: one lamp per archived person,
+ * lights = their archived memories, lone lights = archived memories with
+ * no person, bridges = archived memories shared between two archived
+ * people; the archived input is fetched on entry, never from the graph
+ * prop). Each world renders the graph data the app already holds — the
+ * same window the home galaxy sees — via the `graph` prop from App; none
+ * fetches its own copy of the brain (the Archive's exception is its own
+ * archived input, which the graph window cannot carry).
  * Journeys are fetched on garden/deep-past entry (landmarks / routes); if a
  * fetch fails, the world renders without that layer and says so honestly.
+ * The Archive fetches its own input on entry — the archived nodes plus
+ * their incident edges — because the graph prop never carries archived
+ * rows. If that fetch fails, the Archive renders the error and a retry,
+ * never an empty field (C6): an empty archive and a failed load are
+ * different truths, and this world must never confuse them.
  *
  * Dark contract, same as the panel's: while the flag is off this renders
  * nothing, fetches nothing, and never touches three.js or any scene. The
@@ -100,21 +119,27 @@ interface WorldSceneHandle {
 }
 
 function isGardenLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
 ): layout is GardenLayout {
   return !!layout && "plots" in layout;
 }
 
 function isDeepPastLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
 ): layout is DeepPastLayout {
   return !!layout && "members" in layout;
 }
 
 function isPeopleLayout(
-  layout: GardenLayout | DeepPastLayout | PeopleLayout | undefined,
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
 ): layout is PeopleLayout {
-  return !!layout && "clusters" in layout;
+  return !!layout && "clusters" in layout && "eligibleCount" in layout;
+}
+
+function isQuietArchiveLayout(
+  layout: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | undefined,
+): layout is QuietArchiveLayout {
+  return !!layout && "loneLights" in layout;
 }
 
 interface WorldSceneEntry {
@@ -131,7 +156,7 @@ interface WorldSceneEntry {
    * lowest terrace, so no view can ever sink under the garden.
    */
   cameraFloorY?: number;
-  build: (layout?: GardenLayout | DeepPastLayout | PeopleLayout) => WorldSceneHandle;
+  build: (layout?: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout) => WorldSceneHandle;
 }
 
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
@@ -183,6 +208,17 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     build: (layout) =>
       createPeopleScene(isPeopleLayout(layout) ? layout : EMPTY_PEOPLE_LAYOUT),
   },
+  "quiet-archive": {
+    title: "Quiet/Archive",
+    background: 0x0d1117,
+    fogDensity: 0.00016,
+    orbitRadius: 700,
+    orbitHeight: 140,
+    lookAtY: 0,
+    fallback: "The Archive view needs graphics support on this device — your memories are unaffected.",
+    build: (layout) =>
+      createQuietArchiveScene(isQuietArchiveLayout(layout) ? layout : EMPTY_QUIET_ARCHIVE_LAYOUT),
+  },
 };
 
 export default function WorldsSurface({
@@ -199,6 +235,9 @@ export default function WorldsSurface({
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
   const [journeyLinksMap, setJourneyLinksMap] = useState<Map<number, JourneyLinkSummary[]> | null>(null);
+  const [archivedGraph, setArchivedGraph] = useState<GraphData | null>(null);
+  const [archivedFailed, setArchivedFailed] = useState(false);
+  const [archivedRetry, setArchivedRetry] = useState(0);
   const [guided, setGuided] = useState(false);
   const guidedRef = useRef(false);
   const descentStartedAtRef = useRef(0);
@@ -225,6 +264,7 @@ export default function WorldsSurface({
   const atGarden = atWorld && currentWorld === "growing-place";
   const atDeepPast = atWorld && currentWorld === "deep-past";
   const atPeople = atWorld && currentWorld === "people";
+  const atQuietArchive = atWorld && currentWorld === "quiet-archive";
   const worldName = (key: string) =>
     WORLD_CHART.find((w) => w.key === key)?.name ?? key;
   const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
@@ -290,6 +330,40 @@ export default function WorldsSurface({
     };
   }, [atDeepPast, journeys]);
 
+  // The Archive's own input (Wave 2): the graph prop never carries
+  // archived rows, so the archived nodes plus their incident edges are
+  // fetched on entry. A failed fetch is an error state with a retry —
+  // never an empty field, which would lie about what rests here. The
+  // layout prunes incident edges to archived endpoints (a live memory
+  // linked to an archived person stays in the galaxy).
+  useEffect(() => {
+    if (!atQuietArchive) return;
+    let cancelled = false;
+    setArchivedGraph(null);
+    setArchivedFailed(false);
+    void (async () => {
+      try {
+        const nodes = await getArchivedNodesStrict();
+        const links: GraphEdge[] = [];
+        const ids = nodes.map((n) => n.id);
+        if (ids.length > 0) {
+          let cursor: number | null = null;
+          do {
+            const page = await getIncidentEdges(ids, cursor);
+            links.push(...page.edges);
+            cursor = page.nextCursor;
+          } while (cursor != null);
+        }
+        if (!cancelled) setArchivedGraph({ nodes, links });
+      } catch {
+        if (!cancelled) setArchivedFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [atQuietArchive, archivedRetry]);
+
   // The garden layout derives from the app's graph on every data change —
   // the world re-reads the brain; it stores nothing of its own.
   const layout = useMemo<GardenLayout | undefined>(() => {
@@ -313,6 +387,15 @@ export default function WorldsSurface({
     return buildPeopleLayout(graph);
   }, [atPeople, graph]);
 
+  // The Quiet/Archive layout derives from the fetched archived input —
+  // never from the graph prop, which cannot carry archived rows. The
+  // world re-reads the archive on every visit; restoring in the brain
+  // removes the cluster quietly on the next visit.
+  const quietArchiveLayout = useMemo<QuietArchiveLayout | undefined>(() => {
+    if (!atQuietArchive || !archivedGraph) return undefined;
+    return buildQuietArchiveLayout(archivedGraph);
+  }, [atQuietArchive, archivedGraph]);
+
   const sceneLayout =
     currentWorld === "growing-place"
       ? layout
@@ -320,7 +403,9 @@ export default function WorldsSurface({
         ? deepPastLayout
         : currentWorld === "people"
           ? peopleLayout
-          : undefined;
+          : currentWorld === "quiet-archive"
+            ? quietArchiveLayout
+            : undefined;
 
   const toggleGuided = () => {
     if (guidedRef.current) {
@@ -340,8 +425,10 @@ export default function WorldsSurface({
     if (!visible || !mode) return;
     // A memory-bearing world needs the graph before it can build; until
     // then the dialog shows its loading line (see the render below) and
-    // builds nothing.
-    if (mode === "world" && (atGarden || atDeepPast || atPeople) && !sceneLayout) return;
+    // builds nothing. The Archive needs its fetched archived input the
+    // same way — and when that fetch fails, nothing is built at all (the
+    // error line below owns the state, with a retry).
+    if (mode === "world" && (atGarden || atDeepPast || atPeople || atQuietArchive) && !sceneLayout) return;
     const host = hostRef.current;
     if (!host) return;
     let renderer: THREE.WebGLRenderer;
@@ -534,6 +621,22 @@ export default function WorldsSurface({
       )}
       {mode === "world" && currentWorld === "people" && !peopleLayout && (
         <p className="worlds-surface-fallback">Your people are gathering — your memories are unaffected.</p>
+      )}
+      {mode === "world" && currentWorld === "quiet-archive" && !quietArchiveLayout && !archivedFailed && (
+        <p className="worlds-surface-fallback">Your archive is resting — your memories are unaffected.</p>
+      )}
+      {mode === "world" && atQuietArchive && archivedFailed && (
+        <p className="worlds-surface-fallback">
+          Your archive couldn&apos;t load — your memories are unaffected.{" "}
+          <button type="button" onClick={() => setArchivedRetry((r) => r + 1)}>
+            Try again
+          </button>
+        </p>
+      )}
+      {mode === "world" && atQuietArchive && quietArchiveLayout && quietArchiveLayout.archivedCount === 0 && (
+        <p className="worlds-surface-fallback">
+          Nothing rests here yet — when something is archived, it will rest here.
+        </p>
       )}
       {mode === "world" && atDeepPast && thread && (
         <p className="worlds-surface-fallback">

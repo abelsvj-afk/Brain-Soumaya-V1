@@ -543,6 +543,20 @@ export async function getArchivedNodes(): Promise<GraphNode[]> {
   }
 }
 
+/**
+ * Strict variant of getArchivedNodes for surfaces that must distinguish
+ * "nothing rests here yet" from "the archive failed to load" (Quiet/
+ * Archive C6): THROWS on network/HTTP failure instead of collapsing it
+ * into an empty field. getArchivedNodes' fail-soft contract is unchanged
+ * for its other callers.
+ */
+export async function getArchivedNodesStrict(): Promise<GraphNode[]> {
+  const res = await afetch(`${API}/nodes/archived`);
+  if (!res.ok) throw new Error(`Archived nodes failed (${res.status})`);
+  const d = await res.json().catch(() => []);
+  return Array.isArray(d) ? d : [];
+}
+
 /** An object's evolving lore (oldest → newest); genesis is created on first read. */
 export async function getLore(subjectType: LoreSubjectType, subjectId: string): Promise<LoreEntry[]> {
   try {
