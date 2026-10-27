@@ -1218,6 +1218,46 @@ function migrateSchema(sqlite: RawDb): void {
       ON travel_journey_events(journey_id);
   `);
 
+  // NPC autonomy (Wave 2): the loop's own tables. Identical DDL to
+  // BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have them;
+  // this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS npc_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_log_space_npc_created
+      ON npc_log(space_id, npc_id, created_at);
+    CREATE TABLE IF NOT EXISTS npc_state (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      stopped INTEGER NOT NULL DEFAULT 0,
+      last_tick_at TEXT,
+      last_welcome_journey_id TEXT,
+      last_explore_day TEXT,
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_relic_holdings (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      found_in_world TEXT NOT NULL,
+      PRIMARY KEY (space_id, npc_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_gate (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, npc_id)
+    );
+  `);
+
   // P2-4 journey-bonus outcome columns on existing travel_journeys volumes
   // (additive; the marker is the exactly-once crediting record).
   const travelCols = sqlite.prepare(`PRAGMA table_info(travel_journeys)`).all() as { name: string }[];

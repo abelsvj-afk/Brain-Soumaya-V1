@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import WorldsSurface from "./WorldsSurface.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
+import { useHarborController, type UseHarborController } from "../hooks/useHarborController.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { getArchivedNodesStrict, getIncidentEdges } from "../api/client.js";
 
 vi.mock("../hooks/useTravel.js", () => ({ useTravel: vi.fn() }));
+vi.mock("../hooks/useHarborController.js", () => ({ useHarborController: vi.fn() }));
 vi.mock("../api/journeys.js", () => ({
   getJourneys: vi.fn(async () => []),
   journeyLinks: vi.fn(async () => null),
@@ -15,6 +17,7 @@ vi.mock("../api/client.js", () => ({
   getIncidentEdges: vi.fn(async () => ({ edges: [], nextCursor: null })),
 }));
 const mockUseTravel = vi.mocked(useTravel);
+const mockUseHarborController = vi.mocked(useHarborController);
 const mockGetJourneys = vi.mocked(getJourneys);
 const mockJourneyLinks = vi.mocked(journeyLinks);
 const mockGetArchivedNodesStrict = vi.mocked(getArchivedNodesStrict);
@@ -62,6 +65,32 @@ const atGarden = (over: Partial<UseTravel> = {}) =>
     ...over,
   });
 
+function fakeController(over: Partial<UseHarborController> = {}): UseHarborController {
+  return {
+    npc: {
+      id: "harbor-controller",
+      name: "Harbor controller",
+      job: "Help you arrive — routes, arrivals, traffic.",
+      world: "great-station",
+      stopped: false,
+      actsToday: 1,
+      speaksToday: 0,
+      gateOpen: false,
+      relicsHeld: 0,
+      recentLog: [],
+    },
+    answer: null,
+    loading: false,
+    failed: false,
+    error: null,
+    refresh: vi.fn(async () => {}),
+    ask: vi.fn(async () => {}),
+    stop: vi.fn(async () => {}),
+    resume: vi.fn(async () => {}),
+    ...over,
+  };
+}
+
 const atDeepPast = (over: Partial<UseTravel> = {}) =>
   fakeTravel({
     state: {
@@ -95,6 +124,8 @@ const gardenGraph = {
 describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
   beforeEach(() => {
     mockUseTravel.mockReset();
+    mockUseHarborController.mockReset();
+    mockUseHarborController.mockReturnValue(fakeController());
   });
 
   it("flag off renders nothing (the dark contract)", () => {
@@ -197,6 +228,18 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("at the Station the Harbor controller button opens its panel, and only there", async () => {
+    mockUseTravel.mockReturnValue(atStation());
+    render(<WorldsSurface enabled />);
+    expect(screen.getByRole("dialog", { name: "The Great Station" })).toBeTruthy();
+    expect(screen.queryByText(/Help you arrive/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Harbor controller" }));
+    expect(await screen.findByText(/Help you arrive/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Routes from here" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hide the harbor controller" }));
+    expect(screen.queryByText(/Help you arrive/)).toBeNull();
+  });
 });
 
 describe("WorldsSurface — the Growing Place (P3-1)", () => {
@@ -210,6 +253,13 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
+  });
+
+  it("outside the Station there is no Harbor controller button", () => {
+    mockUseTravel.mockReturnValue(atGarden());
+    render(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Harbor controller" })).toBeNull();
   });
 
   it("at the garden without the graph yet it shows a loading line and builds nothing", () => {

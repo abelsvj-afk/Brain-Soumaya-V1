@@ -204,6 +204,24 @@ export function heroMooringPose(): { position: [number, number, number]; rotatio
 }
 
 /**
+ * The harbor controller's berth (Wave 2, NPC autonomy): the controller
+ * flies the dispatcher (TRAFFIC_MODELS[2] — the same hull as the docking
+ * shuttle, one load, no second fetch) and moors it at a berth between
+ * arms 1 and 2. Radius 222 is the docked-ship radius; angle 3π/4 sits
+ * π/4 from either neighboring arm (~174 units at this radius, clear of
+ * the docked ships at lateral ±8) and inside the dressing band's inner
+ * edge (radius 232+), so no dressing piece can sit on the berth. The
+ * berth is attached to the Station, so the ship turns with the Station
+ * like the hero and the docked ships.
+ */
+export const HARBOR_CONTROLLER_BERTH = { radius: 222, angle: (Math.PI * 3) / 4, y: 0 } as const;
+
+/** The harbor controller's berth pose. */
+export function harborControllerBerthPose(): { position: [number, number, number]; rotationY: number } {
+  return mooringPose(HARBOR_CONTROLLER_BERTH.radius, HARBOR_CONTROLLER_BERTH.angle, HARBOR_CONTROLLER_BERTH.y);
+}
+
+/**
  * The docking arm (Q3): arm 2 (angle π/2) is where the docking shuttle
  * eases in. The mooring radius matches the hero's — the arm tip is the
  * same 207, the ship the same 12 long.
@@ -245,6 +263,7 @@ export const STATION_DRAW_CALL_PLAN: readonly { part: string; calls: number }[] 
   { part: "beacon ring (instanced, nav + work)", calls: 2 },
   { part: "work lights (instanced)", calls: 1 },
   { part: "hero ship (docked)", calls: 10 },
+  { part: "harbor controller's ship (dispatcher, single mesh)", calls: 1 },
   { part: "traffic — Quaternius lanes (instanced, 1/model)", calls: 11 },
   { part: "traffic — WATO regular (merged by material)", calls: 7 },
   { part: "docking shuttle (single mesh)", calls: 1 },
@@ -262,8 +281,9 @@ export const STATION_DRAW_CALL_PLAN: readonly { part: string; calls: number }[] 
  * 32 × 48; hero 37,026 (measured from the deployed file); Quaternius
  * traffic 32,064 × 2 instances; WATO 730; docking shuttle 748;
  * docked 2,072 (cargoB ×2 + miner ×2 + cargoA + racer); dressing
- * 882 × 2; witnesses 264 + 1,516 (drydock composition). Total
- * 246,056 — 49% of the internal target. Route and backdrop cost no
+ * 882 × 2; witnesses 264 + 1,516 (drydock composition); harbor
+ * controller's ship 748 (the dispatcher, moored at its berth). Total
+ * 246,804 — 49% of the internal target. Route and backdrop cost no
  * triangles: the route lives in the TravelPanel, the backdrop is a
  * clear color + fog, not a mesh.
  */
@@ -272,6 +292,7 @@ export const STATION_TRI_PLAN: readonly { part: string; tris: number }[] = [
   { part: "beacon ring (instanced, nav + work)", tris: 3_840 },
   { part: "work lights (instanced)", tris: 1_536 },
   { part: "hero ship (docked)", tris: 37_026 },
+  { part: "harbor controller's ship (dispatcher, single mesh)", tris: 748 },
   { part: "traffic — Quaternius lanes (instanced, 1/model)", tris: 64_128 },
   { part: "traffic — WATO regular (merged by material)", tris: 730 },
   { part: "docking shuttle (single mesh)", tris: 748 },

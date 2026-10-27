@@ -10,3 +10,4 @@ export * from "./lifeVision.js";
 export * from "./temporal.js";
 export * from "./intelligence.js";
 export * from "./worlds.js";
+export * from "./npcs.js";

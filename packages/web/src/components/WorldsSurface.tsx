@@ -44,6 +44,7 @@ import {
   EMPTY_QUIET_ARCHIVE_LAYOUT,
 } from "../graph/quietArchiveScene.js";
 import WorldCredits from "./WorldCredits.js";
+import HarborControllerPanel from "./HarborControllerPanel.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -239,6 +240,7 @@ export default function WorldsSurface({
   const [archivedFailed, setArchivedFailed] = useState(false);
   const [archivedRetry, setArchivedRetry] = useState(0);
   const [guided, setGuided] = useState(false);
+  const [showController, setShowController] = useState(false);
   const guidedRef = useRef(false);
   const descentStartedAtRef = useRef(0);
   const descentFromRef = useRef(0);
@@ -262,6 +264,7 @@ export default function WorldsSurface({
   const visible = !!mode && !dismissed;
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
+  const atStation = atWorld && currentWorld === "great-station";
   const atDeepPast = atWorld && currentWorld === "deep-past";
   const atPeople = atWorld && currentWorld === "people";
   const atQuietArchive = atWorld && currentWorld === "quiet-archive";
@@ -280,6 +283,7 @@ export default function WorldsSurface({
     setDismissed(false);
     setGraphicsFailed(false);
     setGuided(false);
+    setShowController(false);
     guidedRef.current = false;
     parkedProgressRef.current = 0;
     lastProgressRef.current = 0;
@@ -604,6 +608,11 @@ export default function WorldsSurface({
       <div className="worlds-surface-canvas" ref={hostRef} />
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
+        {atStation && (
+          <button type="button" onClick={() => setShowController((v) => !v)}>
+            {showController ? "Hide the harbor controller" : "Harbor controller"}
+          </button>
+        )}
         {atDeepPast && thread && (
           <button type="button" onClick={toggleGuided}>
             {guided ? "Back to the rim" : "Descend the Chronicle"}
@@ -651,6 +660,9 @@ export default function WorldsSurface({
         </p>
       )}
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
+      {mode === "world" && atStation && showController && (
+        <HarborControllerPanel enabled onClose={() => setShowController(false)} />
+      )}
       <footer className="worlds-surface-credits">
         <button type="button" onClick={() => setShowCredits((v) => !v)}>
           {showCredits ? "Hide credits" : "Credits"}
