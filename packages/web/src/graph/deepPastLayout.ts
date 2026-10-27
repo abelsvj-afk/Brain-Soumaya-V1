@@ -154,10 +154,21 @@ export function placementTimestamp(node: GraphNode): Date | null {
   return parseDate(node.createdAt) ?? parseDate(node.lastTendedAt);
 }
 
-/** Stratum band for a placement timestamp, in the viewer's local calendar. */
+/**
+ * The calendar year of a timestamp, read in UTC. Placement timestamps are
+ * UTC-midnight by construction (ISO `Z` strings), so reading the year in
+ * the viewer's local calendar flips the year at the boundary in western
+ * timezones (2020-01-01T00:00:00Z is 2019-12-31 in New York) and moves
+ * the member a whole stratum. UTC keeps the year the timestamp states.
+ */
+function utcYear(d: Date): number {
+  return d.getUTCFullYear();
+}
+
+/** Stratum band for a placement timestamp, in the UTC calendar year. */
 export function stratumForDate(placedAt: Date | null, now: Date): number | null {
   if (!placedAt) return null;
-  const yearsAgo = now.getFullYear() - placedAt.getFullYear();
+  const yearsAgo = utcYear(now) - utcYear(placedAt);
   if (yearsAgo < DEEP_PAST_MIN_AGE_YEARS) return null;
   return Math.min(yearsAgo - DEEP_PAST_MIN_AGE_YEARS, DEEP_PAST_STRATA_COUNT - 1);
 }
@@ -227,7 +238,7 @@ function whyLine(
   riseReason: "tended recently" | "linked recently" | null,
   stillYear: number,
 ): string {
-  const year = placedAt.getFullYear();
+  const year = utcYear(placedAt);
   if (riseReason === "tended recently") {
     return `Kept since ${year} — risen because you tended it recently; it rests at the rim while its context is warm, and returns to depth ${stratum + 1} of ${DEEP_PAST_STRATA_COUNT} when that cools.`;
   }
@@ -277,7 +288,7 @@ export function buildDeepPastLayout(
     const placedAt = placementTimestamp(node);
     const stratum = stratumForDate(placedAt, now);
     if (placedAt === null || stratum === null) continue; // too young, or age unreadable: excluded, never guessed
-    const yearsAgo = now.getFullYear() - placedAt.getFullYear();
+    const yearsAgo = utcYear(now) - utcYear(placedAt);
     const still = parseDate(node.lastTendedAt) ?? placedAt;
     const riseReason = warmContext(node, touching.get(node.id) ?? [], now);
     const home = alcovePosition(node.id, stratum);
@@ -293,7 +304,7 @@ export function buildDeepPastLayout(
       homeZ: home.z,
       risen: riseReason !== null,
       riseReason,
-      why: whyLine(placedAt, yearsAgo, stratum, riseReason, still.getFullYear()),
+      why: whyLine(placedAt, yearsAgo, stratum, riseReason, utcYear(still)),
     };
     members.push(member);
     memberById.set(node.id, member);

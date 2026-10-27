@@ -63,6 +63,17 @@ Model by XCVG, licensed CC-BY 3.0
 (http://creativecommons.org/licenses/by/3.0/).
 Converted to GLB; materials re-expressed in-app.
 
+**The Deep Past (Worlds)** — `first-light-basin-web-256.glb`,
+`stratum-terrace-web-256.glb`, `rim-web-256.glb`,
+`descent-stair-web-256.glb`, `stratum-lantern-web-256.glb`
+Owner-generated artwork, made for this app at the owner's direction
+(image → GLB, the same flow as the relics). No third-party source and
+no license statement is embedded in any of the five files — the
+pieces are the owner's own work, recorded as owner-generated.
+Slimmed for web use (textures to 256, 88,168 triangles across the
+five pieces); the First Light orb, anchor spire, and route bead are
+still to come from the owner and are not in this set.
+
 ## Not shipped
 
 **Held-back ships** — EXCLUDED. Eleven hulls (15,539 triangles) from
