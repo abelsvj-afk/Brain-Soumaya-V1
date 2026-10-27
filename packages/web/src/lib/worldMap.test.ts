@@ -176,10 +176,31 @@ describe("worldMap — the shimmer (Q6) and the stars", () => {
   it("the shimmer sits in a far region, away from every node", () => {
     const data = atHome([{ origin: "home", destination: "great-station" }]);
     expect(data.shimmer).toEqual(WORLD_MAP_SHIMMER);
+    const shimmer = data.shimmer!;
     for (const n of data.nodes) {
-      const d = Math.hypot(n.x - data.shimmer.x, n.y - data.shimmer.y);
+      const d = Math.hypot(n.x - shimmer.x, n.y - shimmer.y);
       expect(d).toBeGreaterThan(150);
     }
+  });
+
+  it("Eternity's world appears only once discovered — and then the shimmer retires", () => {
+    const before = atHome([{ origin: "home", destination: "great-station" }]);
+    expect(before.nodes.find((n) => n.key === "eternity")).toBeUndefined();
+    expect(before.shimmer).toEqual(WORLD_MAP_SHIMMER);
+    const after = deriveMapData({
+      currentWorld: "eternity",
+      activeJourney: null,
+      traversed: [
+        { origin: "home", destination: "great-station" },
+        { origin: "great-station", destination: "growing-place" },
+        { origin: "growing-place", destination: "eternity" },
+      ],
+    });
+    const node = after.nodes.find((n) => n.key === "eternity");
+    expect(node).toBeDefined();
+    expect(node?.name).toBe("Eternity's World");
+    expect(node?.isCurrent).toBe(true);
+    expect(after.shimmer).toBeNull();
   });
 
   it("the starfield is deterministic — the same seed draws the same sky", () => {

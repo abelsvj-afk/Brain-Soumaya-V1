@@ -85,4 +85,20 @@ describe("buildRouteBoard", () => {
     expect(home.options.map((o) => o.cost)).toEqual([0, 0]);
     expect(home.options.every((o) => o.affordable)).toBe(true);
   });
+
+  it("Eternity's world is not offered while the gate stands closed", () => {
+    const board = buildRouteBoard(state("home", 25));
+    expect(board.map((e) => e.world)).toEqual(["home", "great-station", "growing-place", "deep-past"]);
+    expect(board.find((e) => e.world === "eternity")).toBeUndefined();
+  });
+
+  it("Eternity's world is offered — same warp/drift options — once the gate stands open", () => {
+    const board = buildRouteBoard({ ...state("home", 25), eternityReachable: true });
+    const eternity = board.find((e) => e.world === "eternity")!;
+    expect(eternity.name).toBe("Eternity's World");
+    expect(eternity.options).toEqual([
+      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "drift", label: "Drift", cost: 0, affordable: true },
+    ]);
+  });
 });

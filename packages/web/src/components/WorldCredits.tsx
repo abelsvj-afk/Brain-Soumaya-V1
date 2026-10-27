@@ -50,6 +50,16 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
     credit:
       "Procedural work made for this app — shared gate rings and the fly-through corridor are atmosphere, not information. The corridor sky is the same HYG data credited above. The transit ship is her own ship, credited above; the procedural hull is its load-failure fallback.",
   },
+  {
+    asset: "Eternity's figure — man-god-halo.glb",
+    credit:
+      "The owner's own file — his uploaded figure, split into body + halo for this app so the halo can glow on its own. No third-party source; no license applies. Scaled ×170 in Eternity's world.",
+  },
+  {
+    asset: "Eternity's visitor fleet — Kenney speeders (speederA–D)",
+    credit:
+      "Four more Kenney Space Kit craft (kenney.nl), CC0 1.0 — the same kit and the same basis as the Station's Kenney entries above. The files carry no in-file license statement, matching their shipped siblings.",
+  },
 ];
 
 export default function WorldCredits() {

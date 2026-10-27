@@ -332,3 +332,46 @@ describe("WorldsSurface — the People (P3-3)", () => {
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
   });
 });
+
+describe("WorldsSurface — Eternity's World", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+  });
+
+  const atEternity = (over: Partial<UseTravel> = {}) =>
+    fakeTravel({
+      state: {
+        currentWorld: "eternity",
+        activeJourney: null,
+        fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+      },
+      ...over,
+    });
+
+  it("at Eternity's world it mounts; without WebGL it degrades honestly", async () => {
+    mockUseTravel.mockReturnValue(atEternity());
+    render(<WorldsSurface enabled />);
+    expect(screen.getByRole("dialog", { name: "Eternity's World" })).toBeTruthy();
+    expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+    expect(screen.getByText(/your journeys are unaffected/)).toBeTruthy();
+  });
+
+  it("his gestures and tools are offered as buttons; his words live in the world, not over the view", async () => {
+    mockUseTravel.mockReturnValue(atEternity());
+    render(<WorldsSurface enabled />);
+    for (const name of ["Stillness", "Regard", "Blessing", "Sorrow", "Joy", "Warning"]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    for (const name of ["Reorder the heavens", "Part the veil", "Raise the shield", "Send a comet"]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    expect(
+      screen.getByText(/his words appear in the world near his mouth — never over your view/),
+    ).toBeTruthy();
+    // A gesture button without a mounted scene (no WebGL here) must
+    // not throw — and must not claim he holds anything, because the
+    // world never mounted to hold it.
+    fireEvent.click(screen.getByRole("button", { name: "Blessing" }));
+    expect(screen.queryByText(/He is holding/)).toBeNull();
+  });
+});

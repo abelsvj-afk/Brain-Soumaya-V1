@@ -52,6 +52,9 @@ export const WORLD_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   "growing-place": { x: 250, y: 480 },
   "deep-past": { x: 300, y: 180 },
   people: { x: 845, y: 335 },
+  // Eternity's world sits furthest out, alone — the node appears only
+  // once the traveller has discovered it (see deriveMapData).
+  eternity: { x: 905, y: 505 },
 };
 
 /** Node colours follow the settled world palettes (station amber, garden
@@ -63,6 +66,8 @@ export const WORLD_NODE_COLORS: Record<string, string> = {
   "growing-place": "#6fa055",
   "deep-past": "#8a76c9",
   people: "#ffb070",
+  // Eternity's world: whitish gold, his halo's colour.
+  eternity: "#ffe6ad",
 };
 const FALLBACK_NODE_COLOR = "#cfe0ff";
 
@@ -114,7 +119,10 @@ export interface MapData {
   nodes: MapNode[];
   edges: MapEdge[];
   currentWorld: string;
-  shimmer: { x: number; y: number };
+  /** The shimmer hint (Q6) — present only while Eternity's world is
+   *  still undiscovered. Once the traveller has discovered it, the
+   *  node itself is on the map and the hint has done its work. */
+  shimmer: { x: number; y: number } | null;
   stars: MapStar[];
 }
 
@@ -257,7 +265,10 @@ export function deriveMapData(input: {
     nodes,
     edges,
     currentWorld: input.currentWorld,
-    shimmer: { ...WORLD_MAP_SHIMMER },
+    // Eternity's world discovered → the node is drawn and the shimmer
+    // retires. Until then the shimmer stays: the only hint that
+    // something is out there, unnamed and unclickable.
+    shimmer: discovered.has("eternity") ? null : { ...WORLD_MAP_SHIMMER },
     stars: buildStars(),
   };
 }
