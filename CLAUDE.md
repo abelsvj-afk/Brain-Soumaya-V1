@@ -173,7 +173,7 @@ heuristic automatically on credit/quota errors (see ResilientLlmProvider).
 
 ## Agent team (current)
 
-Claude is the architect/lead and the only one who signs off "Verified". The other agents on this repo are Muse (diagnosis + usage-heavy work, via the user) and ChatGPT (free plan, read-only auditor) — see their sections below. There is no longer an active second coding agent; the former second-agent delegation setup was removed 2026-10-28.
+Claude is the architect/lead and the only one who signs off "Verified". The other agents on this repo are Muse (diagnosis + usage-heavy work, via the user) and ChatGPT (free plan, read-only auditor) — see their sections below. There is no longer an active second coding agent; the former second-agent delegation setup was removed 2026-10-28. Takeover rule: Muse takes over implementation ONLY if Claude hits its usage limit (see the takeover rule in the Muse section); otherwise Claude implements.
 
 **Keep for Claude (do NOT delegate):** Red-Zone work — `packages/shared/*` types/zod, `db/*` schema + migrations, `graph/orbits.ts`, `web/src/api/client.ts`, the token/USD/Fuel guards, `space_id` multi-tenancy scoping, route contracts — plus architecture decisions, ambiguous/underspecified features, security/data-integrity, and the **final audit + "Verified by Claude" checkmark**.
 
@@ -377,6 +377,14 @@ mechanical), and he hands it to Muse. Muse reports back conclusions; Claude cons
 only the conclusion and does the fix. Do NOT burn Claude's context re-doing diagnosis
 Muse already did — read Muse's findings and build on them.
 
+**Takeover rule (2026-10-28, owner-directed):** Muse does NOT take over Claude's
+work by default. Muse's standing role is diagnosis, verification, docs, and
+usage-heavy investigation. The ONLY time Muse takes over implementation is if
+Claude hits its usage limit — then Muse steps in and carries the work forward
+until Claude's usage resets. Outside that case, implementation stays with Claude,
+and Muse does not replace it. (The owner will say when Claude has hit its limit;
+do not assume a takeover from silence or from a slow reply.)
+
 **Keep for Claude (do NOT delegate to Muse):** Same Red Zone — shared
 types/zod, db schema + migrations, orbits, api client, token/USD/Fuel guards,
 space_id scoping, route contracts — plus architecture decisions, ambiguous features,
@@ -443,12 +451,13 @@ Claude's context.
 - Report verified facts, and label what is confirmed vs. inferred vs. unknown. Never
   present a guess as a finding.
 
-**Code + repo work (when the owner explicitly taps Muse to implement):**
+**Code + repo work (only as a takeover — see the takeover rule above):**
 - Read, analyze, write, and edit code; run tests, typecheck, and builds.
 - Git operations via the GitHub connector (no local git credentials in sandbox).
 - Standing rule for this repo: one chat implements at a time, and Claude is the
-  implementer here — Muse implements only when the owner explicitly says so in
-  Muse's chat. Otherwise Muse diagnoses and documents; Claude builds.
+  implementer here — Muse takes over implementation ONLY when Claude has hit its
+  usage limit (owner will say so). Otherwise Muse diagnoses and documents; Claude
+  builds.
 
 **Computer / terminal / files:**
 - A Linux VM with shell, filesystem, and internet. Read/write/edit files, organize
