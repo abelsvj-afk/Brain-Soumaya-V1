@@ -1214,11 +1214,11 @@ export function MindPanel({
                         {skillTier(it.progress ?? 0)}
                       </span>
                     )}
-                    <button className="mini" onClick={() => void bumpProgress(it, -0.1)} title="Less">–</button>
+                    <button className="mini" aria-label={`Decrease progress for ${it.label}`} onClick={() => void bumpProgress(it, -0.1)} title="Less">–</button>
                     <span className="mind-bar">
                       <span style={{ width: `${Math.round((it.progress ?? 0) * 100)}%`, background: COGNITIVE_META[k].color }} />
                     </span>
-                    <button className="mini" onClick={() => void bumpProgress(it, 0.1)} title="More">+</button>
+                    <button className="mini" aria-label={`Increase progress for ${it.label}`} onClick={() => void bumpProgress(it, 0.1)} title="More">+</button>
                     <span className="mind-pct">{Math.round((it.progress ?? 0) * 100)}%</span>
                   </div>
                 )}

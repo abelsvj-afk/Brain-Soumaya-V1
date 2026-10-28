@@ -102,7 +102,10 @@ export function NoticingCard({
     try {
       const r = await answerInquiry(q.id, reply.trim());
       if (r) {
-        playSfx("achievement");
+        // REG-226: answering an inquiry pays no economy event, so this is a
+        // neutral confirmation ("complete"), not the achievement jingle —
+        // the same shape REG-212 fixed in the panel/ManualLink doors.
+        playSfx("complete");
         pushToast("Answered — woven into your galaxy 🧠", "💭", 4000);
         setReply("");
         await refresh();
@@ -163,7 +166,11 @@ export function NoticingCard({
       return;
     }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    playSfx("achievement");
+    // REG-226: the achievement jingle sounds only for a real pay/unlock
+    // moment — hub formation (a constellation forms) or lens creation.
+    // Anchor/bridge confirms are plain links that pay nothing, so they get
+    // the neutral confirmation ("complete"), the REG-212 shape.
+    playSfx(isHub || isLens ? "achievement" : "complete");
     pushToast(confirmToast, "🧠", 3500);
     if (isLens) window.dispatchEvent(new Event("brain-lenses-changed")); // refresh the chips
     // A constellation just formed → let the galaxy fly-to-isolate the new hub with a burst

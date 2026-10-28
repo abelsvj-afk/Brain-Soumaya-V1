@@ -187,7 +187,7 @@ export function MemoryAttachments({
               <span style={{ opacity: 0.5, fontSize: "0.68rem" }}>
                 {fmtSize(a.size)} · {fmtAttWhen(a.createdAt)}
               </span>
-              <button className="mini" style={{ padding: "0.1rem 0.4rem" }} onClick={() => setConfirming(a)} title="Remove">✕</button>
+              <button className="mini att-remove" style={{ padding: "0.1rem 0.4rem" }} onClick={() => setConfirming(a)} aria-label={`Remove ${a.filename}`} title="Remove">✕ Remove</button>
             </li>
           ))}
         </ul>

@@ -1,6 +1,6 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import type { AppContext } from "../context.js";
-import { findCandidates } from "../synthesis/engine.js";
+import { findCandidates, latentSynthesisOptionsFor } from "../synthesis/engine.js";
 import { researchSteer } from "../analysis/researchType.js";
 import { pickResearchTarget } from "./researchPriority.js";
 import { rationaleFor } from "./jobRationale.js";
@@ -345,7 +345,10 @@ function selectJobInner(ctx: AppContext, spaceId: string): AgentJob | null {
     }
   }
 
-  const candidates = findCandidates(ctx.handle, { threshold: 0.85, k: 5, minHops: 3, maxCandidates: 15 }, spaceId);
+  // Batch R (REG-227): the latent-job gate adapts to the embeddings provider
+  // (latentSynthesisOptionsFor — 0.5 under hash, 0.85 for real embeddings), the
+  // same provider-awareness shape REG-215 gave the ingest-time gate.
+  const candidates = findCandidates(ctx.handle, latentSynthesisOptionsFor(ctx.embeddings.model), spaceId);
   let c0 = null;
   for (const candidate of candidates) {
     const exists = ctx.handle.db

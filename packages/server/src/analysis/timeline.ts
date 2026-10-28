@@ -30,6 +30,21 @@ const STOP = new Set([
   "but", "not", "all", "out", "about", "into", "just", "like", "some", "more", "than", "then",
   "them", "they", "what", "when", "from", "been", "over", "very", "got", "get", "day", "today",
   "really", "much", "well", "also", "still", "back", "went", "feel", "felt", "time", "one",
+  // REG-228: the frequent-word theme fallback titled a chapter "Rising through
+  // Same" — "same" dominated the window text and nothing filtered it. The
+  // audit below adds the high-frequency non-content words the `[a-z]{4,}`
+  // fallback can pick: "same" itself, plus pronouns/demonstratives,
+  // quantifiers, ordinals/position words, frequency/time adverbs, generic
+  // nouns ("thing", "stuff", "something", …), and prepositions. Deliberately
+  // NOT extended to content verbs/nouns ("run", "work", "love") — those can
+  // be a genuine theme; the set covers only words that can never be one.
+  "same", "these", "those", "their", "which", "whose", "where", "there", "here",
+  "such", "many", "most", "other", "another", "every", "each", "both", "either", "neither",
+  "first", "last", "next", "only",
+  "always", "never", "often", "again", "once",
+  "thing", "things", "stuff", "something", "anything", "everything", "nothing",
+  "anyone", "someone", "everyone",
+  "around", "between", "through", "without", "within", "after", "before", "during", "while",
 ]);
 
 /** SQLite CURRENT_TIMESTAMP is "YYYY-MM-DD HH:MM:SS" (UTC, no Z). Parse to ms. */
@@ -50,9 +65,31 @@ function clamp01(n: number): number {
  * the unit of anchor matching (CHR-03): "Sam's" tokenizes to ["sam", "s"],
  * so a possessive still counts as a mention, while "same" stays one token
  * that never equals "sam".
+ *
+ * REG-229: a hyphenated compound stays ONE token ("state-of-the-art" is a
+ * single token, not four) — otherwise a label matches one segment of a
+ * compound that isn't a mention of it ("Art" matching "state-of-the-art",
+ * "Run" matching "home-run"). The boundary logic lives in `matchesAnchor`,
+ * which expands compounds back into segments only to check whole-compound
+ * coverage, so a genuine mention still matches: "Mary Jane" matches
+ * "Mary-Jane", and "state of the art" matches "state-of-the-art".
  */
 export function tokenize(text: string): string[] {
-  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return text.toLowerCase().match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [];
+}
+
+/**
+ * Expand tokens into hyphen segments, tracking compound boundaries: a
+ * segment knows whether it starts / ends its compound. A plain token is
+ * its own compound (start and end).
+ */
+function anchorSegments(tokens: string[]): { text: string; start: boolean; end: boolean }[] {
+  const out: { text: string; start: boolean; end: boolean }[] = [];
+  for (const t of tokens) {
+    const parts = t.split("-").filter((p) => p.length > 0);
+    parts.forEach((p, i) => out.push({ text: p, start: i === 0, end: i === parts.length - 1 }));
+  }
+  return out;
 }
 
 /**
@@ -60,13 +97,23 @@ export function tokenize(text: string): string[] {
  * subsequence of `haystackTokens` — a single-word label matches as a
  * whole word; a multi-word label ("Mary Jane") matches as the phrase,
  * never as its words scattered or glued ("Maryjane").
+ *
+ * REG-229: the match must align to compound boundaries — it may neither
+ * start nor end inside a hyphenated compound. "Art" does not match
+ * "state-of-the-art" (a middle segment), "Run" does not match "home-run",
+ * but "Mary Jane" still matches "Mary-Jane" and "state of the art" still
+ * matches "state-of-the-art" (whole-compound coverage).
  */
 export function matchesAnchor(haystackTokens: string[], needleTokens: string[]): boolean {
   if (needleTokens.length === 0) return false;
-  for (let i = 0; i + needleTokens.length <= haystackTokens.length; i++) {
+  const hay = anchorSegments(haystackTokens);
+  const needle = anchorSegments(needleTokens);
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    if (!hay[i]!.start) continue; // never start inside a compound
+    if (!hay[i + needle.length - 1]!.end) continue; // never end inside one
     let ok = true;
-    for (let j = 0; j < needleTokens.length; j++) {
-      if (haystackTokens[i + j] !== needleTokens[j]) {
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j]!.text !== needle[j]!.text) {
         ok = false;
         break;
       }
