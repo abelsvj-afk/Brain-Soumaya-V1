@@ -336,6 +336,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the render target is constructed, matching the established codebase convention exactly rather
   than attempting a more speculative shader/geometry change. Needs on-device re-confirmation once
   a deploy is possible.
+- **Worlds unreachable (off-screen panels + broken stylesheet) — MEASURED headless 2026-10-28,
+  FIXED** (TravelSheet.tsx, App.tsx, ToolsMenu.tsx, index.css): see "Current findings —
+  2026-10-28" below for the root cause. Verified headless at 412×915: the sheet card sits fully
+  on screen and on top, the route board lists all six worlds with tappable Warp/Drift, Escape
+  closes it; the World map is `position: fixed`, full-viewport, on top, zero page errors.
+  Needs on-device confirmation: the sheet at the owner's phone size, and that the map's new
+  dimming scrim still reads as "drawn over the galaxy".
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
@@ -594,11 +601,32 @@ fixes from here.
   including Eternity figure, ships, station/space packs).
   `WORLDS_TRAVEL_ENABLED = true` in `packages/shared/src/worlds.ts`.
 
-**Owner-reported symptoms (UNRESOLVED — the work Claude is picking up):**
+**Owner-reported symptoms (ROOT CAUSE FOUND + FIXED 2026-10-28 by Claude — CSS, not a
+crash; the gate question (3) below is still open):**
 - Owner sees no warp gates, no worlds, no nothing from any chat's work in the live app.
 - The world map button (Tools menu → 🪐 World map) produces no visible map when clicked.
 - Owner states: as dev and owner, everything should be accessible to him, including
   Eternity's world.
+
+**Root cause (MEASURED in headless Chromium at 412×915 against a real build — supersedes
+the ErrorBoundary theory below; no JS error was thrown):**
+1. The worlds panels (TravelPanel, ToursPanel, ApprovalsInbox, WorldChangesView) were
+   mounted as loose in-flow children of `.app` (`position: fixed; overflow: hidden`) and
+   `.travel-panel` never had any CSS on any branch — they laid out BELOW the screen's
+   bottom edge (Travel at y=934, Tours 1503, Approvals 1704, World Changes 1747) where
+   nothing could scroll to them. No Travel panel → no departure → no world ever mounts.
+2. PR #122 (Fleet Defense, commit `0738129`) inserted its CSS inside an unclosed
+   `.world-changes-view-why {` rule, so every rule after it (the whole World map, Fleet
+   Defense, `.route-focused`, `.travel-bonus`) became a nested descendant selector that
+   matches nothing. The World map rendered `position: static` at y=1801. The build had
+   been printing a `css-syntax-error` warning for it.
+- **Fix:** brace closed; the four panels now live in ONE positioned, scrollable sheet
+  (`components/TravelSheet.tsx`, Tools → 🚀 Travel; the map's travel handoff and the Help
+  Try-It "travel" action open it via `openTravel`). The sheet stays mounted while closed
+  so journey state/transit clock survive. World map buttons styled and its background
+  given a dimming scrim (fully transparent let the HUD collide with the map's bar).
+  `TravelSheet.test.tsx` gates brace balance (falsified: re-introducing the #122 break
+  fails it) and that every worlds panel mounts inside the sheet.
 
 **What the code says (VERIFIED from source on `main`):**
 - World map button wiring is correct: ToolsMenu "World map" → `setShowWorldMap(true)` →

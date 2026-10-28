@@ -1,7 +1,7 @@
 import { logDiagnosticEvent } from "./diagnostics/buffer";
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
-import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
+import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY, WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
 import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, resolveFocusNode, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanDownBottomPx, fanTargetCaption, galaxyEntityToastText, hudChromeHidden, shieldSavedToastText, measureSafeBottomInset } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
@@ -45,6 +45,7 @@ import ApprovalsInbox from "./components/ApprovalsInbox.js";
 import WorldChangesView from "./components/WorldChangesView.js";
 import WorldsSurface from "./components/WorldsSurface.js";
 import WorldMap from "./components/WorldMap.js";
+import TravelSheet from "./components/TravelSheet.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
@@ -211,6 +212,15 @@ export default function App() {
   // travel panel on when the map hands the traveller over.
   const [showWorldMap, setShowWorldMap] = useState(false);
   const [travelFocus, setTravelFocus] = useState<string | null>(null);
+  // The travel sheet: the worlds panels' one positioned home. Every way in
+  // (Tools → Travel, the map's handoff, a Try-It "travel" action) goes
+  // through openTravel, so no entry point can set a focus the traveller
+  // never sees. Opening from Tools passes no world and clears a stale one.
+  const [showTravel, setShowTravel] = useState(false);
+  const openTravel = useCallback((world: string | null = null) => {
+    setTravelFocus(world);
+    setShowTravel(true);
+  }, []);
   // A full-screen "rank up" celebration moment (not just a quiet toast).
   const [rankUp, setRankUp] = useState<{ title: string; level: number } | null>(null);
   // The "🔓 Unlocked!" celebration moment for the Unlockables system (IM-133).
@@ -1764,7 +1774,7 @@ export default function App() {
       else if (a.kind === "tab" && a.value != null) { dismissObs(); setTab(String(a.value) as any); setPanel("dock"); }
       // Verb 1 (Tend a plot): the Help card's "Travel to Growing Place"
       // Try-It — the same travel-focus mechanism the world map uses.
-      else if (a.kind === "travel" && a.value != null) { setTravelFocus(String(a.value)); }
+      else if (a.kind === "travel" && a.value != null) { openTravel(String(a.value)); }
       else if (a.kind === "panel" && a.value != null) {
         // REG-188: a panel-kind action may carry the text the user already
         // typed (SearchBox's "Add as memory" hatch) — seed the capture box
@@ -2486,49 +2496,46 @@ export default function App() {
         />
       )}
 
-      {/* Worlds travel (Phase 2, P2-3) — ships dark: while the worlds
-          flag is off, TravelPanel renders nothing and fetches nothing. */}
+      {/* The worlds panels live in ONE positioned sheet (Tools → Travel,
+          or a map / Try-It handoff). Mounted loose in .app they laid out
+          in flow below the screen's bottom edge and were unreachable. The
+          sheet stays mounted while closed so the panels keep their state;
+          each panel still ships dark on its own while the worlds flag is
+          off (renders nothing, fetches nothing). */}
       {space && (
-        <ErrorBoundary label="travel" fallback={null}>
-          <TravelPanel focusWorld={travelFocus} />
-        </ErrorBoundary>
-      )}
+        <TravelSheet open={showTravel} onClose={() => setShowTravel(false)}>
+          {/* Worlds travel (Phase 2, P2-3). */}
+          <ErrorBoundary label="travel" fallback={null}>
+            <TravelPanel focusWorld={travelFocus} />
+          </ErrorBoundary>
 
-      {/* Guided tours (Wave 2, N7) — saved Chronicle routes with a voice.
-          Same dark contract as travel: ships dark while the worlds flag
-          is off, and the panel itself fetches nothing then. */}
-      {space && (
-        <ErrorBoundary label="tours" fallback={null}>
-          <ToursPanel />
-        </ErrorBoundary>
-      )}
+          {/* Guided tours (Wave 2, N7) — saved Chronicle routes with a voice. */}
+          <ErrorBoundary label="tours" fallback={null}>
+            <ToursPanel />
+          </ErrorBoundary>
 
-      {/* World changes (Phase 4, §17 M1/M6) — the rail's two doors over
-          one log: the approvals inbox (the calm batched review moment)
-          and the browsable World Changes view. Same dark contract as
-          travel: while the worlds flag is off, both render nothing and
-          fetch nothing. */}
-      {space && (
-        <ErrorBoundary label="approvals-inbox" fallback={null}>
-          <ApprovalsInbox />
-        </ErrorBoundary>
-      )}
-      {space && (
-        <ErrorBoundary label="world-changes-view" fallback={null}>
-          <WorldChangesView />
-        </ErrorBoundary>
+          {/* World changes (Phase 4, §17 M1/M6) — the rail's two doors over
+              one log: the approvals inbox (the calm batched review moment)
+              and the browsable World Changes view. */}
+          <ErrorBoundary label="approvals-inbox" fallback={null}>
+            <ApprovalsInbox />
+          </ErrorBoundary>
+          <ErrorBoundary label="world-changes-view" fallback={null}>
+            <WorldChangesView />
+          </ErrorBoundary>
+        </TravelSheet>
       )}
 
       {/* World map (Rev 116) — the full-screen star map from the Tools
           popup menu. Travelling still happens in the travel panel: the
-          map hands over with a focus world and closes. */}
+          map hands over with a focus world, closes, and opens the sheet. */}
       {space && showWorldMap && (
         <ErrorBoundary label="world-map" fallback={null}>
           <WorldMap
             onClose={() => setShowWorldMap(false)}
             onTravelTo={(world) => {
               setShowWorldMap(false);
-              setTravelFocus(world);
+              openTravel(world);
             }}
           />
         </ErrorBoundary>
@@ -2697,6 +2704,7 @@ export default function App() {
             onTimeline={() => setShowTimeline(true)}
             onLegend={() => setShowLegend(true)}
             onWorldMap={() => setShowWorldMap(true)}
+            onTravel={WORLDS_TRAVEL_ENABLED ? () => openTravel() : undefined}
             onFlashback={triggerFlashback}
             onFocusMode={() => setFocusMode((v) => !v)}
             focusMode={focusMode}
