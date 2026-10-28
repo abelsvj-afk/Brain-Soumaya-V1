@@ -1369,4 +1369,56 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_fleet_defense_log_space_created
       ON fleet_defense_log(space_id, created_at);
+
+    -- Fleets on automated missions: the mission ledger, the log, and
+    -- the fleet stop flag. The log is append-only — every dispatch,
+    -- arrival, work step, return, failure, and recall, with its cause
+    -- in plain language. A mission never writes to a brain: the only
+    -- writes are these tables. Identical DDL also runs in
+    -- db/client.ts migrateSchema() for existing volumes. kind/state
+    -- carry no SQL CHECK: the allow-list is enforced in TypeScript
+    -- (dispatchMission validates the kind, claimTransition guards
+    -- the state), and a CHECK would need a migration every time a
+    -- kind is added. Missions are free: fuel_cost is always 0 today
+    -- (see futureFuelCost in shared/missions.ts for the pricing hook).
+    CREATE TABLE IF NOT EXISTS mission_missions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      client_key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT 'home',
+      fleet_size INTEGER NOT NULL,
+      ships TEXT NOT NULL,
+      duration_minutes INTEGER NOT NULL,
+      fuel_cost REAL NOT NULL,
+      state TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      departed_at TEXT,
+      arrive_at TEXT,
+      depart_back_at TEXT,
+      complete_at TEXT,
+      completed_at TEXT,
+      outcome TEXT,
+      report TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mission_missions_space_client_key
+      ON mission_missions(space_id, client_key);
+    CREATE INDEX IF NOT EXISTS idx_mission_missions_space_state
+      ON mission_missions(space_id, state, created_at);
+    CREATE TABLE IF NOT EXISTS mission_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mission_id TEXT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mission_log_space_created
+      ON mission_log(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS mission_fleet_state (
+      space_id TEXT PRIMARY KEY,
+      stopped INTEGER NOT NULL DEFAULT 0
+    );
 `;

@@ -7,6 +7,7 @@ import { SectorView } from "./SectorView.js";
 import { DigestPanel } from "./DigestPanel.js";
 import { SoumayaPanel } from "./SoumayaPanel.js";
 import { FleetPanel } from "./FleetPanel.js";
+import FleetMissionsPanel from "./FleetMissionsPanel.js";
 import FleetDefensePanel from "./FleetDefensePanel.js";
 import { AchievementsPanel } from "./AchievementsPanel.js";
 import { HangarPanel, type HangarViewTarget } from "./HangarPanel.js";
@@ -435,6 +436,10 @@ export function RightDock({
               {fleetOpen && (
                 <FleetPanel getStatus={getFleetStatus ?? (() => undefined)} onFocus={onFocus} />
               )}
+              {/* Fleet missions live inside the Fleet section, not a
+                  second fleet UI: a fleet out on a mission shows as
+                  out here, with its destination and return. */}
+              {fleetOpen && <FleetMissionsPanel />}
             </details>
             <details
               className="dock-section fleet-defense-section"

@@ -1425,6 +1425,53 @@ function migrateSchema(sqlite: RawDb): void {
       ON tour_sessions(space_id, updated_at);
   `);
 
+  // Fleets on automated missions: the mission ledger, the log, and
+  // the fleet stop flag. New tables, both paths: identical DDL to
+  // BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have them;
+  // this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS mission_missions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      client_key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT 'home',
+      fleet_size INTEGER NOT NULL,
+      ships TEXT NOT NULL,
+      duration_minutes INTEGER NOT NULL,
+      fuel_cost REAL NOT NULL,
+      state TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      departed_at TEXT,
+      arrive_at TEXT,
+      depart_back_at TEXT,
+      complete_at TEXT,
+      completed_at TEXT,
+      outcome TEXT,
+      report TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mission_missions_space_client_key
+      ON mission_missions(space_id, client_key);
+    CREATE INDEX IF NOT EXISTS idx_mission_missions_space_state
+      ON mission_missions(space_id, state, created_at);
+    CREATE TABLE IF NOT EXISTS mission_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mission_id TEXT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mission_log_space_created
+      ON mission_log(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS mission_fleet_state (
+      space_id TEXT PRIMARY KEY,
+      stopped INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
   // P2-4 journey-bonus outcome columns on existing travel_journeys volumes
   // (additive; the marker is the exactly-once crediting record).
   const travelCols = sqlite.prepare(`PRAGMA table_info(travel_journeys)`).all() as { name: string }[];
