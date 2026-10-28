@@ -45,7 +45,7 @@ status log — a frozen verdict, re-run periodically, entries appended not overw
 what it found — **no tab removal, no rebuild; fix/consolidate/surface what's already built.** Weigh
 any new feature idea against closing the roadmap's open problems before adding more surface area.
 
-**MANDATORY**: Refer to [GEMINI_CHANGES.md](./GEMINI_CHANGES.md) for all modifications, asset additions, and infrastructure changes made by the second agent (Antigravity CLI / `agy`), to ensure continuity between agents. The second agent's own mandates + green/red zones live in [AGENTS.md](./AGENTS.md) (the file `agy` auto-loads).
+**HISTORICAL NOTE**: [GEMINI_CHANGES.md](./GEMINI_CHANGES.md) records past modifications, asset additions, and infrastructure changes from earlier agent work, for continuity. It is a historical log, not an active agent's change log — the current agents are Claude, Muse, and ChatGPT (see below).
 
 Guidance for working in this repo. Read this before making changes.
 
@@ -151,11 +151,11 @@ static web (`WEB_DIR`). SQLite persists on a Fly volume at `/data`.
 **How deploys actually happen (verified 2026-06-20):** GitHub Actions is **blocked on
 this account** — runs `startup_failure` with 0 jobs (private-repo Actions minutes/
 runner unavailable), so `.github/workflows/fly-deploy.yml` never ships anything. The
-working path is a **manual `fly deploy --remote-only`** (run by `agy` from Termux, who
-has the `FLY_API_TOKEN`; this sandbox has no flyctl/Fly network). The durable fix is to
+working path is a **manual `fly deploy --remote-only`** (this sandbox has no flyctl
+token or Fly network; Fly work goes through the dashboard browser). The durable fix is to
 reconnect **Fly's native GitHub auto-deploy** (Fly dashboard → app → GitHub), which
 builds the Dockerfile on push without Actions. Either way: pushing alone does NOT deploy
-right now — trigger a `fly deploy` (delegate to `agy`) after pushing branch changes you
+right now — trigger a `fly deploy` after pushing branch changes you
 want live. Migrations must be additive + idempotent so a deploy can never crash boot on
 the existing volume (`migrateSchema`; covered by `migration.test.ts`).
 
@@ -171,57 +171,13 @@ LLM is optional — without a key the app runs in heuristic mode. To use a key:
 `gpt-4o-mini`; override with `OPENAI_MODEL`). Cloud providers degrade to the
 heuristic automatically on credit/quota errors (see ResilientLlmProvider).
 
-## Agent delegation (Claude ⇄ Antigravity CLI) — spend Claude's tokens wisely
+## Agent team (current)
 
-There are two coding agents on this repo and **both have GitHub access**. Claude is the
-architect/lead and the only one who signs off "Verified". The second agent is
-**Antigravity CLI (`agy`)** — a Go-based, headless, low-memory terminal agent (runs well
-on the user's **Termux/mobile** setup) with **async parallel subagents**, a **built-in
-browser subagent** (headless Chrome over MCP) for real visual QA, research/doc-conversion
-slash commands, and an **MCP bridge built to let Claude delegate heavy work to it** (with
-model routing + session continuity + output truncation, so it does NOT eat Claude's
-context). Its full rules are in [AGENTS.md](./AGENTS.md) (the file `agy` auto-loads).
+Claude is the architect/lead and the only one who signs off "Verified". The other agents on this repo are Muse (diagnosis + usage-heavy work, via the user) and ChatGPT (free plan, read-only auditor) — see their sections below. There is no longer an active second coding agent; the former second-agent delegation setup was removed 2026-10-28.
 
-**Core principle: don't burn Claude's tokens/context on anything that is green-zone for
-`agy`.** If a task is mechanical, parallelizable, evidence-gathering, or file-dump-heavy,
-delegate it and consume only the conclusion.
+**Keep for Claude (do NOT delegate):** Red-Zone work — `packages/shared/*` types/zod, `db/*` schema + migrations, `graph/orbits.ts`, `web/src/api/client.ts`, the token/USD/Fuel guards, `space_id` multi-tenancy scoping, route contracts — plus architecture decisions, ambiguous/underspecified features, security/data-integrity, and the **final audit + "Verified by Claude" checkmark**.
 
-**Delegate to `agy` (default to this):**
-- Bulk/mechanical, well-specified edits — rename a thing everywhere, apply one pattern
-  across many `components/*` or `graph/*` files, batch asset/CSS work.
-- **Browser-based visual QA** — load the app, click through the galaxy, screenshot, record
-  a `.webm` walkthrough, run a UX/design review. ⚠️ **NOT available on the user's Termux
-  (android-arm64 has no compatible headless Chrome — confirmed 2026-06-21, issue #10).** From
-  this hosted sandbox you also can't reach the live site. So live pixel verification falls to the
-  USER (or a desktop browser); for everything else, verify behavior by headless
-  reproduction/measurement (see "Verify before you build"), not by eyeballing.
-- **Research & doc ingestion** — web research with citations; URL/PDF/docx/image → Markdown.
-- **Broad codebase exploration** that would otherwise dump many files into Claude's context.
-- Long-running **gate/build** runs and routine git ops, especially from mobile.
-
-**How to delegate:** (a) the **MCP bridge** — call `agy` as an MCP server (preferred; it
-truncates output to protect Claude's context); or (b) **GitHub** — write a crisp,
-self-contained issue/PR task and let `agy` pick it up, push to the deploy branch, and
-report back. Always give it a tight spec + the gate + "stage, don't push, if you hit the
-Red Zone."
-
-**MCP bridge config:** the `agy-bridge` server is committed at repo root in
-[`.mcp.json`](./.mcp.json) (runs `npx -y agy-bridge`), so any Claude Code session in this
-repo can delegate to `agy`. It only works where `agy` itself is installed + authenticated
-(e.g. the user's Termux/laptop) — in a stripped remote sandbox the bridge is inert, so fall
-back to the GitHub hand-off there. Approve the server once when Claude Code prompts to trust
-project MCP servers.
-
-**Keep for Claude (do NOT delegate):** Red-Zone work — `packages/shared/*` types/zod,
-`db/*` schema + migrations, `graph/orbits.ts`, `web/src/api/client.ts`, the token/USD/Fuel
-guards, `space_id` multi-tenancy scoping, route contracts — plus architecture decisions,
-ambiguous/underspecified features, security/data-integrity, and the **final audit +
-"Verified by Claude" checkmark**. Review `agy`'s pushes before ticking that box.
-
-Both agents share the **same gate** and the **same change log** (`GEMINI_CHANGES.md`). The
-mainline branch is now **`main`** (created 2026-10-28 from `7262265a`); the old deploy branch
-`claude/soumaya-second-brain-v1-m4z4hc` is retained but no longer the mainline. Fly deploys
-from `main` with auto-deploy on (see Deployment update 2026-10-28 above).
+The mainline branch is **`main`** (created 2026-10-28 from `7262265a`); the old deploy branch `claude/soumaya-second-brain-v1-m4z4hc` is retained but no longer the mainline. Fly deploys from `main` with auto-deploy on (see Deployment update 2026-10-28 above). The shared gate and the historical change log (`GEMINI_CHANGES.md`) still apply.
 
 ## Verify before you build (and before you claim it works)
 
@@ -415,13 +371,13 @@ tokens/context for the work only Claude can do.
 - **Mechanical repo/file work** — organizing findings, updating docs, and other
   well-specified edits.
 
-**How to delegate:** There is no MCP bridge for Muse (unlike `agy`). Delegation goes
+**How to delegate:** There is no MCP bridge for Muse. Delegation goes
 through the user: tell Sajacous the task is Muse-sized (diagnosis, verification, or
 mechanical), and he hands it to Muse. Muse reports back conclusions; Claude consumes
 only the conclusion and does the fix. Do NOT burn Claude's context re-doing diagnosis
 Muse already did — read Muse's findings and build on them.
 
-**Keep for Claude (do NOT delegate to Muse):** Same Red Zone as `agy` — shared
+**Keep for Claude (do NOT delegate to Muse):** Same Red Zone — shared
 types/zod, db schema + migrations, orbits, api client, token/USD/Fuel guards,
 space_id scoping, route contracts — plus architecture decisions, ambiguous features,
 security/data-integrity, and the final "Verified by Claude" checkmark.
