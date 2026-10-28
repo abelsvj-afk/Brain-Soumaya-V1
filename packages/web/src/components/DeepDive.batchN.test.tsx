@@ -31,7 +31,10 @@ describe("REG-152 / INS-05 — the Investigator names itself", () => {
 
   it("the empty copy names the Investigator, not a bare deep-dive", () => {
     render(<DeepDive nodeId={1} nodeLabel="Rent stress" onFocus={() => {}} />);
-    expect(screen.getByText(/No Investigator deep-dive run yet/)).toBeTruthy();
+    // Union copy (Batch P rebase): REG-152 Investigator naming + REG-108
+    // visit scoping — "No Investigator deep-dive run in this visit yet."
+    expect(screen.getByText(/No Investigator deep-dive run in this visit yet/)).toBeTruthy();
     expect(screen.queryByText("No deep-dive run yet for this memory.")).toBeNull();
+    expect(screen.queryByText("No Investigator deep-dive run yet for this memory.")).toBeNull();
   });
 });

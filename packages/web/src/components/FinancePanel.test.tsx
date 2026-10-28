@@ -20,6 +20,7 @@ const deleteBill = vi.fn();
 const setBuffer = vi.fn();
 const getAfford = vi.fn();
 const addIncome = vi.fn();
+const addExpense = vi.fn();
 const listIncome = vi.fn();
 const listExpense = vi.fn();
 const markOccurrencePaid = vi.fn();
@@ -32,7 +33,7 @@ vi.mock("../api/finance.js", () => ({
   getWealthSummary: (...a: unknown[]) => getWealthSummary(...a),
   setBuffer: (...a: unknown[]) => setBuffer(...a),
   setBalance: vi.fn(),
-  addIncome: (...a: unknown[]) => addIncome(...a), addExpense: vi.fn(),
+  addIncome: (...a: unknown[]) => addIncome(...a), addExpense: (...a: unknown[]) => addExpense(...a),
   createBill: (...a: unknown[]) => createBill(...a),
   patchBill: (...a: unknown[]) => patchBill(...a),
   deleteBill: (...a: unknown[]) => deleteBill(...a),
@@ -103,6 +104,7 @@ beforeEach(() => {
   markOccurrencePaid.mockResolvedValue({ ok: true, budget: budget({}) });
   skipOccurrence.mockResolvedValue({ ok: true, budget: budget({}) });
   addIncome.mockResolvedValue({ income: {}, duplicate: false, budget: budget({}) });
+  addExpense.mockResolvedValue({ expense: {}, duplicate: false, budget: budget({}) });
 });
 afterEach(() => cleanup());
 
@@ -771,5 +773,59 @@ describe("FinancePanel — ADR-019 bill lifecycle (web half)", () => {
     await act(async () => { screen.getByText("Delete").click(); });
     await screen.findByText(/also removes the income it created/);
     expect(screen.getByText(/reverses that income's effect on your balance/)).toBeTruthy();
+  });
+});
+
+describe("REG-010 — a duplicate-flagged paystub confirm says so", () => {
+  it("tells the user the stub was already recorded instead of a plain 'saved'", async () => {
+    const { extractFileText } = await import("../lib/extractFileText.js");
+    (extractFileText as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ text: "Net Pay 900.00", name: "stub" });
+    extractPaystubText.mockResolvedValue({ result: { netCents: 90000, earnings: [], deductions: [], confidence: 0.6 } });
+    confirmPaystub.mockResolvedValue({
+      data: {
+        paystub: { id: 1, netCents: 90000, earnings: [], deductions: [], hasSource: false, createdAt: "x" },
+        budget: budget({}),
+        duplicate: true,
+      },
+    });
+
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("📄 Pay Stubs"));
+    await screen.findByText("📤 Upload a pay stub");
+
+    const input = screen.getByText("📤 Upload a pay stub").closest("label")!.querySelector("input")!;
+    const file = new File(["dummy"], "stub.pdf", { type: "application/pdf" });
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
+    await screen.findByText("Review your pay stub — confirm to save");
+
+    fireEvent.click(screen.getByText("Save pay stub"));
+    await screen.findByText(/already recorded/i);
+    expect(screen.queryByText(/^Pay stub saved$/)).toBeNull();
+  });
+});
+
+describe("REG-091 — manual Add expense records merchant AND category like every other door", () => {
+  it("the expense form has a merchant field, and saving sends merchant + category", async () => {
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("－ Expense"));
+    fireEvent.change(screen.getByPlaceholderText("Amount"), { target: { value: "12.50" } });
+    fireEvent.change(screen.getByPlaceholderText("Merchant (optional)"), { target: { value: "Starbucks" } });
+    fireEvent.change(screen.getByPlaceholderText("Category (e.g. food)"), { target: { value: "food" } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(addExpense).toHaveBeenCalled());
+    expect(addExpense).toHaveBeenCalledWith(expect.objectContaining({ merchant: "Starbucks", category: "food", amountCents: 1250 }));
+  });
+
+  it("a history row carries both fields for the same kind of event", async () => {
+    listExpense.mockResolvedValue([
+      { id: 1, date: "2026-01-05", amountCents: 1200, merchant: "Starbucks", category: "food", balanceAppliedAt: "2026-01-05T00:00:00Z" },
+    ]);
+    render(<FinancePanel />);
+    await screen.findByText("Safe to Spend");
+    fireEvent.click(screen.getByText("🧾 View / edit history"));
+    const row = await screen.findByText("Starbucks");
+    expect(row.closest("li")!.textContent).toContain("food");
   });
 });

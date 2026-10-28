@@ -32,7 +32,9 @@ export function workingRoutes(ctx: AppContext): Router {
   r.post("/", (req, res) => {
     const parsed = AddBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { text, source? }", issues: parsed.error.issues });
+      // REG-040: name the length limit instead of blaming the body's shape.
+      const tooLong = parsed.error.issues.some((i) => i.path[0] === "text" && i.code === "too_big");
+      res.status(400).json({ error: tooLong ? "Thought is too long — the limit is 500 characters." : "Body must be { text, source? }", issues: parsed.error.issues });
       return;
     }
     const source = parsed.data.source ?? "manual";
@@ -93,7 +95,9 @@ export function workingRoutes(ctx: AppContext): Router {
     }
     const parsed = EditBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { text }" });
+      // REG-040: same length naming as the add path.
+      const tooLong = parsed.error.issues.some((i) => i.path[0] === "text" && i.code === "too_big");
+      res.status(400).json({ error: tooLong ? "Thought is too long — the limit is 500 characters." : "Body must be { text }" });
       return;
     }
     if (!editThought(ctx, spaceOf(res), id, parsed.data.text)) {

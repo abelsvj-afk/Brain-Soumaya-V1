@@ -352,7 +352,7 @@ export function financeRoutes(ctx: AppContext): Router {
     const p = PasteBody.safeParse(req.body);
     if (!p.success) return bad(res, "Body must be { text }", p.error.issues);
     const out = await ingestPaste(ctx.handle, spaceOf(res), p.data.text);
-    res.json(out); // { sourceId, result } — nothing committed yet
+    res.json(out); // { sourceId, result, sourceTruncated } — nothing committed yet
   });
 
   // Snap a screenshot/PDF (Stage 1c). Vision auto-extracts when a key is configured; with no

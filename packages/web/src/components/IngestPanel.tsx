@@ -131,6 +131,8 @@ export function IngestPanel({
   };
 
   const dirty = !!(text.trim() || details.trim());
+  // REG-040: the length of what submit() will actually send (text + details).
+  const submittedLen = (details.trim() ? `${text.trim()}\n\n${details.trim()}` : text.trim()).length;
   const requestClose = () => {
     if (!onClose) return;
     // IM-117: closing with a draft asks first (shared ConfirmDialog) instead
@@ -345,6 +347,14 @@ export function IngestPanel({
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
         }}
       />
+      {/* REG-040: the 20,000-character ingest cap is visible before submit —
+          a live counter over what will actually be sent (text + details),
+          with a plain warning past the cap instead of a misleading shape
+          error after it. */}
+      <div className="ingest-count" aria-live="polite">
+        {submittedLen.toLocaleString()} / 20,000 characters
+        {submittedLen > 20000 ? " — over the 20,000-character limit; trim it before adding" : ""}
+      </div>
 
       {/* IM-116: import a document (PDF / Word / text) — or drag one in. */}
       <div className="ingest-import">
