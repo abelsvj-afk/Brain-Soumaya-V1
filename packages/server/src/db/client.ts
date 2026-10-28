@@ -1334,6 +1334,50 @@ function migrateSchema(sqlite: RawDb): void {
       opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, npc_id)
     );
+
+    -- Fleet defense (Wave 2): the releases, the defenses, and the
+    -- append-only log. Identical DDL to BOOTSTRAP_SQL in
+    -- db/schemaSql.ts (fresh DBs already have them; this is a no-op
+    -- there).
+    CREATE TABLE IF NOT EXISTS fleet_defense_releases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      size TEXT NOT NULL,
+      label TEXT NOT NULL,
+      node_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'offered',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_defense_releases_space_status
+      ON fleet_defense_releases(space_id, status, created_at);
+    CREATE TABLE IF NOT EXISTS fleet_defense_defenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      release_id INTEGER NOT NULL,
+      space_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      invaders_json TEXT NOT NULL,
+      tick_count INTEGER NOT NULL DEFAULT 0,
+      last_mode TEXT,
+      last_line TEXT,
+      outcome_line TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_defense_defenses_space_status
+      ON fleet_defense_defenses(space_id, status, created_at);
+    CREATE TABLE IF NOT EXISTS fleet_defense_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      defense_id INTEGER,
+      release_id INTEGER,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_defense_log_space_created
+      ON fleet_defense_log(space_id, created_at);
   `);
 
   // Guided tours (Wave 2, N7): the saved route, its §17 rail log, and

@@ -6653,6 +6653,7 @@ button.mindspace-more { cursor: pointer; }
 .harbor-controller-error {
   color: #ffb4a2;
 }
+
 /* Approvals inbox + World Changes view (Phase 4, §17 M1/M6) — the calm
    review moment and the browsable log. Deliberately quiet: no urgency
    colors, no countdowns, no badges. The collapsed toggle is one line;
@@ -6727,6 +6728,78 @@ button.mindspace-more { cursor: pointer; }
   margin: 0.5rem 0;
   padding-left: 0.75rem;
   border-left: 2px solid rgba(255, 210, 122, 0.5);
+
+/* Fleet defense (Wave 2) — the lane board in the Soumaya tab, beside
+   the Fleet roster. A calm turn-based presentation: static text and
+   lane buttons, no animation anywhere in this block, so reduced
+   motion needs no separate treatment. */
+.fleet-defense {
+  font-size: 0.9rem;
+}
+.fleet-defense-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.fleet-defense-board {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+.fleet-defense-board h4 {
+  margin: 0.25rem 0;
+}
+.fleet-defense-lane ul {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+.fleet-defense-line {
+  font-style: italic;
+}
+.fleet-defense-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.fleet-defense-helm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.fleet-defense-releases,
+.fleet-defense-history {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.fleet-defense-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.fleet-defense-offer fieldset {
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+}
+.fleet-defense-offer fieldset label {
+  display: block;
+}
+.fleet-defense-outcome {
+  font-style: italic;
+}
+.fleet-defense-error {
+  color: #ffb4a2;
+}
+.fleet-defense-section > summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 8px 0;
+
 }
 
 .travel-bonus {
