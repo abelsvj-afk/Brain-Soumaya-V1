@@ -118,6 +118,27 @@ describe("advanceTick", () => {
     expect(r.line).toMatch(/nothing is lost/);
   });
 
+  it("a REAL-defense loss line never names a practice fleet; a practice loss does", () => {
+    // Regression: the shared engine serves the server's real defense
+    // (practice flag off) as well as the Scale practice round, so an
+    // unconditional "practice fleet" loss line leaked into real
+    // defenses via lastLine + the tick log. Both breach shapes are
+    // covered: a hit plus a breach, and a shot flown wide plus a
+    // breach. The wording must name the exact fleet, not merely
+    // contain "nothing is lost".
+    const hitAndBreach = [invader(1, 1), invader(2, 3, "challenger")];
+    const wideAndBreach = [invader(1, 1)];
+    for (const board of [hitAndBreach, wideAndBreach]) {
+      const real = advanceTick(board, { mode: "helm", lane: 2 });
+      expect(real.status).toBe("lost");
+      expect(real.line).toMatch(/The fleet disperses — nothing is lost\./);
+      expect(real.line).not.toMatch(/practice fleet/);
+      const practice = advanceTick(board, { mode: "helm", lane: 2 }, { practice: true });
+      expect(practice.status).toBe("lost");
+      expect(practice.line).toMatch(/The practice fleet disperses — nothing is lost\./);
+    }
+  });
+
   it("two missed rounds still win a small defense; three lose it", () => {
     // Small wave, 5 steps, 3 ships. Fire lane 1 three times: the
     // first shot disperses that lane's ship, the next two fly wide

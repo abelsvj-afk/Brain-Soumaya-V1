@@ -30,7 +30,7 @@ const ROWS: Row[] = [
   { icon: "🔥", label: "Daily streak", amount: "+2", hint: "Automatic the first time you tend your brain each day." },
   { kind: "codex", icon: "🔦", label: "Codex discoveries", amount: "+4", hint: "Your own galaxy states, discovered as you tend it — claimed the moment they're found, one-time per entry." },
   { icon: "🛰️", label: "Slow auto-refuel", amount: "+3.5/hr", hint: "The tank trickles back up on its own while you're away." },
-  { section: "spend", icon: "🛠️", label: "Deep jobs (her research)", amount: "−2 each", hint: "Soumaya's autonomous deep-dive research & sector charting." },
+  { section: "spend", icon: "🛠️", label: "Deep jobs (her research)", amount: "−2 each", hint: "Soumaya's autonomous Research Mode research & sector charting." },
   { section: "spend", icon: "🌡️", label: "Commission a warming", amount: "−25", hint: "Ask Soumaya to warm your coldest memories right now." },
   { section: "spend", icon: "🌀", label: "Warp between worlds", amount: "−10", hint: "One jump between spaces — drifting is always free." },
   { section: "spend", icon: "🚀", label: "Fast-flight burn", amount: "up to −5", hint: "Flying faster than free cruise speed burns a little fuel per burst." },

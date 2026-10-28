@@ -6654,6 +6654,38 @@ button.mindspace-more { cursor: pointer; }
   color: #ffb4a2;
 }
 
+/* Fleet missions panel (fleet missions): a readable card inside the
+   dock's Fleet section — functional layout only, no absolute
+   positioning (it is dock content, not a scene overlay). */
+.fleet-missions {
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+  color: #e8e6df;
+  font-size: 0.9rem;
+}
+.fleet-missions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fleet-missions-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.fleet-missions-active,
+.fleet-missions-done,
+.fleet-missions-log {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.fleet-missions-cause {
+  opacity: 0.8;
+}
+.fleet-missions-error {
+  color: #ffb4a2;
+}
+
 /* Approvals inbox + World Changes view (Phase 4, §17 M1/M6) — the calm
    review moment and the browsable log. Deliberately quiet: no urgency
    colors, no countdowns, no badges. The collapsed toggle is one line;
@@ -6783,6 +6815,25 @@ button.mindspace-more { cursor: pointer; }
   flex-direction: column;
   gap: 0.5rem;
   margin: 0.5rem 0;
+}
+/* Scale practice: the same board, in a clearly separated frame, so a
+   practice round can never be mistaken for a real defense. Static
+   text + buttons, no animation — the reduced-motion form is the same. */
+.fleet-defense-practice {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px dashed rgba(232, 230, 223, 0.45);
+  border-radius: 8px;
+}
+.fleet-defense-practice h4 {
+  margin: 0.25rem 0;
+}
+.fleet-defense-practice fieldset {
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+}
+.fleet-defense-practice fieldset label {
+  display: block;
 }
 .fleet-defense-offer fieldset {
   border: 1px solid rgba(232, 230, 223, 0.25);
