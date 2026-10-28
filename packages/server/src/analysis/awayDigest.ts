@@ -44,7 +44,7 @@ export function markSeen(h: DbHandle, spaceId: string, nowIso: string): void {
 // Human phrasing per autonomous job type (routine upkeep is omitted from the digest).
 const ACTION_LABEL: Record<string, (n: number) => string> = {
   synthesis: (n) => `connected ${n} related ${n === 1 ? "memory" : "memories"}`,
-  research: (n) => `deep-dived ${n} ${n === 1 ? "memory" : "memories"}`,
+  research: (n) => `researched ${n} ${n === 1 ? "memory" : "memories"}`,
   merging: (n) => `fused ${n} duplicate ${n === 1 ? "memory" : "memories"}`,
   sector_vibe: (n) => `charted ${n} ${n === 1 ? "sector" : "sectors"}`,
   daily_log: () => `wrote a daily log`,

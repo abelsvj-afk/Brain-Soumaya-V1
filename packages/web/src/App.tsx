@@ -230,7 +230,7 @@ export default function App() {
   // "what is Soumaya / the companion / the Galaxy" card, shown before the Observatory/Legend
   // reveals so a genuinely new space doesn't stack three separate "welcome" surfaces at once.
   const [showIntro, setShowIntro] = useState(false);
-  // Deep-space focus mode (#2): a distraction-free reading session — dims the chrome,
+  // Deep-space calm mode (#2): a distraction-free reading session — dims the chrome,
   // calms ambient motion, and quiets non-essential toasts. Ephemeral (not persisted).
   const [focusMode, setFocusMode] = useState(false);
   const focusModeSeenRef = useRef(false);
@@ -1549,7 +1549,7 @@ export default function App() {
     if (!space || !loaded) return;
     const key = `brain.replay.lastLog.${space.id}`;
     const VERBS: Record<string, { replay: string; live: string }> = {
-      research: { replay: "deep-dived", live: "just deep-dived" },
+      research: { replay: "researched", live: "just researched" },
       merging: { replay: "fused a duplicate into", live: "just fused a duplicate into" },
       sector_vibe: { replay: "charted the sector around", live: "just charted the sector around" },
       synthesis: { replay: "connected a thread to", live: "just connected a thread to" },
@@ -2732,9 +2732,9 @@ export default function App() {
           <button
             className={`fab fab-focus-toggle ${focusMode ? "on" : ""}`}
             onClick={() => setFocusMode((v) => !v)}
-            aria-label={focusMode ? "Exit focus mode" : "Focus mode"}
+            aria-label={focusMode ? "Exit calm" : "Calm mode"}
             aria-pressed={focusMode}
-            title={focusMode ? "Exit deep-space focus mode" : "Deep-space focus mode — dim the chrome for a calm read"}
+            title={focusMode ? "Exit deep-space calm mode" : "Deep-space calm mode — dim the chrome for a calm read"}
           >
             {focusMode ? "🌐" : "🌌"}
             <span className="fab-cap">Calm</span>
