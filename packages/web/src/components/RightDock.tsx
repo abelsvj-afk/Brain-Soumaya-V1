@@ -7,6 +7,7 @@ import { SectorView } from "./SectorView.js";
 import { DigestPanel } from "./DigestPanel.js";
 import { SoumayaPanel } from "./SoumayaPanel.js";
 import { FleetPanel } from "./FleetPanel.js";
+import FleetDefensePanel from "./FleetDefensePanel.js";
 import { AchievementsPanel } from "./AchievementsPanel.js";
 import { HangarPanel, type HangarViewTarget } from "./HangarPanel.js";
 import type { UnlockStats } from "@brain/shared";
@@ -232,6 +233,10 @@ export function RightDock({
   const [browseView, setBrowseView] = useState<BrowseView>("all");
   const [progressView, setProgressView] = useState<ProgressView>("codex");
   const [fleetOpen, setFleetOpen] = useState(true); // IM-68: Fleet starts open/prominent
+  // Fleet defense (Wave 2): closed by default — the defense is a
+  // deliberate visit, not ambient. Opening it mounts the panel and
+  // its one overview fetch; closed, it fetches nothing.
+  const [defenseOpen, setDefenseOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   // IM-02: the ambient strip shows REAL state only (see dockAmbientDetail).
   // The clock ticks so the greeting/time stay current; everything else is
@@ -430,6 +435,14 @@ export function RightDock({
               {fleetOpen && (
                 <FleetPanel getStatus={getFleetStatus ?? (() => undefined)} onFocus={onFocus} />
               )}
+            </details>
+            <details
+              className="dock-section fleet-defense-section"
+              open={defenseOpen}
+              onToggle={(e) => setDefenseOpen((e.target as HTMLDetailsElement).open)}
+            >
+              <summary>🛡️ Fleet defense — what you chose to let go</summary>
+              {defenseOpen && <FleetDefensePanel nodes={graph.nodes} />}
             </details>
           </div>
         )}

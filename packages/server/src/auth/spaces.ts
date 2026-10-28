@@ -197,6 +197,11 @@ export const SPACE_SCOPED_TABLES = [
   "world_paths",
   "world_change_log",
   "world_proposals",
+  // Fleet defense (Wave 2): the releases, the defenses, and the log
+  // are per-space rows — brain deletion must remove them too.
+  "fleet_defense_releases",
+  "fleet_defense_defenses",
+  "fleet_defense_log",
 ] as const;
 
 /**
