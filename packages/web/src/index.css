@@ -6628,6 +6628,82 @@ button.mindspace-more { cursor: pointer; }
 .harbor-controller-error {
   color: #ffb4a2;
 }
+/* Approvals inbox + World Changes view (Phase 4, §17 M1/M6) — the calm
+   review moment and the browsable log. Deliberately quiet: no urgency
+   colors, no countdowns, no badges. The collapsed toggle is one line;
+   the expanded body is a plain panel, in flow like the travel panel. */
+.approvals-inbox,
+.world-changes-view {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #e8e6df;
+}
+.approvals-inbox-toggle,
+.world-changes-view-toggle {
+  background: rgba(11, 16, 38, 0.72);
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+  color: #e8e6df;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+}
+.approvals-inbox-body,
+.world-changes-view-body {
+  margin-top: 0.5rem;
+  max-width: min(28rem, calc(100% - 2rem));
+  max-height: 24rem;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  background: rgba(11, 16, 38, 0.88);
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+}
+.approvals-inbox-list,
+.world-changes-view-list {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.approvals-inbox-item,
+.world-changes-view-item {
+  margin-bottom: 0.75rem;
+}
+.approvals-inbox-item label {
+  display: block;
+  margin: 0.5rem 0;
+  opacity: 0.9;
+}
+.approvals-inbox-item input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(232, 230, 223, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8e6df;
+}
+.approvals-inbox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.approvals-inbox-note,
+.world-changes-view-note,
+.approvals-inbox-evidence,
+.approvals-inbox-when,
+.world-changes-view-when {
+  opacity: 0.8;
+}
+.approvals-inbox-error,
+.world-changes-view-error {
+  color: #ffb4a2;
+}
+.world-changes-view-why {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid rgba(255, 210, 122, 0.5);
+}
+
 .travel-bonus {
   color: #ffd27a;
 }

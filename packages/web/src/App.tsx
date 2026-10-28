@@ -41,6 +41,8 @@ import { GalaxyViews } from "./components/GalaxyViews.js";
 import { GalaxyErrorCard } from "./components/GalaxyErrorCard.js";
 import TravelPanel from "./components/TravelPanel.js";
 import ToursPanel from "./components/ToursPanel.js";
+import ApprovalsInbox from "./components/ApprovalsInbox.js";
+import WorldChangesView from "./components/WorldChangesView.js";
 import WorldsSurface from "./components/WorldsSurface.js";
 import WorldMap from "./components/WorldMap.js";
 import { getMoneySky } from "./api/finance.js";
@@ -2440,6 +2442,22 @@ export default function App() {
       {space && (
         <ErrorBoundary label="tours" fallback={null}>
           <ToursPanel />
+        </ErrorBoundary>
+      )}
+
+      {/* World changes (Phase 4, §17 M1/M6) — the rail's two doors over
+          one log: the approvals inbox (the calm batched review moment)
+          and the browsable World Changes view. Same dark contract as
+          travel: while the worlds flag is off, both render nothing and
+          fetch nothing. */}
+      {space && (
+        <ErrorBoundary label="approvals-inbox" fallback={null}>
+          <ApprovalsInbox />
+        </ErrorBoundary>
+      )}
+      {space && (
+        <ErrorBoundary label="world-changes-view" fallback={null}>
+          <WorldChangesView />
         </ErrorBoundary>
       )}
 

@@ -144,6 +144,17 @@ function placementFor(nodeId: number, terrace: number): { x: number; y: number; 
   };
 }
 
+/**
+ * The crown-terrace position a landmark for this journey would stand
+ * on — the same seeded placement buildGardenLayout uses for done
+ * Journeys (Phase 4, A6). An approved landmark rises exactly where the
+ * layout would place it once it lands; a landmark already rendering
+ * presence-only is never re-risen, so callers check the layout first.
+ */
+export function landmarkPositionFor(journeyId: number): { x: number; y: number; z: number } {
+  return placementFor(journeyId, GARDEN_TERRACE_COUNT - 1);
+}
+
 export function buildGardenLayout(
   graph: GraphData,
   journeys: Journey[],

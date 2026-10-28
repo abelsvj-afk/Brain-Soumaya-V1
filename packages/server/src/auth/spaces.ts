@@ -188,6 +188,15 @@ export const SPACE_SCOPED_TABLES = [
   "tours",
   "tour_log",
   "tour_sessions",
+  // Phase 4 (§17 rail): the world-change rail's four tables are per-space
+  // rows — brain deletion removes them too. Listed reference-first:
+  // landmarks/paths point at the log (created_log_id) and the log points
+  // at proposals (proposal_id), so each is emptied before the table it
+  // references.
+  "world_landmarks",
+  "world_paths",
+  "world_change_log",
+  "world_proposals",
 ] as const;
 
 /**

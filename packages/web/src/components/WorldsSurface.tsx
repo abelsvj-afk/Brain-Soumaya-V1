@@ -25,8 +25,14 @@ import {
   approachPose,
 } from "../graph/stationLayout.js";
 import { ensureKtx2Support } from "../graph/gltf.js";
-import { buildGardenLayout, clampToGardenFloor, GARDEN_CAMERA_FLOOR_Y, type GardenLayout } from "../graph/gardenLayout.js";
-import { createGardenScene, type GardenScene } from "../graph/gardenScene.js";
+import { buildGardenLayout, clampToGardenFloor, GARDEN_CAMERA_FLOOR_Y, landmarkPositionFor, type GardenLayout } from "../graph/gardenLayout.js";
+import { createGardenScene, EMPTY_GARDEN_MUTATION, type GardenMutationInput, type GardenMutationLanding, type GardenMutationPreview, type GardenMutationUndo, type GardenScene } from "../graph/gardenScene.js";
+import {
+  getWorldChangesState,
+  listWorldChangeProposals,
+  resolveWorldChangeTarget,
+  type WorldChangeProposal,
+} from "../api/worldChanges.js";
 import {
   buildDeepPastLayout,
   type DeepPastLayout,
@@ -140,6 +146,99 @@ interface WorldSceneHandle {
   group: THREE.Group;
   update: (ms: number, opts?: { reducedMotion?: boolean }) => void;
   dispose: () => void;
+  /**
+   * Garden only (Phase 4): push mutation state (warmth, previews,
+   * landings, undos). Absent on every other scene.
+   */
+  setMutation?: (input: GardenMutationInput) => void;
+  /** Garden only (Phase 4): jump in-progress landings/undos to final. */
+  skipAnimations?: () => void;
+  /** Garden only (Phase 4): the fog tint for the warmth now rendered. */
+  getWarmthFogColor?: () => number | null;
+}
+
+/**
+ * The garden's mutation input from the world-changes feed (Phase 4).
+ * Previews render only for pending proposals whose target resolves to
+ * a position in this layout — a landmark at its seeded crown position,
+ * a path between its two plots. Cluster/anchor/tone/brain kinds have
+ * no garden geometry and are never invented a position for. A failed
+ * fetch leaves the previous input untouched: the garden holds its
+ * warmth rather than cooling on a network error.
+ */
+interface GardenWorldChanges {
+  warmth: number;
+  proposals: WorldChangeProposal[];
+}
+
+function gardenMutationFrom(
+  wc: GardenWorldChanges | null,
+  layout: GardenLayout | undefined,
+  events: { landings: GardenMutationLanding[]; undos: GardenMutationUndo[] },
+): GardenMutationInput {
+  const previews: GardenMutationPreview[] = [];
+  if (wc && layout) {
+    const byId = new Map(layout.plots.map((p) => [p.nodeId, p]));
+    for (const p of wc.proposals) {
+      if (p.status !== "pending") continue;
+      const target = resolveWorldChangeTarget(p.target);
+      if (target.kind === "landmark") {
+        previews.push({
+          proposalId: p.id,
+          kind: "landmark",
+          title: p.title,
+          ...landmarkPositionFor(target.journeyId),
+        });
+      } else if (target.kind === "path") {
+        const a = byId.get(target.fromNodeId);
+        const b = byId.get(target.toNodeId);
+        if (!a || !b) continue; // unresolvable: never invented
+        previews.push({
+          proposalId: p.id,
+          kind: "path",
+          title: p.title,
+          from: { x: a.x, y: a.y, z: a.z },
+          to: { x: b.x, y: b.y, z: b.z },
+          fromNodeId: target.fromNodeId,
+          toNodeId: target.toNodeId,
+        });
+      }
+    }
+  }
+  return { warmth: wc?.warmth ?? 0, previews, landings: events.landings, undos: events.undos };
+}
+
+/** A decided proposal as a scene landing/undo — null when it has no garden form. */
+function proposalToGardenMotion<T extends GardenMutationLanding | GardenMutationUndo>(
+  proposal: WorldChangeProposal,
+  layout: GardenLayout | undefined,
+): T | null {
+  const target = resolveWorldChangeTarget(proposal.target);
+  if (target.kind === "landmark") {
+    return {
+      proposalId: proposal.id,
+      kind: "landmark",
+      title: proposal.title,
+      journeyId: target.journeyId,
+      ...landmarkPositionFor(target.journeyId),
+    } as T;
+  }
+  if (target.kind === "path" && layout) {
+    const byId = new Map(layout.plots.map((p) => [p.nodeId, p]));
+    const a = byId.get(target.fromNodeId);
+    const b = byId.get(target.toNodeId);
+    if (!a || !b) return null;
+    return {
+      proposalId: proposal.id,
+      kind: "path",
+      title: proposal.title,
+      from: { x: a.x, y: a.y, z: a.z },
+      to: { x: b.x, y: b.y, z: b.z },
+      fromNodeId: target.fromNodeId,
+      toNodeId: target.toNodeId,
+    } as T;
+  }
+  return null;
 }
 
 function isGardenLayout(
@@ -321,6 +420,20 @@ export default function WorldsSurface({
   const shownSuggestionsRef = useRef<number[]>([]);
   const pickedSuggestionRef = useRef<number | null>(null);
   const suggestionsFetchedRef = useRef(false);
+  // Garden mutation feed (Phase 4): the world-changes state + pending
+  // proposals the garden renders from, and the transient landings/undos
+  // the inbox's decisions announce. The scene never fetches; this host
+  // pushes what it is given, and a failed fetch leaves the previous
+  // input untouched.
+  const [worldChanges, setWorldChanges] = useState<GardenWorldChanges | null>(null);
+  const [worldChangesRetry, setWorldChangesRetry] = useState(0);
+  const [mutationVersion, setMutationVersion] = useState(0);
+  const pendingMutationRef = useRef<{ landings: GardenMutationLanding[]; undos: GardenMutationUndo[] }>({
+    landings: [],
+    undos: [],
+  });
+  const layoutRef = useRef<GardenLayout | undefined>(undefined);
+  const atGardenRef = useRef(false);
 
   const currentWorld = travel.state?.currentWorld;
   const journey = travel.state?.activeJourney ?? null;
@@ -490,12 +603,84 @@ export default function WorldsSurface({
     };
   }, [atQuietArchive, archivedRetry]);
 
+  // Garden mutation feed (Phase 4): warmth + pending proposals on
+  // garden entry. A failed fetch leaves the previous input untouched —
+  // the garden holds its warmth rather than cooling on a network error.
+  useEffect(() => {
+    if (!atGarden) return;
+    let cancelled = false;
+    void (async () => {
+      const [st, list] = await Promise.all([
+        getWorldChangesState(),
+        listWorldChangeProposals({ status: "pending" }),
+      ]);
+      if (cancelled) return;
+      if (st === null && list === null) return;
+      setWorldChanges({ warmth: st?.warmth ?? 0, proposals: list ?? [] });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [atGarden, worldChangesRetry]);
+
+  // The inbox announces decisions on window (world-changes-applied /
+  // world-changes-undone, detail = the proposal) so the garden — which
+  // never fetches — can play the landing or the compensation. An event
+  // for a proposal with no garden form, or while the user is not in the
+  // garden, plays nothing: the log still records it, and the next visit
+  // shows the settled state through the layout.
+  useEffect(() => {
+    atGardenRef.current = atGarden;
+  }, [atGarden]);
+  useEffect(() => {
+    const onApplied = (ev: Event) => {
+      if (!atGardenRef.current) return;
+      const proposal = (ev as CustomEvent<WorldChangeProposal>).detail;
+      if (!proposal) return;
+      const landing = proposalToGardenMotion<GardenMutationLanding>(proposal, layoutRef.current);
+      if (landing) pendingMutationRef.current.landings.push(landing);
+      setWorldChangesRetry((r) => r + 1);
+      if (landing) setMutationVersion((v) => v + 1);
+    };
+    const onUndone = (ev: Event) => {
+      if (!atGardenRef.current) return;
+      const proposal = (ev as CustomEvent<WorldChangeProposal>).detail;
+      if (!proposal) return;
+      const undo = proposalToGardenMotion<GardenMutationUndo>(proposal, layoutRef.current);
+      if (undo) pendingMutationRef.current.undos.push(undo);
+      setWorldChangesRetry((r) => r + 1);
+      if (undo) setMutationVersion((v) => v + 1);
+    };
+    window.addEventListener("world-changes-applied", onApplied);
+    window.addEventListener("world-changes-undone", onUndone);
+    return () => {
+      window.removeEventListener("world-changes-applied", onApplied);
+      window.removeEventListener("world-changes-undone", onUndone);
+    };
+  }, []);
+
   // The garden layout derives from the app's graph on every data change —
   // the world re-reads the brain; it stores nothing of its own.
   const layout = useMemo<GardenLayout | undefined>(() => {
     if (!atGarden || !graph) return undefined;
     return buildGardenLayout(graph, journeys ?? []);
   }, [atGarden, graph, journeys]);
+
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
+
+  // Push the garden's mutation input into the live scene (previews
+  // reconcile by proposal id; landings/undos are drained once, so a
+  // landing never replays because the warmth moved).
+  useEffect(() => {
+    if (!atGarden) return;
+    const scene = gardenSceneRef.current;
+    if (!scene?.setMutation) return;
+    const events = pendingMutationRef.current;
+    pendingMutationRef.current = { landings: [], undos: [] };
+    scene.setMutation(gardenMutationFrom(worldChanges, layout, events));
+  }, [atGarden, worldChanges, layout, mutationVersion]);
 
   // The Deep Past layout derives the same way, plus the fetched Journey
   // links that make the Chronicle thread. No links yet → no thread yet;
@@ -669,6 +854,14 @@ export default function WorldsSurface({
       gardenSceneRef.current = gardenScene;
       gardenCameraRef.current = camera;
     }
+    // Garden only (Phase 4): keep the live scene handle so mutation
+    // state can be pushed into it without rebuilding the renderer.
+    // (In this branch world IS gardenScene — assigned just above — so
+    // the handle stored is the same object; it is stored as the garden
+    // scene so tap-to-tend keeps its pickPlot type.)
+    if (mode === "world" && currentWorld === "growing-place") {
+      gardenSceneRef.current = gardenScene;
+    }
     // Engine audio rides the transit only; it is gated internally by the
     // interface-sounds setting, and it stops when the surface unmounts.
     const engine = mode === "transit" ? makeEngineAudio() : null;
@@ -683,9 +876,11 @@ export default function WorldsSurface({
     };
     window.addEventListener("resize", onResize);
     // Any pointer press skips the Station arrival glide (A13) and drops
-    // straight into the resting orbit.
+    // straight into the resting orbit — and skips a garden landing/undo
+    // in progress (A6/A7/A25: tap to finish instantly at the final state).
     const skipArrival = () => {
       arrivalSkippedRef.current = true;
+      gardenSceneRef.current?.skipAnimations?.();
     };
     host.addEventListener("pointerdown", skipArrival);
 
@@ -695,6 +890,13 @@ export default function WorldsSurface({
     const frame = () => {
       const elapsed = performance.now() - startedAt;
       world.update(elapsed, { reducedMotion });
+      if (mode === "world" && currentWorld === "growing-place") {
+        // A8: the fog takes the warmer tint of the warmth now rendered.
+        const fogColor = gardenSceneRef.current?.getWarmthFogColor?.();
+        if (fogColor !== null && fogColor !== undefined && scene.fog) {
+          (scene.fog as THREE.FogExp2).color.setHex(fogColor);
+        }
+      }
       if (mode === "transit") {
         // Chase view: behind and above the ship, looking down the corridor
         // at the arrival gate. The scene moves the gates; the camera holds.
@@ -784,6 +986,7 @@ export default function WorldsSurface({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       host.removeEventListener("pointerdown", skipArrival);
+      gardenSceneRef.current = null;
       engine?.dispose();
       world.dispose();
       renderer.dispose();
