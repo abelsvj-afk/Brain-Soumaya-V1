@@ -159,6 +159,12 @@ right now — trigger a `fly deploy` (delegate to `agy`) after pushing branch ch
 want live. Migrations must be additive + idempotent so a deploy can never crash boot on
 the existing volume (`migrateSchema`; covered by `migration.test.ts`).
 
+**Update 2026-10-28 (verified):** Fly's native GitHub auto-deploy is now ON and the deploy
+branch is `main` (created 2026-10-28 from the old deploy branch tip `7262265a`). Pushing to
+`main` now deploys automatically; latest release v273 (2026-10-28 5:09 PM EDT) is from `main`.
+The old deploy branch `claude/soumaya-second-brain-v1-m4z4hc` is no longer the mainline. The
+manual `fly deploy` path above is now a fallback, not the primary path.
+
 LLM is optional — without a key the app runs in heuristic mode. To use a key:
 `fly secrets set LLM_PROVIDER=gemini GEMINI_API_KEY=...` or
 `fly secrets set LLM_PROVIDER=openai OPENAI_API_KEY=...` (defaults to the cheap
@@ -212,8 +218,10 @@ guards, `space_id` multi-tenancy scoping, route contracts — plus architecture 
 ambiguous/underspecified features, security/data-integrity, and the **final audit +
 "Verified by Claude" checkmark**. Review `agy`'s pushes before ticking that box.
 
-Both agents share the **same gate**, the **same deploy branch**
-(`claude/soumaya-second-brain-v1-m4z4hc`), and the **same change log** (`GEMINI_CHANGES.md`).
+Both agents share the **same gate** and the **same change log** (`GEMINI_CHANGES.md`). The
+mainline branch is now **`main`** (created 2026-10-28 from `7262265a`); the old deploy branch
+`claude/soumaya-second-brain-v1-m4z4hc` is retained but no longer the mainline. Fly deploys
+from `main` with auto-deploy on (see Deployment update 2026-10-28 above).
 
 ## Verify before you build (and before you claim it works)
 
@@ -390,3 +398,97 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
 - Don't put model identifiers or secrets in committed files.
 - Accessibility (non-negotiable, pure code): honor `prefers-reduced-motion` — new galaxy/UI motion
   must calm or pause under it — and never encode meaning in colour alone (pair it with shape/size/label).
+
+## Muse (King) — delegation for diagnosis + usage
+
+The user (Sajacous) also uses **Muse (King)** as his personal agent, alongside Claude.
+Muse has MORE usage available than Claude, so routing work to Muse saves Claude's
+tokens/context for the work only Claude can do.
+
+**When to route to Muse (via the user):** Muse is the right agent for:
+- **Diagnosis** — figuring out why something isn't showing/working in the live app
+  (deploy state, branch state, what the code actually does vs. what the user sees).
+  Muse can check Fly, GitHub, and the code, and report back a verified diagnosis.
+- **Usage-heavy investigation** — broad codebase exploration, checking many files,
+  verifying deploy/branch/file state, and other evidence-gathering that would eat
+  Claude's context.
+- **Mechanical repo/file work** — organizing findings, updating docs, and other
+  well-specified edits.
+
+**How to delegate:** There is no MCP bridge for Muse (unlike `agy`). Delegation goes
+through the user: tell Sajacous the task is Muse-sized (diagnosis, verification, or
+mechanical), and he hands it to Muse. Muse reports back conclusions; Claude consumes
+only the conclusion and does the fix. Do NOT burn Claude's context re-doing diagnosis
+Muse already did — read Muse's findings and build on them.
+
+**Keep for Claude (do NOT delegate to Muse):** Same Red Zone as `agy` — shared
+types/zod, db schema + migrations, orbits, api client, token/USD/Fuel guards,
+space_id scoping, route contracts — plus architecture decisions, ambiguous features,
+security/data-integrity, and the final "Verified by Claude" checkmark.
+
+## Current findings — 2026-10-28 (worlds / travel visibility)
+
+Organized findings from Muse's diagnosis session (2026-10-28). Claude is picking up
+fixes from here.
+
+**Deploy / branch (VERIFIED, fixed 2026-10-28):**
+- `main` branch did not exist; the repo's default was
+  `claude/soumaya-second-brain-v1-m4z4hc`. `main` was created 2026-10-28 from tip
+  `7262265a` (Fleet Defense PR #122 merge) and verified to contain the worlds code.
+- Fly app `brain-soumaya-v1` was deploying from the old deploy branch with auto-deploy
+  OFF. Switched 2026-10-28: deploy branch = `main`, auto-deploy ON. Release v273
+  deployed from `main` successfully 2026-10-28 5:09 PM EDT.
+- Live server proven current: the served `sw.js` carries the new build ID
+  (`soumaya-bmvskpcxp`) and network-first logic. Stale deploy, missing code, and
+  missing GLB files are all RULED OUT.
+- All 9 Deep Past GLBs are in `packages/web/public/` on `main` (185 GLBs total,
+  including Eternity figure, ships, station/space packs).
+  `WORLDS_TRAVEL_ENABLED = true` in `packages/shared/src/worlds.ts`.
+
+**Owner-reported symptoms (UNRESOLVED — the work Claude is picking up):**
+- Owner sees no warp gates, no worlds, no nothing from any chat's work in the live app.
+- The world map button (Tools menu → 🪐 World map) produces no visible map when clicked.
+- Owner states: as dev and owner, everything should be accessible to him, including
+  Eternity's world.
+
+**What the code says (VERIFIED from source on `main`):**
+- World map button wiring is correct: ToolsMenu "World map" → `setShowWorldMap(true)` →
+  WorldMap full-screen overlay (z-index 70, not CSS-hidden). If clicking produces
+  literally nothing, that points to a runtime failure silently swallowed by the WorldMap
+  ErrorBoundary (fallback null) — NOT a wiring bug.
+- Fresh traveller sees ONLY Home on the map by design (confirmed by
+  `WorldMap.test.tsx`: "a fresh traveller sees only Home — no other world, no 'unknown'
+  marker"). Undiscovered worlds are hidden entirely. So even a working map looks empty
+  until the user travels.
+- Travel lives in the TravelPanel (rendered when a space is loaded, flag on). Route board
+  offers: Home (current), Great Station, Growing Place, Deep Past, Quiet/Archive, Scale —
+  each with Warp (cost 10 fuel) and Drift (FREE). Drift is always affordable, so fuel
+  cannot block discovery.
+- People world is gated by server verdict (`peopleGateOpen`: enough people + linked
+  memories + shared memories). Eternity's world is gated by B-01 (Witness + two other
+  relics, `eternityReachable`). There is NO dev/owner bypass in the code — gates apply
+  to everyone, including the owner.
+- "Warp gates" are not 3D objects in the galaxy; Warp/Drift are buttons in the
+  TravelPanel. If the TravelPanel isn't visible, there are no warp options to see.
+- Server travel API exists: `GET /api/travel/state` (via `travelRoutes`),
+  `TravelRepo.getState()`, `travel_journeys` table in schema, `migrateSchema` system.
+  Client `getTravelState()` returns null on any failure, which makes the panel show
+  "Checking the chart…" or an error — not nothing.
+
+**Open diagnostic questions for the fix (do not guess — verify against the live app /
+owner's screen):**
+1. When the owner clicks the world map button, does ANYTHING appear (even just a Home
+   dot, or "Checking the chart…" text, or an error), or does literally nothing change?
+   (Dialog-open-but-only-Home vs. crash-swallowed are different bugs.)
+2. Is the Travel section visible in the app at all? If not, is it crashing
+   (ErrorBoundary null), stuck loading (travel state null), or positioned where the
+   owner doesn't look?
+3. Dev/owner access: does the owner want a dev bypass for the People and Eternity gates
+   (code change to access control), or does he want to earn them via relics/counts? He
+   stated everything should be accessible to him as dev/owner — confirm before building
+   a bypass.
+
+**Do NOT re-litigate:** stale deploy, missing main branch, missing GLBs, flag off — all
+verified and ruled out 2026-10-28. The problem is downstream of deploy: either runtime
+failure on the owner's device, travel state not loading for his brain, or the
+gates/visibility design itself.
