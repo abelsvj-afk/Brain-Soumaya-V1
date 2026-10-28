@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { SpacesRepo, UserFacingError } from "../../auth/spaces.js";
+import { isOwnerSpace } from "../../auth/owner.js";
 import { requireSpace, spaceOf } from "../middleware.js";
 import { seedWelcomeStar } from "../../analysis/welcome.js";
 import {
@@ -121,7 +122,9 @@ export function spaceRoutes(ctx: AppContext): Router {
       res.status(401).json({ error: "No valid brain selected." });
       return;
     }
-    res.json({ id: space.id, name: space.name, gamerTag: space.gamerTag });
+    // `owner`: whether this brain is exempt from the worlds' progression gates
+    // (auth/owner.ts) — a boolean only, so Settings can show the status.
+    res.json({ id: space.id, name: space.name, gamerTag: space.gamerTag, owner: isOwnerSpace(space.id) });
   });
 
   // PATCH /api/space/profile { gamerTag?, name? } -> update this brain's identity.

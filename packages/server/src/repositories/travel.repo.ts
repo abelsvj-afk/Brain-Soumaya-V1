@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isOwnerSpace } from "../auth/owner.js";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { EconomyRepo, type JourneyBonusCreditor, type JourneyBonusResult } from "../economy.js";
@@ -209,6 +210,9 @@ export class TravelRepo implements JourneyBonusCreditor {
   /** The gate is open for this traveller: opened before, or the
    *  holdings satisfy B-01 right now (key + any two other relics). */
   eternityGateReachable(): boolean {
+    // Owner access: the deployment owner's brain is exempt from the relic
+    // gate (see auth/owner.ts) — it is an earned-progression gate.
+    if (isOwnerSpace(this.spaceId)) return true;
     return this.eternityGateOpened() || eternityGateOpens(this.holdings());
   }
 
@@ -223,6 +227,10 @@ export class TravelRepo implements JourneyBonusCreditor {
    * home. Pure over the ledger rows — no new state.
    */
   eternityChainSatisfied(): boolean {
+    // Owner access: no three-leg chain to walk first (auth/owner.ts). Only
+    // the chain is waived — a departure to the world you are already in is
+    // still refused, owner or not.
+    if (isOwnerSpace(this.spaceId)) return this.deriveWorld(this.latestRow()) !== ETERNITY_WORLD_KEY;
     const latest = this.latestRow();
     if (!latest) return false;
     if (this.deriveWorld(latest) === HOME_WORLD) return false;
@@ -673,6 +681,8 @@ export class TravelRepo implements JourneyBonusCreditor {
    * the brain does.
    */
   peopleGateOpen(): boolean {
+    // Owner access: the deployment owner's brain is exempt (auth/owner.ts).
+    if (isOwnerSpace(this.spaceId)) return true;
     const personWhere = `(kind = 'person_entity' OR type = 'person' OR type = 'relationship_reflection')`;
     // Null-safe negation: a memory node has kind NULL, and in SQLite
     // `NOT (NULL = 'person_entity')` is NULL, not true — a bare NOT

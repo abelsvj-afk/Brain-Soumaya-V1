@@ -165,6 +165,14 @@ branch is `main` (created 2026-10-28 from the old deploy branch tip `7262265a`).
 The old deploy branch `claude/soumaya-second-brain-v1-m4z4hc` is no longer the mainline. The
 manual `fly deploy` path above is now a fallback, not the primary path.
 
+**Owner access (2026-10-28).** The deployment owner's brain skips the worlds' progression gates (People,
+Eternity's relic gate and its three-leg chain). It is a server secret, `OWNER_SPACE_IDS` (comma-separated
+space ids; `fly secrets set OWNER_SPACE_IDS=<id>`), read per call in `auth/owner.ts`. Keyed on the space id,
+NOT the gamer tag — a tag can be re-registered once its account is deleted; an id is an unguessable bearer
+key that must already exist. Unset/empty = nobody exempt (the default). Fuel is NOT waived (warp still
+costs; drift is free). Settings → Owner access shows the server's verdict and has "Copy my brain key" to
+get the id. Never commit an id; it is a credential.
+
 LLM is optional — without a key the app runs in heuristic mode. To use a key:
 `fly secrets set LLM_PROVIDER=gemini GEMINI_API_KEY=...` or
 `fly secrets set LLM_PROVIDER=openai OPENAI_API_KEY=...` (defaults to the cheap
@@ -664,6 +672,12 @@ owner's screen):**
    (code change to access control), or does he want to earn them via relics/counts? He
    stated everything should be accessible to him as dev/owner — confirm before building
    a bypass.
+
+**Owner bypass (question 3 — ANSWERED by the owner 2026-10-28: "owner bypass for everything"):** built
+as `OWNER_SPACE_IDS` (see Deployment). Verified over real HTTP and in the UI: owner brain with no people and
+no relics gets `peopleGateOpen`/`eternityReachable` true, 8 worlds on the board, and a direct Home→Eternity
+departure; a second brain on the same server stays refused with `ETERNITY_GATE_CLOSED`. NOT YET ACTIVE in
+production until the secret is set on Fly (dashboard → Secrets).
 
 **Do NOT re-litigate:** stale deploy, missing main branch, missing GLBs, flag off — all
 verified and ruled out 2026-10-28. The problem is downstream of deploy: either runtime
