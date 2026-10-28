@@ -30,6 +30,7 @@ import {
   type ConsolidationRunContext,
 } from "./consolidation/boundary.js";
 import { recordAccess } from "./consolidation/retrievals.js";
+import { proposeWorldChange } from "../worlds/mutation.js";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -2759,6 +2760,13 @@ export async function sweepWithdrawnEvidence(
  * and calls recordStated(). Returns the episode ID so the caller can avoid
  * double-capture, or null when it abstains.
  *
+ * Phase 4: the write itself is now PROPOSED, not applied — the trigger
+ * matched the user's own words, but elevating them to a 0.95-confidence
+ * stated fact (which overrides inferred entries via INV-ST-1) needs the
+ * owner's yes. maybeRecordStatedInner creates a 'brain_stated' proposal and
+ * returns the episode ID unchanged; approval applies recordStated with the
+ * same evidence.
+ *
  * Never throws — all failures are swallowed (the loop must never break).
  */
 export function maybeRecordStated(
@@ -2865,13 +2873,22 @@ function maybeRecordStatedInner(
   }
   if (!episodeId) return null;
 
-  // Write the stated entry.
+  // Write the stated entry — Phase 4: propose it, do not apply it. The
+  // trigger matched the user's own words, but the elevation to a durable
+  // stated fact needs the owner's approval (see the header comment).
   try {
-    recordStated(h, spaceId, matchedSlot, text, [
-      { type: "episode", id: episodeId, isUserStatement: true },
-    ]);
+    proposeWorldChange(h.sqlite, spaceId, {
+      kind: "brain_stated",
+      targetKind: "user_model",
+      targetId: null,
+      title: `Record as a stated fact (${matchedSlot}): “${text.length > 80 ? `${text.slice(0, 77)}…”` : text}”`,
+      reason: `You said this in conversation, and it reads as a clear first-person ${matchedSlot} statement. Recording it would make it a stated fact about you — the kind that overrides inferred entries. Approve to record it, reject to drop it; the words themselves stay in the conversation either way.`,
+      evidence: [{ type: "episode", id: episodeId }],
+      payload: { slot: matchedSlot, content: text, episodeId },
+      dedupKey: `brain_stated:episode:${episodeId}`,
+    });
   } catch {
-    return null; // recordStated re-validates; any rejection = abstain.
+    return null; // proposal failed = abstain (same as a recordStated rejection)
   }
 
   return episodeId;

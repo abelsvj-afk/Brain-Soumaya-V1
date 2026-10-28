@@ -9,7 +9,12 @@
  *    and consolidated confidence (min(0.69, 0.30 + 0.39·strength))
  *    itself, enforces the ≥2-independent-lineage-groups gate, and runs
  *    the Tier 1/Tier 2 stated-coverage guard. This module never
- *    supplies a confidence anywhere.
+ *    supplies a confidence anywhere. Phase 4: inserts are PROPOSED,
+ *    not applied — but the Tier 2 half of the boundary still runs here,
+ *    at proposal time, via evaluateInsertTier2() with the run ctx
+ *    (judge + shared budget), and its verdict is stored in the
+ *    proposal payload; the applier enforces it and re-runs the full
+ *    boundary at approval time.
  * 2. THE LLM PROPOSES, NEVER DECIDES NUMBERS. Theme extraction goes
  *    through an injectable extractor (production: the repo LLM adapter;
  *    tests: stubs). It proposes (content, slot, topic labels, routing,
@@ -30,11 +35,10 @@
 import { createHash } from "node:crypto";
 import type { DbHandle } from "../../db/client.js";
 import type { RawDb } from "../../db/vec.js";
-import {
-  applyConsolidationMutation,
-  type ConsolidationRunContext,
-} from "./boundary.js";
+import type { ConsolidationRunContext } from "./boundary.js";
+import { evaluateInsertTier2, type InsertTier2Verdict } from "./boundary.js";
 import { contentTokens, tokenJaccard, SLOTS, type Slot } from "../userModel.js";
+import { proposeWorldChange } from "../../worlds/mutation.js";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -81,6 +85,9 @@ export interface DistillationSummary {
   deferredOverflow: number;
   llmCalls: number;
   rejected: number;
+  /** Phase 4: InsertConsolidated / AppendEvidence outcomes proposed to the
+   * owner instead of applied (episode count, not proposal count). */
+  proposed: number;
 }
 
 export type ConsolidationOutcome = "consolidated" | "strengthened" | "abstained";
@@ -263,7 +270,7 @@ export async function runDistillation(
   const spaceId = ctx.spaceId;
   const summary: DistillationSummary = {
     candidates: 0, created: 0, strengthened: 0, abstained: 0,
-    deferredOverflow: 0, llmCalls: 0, rejected: 0,
+    deferredOverflow: 0, llmCalls: 0, rejected: 0, proposed: 0,
   };
 
   const candidates = selectCandidates(sqlite, spaceId, deps.maxItems);
@@ -315,51 +322,79 @@ export async function runDistillation(
       const evidence = episodeIds.map((id) => ({ type: "episode" as const, id }));
       const covering = findCoveringEntry(sqlite, spaceId, prop.slot, prop.content, prop.topicLabels);
       if (covering) {
-        const res = await applyConsolidationMutation(sqlite, ctx, {
-          kind: "AppendEvidence",
-          entryId: covering.id,
+        // Phase 4: PROPOSE the strengthen, do not apply it. No outcome row
+        // is recorded — the episodes stay eligible, and the proposal's
+        // dedup key (fingerprint of the evidence) keeps a later run from
+        // proposing the same strengthen twice. Episodes are marked
+        // processed in-memory only, so the tail loop below does not also
+        // mark them abstained in this run.
+        const { duplicate } = proposeWorldChange(sqlite, spaceId, {
+          kind: "brain_dedup",
+          targetKind: "user_model",
+          targetId: covering.id,
+          title: `Strengthen a known fact: “${covering.content.length > 80 ? `${covering.content.slice(0, 77)}…”` : covering.content}”`,
+          reason: `Your recent notes add fresh evidence for something the brain already believes about you. Approving adds ${episodeIds.length} note${episodeIds.length === 1 ? "" : "s"} as supporting evidence; rejecting changes nothing and the notes stay as they are.`,
           evidence,
+          payload: {
+            mutations: [{ kind: "AppendEvidence", entryId: covering.id, evidence }],
+            episodeIds, groups, fingerprint, runId: ctx.runId ?? null,
+          },
+          dedupKey: `brain_dedup:${fingerprint}`,
         });
-        if (res.status === "applied") {
-          for (const id of episodeIds) {
-            recordOutcome(sqlite, spaceId, id, "strengthened", covering.id, groups, fingerprint, ctx.runId ?? null);
-            processed.add(id);
-          }
-          summary.strengthened += episodeIds.length;
-        } else {
-          summary.rejected += episodeIds.length;
-          for (const id of episodeIds) processed.add(id);
-        }
+        if (!duplicate) summary.proposed += episodeIds.length;
+        for (const id of episodeIds) processed.add(id);
         continue;
       }
       const validAt = episodeIds
         .map((id) => byId.get(id)!.occurredAt)
         .sort()[0];
-      const res = await applyConsolidationMutation(sqlite, ctx, {
-        kind: "InsertConsolidated",
-        entry: {
-          slot: prop.slot as Slot,
-          content: prop.content,
-          evidence,
-          topicLabels: prop.topicLabels,
-          validAt,
-        },
-      });
-      if (res.status === "applied" && res.entryId != null) {
-        for (const id of episodeIds) {
-          recordOutcome(sqlite, spaceId, id, "consolidated", res.entryId, groups, fingerprint, ctx.runId ?? null);
-          processed.add(id);
-        }
-        summary.created++;
-      } else {
-        // Boundary rejection (single lineage group, unknown lineage,
-        // stated coverage, budget…) — episodes stay eligible unless
-        // the rejection is structural; record nothing so a later run
-        // with more evidence can retry (T-C20 bookkeeping stays exact:
-        // no outcome row exists for unprocessed episodes).
+      const insertEntry = {
+        slot: prop.slot as Slot,
+        content: prop.content,
+        evidence,
+        topicLabels: prop.topicLabels,
+        validAt,
+      };
+      // Phase 4 (Tier 2 restoration): run the SAME Tier 2 evaluation the
+      // old auto-apply flow ran inside applyConsolidationMutation — via
+      // the boundary, with the run ctx (judge + shared budget) — BEFORE
+      // creating the proposal, and store the verdict in the payload.
+      // The applier enforces it; a non-clean verdict proposes nothing.
+      const tier2: InsertTier2Verdict = await evaluateInsertTier2(sqlite, ctx, insertEntry);
+      if (tier2.verdict !== "clean") {
+        // Mirror the old flow on a Tier 2 rejection (distill.ts, pristine
+        // tip): summary.rejected += episodes, NO outcome row (episodes
+        // stay eligible for a later run), processed in-memory so the tail
+        // loop does not also mark them abstained. Covers both
+        // "contradiction" (judged / deterministic) and "deferred"
+        // (budget exhausted — the old flow's stated_state_changed /
+        // retryable rejection, which also aborted the run on budget).
         summary.rejected += episodeIds.length;
         for (const id of episodeIds) processed.add(id);
+        continue;
       }
+      // Phase 4: PROPOSE the insert, do not apply it. Same bookkeeping as
+      // the strengthen above — no outcome row, dedup key guards the inbox,
+      // processed in-memory only.
+      const { duplicate } = proposeWorldChange(sqlite, spaceId, {
+        kind: "brain_dedup",
+        targetKind: "user_model",
+        targetId: null,
+        title: `New understanding: “${prop.content.length > 80 ? `${prop.content.slice(0, 77)}…”` : prop.content}”`,
+        reason: `The brain read ${episodeIds.length} of your recent note${episodeIds.length === 1 ? "" : "s"} and distilled this into one durable fact about you. It becomes part of how the brain understands you only if you approve; rejecting leaves your notes untouched.`,
+        evidence,
+        payload: {
+          mutations: [{
+            kind: "InsertConsolidated",
+            entry: insertEntry,
+          }],
+          episodeIds, groups, fingerprint, runId: ctx.runId ?? null,
+          tier2,
+        },
+        dedupKey: `brain_dedup:${fingerprint}`,
+      });
+      if (!duplicate) summary.proposed += episodeIds.length;
+      for (const id of episodeIds) processed.add(id);
     }
     // Episodes the extractor saw but proposed nothing for: abstained.
     for (const c of candidates) {
@@ -396,20 +431,28 @@ export async function runDistillation(
     }
     if (!matched) continue;
     const evidence = [{ type: "episode" as const, id: c.episodeId }];
-    const res = await applyConsolidationMutation(sqlite, ctx, {
-      kind: "AppendEvidence",
-      entryId: matched.id,
+    const fingerprint = evidenceFingerprint(evidence);
+    // Phase 4: PROPOSE the strengthen, do not apply it (same gate as the
+    // extractor path). No outcome row — the episode stays eligible; the
+    // dedup key guards the inbox against repeat proposals for the same
+    // evidence.
+    const { duplicate } = proposeWorldChange(sqlite, spaceId, {
+      kind: "brain_dedup",
+      targetKind: "user_model",
+      targetId: matched.id,
+      title: `Strengthen a known fact: “${matched.content.length > 80 ? `${matched.content.slice(0, 77)}…”` : matched.content}”`,
+      reason: `A recent note of yours adds fresh evidence for something the brain already believes about you. Approving adds it as supporting evidence; rejecting changes nothing.`,
       evidence,
+      payload: {
+        mutations: [{ kind: "AppendEvidence", entryId: matched.id, evidence }],
+        episodeIds: [c.episodeId],
+        groups: c.lineageKey ? [c.lineageKey] : [],
+        fingerprint,
+        runId: ctx.runId ?? null,
+      },
+      dedupKey: `brain_dedup:${fingerprint}`,
     });
-    if (res.status === "applied") {
-      recordOutcome(
-        sqlite, spaceId, c.episodeId, "strengthened", matched.id,
-        c.lineageKey ? [c.lineageKey] : [],
-        evidenceFingerprint(evidence),
-        ctx.runId ?? null,
-      );
-      summary.strengthened++;
-    }
+    if (!duplicate) summary.proposed++;
   }
   return summary;
 }

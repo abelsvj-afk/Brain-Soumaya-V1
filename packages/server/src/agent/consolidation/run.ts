@@ -51,8 +51,10 @@ import {
   isQuietHours,
   localDay,
   localTime,
+  spaceTimezone,
   type NotifyPreferences,
 } from "../notify/policy.js";
+import { localDayBoundsMs } from "../../lib/time.js";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -524,12 +526,57 @@ export async function runConsolidation(
 /* ------------------------------------------------------------------ */
 
 /**
- * The quiet factual consolidation line for the daily digest, from the
- * most recent completed run's summary audit. Rendered ONLY when the
- * run changed something (created/strengthened/flagged/resolved > 0);
- * zero-change runs emit no line.
+ * The quiet factual consolidation line for the daily digest.
+ *
+ * Phase 4: a consolidation lands only when the owner approves its
+ * `brain_dedup` proposal through the rail — the run itself only
+ * proposes, so the run-time audit's created/strengthened counts are
+ * always 0 for distill now. The landed counts therefore come from
+ * `world_change_log`: applied `brain_dedup` entries whose `applied_at`
+ * falls inside the digest's window — the space-local day, the same
+ * window the rest of the digest uses (owner rule 2026-10-21). A
+ * proposal whose payload is an AppendEvidence mutation counts as a
+ * strengthening; anything else (InsertConsolidated, or an unreadable
+ * payload) counts as a new belief. Flagged/resolved still come from
+ * the most recent run's summary audit, as before. Rendered ONLY when
+ * something changed; zero-change days emit no line.
  */
 export function consolidationDigestLine(sqlite: RawDb, spaceId: string): string | null {
+  // Landed consolidations inside the space-local day.
+  let created = 0;
+  let strengthened = 0;
+  try {
+    const tz = spaceTimezone(sqlite, spaceId);
+    const { startMs, endMs } = localDayBoundsMs(Date.now(), tz);
+    const landed = sqlite
+      .prepare(
+        `SELECT p.payload_json AS payload FROM world_change_log l
+         LEFT JOIN world_proposals p ON p.id = l.proposal_id
+         WHERE l.space_id = ? AND l.kind = 'brain_dedup'
+           AND julianday(l.applied_at) >= julianday(?) AND julianday(l.applied_at) < julianday(?)
+         ORDER BY l.id ASC`,
+      )
+      .all(spaceId, new Date(startMs).toISOString(), new Date(endMs).toISOString()) as {
+      payload: string | null;
+    }[];
+    for (const row of landed) {
+      let isAppend = false;
+      try {
+        const payload = JSON.parse(row.payload ?? "{}") as { mutations?: { kind?: string }[] };
+        const kinds = Array.isArray(payload.mutations) ? payload.mutations : [];
+        isAppend = kinds.length > 0 && kinds.every((m) => m?.kind === "AppendEvidence");
+      } catch {
+        isAppend = false;
+      }
+      if (isAppend) strengthened++;
+      else created++;
+    }
+  } catch {
+    // Pre-Phase 4 schema (no world_change_log): no landed rows to count.
+    created = 0;
+    strengthened = 0;
+  }
+  // Flagged/resolved still come from the most recent run's summary audit.
   const row = sqlite
     .prepare(
       `SELECT targets FROM agent_logs
@@ -537,17 +584,18 @@ export function consolidationDigestLine(sqlite: RawDb, spaceId: string): string 
        ORDER BY id DESC LIMIT 1`,
     )
     .get(spaceId) as { targets: string | null } | undefined;
-  if (!row?.targets) return null;
-  let counts: { created?: number; strengthened?: number; flagged?: number; resolved?: number };
-  try {
-    counts = JSON.parse(row.targets) as typeof counts;
-  } catch {
-    return null;
+  let flagged = 0;
+  let resolved = 0;
+  if (row?.targets) {
+    try {
+      const counts = JSON.parse(row.targets) as { flagged?: number; resolved?: number };
+      flagged = counts.flagged ?? 0;
+      resolved = counts.resolved ?? 0;
+    } catch {
+      flagged = 0;
+      resolved = 0;
+    }
   }
-  const created = counts.created ?? 0;
-  const strengthened = counts.strengthened ?? 0;
-  const flagged = counts.flagged ?? 0;
-  const resolved = counts.resolved ?? 0;
   if (created + strengthened + flagged + resolved === 0) return null;
   const parts: string[] = [];
   if (created > 0) parts.push(`consolidated ${created} new belief${created === 1 ? "" : "s"}`);
