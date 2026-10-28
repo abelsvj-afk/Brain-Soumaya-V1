@@ -11,11 +11,13 @@ import { nextAutonomyBatch } from "./maintenance/autonomyBatch.js";
 import { evolveLore } from "./lore/engine.js";
 import { refreshPersona } from "./persona/derive.js";
 import { reconcileConstellations } from "./analysis/constellationReconcile.js";
-import { runDreamCycle } from "./analysis/dreamCycle.js";
+import { proposeDreamCycle } from "./analysis/dreamCycle.js";
 import { runConsolidation } from "./agent/consolidation/run.js";
 import type { LlmJudge } from "./agent/userModel.js";
 import { stepUndertaking } from "./analysis/undertakings.js";
 import { applyCognitiveGravity } from "./analysis/cognitive.js";
+import { sweepWorldProposals } from "./worlds/mutation.js";
+import { sweepApprovals } from "./agent/approvals.js";
 import { sweepDuplicates } from "./analysis/dedup.js";
 import { sweepWorkingMemory } from "./analysis/workingMemory.js";
 import { generateInquiry } from "./analysis/inquiry.js";
@@ -312,6 +314,8 @@ if (process.env.AUTONOMY !== "off") {
         // Dream cycle (Level 2): once per SPACE-local day per brain, consolidate the densest
         // cluster into a durable belief. LLM when Research Mode + budget allow (counts
         // toward the paid ceiling); otherwise a free offline template. Additive-only.
+        // Phase 4: the belief is PROPOSED, not written — the brain's own mutation
+        // needs the owner's yes (kind 'brain_belief' in the approvals inbox).
         try {
           const today = localDay(new Date(), spaceTimezone(ctx.handle.sqlite, spaceId));
           const dreamt = ctx.handle.sqlite
@@ -320,8 +324,8 @@ if (process.env.AUTONOMY !== "off") {
           if (dreamt?.last_dream_date !== today) {
             const canPay =
               researchEnabled(ctx, spaceId) && !ctx.usage.overBudget() && paidThisTick < MAX_PAID_PER_TICK;
-            const beliefId = await runDreamCycle(ctx, spaceId, canPay);
-            if (beliefId != null) {
+            const proposed = await proposeDreamCycle(ctx, spaceId, canPay);
+            if (proposed != null) {
               if (canPay) paidThisTick++;
               ctx.handle.sqlite
                 .prepare(`INSERT OR IGNORE INTO space_meta (space_id) VALUES (?)`)
@@ -331,17 +335,39 @@ if (process.env.AUTONOMY !== "off") {
                 .run(today, spaceId);
               // Log the dream so it's VISIBLE (activity feed + a "she dreamed" notification) —
               // background intelligence must announce itself, not run silently.
-              const belief = ctx.handle.sqlite
-                .prepare(`SELECT label FROM nodes WHERE id = ? AND space_id = ?`)
-                .get(beliefId, spaceId) as { label: string } | undefined;
+              // The proposal title carries the distilled belief label; no node
+              // exists yet, so there is nothing to read back from nodes.
               ctx.handle.sqlite
                 .prepare(`INSERT INTO agent_logs (space_id, agent, action, description, targets) VALUES (?, 'soumaya', 'dream', ?, ?)`)
-                .run(spaceId, `Consolidated a belief while dreaming: "${belief?.label ?? "a pattern in your memories"}"`, JSON.stringify([beliefId]));
-              console.log(`[autonomy] ${spaceId.slice(0, 8)}: dreamed belief #${beliefId}`);
+                .run(spaceId, `Dreamed a belief for your approval: "${proposed.proposal.title}"`, JSON.stringify([proposed.proposal.id]));
+              console.log(`[autonomy] ${spaceId.slice(0, 8)}: proposed belief #${proposed.proposal.id}`);
             }
           }
         } catch (e) {
           console.error("[autonomy] dream cycle failed:", e);
+        }
+        // Phase 4 (§17 rail): the scheduled sweep — proposals wait quietly
+        // (no expiry, no forced decision); the sweep retries approved-but-
+        // unapplied proposals and surfaces pending counts. It also runs the
+        // tool-approval sweep, so pending approvals of both kinds surface in
+        // the one inbox. Background context: no conversational principal,
+        // no-op notify (a retried tool's notification has nowhere to go from
+        // a sweep; its executed status is recorded and visible).
+        try {
+          const world = await sweepWorldProposals(ctx, spaceId);
+          const approvals = await sweepApprovals({
+            ctx,
+            spaceId,
+            now: Date.now(),
+            notify: async () => {},
+          });
+          if (world.pending > 0 || world.approvedUnapplied > 0 || approvals.expired > 0 || approvals.retried > 0) {
+            console.log(
+              `[autonomy] ${spaceId.slice(0, 8)}: sweep world=${JSON.stringify(world)} approvals=${JSON.stringify(approvals)}`,
+            );
+          }
+        } catch (e) {
+          console.error("[autonomy] proposal sweep failed:", e);
         }
         // W3 consolidation (sibling to the dream cycle — a SEPARATE job
         // with its own claim/window/state in consolidation_runs; the two

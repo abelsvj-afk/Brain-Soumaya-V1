@@ -777,6 +777,65 @@ export function migrateSchema(sqlite: RawDb): void {
   `);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_space_idx ON tool_approvals(space_id, status)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_principal_idx ON tool_approvals(principal, status)`);
+  // Phase 4 (§17 rail): mirror of BOOTSTRAP_SQL in db/schemaSql.ts — keep the
+  // two CREATE blocks identical; migrateSchema is what upgrades existing DBs.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS world_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      target_kind TEXT,
+      target_id TEXT,
+      title TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      evidence_json TEXT NOT NULL DEFAULT '[]',
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      dedup_key TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      decided_at TEXT,
+      decided_by TEXT,
+      applied_log_id INTEGER,
+      UNIQUE(space_id, dedup_key)
+    )
+  `);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS world_proposals_space_idx ON world_proposals(space_id, status)`);
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS world_change_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      proposal_id INTEGER,
+      kind TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      evidence_json TEXT NOT NULL DEFAULT '[]',
+      applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      supersedes_log_id INTEGER,
+      undone_by_log_id INTEGER
+    )
+  `);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS world_change_log_space_idx ON world_change_log(space_id, applied_at)`);
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS world_landmarks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      journey_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      created_log_id INTEGER NOT NULL,
+      UNIQUE(space_id, journey_id)
+    )
+  `);
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS world_paths (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      edge_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      target_id INTEGER NOT NULL,
+      created_log_id INTEGER NOT NULL,
+      UNIQUE(space_id, edge_id)
+    )
+  `);
   // Execution-start stamp on tool_approvals — migrateSchema-only
   // PRAGMA-guarded ALTER, NEVER in BOOTSTRAP_SQL (same v252 rule as
   // above). The sweep's stale-`executing` predicate measures from here,
