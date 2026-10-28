@@ -56,6 +56,16 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
       "The ISS model and the Kepler, Pioneer 10, Dawn, and Voyager 1 models are NASA 3D Resources, public domain. The ISS is the catalog's low-poly model (6,642 triangles); the heavier ISS variant was not used. Probe models are the NASA 3D Resources versions; the starfield is the same HYG data credited above.",
   },
   {
+    asset: "Eternity's figure — man-god-halo.glb",
+    credit:
+      "The owner's own file — his uploaded figure, split into body + halo for this app so the halo can glow on its own. No third-party source; no license applies. Shown ×170 in Eternity's world.",
+  },
+  {
+    asset: "Eternity's visitor fleet — Kenney speeders (speederA–D)",
+    credit:
+      "Four more Kenney Space Kit craft (kenney.nl), CC0 1.0 — the same kit and the same basis as the Station's Kenney entries above. The files carry no in-file license statement, matching their shipped siblings.",
+  },
+  {
     asset: "Low Poly Space Pack — reodesuxz (all worlds + galaxy drifters)",
     credit:
       "26 models by reodesuxz (itch.io), free for commercial use, no attribution required. The raw pack files are not redistributed — only the models used in-app ship inside the app. Planets, the Moon and its outpost, asteroid belts, encounters, docked ships, dressing, the drydock gantry, the stratum crystal, Sputnik, and the galaxy drifters.",
