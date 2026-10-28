@@ -100,6 +100,10 @@ interface Props {
   onPlayTrack?: (index: number) => void;
   currentTrackIndex?: number | null;
   musicPlaying?: boolean;
+  /** REG-181/HN-07: the transient trail preview (never persisted) + the
+   *  callback that starts/stops it — owned by App, passed through. */
+  previewTrail?: string | null;
+  onPreviewTrail?: (value: string | null) => void;
 }
 
 // Each tab carries a human `name` (tooltip + accessible label) so the icon row is
@@ -215,6 +219,8 @@ export function RightDock({
   onPlayTrack,
   currentTrackIndex,
   musicPlaying,
+  previewTrail,
+  onPreviewTrail,
 }: Props) {
   const [unseenCount, setUnseenCount] = useState(0);
   // Progressive Discovery: no server fetch needed for gating. Codex entries
@@ -482,6 +488,8 @@ export function RightDock({
             onPlayTrack={onPlayTrack}
             currentTrackIndex={currentTrackIndex}
             musicPlaying={musicPlaying}
+            previewTrail={previewTrail}
+            onPreviewTrail={onPreviewTrail}
           />
         )}
       </div>
