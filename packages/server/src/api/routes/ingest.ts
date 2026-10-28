@@ -46,6 +46,12 @@ export function ingestRoutes(ctx: AppContext): Router {
 
     // Action items are quick to-dos: a small body, no LLM extraction or linking,
     // and an expiry. (Keeps them cheap + transient, distinct from real memories.)
+    // REG-144/AG-05: an action NEVER carries remindAt — the firing tool would
+    // deliver it while every web reminder surface excludes actions, so the
+    // reminder would fire invisibly. The capture paths refuse the combination
+    // up front (IngestPanel) and say so; this branch is the backstop that
+    // drops a remindAt any other caller sends, so the write paths can never
+    // create the data state the read surfaces assert is impossible.
     if (kind === "action") {
       // Verbatim V1 (evidence E1): the source is taken BEFORE this
       // branch's trim — the untrimmed submitted text is what is owed
@@ -54,7 +60,8 @@ export function ingestRoutes(ctx: AppContext): Router {
       //
       // Fix round 2 (audit P1): the source row persists the direct-
       // capture intent ('action') + params (expiry, occurredAt,
-      // remindAt, tags) at capture time, and completion is the shared
+      // tags — never remindAt, REG-144) at capture time, and completion
+      // is the shared
       // processActionCapture path — the same crash/retry exactly-once
       // path boot recovery runs. A crash anywhere after persist
       // recovers as an action node, never as an extracted memory.
@@ -67,7 +74,9 @@ export function ingestRoutes(ctx: AppContext): Router {
         occurredAt,
         idempotencyKey,
         captureIntent: "action",
-        captureParams: { expiresAt, occurredAt, remindAt, tags },
+        // REG-144/AG-05: remindAt is NOT persisted for actions — see the
+        // backstop comment above this branch.
+        captureParams: { expiresAt, occurredAt, tags },
       });
       if (!sourceCreated && source.processingStatus === "extracted") {
         // Idempotent replay of an already-saved action capture: return

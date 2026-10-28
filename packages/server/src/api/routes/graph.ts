@@ -4,6 +4,7 @@ import type { AppContext } from "../../context.js";
 import { GraphService, INCLUDE_IDS_CAP, MAX_UNION_IDS } from "../../graph/service.js";
 import { resolveGalaxyEntity, navigationIntentFor } from "../../analysis/galaxyEntity.js";
 import { GraphExportRepo } from "../../repositories/graphExport.repo.js";
+import { categoryCounts, categoryIds, CATEGORY_KEYS, type CategoryKey } from "../../analysis/categories.js";
 import { spaceOf } from "../middleware.js";
 
 const GALAXY_ENTITY_KINDS: readonly GalaxyEntityKind[] = ["node", "journey", "bill", "goal"];
@@ -57,6 +58,22 @@ export function graphRoutes(ctx: AppContext): Router {
       return res.status(400).json({ error: "cursor must be a non-negative integer edge id" });
     }
     res.json(new GraphService(ctx.handle, spaceOf(res)).incidentEdges(ids, cursor));
+  });
+  // GET /api/graph/categories -> full-set member counts per Views category
+  // (Batch H, REG-207 / CN-08). The Views chips used to count from the loaded
+  // top-300 payload, so a category whose members all sat off-payload vanished;
+  // these counts come from the whole node set, so a category with members is
+  // always present. GET /api/graph/categories/:key/ids -> the full id list
+  // for one category (what a tap isolates to); unknown key -> explicit 400.
+  r.get("/categories", (_req, res) => {
+    res.json({ counts: categoryCounts(ctx, spaceOf(res)) });
+  });
+  r.get("/categories/:key/ids", (req, res) => {
+    const key = req.params.key;
+    if (!(CATEGORY_KEYS as readonly string[]).includes(key)) {
+      return res.status(400).json({ error: `unknown category: ${key}` });
+    }
+    res.json({ ids: categoryIds(ctx, spaceOf(res), key as CategoryKey) });
   });
   // GET /api/graph/export -> this space's whole graph as JSON (IM-129c) —
   // the Settings "Download your brain (JSON)" button. Repository-owned and

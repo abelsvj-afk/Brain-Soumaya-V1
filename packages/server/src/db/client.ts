@@ -411,6 +411,10 @@ export function migrateSchema(sqlite: RawDb): void {
     ["next_review_at", `ALTER TABLE nodes ADD COLUMN next_review_at TEXT`],
     ["last_reviewed_at", `ALTER TABLE nodes ADD COLUMN last_reviewed_at TEXT`],
     ["review_count", `ALTER TABLE nodes ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0`],
+    // Batch G (REG-198): when a proactive nudge snoozes a memory, the snooze
+    // is marked here so tending the memory can tell a nudge snooze apart from
+    // a grade-set SM-2 schedule (which must never be disturbed by a visit).
+    ["review_snoozed_at", `ALTER TABLE nodes ADD COLUMN review_snoozed_at TEXT`],
     // Lifecycle status: an archived memory rests — kept, but out of the galaxy + retrieval
     // by default (not deleted). Feature runway #5a.
     ["status", `ALTER TABLE nodes ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`],
@@ -669,6 +673,49 @@ export function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS inbox_notifications_space_idx ON inbox_notifications(space_id, id);
     CREATE UNIQUE INDEX IF NOT EXISTS inbox_notifications_dedupe_idx ON inbox_notifications(space_id, dedupe_key);
   `);
+  // Batch E (REG-197 / REG-051): same DDL as BOOTSTRAP_SQL in
+  // db/schemaSql.ts — CREATE TABLE IF NOT EXISTS makes this a no-op on fresh
+  // volumes and the creation path on volumes that predate the tables.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS review_grade_attempts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      attempt_key TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      remembered INTEGER NOT NULL,
+      next_review_at TEXT NOT NULL,
+      next_interval_days INTEGER NOT NULL,
+      fuel_earned INTEGER NOT NULL,
+      streak_advanced INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, attempt_key)
+    );
+    CREATE TABLE IF NOT EXISTS daily_earn_counts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, day, kind)
+    );
+    -- Verb 1 (Tend a plot): one row per tend act in the Growing Place.
+    -- kind is line | link | affirm | visit. target_node_id is the node a
+    -- line created (line) or the memory linked to (link); edge_id is the
+    -- edge a line/link created or reused; changed is the affirm judgment
+    -- (1 = changed since, 0 = still true, NULL for other kinds). The row
+    -- is the durable history behind the garden's warm glow and lit paths;
+    -- the node's own last_tended_at is what the cold/dormant signals read.
+    -- Same DDL runs in db/schemaSql.ts BOOTSTRAP_SQL.
+    CREATE TABLE IF NOT EXISTS garden_tends (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      node_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      target_node_id INTEGER,
+      edge_id INTEGER,
+      changed INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_garden_tends_space_node ON garden_tends (space_id, node_id, created_at);
+  `);
   // Life Vision (docs/specs/life-vision.md): optional one-to-many link from a Financial
   // Goal to the Life Vision node it helps fund. Nullable, no SQL FK (matches bucket_id's
   // own style in this table) — validated at the application layer only. `tcols.length > 0`
@@ -730,6 +777,23 @@ export function migrateSchema(sqlite: RawDb): void {
   `);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_space_idx ON tool_approvals(space_id, status)`);
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tool_approvals_principal_idx ON tool_approvals(principal, status)`);
+  // Execution-start stamp on tool_approvals — migrateSchema-only
+  // PRAGMA-guarded ALTER, NEVER in BOOTSTRAP_SQL (same v252 rule as
+  // above). The sweep's stale-`executing` predicate measures from here,
+  // not from decided_at (confirmation time): a row confirmed 6 min ago
+  // but executing for 10 s must NOT be flipped back to `confirmed` and
+  // re-executed concurrently. One-time backfill (= decided_at) runs ONLY
+  // in the first-add step: legacy rows have no recorded start, and
+  // confirmation is the earliest the execution could have begun, so the
+  // old confirmation-time semantics apply to them exactly once; every
+  // row claimed after this migration carries a real start stamp.
+  const approvalCols = sqlite.prepare(`PRAGMA table_info(tool_approvals)`).all() as { name: string }[];
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "execution_started_at")) {
+    sqlite.exec(`ALTER TABLE tool_approvals ADD COLUMN execution_started_at TEXT`);
+    sqlite.exec(
+      `UPDATE tool_approvals SET execution_started_at = decided_at WHERE execution_started_at IS NULL`,
+    );
+  }
 
   // Telegram open-ended notes (parity Phase 3): durable /note drafts. Same
   // column set as BOOTSTRAP_SQL in db/schemaSql.ts — CREATE TABLE IF NOT
@@ -1140,6 +1204,21 @@ export function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
       ON notification_cap_claims(space_id, local_day, state, cap_exempt);
   `);
+  // H-2 (REG-191): per-chat delivery outcomes for the Telegram outbox.
+  // New table, both paths: identical DDL to BOOTSTRAP_SQL in
+  // db/schemaSql.ts (fresh DBs already have it; this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS notification_outbox_deliveries (
+      outbox_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed', 'ambiguous', 'skipped')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (outbox_id, chat_id)
+    );
+  `);
   // Worlds travel (Phase 2, P2-2): the travel journey ledger. New tables,
   // both paths: identical DDL to BOOTSTRAP_SQL in db/schemaSql.ts (fresh
   // DBs already have them; this is a no-op there).
@@ -1177,6 +1256,91 @@ export function migrateSchema(sqlite: RawDb): void {
     );
     CREATE INDEX IF NOT EXISTS idx_travel_events_journey
       ON travel_journey_events(journey_id);
+  `);
+
+  // NPC autonomy (Wave 2): the loop's own tables. Identical DDL to
+  // BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have them;
+  // this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS npc_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_log_space_npc_created
+      ON npc_log(space_id, npc_id, created_at);
+    CREATE TABLE IF NOT EXISTS npc_state (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      stopped INTEGER NOT NULL DEFAULT 0,
+      last_tick_at TEXT,
+      last_welcome_journey_id TEXT,
+      last_explore_day TEXT,
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_relic_holdings (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      found_in_world TEXT NOT NULL,
+      PRIMARY KEY (space_id, npc_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_gate (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, npc_id)
+    );
+  `);
+
+  // Guided tours (Wave 2, N7): the saved route, its §17 rail log, and
+  // playback sessions. Identical DDL to BOOTSTRAP_SQL in db/schemaSql.ts
+  // (fresh DBs already have them; this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS tours (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      journey_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      stops TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tours_space_created
+      ON tours(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tour_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_log_tour_created
+      ON tour_log(tour_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_sessions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      tour_id TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('playing','ended')),
+      ended_reason TEXT CHECK (ended_reason IN ('left','last-stop')),
+      current_stop_index INTEGER NOT NULL DEFAULT 0,
+      pending_leg_journey_id TEXT,
+      pending_leg_target INTEGER,
+      leg_attempt INTEGER NOT NULL DEFAULT 0,
+      skipped_note TEXT,
+      started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      ended_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_sessions_space_updated
+      ON tour_sessions(space_id, updated_at);
   `);
 
   // P2-4 journey-bonus outcome columns on existing travel_journeys volumes

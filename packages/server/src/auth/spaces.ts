@@ -130,6 +130,12 @@ export const SPACE_SCOPED_TABLES = [
   "instruction_profiles",
   "knowledge_docs",
   "codex_claims",
+  // Batch E: grade-attempt receipts (REG-197) and per-day earn counts
+  // (REG-051) are per-space rows — brain deletion must remove them too.
+  "review_grade_attempts",
+  "daily_earn_counts",
+  // Verb 1 (Tend a plot): one row per tend act — per-space, deleted with the brain.
+  "garden_tends",
   "undertakings",
   "daily_contact",
   "user_persona",
@@ -175,6 +181,18 @@ export const SPACE_SCOPED_TABLES = [
   "notification_outbox",
   "travel_journey_events",
   "travel_journeys",
+  // NPC autonomy (Wave 2): the loop's log, state, separate-pool
+  // holdings, and gate rows are per-space rows — brain deletion must
+  // remove them too.
+  "npc_log",
+  "npc_state",
+  "npc_relic_holdings",
+  "npc_gate",
+  // Guided tours (Wave 2, N7): the saved route, its rail log, and its
+  // playback sessions are per-space rows — brain deletion removes them.
+  "tours",
+  "tour_log",
+  "tour_sessions",
   "node_sources",
   "source_corrections",
   "source_chunks",

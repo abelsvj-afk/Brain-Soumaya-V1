@@ -156,6 +156,10 @@ export interface GraphNode {
   occurredAt?: string;
   /** Optional user-set future reminder date/time to resurface this memory. */
   remindAt?: string;
+  /** ISO timestamp this reminder was last delivered (fired); undefined =
+   *  never fired / pending. A reschedule re-arms the reminder by clearing
+   *  this (REG-140) — the web shows it wherever the time can be changed. */
+  reminderFiredAt?: string;
   /** Free + curated labels for filtering/context (e.g. "Work", "Idea", "Anxious"). */
   tags?: string[];
   researchQuestions?: string[];
@@ -375,6 +379,14 @@ export interface EmotionalPattern {
   repeats: number;
   /** A gentle, heuristic suggestion. */
   intervention: string;
+  /**
+   * REG-153 / INS-06: the pattern's evidence basis, in plain words — how
+   * many days/memories it rests on and over what window (e.g. "3 heavy days
+   * among the last 5 day-buckets (2026-03-01–2026-03-05)"). Rendered beside
+   * the label so a health-flavored heading never stands without its
+   * evidence; the chat renderer carries the same hedge in words.
+   */
+  basis?: string;
 }
 
 /** Emotional trajectory analysis over time (research-agent add-on #5). Heuristic + offline. */
@@ -641,13 +653,26 @@ export interface LensQuery {
   text?: string;
 }
 
-/** A persisted lens (with a live match count when listed). */
+/** A persisted lens (with a live match count when listed). Batch H (REG-208 /
+ *  REG-214): `count` is the TRUE total (uncapped); `capped` says the shown set
+ *  was truncated at a cap, `totalIsLowerBound` says the total itself is only a
+ *  lower bound (an inner FTS/due leg truncated first), `shown` is how many ids
+ *  the isolate actually carries, and `broken` marks a lens whose stored query
+ *  JSON could not be parsed at all — never an all-matching lens. */
 export interface Lens {
   id: number;
   name: string;
   query: LensQuery;
   pinned: boolean;
-  count?: number;
+  count?: number | null;
+  /** True when the shown set was truncated at one of evalLens's caps. */
+  capped?: boolean;
+  /** True when `count` is a lower bound, not the exact total (an inner leg hit its cap). */
+  totalIsLowerBound?: boolean;
+  /** How many ids the isolate actually carries (<= count). */
+  shown?: number;
+  /** The stored query JSON is corrupt — the lens is unreadable, not broad. */
+  broken?: boolean;
 }
 
 // ---- Investigator + typed research (docs/INVESTIGATOR_RESEARCH.md) ---------------------

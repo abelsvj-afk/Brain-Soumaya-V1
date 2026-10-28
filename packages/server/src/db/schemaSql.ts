@@ -249,6 +249,51 @@ export const BOOTSTRAP_SQL = `
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, reward_key)
     );
+    -- REG-197 (RC-04): one receipt per grade attempt, so a retry of the same
+    -- attempt replays the committed outcome instead of re-grading, re-paying,
+    -- and re-running SM-2. Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS review_grade_attempts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      attempt_key TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      remembered INTEGER NOT NULL,
+      next_review_at TEXT NOT NULL,
+      next_interval_days INTEGER NOT NULL,
+      fuel_earned INTEGER NOT NULL,
+      streak_advanced INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, attempt_key)
+    );
+    -- REG-051 (PG-08): per-day paid-earn counts (space-local day, one row per
+    -- kind). The count survives dismiss/delete — the earned rows don't — so
+    -- this is what bounds the thought add/dismiss and Mind create/delete
+    -- cycles server-side. Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS daily_earn_counts (
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, day, kind)
+    );
+    -- Verb 1 (Tend a plot): one row per tend act in the Growing Place.
+    -- kind is line | link | affirm | visit. target_node_id is the node a
+    -- line created (line) or the memory linked to (link); edge_id is the
+    -- edge a line/link created or reused; changed is the affirm judgment
+    -- (1 = changed since, 0 = still true, NULL for other kinds). The row
+    -- is the durable history behind the garden's warm glow and lit paths;
+    -- the node's own last_tended_at is what the cold/dormant signals read.
+    -- Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS garden_tends (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL DEFAULT 'legacy',
+      node_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      target_node_id INTEGER,
+      edge_id INTEGER,
+      changed INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_garden_tends_space_node ON garden_tends (space_id, node_id, created_at);
     -- Undertakings (Level 2): a multi-day arc Soumaya commits to, so her autonomy
     -- has narrative ("Day 3 of 5 — Warming the cold belt") instead of 5-min ticks.
     CREATE TABLE IF NOT EXISTS undertakings (
@@ -1177,6 +1222,23 @@ export const BOOTSTRAP_SQL = `
     CREATE INDEX IF NOT EXISTS notification_cap_claims_count_idx
       ON notification_cap_claims(space_id, local_day, state, cap_exempt);
 
+    -- H-2 (REG-191): per-chat delivery outcomes for the Telegram outbox —
+    -- one row per (outbox row, chat), so a retry re-attempts only the chats
+    -- still pending instead of re-delivering to chats that already accepted.
+    -- Identical DDL runs in db/client.ts migrateSchema() for existing
+    -- volumes. No new columns on notification_outbox; no drizzle entry
+    -- (raw-SQL table, like notification_cap_claims).
+    CREATE TABLE IF NOT EXISTS notification_outbox_deliveries (
+      outbox_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed', 'ambiguous', 'skipped')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (outbox_id, chat_id)
+    );
+
     -- Worlds travel (Phase 2, P2-2): the travel journey ledger. Events are
     -- append-only — every state transition writes exactly one, in the same
     -- transaction as the transition. The current world is DERIVED from
@@ -1219,4 +1281,104 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_travel_events_journey
       ON travel_journey_events(journey_id);
+
+    -- NPC autonomy (Wave 2): the autonomy loop's own tables. The log is
+    -- append-only — every act and every non-act, with its cause in plain
+    -- language, so anyone can ask "why did it do that?" and get an
+    -- answer. Holdings live in a SEPARATE pool from any player relic
+    -- pool (note §3): an NPC can never consume, hold, or lock away a
+    -- copy a player could otherwise find. npc_state carries the kill
+    -- switch (stopped), the tick throttle, the last welcomed arrival,
+    -- and the last explore day — the NPC remembers nothing between
+    -- visits beyond what this row needs to run the loop (note §3).
+    -- Identical DDL also runs in db/client.ts migrateSchema() for
+    -- existing volumes. kind carries no SQL CHECK: the allow-list is
+    -- enforced in TypeScript (NpcRepo.appendLog validates against
+    -- NPC_ACT_KINDS), and a CHECK would need a migration every time
+    -- the roster claims a new kind.
+    CREATE TABLE IF NOT EXISTS npc_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_log_space_npc_created
+      ON npc_log(space_id, npc_id, created_at);
+    CREATE TABLE IF NOT EXISTS npc_state (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      stopped INTEGER NOT NULL DEFAULT 0,
+      last_tick_at TEXT,
+      last_welcome_journey_id TEXT,
+      last_explore_day TEXT,
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_relic_holdings (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      found_in_world TEXT NOT NULL,
+      PRIMARY KEY (space_id, npc_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_gate (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, npc_id)
+    );
+
+    -- Guided tours (Wave 2, N7): a saved Chronicle route with a voice.
+    -- tours is the read model (the route + its stops, snapshotted at
+    -- creation); tour_log is the §17 rail — append-only, one entry per
+    -- structural change (created / renamed / deleted / restored), and
+    -- undo is a compensating entry (restored), never a rewrite. The row
+    -- and its log entry commit in ONE transaction, the travel pattern.
+    -- tour_sessions is playback state: a position, not progress — no
+    -- counts of done stops, no percentages, no score. A session ends
+    -- free whenever the traveler steps off, or when the route runs out.
+    -- Identical DDL also runs in db/client.ts migrateSchema() for
+    -- existing volumes.
+    CREATE TABLE IF NOT EXISTS tours (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      journey_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      stops TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tours_space_created
+      ON tours(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tour_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_log_tour_created
+      ON tour_log(tour_id, created_at);
+    CREATE TABLE IF NOT EXISTS tour_sessions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      tour_id TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('playing','ended')),
+      ended_reason TEXT CHECK (ended_reason IN ('left','last-stop')),
+      current_stop_index INTEGER NOT NULL DEFAULT 0,
+      pending_leg_journey_id TEXT,
+      pending_leg_target INTEGER,
+      leg_attempt INTEGER NOT NULL DEFAULT 0,
+      skipped_note TEXT,
+      started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      ended_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tour_sessions_space_updated
+      ON tour_sessions(space_id, updated_at);
 `;

@@ -7,8 +7,9 @@ import { EMBED_DIM } from "../db/vec.js";
 import type { AppContext } from "../context.js";
 import { GraphService } from "../graph/service.js";
 import { UsageTracker } from "../usage.js";
-import { handleTelegramUpdate, sendDailyDigests, type TelegramUpdate } from "../telegram/bot.js";
+import { handleTelegramUpdate, sendDailyDigests, formatLogConfirmation, type TelegramUpdate } from "../telegram/bot.js";
 import { TelegramLinksRepo } from "../telegram/links.js";
+import { setChatVoiceEnabled, clearChatVoiceModes } from "../telegram/voiceReply.js";
 import { SpacesRepo } from "../auth/spaces.js";
 import { SourcesRepo } from "../repositories/sources.repo.js";
 
@@ -184,5 +185,89 @@ describe("telegram proactive digest sweep", () => {
   it("does not push to chats that never linked", async () => {
     const sent = await sendDailyDigests(ctx, send);
     expect(sent).toBe(0);
+  });
+});
+
+// REG-031 (CAP-11): a /log confirmation accounts for every node the capture
+// created — the count always, labels where they fit.
+describe("REG-031 /log confirmation accounts for every node", () => {
+  it("a single-node capture keeps the existing one-label form", () => {
+    expect(formatLogConfirmation([{ label: "Call mom Sunday" }], 2, 3.5, "")).toBe(
+      `✦ Logged "Call mom Sunday" — 2 links formed · +3.5 ⛽`,
+    );
+  });
+  it("a multi-node capture names every node and states the count", () => {
+    const text = formatLogConfirmation(
+      [{ label: "Call mom Sunday" }, { label: "Buy oat milk" }, { label: "Dentist at 3pm" }],
+      1,
+      4.5,
+      " · 🔥 day 2",
+    );
+    expect(text).toMatch(/Logged 3 memories/);
+    expect(text).toContain(`"Call mom Sunday"`);
+    expect(text).toContain(`"Buy oat milk"`);
+    expect(text).toContain(`"Dentist at 3pm"`);
+    expect(text).toMatch(/1 link formed/);
+    expect(text).toMatch(/\+4\.5 ⛽/);
+    expect(text).toContain("🔥 day 2");
+  });
+  it("many nodes are capped with a (+N more) tail, never silently dropped", () => {
+    const nodes = Array.from({ length: 8 }, (_, i) => ({ label: `node ${i + 1}` }));
+    const text = formatLogConfirmation(nodes, 0, 1, "");
+    expect(text).toMatch(/Logged 8 memories/);
+    expect(text).toMatch(/\(\+3 more\)/);
+  });
+  it("an end-to-end /log still confirms the one node the heuristic extractor makes", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
+    await handleTelegramUpdate(ctx, update(1, "/log alice went for a long run today"), send);
+    expect(outbox.at(-1)!.text).toMatch(/Logged "/);
+    expect(outbox.at(-1)!.text).toMatch(/links? formed/);
+  });
+});
+
+// REG-032 (TG-14): one command reports link target, voice state,
+// note-in-progress state, and notification settings together.
+describe("REG-032 /settings reports the whole chat state", () => {
+  beforeEach(() => {
+    clearChatVoiceModes();
+  });
+
+  it("reports the linked brain, voice OFF, and no note when idle", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link soumaya hunter222"), send);
+    outbox = [];
+    await handleTelegramUpdate(ctx, update(1, "/settings"), send);
+    const text = outbox.at(-1)!.text;
+    expect(text).toMatch(/Linked brain: "soumaya"/i);
+    expect(text).toMatch(/Voice replies: OFF/i);
+    expect(text).toMatch(/no note in progress/i);
+    expect(text).toMatch(/Timezone:/);
+    expect(text).toMatch(/Quiet hours:/);
+    expect(text).toMatch(/Digest time:/);
+    expect(text).toMatch(/Daily cap:/);
+  });
+
+  it("reports voice ON and an open note with its size", async () => {
+    await handleTelegramUpdate(ctx, update(1, "/link soumaya hunter222"), send);
+    const spaceId = new TelegramLinksRepo(handle).get(1)!.spaceId;
+    setChatVoiceEnabled(spaceId, 1, true);
+    await handleTelegramUpdate(ctx, update(1, "/note"), send);
+    await handleTelegramUpdate(ctx, update(1, "first draft line"), send);
+    outbox = [];
+    await handleTelegramUpdate(ctx, update(1, "/settings"), send);
+    const text = outbox.at(-1)!.text;
+    expect(text).toMatch(/Linked brain: "soumaya"/i);
+    expect(text).toMatch(/Voice replies: ON/i);
+    expect(text).toMatch(/note is in progress \(1 part, 16 characters\)/i);
+  });
+});
+
+// REG-034 (TG-13, HELP half): HELP's /note line states the typed-text-only flow.
+describe("REG-034 HELP describes /note as typed-text only", () => {
+  it("an unlinked chat sees the /note line with the voice limitation", async () => {
+    await handleTelegramUpdate(ctx, update(1, "hello"), send);
+    const text = outbox.at(-1)!.text;
+    expect(text).toMatch(/\/note/);
+    expect(text).toMatch(/Typed messages only/i);
+    expect(text).toMatch(/voice notes can't join a note yet/i);
   });
 });

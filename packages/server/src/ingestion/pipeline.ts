@@ -12,6 +12,7 @@ import {
   associativeLink,
   mapWithConcurrency,
   DEFAULT_LINK_OPTIONS,
+  linkOptionsFor,
   type AssociativeLinkOptions,
 } from "./associativeLink.js";
 import type { AppContext } from "../context.js";
@@ -159,7 +160,10 @@ export async function processSourceExtraction(
 
     // 2 + 3. Embed each new node (external call — stays OUTSIDE the
     // write transaction below, like the extraction LLM call above).
-    const contents = extraction.nodes.map((n) => n.content);
+    // REG-190: embed the same "label. content" composition the Details edit path
+    // uses — content-only here made a memory's semantic findability depend on
+    // whether it had ever been edited in Details.
+    const contents = extraction.nodes.map((n) => `${n.label}. ${n.content}`);
     const vectors = await deps.embeddings.embedBatch(contents);
     const createdNodes: GraphNode[] = [];
     const labelToId = new Map<string, number>();
@@ -183,9 +187,13 @@ export async function processSourceExtraction(
     const writeTx = h.sqlite.transaction(() => {
       for (let i = 0; i < extraction.nodes.length; i++) {
         const n = extraction.nodes[i]!;
-        // Stamp the user's event date / reminder / tags on each node from this dump.
+        // Stamp the user's event date / tags on each node from this dump — but
+        // the reminder on the FIRST node only (REG-143/AG-04): stamping remindAt
+        // on every node turned one "add reminder" into N independent reminders
+        // (N firings, N cap slots, N due rows, one toast claiming a single one).
+        // occurredAt/tags describe the whole dump, so they still stamp everywhere.
         const node = nodesRepo.create(
-          { ...n, occurredAt: meta?.occurredAt, remindAt: meta?.remindAt, tags: meta?.tags },
+          { ...n, occurredAt: meta?.occurredAt, remindAt: i === 0 ? meta?.remindAt : undefined, tags: meta?.tags },
           vectors[i]!,
         );
         sourcesRepo.linkNodeToAllChunks(node.id, sourceId);
@@ -250,6 +258,11 @@ export async function processSourceExtraction(
     // collected by index so output order stays deterministic.
     let associativeEdges: GraphEdge[] = [];
     try {
+      // Batch H (REG-215 / CN-17): the gate adapts to the embeddings provider
+      // (linkOptionsFor — 0.5 under hash, 0.72 for real embeddings) when the
+      // caller didn't pass explicit options; an explicit linkOptions still wins,
+      // and a missing ctx falls back to the documented default.
+      const linkOpts = deps.linkOptions ?? (ctx ? linkOptionsFor(ctx.embeddings.model) : DEFAULT_LINK_OPTIONS);
       const perNodeLinks = await mapWithConcurrency(
         createdNodes,
         2,
@@ -259,7 +272,7 @@ export async function processSourceExtraction(
             { nodes: nodesRepo, edges: edgesRepo, llm: deps.llm },
             node,
             vectors[i]!,
-            deps.linkOptions ?? DEFAULT_LINK_OPTIONS,
+            linkOpts,
             spaceId,
           ),
       );

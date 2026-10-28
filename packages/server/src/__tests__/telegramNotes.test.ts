@@ -90,6 +90,9 @@ describe("telegram notes — full verbatim flow", () => {
 
     await handleTelegramUpdate(ctx, update(7, "/note"), send);
     expect(outbox.at(-1)!.text).toMatch(/Note started/i);
+    // REG-034: the start text states the typed-text-only flow.
+    expect(outbox.at(-1)!.text).toMatch(/Typed messages only/i);
+    expect(outbox.at(-1)!.text).toMatch(/voice notes can't join a note yet/i);
 
     const p1 = "\nMy Title Line\nbody starts here";
     const p2 = "second part\nwith a line break  \nand trailing spaces above";
@@ -131,7 +134,7 @@ describe("telegram notes — full verbatim flow", () => {
 
     // Findable in-app: the nodes repository/search path (galaxy/Browse/Search
     // all read nodes) returns it — via GraphService.search (hybrid vec+FTS).
-    const hits = await new GraphService(handle, spaceId).search(ctx.embeddings, "My Title Line", 10);
+    const { hits } = await new GraphService(handle, spaceId).search(ctx.embeddings, "My Title Line", 10);
     expect(hits.map((h) => h.id)).toContain(node.id);
     expect(new NodesRepo(handle, spaceId).getById(node.id)!.content).toBe(expected);
   });
@@ -143,6 +146,8 @@ describe("telegram notes — full verbatim flow", () => {
     await handleTelegramUpdate(ctx, update(7, "/note"), send);
     expect(outbox.at(-1)!.text).toMatch(/already in progress/i);
     expect(outbox.at(-1)!.text).toMatch(/1 part/);
+    // REG-034: the re-start text states the typed-text-only flow too.
+    expect(outbox.at(-1)!.text).toMatch(/voice notes can't join a note yet/i);
     const draft = drafts().get(spaceId, 7);
     expect(draft!.partCount).toBe(1);
     expect(draft!.text).toBe("keep this line");
@@ -152,6 +157,8 @@ describe("telegram notes — full verbatim flow", () => {
     const spaceId = await linkChat(7);
     await handleTelegramUpdate(ctx, update(7, "/note opening words"), send);
     expect(outbox.at(-1)!.text).toMatch(/Note started/i);
+    // REG-034: the with-first-part start text states it too.
+    expect(outbox.at(-1)!.text).toMatch(/voice notes can't join a note yet/i);
     const draft = drafts().get(spaceId, 7);
     expect(draft!.partCount).toBe(1);
     expect(draft!.text).toBe("opening words");

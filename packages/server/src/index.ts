@@ -1,7 +1,7 @@
 import { buildContext } from "./context.js";
 import { createApp } from "./api/server.js";
 import { NodesRepo } from "./repositories/nodes.repo.js";
-import { setTelegramWebhook, sendDailyDigests, tgSend, createTelegramSpaceSender } from "./telegram/bot.js";
+import { setTelegramWebhook, sendDailyDigests, tgSend, createTelegramSpaceSender, type TelegramSpaceSendReport } from "./telegram/bot.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
 import { sweepPendingPushes } from "./push/outbox.js";
@@ -176,12 +176,14 @@ setInterval(() => {
       // Tools pass metadata; the policy decides send-now vs queue vs drop, and the
       // outbox sweeper below delivers deferred items. Raw send is Telegram-only.
       // Batch A (RE-01/RE-02): the raw sender classifies outcomes —
-      // a refused send throws (definite), a no-response send throws
-      // ambiguous, and a space with no linked chat throws
+      // a refused send is reported "refused" (definite), a no-response
+      // send "ambiguous", and a space with no linked chat throws
       // NoRecipientsError — so the boundary records delivery honestly.
+      // H-2 (REG-191): the sender returns a per-chat report, so a retry
+      // re-attempts only the chats still pending.
       const rawSend = tgToken
         ? createTelegramSpaceSender(ctx.handle, tgToken)
-        : async (_spaceId: string, _text: string) => {};
+        : async (_spaceId: string, _text: string): Promise<TelegramSpaceSendReport> => ({ attempted: [] });
       const policyNotify = createPolicyNotify({
         sqlite: ctx.handle.sqlite,
         handle: ctx.handle, // W2: DbHandle for episode capture
@@ -233,8 +235,8 @@ setInterval(() => {
           },
           new Date()
         );
-        if (sweep.sent > 0 || sweep.ambiguous > 0) {
-          console.log(`[notify] sweep: ${sweep.sent} sent, ${sweep.ambiguous} ambiguous`);
+        if (sweep.sent > 0 || sweep.ambiguous > 0 || sweep.failed > 0 || sweep.retried > 0 || sweep.dropped > 0) {
+          console.log(`[notify] sweep: ${sweep.sent} sent, ${sweep.retried} retried, ${sweep.failed} failed, ${sweep.ambiguous} ambiguous, ${sweep.dropped} dropped, ${sweep.queued} queued`);
         }
       }
       // Web push (Round 3 policy follow-up): drain policy-deferred pushes
@@ -244,8 +246,8 @@ setInterval(() => {
       // no-op when VAPID is unconfigured.
       try {
         const pushSweep = await sweepPendingPushes(ctx.handle, { workerId: `push-sweep-${process.pid}` });
-        if (pushSweep.sent > 0 || pushSweep.ambiguous > 0) {
-          console.log(`[push] sweep: ${pushSweep.sent} sent, ${pushSweep.ambiguous} ambiguous`);
+        if (pushSweep.sent > 0 || pushSweep.ambiguous > 0 || pushSweep.failed > 0 || pushSweep.dropped > 0) {
+          console.log(`[push] sweep: ${pushSweep.sent} sent, ${pushSweep.deferred} deferred, ${pushSweep.failed} failed, ${pushSweep.dropped} dropped, ${pushSweep.ambiguous} ambiguous`);
         }
       } catch (err) {
         console.error("[push] sweep error:", err);

@@ -26,6 +26,7 @@ import {
   type TelegramReplyDeps,
 } from "./voiceReply.js";
 import { expireStaleDraft, expiredDraftWarning, handleNoteAppend, handleNoteCommand, stripCommandBody } from "./notes.js";
+import { TelegramNoteDraftsRepo } from "../repositories/telegramNoteDrafts.repo.js";
 import { chunkTelegramText } from "./chunking.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
 import type { DbHandle } from "../db/client.js";
@@ -55,6 +56,64 @@ export interface TelegramUpdate {
 
 /** Injected sender so tests run with no network. */
 export type Send = (chatId: number, text: string) => Promise<void>;
+
+/**
+ * Max send attempts for one on-demand command reply (H-4, REG-193).
+ * Mirrors the notify outbox's MAX_ATTEMPTS = 3 — the scheduled digest
+ * sweep already retries on later sweeps; the on-demand reply path had no
+ * equivalent, so a transient send failure ended in silence (the webhook
+ * had already acked 200, so Telegram never retries the update).
+ */
+export const TELEGRAM_REPLY_MAX_ATTEMPTS = 3;
+/**
+ * Backoff between reply-send attempts: the outbox's retryAfter doubles
+ * in minutes (2/4/8m) for background sweeps; a user is waiting on a
+ * command reply, so the same doubling shape runs in seconds.
+ */
+export const TELEGRAM_REPLY_BACKOFF_MS: readonly number[] = [1000, 2000];
+
+/**
+ * Send one reply (chunked to Telegram's limit) with bounded retries.
+ * Retries PER CHUNK: a failure on chunk 2 must not re-send chunk 1.
+ *
+ * Retries on any throw, mirroring the scheduled digest sweep's catch-all
+ * retry — including AmbiguousSendError (no response: Telegram may or may
+ * not have received it). That carries the same duplicate risk the sweep
+ * already accepts on later sweeps, bounded here to 3 attempts per chunk;
+ * a definite refusal is provably undelivered, so retrying it is safe.
+ * Throws the last error when every attempt fails, so the caller still
+ * sees (and logs) the failure instead of silently dropping the reply.
+ */
+export async function sendTelegramReplyWithRetry(
+  sendRaw: Send,
+  chatId: number,
+  text: string,
+  opts: {
+    maxAttempts?: number;
+    backoffMs?: readonly number[];
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const maxAttempts = opts.maxAttempts ?? TELEGRAM_REPLY_MAX_ATTEMPTS;
+  const backoffMs = opts.backoffMs ?? TELEGRAM_REPLY_BACKOFF_MS;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  for (const chunk of chunkTelegramText(text)) {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await sendRaw(chatId, chunk);
+        lastErr = undefined;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          await sleep(backoffMs[Math.min(attempt - 1, backoffMs.length - 1)] ?? 0);
+        }
+      }
+    }
+    if (lastErr !== undefined) throw lastErr;
+  }
+}
 
 /**
  * Send a text message to a chat (real network). Reports the outcome
@@ -96,35 +155,71 @@ export async function tgSend(token: string, chatId: number, text: string): Promi
 }
 
 /**
+ * H-2 (REG-191): one chat's outcome inside a Telegram space-send report.
+ * - "sent": Telegram accepted (HTTP 200, ok:true).
+ * - "refused": a response was received and it refused (HTTP error, or an
+ *   ok:false body) — a definite failure, safe to retry.
+ * - "ambiguous": no response came back — Telegram may or may not have
+ *   received it, never retried (Batch A).
+ * - "skipped": the chat unlinked between attempts — no fetch was attempted.
+ */
+export type TelegramChatOutcome = "sent" | "refused" | "ambiguous" | "skipped";
+
+/** Per-chat report for one space send: every attempted chat, exactly once. */
+export interface TelegramSpaceSendReport {
+  attempted: { chatId: number; outcome: TelegramChatOutcome; error?: string }[];
+}
+
+/**
  * The production raw sender the notification boundary wraps (index.ts):
  * deliver one proactive message to every chat linked to a space.
  * - No linked chat → NoRecipientsError (a known non-delivery to nobody).
- * - Every linked chat is attempted, even when one fails.
- * - Any definite refusal → a definite throw (wins over ambiguity: at
- *   least one recipient provably did not receive it).
- * - Otherwise any no-response failure → AmbiguousSendError.
+ * - Every chat in the attempt set is attempted, even when one fails.
+ * - Returns a per-chat report instead of collapsing to a single throw
+ *   (H-2, REG-191): a definite refusal or an ambiguity for one chat no
+ *   longer throws, so the boundary can retry only the chats still pending
+ *   instead of re-delivering to chats that already accepted.
+ * - `onlyChatIds`, when given, restricts the attempt set to those chats
+ *   (a retry); a requested chat that is no longer linked is reported
+ *   "skipped" with no fetch attempted. When omitted, the attempt set is
+ *   all currently linked chats (first attempt).
+ * - Throws ONLY NoRecipientsError (zero linked chats).
  */
 export function createTelegramSpaceSender(
   handle: DbHandle,
   token: string,
-): (spaceId: string, text: string) => Promise<void> {
-  return async (spaceId: string, text: string) => {
+): (spaceId: string, text: string, onlyChatIds?: number[]) => Promise<TelegramSpaceSendReport> {
+  return async (spaceId: string, text: string, onlyChatIds?: number[]) => {
     const links = new TelegramLinksRepo(handle).all().filter((l) => l.spaceId === spaceId);
     if (links.length === 0) {
       throw new NoRecipientsError("no linked chats for this space");
     }
-    let definite: Error | null = null;
-    let ambiguous: AmbiguousSendError | null = null;
+    const wanted = onlyChatIds && onlyChatIds.length > 0 ? new Set(onlyChatIds) : null;
+    const attempted: TelegramSpaceSendReport["attempted"] = [];
     for (const l of links) {
+      if (wanted && !wanted.has(l.chatId)) continue;
       try {
         await tgSend(token, l.chatId, text);
+        attempted.push({ chatId: l.chatId, outcome: "sent" });
       } catch (err) {
-        if (err instanceof AmbiguousSendError) ambiguous ??= err;
-        else definite ??= err instanceof Error ? err : new Error(String(err));
+        if (err instanceof AmbiguousSendError) {
+          attempted.push({ chatId: l.chatId, outcome: "ambiguous", error: err.message });
+        } else {
+          attempted.push({
+            chatId: l.chatId,
+            outcome: "refused",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
-    if (definite) throw definite;
-    if (ambiguous) throw ambiguous;
+    if (wanted) {
+      const linkedIds = new Set(links.map((l) => l.chatId));
+      for (const chatId of onlyChatIds!) {
+        if (!linkedIds.has(chatId)) attempted.push({ chatId, outcome: "skipped" });
+      }
+    }
+    return { attempted };
   };
 }
 
@@ -190,13 +285,13 @@ const HELP =
   "Then, any time:\n" +
   "• Send me anything and I'll answer from your memories (with what I drew on).\n" +
   "• /log <thought> — save a new memory; I'll tell you what landed.\n" +
-  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it. A draft left untouched for 24 hours is discarded.\n" +
+  "• /note — start an open-ended note: keep sending, every word is kept exactly as sent; /done saves it into your brain, /cancel discards it. Typed messages only — voice notes can't join a note yet. A draft left untouched for 24 hours is discarded.\n" +
   "• /digest — get today's digest now (I also send it once a day on my own).\n" +
   "• /digest 07:00 — change when the daily digest arrives.\n" +
   "• /quiet 21:00 04:30 — set quiet hours (I won't ping you then unless it's urgent).\n" +
   "• /cap 5 — max proactive pings per day (urgent ones don't count; your daily digest is scheduled separately and doesn't count against the cap).\n" +
   "• /tz America/Chicago — set your timezone for quiet hours + digest.\n" +
-  "• /settings — show your current notification settings.\n" +
+  "• /settings — show this chat's state: linked brain, voice, note in progress, and notification settings.\n" +
   "• /voice on — hear my replies as voice notes (when voice is enabled on the server); /voice off — back to text.\n" +
   "• /unlink — disconnect this chat.\n" +
   "• /help — show this again.";
@@ -340,6 +435,29 @@ export function formatDigest(digest: DailyDigest, spaceName: string): string {
 }
 
 /**
+ * REG-031 (CAP-11): the /log confirmation accounts for EVERY node the
+ * capture created — the count always, labels where the channel allows
+ * (first five, truncated, with a (+N more) tail so nothing is silently
+ * dropped). A single-node capture keeps the exact pre-existing form.
+ */
+export function formatLogConfirmation(
+  nodes: { label: string }[],
+  linkCount: number,
+  fuel: number,
+  streakNote: string,
+): string {
+  const links = `${linkCount} link${linkCount === 1 ? "" : "s"} formed`;
+  const reward = `+${fuel.toFixed(1)} ⛽${streakNote}`;
+  if (nodes.length <= 1) {
+    const label = nodes[0]?.label ?? "a memory";
+    return `✦ Logged "${label}" — ${links} · ${reward}`;
+  }
+  const shown = nodes.slice(0, 5).map((n) => `"${n.label.slice(0, 40)}"`);
+  const more = nodes.length > 5 ? ` (+${nodes.length - 5} more)` : "";
+  return `✦ Logged ${nodes.length} memories — ${shown.join(", ")}${more} · ${links} · ${reward}`;
+}
+
+/**
  * Core update handler. `send` is injected so tests run with no network.
  *
  * Multi-brain: a chat must /link to a brain before it can log or ask anything.
@@ -354,9 +472,11 @@ export async function handleTelegramUpdate(
   // answers (tab lists, weekly reviews) exceed Telegram's 4096-char limit
   // and a single send would fail. Short messages pass through untouched
   // (chunkTelegramText returns [text]), so existing behavior is identical
-  // under the limit. The wrapper is transparent to all handlers below.
+  // under the limit. H-4 (REG-193): the wrapper also retries each chunk
+  // (bounded, 3 attempts) — before this, one transient send failure ended
+  // in silence because the webhook had already acked 200.
   const send: Send = async (chatId, text) => {
-    for (const chunk of chunkTelegramText(text)) await sendRaw(chatId, chunk);
+    await sendTelegramReplyWithRetry(sendRaw, chatId, text);
   };
   const msg = update.message;
   const chatId = msg?.chat?.id;
@@ -544,9 +664,20 @@ export async function handleTelegramUpdate(
 
   if (text === "/settings") {
     const p = getPreferences(ctx.handle.sqlite, spaceId);
+    // REG-032: one command reports the whole chat state — link target,
+    // voice state, note-in-progress state, and notification settings
+    // together — so a user returning after days away can answer "what
+    // state is this chat in?" from one place.
+    const draft = new TelegramNoteDraftsRepo(ctx.handle).get(spaceId, chatId);
+    const noteState = draft
+      ? `a note is in progress (${draft.partCount} part${draft.partCount === 1 ? "" : "s"}, ${draft.text.length} characters) — /done saves it, /cancel discards it`
+      : "no note in progress — /note starts one";
     await send(
       chatId,
-      `🔔 Notification settings:\n` +
+      `🔔 This chat's state:\n` +
+        `• Linked brain: "${link.spaceName}"\n` +
+        `• Voice replies: ${isChatVoiceEnabled(spaceId, chatId) ? "ON — short answers are spoken" : "OFF — replies stay text"} (/voice on/off)\n` +
+        `• Note: ${noteState}\n` +
         `• Timezone: ${p.timezone}\n` +
         `• Quiet hours: ${p.quietStart}–${p.quietEnd}\n` +
         `• Digest time: ${p.digestTime}\n` +
@@ -606,12 +737,8 @@ export async function handleTelegramUpdate(
     const { streak, advanced } = new StreakRepo(ctx.handle, spaceId).touch();
     const fuel = EARN_MEMORY + EARN_LINK * linkCount + (advanced ? STREAK_DAY_BONUS : 0);
     new EconomyRepo(ctx.handle, spaceId).add(fuel);
-    const label = result.nodes[0]?.label ?? "a memory";
     const streakNote = advanced ? ` · 🔥 day ${streak.current}` : "";
-    await send(
-      chatId,
-      `✦ Logged "${label}" — ${linkCount} link${linkCount === 1 ? "" : "s"} formed · +${fuel.toFixed(1)} ⛽${streakNote}`,
-    );
+    await send(chatId, formatLogConfirmation(result.nodes, linkCount, fuel, streakNote));
     return;
   }
 
@@ -664,7 +791,14 @@ export async function handleTelegramUpdate(
   } catch (err) {
     console.error("[telegram] agent loop failed, falling back to chat:", err);
     const answer = await chat(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, text, undefined, spaceId);
-    let reply = answer.answer?.trim() || "I don't have anything on that yet — add a memory with /log.";
+    // REG-033 (TG-15): a fallback-delivered reply must be distinguishable
+    // as such in the channel. The full agent (tools, approvals,
+    // memory-writing) was unavailable for this turn — say so up front
+    // instead of answering as if nothing happened. Wording is the design
+    // choice; silent equivalence is the defect.
+    let reply =
+      "⚠️ My full self couldn't run just now, so this is a simpler answer drawn only from your memories — I couldn't take actions or save anything this turn.\n\n" +
+      (answer.answer?.trim() || "I don't have anything on that yet — add a memory with /log.");
     if (answer.citations.length > 0) {
       reply += `\n\n— from: ${answer.citations.map((c) => c.label).join(" · ")}`;
     }

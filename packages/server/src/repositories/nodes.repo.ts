@@ -4,6 +4,7 @@ import type { DbHandle } from "../db/client.js";
 import { nodes, DEFAULT_SPACE, type NodeRow } from "../db/schema.js";
 import { upsertEmbedding, deleteEmbedding } from "../db/vec.js";
 import { ftsUpsert, ftsDelete } from "../db/fts.js";
+import { clearReviewSnooze } from "../analysis/review.js";
 
 export interface NewNode {
   label: string;
@@ -54,6 +55,9 @@ function toGraphNode(row: NodeRow): GraphNode {
     lastTendedAt: row.lastTendedAt ?? undefined,
     occurredAt: row.occurredAt ?? undefined,
     remindAt: row.remindAt ?? undefined,
+    // REG-140: the web needs the fired state to show it where the time can
+    // be changed (Agenda due list / edit). NULL = never fired / re-armed.
+    reminderFiredAt: row.reminderFiredAt ?? undefined,
     tags: parseTags(row.tags),
     researchQuestions: parseJson<string[]>(row.researchQuestions),
     researchAnswers: parseJson<Record<string, string>>(row.researchAnswers),
@@ -294,9 +298,14 @@ export class NodesRepo {
 
   /** "Tend" a memory — reset its entropy clock (visiting/editing/linking). */
   tend(id: number): boolean {
+    const now = new Date();
     const info = this.h.sqlite
       .prepare(`UPDATE nodes SET last_tended_at = ? WHERE id = ? AND space_id = ?`)
-      .run(new Date().toISOString(), id, this.spaceId);
+      .run(now.toISOString(), id, this.spaceId);
+    // Batch G (REG-198): visiting the memory also clears a nudge snooze on it —
+    // the user followed the nudge's instruction, so the memory stops hiding from
+    // Recall. A grade-set schedule carries no snooze marker and is untouched.
+    if (info.changes > 0) clearReviewSnooze(this.h, this.spaceId, id, now.getTime());
     return info.changes > 0;
   }
 
@@ -306,6 +315,17 @@ export class NodesRepo {
    * fields present in `patch` are touched. Returns the updated node, or
    * undefined when the node isn't in this space. Keeps FTS in sync when the
    * label/content change, and tends the node (editing = visiting it).
+   *
+   * REG-140: moving `remindAt` (to a new time, or to null) RE-ARMS the
+   * reminder — `reminder_fired_at` / `fired_by_approval` are cleared, so the
+   * firing tool's `detect()` (which only proposes unfired rows) proposes it
+   * again at the new time. A label/content-only edit leaves the fired state
+   * alone: re-saving the same reminder must not silently re-fire it.
+   *
+   * REG-144 (AG-05): an action can NEVER carry a remindAt — the agenda write
+   * paths can never create that state, so a non-null remindAt on an action
+   * patch is dropped here (the repo backstop; the route's only caller). A
+   * null remindAt is still honoured: clearing can only remove the state.
    */
   updateAgenda(
     id: number,
@@ -313,11 +333,20 @@ export class NodesRepo {
   ): GraphNode | undefined {
     const existing = this.getById(id);
     if (!existing) return undefined;
+    if (existing.kind === "action" && patch.remindAt !== undefined && patch.remindAt !== null) {
+      patch = { ...patch, remindAt: undefined };
+    }
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (patch.label !== undefined) { sets.push("label = ?"); vals.push(patch.label); }
     if (patch.content !== undefined) { sets.push("content = ?"); vals.push(patch.content); }
-    if (patch.remindAt !== undefined) { sets.push("remind_at = ?"); vals.push(patch.remindAt); }
+    if (patch.remindAt !== undefined) {
+      sets.push("remind_at = ?");
+      vals.push(patch.remindAt);
+      // REG-140 re-arm: a moved remind_at fires again at its new time.
+      sets.push("reminder_fired_at = NULL");
+      sets.push("fired_by_approval = NULL");
+    }
     if (patch.expiresAt !== undefined) { sets.push("expires_at = ?"); vals.push(patch.expiresAt); }
     if (sets.length === 0) return existing;
     sets.push("last_tended_at = ?");
