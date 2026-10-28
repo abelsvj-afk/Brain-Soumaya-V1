@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { GARDEN_BACKDROP_PLANETS, loadGardenAsset } from "./gardenAssets.js";
 import { buildHygStarfield } from "./hygStars.js";
 import {
   GARDEN_TERRACE_COUNT,
@@ -216,6 +217,20 @@ function buildLandmarkArch(
   glow.position.y = 30;
   arch.add(left, right, arc, glow);
   return { arch, glow };
+}
+
+/** Scale a loaded model so its longest side is `size`, recentered on its bounding-box center. */
+function fitToSize(root: THREE.Object3D, size: number): void {
+  const box = new THREE.Box3().setFromObject(root);
+  const extents = box.getSize(new THREE.Vector3());
+  const longest = Math.max(extents.x, extents.y, extents.z);
+  if (!Number.isFinite(longest) || longest <= 0) return;
+  const scale = size / longest;
+  root.scale.setScalar(scale);
+  root.updateWorldMatrix(true, true);
+  const scaled = new THREE.Box3().setFromObject(root);
+  const center = scaled.getCenter(new THREE.Vector3());
+  root.position.sub(center);
 }
 
 export function createGardenScene(
@@ -469,6 +484,33 @@ export function createGardenScene(
   starMat.transparent = true;
   starMat.opacity = 0.35;
   group.add(stars);
+
+  // Distant backdrop planets (EVE-style, 2026-10-27): a whole distant
+  // system, a Quaternius planet, and THE ice world — a frozen sphere
+  // over the warm garden — 4,000 units out at ~7° elevation. The slow
+  // orbit (radius 1,150) never brings the camera closer than ~2,850,
+  // so they loom and never arrive. Loaded as-is; a holder stays empty
+  // until its GLB lands.
+  for (const planet of GARDEN_BACKDROP_PLANETS) {
+    const holder = new THREE.Group();
+    holder.name = `backdrop-${planet.key}`;
+    holder.position.set(
+      Math.cos(planet.angle) * planet.distance,
+      planet.y,
+      Math.sin(planet.angle) * planet.distance,
+    );
+    group.add(holder);
+    void loadGardenAsset(planet.url).then((loaded) => {
+      if (!loaded) return;
+      if (disposed) {
+        disposeObject3D(loaded);
+        return;
+      }
+      fitToSize(loaded, planet.size);
+      loaded.name = `backdrop-${planet.key}-model`;
+      holder.add(loaded);
+    });
+  }
 
   // Dawn light: warm low key + soft ambient. Mist: three slow planes.
   // The key, ambient, and mist are the A8 handles — the mutation block

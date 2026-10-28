@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { buildQuietArchiveLayout, QUIET_ARCHIVE_BUDGET, type QuietArchiveLayout } from "./quietArchiveLayout.js";
+import { buildQuietArchiveLayout, QUIET_ARCHIVE_BUDGET, quietArchiveSputnikPosition, type QuietArchiveLayout } from "./quietArchiveLayout.js";
+import {
+  QUIET_ARCHIVE_ARTIFACT,
+  QUIET_ARCHIVE_BACKDROP_DRAW_CALLS,
+  QUIET_ARCHIVE_BACKDROP_PLANETS,
+  QUIET_ARCHIVE_BACKDROP_TRIS_TOTAL,
+} from "./quietArchiveAssets.js";
 import { createQuietArchiveScene, EMPTY_QUIET_ARCHIVE_LAYOUT } from "./quietArchiveScene.js";
 import type { GraphData } from "@brain/shared";
 
@@ -99,6 +105,30 @@ describe("createQuietArchiveScene", () => {
     scene.dispose();
   });
 
+  it("the first artifact has its alcove by the arrival edge — empty until its GLB lands", () => {
+    const scene = createQuietArchiveScene(layout);
+    const holder = scene.group.getObjectByName("artifact-sputnik") as THREE.Group;
+    expect(holder).toBeTruthy();
+    expect(holder.children.length).toBe(0); // the GLB lands async; no stand-in
+    const spot = quietArchiveSputnikPosition(layout.fieldRadius);
+    expect(holder.position.x).toBeCloseTo(spot.x, 5);
+    expect(holder.position.y).toBe(spot.y);
+    expect(holder.position.z).toBeCloseTo(spot.z, 5);
+    scene.dispose();
+  });
+
+  it("the EVE-style backdrop planet hangs 4,000 out — holder exists, empty until its GLB lands", () => {
+    const scene = createQuietArchiveScene(layout);
+    for (const planet of QUIET_ARCHIVE_BACKDROP_PLANETS) {
+      const holder = scene.group.getObjectByName(`backdrop-${planet.key}`) as THREE.Group;
+      expect(holder).toBeTruthy();
+      expect(holder.children.length).toBe(0);
+      expect(Math.hypot(holder.position.x, holder.position.z)).toBeCloseTo(4000, 5);
+      expect(holder.position.y).toBe(500);
+    }
+    scene.dispose();
+  });
+
   it("a lone person with no bridges rests alone — no bridge is drawn for them", () => {
     const lone = buildQuietArchiveLayout(
       {
@@ -132,8 +162,21 @@ describe("createQuietArchiveScene", () => {
     const big = buildQuietArchiveLayout({ nodes: bigNodes, links: bigLinks } as unknown as GraphData);
     expect(big.clusters).toHaveLength(20);
     const scene = createQuietArchiveScene(big);
-    expect(countDrawCalls(scene.group)).toBeLessThanOrEqual(QUIET_ARCHIVE_BUDGET.maxDrawCalls);
-    expect(estimateTris(scene.group)).toBeLessThanOrEqual(QUIET_ARCHIVE_BUDGET.maxTris);
+    // The GLBs load async, so the built group holds the procedural
+    // scene only; the manifest's measured cost is added here, so the
+    // budget assertion covers the scene as the user actually sees it
+    // once the pieces have landed (Sputnik 2 calls / 144 tris + the
+    // backdrop dwarf 1 call / 300 tris).
+    expect(
+      countDrawCalls(scene.group) +
+        QUIET_ARCHIVE_ARTIFACT.materials +
+        QUIET_ARCHIVE_BACKDROP_DRAW_CALLS,
+    ).toBeLessThanOrEqual(QUIET_ARCHIVE_BUDGET.maxDrawCalls);
+    expect(
+      estimateTris(scene.group) +
+        QUIET_ARCHIVE_ARTIFACT.tris +
+        QUIET_ARCHIVE_BACKDROP_TRIS_TOTAL,
+    ).toBeLessThanOrEqual(QUIET_ARCHIVE_BUDGET.maxTris);
     scene.dispose();
   });
 

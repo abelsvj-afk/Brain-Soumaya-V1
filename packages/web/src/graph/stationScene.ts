@@ -1,16 +1,24 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { noteModelFallback } from "./gltf.js";
 import {
   STATION_PALETTE,
   STATION_ROTATION_RATE_RAD_PER_MS,
   STATION_SEED,
   STATION_WHEEL_RADIUS,
+  LOWPOLY_DOCKED_SPOTS,
+  LOWPOLY_GANTRY_POSITION,
+  STATION_CLUSTER_POSITIONS,
+  clusterModelOffset,
+  stationClusterPosition,
   WITNESS_DRYDOCK_POSITION,
   WITNESS_HAULER_POSITION,
   beaconRing,
+  dockedPoseAt,
   dockingMooringPose,
   harborControllerBerthPose,
   heroMooringPose,
+  lowPolyDressingSpots,
   mooringPose,
   rngFromSeed,
   trafficLanes,
@@ -24,11 +32,19 @@ import {
   DOCKING_MODEL_INDEX,
   DRESSING_MODELS,
   DRYDOCK_PIECES,
+  LOWPOLY_DOCKED_MODELS,
+  LOWPOLY_DRESSING_MODELS,
+  LOWPOLY_GANTRY,
+  STATION_BACKDROP_PLANETS,
+  STATION_CLUSTERS,
   TRAFFIC_MODELS,
   WITNESS_HAULER,
   loadStationAsset,
   mergeByMaterial,
+  mergeClusterToSingleMaterial,
   mergeToSingleMaterial,
+  recenterGeometry,
+  scaleGeometryToSize,
   singleMeshGeometry,
 } from "./stationAssets.js";
 
@@ -61,10 +77,13 @@ import {
  * and rotation freeze under reduced motion (same scene, same
  * information, no motion).
  *
- * Budget (measured, see stationLayout.ts STATION_TRI_PLAN): 53 draw
- * calls / 246,056 visible tris worst case — inside the internal
- * targets (≤64 / ≤500k). If an asset's merge fails, the asset is
- * OMITTED rather than shipped unmerged over budget.
+ * Budget (measured, see stationLayout.ts STATION_TRI_PLAN): 64 draw
+ * calls / 248,900 visible tris worst case — exactly at the internal
+ * call target (≤64 / ≤500k). The population increment (+10 calls,
+ * +2,096 tris) spent the last spare call the harbor controller left:
+ * the plan is AT the line, not under it — recorded plainly, not
+ * hidden. If an asset's merge fails, the asset is OMITTED rather
+ * than shipped unmerged over budget.
  */
 export interface StationScene {
   group: THREE.Group;
@@ -116,6 +135,15 @@ const DOCKED_FORWARD_LENGTHS: Record<string, number> = {
   craft_racer: 8,
 };
 
+/** Low-poly docked ships (population increment): the same scale ladder
+ *  as the Kenney docked ships — 8–10 long beside the 420-unit wheel. */
+const LOWPOLY_DOCKED_FORWARD_LENGTHS: Record<string, number> = {
+  rocket_classic: 10,
+  rocket_shuttle: 9,
+  lander_pod: 10,
+  space_capsule: 8,
+};
+
 /** Docking cycle (Q3, B-4): a presentation-only ambient animation.
  *  One shuttle eases from its lane onto arm 2, holds, eases back,
  *  and waits — no persistent state, no schedules, no simulated users.
@@ -141,6 +169,20 @@ const lerp3 = (
   a[1] + (b[1] - a[1]) * f,
   a[2] + (b[2] - a[2]) * f,
 ];
+
+/** Scale a loaded model so its longest side is `size`, recentered on its bounding-box center. */
+function fitToSize(root: THREE.Object3D, size: number): void {
+  const box = new THREE.Box3().setFromObject(root);
+  const extents = box.getSize(new THREE.Vector3());
+  const longest = Math.max(extents.x, extents.y, extents.z);
+  if (!Number.isFinite(longest) || longest <= 0) return;
+  const scale = size / longest;
+  root.scale.setScalar(scale);
+  root.updateWorldMatrix(true, true);
+  const scaled = new THREE.Box3().setFromObject(root);
+  const center = scaled.getCenter(new THREE.Vector3());
+  root.position.sub(center);
+}
 
 export interface DockingPose {
   position: [number, number, number];
@@ -286,6 +328,31 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
   station.add(workLights);
 
   group.add(buildHygStarfield());
+
+  // --- Distant backdrop planets (EVE-style, 2026-10-27): the lava
+  // planet and a Quaternius planet, 4,000 units out at ~7° elevation,
+  // ~180° apart — the slow orbit never brings the camera closer than
+  // ~3,400, so they loom and never arrive. Loaded as-is, fitted to
+  // their placed size; a holder stays empty until its GLB lands.
+  for (const planet of STATION_BACKDROP_PLANETS) {
+    const holder = new THREE.Group();
+    holder.name = `backdrop-${planet.key}`;
+    holder.position.set(
+      Math.cos(planet.angle) * planet.distance,
+      planet.y,
+      Math.sin(planet.angle) * planet.distance,
+    );
+    group.add(holder);
+    void loadStationAsset(planet.url).then((loaded) => {
+      if (!loaded || disposed) {
+        if (loaded) disposeObject3D(loaded);
+        return;
+      }
+      fitToSize(loaded, planet.size);
+      loaded.name = `backdrop-${planet.key}-model`;
+      holder.add(loaded);
+    });
+  }
 
   // --- Real traffic (P2-6): one InstancedMesh per model, two ships
   // per lane. The procedural boxes below are the LOAD fallback only.
@@ -508,6 +575,149 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
         instanced.instanceMatrix.needsUpdate = true;
       });
     });
+  }
+
+  // --- Low-poly docked ships (population increment): four more
+  // moored craft at the new spots (arms 1 and 3, lateral ±20) — one
+  // InstancedMesh per model, merged to one material, each at its own
+  // spot from the layout (spot i ↔ model i). The moorings stay empty
+  // until their GLBs land — no faked ships.
+  {
+    LOWPOLY_DOCKED_MODELS.forEach((model, modelIndex) => {
+      void loadStationAsset(model.url).then((loaded) => {
+        if (!loaded || disposed) {
+          if (loaded) disposeObject3D(loaded);
+          return;
+        }
+        const merged = mergeToSingleMaterial(loaded, STATION_PALETTE.hullGunmetal);
+        if (!merged) return;
+        const target = LOWPOLY_DOCKED_FORWARD_LENGTHS[model.key] ?? 10;
+        const scale = scaleToForward(merged.geometry, target);
+        const instanced = new THREE.InstancedMesh(merged.geometry, merged.material, model.instances);
+        instanced.name = `docked-lowpoly-${model.key}`;
+        station.add(instanced);
+        const spot = LOWPOLY_DOCKED_SPOTS[modelIndex];
+        if (!spot) return;
+        const angle = (spot.arm / 4) * Math.PI * 2;
+        const pose = dockedPoseAt(222, angle, spot.lateral);
+        dummy.position.set(pose.position[0], pose.position[1], pose.position[2]);
+        dummy.rotation.set(0, pose.rotationY, 0);
+        dummy.scale.setScalar(scale);
+        dummy.updateMatrix();
+        instanced.setMatrixAt(0, dummy.matrix);
+        instanced.instanceMatrix.needsUpdate = true;
+      });
+    });
+  }
+
+  // --- Low-poly dressing (population increment): five Station Kit
+  // pieces, one instance each, set between the existing dressing
+  // clusters (the layout's spots), attached to the Station so they
+  // turn with it. Merged to one material each.
+  {
+    const spots = lowPolyDressingSpots(LOWPOLY_DRESSING_MODELS.length);
+    LOWPOLY_DRESSING_MODELS.forEach((model, modelIndex) => {
+      void loadStationAsset(model.url).then((loaded) => {
+        if (!loaded || disposed) {
+          if (loaded) disposeObject3D(loaded);
+          return;
+        }
+        const merged = mergeToSingleMaterial(loaded, STATION_PALETTE.hullGunmetal);
+        if (!merged) return;
+        const instanced = new THREE.InstancedMesh(merged.geometry, merged.material, model.instances);
+        instanced.name = `dressing-lowpoly-${model.key}`;
+        station.add(instanced);
+        const spot = spots[modelIndex];
+        if (!spot) return;
+        dummy.position.set(
+          Math.cos(spot.angle) * spot.radius,
+          spot.y,
+          Math.sin(spot.angle) * spot.radius,
+        );
+        dummy.rotation.set(0, spot.rotationY, 0);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        instanced.setMatrixAt(0, dummy.matrix);
+        instanced.instanceMatrix.needsUpdate = true;
+      });
+    });
+  }
+
+  // --- Drydock gantry witness (population increment): the launch
+  // tower stands beside the drydock frame, merged to one material,
+  // scaled to a 12-unit height so it reads as a gantry at Station
+  // scale. The berth stays empty until the GLB lands.
+  {
+    void loadStationAsset(LOWPOLY_GANTRY.url).then((loaded) => {
+      if (!loaded || disposed) {
+        if (loaded) disposeObject3D(loaded);
+        return;
+      }
+      const merged = mergeToSingleMaterial(loaded, STATION_PALETTE.hullGunmetal);
+      if (!merged) return;
+      recenterGeometry(merged.geometry);
+      scaleGeometryToSize(merged.geometry, 12);
+      const gantry = new THREE.Mesh(merged.geometry, merged.material);
+      gantry.name = "witness-drydock-gantry";
+      gantry.position.set(
+        LOWPOLY_GANTRY_POSITION[0],
+        LOWPOLY_GANTRY_POSITION[1],
+        LOWPOLY_GANTRY_POSITION[2],
+      );
+      gantry.rotation.y = 0.6; // aligned with the drydock frame's hangar
+      group.add(gantry);
+    });
+  }
+
+  // --- Annex clusters (hunt #2): three whole packs as settlements on
+  // the far side of the dressing band — the Lunar Annex, the Colony
+  // Ring, and the Station Stores. Each pack merges to ONE material and
+  // ONE call; the merged mesh rides the `station` group, so it turns
+  // with the Station. A cluster whose models have not all landed is
+  // omitted whole — never half a settlement — and the failure is
+  // registered the same way.
+  {
+    for (const cluster of STATION_CLUSTERS) {
+      const position = STATION_CLUSTER_POSITIONS.find((p) => p.key === cluster.key);
+      if (!position) continue;
+      const holder = new THREE.Group();
+      holder.name = `annex-${cluster.key}`;
+      const [px, py, pz] = stationClusterPosition(position);
+      holder.position.set(px, py, pz);
+      station.add(holder);
+      void Promise.all(cluster.models.map((m) => loadStationAsset(m.url))).then((loaded) => {
+        if (disposed) {
+          for (const root of loaded) if (root) disposeObject3D(root);
+          return;
+        }
+        const entries: {
+          root: THREE.Object3D;
+          offset: readonly [number, number];
+          size: number;
+        }[] = [];
+        for (let i = 0; i < cluster.models.length; i++) {
+          const model = cluster.models[i];
+          const root = loaded[i];
+          if (!model || !root) {
+            // Not all models landed: omit the settlement whole.
+            noteModelFallback(`annex-${cluster.key}`);
+            return;
+          }
+          entries.push({
+            root,
+            offset: clusterModelOffset(i, cluster.models.length),
+            size: model.size,
+          });
+        }
+        const merged = mergeClusterToSingleMaterial(entries, STATION_PALETTE.hullGunmetal);
+        if (!merged) {
+          noteModelFallback(`annex-${cluster.key}`);
+          return;
+        }
+        merged.name = `annex-model-${cluster.key}`;
+        holder.add(merged);
+      });
+    }
   }
 
   // --- Witnesses (C1): the hauler and the drydock frame sit just off

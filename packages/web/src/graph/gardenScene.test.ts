@@ -1,10 +1,40 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { buildGardenLayout } from "./gardenLayout.js";
+import { GARDEN_BACKDROP_DRAW_CALLS, GARDEN_BACKDROP_PLANETS, GARDEN_BACKDROP_TRIS_TOTAL } from "./gardenAssets.js";
+import { buildGardenLayout, GARDEN_BUDGET } from "./gardenLayout.js";
 import { createGardenScene } from "./gardenScene.js";
 import type { GraphData, Journey } from "@brain/shared";
 
 const NOW = new Date("2026-10-24T12:00:00");
+
+/** Draw calls: every object that draws (meshes, instanced meshes, points, lines, sprites). */
+function countDrawCalls(group: THREE.Group): number {
+  let calls = 0;
+  group.traverse((o) => {
+    const anyO = o as THREE.Mesh & THREE.InstancedMesh & THREE.Points & THREE.Line & THREE.Sprite;
+    if (anyO.isMesh || anyO.isInstancedMesh || anyO.isPoints || anyO.isLine || anyO.isSprite) calls++;
+  });
+  return calls;
+}
+
+/** Triangle estimate: indexed geometry counts × instance count; sprites count 2 each. */
+function estimateTris(group: THREE.Group): number {
+  let tris = 0;
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh || (mesh as unknown as THREE.InstancedMesh).isInstancedMesh) {
+      const geo = mesh.geometry as THREE.BufferGeometry;
+      const per = (geo.index ? geo.index.count : geo.getAttribute("position")!.count) / 3;
+      const instances = (mesh as unknown as THREE.InstancedMesh).isInstancedMesh
+        ? (mesh as unknown as THREE.InstancedMesh).count
+        : 1;
+      tris += per * instances;
+    } else if ((o as THREE.Sprite).isSprite) {
+      tris += 2;
+    }
+  });
+  return Math.round(tris);
+}
 
 const layout = buildGardenLayout(
   {
@@ -104,5 +134,32 @@ describe("garden scene (P3-1)", () => {
     expect(() => scene.dispose()).not.toThrow();
     expect(() => scene.dispose()).not.toThrow();
     expect(() => scene.update(3000)).not.toThrow(); // no-op after dispose
+  });
+
+  it("the EVE-style backdrop planets hang 4,000 out — holders exist, empty until their GLBs land", () => {
+    const scene = createGardenScene(layout);
+    for (const planet of GARDEN_BACKDROP_PLANETS) {
+      const holder = scene.group.getObjectByName(`backdrop-${planet.key}`) as THREE.Group;
+      expect(holder).toBeTruthy();
+      expect(holder.children.length).toBe(0);
+      expect(Math.hypot(holder.position.x, holder.position.z)).toBeCloseTo(4000, 5);
+      expect(holder.position.y).toBe(500);
+    }
+    scene.dispose();
+  });
+
+  it("the recipe budget holds with the backdrop planets in — calls and tris, not just constants", () => {
+    const scene = createGardenScene(layout);
+    // The GLBs load async, so the built group holds the procedural
+    // scene only; the manifest's measured cost is added here, so the
+    // budget assertion covers the scene as the user actually sees it
+    // once the planets have landed (5 calls / 63,334 tris).
+    expect(countDrawCalls(scene.group) + GARDEN_BACKDROP_DRAW_CALLS).toBeLessThanOrEqual(
+      GARDEN_BUDGET.maxDrawCalls,
+    );
+    expect(estimateTris(scene.group) + GARDEN_BACKDROP_TRIS_TOTAL).toBeLessThanOrEqual(
+      GARDEN_BUDGET.maxTris,
+    );
+    scene.dispose();
   });
 });

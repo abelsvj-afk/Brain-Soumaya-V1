@@ -13,7 +13,13 @@ describe("WorldCredits", () => {
   it("renders every registered credit", () => {
     render(<WorldCredits />);
     for (const c of WORLD_CREDITS) {
-      expect(screen.getByText(new RegExp(c.asset.split("—")[0]!.trim().slice(0, 12)))).toBeTruthy();
+      // Anchored to the start of the heading: an unanchored match would
+      // also catch a credit BODY that mentions the same word (the
+      // Sketchfab body says "Scale centerpieces", and the Scale heading
+      // is just "Scale" — /Scale/ matches both).
+      const prefix = c.asset.split("—")[0]!.trim().slice(0, 12);
+      const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      expect(screen.getByText(new RegExp(`^${escaped}`))).toBeTruthy();
     }
   });
 
@@ -21,5 +27,13 @@ describe("WorldCredits", () => {
     render(<WorldCredits />);
     expect(screen.getByText(/International Space Station/)).toBeTruthy();
     expect(screen.getByText(/NASA 3D Resources, public domain/)).toBeTruthy();
+  });
+
+  it("credits the Low Poly Space Pack and the FlexUnit UFO (population increment)", () => {
+    render(<WorldCredits />);
+    expect(screen.getByText(/Low Poly Space Pack — reodesuxz/)).toBeTruthy();
+    expect(screen.getByText(/no attribution required/)).toBeTruthy();
+    expect(screen.getByText(/^FlexUnit UFO/)).toBeTruthy();
+    expect(screen.getByText(/by FlexUnit, CC0/)).toBeTruthy();
   });
 });

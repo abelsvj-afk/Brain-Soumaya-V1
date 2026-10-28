@@ -1,9 +1,17 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { buildHygStarfield } from "./hygStars.js";
-import { QUIET_ARCHIVE_FORMS, QUIET_ARCHIVE_PALETTE, QUIET_ARCHIVE_SEED } from "./quietArchiveAssets.js";
+import {
+  QUIET_ARCHIVE_ARTIFACT,
+  QUIET_ARCHIVE_BACKDROP_PLANETS,
+  QUIET_ARCHIVE_FORMS,
+  QUIET_ARCHIVE_PALETTE,
+  QUIET_ARCHIVE_SEED,
+  loadQuietArchiveAsset,
+} from "./quietArchiveAssets.js";
 import {
   QUIET_ARCHIVE_EMPTY_FIELD_RADIUS,
+  quietArchiveSputnikPosition,
   type QuietArchiveLayout,
   type QuietArchiveLightForm,
 } from "./quietArchiveLayout.js";
@@ -26,9 +34,9 @@ import {
  *
  * Draw-call sketch (recipe ceiling 60): ground 1 · ground ring 1 ·
  * threshold 3 · lamps 1 · lamp glows 1 · lights ≤4 (one instanced mesh
- * per form) · bridges 1 · motes 1 · HYG sky 1 = ≤14. Runtime measurement
- * belongs to the device check (C4's measured half); these constants are
- * the static half.
+ * per form) · bridges 1 · motes 1 · HYG sky 1 · first artifact 2
+ * (Sputnik, both materials) = ≤16. Runtime measurement belongs to the
+ * device check (C4's measured half); these constants are the static half.
  *
  * Rest is structural here: the scene has no state for decline. Every
  * lamp carries the same light; a quiet cluster is a resting person,
@@ -124,6 +132,20 @@ const FORM_GEOMETRY: Record<QuietArchiveLightForm, () => THREE.BufferGeometry> =
   thread: () => new THREE.ConeGeometry(QUIET_ARCHIVE_FORMS.thread.radius, 6, 5),
   gathering: () => new THREE.TorusGeometry(QUIET_ARCHIVE_FORMS.gathering.radius, 1, 6, 12),
 };
+
+/** Scale a loaded model so its longest side is `size`, recentered on its bounding-box center. */
+function fitToSize(root: THREE.Object3D, size: number): void {
+  const box = new THREE.Box3().setFromObject(root);
+  const extents = box.getSize(new THREE.Vector3());
+  const longest = Math.max(extents.x, extents.y, extents.z);
+  if (!Number.isFinite(longest) || longest <= 0) return;
+  const scale = size / longest;
+  root.scale.setScalar(scale);
+  root.updateWorldMatrix(true, true);
+  const scaled = new THREE.Box3().setFromObject(root);
+  const center = scaled.getCenter(new THREE.Vector3());
+  root.position.sub(center);
+}
 
 export function createQuietArchiveScene(layout: QuietArchiveLayout): QuietArchiveScene {
   const group = new THREE.Group();
@@ -302,6 +324,54 @@ export function createQuietArchiveScene(layout: QuietArchiveLayout): QuietArchiv
       bridges.name = "bridges";
       group.add(bridges);
     }
+  }
+
+  // The first artifact (population increment): Sputnik 1, the first
+  // human-made thing ever put up there, resting in its alcove by the
+  // arrival edge. Loaded as-is — both materials, 2 calls. The alcove
+  // stays empty until the GLB lands; a failed load leaves it empty
+  // and notes the failure, never a stand-in.
+  {
+    const spot = quietArchiveSputnikPosition(fieldRadius);
+    const holder = new THREE.Group();
+    holder.name = "artifact-sputnik";
+    holder.position.set(spot.x, spot.y, spot.z);
+    group.add(holder);
+    void loadQuietArchiveAsset(QUIET_ARCHIVE_ARTIFACT.url).then((loaded) => {
+      if (!loaded) return;
+      if (disposed) {
+        disposeObject3D(loaded);
+        return;
+      }
+      fitToSize(loaded, QUIET_ARCHIVE_ARTIFACT.size);
+      loaded.name = "artifact-sputnik-model";
+      holder.add(loaded);
+    });
+  }
+
+  // Distant backdrop planets (EVE-style, 2026-10-27): a dim ember in
+  // the quiet dark, 4,000 units out — the slow orbit never brings the
+  // camera closer than ~3,300, so it looms and never arrives. Loaded
+  // as-is; the holder stays empty until its GLB lands.
+  for (const planet of QUIET_ARCHIVE_BACKDROP_PLANETS) {
+    const holder = new THREE.Group();
+    holder.name = `backdrop-${planet.key}`;
+    holder.position.set(
+      Math.cos(planet.angle) * planet.distance,
+      planet.y,
+      Math.sin(planet.angle) * planet.distance,
+    );
+    group.add(holder);
+    void loadQuietArchiveAsset(planet.url).then((loaded) => {
+      if (!loaded) return;
+      if (disposed) {
+        disposeObject3D(loaded);
+        return;
+      }
+      fitToSize(loaded, planet.size);
+      loaded.name = `backdrop-${planet.key}-model`;
+      holder.add(loaded);
+    });
   }
 
   // Faint cool motes: the air above the field, barely there — atmosphere,

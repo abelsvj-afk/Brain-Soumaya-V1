@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { buildHygStarfield } from "./hygStars.js";
-import { PEOPLE_FORMS, PEOPLE_HEARTH, PEOPLE_PALETTE } from "./peopleAssets.js";
+import { PEOPLE_BACKDROP_PLANETS, PEOPLE_FORMS, PEOPLE_HEARTH, PEOPLE_PALETTE, loadPeopleAsset } from "./peopleAssets.js";
 import {
   PEOPLE_FIELD_RADIUS,
   PEOPLE_SEED,
@@ -108,6 +108,20 @@ interface LightOrbit {
   speed: number;
   /** Date and gathering rings lie flat; memory spheres and thread cones stand. */
   flat: boolean;
+}
+
+/** Scale a loaded model so its longest side is `size`, recentered on its bounding-box center. */
+function fitToSize(root: THREE.Object3D, size: number): void {
+  const box = new THREE.Box3().setFromObject(root);
+  const extents = box.getSize(new THREE.Vector3());
+  const longest = Math.max(extents.x, extents.y, extents.z);
+  if (!Number.isFinite(longest) || longest <= 0) return;
+  const scale = size / longest;
+  root.scale.setScalar(scale);
+  root.updateWorldMatrix(true, true);
+  const scaled = new THREE.Box3().setFromObject(root);
+  const center = scaled.getCenter(new THREE.Vector3());
+  root.position.sub(center);
 }
 
 const FORM_GEOMETRY: Record<PeopleLightForm, () => THREE.BufferGeometry> = {
@@ -306,6 +320,32 @@ export function createPeopleScene(layout: PeopleLayout): PeopleScene {
   starMat.transparent = true;
   starMat.opacity = 0.2;
   group.add(stars);
+
+  // Distant backdrop planets (EVE-style, 2026-10-27): Earth and Moon —
+  // home, far away — and a Quaternius planet, 4,000 units out at ~7°
+  // elevation, ~180° apart. The slow orbit never brings the camera
+  // closer than ~3,300, so they loom and never arrive. Loaded as-is;
+  // a holder stays empty until its GLB lands.
+  for (const planet of PEOPLE_BACKDROP_PLANETS) {
+    const holder = new THREE.Group();
+    holder.name = `backdrop-${planet.key}`;
+    holder.position.set(
+      Math.cos(planet.angle) * planet.distance,
+      planet.y,
+      Math.sin(planet.angle) * planet.distance,
+    );
+    group.add(holder);
+    void loadPeopleAsset(planet.url).then((loaded) => {
+      if (!loaded) return;
+      if (disposed) {
+        disposeObject3D(loaded);
+        return;
+      }
+      fitToSize(loaded, planet.size);
+      loaded.name = `backdrop-${planet.key}-model`;
+      holder.add(loaded);
+    });
+  }
 
   // Amber-warm light on dark: the hearths do the warming; the ambient is
   // low and calm, one warm point light holds the field's center.

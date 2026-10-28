@@ -39,7 +39,7 @@ function names(group: THREE.Group): Set<string> {
 }
 
 describe("createScaleScene", () => {
-  it("renders the whole space synchronously: truss, stars, asteroids, frame, capsule, probe holders", () => {
+  it("renders the whole space synchronously: truss, stars, belt positions, frame, capsule, probe/planet/moon/encounter holders", () => {
     const scene = createScaleScene(buildScaleLayout());
     const n = names(scene.group);
     expect(n.has("scale")).toBe(true);
@@ -49,11 +49,55 @@ describe("createScaleScene", () => {
     // model loads — the Profondo pattern.
     expect(n.has("iss-fallback")).toBe(true);
     expect(n.has("iss-fallback-truss")).toBe(true);
-    expect(n.has("named-asteroids")).toBe(true);
+    // The points layer is gone: the named asteroids are real instanced
+    // bodies now (belts load async), not points.
+    expect(n.has("named-asteroids")).toBe(false);
     expect(n.has("gate-scale-survey-frame")).toBe(true);
     expect(n.has("docked-capsule")).toBe(true);
     for (const slug of ["kepler", "pioneer-10", "dawn", "voyager"]) {
       expect(n.has(`probe-${slug}`)).toBe(true);
+    }
+    // Planets, moon + outpost, encounters, and the debris satellite all
+    // get holders synchronously; the GLBs land into them async.
+    for (const key of [
+      "planet_earth",
+      "planet_mars",
+      "planet_jupiter",
+      "planet_saturn",
+      "quaternius-planet-1",
+      "quaternius-planet-2",
+      "quaternius-planet-3",
+      "planets-set",
+      "earth-and-moon",
+      "pixel-brown-dwarf",
+      "sun",
+      "stars",
+    ]) {
+      expect(n.has(`planet-${key}`)).toBe(true);
+    }
+    expect(n.has("moon")).toBe(true);
+    expect(n.has("moon-outpost-dome")).toBe(true);
+    expect(n.has("moon-outpost-rover")).toBe(true);
+    expect(n.has("moon-outpost-flag")).toBe(true);
+    for (const key of ["alien", "astronaut", "flexunit-ufo", "ufo", "hubble", "pulsar"]) {
+      expect(n.has(`encounter-${key}`)).toBe(true);
+    }
+    expect(n.has("satellite-a")).toBe(true);
+    // Hunt #2: belt pieces and centerpieces all get holders
+    // synchronously too (the nebula planes' meshes arrive with their
+    // textures, async, and never block the scene).
+    for (const key of [
+      "belt-strip",
+      "bennu",
+      "asteroid-large",
+      "debris-pile",
+      "asteroid-toastie",
+      "rubble-rocks",
+    ]) {
+      expect(n.has(`belt-piece-${key}`)).toBe(true);
+    }
+    for (const key of ["black-hole", "pillars-1b", "g292", "gas-cloud", "planetary-nebula", "sf-black-hole"]) {
+      expect(n.has(`centerpiece-${key}`)).toBe(true);
     }
     // The true sky: the HYG starfield, at full strength.
     expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(true);
@@ -92,6 +136,35 @@ describe("createScaleScene", () => {
     const before = holder.position.clone();
     scene.update(200_000, { reducedMotion: true });
     expect(holder.position.equals(before)).toBe(true);
+    scene.dispose();
+  });
+
+  it("the moon drifts and its outpost rides with it; reduced motion holds both still", () => {
+    const scene = createScaleScene(buildScaleLayout());
+    const moon = scene.group.getObjectByName("moon")!;
+    const dome = scene.group.getObjectByName("moon-outpost-dome")!;
+    // The outpost is a child of the moon holder, at its layout offset —
+    // so it rides with the moon by construction, not by a second drift.
+    expect(dome.parent).toBe(moon);
+    const at0 = moon.position.clone();
+    scene.update(100_000);
+    expect(moon.position.equals(at0)).toBe(false);
+    const before = moon.position.clone();
+    scene.update(200_000, { reducedMotion: true });
+    expect(moon.position.equals(before)).toBe(true);
+    scene.dispose();
+  });
+
+  it("encounters and the debris satellite drift on their own vectors", () => {
+    const scene = createScaleScene(buildScaleLayout());
+    const alien = scene.group.getObjectByName("encounter-alien")!;
+    const at0 = alien.position.clone();
+    scene.update(100_000);
+    expect(alien.position.equals(at0)).toBe(false);
+    const satellite = scene.group.getObjectByName("satellite-a")!;
+    const sat0 = satellite.position.clone();
+    scene.update(150_000);
+    expect(satellite.position.equals(sat0)).toBe(false);
     scene.dispose();
   });
 
