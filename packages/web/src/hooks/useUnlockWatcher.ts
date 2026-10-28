@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { unlockedItems, type UnlockStats, type UnlockableItem } from "@brain/shared";
+import { celebratableItems, type UnlockStats, type UnlockableItem } from "@brain/shared";
 import { loadSeenUnlockIds, saveSeenUnlockIds } from "../components/unlockables.js";
 
 /**
@@ -16,6 +16,9 @@ import { loadSeenUnlockIds, saveSeenUnlockIds } from "../components/unlockables.
  *    that set forever, so a stats dip and recovery never re-fires it.
  *    (The pure prev-vs-next diff the shared package exposes for tests and
  *    other consumers is `newlyUnlocked(prevStats, nextStats)`.)
+ *  - The celebrated set is the Hangar-counted set (REG-177/HN-03):
+ *    `celebratableItems` excludes the scenery twins, so one physical
+ *    asset produces one celebration, never two.
  *  - The FIRST evaluation for a brain whose celebrated set is empty seeds
  *    that set silently with everything already unlocked — a returning
  *    pilot is never spammed with a backlog of celebrations (the same
@@ -42,7 +45,7 @@ export function useUnlockWatcher(args: {
   useEffect(() => {
     if (!stats || !spaceId) return;
     const opts = { devUnlockAll };
-    const nowUnlocked = unlockedItems(stats, opts);
+    const nowUnlocked = celebratableItems(stats, opts);
     const nowIds = new Set(nowUnlocked.map((i) => i.id));
 
     if (seededForRef.current !== spaceId) {

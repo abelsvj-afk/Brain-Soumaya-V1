@@ -542,6 +542,12 @@ body,
 .mini:disabled {
   opacity: 0.6;
 }
+/* REG-179/HN-05: Hangar action buttons meet the program's 46px touch
+   standard while keeping their captions (`.mini` alone is ~26px tall). */
+.mini.hangar-action {
+  min-height: 46px;
+  padding: 10px 14px;
+}
 .insights {
   list-style: none;
   padding: 0;
@@ -2974,9 +2980,14 @@ button {
   border: 1px solid var(--glass-border);
   color: var(--text);
   border-radius: 4px;
-  width: 22px;
-  height: 22px;
-  font-size: 9px;
+  /* REG-168/SF-03: the old 22px glyph-only targets were far under the
+     program's 46px touch standard — sized up (the captions are the
+     aria-labels: "Move … up/down in priority"). */
+  min-width: 46px;
+  min-height: 46px;
+  width: 46px;
+  height: 46px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;

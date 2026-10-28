@@ -206,3 +206,45 @@ export function saveSeenUnlockIds(spaceId: string, ids: Iterable<string>): void 
     /* storage unavailable — celebrations simply re-derive next session */
   }
 }
+
+// ---- "Seen in the Hangar" record (REG-183/HN-09) ---------------------------
+// The Hangar's own "viewed here" record, same device-local pattern as the
+// celebrated set above. An item is NEW in the panel while it is unlocked
+// but not in this set; viewing the panel (or equipping/playing the item)
+// records it, so the mark lasts for that visit and no longer.
+
+/** localStorage key holding the ids this device has already seen in the Hangar for a brain. */
+export function hangarSeenKey(spaceId: string): string {
+  return `brain.hangar.seen.${spaceId}`;
+}
+
+/**
+ * Read the Hangar-seen ids for a brain. On first read (no record yet)
+ * the set is SEEDED from the watcher's celebrated set — the existing
+ * record (REG-183) — so long-owned unlocks don't all read as new on a
+ * first Hangar visit; only items unlocked after that visit (or never
+ * celebrated on this device) show the mark.
+ */
+export function loadHangarSeenIds(spaceId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(hangarSeenKey(spaceId));
+    if (raw === null) {
+      const seeded = loadSeenUnlockIds(spaceId);
+      saveHangarSeenIds(spaceId, seeded);
+      return new Set(seeded);
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Persist the Hangar-seen ids for a brain. */
+export function saveHangarSeenIds(spaceId: string, ids: Iterable<string>): void {
+  try {
+    localStorage.setItem(hangarSeenKey(spaceId), JSON.stringify([...ids]));
+  } catch {
+    /* storage unavailable — "new" marks simply re-derive next session */
+  }
+}

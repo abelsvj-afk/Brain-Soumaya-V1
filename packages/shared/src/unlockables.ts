@@ -428,6 +428,21 @@ export function unlockedItems(stats: UnlockStats, opts?: UnlockOptions): Unlocka
   return UNLOCKABLES.filter((i) => isUnlocked(i, stats, opts));
 }
 
+/**
+ * The items the celebration watcher may celebrate: the SAME set the
+ * Hangar counts (REG-177/HN-03; HangarPanel's IM-97 count). The Dyson
+ * sphere and the black hole each exist twice in the catalog — once as a
+ * figurine, once as scenery — with the same asset and the same rule
+ * ("one asset, two surfaces, ONE rule"); scenery is the figurine seen
+ * from far away, not a second thing to earn, so celebrating it would
+ * celebrate one physical asset twice. Excluding it here keeps the
+ * celebration stream and the Hangar's completeness count in agreement
+ * about how many things exist. No condition or threshold changes.
+ */
+export function celebratableItems(stats: UnlockStats, opts?: UnlockOptions): UnlockableItem[] {
+  return UNLOCKABLES.filter((i) => i.category !== "scenery" && isUnlocked(i, stats, opts));
+}
+
 /** Every catalog item currently locked for these stats, in catalog order. */
 export function lockedItems(stats: UnlockStats, opts?: UnlockOptions): UnlockableItem[] {
   return UNLOCKABLES.filter((i) => !isUnlocked(i, stats, opts));

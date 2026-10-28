@@ -88,6 +88,7 @@ import {
 } from "./components/unlockables.js";
 import { useUnlockWatcher } from "./hooks/useUnlockWatcher.js";
 import { useCodexDiscoveryClaims } from "./components/useCodexDiscoveryClaims.js";
+import { useCelebrationQueue } from "./hooks/useCelebrationQueue.js";
 import { UnlockCelebration } from "./components/UnlockCelebration.js";
 import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
@@ -213,7 +214,15 @@ export default function App() {
   // A full-screen "rank up" celebration moment (not just a quiet toast).
   const [rankUp, setRankUp] = useState<{ title: string; level: number } | null>(null);
   // The "🔓 Unlocked!" celebration moment for the Unlockables system (IM-133).
-  const [unlockMoment, setUnlockMoment] = useState<UnlockableItem | null>(null);
+  // A QUEUE (REG-178/HN-04): several items routinely unlock in one
+  // evaluation, and a single slot collapsed them to the last item's card.
+  // Every item now gets its moment in unlock order; dismissing the head
+  // reveals the next.
+  const {
+    current: unlockMoment,
+    enqueue: enqueueUnlockMoment,
+    dismissCurrent: dismissUnlockMoment,
+  } = useCelebrationQueue();
   const [awayDigest, setAwayDigest] = useState<AwayDigest | null>(null);
   // The Observatory home overlay — fades in once, after the cinematic fly-in settles.
   const [showObs, setShowObs] = useState(false);
@@ -258,6 +267,10 @@ export default function App() {
   // Hangar system equipped states
   const [equippedShip, setEquippedShip] = useState<string>("default");
   const [equippedTrail, setEquippedTrail] = useState<string>("blue");
+  // Trail preview (REG-181/HN-07): a transient, never-persisted trail
+  // override so the Hangar can show a trail in the galaxy before equip.
+  // Cleared by any equip, by a space change, or by Stop preview.
+  const [previewTrail, setPreviewTrail] = useState<string | null>(null);
   const [equippedFig1, setEquippedFig1] = useState<string>("none");
   const [equippedFig2, setEquippedFig2] = useState<string>("none");
   const [showFocusFig1, setShowFocusFig1] = useState<boolean>(true);
@@ -275,6 +288,7 @@ export default function App() {
 
     setEquippedShip(localStorage.getItem(shipKey) || "default");
     setEquippedTrail(localStorage.getItem(trailKey) || "blue");
+    setPreviewTrail(null); // a preview never survives a space change
     setEquippedFig1(localStorage.getItem(fig1Key) || "none");
     setEquippedFig2(localStorage.getItem(fig2Key) || "none");
     setShowFocusFig1(localStorage.getItem(focusFig1Key) !== "false");
@@ -518,7 +532,38 @@ export default function App() {
   // useShipStatusOpen hook in GalaxyHud); the phone default is collapsed
   // after a one-time first-run expanded reveal, desktop starts expanded.
   const [shipStatusOpen, setShipStatusOpen] = useShipStatusOpen(space?.id ?? null);
-  const [shipViewMode, setShipViewMode] = useState<"orbit" | "cockpit">("orbit");
+  // Camera mode persists PER BRAIN like the ship-task label beside it
+  // (REG-171/SF-06 — it used to be a plain useState, so a locked cockpit
+  // camera silently returned to orbit on every reload). Same pattern as
+  // showShipTask above: the old global "ship.view" key is the one-time
+  // fallback for brains that predate the per-brain key.
+  const [shipViewMode, setShipViewModeState] = useState<"orbit" | "cockpit">(() => {
+    try {
+      return localStorage.getItem("ship.view") === "cockpit" ? "cockpit" : "orbit";
+    } catch {
+      return "orbit";
+    }
+  });
+  useEffect(() => {
+    if (!space) return;
+    try {
+      const v = localStorage.getItem(`ship.view.${space.id}`) ?? localStorage.getItem("ship.view");
+      setShipViewModeState(v === "cockpit" ? "cockpit" : "orbit");
+    } catch {
+      /* private mode */
+    }
+  }, [space?.id]);
+  const setShipViewMode = useCallback(
+    (v: "orbit" | "cockpit") => {
+      setShipViewModeState(v);
+      try {
+        localStorage.setItem(space ? `ship.view.${space.id}` : "ship.view", v);
+      } catch {
+        /* private mode */
+      }
+    },
+    [space?.id],
+  );
   const [tasks, setTasks] = useState<any[]>([]);
   const handleReorderTasks = useCallback((newOrder: any[]) => {
     graphRef.current?.reorderTasks(newOrder);
@@ -816,6 +861,18 @@ export default function App() {
       }
     },
     [followStation, followFig1, followFig2],
+  );
+  // Hangar trail preview (REG-181/HN-07): apply the trail transiently
+  // (never written to localStorage) and focus the ship so the trail is
+  // seen in the galaxy. The dock closes, as with any View in galaxy —
+  // the preview banner in the Hangar (on reopen) names the preview and
+  // offers Stop preview / Equip to keep it.
+  const handlePreviewTrail = useCallback(
+    (value: string | null) => {
+      setPreviewTrail(value);
+      if (value) handleViewInGalaxy("ship");
+    },
+    [handleViewInGalaxy],
   );
   // Single click = play/pause; double click = next track (a short timer lets a
   // second click cancel the toggle so a double-click cleanly skips the song).
@@ -1260,7 +1317,7 @@ export default function App() {
     devUnlockAll,
     onUnlock: (item) => {
       playSfx("achievement");
-      setUnlockMoment(item);
+      enqueueUnlockMoment(item);
       pushToast(`🔓 Unlocked! ${item.label} — ${item.description}`, "🔓", 9000, "high");
     },
   });
@@ -1973,6 +2030,7 @@ export default function App() {
 
         setEquippedShip(localStorage.getItem(shipKey) || "default");
         setEquippedTrail(localStorage.getItem(trailKey) || "blue");
+        setPreviewTrail(null); // equipping ends any preview — the real pick now shows
         setEquippedFig1(localStorage.getItem(fig1Key) || "none");
         setEquippedFig2(localStorage.getItem(fig2Key) || "none");
         setShowFocusFig1(localStorage.getItem(focusFig1Key) !== "false");
@@ -2055,7 +2113,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <UnlockCelebration item={unlockMoment} onDismiss={() => setUnlockMoment(null)} />
+      <UnlockCelebration item={unlockMoment} onDismiss={dismissUnlockMoment} />
       {/* Lite mode: a calm static backdrop instead of the WebGL galaxy, so the app is
           fully usable (Mind, chat, memories, tabs) even when the 3D can't render. */}
       {lite && <div className="lite-backdrop" aria-hidden />}
@@ -2175,7 +2233,7 @@ export default function App() {
         shipViewMode={shipViewMode}
         fuel={fuel}
         equippedShip={equippedShip}
-        equippedTrail={equippedTrail}
+        equippedTrail={previewTrail ?? equippedTrail}
         equippedFig1={equippedFig1}
         equippedFig2={equippedFig2}
         spaceId={space?.id ?? ""}
@@ -3208,6 +3266,8 @@ export default function App() {
           onPlayTrack={playSong}
           currentTrackIndex={musicTrack?.index ?? null}
           musicPlaying={music}
+          previewTrail={previewTrail}
+          onPreviewTrail={handlePreviewTrail}
           onAskJourney={(j) => {
             // Phase AC.1 — Journey → Chat: reuses the exact one-shot handoff pattern
             // Phase Y/Z already established for proactiveContext, just keyed by a
