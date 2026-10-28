@@ -205,4 +205,56 @@ describe("FleetDefensePanel", () => {
     );
     expect(screen.getByText(/Cleared — the old argument/)).toBeTruthy();
   });
+
+  it("the practice section labels itself PRACTICE with nothing at stake", async () => {
+    render(<FleetDefensePanel />);
+    await waitFor(() => expect(screen.getByText("Practice in Scale Space")).toBeTruthy());
+    expect(screen.getByText(/PRACTICE — this is only practice/)).toBeTruthy();
+    expect(screen.getByText(/Nothing is at stake here/)).toBeTruthy();
+    expect(screen.getByText(/nothing is cleared, nothing is saved/)).toBeTruthy();
+    expect(screen.getByText("Start a practice round")).toBeTruthy();
+  });
+
+  it("a practice round shows the same board and calls no real-defense api", async () => {
+    render(<FleetDefensePanel />);
+    await waitFor(() => expect(screen.getByText("Start a practice round")).toBeTruthy());
+    fireEvent.click(screen.getByText("Start a practice round"));
+    expect(screen.getByText(/PRACTICE round/)).toBeTruthy();
+    expect(screen.getByText("Quaternius bob — 5 steps out")).toBeTruthy();
+    expect(mockOffer).not.toHaveBeenCalled();
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockTick).not.toHaveBeenCalled();
+  });
+
+  it("a practice win says nothing was cleared or saved — never the codex line", async () => {
+    render(<FleetDefensePanel />);
+    await waitFor(() => expect(screen.getByText("Start a practice round")).toBeTruthy());
+    fireEvent.click(screen.getByText("Start a practice round"));
+    fireEvent.click(screen.getByText("Let Soumaya take this round"));
+    fireEvent.click(screen.getByText("Let Soumaya take this round"));
+    fireEvent.click(screen.getByText("Let Soumaya take this round"));
+    await waitFor(() => expect(screen.getByText(/Practice complete/)).toBeTruthy());
+    expect(screen.getByText(/Nothing was released, nothing was cleared, nothing was saved/)).toBeTruthy();
+    expect(mockTick).not.toHaveBeenCalled();
+  });
+
+  it("a practice loss costs nothing and ends practice cleanly", async () => {
+    render(<FleetDefensePanel />);
+    await waitFor(() => expect(screen.getByText("Start a practice round")).toBeTruthy());
+    fireEvent.click(screen.getByText("Start a practice round"));
+    for (let i = 0; i < 5; i++) fireEvent.click(screen.getByText("Fire lane 1"));
+    await waitFor(() => expect(screen.getByText(/Practice over/)).toBeTruthy());
+    expect(screen.getByText(/Nothing was lost, nothing changed, nothing was saved/)).toBeTruthy();
+    fireEvent.click(screen.getByText("End practice"));
+    expect(screen.getByText("Start a practice round")).toBeTruthy();
+  });
+
+  it("practice is available even when the real defense cannot be reached", async () => {
+    mockGet.mockResolvedValueOnce(null);
+    render(<FleetDefensePanel />);
+    await waitFor(() => expect(screen.getByText(/couldn't be reached/)).toBeTruthy());
+    expect(screen.getByText("Practice in Scale Space")).toBeTruthy();
+    fireEvent.click(screen.getByText("Start a practice round"));
+    expect(screen.getByText(/PRACTICE round/)).toBeTruthy();
+  });
 });
