@@ -350,7 +350,14 @@ export function financeRoutes(ctx: AppContext): Router {
   const PasteBody = z.object({ text: z.string().min(1).max(20000) }).strict();
   r.post("/ingest/paste", async (req, res) => {
     const p = PasteBody.safeParse(req.body);
-    if (!p.success) return bad(res, "Body must be { text }", p.error.issues);
+    if (!p.success) {
+      // REG-232: a length rejection says it is a length rejection and names
+      // the limit — the same class REG-040 fixed on the ingest/working
+      // routes. The old shape message blamed the body's shape for an input
+      // whose only problem was length.
+      const tooLong = p.error.issues.some((i) => i.path[0] === "text" && i.code === "too_big");
+      return bad(res, tooLong ? "Text is too long — the limit is 20,000 characters." : "Body must be { text }", p.error.issues);
+    }
     const out = await ingestPaste(ctx.handle, spaceOf(res), p.data.text);
     res.json(out); // { sourceId, result, sourceTruncated } — nothing committed yet
   });

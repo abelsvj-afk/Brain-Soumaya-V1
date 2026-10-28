@@ -745,6 +745,13 @@ function PasteImport({ onDone }: { onDone: (committed: number) => void }) {
         <>
           <div className="fin-form-title">Type it in your own words, or paste an export</div>
           <textarea className="fin-paste-area" rows={5} placeholder={"e.g.\ngot 44.30 from DoorDash today\nspent 12 at the store\n01/09 rent -600"} value={text} onChange={(e) => setText(e.target.value)} aria-label="Type or paste transactions" />
+          {/* REG-232: the 20,000-character paste cap is visible before submit —
+              a live counter, with a plain warning past the cap instead of a
+              misleading shape error after it (REG-040's shape, mirrored). */}
+          <div className="fin-muted" aria-live="polite">
+            {text.length.toLocaleString()} / 20,000 characters
+            {text.length > 20000 ? " — over the 20,000-character limit; trim it before reading" : ""}
+          </div>
           <div className="fin-muted">One per line. Say where money came from or went, and I'll sort out the amounts — you confirm before anything's added.</div>
           <div className="fin-form-actions">
             <button className="fin-primary" onClick={read} disabled={busy}>{busy ? "Reading…" : "Read"}</button>

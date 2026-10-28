@@ -4143,6 +4143,20 @@ button {
    standard. Scoped to the card row so the edit form's own Save/Cancel
    buttons (inside .mind-edit) are untouched. */
 .mind-card-row > .mini { min-height: 46px; }
+/* Batch R (REG-231): every `.mini` control in the Mind tab meets the 46px
+   round-3 touch standard — the blanket rule covers the whole panel (Hold,
+   Retry ×5, mote actions, add-form Cancel, Clear filters, edit-form
+   Save/Cancel, card Edit/Delete, skill –/+, split/merge toggles, + Link,
+   Merge…/Clear, "+N more", the attachment + Add/Retry, and the confirm
+   dialog's Cancel/confirm), so no control in the tab is left to a scoped
+   rule that can drift. One recorded exception below. */
+.mind-panel .mini { min-height: 46px; }
+/* Batch R (REG-231) — RECORDED SURFACE EXCEPTION: the per-file attachment
+   remove lives inside a dense file-list row; a 46px target there would triple
+   every row's height. It is 32px instead, with a visible "Remove" caption and
+   an accessible name — the same exception shape MIN-08 recorded for the
+   person/goal unlink chip. */
+.mind-panel .att-remove { min-height: 32px; }
 .mind-ws-toggle {
   font-size: 0.62rem;
   padding: 2px 7px;

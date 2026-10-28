@@ -83,7 +83,11 @@ export async function addTimelineChapterResult(
  *  this section without taking down the chapters list.
  *  CHR-11: pages (limit/offset) until the server's totals have arrived, so
  *  beyond the window the band shows the whole story instead of silently
- *  showing the first page. A page that adds nothing ends the loop. */
+ *  showing the first page. A page that adds nothing ends the loop.
+ *  REG-230: pages are deduplicated by id — a stuck server returning the
+ *  same page forever used to accumulate copies (the old no-progress check
+ *  measured raw length, which grew on every repeat), so the loop now ends
+ *  when a page contributes zero NEW rows. */
 export async function getLifeSeasons(): Promise<LifeSeasonsTimeline | null> {
   try {
     const limit = 500; // server max per page
@@ -92,18 +96,23 @@ export async function getLifeSeasons(): Promise<LifeSeasonsTimeline | null> {
     let journeySpans: JourneySpan[] = [];
     let totalSeasons = 0;
     let totalJourneySpans = 0;
+    const seenSeasonIds = new Set<number>();
+    const seenSpanIds = new Set<number>();
     for (;;) {
       const res = await afetch(`${API}/timeline/seasons?limit=${limit}&offset=${offset}`);
       if (!res.ok) return null;
       const d = (await res.json()) as LifeSeasonsTimeline;
       if (!Array.isArray(d?.seasons) || !Array.isArray(d?.journeySpans)) return null;
-      const before = seasons.length + journeySpans.length;
-      seasons = seasons.concat(d.seasons);
-      journeySpans = journeySpans.concat(d.journeySpans);
+      const newSeasons = d.seasons.filter((s) => !seenSeasonIds.has(s.id));
+      const newSpans = d.journeySpans.filter((j) => !seenSpanIds.has(j.journey.id));
+      for (const s of newSeasons) seenSeasonIds.add(s.id);
+      for (const j of newSpans) seenSpanIds.add(j.journey.id);
+      seasons = seasons.concat(newSeasons);
+      journeySpans = journeySpans.concat(newSpans);
       totalSeasons = typeof d.totalSeasons === "number" ? d.totalSeasons : seasons.length;
       totalJourneySpans = typeof d.totalJourneySpans === "number" ? d.totalJourneySpans : journeySpans.length;
       if (seasons.length >= totalSeasons && journeySpans.length >= totalJourneySpans) break;
-      if (seasons.length + journeySpans.length === before) break; // no progress — never spin
+      if (newSeasons.length === 0 && newSpans.length === 0) break; // stuck page — nothing new, never spin
       offset += limit;
     }
     return { seasons, journeySpans, totalSeasons, totalJourneySpans };

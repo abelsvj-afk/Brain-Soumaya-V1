@@ -74,7 +74,11 @@ describe("GH-19 — confirm honesty", () => {
     await waitFor(() =>
       expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Connected ✦"), "🧠", expect.any(Number)),
     );
-    expect(playSfx).toHaveBeenCalledWith("achievement");
+    // REG-226: this inquiry is a plain bridge link (no hub forms, no lens
+    // is created), so the verified celebration is the neutral confirmation,
+    // not the achievement jingle — the jingle is reserved for hub/lens
+    // confirms (pinned in NoticingCard.batchR.test.tsx).
+    expect(playSfx).toHaveBeenCalledWith("complete");
     await waitFor(() => expect(screen.queryByText("Are these two memories connected?")).toBeNull());
   });
 });
