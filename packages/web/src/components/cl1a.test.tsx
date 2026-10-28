@@ -150,7 +150,7 @@ describe("IM-08 Legend", () => {
   it("covers Fuel, streak/shields, motes, ship label, Flashback, Focus, Views-vs-Lens, beacon beam/guard", () => {
     render(<Legend onClose={() => {}} />);
     const text = document.body.textContent ?? "";
-    for (const needle of ["Fuel", "Nebula shields", "MindSpace motes", "Ship task label", "Beacon beam", "Guard", "Flashback", "Focus mode", "Views vs Lens"]) {
+    for (const needle of ["Fuel", "Nebula shields", "MindSpace motes", "Ship task label", "Beacon beam", "Guard", "Flashback", "Calm mode", "Views vs Lens"]) {
       expect(text).toContain(needle);
     }
   });
