@@ -5,6 +5,7 @@ import {
   QUIET_ARCHIVE_CLUSTER_SPACING,
   QUIET_ARCHIVE_EMPTY_FIELD_RADIUS,
   QUIET_ARCHIVE_SEED,
+  quietArchiveSputnikPosition,
 } from "./quietArchiveLayout.js";
 import type { GraphData } from "@brain/shared";
 
@@ -146,6 +147,30 @@ describe("buildQuietArchiveLayout — the resting set", () => {
     for (const spot of layout.relicSpots) {
       expect(Math.hypot(spot.x, spot.z)).toBeLessThanOrEqual(layout.fieldRadius);
     }
+  });
+
+  it("Sputnik rests in its alcove by the arrival edge — beside the threshold, never in it", () => {
+    const layout = buildQuietArchiveLayout(archiveGraph());
+    const spot = quietArchiveSputnikPosition(layout.fieldRadius);
+    // Inside the field, 40 units in from the edge, low (a small bright thing).
+    expect(Math.hypot(spot.x, spot.z)).toBe(layout.fieldRadius - 40);
+    expect(spot.y).toBe(8);
+    // Off the threshold's axis (threshold at angle 0.6, field edge):
+    // more than 100 units from the doorway's center, so it never stands
+    // in the doorway — and clear of the Stillness Seal's relic spot.
+    const threshold = {
+      x: Math.cos(0.6) * (layout.fieldRadius + 10),
+      z: Math.sin(0.6) * (layout.fieldRadius + 10),
+    };
+    expect(Math.hypot(spot.x - threshold.x, spot.z - threshold.z)).toBeGreaterThan(100);
+    const seal = layout.relicSpots.find((s) => s.id === "stillness-seal")!;
+    expect(Math.hypot(spot.x - seal.x, spot.z - seal.z)).toBeGreaterThan(50);
+    // Deterministic from the field radius alone.
+    expect(quietArchiveSputnikPosition(layout.fieldRadius)).toEqual(spot);
+    expect(quietArchiveSputnikPosition(QUIET_ARCHIVE_EMPTY_FIELD_RADIUS).x).toBeCloseTo(
+      Math.cos(1.1) * (QUIET_ARCHIVE_EMPTY_FIELD_RADIUS - 40),
+      5,
+    );
   });
 
   it("no cluster is nearer, larger, or brighter for importance or review strength", () => {

@@ -89,6 +89,7 @@ import {
 import { cameraDepthFromNdc, clampLabelCenter, isPhonePortraitViewport, labelHalfExtentsPx } from "./labelFrame.js";
 import { makeOrbitSystem } from "./orbits.js";
 import { makeVisitors, type VisitorSystem } from "./visitors.js";
+import { createGalaxyDrifters, type GalaxyDrifters } from "./galaxyDrifters.js";
 import { isNodeProcessing, logVisits } from "../api/client.js";
 import { makeSatellites, type SatelliteSystem } from "./satellites.js";
 import { makeTaskSatellites, type TaskSatellites } from "./taskSatellites.js";
@@ -1260,6 +1261,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   let prevShipPos: THREE.Vector3 | null = null;
   const shipPanScratch = new THREE.Vector3(); // IM-135: ship screen-x projection for engine stereo pan
   let visitors: VisitorSystem | null = null;
+  let galaxyDrifters: GalaxyDrifters | null = null;
   let satellites: SatelliteSystem | null = null;
   let taskSatellites: TaskSatellites | null = null; // IM-140a: completed-task satellites
   let subAgents: SubAgentSystem | null = null;
@@ -1539,6 +1541,12 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       });
       visitorsRef.current = visitors;
       scene.add(visitors.group);
+      // Galaxy drifters (population increment refinement): four benign
+      // visitors on slow bounded paths — NOT the visitors system above
+      // (those visit memories; these never do) and NOT the fleet's
+      // hostile drifters. No labels, no clicks, no visits.
+      galaxyDrifters = createGalaxyDrifters();
+      scene.add(galaxyDrifters.group);
       satellites = makeSatellites();
       satellitesRef.current = satellites;
       scene.add(satellites.group);
@@ -1553,6 +1561,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // simulation change), matching every other diagnostic category's approach.
       if (diag.enabled && !diag.aux) {
         visitors.group.visible = false;
+        galaxyDrifters.group.visible = false;
         satellites.group.visible = false;
         subAgents.group.visible = false;
       }
@@ -2167,6 +2176,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           ? { beaconedIds: satellites.getBeaconedIds(), positions: satellites.getPositions() }
           : undefined,
       );
+      // Galaxy drifters: slow bounded visitors on their own paths —
+      // calm motion (prefers-reduced-motion / focus mode) holds them
+      // still, like the worlds' reduced motion. They are not visitors
+      // (no memory visits) and not fleet drifters (no interception).
+      galaxyDrifters?.update(nowMs, { reducedMotion: calmMotionRef.current });
       // Tell React how many beacons are live, so the focus button can pulse.
       // Tell React how many beacons are live, so the focus button can pulse.
       if (satellites) {

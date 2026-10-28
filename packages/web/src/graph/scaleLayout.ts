@@ -16,8 +16,11 @@
  *   with the ship, the traveler's own act. This layout therefore takes no
  *   graph input: the space is the same for every traveler, every visit.
  * - The sky is true: HYG stars (already built, P2-3) + real named
- *   asteroids. No nebula planes, no fog — distance reads through witness
- *   objects and the approach stages, not through haze.
+ *   asteroids. No fog — distance reads through witness objects and the
+ *   approach stages, not through haze. (Nebula planes: the Rev 123
+ *   "no nebula planes" line was overridden by the owner on 2026-10-27 —
+ *   three OGA renders as distant light only, far outside the orbit,
+ *   never a body, never fog. See SCALE_NEBULA_PLANES.)
  * - The approach is felt in sequence: far silhouette → middle witnesses
  *   → near 1:1, the station overfilling the view at closest approach.
  *   The approach is gently curved, never a sterile straight line; the
@@ -65,8 +68,16 @@
 
 export const SCALE_SEED = "scale / actual-size-1";
 
-/** Recipe budget (R-C4 allocation): planned ceilings, asserted statically. */
-export const SCALE_BUDGET = { maxDrawCalls: 90, maxTris: 500_000 } as const;
+/** Recipe budget (R-C4 allocation): planned ceilings, asserted statically.
+ * The call ceiling moved 90 → 100 for the Sketchfab long game
+ * (2026-10-27): ten calls buy the three signature animated pieces the
+ * owner downloaded himself — the Planetary Nebula (4 materials, kept
+ * as-is so its emissive layers survive), the Sketchfab black hole (4
+ * materials, transmission disk kept), and the pulsar (2 materials,
+ * unlit glow kept). The tri ceiling is the hard guard and still holds:
+ * 450,484 of 500,000. No honest saving existed elsewhere — every
+ * existing call is a merged single or a kept color. */
+export const SCALE_BUDGET = { maxDrawCalls: 100, maxTris: 500_000 } as const;
 
 /** Her ship's length in scene units (Station + transit scenes) — the yardstick Scale measures against. */
 export const SCALE_SHIP_LENGTH = 12;
@@ -164,6 +175,202 @@ export const SCALE_CAPSULE = {
   /** Total length, in scene units — a capsule about two-thirds of a ship-length. */
   length: 8,
 } as const;
+
+export interface ScalePlanet {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units — all smaller than the 109-unit ISS truss. */
+  size: number;
+  /** Material count of the file (= draw calls when loaded as-is, colors kept). */
+  materials: number;
+}
+
+/**
+ * Planets as floating bodies (population increment, 2026-10-27) — loaded
+ * as-is, colors kept. Deterministic seed positions, clear of the ISS
+ * (truss half-span 54.5), the survey frame, the probe lanes, and the
+ * relic anchors (verified by the layout test's clearance assertions).
+ */
+export const SCALE_PLANETS: readonly ScalePlanet[] = [
+  { key: "planet_earth", name: "Earth", x: -220, y: 60, z: -260, size: 40, materials: 3 },
+  { key: "planet_mars", name: "Mars", x: 300, y: -40, z: 240, size: 30, materials: 3 },
+  { key: "planet_jupiter", name: "Jupiter", x: -420, y: 90, z: 320, size: 55, materials: 3 },
+  { key: "planet_saturn", name: "Saturn", x: 520, y: -70, z: -320, size: 45, materials: 2 },
+];
+
+/**
+ * Hunt-2 planets (space-hunt-2, 2026-10-27) — appended to SCALE_PLANETS
+ * below by buildScaleLayout; same shape, same clearances (verified by
+ * the layout test's clearance assertions).
+ */
+export const SCALE_HUNT2_PLANETS: readonly ScalePlanet[] = [
+  { key: "quaternius-planet-1", name: "Planet 1 (Quaternius)", x: -650, y: -60, z: -150, size: 35, materials: 1 },
+  { key: "quaternius-planet-2", name: "Planet 2 (Quaternius)", x: 150, y: 140, z: -480, size: 30, materials: 1 },
+  { key: "quaternius-planet-3", name: "Planet 3 (Quaternius)", x: -80, y: -120, z: 560, size: 32, materials: 1 },
+  { key: "planets-set", name: "Planets (set)", x: 680, y: 100, z: -80, size: 45, materials: 2 },
+  { key: "earth-and-moon", name: "Earth and Moon", x: -520, y: -140, z: 480, size: 28, materials: 3 },
+  { key: "pixel-brown-dwarf", name: "Pixel Planet WISE 0855-0714", x: 60, y: 180, z: 380, size: 22, materials: 1 },
+  { key: "sun", name: "Sun", x: -150, y: -60, z: -650, size: 60, materials: 2 },
+  { key: "stars", name: "Stars", x: 480, y: -160, z: -480, size: 30, materials: 1 },
+];
+
+
+/** Hunt-2 belt pieces at the field's edge (see scaleAssets.ts for the files). */
+export interface ScaleBeltPiece {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units. */
+  size: number;
+  /** Drift direction (unit-ish) for the slow sway — only Bennu drifts. */
+  drift?: readonly [number, number, number];
+}
+export const SCALE_BELT_PIECES: readonly ScaleBeltPiece[] = [
+  { key: "belt-strip", name: "Asteroids (Jarlan)", x: -700, y: 200, z: 700, size: 40 },
+  { key: "bennu", name: "Bennu", x: 850, y: -260, z: -750, size: 18, drift: [0.4, -0.05, -0.5] },
+  { key: "asteroid-large", name: "Asteroid", x: -1400, y: 250, z: -300, size: 25 },
+  { key: "debris-pile", name: "Debris Pile", x: 250, y: -220, z: 750, size: 12 },
+  { key: "asteroid-toastie", name: "Asteroid (J-Toastie)", x: -250, y: 260, z: -750, size: 10 },
+  { key: "rubble-rocks", name: "Rubble Rocks", x: 1100, y: 80, z: -150, size: 14 },
+];
+
+
+/** Heavy centerpieces, far out and dim — never central, never bright.
+ * Pillars 1B and the gas cloud carry the nebula material; the black
+ * hole and G292 keep their own. The Sketchfab pair (2026-10-27) keeps
+ * its own materials too — the nebula's emissive layers and the black
+ * hole's transmission disk — and both play their own animation clips
+ * in the scene (the first GLB clips this world has ever played). */
+export interface ScaleCenterpiece {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units. */
+  size: number;
+  /** "as-is" keeps the file's materials; "nebula" takes the scene's nebula material. */
+  material: "as-is" | "nebula";
+  /** One slow turn, in ms — minutes, never seconds. */
+  spinMs: number;
+  /** The file carries its own animation clip(s), played by the scene — not just the slow spin. */
+  animated?: boolean;
+}
+export const SCALE_CENTERPIECES: readonly ScaleCenterpiece[] = [
+  { key: "black-hole", name: "Black hole", x: -1900, y: -350, z: 1400, size: 90, material: "as-is", spinMs: 600000 },
+  { key: "pillars-1b", name: "Pillars of Creation (Pillar 1B)", x: -1400, y: 300, z: -1200, size: 160, material: "nebula", spinMs: 720000 },
+  { key: "g292", name: "G292.0+1.8", x: 1500, y: -250, z: 1100, size: 140, material: "as-is", spinMs: 900000 },
+  { key: "gas-cloud", name: "Cloud", x: 0, y: 450, z: -1700, size: 120, material: "nebula", spinMs: 720000 },
+  { key: "planetary-nebula", name: "Planetary Nebula", x: 1900, y: 350, z: -1400, size: 150, material: "as-is", spinMs: 720000, animated: true },
+  { key: "sf-black-hole", name: "Black hole (Sketchfab)", x: 2100, y: -400, z: -900, size: 90, material: "as-is", spinMs: 600000, animated: true },
+];
+
+
+/** Distant nebula light — three OGA renders as huge static planes far
+ * outside the orbit, facing the center. 1800 x 1125 (the renders are
+ * 2560x1600, 16:10). */
+export interface ScaleNebulaPlane {
+  key: string;
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  height: number;
+}
+export const SCALE_NEBULA_PLANES: readonly ScaleNebulaPlane[] = [
+  { key: "nebula-01", x: -3500, y: 600, z: 1200, width: 1800, height: 1125 },
+  { key: "nebula-02", x: 3000, y: -500, z: -1800, width: 1800, height: 1125 },
+  { key: "nebula-03", x: 800, y: 1500, z: 3300, width: 1800, height: 1125 },
+];
+
+export interface ScaleMoon {
+  key: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units. */
+  size: number;
+  materials: number;
+  /** Drift direction (unit-ish), seed-derived — the moon sways like the probes, and the outpost rides with it. */
+  drift: readonly [number, number, number];
+}
+
+/** The moon (population increment) — the outpost stands on it. */
+export const SCALE_MOON: ScaleMoon = {
+  key: "moon_cratered",
+  x: -300,
+  y: 120,
+  z: 420,
+  size: 25,
+  materials: 2,
+  drift: [-0.5, 0.1, 0.6],
+};
+
+/**
+ * The moon outpost, as fractions of the moon's scaled radius — the dome,
+ * rover, and flag sit on the moon's surface and ride with it when it
+ * drifts (they are children of the moon holder in the scene, at
+ * offset × radius). Fractions, not units, so a re-fit moon keeps its
+ * outpost on the surface.
+ */
+export const SCALE_MOON_OUTPOST_OFFSETS = {
+  dome: [0.45, 0.95, 0.25],
+  rover: [-0.7, 0.9, -0.4],
+  flag: [0.8, 1.0, -0.6],
+} as const;
+/** Longest side of each outpost piece once placed, in scene units. */
+export const SCALE_MOON_OUTPOST_SIZES = { dome: 10, rover: 8, flag: 6 } as const;
+
+export interface ScaleEncounter {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Longest side once placed, in scene units. */
+  size: number;
+  /** Drift direction (unit-ish) for the slow sway, like the probes. */
+  drift: readonly [number, number, number];
+  /** "merged" collapses the file to the visitor grey (ships, telescopes,
+   * hardware); "as-is" keeps the file's materials — only the pulsar,
+   * whose unlit glow IS the sight. Absent means "merged". */
+  material?: "as-is" | "merged";
+}
+
+/**
+ * Encounters (population increment) — rare, slow-drift, far out, long
+ * loops. An alien, an astronaut, two UFOs: things passing through the
+ * vast dark, seen sometimes, never central. The pulsar (Sketchfab,
+ * 2026-10-27) is the one encounter that is not a craft: a stellar
+ * jet, thirty units of light, kept as-is so its glow survives.
+ */
+export const SCALE_ENCOUNTERS: readonly ScaleEncounter[] = [
+  { key: "alien", name: "Alien", x: 900, y: 150, z: -700, size: 6, drift: [0.7, 0.1, -0.6] },
+  { key: "astronaut", name: "Astronaut", x: -1100, y: -100, z: 800, size: 6, drift: [-0.6, 0.08, 0.7] },
+  { key: "flexunit-ufo", name: "FlexUnit UFO", x: 1200, y: 200, z: 600, size: 3, drift: [0.8, -0.05, 0.5] },
+  { key: "ufo", name: "UFO", x: -900, y: -150, z: -900, size: 8, drift: [-0.7, -0.1, -0.6] },
+  { key: "hubble", name: "Hubble", x: 1050, y: -120, z: 150, size: 8, drift: [0.5, 0.05, -0.6] },
+  { key: "pulsar", name: "Pulsar (AstroRiah)", x: -1600, y: 500, z: -600, size: 30, drift: [0.6, 0.1, -0.5], material: "as-is" },
+];
+
+/** A drifting debris satellite (population increment) — old hardware, still out there. */
+export const SCALE_SATELLITE_A: ScaleEncounter = {
+  key: "satellite_a",
+  name: "Satellite A",
+  x: 700,
+  y: -200,
+  z: -500,
+  size: 8,
+  drift: [0.6, 0.05, -0.7],
+};
+
+/** Belt body sizes, in scene units: the big rocks read at ~15, the small ones at ~8. */
+export const SCALE_BELT_SIZES = { big: 15, small: 8 } as const;
 
 /**
  * The four NASA probes (design note §2; Q1 settled: all four first).
@@ -287,6 +494,20 @@ export interface ScaleLayout {
   iss: { x: number; y: number; z: number; scale: number; trussSpan: number };
   probes: ScaleProbe[];
   asteroids: ScaleAsteroid[];
+  /** Planets as floating bodies (population increment) — loaded as-is, colors kept. */
+  planets: ScalePlanet[];
+  /** The moon, with its outpost riding on it — null in the empty layout. */
+  moon: ScaleMoon | null;
+  /** Rare slow-drift encounters, far out (population increment). */
+  encounters: ScaleEncounter[];
+  /** The drifting debris satellite — null in the empty layout. */
+  satellite: ScaleEncounter | null;
+  /** Placed belt pieces at the field's edge (hunt #2). */
+  beltPieces: ScaleBeltPiece[];
+  /** Heavy centerpieces, far out and dim (hunt #2). */
+  centerpieces: ScaleCenterpiece[];
+  /** Distant nebula-light planes (hunt #2). */
+  nebulaPlanes: ScaleNebulaPlane[];
   surveyFrame: {
     position: readonly [number, number, number];
     width: number;
@@ -340,6 +561,13 @@ export function buildScaleLayout(): ScaleLayout {
     iss: { x: 0, y: 0, z: 0, scale: SCALE_ISS_SCALE, trussSpan: SCALE_ISS_TRUSS_SPAN },
     probes: [...SCALE_PROBES],
     asteroids,
+    planets: [...SCALE_PLANETS, ...SCALE_HUNT2_PLANETS],
+    moon: { ...SCALE_MOON },
+    encounters: [...SCALE_ENCOUNTERS],
+    satellite: { ...SCALE_SATELLITE_A },
+    beltPieces: [...SCALE_BELT_PIECES],
+    centerpieces: [...SCALE_CENTERPIECES],
+    nebulaPlanes: [...SCALE_NEBULA_PLANES],
     surveyFrame: {
       position: SCALE_SURVEY_FRAME.position,
       width: SCALE_SURVEY_FRAME.width,

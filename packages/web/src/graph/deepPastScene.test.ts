@@ -3,9 +3,13 @@ import * as THREE from "three";
 import { buildDeepPastLayout, DEEP_PAST_BUDGET, DEEP_PAST_STRATA_COUNT } from "./deepPastLayout.js";
 import {
   DEEP_PAST_BASIN_GLB_Y,
+  DEEP_PAST_CRYSTAL,
   DEEP_PAST_LANTERN,
+  DEEP_PAST_ORB,
   DEEP_PAST_RIM,
+  DEEP_PAST_SPIRE,
   DEEP_PAST_STAIR,
+  DEEP_PAST_SUPERNOVA,
   DEEP_PAST_TERRACE,
 } from "./deepPastAssets.js";
 import {
@@ -114,7 +118,7 @@ describe("deep past scene (P3-2)", () => {
     expect(scene.group.getObjectByName("basin-rim")).toBeTruthy();
     // Holders start empty: the GLBs land async; a failed load leaves a
     // holder empty and noted, never a hole in the world.
-    for (const name of ["glb-basin", "glb-terrace", "glb-rim", "glb-stair", "glb-lantern"]) {
+    for (const name of ["glb-basin", "glb-terrace", "glb-rim", "glb-stair", "glb-lantern", "glb-crystal", "glb-supernova", "glb-spire", "glb-orb"]) {
       const holder = scene.group.getObjectByName(name) as THREE.Group;
       expect(holder).toBeTruthy();
       expect(holder.children.length).toBe(0);
@@ -137,6 +141,22 @@ describe("deep past scene (P3-2)", () => {
     expect(lantern.position.x).toBeCloseTo(Math.cos(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius, 5);
     expect(lantern.position.y).toBe(DEEP_PAST_LANTERN.y);
     expect(lantern.position.z).toBeCloseTo(Math.sin(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius, 5);
+    const crystal = scene.group.getObjectByName("glb-crystal") as THREE.Group;
+    expect(crystal.position.x).toBeCloseTo(Math.cos(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius, 5);
+    expect(crystal.position.y).toBe(DEEP_PAST_CRYSTAL.y);
+    expect(crystal.position.z).toBeCloseTo(Math.sin(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius, 5);
+    const supernova = scene.group.getObjectByName("glb-supernova") as THREE.Group;
+    expect(supernova.position.x).toBeCloseTo(Math.cos(DEEP_PAST_SUPERNOVA.angle) * DEEP_PAST_SUPERNOVA.radius, 5);
+    expect(supernova.position.y).toBe(DEEP_PAST_SUPERNOVA.y);
+    expect(supernova.position.z).toBeCloseTo(Math.sin(DEEP_PAST_SUPERNOVA.angle) * DEEP_PAST_SUPERNOVA.radius, 5);
+    const spire = scene.group.getObjectByName("glb-spire") as THREE.Group;
+    expect(spire.position.x).toBeCloseTo(Math.cos(DEEP_PAST_SPIRE.angle) * DEEP_PAST_SPIRE.radius, 5);
+    expect(spire.position.y).toBe(DEEP_PAST_SPIRE.y);
+    expect(spire.position.z).toBeCloseTo(Math.sin(DEEP_PAST_SPIRE.angle) * DEEP_PAST_SPIRE.radius, 5);
+    const orb = scene.group.getObjectByName("glb-orb") as THREE.Group;
+    expect(orb.position.x).toBe(0);
+    expect(orb.position.y).toBe(DEEP_PAST_ORB.y);
+    expect(orb.position.z).toBe(0);
     scene.dispose();
   });
 

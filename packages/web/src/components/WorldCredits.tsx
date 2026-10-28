@@ -55,6 +55,46 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
     credit:
       "The ISS model and the Kepler, Pioneer 10, Dawn, and Voyager 1 models are NASA 3D Resources, public domain. The ISS is the catalog's low-poly model (6,642 triangles); the heavier ISS variant was not used. Probe models are the NASA 3D Resources versions; the starfield is the same HYG data credited above.",
   },
+  {
+    asset: "Low Poly Space Pack — reodesuxz (all worlds + galaxy drifters)",
+    credit:
+      "26 models by reodesuxz (itch.io), free for commercial use, no attribution required. The raw pack files are not redistributed — only the models used in-app ship inside the app. Planets, the Moon and its outpost, asteroid belts, encounters, docked ships, dressing, the drydock gantry, the stratum crystal, Sputnik, and the galaxy drifters.",
+  },
+  {
+    asset: "FlexUnit UFO",
+    credit:
+      "“3D Game Ready UFO Spaceship” by FlexUnit, CC0. Converted from FBX to GLB; scaled up on placement (the converted file measures tiny in its own units).",
+  },
+  {
+    asset: "Poly Pizza models — hunt #2",
+    credit:
+      "Models from Poly Pizza (the former Google Poly library plus community uploads), CC-BY 3.0 unless noted: “Black hole”, “Comet”, “Sun”, “Moon”, “Planets (set)”, “Asteroid”, “Hubble telescope” by Poly by Google; “Earth and Moon”, “Solar System”, “Asteroids” by Jarlan Perez; “The solar system” by Diego Dilley; “Asteroid” by J-Toastie; “Planet” ×3, “Star”, “Debris Pile” by Quaternius, CC0 1.0; “Pixel Planet WISE 0855-0714” by AstroJar, CC0 1.0; “Stars” by MiniPoly; “Cloud” by jeremy; “Rubble Rocks” by Kyle Hickman.",
+  },
+  {
+    asset: "NASA supernova remnants — hunt #2",
+    credit:
+      "Bennu, G292.0+1.8, and Pillar 1B of the Pillars of Creation — NASA 3D Resources / STScI, public domain. Pillar 1B was converted from the published STL (which carries no color) and is given a rose-gold nebula material in-app.",
+  },
+  {
+    asset: "reodesuxz packs — hunt #2",
+    credit:
+      "81 models by reodesuxz (itch.io), free for commercial use, no attribution needed. The raw pack files are not redistributed — only the models used in-app ship inside the app. Each pack merges to one call as an annex settlement (Lunar Annex, Colony Ring, Station Stores).",
+  },
+  {
+    asset: "Kenney station picks — hunt #2",
+    credit:
+      "Table-display planet, rocks, structure, and tall container by Kenney (kenney.nl), CC0 1.0. The kit's other files are interior furniture with no home in the app.",
+  },
+  {
+    asset: "Nebula renders — hunt #2",
+    credit:
+      "Three of fourteen “Space, nebula, starfield renders” by Jattenalle, OpenGameArt, CC-BY 3.0, used as huge static backdrop planes far outside the orbit. They are pictures of nebulas, not 3D nebulas.",
+  },
+  {
+    asset: "Sketchfab models — owner-downloaded",
+    credit:
+      "“Planetary Nebula” by Tycho Magnetic Anomaly, “Black Hole” by SebastianSosnowski, “Pulsar | AstroRiah” by MonstroCount (@AstroRiah), “Nebula traveller” by tamminen, “Supernova remnant” by Aiekick, “Lava planet” by FPSunreal, and “Ice planet with procedural textures” by imperioame — all Sketchfab, all CC-BY 4.0, all downloaded by the owner himself on 2026-10-27. The nebula and black hole are Scale centerpieces (animated, loaded as-is), the pulsar is a Scale encounter (loaded as-is so its glow survives), the nebula traveller is the sixth galaxy drifter (loaded as-is so its glass and morph clip survive), the supernova remnant ships only as a slimmed point cloud in the Deep Past (216,902 points, 10% of the source), the lava planet is a Great Station backdrop planet, and the ice planet is a Growing Place backdrop planet (both loaded as-is, 4,000 units out).",
+  },
 ];
 
 export default function WorldCredits() {

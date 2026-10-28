@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
 import { buildPeopleLayout, PEOPLE_BUDGET, type PeopleLayout } from "./peopleLayout.js";
+import {
+  PEOPLE_BACKDROP_DRAW_CALLS,
+  PEOPLE_BACKDROP_PLANETS,
+  PEOPLE_BACKDROP_TRIS_TOTAL,
+} from "./peopleAssets.js";
 import { createPeopleScene, EMPTY_PEOPLE_LAYOUT } from "./peopleScene.js";
 import type { GraphData } from "@brain/shared";
 
@@ -112,6 +117,18 @@ describe("createPeopleScene", () => {
     scene.dispose();
   });
 
+  it("the EVE-style backdrop planets hang 4,000 out — holders exist, empty until their GLBs land", () => {
+    const scene = createPeopleScene(layout);
+    for (const planet of PEOPLE_BACKDROP_PLANETS) {
+      const holder = scene.group.getObjectByName(`backdrop-${planet.key}`) as THREE.Group;
+      expect(holder).toBeTruthy();
+      expect(holder.children.length).toBe(0);
+      expect(Math.hypot(holder.position.x, holder.position.z)).toBeCloseTo(4000, 5);
+      expect(holder.position.y).toBe(500);
+    }
+    scene.dispose();
+  });
+
   it("the recipe budget holds as built geometry — calls and tris, not just constants", () => {
     // A large fixture: 20 clusters × 100 gathering lights (the heaviest
     // form) = 2,000 lights, the worst credible field.
@@ -129,8 +146,16 @@ describe("createPeopleScene", () => {
     const big = buildPeopleLayout({ nodes: bigNodes, links: bigLinks } as unknown as GraphData, NOW);
     expect(big.clusters).toHaveLength(20);
     const scene = createPeopleScene(big);
-    expect(countDrawCalls(scene.group)).toBeLessThanOrEqual(PEOPLE_BUDGET.maxDrawCalls);
-    expect(estimateTris(scene.group)).toBeLessThanOrEqual(PEOPLE_BUDGET.maxTris);
+    // The GLBs load async, so the built group holds the procedural
+    // scene only; the manifest's measured cost is added here, so the
+    // budget assertion covers the scene as the user actually sees it
+    // once the planets have landed (4 calls / 3,702 tris).
+    expect(countDrawCalls(scene.group) + PEOPLE_BACKDROP_DRAW_CALLS).toBeLessThanOrEqual(
+      PEOPLE_BUDGET.maxDrawCalls,
+    );
+    expect(estimateTris(scene.group) + PEOPLE_BACKDROP_TRIS_TOTAL).toBeLessThanOrEqual(
+      PEOPLE_BUDGET.maxTris,
+    );
     scene.dispose();
   });
 

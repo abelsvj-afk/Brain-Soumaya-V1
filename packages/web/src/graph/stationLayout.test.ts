@@ -5,7 +5,10 @@ import {
   HARBOR_CONTROLLER_BERTH,
   HERO_MOORING,
   HERO_SHIP_FORWARD_LENGTH,
+  LOWPOLY_DOCKED_SPOTS,
+  LOWPOLY_GANTRY_POSITION,
   STATION_BUDGET,
+  STATION_CLUSTER_POSITIONS,
   STATION_INTERNAL_TARGETS,
   STATION_MAX_TRAFFIC_RADIUS,
   STATION_ORBIT_CLEARANCE,
@@ -14,13 +17,19 @@ import {
   STATION_SCALE_RATIO,
   STATION_WHEEL_DIAMETER,
   STATION_WHEEL_RADIUS,
+  WITNESS_DRYDOCK_POSITION,
+  WITNESS_HAULER_POSITION,
   approachPose,
   beaconRing,
+  clusterModelOffset,
+  dockedPoseAt,
   dockingMooringPose,
   harborControllerBerthPose,
   heroMooringPose,
+  lowPolyDressingSpots,
   plannedDrawCalls,
   plannedVisibleTris,
+  stationClusterPosition,
   rngFromSeed,
   stationCameraSweep,
   trafficLanes,
@@ -107,13 +116,62 @@ describe("stationLayout", () => {
     expect(plannedVisibleTris()).toBeLessThanOrEqual(STATION_INTERNAL_TARGETS.visibleTris);
     expect(plannedVisibleTris()).toBeLessThanOrEqual(STATION_BUDGET.visibleTris);
     expect(STATION_BUDGET.visibleTris).toBe(750_000); // §11 hard boundary, not a target
-    expect(STATION_INTERNAL_TARGETS.drawCalls).toBe(64);
+    expect(STATION_INTERNAL_TARGETS.drawCalls).toBe(72);
     expect(STATION_INTERNAL_TARGETS.visibleTris).toBe(500_000);
     // Pinned measured totals (P2-6 build record): the WATO regular is
     // 7 materials after the merge, not the hunt's 6-family count.
     // NPC autonomy adds the controller's ship: +1 call, +748 tris.
-    expect(plannedDrawCalls()).toBe(54);
-    expect(plannedVisibleTris()).toBe(246_804);
+    // Population increment: +10 calls, +2,096 tris — the plan lands
+    // EXACTLY at the 64-call internal target (the harbor controller
+    // left one spare call; this increment spends it). Recorded plainly.
+    // Hunt #2 annexes: +3 calls, +10,410 tris — three whole packs
+    // merged to one call each; 67 planned leaves 5 of headroom
+    // before the 72-call internal target. EVE-style backdrop planets:
+    // +3 calls, +10,522 tris — the lava planet (2) and a Quaternius
+    // planet (1), as-is; 70 planned leaves 2 of headroom.
+    expect(plannedDrawCalls()).toBe(70);
+    expect(plannedVisibleTris()).toBe(269_832);
+  });
+
+  it("the three annex clusters sit outside the dressing band, far apart, and clear of the drydock", () => {
+    expect(STATION_CLUSTER_POSITIONS.map((p) => p.key)).toEqual([
+      "lunar-annex",
+      "colony-ring",
+      "station-stores",
+    ]);
+    const positions = STATION_CLUSTER_POSITIONS.map((p) => stationClusterPosition(p));
+    for (const [x, y, z] of positions) {
+      // Outside the 234–244 dressing band, 25+ clear of it.
+      expect(Math.hypot(x, z)).toBeGreaterThan(269);
+      expect(Math.abs(y)).toBeLessThanOrEqual(30);
+    }
+    // 500+ apart from each other.
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const a = positions[i]!;
+        const b = positions[j]!;
+        expect(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])).toBeGreaterThan(500);
+      }
+    }
+    // Clear of the drydock gantry (88, 20, 195) and the hauler (30, 10, 220).
+    for (const [x, y, z] of positions) {
+      expect(Math.hypot(x - 88, y - 20, z - 195)).toBeGreaterThan(100);
+      expect(Math.hypot(x - 30, y - 10, z - 220)).toBeGreaterThan(100);
+    }
+  });
+
+  it("clusterModelOffset spreads a settlement on two golden-spiral rings, deterministic", () => {
+    const a = Array.from({ length: 27 }, (_, i) => clusterModelOffset(i, 27));
+    const b = Array.from({ length: 27 }, (_, i) => clusterModelOffset(i, 27));
+    expect(a).toEqual(b);
+    // Inner 40% (11) at radius 9, the rest at radius 18.
+    for (let i = 0; i < 27; i++) {
+      const [x, z] = a[i]!;
+      const r = Math.hypot(x, z);
+      expect(r).toBeCloseTo(i < 11 ? 9 : 18, 5);
+    }
+    // No two models share a spot.
+    expect(new Set(a.map(([x, z]) => `${x.toFixed(5)},${z.toFixed(5)}`)).size).toBe(27);
   });
 
   it("the harbor controller's berth sits between arms 1 and 2, clear of docked ships and dressing", () => {
@@ -154,5 +212,86 @@ describe("stationLayout", () => {
         expect(pose.distance).toBe(STATION_ORBIT_RADIUS);
       }
     }
+  });
+
+  it("the low-poly docked spots are clear of the hero, the shuttle, the controller berth, and the dressing band", () => {
+    expect(LOWPOLY_DOCKED_SPOTS).toHaveLength(4);
+    const hero = heroMooringPose().position;
+    const shuttle = dockingMooringPose().position;
+    const berth = harborControllerBerthPose().position;
+    const dist = (a: readonly [number, number, number], b: readonly [number, number, number]) =>
+      Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    for (const spot of LOWPOLY_DOCKED_SPOTS) {
+      const angle = (spot.arm / 4) * Math.PI * 2;
+      const pose = dockedPoseAt(222, angle, spot.lateral);
+      // Nose outward, like every moored ship.
+      expect(-Math.sin(pose.rotationY)).toBeCloseTo(Math.cos(angle), 5);
+      expect(-Math.cos(pose.rotationY)).toBeCloseTo(Math.sin(angle), 5);
+      // Inside the dressing band's inner edge (232) and the innermost
+      // traffic lane (255), outside the rim (210).
+      expect(Math.hypot(pose.position[0], pose.position[2])).toBeLessThan(232);
+      expect(Math.hypot(pose.position[0], pose.position[2])).toBeGreaterThan(210);
+      // Clear of the hero (arm 0), the docking shuttle (arm 2), and the
+      // controller berth (3π/4) — the nearest of these is far outside a
+      // ship's length.
+      expect(dist(pose.position, hero)).toBeGreaterThan(100);
+      expect(dist(pose.position, shuttle)).toBeGreaterThan(100);
+      expect(dist(pose.position, berth)).toBeGreaterThan(100);
+    }
+    // The four spots are distinct and pairwise clear (the tightest pair
+    // is the two laterals on one arm: 40 apart, parallel-moored).
+    const poses = LOWPOLY_DOCKED_SPOTS.map((s) => dockedPoseAt(222, (s.arm / 4) * Math.PI * 2, s.lateral));
+    for (let i = 0; i < poses.length; i++) {
+      for (let j = i + 1; j < poses.length; j++) {
+        expect(dist(poses[i]!.position, poses[j]!.position)).toBeGreaterThan(30);
+      }
+    }
+    // 12 units from the existing ±8 docked ships on the same arms
+    // (parallel-moored: the gap is lateral, ship width, not length).
+    const existing = [8, -8].flatMap((lateral) =>
+      [1, 2, 3].map((arm) => dockedPoseAt(222, (arm / 4) * Math.PI * 2, lateral).position),
+    );
+    for (const pose of poses) {
+      const nearest = Math.min(...existing.map((e) => dist(pose.position, e)));
+      expect(nearest).toBeCloseTo(12, 5);
+    }
+  });
+
+  it("the low-poly dressing spots are deterministic, in the band, and off the existing diagonals", () => {
+    const a = lowPolyDressingSpots(5);
+    const b = lowPolyDressingSpots(5);
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(5);
+    for (const spot of a) {
+      expect(spot.radius).toBeGreaterThanOrEqual(234);
+      expect(spot.radius).toBeLessThanOrEqual(244);
+      expect(Math.abs(spot.y)).toBeLessThanOrEqual(20);
+      // Off-diagonal: the existing dressing sits on the diagonals
+      // (±0.25 rad); these sit ~0.45 rad off, so no two dressing pieces
+      // share a neighborhood.
+      const fromDiagonal =
+        (((spot.angle - Math.PI / 4) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);
+      const offDiagonal = Math.min(fromDiagonal, Math.PI / 2 - fromDiagonal);
+      expect(offDiagonal).toBeGreaterThan(0.25);
+    }
+  });
+
+  it("the drydock gantry stands beside the drydock frame, clear of the hauler and the approach", () => {
+    const gantry = LOWPOLY_GANTRY_POSITION;
+    const frame = WITNESS_DRYDOCK_POSITION;
+    const hauler = WITNESS_HAULER_POSITION;
+    const dist = (a: readonly [number, number, number], b: readonly [number, number, number]) =>
+      Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    // Beside the frame (~25 off its center — the frame's pieces span
+    // ±14), not on it.
+    expect(dist(gantry, frame)).toBeGreaterThan(20);
+    expect(dist(gantry, frame)).toBeLessThan(30);
+    // Clear of the hauler.
+    expect(dist(gantry, hauler)).toBeGreaterThan(50);
+    // Clear of the closest approach-camera pose (arrival: 150 at azimuth
+    // 0.12 → (149, 18) in xz).
+    expect(dist(gantry, [149, 20, 18])).toBeGreaterThan(150);
+    // Inside the innermost traffic lane.
+    expect(Math.hypot(gantry[0], gantry[2])).toBeLessThan(255);
   });
 });

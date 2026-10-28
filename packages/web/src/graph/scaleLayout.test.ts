@@ -3,13 +3,24 @@ import {
   buildScaleLayout,
   SCALE_APPROACH,
   SCALE_ASTEROID_NAMES,
+  SCALE_BELT_PIECES,
+  SCALE_BELT_SIZES,
+  SCALE_CENTERPIECES,
   SCALE_BUDGET,
+  SCALE_ENCOUNTERS,
   SCALE_ISS_SCALE,
   SCALE_ISS_TRUSS_SPAN,
+  SCALE_MOON,
+  SCALE_MOON_OUTPOST_OFFSETS,
+  SCALE_MOON_OUTPOST_SIZES,
+  SCALE_NEBULA_PLANES,
   SCALE_ORBIT,
+  SCALE_HUNT2_PLANETS,
+  SCALE_PLANETS,
   SCALE_PROBES,
   SCALE_RELIC_ANCHORS,
   SCALE_RELIC_SIZE,
+  SCALE_SATELLITE_A,
   SCALE_SEED,
   SCALE_SHIP_LENGTH,
   SCALE_SURVEY_FRAME,
@@ -26,8 +37,8 @@ describe("buildScaleLayout", () => {
     expect(SCALE_SEED).toBe("scale / actual-size-1");
   });
 
-  it("the budget is the recipe's planned ceiling (≤90 calls / ≤500k tris)", () => {
-    expect(SCALE_BUDGET.maxDrawCalls).toBe(90);
+  it("the budget is the recipe's planned ceiling (≤100 calls / ≤500k tris)", () => {
+    expect(SCALE_BUDGET.maxDrawCalls).toBe(100);
     expect(SCALE_BUDGET.maxTris).toBe(500_000);
   });
 
@@ -124,5 +135,216 @@ describe("buildScaleLayout", () => {
       SCALE_RELIC_ANCHORS["unnumbered-fragment"]!.position[2],
     );
     expect(fragmentR).toBeGreaterThan(300);
+  });
+
+  it("carries twelve planets as floating bodies, all smaller than the ISS truss and clear of everything", () => {
+    const layout = buildScaleLayout();
+    expect(layout.planets.map((p) => p.key)).toEqual([
+      "planet_earth",
+      "planet_mars",
+      "planet_jupiter",
+      "planet_saturn",
+      "quaternius-planet-1",
+      "quaternius-planet-2",
+      "quaternius-planet-3",
+      "planets-set",
+      "earth-and-moon",
+      "pixel-brown-dwarf",
+      "sun",
+      "stars",
+    ]);
+    expect(layout.planets).toEqual([...SCALE_PLANETS, ...SCALE_HUNT2_PLANETS]);
+    const dist3 = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    for (const planet of layout.planets) {
+      // Smaller than the 109-unit truss: the ISS stays the hero.
+      expect(planet.size).toBeLessThan(SCALE_ISS_TRUSS_SPAN);
+      // Clear of the truss (half-span 54.5 + the planet's own radius, with margin).
+      expect(Math.hypot(planet.x, planet.y, planet.z)).toBeGreaterThan(
+        SCALE_ISS_TRUSS_SPAN / 2 + planet.size / 2 + 100,
+      );
+      // Clear of the survey frame (at [0, 0, 320], half-width 65).
+      expect(dist3(planet, { x: 0, y: 0, z: 320 })).toBeGreaterThan(65 + planet.size / 2 + 50);
+      // Clear of every probe (probe size + planet radius, with margin).
+      for (const probe of SCALE_PROBES) {
+        expect(dist3(planet, probe)).toBeGreaterThan(probe.size + planet.size / 2 + 50);
+      }
+      // Clear of every other planet.
+      for (const other of layout.planets) {
+        if (other === planet) continue;
+        expect(dist3(planet, other)).toBeGreaterThan(
+          planet.size / 2 + other.size / 2 + 50,
+        );
+      }
+      // Clear of every relic anchor.
+      for (const anchor of Object.values(SCALE_RELIC_ANCHORS)) {
+        expect(dist3(planet, { x: anchor.position[0], y: anchor.position[1], z: anchor.position[2] })).toBeGreaterThan(
+          planet.size / 2 + anchor.size / 2 + 25,
+        );
+      }
+    }
+    // Planets load as-is: material counts are the draw calls (11 low-poly + 12 hunt-2 = 23).
+    expect(layout.planets.reduce((n, p) => n + p.materials, 0)).toBe(23);
+    expect(SCALE_PLANETS.map((p) => p.size)).toEqual([40, 30, 55, 45]);
+    expect(SCALE_HUNT2_PLANETS.map((p) => p.size)).toEqual([35, 30, 32, 45, 28, 22, 60, 30]);
+  });
+
+  it("carries the moon, with its outpost offsets derived from the moon's radius", () => {
+    const layout = buildScaleLayout();
+    expect(layout.moon).toEqual(SCALE_MOON);
+    expect(layout.moon!.size).toBe(25);
+    expect(layout.moon!.materials).toBe(2);
+    // Clear of the ISS, the probes, and the planets.
+    const moon = layout.moon!;
+    expect(Math.hypot(moon.x, moon.y, moon.z)).toBeGreaterThan(300);
+    for (const probe of SCALE_PROBES) {
+      expect(Math.hypot(moon.x - probe.x, moon.y - probe.y, moon.z - probe.z)).toBeGreaterThan(100);
+    }
+    for (const planet of layout.planets) {
+      expect(
+        Math.hypot(moon.x - planet.x, moon.y - planet.y, moon.z - planet.z),
+      ).toBeGreaterThan(moon.size / 2 + planet.size / 2 + 50);
+    }
+    // The outpost offsets are fractions of the moon's radius — the dome,
+    // rover, and flag sit on the surface (~1 radius out) and ride with
+    // the moon when it drifts.
+    const radius = moon.size / 2;
+    for (const [slot, offset] of Object.entries(SCALE_MOON_OUTPOST_OFFSETS)) {
+      const mag = Math.hypot(offset[0], offset[1], offset[2]) * radius;
+      expect(mag, slot).toBeGreaterThan(radius * 0.9);
+      expect(mag, slot).toBeLessThan(radius * 1.6);
+    }
+    expect(SCALE_MOON_OUTPOST_SIZES).toEqual({ dome: 10, rover: 8, flag: 6 });
+  });
+
+  it("carries six slow-drift encounters and the debris satellite, far out and clear", () => {
+    const layout = buildScaleLayout();
+    expect(layout.encounters.map((e) => e.key)).toEqual([
+      "alien",
+      "astronaut",
+      "flexunit-ufo",
+      "ufo",
+      "hubble",
+      "pulsar",
+    ]);
+    expect(layout.encounters).toEqual(SCALE_ENCOUNTERS);
+    expect(layout.satellite).toEqual(SCALE_SATELLITE_A);
+    const dist3 = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    const far = [...layout.encounters, layout.satellite!];
+    for (const body of far) {
+      // Far out: beyond the asteroid belt's inner edge is fine, but every
+      // encounter sits well clear of the station itself.
+      expect(Math.hypot(body.x, body.y, body.z), body.key).toBeGreaterThan(500);
+      for (const probe of SCALE_PROBES) {
+        expect(dist3(body, probe), body.key).toBeGreaterThan(100);
+      }
+      for (const planet of layout.planets) {
+        expect(dist3(body, planet), body.key).toBeGreaterThan(100);
+      }
+      for (const other of far) {
+        if (other === body) continue;
+        expect(dist3(body, other), body.key).toBeGreaterThan(100);
+      }
+      expect(body.size).toBeGreaterThan(0);
+      expect(body.drift.length).toBe(3);
+    }
+    // The FlexUnit UFO is scaled up on placement: its file measures
+    // 0.05 units, so it is fitted to 3 — the smallest encounter.
+    expect(layout.encounters.find((e) => e.key === "flexunit-ufo")!.size).toBe(3);
+    // The pulsar is the one encounter that is not a craft: a stellar
+    // jet, thirty units of light, loaded as-is so its glow survives.
+    expect(layout.encounters.find((e) => e.key === "pulsar")!.size).toBe(30);
+    expect(layout.encounters.find((e) => e.key === "pulsar")!.material).toBe("as-is");
+    expect(SCALE_BELT_SIZES).toEqual({ big: 15, small: 8 });
+  });
+
+  it("carries six placed belt pieces at the field's edge, far out and clear", () => {
+    const layout = buildScaleLayout();
+    expect(layout.beltPieces.map((b) => b.key)).toEqual([
+      "belt-strip",
+      "bennu",
+      "asteroid-large",
+      "debris-pile",
+      "asteroid-toastie",
+      "rubble-rocks",
+    ]);
+    expect(layout.beltPieces).toEqual(SCALE_BELT_PIECES);
+    const dist3 = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    for (const piece of layout.beltPieces) {
+      expect(Math.hypot(piece.x, piece.y, piece.z), piece.key).toBeGreaterThan(500);
+      for (const probe of SCALE_PROBES) {
+        expect(dist3(piece, probe), piece.key).toBeGreaterThan(100);
+      }
+      for (const planet of layout.planets) {
+        expect(dist3(piece, planet), piece.key).toBeGreaterThan(100);
+      }
+      for (const other of layout.beltPieces) {
+        if (other === piece) continue;
+        expect(dist3(piece, other), piece.key).toBeGreaterThan(100);
+      }
+      expect(piece.size).toBeGreaterThan(0);
+    }
+    // Bennu drifts; the rest hold still.
+    expect(layout.beltPieces.find((b) => b.key === "bennu")!.drift).toEqual([0.4, -0.05, -0.5]);
+    expect(layout.beltPieces.find((b) => b.key === "belt-strip")!.drift).toBeUndefined();
+  });
+
+  it("carries six heavy centerpieces, far out, dim and distant — never central", () => {
+    const layout = buildScaleLayout();
+    expect(layout.centerpieces.map((c) => c.key)).toEqual([
+      "black-hole",
+      "pillars-1b",
+      "g292",
+      "gas-cloud",
+      "planetary-nebula",
+      "sf-black-hole",
+    ]);
+    expect(layout.centerpieces).toEqual(SCALE_CENTERPIECES);
+    const dist3 = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    for (const piece of layout.centerpieces) {
+      // Far out: 1,700+ from the station, and clear of the survey
+      // frame's approach corridor.
+      expect(Math.hypot(piece.x, piece.y, piece.z), piece.key).toBeGreaterThan(1700);
+      expect(dist3(piece, { x: 0, y: 0, z: 320 }), piece.key).toBeGreaterThan(1000);
+      for (const probe of SCALE_PROBES) {
+        expect(dist3(piece, probe), piece.key).toBeGreaterThan(100);
+      }
+      for (const planet of layout.planets) {
+        expect(dist3(piece, planet), piece.key).toBeGreaterThan(100);
+      }
+      for (const other of layout.centerpieces) {
+        if (other === piece) continue;
+        expect(dist3(piece, other), piece.key).toBeGreaterThan(100);
+      }
+      // Slow turns only: a full turn takes minutes, never seconds.
+      expect(piece.spinMs).toBeGreaterThanOrEqual(600_000);
+    }
+    // Pillars + cloud carry no color of their own — the scene gives
+    // them the nebula material. The black hole and G292 keep theirs.
+    expect(layout.centerpieces.find((c) => c.key === "pillars-1b")!.material).toBe("nebula");
+    expect(layout.centerpieces.find((c) => c.key === "gas-cloud")!.material).toBe("nebula");
+    expect(layout.centerpieces.find((c) => c.key === "black-hole")!.material).toBe("as-is");
+    expect(layout.centerpieces.find((c) => c.key === "g292")!.material).toBe("as-is");
+    // The Sketchfab pair keeps its own materials too — and plays its
+    // own animation clips on top of the slow spin.
+    expect(layout.centerpieces.find((c) => c.key === "planetary-nebula")!.material).toBe("as-is");
+    expect(layout.centerpieces.find((c) => c.key === "planetary-nebula")!.animated).toBe(true);
+    expect(layout.centerpieces.find((c) => c.key === "sf-black-hole")!.material).toBe("as-is");
+    expect(layout.centerpieces.find((c) => c.key === "sf-black-hole")!.animated).toBe(true);
+  });
+
+  it("carries three distant nebula-light planes, far outside the orbit, facing the center", () => {
+    const layout = buildScaleLayout();
+    expect(layout.nebulaPlanes.map((p) => p.key)).toEqual(["nebula-01", "nebula-02", "nebula-03"]);
+    expect(layout.nebulaPlanes).toEqual(SCALE_NEBULA_PLANES);
+    for (const plane of layout.nebulaPlanes) {
+      // Far outside the orbit (radius 320): distant light, never a body.
+      expect(Math.hypot(plane.x, plane.y, plane.z), plane.key).toBeGreaterThan(3000);
+      // The renders are 2560x1600 — 16:10.
+      expect(plane.width / plane.height).toBeCloseTo(1.6, 5);
+    }
   });
 });

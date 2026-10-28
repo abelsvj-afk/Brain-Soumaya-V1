@@ -14,7 +14,7 @@ import {
   heroMooringPose,
   trafficLanes,
 } from "./stationLayout.js";
-import { DOCKING_MODEL_INDEX } from "./stationAssets.js";
+import { DOCKING_MODEL_INDEX, STATION_BACKDROP_PLANETS } from "./stationAssets.js";
 
 function find(group: THREE.Group, name: string): THREE.Object3D | undefined {
   let found: THREE.Object3D | undefined;
@@ -84,6 +84,48 @@ describe("createStationScene", () => {
     expect(pose.position[0]).toBeCloseTo(228, 5);
     expect(pose.position[1]).toBe(0);
     expect(pose.position[2]).toBeCloseTo(0, 5);
+  });
+
+  it("the low-poly moorings, dressing, and gantry stay empty until their GLBs land — no faked ships", () => {
+    const scene = createStationScene();
+    for (const key of ["rocket_classic", "rocket_shuttle", "lander_pod", "space_capsule"]) {
+      expect(find(scene.group, `docked-lowpoly-${key}`)).toBeUndefined();
+    }
+    for (const key of [
+      "space_station_core",
+      "station_module",
+      "satellite_dish",
+      "solar_array",
+      "fuel_tank",
+    ]) {
+      expect(find(scene.group, `dressing-lowpoly-${key}`)).toBeUndefined();
+    }
+    expect(find(scene.group, "witness-drydock-gantry")).toBeUndefined();
+    scene.dispose();
+  });
+
+  it("the annex holders exist and stay empty until their GLBs land — no half settlements", () => {
+    const scene = createStationScene();
+    for (const key of ["lunar-annex", "colony-ring", "station-stores"]) {
+      const holder = find(scene.group, `annex-${key}`);
+      expect(holder).toBeTruthy();
+      expect(holder!.children.length).toBe(0);
+      expect(find(scene.group, `annex-model-${key}`)).toBeUndefined();
+    }
+    scene.dispose();
+  });
+
+  it("the EVE-style backdrop planets hang 4,000 out — holders exist, empty until their GLBs land", () => {
+    const scene = createStationScene();
+    for (const planet of STATION_BACKDROP_PLANETS) {
+      const holder = find(scene.group, `backdrop-${planet.key}`);
+      expect(holder).toBeTruthy();
+      expect(holder!.children.length).toBe(0);
+      expect(find(scene.group, `backdrop-${planet.key}-model`)).toBeUndefined();
+      expect(Math.hypot(holder!.position.x, holder!.position.z)).toBeCloseTo(4000, 5);
+      expect(holder!.position.y).toBe(500);
+    }
+    scene.dispose();
   });
 });
 
