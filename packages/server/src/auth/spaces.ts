@@ -202,6 +202,11 @@ export const SPACE_SCOPED_TABLES = [
   "fleet_defense_releases",
   "fleet_defense_defenses",
   "fleet_defense_log",
+  // Fleets on automated missions: the mission ledger, the log, and
+  // the fleet stop flag are per-space rows too.
+  "mission_missions",
+  "mission_log",
+  "mission_fleet_state",
 ] as const;
 
 /**
