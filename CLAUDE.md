@@ -426,6 +426,153 @@ types/zod, db schema + migrations, orbits, api client, token/USD/Fuel guards,
 space_id scoping, route contracts — plus architecture decisions, ambiguous features,
 security/data-integrity, and the final "Verified by Claude" checkmark.
 
+### What Muse can actually do (full capabilities — so Claude doesn't under-delegate)
+
+Claude may not know Muse's range. Muse is a full personal agent with its own computer,
+browser, tools, skills, and connected accounts — not just a chat window. Route work to
+Muse whenever the task fits one of these, especially when it would otherwise burn
+Claude's context.
+
+**Live browser (real Chromium, user-watchable):**
+- Open ANY website — including ones needing login, forms, or JavaScript — and act on
+  it: click, fill forms, read live state, check prices/availability/status.
+- **Fly.io dashboard:** check app status (running/suspended), machines, releases,
+  volumes, settings; change the deploy branch; enable auto-deploy; trigger deploys.
+  The user signs in via GitHub when prompted. (No flyctl token exists in Muse's
+  sandbox, so Fly work goes through the dashboard browser, not the CLI.)
+- **GitHub website:** ground truth when the GitHub connector returns stale head data
+  (connector reads can lag; the web UI does not).
+- The user can watch or take over a live browser session at any time.
+- Limit: the live browser cannot open local files (`file://` rejected) — local HTML
+  verification goes through sandbox Chromium (see below), not the live browser.
+
+**GitHub (via connector):**
+- Read files, branches, commits, PRs, issues, and code search.
+- Create branches and push UTF-8 text files (docs, code, configs).
+- Limit: push is text-only — binary files (GLBs) must be uploaded via the GitHub
+  website, not the connector.
+
+**In-app artifacts (chat-native, NOT downloaded files):**
+- Build web pages and apps that open INSIDE the chat — this is the reliable path on
+  the owner's phone. The downloaded-file + blob-URL pattern repeatedly stalls on his
+  phone (Deep Past, route-bead showcase); in-app artifacts sidestep it entirely.
+- Documents, PDFs, spreadsheets, presentations — editable sources kept for later
+  changes.
+- Interactive visualizations, mockups, showcases, design elements, 2D canvas
+  renderings (used for the route-bead artifact: 4 inner beads, cosmic glass tint).
+- Shareable links and exports (with expiry noted; anyone with the link can open it).
+
+**3D / GLB / mockup work:**
+- Generate procedural GLBs (e.g., the route bead: clear bead + orbiting glow orb,
+  baked animation clip).
+- Slim GLBs (gltf-transform: weld → simplify → resize → draco; web-slim recipe
+  verified: 256-texture versions).
+- Verify GLBs: byte size, SHA, triangle/vertex counts, mesh/material/texture counts,
+  animations present, JSON chunk padding rules.
+- Sandbox-verify HTML/3D with Playwright (Chromium): zero console errors, animation
+  plays, real-vs-placeholder detection, cold-load timing.
+- Honest limits: sandbox renders ~1 fps at large viewports (never claim performance
+  from it); a real phone GPU reads transparency differently; downloaded files stall
+  on the owner's phone specifically.
+
+**Diagnosis / verification (Muse's strongest lane for this repo):**
+- Verify deploy state (Fly releases, branch settings, auto-deploy), branch state
+  (what's on `main` vs. any other branch), file presence (GLBs, code), flag values,
+  code wiring (button → handler → component → render), CSS visibility (is it
+  hidden, off-screen, or z-index-buried), and test expectations (what the tests
+  say SHOULD happen).
+- Rule out delivery problems (stale deploy, missing code, missing files, flag off)
+  BEFORE blaming code — with evidence (live `sw.js` build ID, file listings, flag
+  reads), not guesses.
+- Report verified facts, and label what is confirmed vs. inferred vs. unknown. Never
+  present a guess as a finding.
+
+**Code + repo work (when the owner explicitly taps Muse to implement):**
+- Read, analyze, write, and edit code; run tests, typecheck, and builds.
+- Git operations via the GitHub connector (no local git credentials in sandbox).
+- Standing rule for this repo: one chat implements at a time, and Claude is the
+  implementer here — Muse implements only when the owner explicitly says so in
+  Muse's chat. Otherwise Muse diagnoses and documents; Claude builds.
+
+**Computer / terminal / files:**
+- A Linux VM with shell, filesystem, and internet. Read/write/edit files, organize
+  the workspace, manage goals and tracked items, run scripts and builds.
+- Durable home directory; workspace is the working area; `/tmp` is ephemeral.
+
+**Research:**
+- Web search (with news, sports, weather, finance, datetime verticals), deep
+  research with sources, social search (public posts), page-text fetching with
+  citations. Distinguishes search snippets (possibly stale) from live-verified facts.
+
+**Connected accounts (via connectors — check status first; share a connect link if
+not connected):**
+- Google: Gmail (6 of the owner's accounts connected), Calendar, Docs, Drive, Tasks.
+- Social: Facebook, Instagram, Messenger, Threads (read/post/comment/manage).
+- Money: Plaid (bank/card/investment balances, transactions, liabilities), Stripe
+  (merchant), Shopify, Shop Pay / Stripe Link wallets (saved-card checkout with
+  per-purchase approval; Muse never sees full card numbers).
+- Travel: Duffel (flights), hotel booking, event tickets (Ticketmaster), places
+  search (addresses, hours, ratings, reviews, photos).
+- Health/fitness: Apple Health, Health Connect (metrics, sleep, workouts).
+- Music: Spotify (search, playlists, playback). Home: smart-device control,
+  camera events. Devices: paired-device contacts and calendar.
+- Secure Vault: saved website logins (github.com, indeed.com); browser signs in
+  with them (Muse never sees passwords).
+
+**Communication / messaging:**
+- WhatsApp, Messenger, Instagram messages, and other side chats — including
+  delegated conversations (a worker talks for the user in a group or 1:1).
+- Email: find, triage, draft, and send (with approval, thread + recipients exact).
+- Scheduling: find times across people/calendars/timezones, place holds, send
+  invitations, book appointments.
+
+**Scheduling / background work:**
+- Crons: recurring checks, reminders, daily deliveries (e.g., daily scripture,
+  daily word/skills). Hooks: event-driven automations. Subagents: delegate
+  parallel, self-contained work that runs in the background while Muse stays
+  responsive.
+
+**Media / voice / creative:**
+- Generate or edit images and video (up to 6 videos per user message), avatar
+  creation and dance videos.
+- Voice notes and voice messages, podcast scripting/production, text-to-speech
+  narration.
+- Music discovery and playlist building.
+
+**Shopping / purchases / money:**
+- Product search, comparison, and purchase (with the user's explicit approval and
+  the required checkout review; Wallet cards via Shop Pay / Stripe Link).
+- Groceries and food delivery (Instacart, Walmart, Uber Eats, DoorDash, etc.).
+- Financial planning: budgets, affordability checks, debt repayment, running
+  ledgers (the owner's Finance Project ledger lives in the Finance goal workspace).
+
+**Personal / life:**
+- Goals and habit tracking (durable goals with workspaces, progress, briefings).
+- Fitness tracking (activity, sleep, recovery, body measurements vs. goals).
+- Health-record summaries and clinician-visit questions.
+- Home control, device data, file hosting, knowledge organization (notes/docs).
+
+**Memory / continuity:**
+- Long-term memory across conversations: who the user is, preferences, decisions,
+  commitments, relationships, and past work — so the user is not re-asked for
+  established facts.
+- Memory is Muse's record, not permission: it does not grant authority to act, and
+  it cannot replace runtime approvals or the owner's explicit tap.
+
+**What Muse CANNOT do (so Claude doesn't assume it):**
+- Cannot see the user's screen — needs a screenshot from the user to diagnose
+  what the user actually sees.
+- Cannot access the user's brain data without the space ID, which is the permanent
+  login credential — it must come via secure entry, never as raw chat text.
+- Cannot run the user's phone apps or reach his phone's local files directly.
+- Cannot use flyctl (no token) or local git credentials (no auth) — those paths go
+  through the browser dashboard and the GitHub connector respectively.
+- Cannot reach a stripped remote sandbox's local services; cannot bypass a site's
+  bot block (if a site refuses AI agents, Muse says so and uses an alternative).
+- Cannot act on the user's behalf without approval for outward messages, sends,
+  posts, deletes, purchases, or persistent jobs — approval covers only the exact
+  action/content the user named or saw.
+
 ## Current findings — 2026-10-28 (worlds / travel visibility)
 
 Organized findings from Muse's diagnosis session (2026-10-28). Claude is picking up
