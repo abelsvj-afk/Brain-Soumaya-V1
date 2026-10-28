@@ -573,6 +573,43 @@ not connected):**
   posts, deletes, purchases, or persistent jobs — approval covers only the exact
   action/content the user named or saw.
 
+## ChatGPT (free plan) — read-only auditor
+
+The user (Sajacous) also uses **ChatGPT (free plan)** connected to GitHub.
+
+**Role: READ ONLY. Audit, don't change.** ChatGPT reads the repo and audits it. It
+does NOT usually change anything — no code writes, no pushes, no merges, no deploys.
+Its output is findings, not changes.
+
+**What it's used for:**
+- Auditing an increment after it lands (the standing "audit-after" lane: build → full
+  gate → merge → ChatGPT audit of that increment → its findings become the fix list).
+  Audit-after has caught real defects that design reviews missed (e.g., raw error
+  text leaking, UTC fallback, the Deep Past runtime import-map silent-failure mode).
+- Independent re-audits and second opinions (e.g., Verbatim Recall re-audits, design
+  reviews, fix-round reviews).
+- Reading and summarizing code, docs, or a branch for the owner.
+
+**How Claude should treat a ChatGPT audit:**
+- Read the findings, then VERIFY each one against the actual code before acting.
+  A ChatGPT finding is a lead, not a verdict — confirm it reproduces, then fix it.
+- A ChatGPT audit is NEVER Claude's "Verified" sign-off. The sign-off is Claude's
+  own gate + audit (see "Verify before you build" and the Red Zone rule).
+- Do NOT treat a ChatGPT recommendation as the owner's approval. The owner's tap is
+  the only approval (same rule as for any relayed recommendation).
+- If a ChatGPT audit contradicts Claude's own reading, say so plainly and show the
+  evidence — don't silently defer to it.
+
+**Free-plan constraint:** It's the free plan, so its usage is limited. Keep audit
+requests focused and batched: one well-scoped audit per increment (or per fix round),
+not a stream of small reads. Don't burn its turns on things Muse or Claude can
+check directly (file listings, flag values, deploy state — that's Muse's lane).
+
+**What it does NOT do:** It does not implement, does not push, does not merge, does
+not deploy, and does not hold the gate. If an audit suggests a change, the change
+still goes through the normal lane (Claude or the owner-tapped implementer, gate,
+review, owner's tap for merge/deploy).
+
 ## Current findings — 2026-10-28 (worlds / travel visibility)
 
 Organized findings from Muse's diagnosis session (2026-10-28). Claude is picking up
