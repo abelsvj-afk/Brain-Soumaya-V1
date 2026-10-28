@@ -18,7 +18,7 @@ interface Props {
   node: GraphNode | null;
   graph: GraphData;
   onFocus: (id: number) => void;
-  /** Called after a node's weight is changed so the galaxy can re-render. */
+  /** Called after a node's importance is changed so the galaxy can re-render. */
   onChanged?: (id: number) => void;
   /** Called after a node is deleted. */
   onDeleted?: () => void;
@@ -54,7 +54,7 @@ export function fmtWhen(raw: string): string {
 }
 
 /** Plain-language "why is it this size" from the node's real mass signals —
- *  turns an abstract weight% into understanding you learn by seeing it. */
+ *  turns an abstract mass% into understanding you learn by seeing it. */
 function sizeReason(n: GraphNode): string {
   const bits: string[] = [];
   if ((n.importance ?? 0) >= 0.66) bits.push("it matters to you");
@@ -252,7 +252,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           // saved (the sync effect above only fires when node.importance actually
           // changes, which it won't have here).
           setWeight(reverted);
-          pushToast("Couldn't save that weight — try again.", "⚠️", 3500);
+          pushToast("Couldn't save that importance — try again.", "⚠️", 3500);
         });
     }, 350);
   };
@@ -356,7 +356,9 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
       {node.celestial && node.kind !== "belief" && node.kind !== "moc" && (
         <>
           <span className="meta">
-            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]} · weight{" "}
+            {/* REG-106: the derived figure is named mass, never weight — the
+                slider below sets importance, a different quantity. */}
+            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]} · mass{" "}
             {Math.round((node.mass ?? 0) * 100)}%
             {node.degree ? ` · ${node.degree} link${node.degree === 1 ? "" : "s"}` : ""}
           </span>
@@ -683,7 +685,9 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
 
       <div className="weight">
         <div className="weight-head">
-          <h3>Weight (gravity)</h3>
+          {/* REG-106: the slider sets importance — one ingredient in the
+              mass % above, not the mass itself. */}
+          <h3>Importance</h3>
           <button
             className="link-btn"
             title="Reset to the automatic rating (offline, no API)"
@@ -706,6 +710,10 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           }}
         />
         <span className="weight-val">{Math.round(weight * 100)}%</span>
+        <p className="weight-note">
+          Importance is one ingredient in the memory&apos;s mass — connections, age, and feeling add the rest,
+          so the mass above can sit below the importance you set.
+        </p>
         <div className="tier-legend" aria-hidden="true">
           {CELESTIAL_CLASSES.map((c) => (
             <span
@@ -747,7 +755,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
       {confirmingDelete && onDeleted && (
         <ConfirmDialog
           title="Delete this memory?"
-          message={`"${node.label}" will be permanently deleted. This can't be undone.`}
+          message={`"${node.label}" will be permanently deleted, along with its connections, attachments, and insights about it. This can't be undone.`}
           confirmLabel="Delete"
           onConfirm={() => {
             setConfirmingDelete(false);

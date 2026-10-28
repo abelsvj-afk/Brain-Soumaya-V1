@@ -135,9 +135,9 @@ export const editExpense = (id: number, patch: { date?: string; amountCents?: nu
 export const deleteExpense = (id: number) => send<{ ok: boolean; budget: BudgetSummary }>(`/expense/${id}`, "DELETE");
 
 // ---- Ingestion (Stage 1b/1c): paste / image → drafts → confirm ----
-export const ingestPaste = (text: string) => send<{ sourceId: number; result: FinExtractionResult }>("/ingest/paste", "POST", { text });
+export const ingestPaste = (text: string) => send<{ sourceId: number; result: FinExtractionResult; sourceTruncated: boolean }>("/ingest/paste", "POST", { text });
 export const ingestImage = (dataUrl: string, mime: string) =>
-  send<{ sourceId: number; result: FinExtractionResult; readable: boolean }>("/ingest/image", "POST", { dataUrl, mime });
+  send<{ sourceId: number; result: FinExtractionResult; readable: boolean; sourceTruncated: boolean }>("/ingest/image", "POST", { dataUrl, mime });
 export interface ConfirmInput {
   sourceId: number;
   incomes: Array<{ date?: string; netCents: number; platform?: string }>;
@@ -215,7 +215,7 @@ export interface PaystubConfirmInput {
   sourceData?: string; // base64
 }
 export const confirmPaystub = (input: PaystubConfirmInput) =>
-  sendChecked<{ paystub: FinPaystub; budget: BudgetSummary }>("/paystub/confirm", "POST", input);
+  sendChecked<{ paystub: FinPaystub; budget: BudgetSummary; duplicate: boolean }>("/paystub/confirm", "POST", input);
 export const listPaystubs = () => getJson<FinPaystub[]>("/paystub");
 export const getPaystub = (id: number) => getJson<FinPaystub>(`/paystub/${id}`);
 export const deletePaystub = (id: number) => send<{ ok: boolean }>(`/paystub/${id}`, "DELETE");

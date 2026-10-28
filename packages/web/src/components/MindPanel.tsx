@@ -749,6 +749,9 @@ export function MindPanel({
         <p className="mind-ws-sub" style={{ textAlign: "left", marginBottom: 2 }}>
           A thought fades over a few days. Tap <b>↑ Keep</b> to reset its timer — keep returning to
           one (3×) and it becomes a permanent memory in your galaxy. <b>×</b> lets it go now.
+          {/* REG-042: the 30-mote cap is stated where thoughts are captured —
+              when the mind is full, the faintest thought fades to make room. */}
+          {" "}Your mind holds up to 30 thoughts — when it&apos;s full, the faintest one fades to make room for the new one.
         </p>
         <div className="mind-ws-input">
           <input
@@ -763,6 +766,11 @@ export function MindPanel({
           <button className="mini" onClick={() => void think()} disabled={!thought.trim()}>
             Hold
           </button>
+        </div>
+        {/* REG-040: the 500-character thought cap is visible before submit. */}
+        <div className="mind-ws-count" aria-live="polite">
+          {thought.length}/500
+          {thought.length > 500 ? " — over the 500-character limit; trim it before holding" : ""}
         </div>
         {/* IM-49: legend for the mote source colours — the colour was the only
             encoding and it was explained nowhere in this tab. */}

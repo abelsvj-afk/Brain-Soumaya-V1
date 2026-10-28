@@ -53,7 +53,7 @@ export function WelcomeIntro({
             much it matters and linked to the goals, people, and money it relates to.
           </li>
           <li>
-            <b>Money, Life Vision, and Journeys</b> are real tabs, not just words — track what you
+            <b>Money and Journeys</b> are real tabs, not just words — and Life Vision is a real section at the top of the Mind tab — track what you
             earn and owe, name what you're ultimately building toward, and group it all into the
             life chapters (journeys) it actually belongs to.
           </li>

@@ -114,6 +114,42 @@ export class FinPaystubRepo {
     return rows.map((r) => this.map(r));
   }
 
+  /** REG-009: EVERY stub whose effective date (pay_date, else its linked
+   *  income's date) + net match — a direct keyed query, never a capped
+   *  list() page: a re-uploaded stub older than the 200 most recent stubs
+   *  must still be found. (SELECT_COLS re-qualified with the p. alias: the
+   *  fin_income join carries an id column of its own.) */
+  findAllByDateAndNet(date: string, netCents: number): FinPaystub[] {
+    const cols = FinPaystubRepo.SELECT_COLS.split(",")
+      .map((c) => c.trim())
+      .map((c) => (c.startsWith("(") ? c : `p.${c}`))
+      .join(", ");
+    const rows = this.handle.sqlite
+      .prepare(
+        `SELECT ${cols} FROM fin_paystub p
+         LEFT JOIN fin_income i ON i.id = p.income_id AND i.space_id = p.space_id
+         WHERE p.space_id = ? AND p.net_cents = ? AND COALESCE(p.pay_date, i.date) = ?
+         ORDER BY p.id ASC`,
+      )
+      .all(this.spaceId, Math.round(netCents), date.slice(0, 10)) as any[];
+    return rows.map((r) => this.map(r));
+  }
+
+  /** REG-009: stubs linked to any of these incomes — the duplicate
+   *  set-scan's stub-ownership check, keyed by income id (an income's date
+   *  can be edited after its stub was saved, so ownership must not be
+   *  inferred from a (date, net) match). */
+  findAllByIncomeIds(ids: number[]): FinPaystub[] {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = this.handle.sqlite
+      .prepare(
+        `SELECT ${FinPaystubRepo.SELECT_COLS} FROM fin_paystub WHERE space_id = ? AND income_id IN (${placeholders}) ORDER BY id ASC`,
+      )
+      .all(this.spaceId, ...ids) as any[];
+    return rows.map((r) => this.map(r));
+  }
+
   /** The original document's bytes, for the "View original" download only. */
   getSourceBlob(id: number): { data: string; mime: string | null; filename: string | null } | null {
     const r = this.handle.sqlite

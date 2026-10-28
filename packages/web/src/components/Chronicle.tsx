@@ -30,11 +30,34 @@ export function fmtLoreWhen(raw: string): string {
   });
 }
 
+/** REG-109: chapter triggers are internal vocabulary (genesis, manual, …) —
+ *  render each as a plain-language cause. Unknown future tokens get a human
+ *  fallback (split + lowercased), never the raw token; an empty value reads
+ *  as a plain "updated". */
+export function fmtLoreTrigger(trigger: string): string {
+  const known: Record<string, string> = {
+    genesis: "her first telling",
+    manual: "you asked for a new chapter",
+    revised: "revised as beliefs changed",
+    merged: "merged from related chapters",
+    linked: "linked to new memories",
+    evolved: "grew from new memories",
+  };
+  const hit = known[trigger];
+  if (hit) return hit;
+  const humanized = trigger
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .trim();
+  return humanized || "updated";
+}
+
 function ChapterMeta({ entry }: { entry: LoreEntry }) {
   return (
     <span className="chronicle-meta">
       {" · "}
-      {entry.trigger} · {fmtLoreWhen(entry.createdAt)}
+      {fmtLoreTrigger(entry.trigger)} · {fmtLoreWhen(entry.createdAt)}
     </span>
   );
 }

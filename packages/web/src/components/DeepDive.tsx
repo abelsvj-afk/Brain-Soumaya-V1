@@ -14,10 +14,11 @@ import { investigateNode } from "../api/client.js";
  * persistent, mutating — it appends a `--- Research Deep Dive ---` section
  * to the node's own content). The two must never again share a bare label.
  *
- * Truthful states: before a run it says nothing has run yet; while running it
- * says so; on failure the error goes to a dedicated error surface with Retry —
- * never into the report body (the IM-32 lesson: server error text must not be
- * rendered in Soumaya's voice).
+ * Truthful states: before a run it says nothing has run in this visit yet
+ * (REG-108 — reports don't persist, so the copy never claims none ever ran);
+ * while running it says so; on failure the error goes to a dedicated error
+ * surface with Retry — never into the report body (the IM-32 lesson: server
+ * error text must not be rendered in Soumaya's voice).
  *
  * Note on scope: the endpoint's contract is { nodeId } only — it investigates
  * the memory itself and RETURNS the questions worth asking (rendered below).
@@ -81,7 +82,11 @@ export function DeepDive({
         </div>
       )}
       {!busy && !error && !report && (
-        <p className="empty small">No Investigator deep-dive run yet for this memory.</p>
+        // REG-108: reports are ephemeral (no store) — the empty copy is scoped
+        // honestly to this visit, so reopening never claims no deep-dive ever ran.
+        // REG-152: named Investigator, so it never shares a bare label with
+        // Research Mode research.
+        <p className="empty small">No Investigator deep-dive run in this visit yet.</p>
       )}
       {!busy && report && (
         <div className="deep-dive-report">

@@ -125,4 +125,14 @@ export class FinIncomeRepo {
       .get(this.spaceId, date.slice(0, 10), Math.round(netCents));
     return r ? this.map(r) : null;
   }
+
+  /** REG-009: EVERY income at (date, net) — a direct keyed query, never a
+   *  capped list() page: a match older than the 200 most recent incomes must
+   *  still be found by the paystub duplicate set-scan. */
+  findAllByDateAndNet(date: string, netCents: number): FinIncome[] {
+    const rows = this.handle.sqlite
+      .prepare(`SELECT * FROM fin_income WHERE space_id = ? AND date = ? AND net_cents = ? ORDER BY id ASC`)
+      .all(this.spaceId, date.slice(0, 10), Math.round(netCents)) as any[];
+    return rows.map((r) => this.map(r));
+  }
 }

@@ -30,7 +30,7 @@ afterEach(() => cleanup());
 describe("IM-37 — Deep-dive surface over POST /api/investigate", () => {
   it("starts honest: no run yet, no fabricated report", () => {
     render(<DeepDive nodeId={1} nodeLabel="Rent stress" onFocus={() => {}} />);
-    expect(screen.getByText("No Investigator deep-dive run yet for this memory.")).toBeTruthy();
+    expect(screen.getByText("No Investigator deep-dive run in this visit yet.")).toBeTruthy();
     expect(investigateNode).not.toHaveBeenCalled();
   });
 
