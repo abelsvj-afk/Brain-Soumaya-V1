@@ -1,4 +1,4 @@
-import { WARP_COST, type TravelKind } from "@brain/shared";
+import { ETERNITY_WORLD_KEY, WARP_COST, type TravelKind } from "@brain/shared";
 import type { TravelState } from "../api/travel.js";
 
 /**
@@ -11,8 +11,19 @@ import type { TravelState } from "../api/travel.js";
  * it rejects anything off-list; this chart only decides what the board
  * offers. When discovery lands in Phase 3, the chart moves into the
  * state response and this mirror goes away.
+ *
+ * Eternity's world is on the chart as a GATED world (B-01): the board
+ * offers it only when the server's state says the gate stands open
+ * for this traveller (`eternityReachable`). Until then the world is
+ * not offered at all — the board never shows a journey the server
+ * would refuse, and the gate's key stays a discovery, not a menu item.
  */
-export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[] = [
+export const WORLD_CHART: readonly {
+  key: string;
+  name: string;
+  blurb: string;
+  gated?: boolean;
+}[] = [
   { key: "home", name: "Home", blurb: "Your galaxy — every memory, always here." },
   {
     key: "great-station",
@@ -43,6 +54,12 @@ export const WORLD_CHART: readonly { key: string; name: string; blurb: string }[
     key: "scale",
     name: "Scale",
     blurb: "The actual station, actual size — the real ISS beside your ship, so the size is felt, not stated.",
+  },
+  {
+    key: ETERNITY_WORLD_KEY,
+    name: "Eternity's World",
+    blurb: "The furthest world — a white void where Eternity himself stands. The way there runs through two other worlds, and the gate opens only for those carrying the Witness and two other relics.",
+    gated: true,
   },
 ];
 
@@ -88,9 +105,14 @@ export function buildRouteBoard(state: TravelState): RouteEntry[] {
   // older server) reads as closed. The one exception is being there:
   // if the traveller is already in People, the entry stays, so the
   // board never hides the world they are standing in.
-  const chart = WORLD_CHART.filter(
-    (w) => w.key !== "people" || state.peopleGateOpen === true || state.currentWorld === "people",
-  );
+  // Eternity's world is GATED (B-01): the board offers it only when the
+  // server says the gate stands open (eternityReachable) — the board
+  // never offers a journey the server would refuse.
+  const chart = WORLD_CHART.filter((w) => {
+    if (w.key === "people") return state.peopleGateOpen === true || state.currentWorld === "people";
+    if (w.gated) return state.eternityReachable === true;
+    return true;
+  });
   return chart.map((w) => {
     const isCurrent = state.currentWorld === w.key;
     return {
