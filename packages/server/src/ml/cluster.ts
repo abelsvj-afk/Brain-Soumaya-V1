@@ -174,7 +174,11 @@ export function findConstellations(
     if (!moved && iter > 0) break;
   }
 
-  // Assemble constellations (drop empties), with cohesion + an auto name.
+  // Assemble constellations (drop empties AND singletons), with cohesion + an auto name.
+  // REG-156 / INS-10: a 1-member bucket is not a constellation — its cohesion
+  // is 1.0 by construction (the centroid IS that vector), so presenting it as
+  // "1 · 100% tight" with a Save button fabricates a precision figure and
+  // walks the user into the promote route's min-2 error.
   const buckets = new Map<number, Sample[]>();
   for (let i = 0; i < samples.length; i++) {
     const c = assign[i]!;
@@ -185,7 +189,7 @@ export function findConstellations(
   const out: Constellation[] = [];
   let cid = 1;
   for (const [c, members] of buckets) {
-    if (members.length === 0) continue;
+    if (members.length < 2) continue;
     const centroid = centroids[c]!;
     let cohesion = 0;
     for (const m of members) cohesion += dot(m.vec, centroid);

@@ -55,7 +55,7 @@ export function FuelEarnSheet({ fuel, onAction, onClose }: Props) {
             <div className="fw-title">Ways to earn Fuel</div>
             {fuel && (
               <div className="fw-now">
-                {Math.round(fuel.fuel)}/{fuel.capacity} · {pct}% — Soumaya spends it on deep-dive research & sector charting.
+                {Math.round(fuel.fuel)}/{fuel.capacity} · {pct}% — Soumaya spends it on Research Mode research & sector charting.
                 {/* IM-11: the spend side, as a number — each autonomous job costs this much. */}
                 <span className="fw-cost"> Each deep job costs {fuel.jobCost} Fuel.</span>
               </div>

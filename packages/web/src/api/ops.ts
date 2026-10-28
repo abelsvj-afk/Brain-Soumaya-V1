@@ -107,6 +107,29 @@ export async function getDailyLog(): Promise<DailyLog | null> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getDailyLog` — same
+ * endpoint, `{ ok: false }` on any failure instead of collapsing into null.
+ * A 404 is NOT a failure: the route answers 404 when no log has been
+ * written yet, which is a legitimate empty state, so it returns
+ * `{ ok: true, log: null }`. Only a network failure, a non-404 error
+ * status, or a malformed body is `{ ok: false }`. Same Result-variant
+ * pattern as client.ts's `getDigestResult`; the fail-soft getter above is
+ * untouched.
+ */
+export async function getDailyLogResult(): Promise<{ ok: true; log: DailyLog | null } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/maintenance/daily-log`);
+    if (res.status === 404) return { ok: true, log: null };
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    if (d === null) return { ok: true, log: null };
+    return d && typeof d === "object" && typeof d.content === "string" ? { ok: true, log: d as DailyLog } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export interface Usage {
   inputTokens: number;
   outputTokens: number;

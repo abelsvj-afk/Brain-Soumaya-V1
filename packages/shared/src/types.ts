@@ -369,6 +369,14 @@ export interface EmotionalPattern {
   repeats: number;
   /** A gentle, heuristic suggestion. */
   intervention: string;
+  /**
+   * REG-153 / INS-06: the pattern's evidence basis, in plain words — how
+   * many days/memories it rests on and over what window (e.g. "3 heavy days
+   * among the last 5 day-buckets (2026-03-01–2026-03-05)"). Rendered beside
+   * the label so a health-flavored heading never stands without its
+   * evidence; the chat renderer carries the same hedge in words.
+   */
+  basis?: string;
 }
 
 /** Emotional trajectory analysis over time (research-agent add-on #5). Heuristic + offline. */

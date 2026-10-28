@@ -445,7 +445,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           </summary>
           <div style={{ padding: "0 1rem 1rem 1rem" }}>
             <p style={{ fontSize: "0.82rem", opacity: 0.85, margin: "0 0 1rem 0" }}>
-              Soumaya needs more context to finalize the deep-dive research for this memory.
+              Soumaya needs more context to finalize the Research Mode research for this memory.
             </p>
             {researchError && (
               <p style={{ color: "#ff5252", fontSize: "0.82rem", margin: "0 0 0.75rem 0" }}>
@@ -669,10 +669,12 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
         </details>
       )}
 
-      {/* IM-37: the Investigator's face — a cited deep-dive over this memory. */}
+      {/* IM-37: the Investigator's face — a cited deep-dive over this memory.
+          REG-152: the summary names the Investigator, because a second system
+          (Research Mode research) shares the name "deep-dive". */}
       {node.kind !== "action" && (
         <details className="dock-section" open={!isMobile}>
-          <summary>🔍 Deep-dive</summary>
+          <summary>🔍 Deep-dive (Investigator)</summary>
           <div style={{ padding: "10px" }}>
             <DeepDive nodeId={node.id} nodeLabel={node.label} onFocus={onFocus} />
           </div>
@@ -792,7 +794,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
               pushToast("Couldn't queue that — try again.", "⚠️", 3500);
             }
           }}
-          title="She'll prioritize this memory on her next round. With Research Mode on (and fuel in the tank) she deep-dives it — that spends 2 ⛽; otherwise it's a free recalibration."
+          title="She'll prioritize this memory on her next round. With Research Mode on (and fuel in the tank) she researches it in Research Mode — that spends 2 ⛽; otherwise it's a free recalibration."
         >
           {requested ? "🛰️ Queued for Soumaya" : `🛰️ Ask Soumaya to tend this · up to ${FUEL_JOB_COST} ⛽`}
         </button>

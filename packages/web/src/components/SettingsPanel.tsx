@@ -452,7 +452,7 @@ export function SettingsPanel({
           <label className="settings-toggle">
             <span>
               Research Mode
-              <em>She spends fuel to deep-dive memories and forge new links. Same switch as in the 🛰️ Soumaya tab — one setting, both places.</em>
+              <em>She spends fuel to research memories in Research Mode and forge new links. Same switch as in the 🛰️ Soumaya tab — one setting, both places.</em>
             </span>
             <button className={`switch ${researchOn ? "on" : ""}`} onClick={() => void toggleResearch()} aria-pressed={researchOn}>
               <span className="knob" />

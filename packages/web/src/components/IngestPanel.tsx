@@ -189,8 +189,16 @@ export function IngestPanel({
       const n = r.nodes.length;
       const e = r.extractedEdges.length + r.associativeEdges.length;
       const fuelBit = r.fuelEarned ? ` · +${r.fuelEarned.toFixed(1)} ⛽` : "";
-      const weighty = r.nodes.some((x: any) => (x.importance ?? 0) >= 0.6);
-      const researchBit = action ? "" : weighty ? " · 🔬 may deep-dive in Research Mode" : " · 🗃️ stored, no research needed";
+      // REG-150 / INS-03: the Research Mode claim must match the picker's
+      // reality. The autonomous picker pools importance >= 0.45 with degree
+      // <= 1, not already deep-dived (researchPriority.ts) — the 0.6 figure
+      // was the self-check's blind-spot count, a different quantity — and a
+      // job runs only when Research Mode is on for the space + the USD budget
+      // + fuel allow, so even a pool-eligible memory only "may" be researched.
+      // The negative branch claims nothing about research: a user-requested
+      // tend researches a memory at ANY importance, so "stored" stands alone.
+      const weighty = r.nodes.some((x: any) => (x.importance ?? 0) >= 0.45);
+      const researchBit = action ? "" : weighty ? " · 🔬 may be researched in Research Mode" : " · 🗃️ stored";
       // REG-143/AG-04: the pipeline stamps the reminder on the FIRST node
       // only — name that carrier here so the user knows which memory holds it.
       const reminderBit = !action && toIso(remind) && r.nodes[0] ? ` · 🔔 reminder on "${(r.nodes[0].label ?? "").slice(0, 30)}"` : "";

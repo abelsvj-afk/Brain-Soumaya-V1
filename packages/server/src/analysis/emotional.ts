@@ -118,6 +118,12 @@ function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone)
   const patterns: EmotionalPattern[] = [];
 
   const dipDays = points.filter((p) => p.valence < -0.3);
+  // REG-153 / INS-06: every pattern carries its basis — days counted and
+  // the window it was counted over — so the panel can show the evidence
+  // beside the label instead of a bare health-flavored heading.
+  const firstDay = points[0]?.date ?? "";
+  const lastDay = points[points.length - 1]?.date ?? "";
+  const windowBit = firstDay && lastDay ? `${points.length} day-buckets (${firstDay}–${lastDay})` : `${points.length} day-buckets`;
   if (dipDays.length >= 2) {
     patterns.push({
       type: "Stress cycle",
@@ -125,6 +131,7 @@ function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone)
       repeats: dipDays.length,
       intervention:
         "These heavy dips keep recurring — note what tends to precede them and plan a small recovery ritual around that trigger.",
+      basis: `${dipDays.length} heavy days among the last ${windowBit}.`,
     });
   }
   // Burnout shape: a bright early stretch that cools into a heavy recent one.
@@ -139,6 +146,7 @@ function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone)
         repeats: 1,
         intervention:
           "A bright early stretch has cooled into a heavy one — a classic burnout shape. Protect rest and lighten the load where you can.",
+        basis: `${windowBit}: early stretch averaged ${round(early)}, recent stretch averaged ${round(late)}.`,
       });
     }
   }
@@ -148,6 +156,7 @@ function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone)
       trigger: "",
       repeats: 1,
       intervention: "You're on an upswing — worth noting what's working so you can repeat it.",
+      basis: `Rising mood across the last ${windowBit}.`,
     });
   } else if (trend === "falling" && average < 0) {
     patterns.push({
@@ -155,6 +164,7 @@ function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone)
       trigger,
       repeats: 1,
       intervention: "Mood has been trending down. Revisit a memory that lifted you, or capture one good thing today.",
+      basis: `Falling mood across the last ${windowBit}.`,
     });
   }
   if (volatility >= 0.5) {
@@ -163,6 +173,7 @@ function trajectoryFrom(nodes: GraphNode[], tz: string = DEFAULT_PREFS.timezone)
       trigger: "",
       repeats: 1,
       intervention: "Big emotional swings lately — anchoring routines (sleep, movement) can smooth the ride.",
+      basis: `High swings across the last ${windowBit}.`,
     });
   }
 

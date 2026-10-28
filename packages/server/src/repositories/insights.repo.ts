@@ -4,6 +4,7 @@ import type { DbHandle } from "../db/client.js";
 import { insights, DEFAULT_SPACE, type InsightRow } from "../db/schema.js";
 import { NodesRepo } from "./nodes.repo.js";
 import { NotificationsRepo } from "./notifications.repo.js";
+import { localDayBoundsForDate } from "../lib/time.js";
 
 /** Significance tier (#10) from an insight's kind + the memories it spans.
  *  1 = identity-shaping, 2 = behavioral pattern, 3 = situational. */
@@ -74,6 +75,36 @@ export class InsightsRepo {
       .orderBy(desc(insights.id))
       .limit(limit)
       .all();
+    return this.hydrate(rows);
+  }
+
+  /**
+   * REG-148 / INS-01: insights created on one SPACE-local calendar day
+   * (`YYYY-MM-DD` in zone `tz`) — the digest's "Connections she surfaced
+   * today" must be the day's own insights, not the five most recent of all
+   * time. Instant-range membership (julianday on both sides) so the stored
+   * formats' mix (naive SQLite UTC + ISO-Z) is handled the same way the
+   * digest's own expired-actions block already does it. The day string is
+   * the caller's (the digest's `today`); `tz` is only used to find that
+   * day's real local midnights (DST-safe via `localDayBoundsForDate`).
+   */
+  recentOnDay(date: string, tz: string, limit = 5): Insight[] {
+    const { startMs, endMs } = localDayBoundsForDate(date, tz);
+    const rows = this.h.sqlite
+      .prepare(
+        `SELECT id, node_a AS nodeA, node_b AS nodeB, text, score, kind,
+                created_at AS createdAt, space_id AS spaceId
+         FROM insights
+         WHERE space_id = ?
+           AND julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)
+         ORDER BY id DESC LIMIT ?`,
+      )
+      .all(this.spaceId, new Date(startMs).toISOString(), new Date(endMs).toISOString(), limit) as InsightRow[];
+    return this.hydrate(rows);
+  }
+
+  /** Hydrate raw insight rows with their node references for display. */
+  private hydrate(rows: InsightRow[]): Insight[] {
     const ids = Array.from(new Set(rows.flatMap((r) => [r.nodeA, r.nodeB])));
     const refs = new Map<number, NodeRef>(
       this.nodes.byIds(ids).map((n) => [n.id, { id: n.id, label: n.label, type: n.type }]),

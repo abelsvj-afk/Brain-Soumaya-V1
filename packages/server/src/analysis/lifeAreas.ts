@@ -7,8 +7,10 @@ import { NodesRepo } from "../repositories/nodes.repo.js";
 /**
  * Life-area lens (research-agent add-on #6) — adopted as an OPTIONAL OVERLAY, not a
  * storage model. The galaxy still clusters by association (emergent constellations);
- * this just classifies each memory into a broad area of life so you can see where your
- * attention actually goes. Heuristic over tags + type + language; fully offline.
+ * this just classifies each memory into a broad area of life so you can see roughly
+ * which themes your memories fall into. Heuristic over tags + type + language; fully
+ * offline. It measures keyword-sorted memory counts, NOT attention — the system has
+ * no attention/engagement signal in this builder (REG-155 / INS-08).
  */
 
 const RULES: { area: LifeArea; tags: string[]; types: string[]; re: RegExp }[] = [
@@ -61,6 +63,10 @@ export function buildLifeAreaCounts(h: DbHandle, spaceId: string = DEFAULT_SPACE
   const counts = new Map<LifeArea, number>(LIFE_AREAS.map((a) => [a, 0]));
   for (const n of new NodesRepo(h, spaceId).all()) {
     if (n.kind === "action" || n.kind === "moc") continue;
+    // REG-155 / INS-08: machine-authored belief nodes are her distillations,
+    // not the user's memories — counting them would let her own summaries
+    // inflate the areas their wording happens to match.
+    if (n.kind === "belief") continue;
     const area = lifeAreaOf(n);
     counts.set(area, (counts.get(area) ?? 0) + 1);
   }

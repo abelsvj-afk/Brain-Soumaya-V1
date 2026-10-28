@@ -135,34 +135,43 @@ describe("NodeList", () => {
 
 describe("DigestPanel", () => {
   it("renders with a loading shimmer skeleton, then loads data concurrently", async () => {
-    vi.spyOn(clientApi, "getDigest").mockResolvedValue([]);
-    vi.spyOn(clientApi, "getDailyDigest").mockResolvedValue({
-      date: "2026-08-11",
-      greeting: "Hello!",
-      fresh: [],
-      connections: [],
-      expiredActions: [],
-      cooling: [],
-      reminders: [],
-      closing: "Bye!",
+    // Batch N (REG-149): the panel loads through the strict Result variants
+    // (IM-124); spy those, with the { ok: true, … } shape.
+    vi.spyOn(clientApi, "getDigestResult").mockResolvedValue({ ok: true, insights: [] });
+    vi.spyOn(clientApi, "getDailyDigestResult").mockResolvedValue({
+      ok: true,
+      digest: {
+        date: "2026-08-11",
+        greeting: "Hello!",
+        fresh: [],
+        connections: [],
+        expiredActions: [],
+        cooling: [],
+        reminders: [],
+        closing: "Bye!",
+      },
     });
-    vi.spyOn(clientApi, "getConstellations").mockResolvedValue([]);
-    vi.spyOn(clientApi, "getEmotionalTrajectory").mockResolvedValue({
-      points: [],
-      trend: "steady",
-      average: 0,
-      volatility: 0,
-      patterns: [],
-      sampleSize: 0,
+    vi.spyOn(clientApi, "getConstellationsResult").mockResolvedValue({ ok: true, constellations: [] });
+    vi.spyOn(clientApi, "getEmotionalTrajectoryResult").mockResolvedValue({
+      ok: true,
+      trajectory: {
+        points: [],
+        trend: "steady",
+        average: 0,
+        volatility: 0,
+        patterns: [],
+        sampleSize: 0,
+      },
     });
-    vi.spyOn(clientApi, "getDormant").mockResolvedValue([]);
-    vi.spyOn(clientApi, "getEvolutionLinks").mockResolvedValue([]);
-    vi.spyOn(clientApi, "getLifeAreas").mockResolvedValue([]);
-    vi.spyOn(clientApi, "getSelfReview").mockResolvedValue([]);
-    vi.spyOn(clientApi, "getDailyLog").mockResolvedValue(null);
-    vi.spyOn(clientApi, "getBeliefs").mockResolvedValue([
-      { id: 101, content: "You value deep connections", evidence: 5 } as any,
-    ]);
+    vi.spyOn(clientApi, "getDormantResult").mockResolvedValue({ ok: true, dormant: [] });
+    vi.spyOn(clientApi, "getEvolutionLinksResult").mockResolvedValue({ ok: true, evolution: [] });
+    vi.spyOn(clientApi, "getLifeAreasResult").mockResolvedValue({ ok: true, lifeAreas: [] });
+    vi.spyOn(clientApi, "getSelfReviewResult").mockResolvedValue({ ok: true, selfReview: [] });
+    vi.spyOn(clientApi, "getDailyLogResult").mockResolvedValue({ ok: true, log: null });
+    vi.spyOn(clientApi, "getBeliefsResult").mockResolvedValue({
+      ok: true,
+      beliefs: [{ id: 101, content: "You value deep connections", evidence: 5 } as any],
+    });
 
     const { container } = render(<DigestPanel onFocus={vi.fn()} />);
 

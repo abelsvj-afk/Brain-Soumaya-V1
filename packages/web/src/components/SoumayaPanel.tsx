@@ -422,8 +422,8 @@ export function SoumayaPanel({
             </div>
             <p className="budget-note" style={{ fontSize: "11px", marginTop: "6px" }}>
               {fuel.fuel < fuel.jobCost
-                ? "Out of fuel — deep-dive expansion paused. Add memories, forge links, or clear action items to refuel."
-                : "Powers deep-dive research + sector charting. Earn it by adding memories or forging links."}
+                ? "Out of fuel — Research Mode research paused. Add memories, forge links, or clear action items to refuel."
+                : "Powers Research Mode research + sector charting. Earn it by adding memories or forging links."}
             </p>
             {/* A player-controlled SINK so Fuel isn't just a number that pins at the cap:
                 spend it to have Soumaya warm your coldest memories on demand, right now. */}
