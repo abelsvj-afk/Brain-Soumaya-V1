@@ -11,6 +11,10 @@ import {
   type FleetDefenseReleaseSize,
 } from "@brain/shared";
 import { useFleetDefense } from "../hooks/useFleetDefense.js";
+import {
+  practiceOutcomeLine,
+  useFleetDefensePractice,
+} from "../hooks/useFleetDefensePractice.js";
 
 /**
  * Fleet defense, in the Soumaya tab beside the Fleet roster (Wave 2).
@@ -54,6 +58,16 @@ const KIND_PLACEHOLDERS: Record<FleetDefenseReleaseKind, string> = {
   debt: "e.g. the card balance I'm paying down",
 };
 
+/** Practice size labels are deliberately worded as PRACTICE fleets, so
+ *  no practice label can ever be read as a real release's fleet — and
+ *  so the real-defense copy ("3 ships will come") stays unique to a
+ *  real offered release. */
+const PRACTICE_SIZE_LABELS: Record<FleetDefenseReleaseSize, string> = {
+  small: "Small — a light practice fleet, 3 ships",
+  steady: "Steady — a mid-size practice fleet, 4 ships",
+  big: "Big — a heavy practice fleet, 5 ships",
+};
+
 export default function FleetDefensePanel({
   nodes = [],
   enabled = true,
@@ -64,6 +78,16 @@ export default function FleetDefensePanel({
 }) {
   const { overview, loading, failed, error, autoPlay, setAutoPlay, refresh, offer, start, tick } =
     useFleetDefense(enabled);
+  const {
+    practice,
+    autoPlay: practiceAutoPlay,
+    setAutoPlay: setPracticeAutoPlay,
+    start: startPractice,
+    tick: tickPractice,
+    end: endPractice,
+  } = useFleetDefensePractice();
+  const [practiceSize, setPracticeSize] = useState<FleetDefenseReleaseSize>("small");
+  const [practiceHelmLane, setPracticeHelmLane] = useState<number | null>(null);
   const [showOffer, setShowOffer] = useState(false);
   const [kind, setKind] = useState<FleetDefenseReleaseKind>("emotion");
   const [size, setSize] = useState<FleetDefenseReleaseSize>("small");
@@ -335,6 +359,128 @@ export default function FleetDefensePanel({
           )}
         </>
       )}
+
+      {/* Scale practice — a clearly separated mode, NOT a real defense.
+          It needs no server and no release, so it renders even when
+          the real defense couldn't be reached: practice is always
+          available, and it can never be mistaken for a defense of
+          something you chose to let go of. */}
+      <div className="fleet-defense-practice" aria-label="Practice in Scale Space">
+        <h4>Practice in Scale Space</h4>
+        <p>
+          PRACTICE — this is only practice, in Scale Space. Nothing is at stake here: no
+          release is offered, nothing is cleared, nothing is saved, and nothing you
+          worked on is touched. It is the same defense loop — the same ships, the same
+          three lanes, one short round, one wave — so you can learn how it plays before
+          a real defense, or just play it for its own sake. Practice is free, and
+          practice earns nothing: no score, no reward, no record kept.
+        </p>
+
+        {!practice && (
+          <>
+            <fieldset>
+              <legend>How big a practice fleet?</legend>
+              {FLEET_DEFENSE_RELEASE_SIZES.map((s) => (
+                <label key={s}>
+                  <input
+                    type="radio"
+                    name="practice-size"
+                    checked={practiceSize === s}
+                    onChange={() => setPracticeSize(s)}
+                  />{" "}
+                  {PRACTICE_SIZE_LABELS[s]}
+                </label>
+              ))}
+            </fieldset>
+            <p>
+              <button type="button" onClick={() => startPractice(practiceSize)}>
+                Start a practice round
+              </button>
+            </p>
+          </>
+        )}
+
+        {practice && (
+          <div className="fleet-defense-board" aria-label="Practice round">
+            <h4>
+              PRACTICE round — {practice.size} fleet,{" "}
+              {practice.status === "active"
+                ? "in progress"
+                : practice.status === "won"
+                  ? "practice fleet dispersed"
+                  : "practice fleet got through"}
+            </h4>
+            <p>
+              {practice.invaders.filter((i) => !i.dispersed).length} of{" "}
+              {practice.invaders.length} practice ships still closing in · round{" "}
+              {practice.tickCount + 1}
+            </p>
+            <p>
+              Defenders: {FLEET_DEFENSE_DEFENDERS.map((d) => d.name).join(" · ")} — Kenney
+              hulls and her own ship, against Quaternius fighters.
+            </p>
+            {[1, 2, 3].map((lane) => {
+              const inLane = practice.invaders.filter((i) => i.lane === lane);
+              return (
+                <div key={lane} className="fleet-defense-lane">
+                  <strong>Lane {lane}</strong>
+                  <ul>
+                    {inLane.map((inv) => (
+                      <li key={inv.shipKey}>
+                        {inv.shipName} —{" "}
+                        {inv.dispersed ? "dispersed" : `${inv.distance} step${inv.distance === 1 ? "" : "s"} out`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {practice.lastLine && <p className="fleet-defense-line">{practice.lastLine}</p>}
+            {practice.status !== "active" && (
+              <p className="fleet-defense-outcome">{practiceOutcomeLine(practice.status)}</p>
+            )}
+            <div className="fleet-defense-controls">
+              <button
+                type="button"
+                onClick={() => tickPractice("autonomous")}
+                disabled={practice.status !== "active"}
+              >
+                Let Soumaya take this round
+              </button>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={practiceAutoPlay}
+                  onChange={(e) => setPracticeAutoPlay(e.target.checked)}
+                />{" "}
+                She plays on her own
+              </label>
+            </div>
+            <div className="fleet-defense-helm">
+              <span>Take the helm — fire down a lane:</span>{" "}
+              {Array.from({ length: FLEET_DEFENSE_LANES }, (_, i) => i + 1).map((lane) => (
+                <button
+                  key={lane}
+                  type="button"
+                  disabled={practice.status !== "active"}
+                  onClick={() => {
+                    setPracticeHelmLane(lane);
+                    tickPractice("helm", lane);
+                  }}
+                >
+                  Fire lane {lane}
+                </button>
+              ))}
+              {practiceHelmLane !== null && <span> Last practice helm shot: lane {practiceHelmLane}.</span>}
+            </div>
+            <p>
+              <button type="button" onClick={() => endPractice()}>
+                End practice
+              </button>
+            </p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
