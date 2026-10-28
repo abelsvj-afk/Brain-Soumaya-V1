@@ -130,6 +130,8 @@ export const SPACE_SCOPED_TABLES = [
   // (REG-051) are per-space rows — brain deletion must remove them too.
   "review_grade_attempts",
   "daily_earn_counts",
+  // Verb 1 (Tend a plot): one row per tend act — per-space, deleted with the brain.
+  "garden_tends",
   "undertakings",
   "daily_contact",
   "user_persona",

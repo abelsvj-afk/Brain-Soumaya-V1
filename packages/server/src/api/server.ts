@@ -24,6 +24,7 @@ import { cognitiveRoutes } from "./routes/cognitive.js";
 import { workingRoutes } from "./routes/working.js";
 import { inquiryRoutes } from "./routes/inquiries.js";
 import { candidateRoutes } from "./routes/candidates.js";
+import { gardenRoutes } from "./routes/garden.js";
 import { peopleRoutes } from "./routes/people.js";
 import { timelineRoutes } from "./routes/timeline.js";
 import { reviewRoutes } from "./routes/review.js";
@@ -119,6 +120,7 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/working", guard, workingRoutes(ctx));
   app.use("/api/inquiries", guard, inquiryRoutes(ctx));
   app.use("/api/candidates", guard, candidateRoutes(ctx));
+  app.use("/api/garden", guard, gardenRoutes(ctx));
   app.use("/api/people", guard, peopleRoutes(ctx));
   app.use("/api/timeline", guard, timelineRoutes(ctx));
   app.use("/api/review", guard, reviewRoutes(ctx));

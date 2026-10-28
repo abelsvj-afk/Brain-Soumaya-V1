@@ -25,9 +25,10 @@ import {
  *
  * Draw-call sketch (recipe ceiling 95): terraces ≤6 · tree 4 · vegetation 1
  * · plots 3 (one instanced mesh per form) · paths 1 · landmarks ≤3 each
- * · sky 1 · mist 3 · underside 2 (skirt + bottom cap). Runtime measurement
- * belongs to the device check (C4's measured half); these constants are
- * the static half.
+ * · sky 1 · mist 3 · underside 2 (skirt + bottom cap) · Verb 1 glow ≤2
+ * (one halo InstancedMesh + one lit-paths LineSegments, only when non-empty).
+ * Runtime measurement belongs to the device check (C4's measured half);
+ * these constants are the static half.
  *
  * The garden is a finished solid: a stone skirt drops from the lowest
  * terrace to a solid floor, and a bottom cap closes it — from below,
@@ -44,6 +45,25 @@ export interface GardenScene {
   group: THREE.Group;
   update: (elapsedMs: number, opts?: { reducedMotion?: boolean }) => void;
   dispose: () => void;
+  /**
+   * Verb 1 (Tend a plot): which plot a pointer tap lands on, if any.
+   * Raycasts against the three plot InstancedMeshes; returns the plot's
+   * node id, or null when the tap hits ground, sky, or nothing.
+   */
+  pickPlot: (ndc: { x: number; y: number }, camera: THREE.Camera) => number | null;
+}
+
+/**
+ * Verb 1 (Tend a plot): the garden's warm glow, passed at build time.
+ * warmNodeIds — plots tended within the warm window (gold halos).
+ * litEdgeIds — edges a recent tend created or reused (brighter paths).
+ * Both are additive only: untended plots and unlit paths render exactly
+ * as before. The layout's own paths already carry edge ids (GardenPath),
+ * so the scene resolves lit endpoints from the layout — no re-derivation.
+ */
+export interface GardenGlow {
+  warmNodeIds: Set<number>;
+  litEdgeIds: Set<number>;
 }
 
 const DAWN_GOLD = 0xffd27a;
@@ -70,11 +90,13 @@ function hashSeeded(seed: string): number {
   return h >>> 0;
 }
 
-export function createGardenScene(layout: GardenLayout): GardenScene {
+export function createGardenScene(layout: GardenLayout, glow?: GardenGlow): GardenScene {
   const group = new THREE.Group();
   group.name = "growing-place";
   let disposed = false;
   const swaying: THREE.Object3D[] = [];
+  // Verb 1: the plot meshes, kept for tap-to-tend raycasting.
+  const plotMeshes: { mesh: THREE.InstancedMesh; plots: readonly { nodeId: number }[] }[] = [];
 
   // Terraces: one flat ring per band present, greens varied per terrace so
   // the arcs read as distinct plantings. Ring i spans radius[i+1]..radius[i].
@@ -213,7 +235,60 @@ export function createGardenScene(layout: GardenLayout): GardenScene {
       mesh.setMatrixAt(i, dummy.matrix);
     });
     mesh.name = form.name;
+    plotMeshes.push({ mesh, plots: form.plots });
     group.add(mesh);
+  }
+
+  // Verb 1 (Tend a plot): the warm glow. One InstancedMesh of gold halo
+  // spheres over plots tended within the warm window, plus one brighter
+  // LineSegments over the paths a recent tend lit. Additive only — an
+  // untended plot looks exactly as it always did; the glow simply isn't
+  // drawn. Baked glow, no bloom, no post-processing.
+  if (glow && glow.warmNodeIds.size > 0) {
+    const warmPlots: { x: number; y: number; z: number }[] = [];
+    for (const form of forms) {
+      form.plots.forEach((plot) => {
+        if (glow.warmNodeIds.has(plot.nodeId)) {
+          warmPlots.push({ x: plot.x, y: plot.y + form.lift, z: plot.z });
+        }
+      });
+    }
+    if (warmPlots.length > 0) {
+      const halos = new THREE.InstancedMesh(
+        new THREE.SphereGeometry(5.5, 12, 8),
+        new THREE.MeshBasicMaterial({ color: DAWN_GOLD, transparent: true, opacity: 0.45, depthWrite: false }),
+        warmPlots.length,
+      );
+      warmPlots.forEach((p, i) => {
+        dummy.position.set(p.x, p.y, p.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        halos.setMatrixAt(i, dummy.matrix);
+      });
+      halos.name = "warm-halos";
+      group.add(halos);
+    }
+  }
+  if (glow && glow.litEdgeIds.size > 0) {
+    const byId = new Map(layout.plots.map((p) => [p.nodeId, p]));
+    const positions: number[] = [];
+    for (const path of layout.paths) {
+      if (!glow.litEdgeIds.has(path.edgeId)) continue;
+      const a = byId.get(path.fromNodeId);
+      const b = byId.get(path.toNodeId);
+      if (!a || !b) continue; // layout guarantees endpoints; defense in depth
+      positions.push(a.x, a.y + 3, a.z, b.x, b.y + 3, b.z);
+    }
+    if (positions.length > 0) {
+      const litGeo = new THREE.BufferGeometry();
+      litGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+      const lit = new THREE.LineSegments(
+        litGeo,
+        new THREE.LineBasicMaterial({ color: 0xffc84d, transparent: true, opacity: 1 }),
+      );
+      lit.name = "lit-paths";
+      group.add(lit);
+    }
   }
 
   // Paths: one LineSegments of dawn-gold chords between plot pairs.
@@ -281,6 +356,7 @@ export function createGardenScene(layout: GardenLayout): GardenScene {
     swaying.push(mist);
   }
 
+  const raycaster = new THREE.Raycaster();
   return {
     group,
     update(elapsedMs: number, opts?: { reducedMotion?: boolean }) {
@@ -293,6 +369,18 @@ export function createGardenScene(layout: GardenLayout): GardenScene {
           obj.rotation.z = sway;
         }
       }
+    },
+    pickPlot(ndc: { x: number; y: number }, camera: THREE.Camera): number | null {
+      if (disposed || plotMeshes.length === 0) return null;
+      raycaster.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), camera);
+      const hits = raycaster.intersectObjects(
+        plotMeshes.map((p) => p.mesh),
+        false,
+      );
+      const hit = hits[0];
+      if (!hit || hit.instanceId === undefined || hit.instanceId === null) return null;
+      const entry = plotMeshes.find((p) => p.mesh === hit.object);
+      return entry?.plots[hit.instanceId]?.nodeId ?? null;
     },
     dispose() {
       if (disposed) return;
