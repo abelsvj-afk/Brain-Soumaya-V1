@@ -95,6 +95,7 @@ import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
 import { NavRail } from "./components/NavRail.js";
 import { ToolsMenu } from "./components/ToolsMenu.js";
+import { useEternityPresence } from "./hooks/useEternityPresence.js";
 import { ActionRail } from "./components/ActionRail.js";
 import {
   currentSpace,
@@ -145,6 +146,8 @@ export default function App() {
   // defaults via utils/spaceTimezone.ts) follows the SPACE's zone.
   const spaceTimeZone = useSpaceTimeZone();
   const [space, setSpace] = useState<{ id: string; name: string } | null>(null);
+  // Eternity's presence in the home sky + his one daily word (docs/specs/eternity-autonomy-2026-10-29.md §2d/§2e).
+  useEternityPresence(!!space);
   const [authChecked, setAuthChecked] = useState(false);
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
   // Several panels can request a graph refresh at once. Only the response from the

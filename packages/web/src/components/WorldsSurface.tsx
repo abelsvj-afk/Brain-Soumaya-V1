@@ -1773,7 +1773,7 @@ export default function WorldsSurface({
         }
       }
       // The warp swings the whole sky round the holding ship (the same yaw its gates turn with).
-      sky?.update(camera.position, elapsed / 1000, mode === "transit" ? -((world as TransitScene).view?.yaw ?? 0) : 0);
+      sky?.update(camera.position, elapsed / 1000, mode === "transit" ? -((world as TransitScene).view?.yaw ?? 0) : 0, reducedMotion);
       try {
         renderer.render(scene, camera);
       } catch (err) {

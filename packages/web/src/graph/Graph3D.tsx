@@ -48,6 +48,7 @@ import type { GraphData, GraphNode } from "@brain/shared";
 import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds } from "./nodeObject.js";
 import { makeStarfield, makeGalaxies, makeMilkyWay } from "./starfield.js";
 import { withSkySeed } from "./homeSky.js";
+import { buildEternityHalo, type EternityHalo } from "./eternityHalo.js";
 import { makeConstellations } from "./skybox.js";
 import { makeDeepSpace, makeBackdropBakeSources, DEEP_SPACE_BASE } from "./deepSpace.js";
 import { bakeBackdrop, disposeBakedBackdrop, type BakedBackdrop } from "./backdropBake.js";
@@ -609,6 +610,38 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   // While a world is up, stop the library's render loop and this component's tick; resume on return
   // (dt is clamped, so nothing jumps).
   const pausedRef = useRef(false);
+  // Eternity's presence in the home sky (spec §2d): added when the app reads his presence; brighter on a day he acted.
+  const eternityHaloRef = useRef<EternityHalo | null>(null);
+  useEffect(() => {
+    const onPresence = (e: Event) => {
+      const d = (e as CustomEvent<{ intensity?: number; visible?: boolean }>).detail ?? {};
+      const scene = fgRef.current?.scene?.() as THREE.Scene | undefined;
+      if (!scene) return;
+      if (d.visible === false) {
+        if (eternityHaloRef.current) {
+          scene.remove(eternityHaloRef.current.group);
+          eternityHaloRef.current.dispose();
+          eternityHaloRef.current = null;
+        }
+        return;
+      }
+      if (!eternityHaloRef.current) {
+        eternityHaloRef.current = buildEternityHalo(3200, 10500);
+        scene.add(eternityHaloRef.current.group);
+      }
+      eternityHaloRef.current.setIntensity(d.intensity ?? 0.35);
+    };
+    window.addEventListener("eternity:presence", onPresence);
+    return () => {
+      window.removeEventListener("eternity:presence", onPresence);
+      const scene = fgRef.current?.scene?.() as THREE.Scene | undefined;
+      if (eternityHaloRef.current) {
+        scene?.remove(eternityHaloRef.current.group);
+        eternityHaloRef.current.dispose();
+        eternityHaloRef.current = null;
+      }
+    };
+  }, []);
   useEffect(() => {
     const onSurface = (e: Event) => {
       const up = !!(e as CustomEvent<{ visible?: boolean }>).detail?.visible;
@@ -2339,6 +2372,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
         if (s.journeyhubs?.visible) s.journeyhubs.children.forEach((o: any) => o.userData?.update?.(now));
       }
       s.nebulae?.children.forEach((o: any) => o.userData?.update?.(now));
+      eternityHaloRef.current?.update(now, calmMotionRef.current);
       s.comets?.children.forEach((o: any) => o.userData?.update?.(now));
       burstsRef.current?.group?.children.forEach((o: any) => o.userData?.update?.());
       linkFormingRef.current?.group?.userData?.update?.();

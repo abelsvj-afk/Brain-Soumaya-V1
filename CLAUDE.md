@@ -560,6 +560,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   uses his own lines and names a memory only if it carries feeling/importance (an errand like "Buy socks" never). Stopped or
   "Eternity may write to me" unticked → silent. Look at: whether 06:45 is the right wake time, the tone of his first real
   messages, and that Telegram shows them (the bot must be linked).
+- **Eternity phase 2d/2e — presence across the app + projection into every brain (2026-10-29) — toast MEASURED in a real
+  browser; halo proven by tests (not seen on screen headless); needs on-device confirmation** (npcs/eternityPresence.ts,
+  GET /api/npcs/eternity/presence, graph/eternityHalo.ts, homeSky.ts, Graph3D.tsx, hooks/useEternityPresence.ts,
+  graph/eternityPresenceToast.ts): a faint arc of his halo hangs at the edge of the home galaxy's sky and of every world's sky
+  (brighter on a day his loop acted in that brain; still under reduced motion; one additive draw call). His PROJECTION: one
+  broadcast gesture + line per calendar day, identical for every brain (no content crosses brains). ~15 s after the app opens
+  (never on top of first-run screens) he leaves ONE toast a day: the broadcast line, a crown for a Journey finished this week,
+  and "parted the veil" on your top memory due for recall — tapping flies you to that star (he only offers; you recall). The kill
+  switch silences all of it. Look at: whether the halo is visible but not distracting on a real phone, and the toast's wording.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

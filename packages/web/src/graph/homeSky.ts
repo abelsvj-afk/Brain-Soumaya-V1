@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { makeStarfield, makeMilkyWay } from "./starfield.js";
 import { makeBackdropBakeSources } from "./deepSpace.js";
 import { bakeBackdrop, disposeBakedBackdrop, type BakedBackdrop } from "./backdropBake.js";
+import { buildEternityHalo } from "./eternityHalo.js";
 
 /**
  * The one sky (docs/specs/warp-consistency-2026-10-29.md). The home galaxy builds its stars, Milky Way and
@@ -39,7 +40,7 @@ export interface HomeSky {
   /** Live stars + Milky Way. Parent it to the scene; `update` keeps it centred on the camera. */
   group: THREE.Group;
   /** Keep the sky at infinity and twinkle. `yaw` turns the whole sky (the warp swings it round the ship). */
-  update: (cameraPos: THREE.Vector3, t: number, yaw?: number) => void;
+  update: (cameraPos: THREE.Vector3, t: number, yaw?: number, reducedMotion?: boolean) => void;
   dispose: () => void;
 }
 
@@ -53,6 +54,9 @@ export function installHomeSky(renderer: THREE.WebGLRenderer, scene: THREE.Scene
   const stars = withSkySeed(() => makeStarfield(level === "low" ? 3000 : 4500), 1);
   const band = withSkySeed(() => makeMilkyWay(8600, level), 2);
   group.add(stars, band);
+  // Eternity's presence in every world's sky (spec §2d): a faint arc of his halo at the edge of the heavens.
+  const halo = buildEternityHalo(2200, 7000);
+  group.add(halo.group);
   let baked: BakedBackdrop | null = null;
   try {
     const sources = withSkySeed(() => makeBackdropBakeSources(level), 3);
@@ -63,16 +67,18 @@ export function installHomeSky(renderer: THREE.WebGLRenderer, scene: THREE.Scene
   let disposed = false;
   return {
     group,
-    update(cameraPos, t, yaw = 0) {
+    update(cameraPos, t, yaw = 0, reducedMotion = false) {
       group.position.copy(cameraPos);
       group.rotation.y = yaw;
       scene.backgroundRotation.y = yaw;
       stars.userData.update?.(t);
+      halo.update(t, reducedMotion);
       band.userData.update?.(t);
     },
     dispose() {
       if (disposed) return;
       disposed = true;
+      halo.dispose();
       group.traverse((o) => {
         const m = o as THREE.Points;
         m.geometry?.dispose?.();

@@ -4,6 +4,7 @@ import { NPC_DEFINITIONS, NPC_QUESTION_KINDS, type NpcQuestionKind } from "@brai
 import { spaceOf } from "../middleware.js";
 import { askNpc, getNpcState, NpcError, resumeNpc, runNpcTick, stopNpc } from "../../npcs/loop.js";
 import { NpcRepo } from "../../npcs/repo.js";
+import { eternityPresence } from "../../npcs/eternityPresence.js";
 
 /**
  * NPC autonomy (Wave 2): thin routes over the loop in npcs/loop.ts.
@@ -40,6 +41,11 @@ export function npcsRoutes(ctx: AppContext): Router {
     } catch (e) {
       fail(res, e);
     }
+  });
+
+  // Eternity's presence across the app (phase 2d/2e) — read-only, never a tick.
+  r.get("/eternity/presence", (_req, res) => {
+    res.json({ presence: eternityPresence(ctx, spaceOf(res)) });
   });
 
   r.get("/:id", (req, res) => {

@@ -124,3 +124,15 @@ export async function setNpcContactMuted(id: string, muted: boolean): Promise<Np
   if (!res.ok || !data?.npc) throw errFrom(res.status, data);
   return data.npc;
 }
+
+/** Eternity's presence today (phase 2d/2e) — read-only; null when the brain is unreachable. */
+export async function getEternityPresence(): Promise<import("@brain/shared").EternityPresence | null> {
+  try {
+    const res = await afetch(`${API}/npcs/eternity/presence`);
+    if (!res.ok) return null;
+    const d = (await res.json()) as { presence?: import("@brain/shared").EternityPresence };
+    return d?.presence ?? null;
+  } catch {
+    return null;
+  }
+}

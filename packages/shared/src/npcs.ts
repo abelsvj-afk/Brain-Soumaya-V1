@@ -139,6 +139,27 @@ export const ETERNITY_WAKE_LATEST = "11:00";
 export const ETERNITY_AUTONOMOUS_GESTURES = ["stillness", "regard", "blessing", "joy"] as const;
 export type EternityAutonomousGesture = (typeof ETERNITY_AUTONOMOUS_GESTURES)[number];
 
+/** His broadcast lines (the same words to every brain — the projection, phase 2e). Copied from the world's gesture table. */
+export const ETERNITY_BROADCAST_LINES: Record<EternityAutonomousGesture, string> = {
+  stillness: "Be still. You are seen, every one of you. Rest here.",
+  regard: "He turns toward this corner of the sky. Every ship feels looked at — because it is.",
+  blessing: "For every ship in this sky: go back lighter than you came.",
+  joy: "Joy, plainly. The whole sky brightens — share it.",
+};
+
+/** His presence in a brain today (phase 2d/2e). `broadcast` is identical for every brain on a given day. */
+export interface EternityPresence {
+  dayKey: string;
+  stopped: boolean;
+  broadcast: { gesture: EternityAutonomousGesture; line: string } | null;
+  /** True when his own loop acted in this brain today — his halo burns brighter. */
+  actedToday: boolean;
+  /** "Part the veil": a memory due for recall he lights for you (an offer — you recall it, he changes nothing). */
+  veil: { nodeId: number; label: string } | null;
+  /** A Journey you completed in the last 7 days, crowned. */
+  crown: { journeyId: number; title: string } | null;
+}
+
 export const NPC_DEFINITIONS: readonly NpcDefinition[] = [HARBOR_CONTROLLER, ETERNITY_FIGURE] as const;
 
 export function npcDefinition(id: string): NpcDefinition | undefined {
