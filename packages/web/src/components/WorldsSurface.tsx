@@ -98,6 +98,7 @@ import {
   type WalkPoint,
   type WalkState,
 } from "../graph/gardenWalk.js";
+import { applyWorldLighting, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
@@ -364,6 +365,8 @@ function isScaleLayout(
 
 interface WorldSceneEntry {
   title: string;
+  /** Shared lighting (graph/worldLighting.ts): the environment map + fill the glTF models need to read as lit. */
+  light?: WorldLightRig;
   background: number;
   fogDensity: number;
   orbitRadius: number;
@@ -404,6 +407,7 @@ const EMPTY_GARDEN_LAYOUT: GardenLayout = {
 const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   "great-station": {
     title: "The Great Station",
+    light: { env: 1.1, hemi: { sky: 0x9fb0ff, ground: 0x2a2036, intensity: 0.8 }, key: { color: 0xfff1dc, intensity: 3.0, from: [-500, 450, 350] } },
     background: STATION_PALETTE.indigo,
     fogDensity: 0.00016,
     orbitRadius: STATION_ORBIT_RADIUS,
@@ -414,6 +418,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   "growing-place": {
     title: "The Growing Place",
+    light: { env: 0.5 },
     background: 0x0a2420,
     fogDensity: 0.00016,
     orbitRadius: 1150,
@@ -425,6 +430,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   "deep-past": {
     title: "The Deep Past",
+    light: { env: 0.6, hemi: { sky: 0xa890e8, ground: 0x2e1a48, intensity: 1.2 }, key: { color: 0xb8a8ff, intensity: 1.0, from: [300, 900, 200] } },
     background: 0x140d24,
     fogDensity: 0.00016,
     orbitRadius: 850,
@@ -436,6 +442,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   people: {
     title: "The People",
+    light: { env: 0.6, hemi: { sky: 0xffdcb0, ground: 0x3a2a20, intensity: 1.0 } },
     background: 0x1a120c,
     fogDensity: 0.00016,
     orbitRadius: 700,
@@ -447,6 +454,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   "quiet-archive": {
     title: "Quiet/Archive",
+    light: { env: 0.6, hemi: { sky: 0xa8c0d8, ground: 0x1a2028, intensity: 1.0 } },
     background: 0x0d1117,
     fogDensity: 0.00016,
     orbitRadius: 700,
@@ -458,6 +466,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   scale: {
     title: "Scale",
+    light: { env: 0.9, hemi: { sky: 0x9fb0ff, ground: 0x2a2036, intensity: 0.5 } },
     background: 0x000000,
     fogDensity: 0,
     orbitRadius: 320,
@@ -1258,6 +1267,8 @@ export default function WorldsSurface({
         : built;
     if (!world) return;
     scene.add(world.group);
+    // Shared lighting rig for this world (not the transit corridor, which lights itself).
+    const lighting = mode === "world" && entry?.light ? applyWorldLighting(scene, renderer, entry.light) : null;
     sceneHandleRef.current = world;
     const eternityCtl = currentWorld === "eternity" ? built?.eternity : undefined;
     if (gardenScene) {
@@ -1569,6 +1580,7 @@ export default function WorldsSurface({
       lookAllowedRef.current = false;
       gardenSceneRef.current = null;
       engine?.dispose();
+      lighting?.dispose();
       world.dispose();
       sceneHandleRef.current = null;
       renderer.dispose();
