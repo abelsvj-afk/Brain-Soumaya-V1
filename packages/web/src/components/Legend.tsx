@@ -242,7 +242,7 @@ export function Legend({ onClose }: { onClose: () => void }) {
             <h3>Moments & modes</h3>
             <ul className="legend-list">
               <li><span className="legend-glyph">☄️</span><span className="legend-name">Flashback</span><span className="legend-meaning">a flight back to an old, weighty memory — tap its toast to fly there</span></li>
-              <li><span className="legend-glyph">🎯</span><span className="legend-name">Calm mode</span><span className="legend-meaning">dims the chrome — header, alerts, chips, HUD — for a calm reading session; entry and exit are announced</span></li>
+              <li><span className="legend-glyph">🌌</span><span className="legend-name">Calm mode</span><span className="legend-meaning">dims the chrome — header, alerts, chips, HUD — for a calm reading session; entry and exit are announced</span></li>
               <li><span className="legend-glyph">🌌</span><span className="legend-name">Views vs Lens</span><span className="legend-meaning">a View is a fixed, instant category glance; a Lens is your own saved filter that keeps matching new memories</span></li>
             </ul>
           </section>

@@ -20,9 +20,10 @@ export function ActionRail(p: ActionRailProps) {
         📝
         <span className="fab-cap">Add</span>
       </button>
-      <button className="fab fab-observatory" onClick={p.onObservatory} aria-label="Open the Observatory home" title="Observatory — your home view">
+      <button className="fab fab-observatory" onClick={p.onObservatory} aria-label="Open the Observatory home" title="Observatory — your daily briefing">
         🔭
-        <span className="fab-cap">Home</span>
+        {/* "Home" read as "go back to the galaxy" — which is exactly what it does NOT do inside a world (audit: naming). */}
+        <span className="fab-cap">Briefing</span>
       </button>
       <button
         className={`fab fab-chat ${p.chatActive ? "on" : ""} ${p.chatPulse ? "pulse" : ""}`}

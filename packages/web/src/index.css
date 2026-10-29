@@ -7687,3 +7687,5 @@ body.in-transit .tools-btn { opacity: 0.55; }
 body.in-world .streak-ember,
 body.in-world .notifications-bar { display: none; }
 .garden-groves { left: var(--hud-rail); width: min(300px, calc(100% - 2 * var(--hud-rail))); }
+/* The "switch to Performance Mode?" offer never covers the warp cinematic (it comes back after). */
+body.in-transit .perf-suggest { display: none; }

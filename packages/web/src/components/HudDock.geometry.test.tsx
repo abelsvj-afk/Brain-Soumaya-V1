@@ -649,7 +649,7 @@ describe("HUD round 3 — captions live inside the footprint (source gate)", () 
       expect(nav, `NavRail caption ${cap}`).toContain(`fab-cap">${cap}`);
     }
     const actions = readRepoFile("src/components/ActionRail.tsx");
-    for (const cap of ["Add", "Home", "Chat", "Settings"]) {
+    for (const cap of ["Add", "Briefing", "Chat", "Settings"]) {
       expect(actions, `ActionRail caption ${cap}`).toContain(`fab-cap">${cap}`);
     }
     expect(readRepoFile("src/components/ToolsMenu.tsx")).toContain('fab-cap">Tools');

@@ -38,9 +38,10 @@ actions, in the world's context bar). Nothing is ever replaced wholesale by a sc
 |---|---|
 | **Calm mode** — left-rail button (class `fab-focus-toggle`) AND Tools entry | Keep the **Tools** entry (and the command palette); **remove the rail button** |
 | Legend glyph for Calm is 🎯 — the same glyph as the 🎯 Focus button | Calm gets its own icon; the Legend matches the real controls |
-| **Focus / Recenter / Level camera** — three overlapping camera buttons | Keep **Focus** (fan: ship, station, fleet, beacons, figurines) and **Recenter**; "Level camera on the ship" folds into the Focus fan's ship entry (long-press stays) — to be confirmed in build against `levelShipView` use |
+| **Focus / Recenter / Level camera** — three camera controls | No change: "Level view" is a pill that appears **only while following the ship**, so it is contextual, not a duplicate |
 | **Search** — Tools entry, Observatory 🔍, header search, command palette | one door in the Tools menu + ⌘K; the Observatory keeps its own because it is that screen's own search (documented) |
-| **Travel** vs **World map** — two Tools entries for one journey | merge into **Worlds**: the map, with Travel as its action (spec follow-up; both remain until the map has the sheet's controls) |
+| **Travel** vs **World map** — two Tools entries | No change: they do different jobs (the map = where things are, with "Travel to X"; the Travel sheet = routes, fuel, tours, approvals) |
+| The 🔭 button's caption **"Home"** — inside a world "Home" reads as "go back to the galaxy", but it opens the Observatory | Caption is now **"Briefing"**; "← Galaxy" is the only way back |
 | Views chip "🧭 Journeys 3" vs the Journeys panel vs the Observatory's "Your journeys" | the Views chip is a *filter*, renamed **"Journeys only"** so the words stop colliding |
 | Inbox (Panels tab) vs notices badge vs toast overflow note | one concept: the badge opens the Inbox; the toast note links to it (already true) — no change |
 
