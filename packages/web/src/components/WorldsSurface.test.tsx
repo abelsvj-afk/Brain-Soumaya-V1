@@ -747,7 +747,7 @@ describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () =
     expect(screen.getByRole("button", { name: "Go to the Fleet Deck" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Go to the Observation Deck" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Go to the Hangar Bay" })).toBeNull();
-    expect(screen.getByText(/The Hangar Bay —/)).toBeTruthy();
+    expect(screen.getByText(/The Hangar Bay/)).toBeTruthy();
     // The bay is the ship room now: the Batch O ship picker lives here.
     expect(screen.getByText(/Spaceship Hull/)).toBeTruthy();
   });
@@ -756,7 +756,7 @@ describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () =
     mountEngaged(<WorldsSurface enabled />);
     fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
     fireEvent.click(screen.getByRole("button", { name: "Go to the Fleet Deck" }));
-    expect(screen.getByText(/The Fleet Deck —/)).toBeTruthy();
+    expect(screen.getByText(/^The Fleet Deck$/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Go to the Hangar Bay" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Go to the Fleet Deck" })).toBeNull();
     expect(screen.queryByText(/Walk to/)).toBeNull();
@@ -769,7 +769,7 @@ describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () =
     mountEngaged(<WorldsSurface enabled />);
     fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
     fireEvent.click(screen.getByRole("button", { name: "Go to the Commission Board" }));
-    expect(screen.getByText(/The Commission Board —/)).toBeTruthy();
+    expect(screen.getByText(/^The Commission Board$/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Link —/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Review —/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Journey step —/ })).toBeTruthy();
@@ -780,7 +780,7 @@ describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () =
     mountEngaged(<WorldsSurface enabled />);
     fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
     fireEvent.click(screen.getByRole("button", { name: "Go to the Observation Deck" }));
-    expect(screen.getByText(/The Observation Deck —/)).toBeTruthy();
+    expect(screen.getByText(/^The Observation Deck$/)).toBeTruthy();
     expect(screen.getByText(/nothing to do/)).toBeTruthy();
     expect(screen.queryByLabelText("Commission board")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Fleet missions" })).toBeNull();
@@ -794,7 +794,7 @@ describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () =
     fireEvent.click(screen.getByRole("button", { name: "Step back outside" }));
     expect(screen.getByRole("button", { name: "Step inside the Station" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Go to the/ })).toBeNull();
-    expect(screen.queryByText(/The Observation Deck —/)).toBeNull();
+    expect(screen.queryByText(/^The Observation Deck$/)).toBeNull();
   });
 });
 

@@ -136,3 +136,18 @@ describe("TravelSheet — behaviour", () => {
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("Station interior — layout (measured on a 412px phone: header 195px tall)", () => {
+  // The header wraps to many rows, so nothing pinned to the top may share its
+  // band, and the bottom card may not grow up over it. jsdom can't lay out;
+  // these pin the CSS contract the measured fix relies on.
+  it("the room card is capped by the viewport (a percentage), never by header height", () => {
+    const body = ruleBody(".worlds-surface-room");
+    expect(body).toMatch(/max-height:\s*min\(55%/);
+    expect(body).toMatch(/bottom:/);
+  });
+
+  it("the caption lives inside the room card, not pinned under the header", () => {
+    expect(readRepoFile("src/components/WorldsSurface.tsx")).toMatch(/worlds-surface-room-caption/);
+  });
+});

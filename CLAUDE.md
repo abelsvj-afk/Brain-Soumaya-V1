@@ -446,6 +446,11 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   Verified end to end headless: plant → linked; done → "the tree grows (1 done)"; ask → answer; sheet
   refreshes in place. Carry → place is unit-tested only. Look at: the sheet's height over the scene on a
   phone, and whether a mission planted here showing as a 30-day to-do elsewhere in the app is expected.
+- **Station interior layout — MEASURED headless at 412×915, FIXED (2026-10-29)** (WorldsSurface.tsx, index.css
+  `.worlds-surface-room`): inside the Station the wrapped header is 195px tall; the room caption was pinned
+  at 80–140px (on top of the header buttons) and the room card's top sat at 128px, covering "Back to your
+  galaxy" (145–183px). The caption now sits inside the bottom room card and the card is capped at 55% of
+  the viewport (top measured at 371px). Needs on-device confirmation on a shorter phone.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

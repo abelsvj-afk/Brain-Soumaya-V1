@@ -1876,24 +1876,30 @@ export default function WorldsSurface({
       {mode === "world" && atStation && showController && (
         <HarborControllerPanel enabled onClose={() => setShowController(false)} />
       )}
-      {mode === "world" && atStation && inside && interiorRoomInfo && (
-        <p className="worlds-surface-fallback">
-          {interiorRoomInfo.title} — {interiorRoomInfo.blurb}
-        </p>
-      )}
-      {mode === "world" && atStation && inside && interiorRoom !== "observation-deck" && (
+      {/* The room's caption and its work share one bottom card (the header
+          above wraps to several rows on a phone — a caption pinned to the
+          top collided with it, and a tall card covered "Back to your
+          galaxy"). The observation deck has no work, just its caption. */}
+      {mode === "world" && atStation && inside && (interiorRoomInfo || interiorRoom !== "observation-deck") && (
         <div className="worlds-surface-room">
-          <StationInteriorRoomPanel
-            room={interiorRoom}
-            graph={graph}
-            spaceId={getSpaceId() ?? ""}
-            getFleetStatus={getFleetStatus}
-            onFocus={onFocus}
-            onEquipChanged={() => {
-              setBayShipNonce((n) => n + 1);
-              onHangarEquipChanged?.();
-            }}
-          />
+          {interiorRoomInfo && (
+            <p className="worlds-surface-room-caption">
+              <strong>{interiorRoomInfo.title}</strong> — {interiorRoomInfo.blurb}
+            </p>
+          )}
+          {interiorRoom !== "observation-deck" && (
+            <StationInteriorRoomPanel
+              room={interiorRoom}
+              graph={graph}
+              spaceId={getSpaceId() ?? ""}
+              getFleetStatus={getFleetStatus}
+              onFocus={onFocus}
+              onEquipChanged={() => {
+                setBayShipNonce((n) => n + 1);
+                onHangarEquipChanged?.();
+              }}
+            />
+          )}
         </div>
       )}
       <footer className="worlds-surface-credits">
