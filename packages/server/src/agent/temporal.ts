@@ -19,6 +19,7 @@ import type { RawDb } from "../db/vec.js";
 import { upsertEmbedding } from "../db/vec.js";
 import { ftsUpsert } from "../db/fts.js";
 import type { NodeRow, CorrectionRow } from "../db/schema.js";
+import { copyNodeSourceLinksRaw } from "../repositories/sources.repo.js";
 
 /** The three correction types (design §2.2). */
 export type CorrectionType = "factual_update" | "false_belief" | "preference_override";
@@ -243,6 +244,16 @@ export function supersede(
       );
     }
 
+    // Verbatim V1 section 12D: supersession copies the old node's
+    // provenance links forward to the replacement node (same tx).
+    if (newNodeId !== null) {
+      try {
+        copyNodeSourceLinksRaw(h.sqlite, spaceId, input.oldNodeId, newNodeId);
+      } catch {
+        /* pre-V1 volume without node_sources */
+      }
+    }
+
     // 4. Record the correction event (append-only). corrected_at is the shared opTime.
     const cr = h.sqlite
       .prepare(
@@ -371,6 +382,12 @@ export function supersedeSystemDerived(
       )
       .run(newRow.valid_from ?? null, opTime, input.newNodeId, input.oldNodeId, spaceId);
     if (upd.changes !== 1) return null;
+    // Verbatim V1 section 12D: provenance links copy forward (same tx).
+    try {
+      copyNodeSourceLinksRaw(h.sqlite, spaceId, input.oldNodeId, input.newNodeId);
+    } catch {
+      /* pre-V1 volume without node_sources */
+    }
     const cr = h.sqlite
       .prepare(
         `INSERT INTO corrections

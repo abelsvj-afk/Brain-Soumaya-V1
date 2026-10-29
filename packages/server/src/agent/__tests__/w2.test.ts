@@ -2806,6 +2806,10 @@ const W2_TABLE_COLUMNS: Record<string, string[]> = {
     "status", "created_at", "applied_at",
   ],
   enrichment_quota: ["space_id", "quota_date", "claimed"],
+  forget_unresolved_flags: [
+    "id", "space_id", "request_id", "source_id", "table_name", "row_id",
+    "policy_reason", "status", "created_at", "reviewed_at",
+  ],
 };
 
 /**

@@ -37,6 +37,25 @@ const PORT = Number(process.env.PORT ?? 3001);
 const ctx = await buildContext();
 const app = createApp(ctx);
 
+// Verbatim-Recall V1 boot recovery (sections 12E / 18.3 / 18.4.4): log
+// the preserved-source count, backfill chunk vectors, and resume any
+// sources a crash left pending. Best-effort and non-blocking — a
+// recovery failure never stops the server from serving.
+void (async () => {
+  try {
+    const { logPreservedSourceCount, backfillChunkVec, recoverPendingSources } = await import("./sources/recovery.js");
+    logPreservedSourceCount(ctx.handle);
+    const indexed = await backfillChunkVec(ctx.handle, ctx.embeddings);
+    if (indexed > 0) console.log(`[sources] chunk vec backfill: ${indexed} chunk(s) indexed`);
+    const rec = await recoverPendingSources(ctx.handle, { embeddings: ctx.embeddings, llm: ctx.llm }, ctx);
+    if (rec.reclaimed > 0 || rec.resumed > 0) {
+      console.log(`[sources] recovery: ${rec.reclaimed} lease(s) reclaimed, ${rec.resumed} source(s) resumed`);
+    }
+  } catch (err) {
+    console.warn("[sources] boot recovery failed (server continues):", err);
+  }
+})();
+
 const server = app.listen(PORT, () => {
   console.log(`[server] listening on http://localhost:${PORT}`);
   console.log(`[server] embeddings: ${ctx.embeddings.model} (${ctx.embeddings.dim}d)`);
