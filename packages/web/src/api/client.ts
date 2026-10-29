@@ -2,7 +2,7 @@ import type { Attachment, AwayDigest, ChatResponse, Constellation, DailyDigest, 
 import { useState, useEffect } from "react";
 // Transport primitives live in http.ts (Post-MVP D4 split); re-export the public ones
 // so existing `import { getSpaceId, BOOT_TIMEOUT_MS } from "../api/client"` keep working.
-import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS } from "./http.js";
+import { API, afetch, getSpaceId, getSpaceName, storeSpace, BOOT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } from "./http.js";
 import { CHAT_TIMEOUT_MS, ChatRequestError, chatErrorForStatus, chatTimeoutError, sanitizeChatPayload } from "./chatSend.js";
 
 export * from "./chatSend.js";
@@ -92,7 +92,23 @@ export interface IngestResult {
 }
 
 export interface SearchHit extends GraphNode {
-  similarity: number;
+  /** Real vector cosine for vector hits, null for keyword-only hits — the
+   * server never invents a score (REG-185). Absent on older payloads. */
+  similarity: number | null;
+  /** Which retrieval side(s) produced the hit; drives the match marker. */
+  matchKind?: "keyword" | "vector" | "both";
+}
+
+/** The search envelope the server returns (REG-186): the page plus whether
+ * more matches exist than the page shows. */
+export interface SearchDetails {
+  hits: SearchHit[];
+  error?: string;
+  /** Live matches found within the probe pool. */
+  total?: number;
+  hasMore?: boolean;
+  /** True when `total` is a lower bound ("more than N"), not an exact count. */
+  totalCapped?: boolean;
 }
 
 /** Mirrors server/llm/adapter.ts's DegradeReason — kept as a plain string union here
@@ -281,16 +297,49 @@ export class OfflineQueuedError extends Error {
   }
 }
 
-function enqueueIngest(text: string, opts?: IngestOpts): void {
+/** CAP-06: the offline queue's capacity, named so the refusal can name it. */
+export const INGEST_QUEUE_LIMIT = 200;
+
+type EnqueueResult =
+  | { queued: true }
+  | { queued: false; reason: "no-brain" | "full" | "storage" };
+
+/**
+ * CAP-06: enqueueing used to report nothing — it silently no-opped when no
+ * brain was signed in and silently dropped the oldest capture at capacity
+ * (`slice(-200)`), while the caller still claimed "saved". It now reports
+ * its outcome; at capacity the NEW capture is refused (never a silent drop).
+ */
+function enqueueIngest(text: string, opts?: IngestOpts): EnqueueResult {
   try {
     const key = ingestQueueKey();
-    if (!key) return; // no brain signed in — don't stash an unattributable note
+    if (!key) return { queued: false, reason: "no-brain" }; // no brain signed in — don't stash an unattributable note
     const q = JSON.parse(localStorage.getItem(key) || "[]") as { text: string; opts?: IngestOpts }[];
+    if (q.length >= INGEST_QUEUE_LIMIT) return { queued: false, reason: "full" };
     q.push({ text, opts });
-    localStorage.setItem(key, JSON.stringify(q.slice(-200)));
+    localStorage.setItem(key, JSON.stringify(q));
+    return { queued: true };
   } catch {
-    /* storage unavailable — nothing more we can do */
+    return { queued: false, reason: "storage" };
   }
+}
+
+/**
+ * CAP-06: translate an enqueue outcome into the ingest contract —
+ * OfflineQueuedError ONLY when the capture really was queued; otherwise a
+ * plain honest error that never claims "saved".
+ */
+function throwForEnqueue(result: EnqueueResult): never {
+  if (result.queued) throw new OfflineQueuedError();
+  if (result.reason === "full") {
+    throw new Error(
+      `You're offline, and your offline queue is full (${INGEST_QUEUE_LIMIT} captures waiting) — this one couldn't be saved. Reconnect so the queue can sync, then try again.`,
+    );
+  }
+  if (result.reason === "no-brain") {
+    throw new Error("You're offline and no brain is signed in, so this couldn't be saved. Sign in and try again.");
+  }
+  throw new Error("You're offline, and this device couldn't store the capture, so it wasn't saved. Reconnect and try again.");
 }
 
 /**
@@ -346,8 +395,7 @@ export async function ingestText(text: string, opts?: IngestOpts): Promise<Inges
     (async () => {
       // Offline up front → queue immediately, don't even try the network.
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        enqueueIngest(text, opts);
-        throw new OfflineQueuedError();
+        throwForEnqueue(enqueueIngest(text, opts));
       }
       let res: Response;
       try {
@@ -358,8 +406,7 @@ export async function ingestText(text: string, opts?: IngestOpts): Promise<Inges
         });
       } catch {
         // Network blip mid-request → save it for the next flush.
-        enqueueIngest(text, opts);
-        throw new OfflineQueuedError();
+        throwForEnqueue(enqueueIngest(text, opts));
       }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -380,7 +427,11 @@ export async function search(q: string): Promise<SearchHit[]> {
   try {
     const res = await afetch(`${API}/search?q=${encodeURIComponent(q)}`);
     const d = await res.json().catch(() => []);
-    return Array.isArray(d) ? d : [];
+    // The route returns the { hits, total, hasMore, totalCapped } envelope
+    // (REG-186); older bare-array payloads are still accepted.
+    if (Array.isArray(d)) return d;
+    const hits = (d as { hits?: unknown }).hits;
+    return Array.isArray(hits) ? hits : [];
   } catch {
     return [];
   }
@@ -389,7 +440,7 @@ export async function search(q: string): Promise<SearchHit[]> {
 /** Same request as search(), but distinguishes a real failure from "zero
  *  matches" instead of collapsing both into an empty array — SearchBox.tsx
  *  used to render a network error as an indistinguishable "No matches". */
-export async function searchDetailed(q: string): Promise<{ hits: SearchHit[]; error?: string }> {
+export async function searchDetailed(q: string): Promise<SearchDetails> {
   try {
     const res = await afetch(`${API}/search?q=${encodeURIComponent(q)}`);
     if (!res.ok) {
@@ -397,7 +448,14 @@ export async function searchDetailed(q: string): Promise<{ hits: SearchHit[]; er
       return { hits: [], error: body.error ?? `Search failed (${res.status})` };
     }
     const d = await res.json().catch(() => []);
-    return { hits: Array.isArray(d) ? d : [] };
+    if (Array.isArray(d)) return { hits: d };
+    const obj = d as { hits?: unknown; total?: unknown; hasMore?: unknown; totalCapped?: unknown };
+    return {
+      hits: Array.isArray(obj.hits) ? obj.hits : [],
+      total: typeof obj.total === "number" ? obj.total : undefined,
+      hasMore: typeof obj.hasMore === "boolean" ? obj.hasMore : undefined,
+      totalCapped: typeof obj.totalCapped === "boolean" ? obj.totalCapped : undefined,
+    };
   } catch {
     return { hits: [], error: "Couldn't reach the server." };
   }
@@ -457,13 +515,20 @@ export async function updateNodeDetails(
   return res.json() as Promise<GraphNode>;
 }
 
-/** Permanently delete a memory. */
-export async function deleteNode(id: number): Promise<void> {
+/** Permanently delete a memory. Returns the journey progress the delete
+ *  credited, if any (REG-160/JN-03): completing a linked mission advances its
+ *  journey server-side, and the caller surfaces it at the moment of completion
+ *  instead of the response being discarded. Empty when nothing was linked. */
+export interface DeleteNodeResult {
+  journeyProgress?: { journeyId: number; title: string; progress: number; missionsCompleted: number }[];
+}
+export async function deleteNode(id: number): Promise<DeleteNodeResult> {
   const res = await afetch(`${API}/nodes/${id}`, { method: "DELETE" });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Delete failed (${res.status})`);
   }
+  return (await res.json().catch(() => ({}))) as DeleteNodeResult;
 }
 
 /** Archive (rest) a memory — kept, but out of the galaxy + retrieval — or restore it. */
@@ -483,6 +548,20 @@ export async function getArchivedNodes(): Promise<GraphNode[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * Strict variant of getArchivedNodes for surfaces that must distinguish
+ * "nothing rests here yet" from "the archive failed to load" (Quiet/
+ * Archive C6): THROWS on network/HTTP failure instead of collapsing it
+ * into an empty field. getArchivedNodes' fail-soft contract is unchanged
+ * for its other callers.
+ */
+export async function getArchivedNodesStrict(): Promise<GraphNode[]> {
+  const res = await afetch(`${API}/nodes/archived`);
+  if (!res.ok) throw new Error(`Archived nodes failed (${res.status})`);
+  const d = await res.json().catch(() => []);
+  return Array.isArray(d) ? d : [];
 }
 
 /** An object's evolving lore (oldest → newest); genesis is created on first read. */
@@ -579,9 +658,9 @@ export async function getDigest(): Promise<Insight[]> {
  * to report" from "the server didn't answer" (the Observatory) use this.
  * Same Result-variant pattern as api/mind.ts's `getCognitiveResult`.
  */
-export async function getDigestResult(): Promise<{ ok: true; insights: Insight[] } | { ok: false }> {
+export async function getDigestResult(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<{ ok: true; insights: Insight[] } | { ok: false }> {
   try {
-    const res = await afetch(`${API}/digest`);
+    const res = await afetch(`${API}/digest`, {}, timeoutMs);
     if (!res.ok) return { ok: false };
     const d = await res.json().catch(() => null);
     return Array.isArray(d) ? { ok: true, insights: d as Insight[] } : { ok: false };
@@ -629,6 +708,40 @@ export async function getDailyDigest(): Promise<DailyDigest> {
     };
   } catch {
     return empty;
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getDailyDigest` — same
+ * endpoint and same field-by-field normalization, but FAILURE (network
+ * error, non-OK status, non-object body) returns `{ ok: false }` instead of
+ * collapsing into the fabricated empty digest. `getDailyDigest` keeps its
+ * fail-soft contract untouched for every existing caller; only the
+ * DigestPanel (which must distinguish "nothing to report" from "the server
+ * didn't answer") uses this. Same Result-variant pattern as `getDigestResult`.
+ */
+export async function getDailyDigestResult(): Promise<{ ok: true; digest: DailyDigest } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/daily`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false };
+    const empty: DailyDigest = emptyDailyDigest();
+    return {
+      ok: true,
+      digest: {
+        date: typeof d.date === "string" ? d.date : empty.date,
+        greeting: typeof d.greeting === "string" ? d.greeting : "",
+        fresh: Array.isArray(d.fresh) ? d.fresh : [],
+        connections: Array.isArray(d.connections) ? d.connections : [],
+        expiredActions: Array.isArray(d.expiredActions) ? d.expiredActions : [],
+        cooling: Array.isArray(d.cooling) ? d.cooling : [],
+        reminders: Array.isArray(d.reminders) ? d.reminders : [],
+        closing: typeof d.closing === "string" ? d.closing : "",
+      },
+    };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -708,9 +821,9 @@ export async function getConstellations(): Promise<Constellation[]> {
  * must not mistake a dead endpoint for "no constellations" can tell the
  * difference. `getConstellations` keeps its fail-soft contract.
  */
-export async function getConstellationsResult(): Promise<{ ok: true; constellations: Constellation[] } | { ok: false }> {
+export async function getConstellationsResult(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<{ ok: true; constellations: Constellation[] } | { ok: false }> {
   try {
-    const res = await afetch(`${API}/constellations`);
+    const res = await afetch(`${API}/constellations`, {}, timeoutMs);
     if (!res.ok) return { ok: false };
     const d = await res.json().catch(() => null);
     return Array.isArray(d) ? { ok: true, constellations: d as Constellation[] } : { ok: false };
@@ -809,6 +922,36 @@ export async function getEmotionalTrajectory(): Promise<EmotionalTrajectory> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getEmotionalTrajectory`
+ * — same endpoint and normalization, `{ ok: false }` on any failure instead
+ * of the fabricated empty trajectory. Same Result-variant pattern as
+ * `getDigestResult`; the fail-soft getter above is untouched.
+ */
+export async function getEmotionalTrajectoryResult(): Promise<
+  { ok: true; trajectory: EmotionalTrajectory } | { ok: false }
+> {
+  try {
+    const res = await afetch(`${API}/digest/emotional`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false };
+    return {
+      ok: true,
+      trajectory: {
+        points: Array.isArray(d.points) ? d.points : [],
+        trend: d.trend === "rising" || d.trend === "falling" ? d.trend : "steady",
+        average: typeof d.average === "number" ? d.average : 0,
+        volatility: typeof d.volatility === "number" ? d.volatility : 0,
+        patterns: Array.isArray(d.patterns) ? d.patterns : [],
+        sampleSize: typeof d.sampleSize === "number" ? d.sampleSize : 0,
+      },
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** Distribution of memories across life-areas — the optional life-area lens (#6). */
 export async function getLifeAreas(): Promise<LifeAreaCount[]> {
   try {
@@ -817,6 +960,22 @@ export async function getLifeAreas(): Promise<LifeAreaCount[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getLifeAreas` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getLifeAreasResult(): Promise<{ ok: true; lifeAreas: LifeAreaCount[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/life-areas`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, lifeAreas: d as LifeAreaCount[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -851,6 +1010,22 @@ export async function getSelfReview(): Promise<SelfReviewItem[]> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getSelfReview` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getSelfReviewResult(): Promise<{ ok: true; selfReview: SelfReviewItem[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/self-review`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, selfReview: d as SelfReviewItem[] } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** How threads of thinking evolved over time (older → newer, free, offline-safe). */
 export async function getEvolutionLinks(): Promise<EvolutionLink[]> {
   try {
@@ -859,6 +1034,22 @@ export async function getEvolutionLinks(): Promise<EvolutionLink[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getEvolutionLinks` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getEvolutionLinksResult(): Promise<{ ok: true; evolution: EvolutionLink[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/evolution`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, evolution: d as EvolutionLink[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -871,6 +1062,22 @@ export async function getDormant(): Promise<DormantItem[]> {
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getDormant` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getDormantResult(): Promise<{ ok: true; dormant: DormantItem[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/dormant`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, dormant: d as DormantItem[] } : { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -1055,6 +1262,22 @@ export async function getBeliefs(): Promise<Belief[]> {
   }
 }
 
+/**
+ * Batch N (REG-149 / INS-02): strict sibling of `getBeliefs` — same
+ * endpoint, `{ ok: false }` on any failure instead of `[]`. Same
+ * Result-variant pattern as `getDigestResult`.
+ */
+export async function getBeliefsResult(): Promise<{ ok: true; beliefs: Belief[] } | { ok: false }> {
+  try {
+    const res = await afetch(`${API}/digest/beliefs`);
+    if (!res.ok) return { ok: false };
+    const d = await res.json().catch(() => null);
+    return Array.isArray(d) ? { ok: true, beliefs: d as Belief[] } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** Acknowledge a due reminder (clears remind_at so it stops re-surfacing). */
 export async function ackReminder(id: number): Promise<boolean> {
   try {
@@ -1110,9 +1333,9 @@ export interface DailyContact {
   answered: boolean;
 }
 
-export async function getDailyContact(): Promise<DailyContact | null> {
+export async function getDailyContact(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<DailyContact | null> {
   try {
-    const res = await afetch(`${API}/contact`);
+    const res = await afetch(`${API}/contact`, {}, timeoutMs);
     return res.ok ? ((await res.json()) as DailyContact) : null;
   } catch {
     return null;

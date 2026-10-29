@@ -14,6 +14,17 @@ export interface TravelState {
   currentWorld: string;
   activeJourney: TravelJourney | null;
   fuel: Fuel;
+  /**
+   * Whether the People gate is open (P3-3, Q1) — the server's verdict,
+   * from its travel state. Absent on older servers: the board treats a
+   * missing flag as closed (fail closed, never guess the gate open).
+   */
+  peopleGateOpen?: boolean;
+  /** Whether the gate to Eternity's world stands open for this
+   *  traveller (opened before, or the holdings satisfy B-01 now).
+   *  Absent on an older server — the board then hides the gated
+   *  world, never offers a journey the server would refuse. */
+  eternityReachable?: boolean;
 }
 
 /**

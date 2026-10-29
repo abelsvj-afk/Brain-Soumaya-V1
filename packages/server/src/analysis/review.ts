@@ -1,4 +1,5 @@
 import type { AppContext } from "../context.js";
+import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 
 /**
@@ -98,7 +99,7 @@ export function gradeReview(ctx: AppContext, spaceId: string, id: number, rememb
   const nextIso = new Date(now + interval * DAY).toISOString();
   s.prepare(
     `UPDATE nodes SET review_ease = ?, review_interval_days = ?, next_review_at = ?, last_reviewed_at = ?,
-       review_count = ? WHERE id = ? AND space_id = ?`,
+       review_count = ?, review_snoozed_at = NULL WHERE id = ? AND space_id = ?`,
   ).run(ease, interval, nextIso, new Date(now).toISOString(), remembered ? count + 1 : 0, id, spaceId);
   return nextIso;
 }
@@ -106,11 +107,32 @@ export function gradeReview(ctx: AppContext, spaceId: string, id: number, rememb
 /**
  * A soft snooze when Soumaya nudges a memory but the user hasn't graded it yet — push
  * the next review out a few days so she doesn't re-ask tomorrow (without falsely marking
- * it "reviewed", which would restore strength it hasn't earned).
+ * it "reviewed", which would restore strength it hasn't earned). The snooze is MARKED
+ * (`review_snoozed_at`): only a nudge snooze may be cleared by tending the memory
+ * (REG-198) — a grade-set schedule carries no marker and is never disturbed by a visit.
  */
 export function snoozeReview(ctx: AppContext, spaceId: string, id: number, now: number = Date.now(), days = 3): void {
   const nextIso = new Date(now + days * DAY).toISOString();
   ctx.handle.sqlite
-    .prepare(`UPDATE nodes SET next_review_at = ? WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
-    .run(nextIso, id, spaceId);
+    .prepare(
+      `UPDATE nodes SET next_review_at = ?, review_snoozed_at = ? WHERE id = ? AND space_id = ? AND deleted_at IS NULL`,
+    )
+    .run(nextIso, new Date(now).toISOString(), id, spaceId);
+}
+
+/**
+ * Clear a nudge snooze (REG-198): the user opened/tended the memory the nudge asked
+ * about, so the snooze no longer hides it — the memory is due again right now (it was
+ * due when the nudge fired). Only a MARKED snooze is cleared; a grade-set schedule
+ * (no marker) is left exactly alone. Takes the raw handle so the tend path
+ * (NodesRepo) can call it without an AppContext. Returns true when a snooze was cleared.
+ */
+export function clearReviewSnooze(handle: DbHandle, spaceId: string, id: number, now: number = Date.now()): boolean {
+  const info = handle.sqlite
+    .prepare(
+      `UPDATE nodes SET next_review_at = ?, review_snoozed_at = NULL
+       WHERE id = ? AND space_id = ? AND deleted_at IS NULL AND review_snoozed_at IS NOT NULL`,
+    )
+    .run(new Date(now).toISOString(), id, spaceId);
+  return info.changes > 0;
 }

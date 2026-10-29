@@ -140,6 +140,14 @@ export interface CognitiveItem {
   /** Set once a goal actually finished (never cleared). Always null for other kinds. */
   completedAt: string | null;
   degree: number;
+  /**
+   * Batch L (MIN-05, REG-136) — incoming `supports` edges: the count the
+   * "Ripe" label is DEFINED on (the server's ripeIdeaIds counts exactly
+   * this). `degree` counts every edge touching the node, either direction,
+   * any relationship — applying the shared IDEA_PROMOTE_SUPPORT threshold
+   * to it certified ideas ripe that no memory supports.
+   */
+  supportCount: number;
   aliases: string[];
   createdAt: string;
   /** Life Vision's target date (docs/specs/life-vision.md) — reminder semantics for
@@ -175,7 +183,7 @@ export function listCognitive(
          ORDER BY n.id DESC LIMIT 100
        )
        SELECT p.id, p.kind, p.label, p.content, p.progress, p.completedAt, p.aliases, p.createdAt,
-         p.remindAt, COALESCE(d.degree, 0) AS degree
+         p.remindAt, COALESCE(d.degree, 0) AS degree, COALESCE(s.supports, 0) AS supportCount
        FROM page p
        LEFT JOIN (
          SELECT endpoint AS node_id, COUNT(*) AS degree
@@ -188,9 +196,15 @@ export function listCognitive(
          )
          GROUP BY endpoint
        ) d ON d.node_id = p.id
+       LEFT JOIN (
+         SELECT target AS node_id, COUNT(*) AS supports
+         FROM edges
+         WHERE space_id = ? AND target IN (SELECT id FROM page) AND relationship = 'supports'
+         GROUP BY target
+       ) s ON s.node_id = p.id
        ORDER BY p.id DESC`,
     )
-    .all(spaceId, ...kinds, spaceId, spaceId) as (Omit<CognitiveItem, "kind" | "aliases"> & { kind: string; aliases: string | null })[];
+    .all(spaceId, ...kinds, spaceId, spaceId, spaceId) as (Omit<CognitiveItem, "kind" | "aliases"> & { kind: string; aliases: string | null })[];
   return rows.map((r) => {
     let aliases: string[] = [];
     try {
@@ -209,6 +223,25 @@ export function listCognitive(
     }
     return { ...r, kind: r.kind as CognitiveKind, aliases };
   });
+}
+
+/**
+ * Batch L (MIN-06, REG-137) — the TRUE total of cognitive objects matching
+ * the filter, independent of listCognitive's 100-row page. The list read
+ * truncates silently at 100; without this the tab presents the returned
+ * count as the mapped count and older items vanish from search. Same kind
+ * filter as listCognitive so the route's `{ items, total }` always agree.
+ */
+export function countCognitive(ctx: AppContext, spaceId: string, kind?: CognitiveKind): number {
+  const kinds = kind ? [kind] : (Object.keys(COGNITIVE_META) as CognitiveKind[]);
+  const placeholders = kinds.map(() => "?").join(",");
+  const row = ctx.handle.sqlite
+    .prepare(
+      `SELECT COUNT(*) AS n FROM nodes
+       WHERE space_id = ? AND deleted_at IS NULL AND kind IN (${placeholders})`,
+    )
+    .get(spaceId, ...kinds) as { n: number };
+  return row.n;
 }
 
 /**

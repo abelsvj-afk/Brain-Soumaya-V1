@@ -28,3 +28,6 @@ npm-debug.log*
 
 # stray wget artifact
 .wget-hsts
+
+# worlds-check screenshots
+worlds-check-out/

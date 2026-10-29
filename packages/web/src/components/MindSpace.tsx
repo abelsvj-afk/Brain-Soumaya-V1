@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  getThoughts,
+  getThoughtsResult,
   reinforceThought,
   promoteThought,
   dismissThought,
@@ -109,6 +109,12 @@ export function MindSpace({
   const [on, setOn] = useState(mindSpaceEnabled());
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Batch L (MIN-04, REG-135) — the last load FAILED. The old loader used the
+  // fail-soft getThoughts() (any failure resolves to []), so a failed first
+  // load asserted an empty mind and a failed 15s poll erased displayed motes
+  // into the same false claim. The strict Result keeps failure distinct from
+  // a confirmed empty success; a failed refresh keeps the last good motes.
+  const [loadError, setLoadError] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -119,18 +125,26 @@ export function MindSpace({
   }, []);
 
   const load = useCallback(() => {
-    getThoughts()
-      .then((ts) => {
-        setThoughts(ts);
-        setLoaded(true);
+    getThoughtsResult()
+      .then((r) => {
+        if (r.ok) {
+          setThoughts(r.thoughts);
+          setLoaded(true);
+          setLoadError(false);
+        } else {
+          // Keep whatever motes are already on screen; just flag the failure
+          // so the render can say so instead of going silently empty.
+          setLoadError(true);
+        }
       })
-      .catch(() => setLoaded(true));
+      .catch(() => setLoadError(true));
   }, []);
 
   useEffect(() => {
     if (!on) {
       setThoughts([]);
       setLoaded(false);
+      setLoadError(false);
       setSelectedId(null);
       return;
     }
@@ -141,6 +155,19 @@ export function MindSpace({
 
   // Vanish while a menu/panel is open so drifting motes never sit over what you're reading.
   if (!on || hidden) return null;
+
+  // A failed load NEVER renders the empty state: the empty wording appears
+  // only on a confirmed empty success. A failed first load (or a failed
+  // refresh after a confirmed empty load) says the load failed, with Retry.
+  if (loadError && thoughts.length === 0) {
+    return (
+      <div className="mindspace-layer">
+        <button className="mindspace-empty" onClick={() => load()} title="Retry loading your thoughts">
+          💭 MindSpace couldn't load your thoughts — they'll drift here when it reconnects. Tap to retry.
+        </button>
+      </div>
+    );
+  }
 
   // Enabled-with-zero-thoughts must NOT look identical to disabled: say so.
   if (loaded && thoughts.length === 0) {
@@ -216,6 +243,14 @@ export function MindSpace({
         ))}
       </div>
 
+      {/* Batch L (MIN-04): a failed refresh keeps the last good motes — and
+          says so, instead of silently going stale. */}
+      {loadError && (
+        <button type="button" className="mindspace-stale" onClick={() => load()}>
+          ⚠️ Couldn't refresh — showing the last copy. Tap to retry.
+        </button>
+      )}
+
       {selected && (
         <div
           className="mindspace-card"
@@ -270,7 +305,15 @@ export function MindSpace({
               onClick={() =>
                 void act(async () => {
                   const r = await reinforceThought(selected.id);
-                  if (r?.promotedNodeId != null) {
+                  // Batch L (MIN-02): a null result is a FAILED Keep — toast
+                  // and keep the card open. (act() still reloads afterwards,
+                  // but the reload re-fetches server state the failure left
+                  // unchanged; the toast is what says it failed.)
+                  if (!r) {
+                    pushToast("Couldn't keep that thought — try again.", "⚠️", 3500);
+                    return;
+                  }
+                  if (r.promotedNodeId != null) {
                     pushToast("💭 A recurring thought settled into memory", "🧠", 4500);
                     setSelectedId(null);
                   }
@@ -305,7 +348,13 @@ export function MindSpace({
               title="Let it go"
               onClick={() =>
                 void act(async () => {
-                  await dismissThought(selected.id);
+                  const ok = await dismissThought(selected.id);
+                  // Batch L (MIN-02): a false result is a FAILED Let go — toast
+                  // and keep the card open, never close it as if it worked.
+                  if (!ok) {
+                    pushToast("Couldn't let go of that thought — it's still here.", "⚠️", 3500);
+                    return;
+                  }
                   setSelectedId(null);
                 })
               }

@@ -290,6 +290,29 @@ export function markPushSent(sqlite: RawDb, id: number): void {
 }
 
 /**
+ * Partial delivery (REG-029): at least one subscription accepted the push
+ * but at least one definitively failed. Recorded as its own terminal state
+ * — never indistinguishable from full delivery — with the counts in
+ * last_error. The cap claim transitions to 'sent': the occurrence WAS
+ * delivered (to some devices) and consumed its slot. NOT re-queued: a
+ * retry of the whole row would re-deliver to the subscriptions that
+ * already accepted it (the duplicate-delivery harm); a retry scoped to
+ * only the failed subscriptions would need per-subscription outcome
+ * tracking, which this store does not have — so the honest record is the
+ * fix, and the failed devices simply miss this occurrence.
+ */
+export function markPushPartial(sqlite: RawDb, id: number, sent: number, failed: number): void {
+  sqlite.transaction(() => {
+    sqlite
+      .prepare(
+        `UPDATE push_outbox SET status = 'partial', last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      )
+      .run(`push delivered to ${sent} subscription(s); ${failed} failed`, id);
+    transitionClaimForRow(sqlite, id, "sent");
+  })();
+}
+
+/**
  * Definite failure. Releases the ledger slot (claim → released,
  * atomically with the outbox update) and either re-queues with backoff
  * (row returns to 'pending') or marks terminal 'failed'.
@@ -430,7 +453,13 @@ export interface PushDispatchResult {
   dropped: string | null;
 }
 
-type SendOutcome = { outcome: "sent"; sentCount: number } | { outcome: "retry" | "dropped" };
+type SendOutcome =
+  | { outcome: "sent"; sentCount: number }
+  | { outcome: "retry" | "dropped" }
+  // H-3 (REG-192): a terminal failure is its own outcome — the old code
+  // returned "retry" for it too, so the sweep counted a push that will
+  // never be delivered as deferred.
+  | { outcome: "failed" };
 
 /**
  * Execute the send for a CLAIMED row (claimed_by/at already set by the
@@ -467,6 +496,13 @@ async function executePushSend(
         markPushDropped(sqlite, row.id, "no subscriptions remain");
         return { outcome: "dropped" };
       }
+    } else if (res.failed > 0) {
+      // REG-029: partial delivery — some subscriptions accepted, some
+      // definitively failed. Record it as partial (never as full success);
+      // the outcome is still "sent" for the caller's counts, since the
+      // occurrence did reach devices.
+      markPushPartial(sqlite, row.id, res.sent, res.failed);
+      return { outcome: "sent", sentCount };
     }
   } catch (err) {
     failure = err instanceof Error ? err.message : String(err);
@@ -475,9 +511,9 @@ async function executePushSend(
     const attempts = row.attempts + 1;
     if (attempts >= MAX_ATTEMPTS) {
       markPushFailed(sqlite, row.id, failure, null);
-    } else {
-      markPushFailed(sqlite, row.id, failure, retryAfter(attempts, opts.now));
+      return { outcome: "failed" };
     }
+    markPushFailed(sqlite, row.id, failure, retryAfter(attempts, opts.now));
     return { outcome: "retry" };
   }
   markPushSent(sqlite, row.id);
@@ -569,6 +605,8 @@ export interface PushSweepStats {
   deferred: number;
   dropped: number;
   ambiguous: number;
+  /** H-3 (REG-192): pushes that reached the terminal failure state — never deferred, never delivered. */
+  failed: number;
 }
 
 /**
@@ -582,7 +620,7 @@ export async function sweepPendingPushes(
   handle: DbHandle,
   opts: PushDeliveryOptions = {}
 ): Promise<PushSweepStats> {
-  const stats: PushSweepStats = { sent: 0, deferred: 0, dropped: 0, ambiguous: 0 };
+  const stats: PushSweepStats = { sent: 0, deferred: 0, dropped: 0, ambiguous: 0, failed: 0 };
   const config = opts.config !== undefined ? opts.config : getVapidConfig();
   if (!config) return stats;
 
@@ -675,6 +713,7 @@ export async function sweepPendingPushes(
     const outcome = await executePushSend(handle, fresh, { config, sender: opts.sender, now });
     if (outcome.outcome === "sent") stats.sent++;
     else if (outcome.outcome === "dropped") stats.dropped++;
+    else if (outcome.outcome === "failed") stats.failed++;
     else stats.deferred++;
   }
   return stats;

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import OwnerAccess from "./OwnerAccess.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { currentSpace, updateProfile } from "../api/client.js";
 import { AccountSettings } from "./AccountSettings.js";
@@ -45,7 +46,7 @@ import {
 } from "../api/forgetRequests.js";
 import { getUsage, getToolHealth, getSettings, updateSetting, type Usage, type ToolHealth } from "../api/ops.js";
 import { getSpacePreferences, updateSpacePreferences, getGraphExport, type SpacePreferences } from "../api/preferences.js";
-import { setSpaceTimeZone } from "../utils/spaceTimezone.js";
+import { setSpaceTimeZone, deviceTimeZone } from "../utils/spaceTimezone.js";
 import { loadPersistedRung, RUNG_TABLE, ADAPTIVE_MODEL_VERSION } from "../graph/adaptiveController.js";
 import {
   startSweep,
@@ -73,12 +74,16 @@ import {
 } from "../graph/galaxyStateSnapshot.js";
 
 /** Common IANA zones for the IM-129 timezone picker; a space already set to
- *  any other valid zone gets its own value prepended in the <select>. */
+ *  any other valid zone gets its own value prepended in the <select>.
+ *  REG-216: "UTC" is NOT offered — the TIMEZONE RULE (no UTC in anything
+ *  user-facing, ever) is broken by this one control otherwise. The server
+ *  still accepts UTC as a stored fallback; a space already stored as UTC
+ *  shows the device zone here instead (see tzValue below). */
 const TZ_CHOICES = [
   "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix",
   "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu",
   "America/Toronto", "America/Mexico_City", "America/Sao_Paulo",
-  "UTC", "Europe/London", "Europe/Paris", "Europe/Moscow",
+  "Europe/London", "Europe/Paris", "Europe/Moscow",
   "Africa/Lagos", "Africa/Johannesburg", "Asia/Dubai", "Asia/Karachi",
   "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney",
   "Pacific/Auckland",
@@ -352,6 +357,9 @@ export function SettingsPanel({
       setFlagsBusy(null);
     }
   };
+  // REG-216: the timezone the picker shows — a space stored as UTC (server
+  // fallback only) displays the device zone, never a UTC option.
+  const tzValue = prefs == null ? "" : (prefs.timezone === "UTC" ? deviceTimeZone() : prefs.timezone);
 
   useEffect(() => {
     let cancelled = false;
@@ -407,6 +415,10 @@ export function SettingsPanel({
   };
 
   const openSoumayaTab = () => {
+    // REG-217: this button closes the panel like the × does — a dirty
+    // profile or notification prefs must ask first, same as every other
+    // close path, or the edit is lost silently.
+    if (!confirmDiscardUnsaved()) return;
     try { window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "tab", value: "soumaya" } })); } catch { /* no window */ }
     onClose();
   };
@@ -493,10 +505,19 @@ export function SettingsPanel({
   };
 
   const cardRef = useRef<HTMLDivElement>(null);
+  /** REG-217: the unsaved-edit guard covers notification prefs as well as
+   *  the profile — closing (or reloading) with either dirty asks first,
+   *  naming what would be lost. */
+  const confirmDiscardUnsaved = (): boolean => {
+    if (profileDirty && prefsDirty) return confirm("You have unsaved profile and notification changes that will be lost. Continue?");
+    if (profileDirty) return confirm("You have an unsaved profile change that will be lost. Continue?");
+    if (prefsDirty) return confirm("You have unsaved notification settings that will be lost. Continue?");
+    return true;
+  };
   const closeWithConfirm = () => {
     // Backdrop-click and Escape are new (this dialog had neither before) —
     // must not bypass the unsaved-edit guard the × button already respects.
-    if (profileDirty && !confirm("You have an unsaved profile change that will be lost. Continue?")) return;
+    if (!confirmDiscardUnsaved()) return;
     onClose();
   };
   useDialogA11y(cardRef, closeWithConfirm);
@@ -544,6 +565,7 @@ export function SettingsPanel({
         {/* Account security (IM-129): passcode change + brain deletion. Self-
             contained in AccountSettings; it confirms against the gamer tag
             loaded above (the same value the server checks). */}
+        <OwnerAccess />
         <AccountSettings gamerTag={gamerTag} onBrainDeleted={onBrainDeleted} />
 
         <section className="settings-section" id="settings-audio">
@@ -648,11 +670,11 @@ export function SettingsPanel({
               <label className="settings-field">
                 <span>Timezone</span>
                 <select
-                  value={prefs.timezone}
+                  value={tzValue}
                   disabled={prefsBusy}
                   onChange={(e) => { setPrefs({ ...prefs, timezone: e.target.value }); setPrefsDirty(true); }}
                 >
-                  {(TZ_CHOICES.includes(prefs.timezone) ? TZ_CHOICES : [prefs.timezone, ...TZ_CHOICES]).map((tz) => (
+                  {(TZ_CHOICES.includes(tzValue) ? TZ_CHOICES : [tzValue, ...TZ_CHOICES]).map((tz) => (
                     <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
                   ))}
                 </select>
@@ -951,7 +973,7 @@ export function SettingsPanel({
             <button
               className={`switch ${composerBypassOn ? "on" : ""}`}
               onClick={() => {
-                if (profileDirty && !confirm("You have an unsaved profile change that will be lost. Continue?")) return;
+                if (!confirmDiscardUnsaved()) return;
                 const next = !composerBypassOn;
                 setComposerBypassOnState(next);
                 setComposerBypassEnabled(next);
@@ -1157,10 +1179,10 @@ export function SettingsPanel({
             <button
               className={`switch ${liteOn ? "on" : ""}`}
               onClick={() => {
-                // A reload wipes any unsaved Display name/Gamer tag edit sitting
-                // in the fields above with no warning — this used to fire
-                // regardless.
-                if (profileDirty && !confirm("You have an unsaved profile change that will be lost. Continue?")) return;
+                // A reload wipes any unsaved Display name/Gamer tag or
+                // notification-settings edit sitting in the fields above
+                // with no warning — this used to fire regardless.
+                if (!confirmDiscardUnsaved()) return;
                 const next = !liteOn;
                 setLiteOn(next);
                 try { localStorage.setItem("brain.lite", next ? "1" : "0"); } catch { /* ignore */ }
@@ -1251,8 +1273,8 @@ export function SettingsPanel({
               className={`switch ${boundedLinksOn ? "on" : ""}`}
               onClick={() => {
                 // Same guard as Lite mode below — a reload wipes an unsaved Display
-                // name/Gamer tag edit with no warning otherwise.
-                if (profileDirty && !confirm("You have an unsaved profile change that will be lost. Continue?")) return;
+                // name/Gamer tag or notification-settings edit with no warning otherwise.
+                if (!confirmDiscardUnsaved()) return;
                 const next = !boundedLinksOn;
                 setBoundedLinksOnState(next);
                 setBoundedLinksEnabled(next);
@@ -1270,7 +1292,7 @@ export function SettingsPanel({
                 value={linkBudget}
                 options={["200", "300", String(DEFAULT_DETAILED_LINK_BUDGET)]}
                 onPick={(v) => {
-                  if (profileDirty && !confirm("You have an unsaved profile change that will be lost. Continue?")) return;
+                  if (!confirmDiscardUnsaved()) return;
                   setLinkBudgetState(v);
                   setDetailedLinkBudget(Number(v));
                   setTimeout(() => window.location.reload(), 150);

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { TravelJourney } from "@brain/shared";
 import { useTravel } from "./useTravel.js";
+import { prefetchWorld } from "../graph/worldPrefetch.js";
 import {
   arriveJourney,
   cancelJourney,
@@ -22,6 +23,8 @@ vi.mock("../api/travel.js", async (importOriginal) => {
     arriveJourney: vi.fn(),
   };
 });
+
+vi.mock("../graph/worldPrefetch.js", () => ({ prefetchWorld: vi.fn(async () => {}) }));
 
 const mockState = vi.mocked(getTravelState);
 const mockDepart = vi.mocked(departJourney);
@@ -150,5 +153,87 @@ describe("useTravel", () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
     expect(mockState.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("useTravel — copies stay in sync", () => {
+  // The travel panel, the world scene layer and the world map each run their
+  // own copy of this hook. Before the sync event, a departure from the panel
+  // was invisible to the scene layer: no transit flight, no arrival scene,
+  // until a page reload (measured in a real browser).
+  it("a departure in one copy makes the other copy re-read the server", async () => {
+    mockState.mockResolvedValue(state(null));
+    mockDepart.mockResolvedValue(journey());
+    const panel = renderHook(() => useTravel());
+    const scene = renderHook(() => useTravel());
+    await waitFor(() => expect(panel.result.current.state).not.toBeNull());
+    await waitFor(() => expect(scene.result.current.state).not.toBeNull());
+    expect(scene.result.current.state?.activeJourney).toBeNull();
+
+    mockState.mockResolvedValue(state(journey({ state: "in_transit" })));
+    await act(async () => {
+      await panel.result.current.depart("warp", "great-station");
+    });
+    await waitFor(() => expect(scene.result.current.state?.activeJourney?.state).toBe("in_transit"));
+  });
+
+  it("the acting copy does not re-fetch for its own echo", async () => {
+    mockState.mockResolvedValue(state(null));
+    mockDepart.mockResolvedValue(journey());
+    const { result } = renderHook(() => useTravel());
+    await waitFor(() => expect(result.current.state).not.toBeNull());
+    mockState.mockClear();
+    await act(async () => {
+      await result.current.depart("warp", "great-station");
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mockState).toHaveBeenCalledTimes(1); // its own refresh — not two
+  });
+
+  it("a disabled copy never reacts to another copy's action", async () => {
+    mockState.mockResolvedValue(state(null));
+    mockDepart.mockResolvedValue(journey());
+    const live = renderHook(() => useTravel());
+    renderHook(() => useTravel(false));
+    await waitFor(() => expect(live.result.current.state).not.toBeNull());
+    mockState.mockClear();
+    await act(async () => {
+      await live.result.current.depart("warp", "great-station");
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mockState).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Prefetch trigger (see graph/worldPrefetch.ts): the journey's dead time is when the destination's
+// models are fetched, so the world isn't bare when you arrive.
+describe("useTravel — warms the destination while travelling", () => {
+  it("starts warming the destination as soon as the server reports a journey arming", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "arming", destination: "deep-past" })));
+    renderHook(() => useTravel());
+    await waitFor(() => expect(prefetchWorld).toHaveBeenCalledWith("deep-past"));
+  });
+  it("…and while in transit (covers a reload mid-flight)", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "in_transit", destination: "scale" })));
+    renderHook(() => useTravel());
+    await waitFor(() => expect(prefetchWorld).toHaveBeenCalledWith("scale"));
+  });
+  it("does nothing when no journey is active", async () => {
+    mockState.mockResolvedValue(state(null));
+    const { result } = renderHook(() => useTravel());
+    await waitFor(() => expect(result.current.state).not.toBeNull());
+    expect(prefetchWorld).not.toHaveBeenCalled();
+  });
+  it("does not prefetch the way HOME on a turn-back (already seen) — returning is not arming/in_transit", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "returning", destination: "home" })));
+    const { result } = renderHook(() => useTravel());
+    await waitFor(() => expect(result.current.state).not.toBeNull());
+    expect(prefetchWorld).not.toHaveBeenCalled();
+  });
+  it("does not prefetch while disabled (worlds flag off)", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "arming" })));
+    renderHook(() => useTravel(false));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(prefetchWorld).not.toHaveBeenCalled();
   });
 });

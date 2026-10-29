@@ -104,3 +104,13 @@ describe("SettingsPanel — profile inputs lock while a save is in flight", () =
     expect(nameInput.disabled).toBe(false);
   });
 });
+
+describe("REG-026 Settings names what the Inbox actually keeps", () => {
+  it("states the four recorded producers and where other messages live", async () => {
+    render(<SettingsPanel onClose={() => {}} />);
+    const note = await screen.findByText(/Your Inbox keeps the digests/i);
+    expect(note.textContent).toMatch(/insights, discoveries, and bill-risk warnings/i);
+    expect(note.textContent).toMatch(/reminders and check-ins, live only in the chat/i);
+    expect(note.textContent).not.toMatch(/keeps everything she sends/i);
+  });
+});

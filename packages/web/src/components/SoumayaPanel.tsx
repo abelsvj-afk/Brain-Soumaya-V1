@@ -94,17 +94,27 @@ export function SoumayaPanel({
   // Telemetry & Logs state
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [logsError, setLogsError] = useState(false);
-  const [researchEnabled, setResearchEnabled] = useState(false);
+  // REG-167/SF-01: the setting is UNKNOWN until it has actually been read —
+  // `null` renders as such; `false` must never mean "never read".
+  const [researchEnabled, setResearchEnabled] = useState<boolean | null>(null);
+  const [settingsError, setSettingsError] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [usageError, setUsageError] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
   const [toolHealth, setToolHealth] = useState<ToolHealth[]>([]);
   const [undertaking, setUndertaking] = useState<Undertaking | null>(null);
+  const [undertakingError, setUndertakingError] = useState(false);
   const [undertakingHistory, setUndertakingHistory] = useState<Undertaking[]>([]);
+  const [historyError, setHistoryError] = useState(false);
   const [streak, setStreak] = useState<Streak | null>(null);
+  const [streakError, setStreakError] = useState(false);
   const [fuel, setFuel] = useState<Fuel | null>(null);
+  const [fuelError, setFuelError] = useState(false);
   const [commissioning, setCommissioning] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
   const [budgetError, setBudgetError] = useState<string | null>(null);
+  // REG-172/SF-07: a $0 budget is armed, not submitted — the panel asks first.
+  const [budgetZeroArmed, setBudgetZeroArmed] = useState(false);
   const [loading, setLoading] = useState(true);
   // IM-66 log browsing state
   const [logQuery, setLogQuery] = useState("");
@@ -125,6 +135,22 @@ export function SoumayaPanel({
     }
     setTokenDraft("");
     setTokenRequest({ onReady });
+  };
+
+  // REG-172/SF-07: the actual budget write, shared by the Set button and
+  // the $0 confirmation.
+  const submitBudget = (v: number): void => {
+    ensureAdminToken(async () => {
+      const u = await apiSetBudget(v);
+      if (u) {
+        setUsage(u);
+        setBudgetError(null);
+        setBudgetInput("");
+      } else {
+        setAdminToken(""); // forget a bad token so the next click re-asks
+        setBudgetError("Rejected — check the admin token and try again.");
+      }
+    });
   };
 
   /** IM-70: a target pill reads the memory's label, like FleetPanel's labelOf. */
@@ -157,6 +183,15 @@ export function SoumayaPanel({
   // Fetch telemetry/logs. Logs load through the STRICT variant (IM-66): a
   // failed load sets logsError so the panel shows a real error state instead
   // of rendering a dead server as a legitimately empty brain.
+  //
+  // REG-167/SF-01: the other six sources used to load in ONE Promise.all
+  // whose catch only console.error'd — one dead endpoint blanked all six
+  // sections and Research Mode rendered its unverified `false` default as
+  // OFF. Each source now settles independently (Promise.allSettled): a
+  // failed source sets its own error flag and clears its value, so its
+  // section renders an error state — never a default presented as fact —
+  // while the surviving sections keep their real data. A later successful
+  // poll round clears the flag again.
   const fetchData = async () => {
     try {
       const logsData = await getAgentLogsStrict();
@@ -166,30 +201,68 @@ export function SoumayaPanel({
       console.error("Failed to fetch Soumaya logs", err);
       setLogsError(true);
     }
-    try {
-      const [settings, usageData, fuelData, arc, arcHistory, streakData, healthData, toolHealthData] = await Promise.all([
-        getSettings(),
-        getUsage(),
-        getFuel(),
-        getUndertaking(),
-        getUndertakingHistory(),
-        getStreak(),
-        getHealth().catch(() => null), // diagnostics-only — never block the rest of the panel
-        getToolHealth().catch(() => []), // diagnostics-only — never block the rest of the panel
-      ]);
-      setResearchEnabled(settings.research_enabled === "true");
-      if (usageData) setUsage(usageData);
-      if (fuelData) setFuel(fuelData);
-      setUndertaking(arc);
-      setUndertakingHistory(arcHistory);
-      if (streakData) setStreak(streakData);
-      setHealth(healthData);
-      setToolHealth(toolHealthData);
-    } catch (err) {
-      console.error("Failed to fetch Soumaya data", err);
-    } finally {
-      setLoading(false);
+    const [settingsR, usageR, fuelR, arcR, arcHistoryR, streakR] = await Promise.allSettled([
+      getSettings(),
+      getUsage(),
+      getFuel(),
+      getUndertaking(),
+      getUndertakingHistory(),
+      getStreak(),
+    ]);
+    // Diagnostics-only — never block the rest of the panel.
+    const healthData = await getHealth().catch(() => null);
+    const toolHealthData = await getToolHealth().catch(() => []);
+    setHealth(healthData);
+    setToolHealth(toolHealthData);
+    if (settingsR.status === "fulfilled") {
+      setResearchEnabled(settingsR.value.research_enabled === "true");
+      setSettingsError(false);
+    } else {
+      console.error("Failed to fetch Soumaya settings", settingsR.reason);
+      setResearchEnabled(null);
+      setSettingsError(true);
     }
+    if (usageR.status === "fulfilled") {
+      if (usageR.value) setUsage(usageR.value);
+      setUsageError(false);
+    } else {
+      console.error("Failed to fetch Soumaya usage", usageR.reason);
+      setUsage(null);
+      setUsageError(true);
+    }
+    if (fuelR.status === "fulfilled") {
+      if (fuelR.value) setFuel(fuelR.value);
+      setFuelError(false);
+    } else {
+      console.error("Failed to fetch Soumaya fuel", fuelR.reason);
+      setFuel(null);
+      setFuelError(true);
+    }
+    if (arcR.status === "fulfilled") {
+      setUndertaking(arcR.value);
+      setUndertakingError(false);
+    } else {
+      console.error("Failed to fetch Soumaya undertaking", arcR.reason);
+      setUndertaking(null);
+      setUndertakingError(true);
+    }
+    if (arcHistoryR.status === "fulfilled") {
+      setUndertakingHistory(arcHistoryR.value);
+      setHistoryError(false);
+    } else {
+      console.error("Failed to fetch Soumaya undertaking history", arcHistoryR.reason);
+      setUndertakingHistory([]);
+      setHistoryError(true);
+    }
+    if (streakR.status === "fulfilled") {
+      if (streakR.value) setStreak(streakR.value);
+      setStreakError(false);
+    } else {
+      console.error("Failed to fetch Soumaya streak", streakR.reason);
+      setStreak(null);
+      setStreakError(true);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -200,7 +273,10 @@ export function SoumayaPanel({
 
   // IM-72: honour the write result — flip optimistically, but on failure roll
   // back and toast instead of lying until the next poll silently flips it.
+  // REG-167: the toggle is disabled while the setting is unknown (null), so
+  // this never runs on an unread value.
   const toggleResearch = async () => {
+    if (researchEnabled === null) return;
     const prev = researchEnabled;
     const newVal = !prev;
     setResearchEnabled(newVal);
@@ -264,7 +340,9 @@ export function SoumayaPanel({
               onClick={() => setShowShipTask(!showShipTask)}
               style={{ fontSize: "1.1rem" }}
             >
-              🏷️
+              {/* REG-168/SF-03: captioned like its 🎥 neighbour — a bare 🏷️
+                  existed only in a long-press tooltip. */}
+              🏷️ Labels
             </button>
           )}
         </div>
@@ -285,6 +363,14 @@ export function SoumayaPanel({
       </div>
 
       {/* Her multi-day undertaking — autonomy with a narrative arc. */}
+      {undertakingError && (
+        <div className="undertaking-card">
+          <p className="budget-note budget-over" style={{ fontSize: "11px" }}>
+            Couldn't load the current undertaking — try again.
+          </p>
+          <button className="mini" onClick={() => fetchData()}>Try again</button>
+        </div>
+      )}
       {undertaking && undertaking.status === "active" && (
         <div className="undertaking-card">
           <div className="undertaking-head">
@@ -309,6 +395,11 @@ export function SoumayaPanel({
             She finished this arc — a new one begins when there's enough to work on.
           </p>
         </div>
+      )}
+      {historyError && (
+        <p className="budget-note budget-over" style={{ fontSize: "11px" }}>
+          Couldn't load past undertakings.
+        </p>
       )}
       {pastUndertakings.length > 0 && (
         <div className="undertaking-history">
@@ -356,6 +447,7 @@ export function SoumayaPanel({
                         disabled={pIdx === 0}
                         onClick={() => moveTask(idx, "up")}
                         title="Move task up in priority"
+                        aria-label={`Move ${task.label} up in priority`}
                       >
                         ▲
                       </button>
@@ -364,6 +456,7 @@ export function SoumayaPanel({
                         disabled={pIdx === plannedTasks.length - 1}
                         onClick={() => moveTask(idx, "down")}
                         title="Move task down in priority"
+                        aria-label={`Move ${task.label} down in priority`}
                       >
                         ▼
                       </button>
@@ -388,22 +481,31 @@ export function SoumayaPanel({
           </h4>
           <div className="toggle-box" style={{ margin: 0 }}>
             <span className="mini-label" style={{ fontSize: "11px", opacity: 0.7 }}>Research Mode</span>
-            <button 
-              className={`mini ${researchEnabled ? 'active' : ''}`} 
+            <button
+              className={`mini ${researchEnabled ? 'active' : ''}`}
               onClick={toggleResearch}
-              style={{ 
+              disabled={researchEnabled === null}
+              title={researchEnabled === null ? "Research Mode — the setting couldn't be loaded" : researchEnabled ? "Research Mode on" : "Research Mode off"}
+              style={{
                 backgroundColor: researchEnabled ? 'rgba(100,200,255,0.2)' : 'transparent',
                 borderColor: researchEnabled ? '#64c8ff' : 'rgba(255,255,255,0.2)',
                 fontSize: "10px",
                 padding: "2px 6px"
               }}
             >
-              {researchEnabled ? "ON" : "OFF"}
+              {/* REG-167/SF-01: "…" + disabled while the setting is unknown —
+                  never an unverified OFF presented as fact. */}
+              {researchEnabled === null ? "…" : researchEnabled ? "ON" : "OFF"}
             </button>
           </div>
         </div>
+        {settingsError && (
+          <p className="budget-note budget-over" style={{ fontSize: "11px", marginTop: "6px" }}>
+            Couldn't load settings — Research Mode state unknown.
+          </p>
+        )}
 
-        {fuel && (
+        {fuel ? (
           <div className="budget-box" style={{ marginTop: "10px" }}>
             <div className="budget-head">
               <span>⛽ Fuel (earned by tending)</span>
@@ -422,8 +524,8 @@ export function SoumayaPanel({
             </div>
             <p className="budget-note" style={{ fontSize: "11px", marginTop: "6px" }}>
               {fuel.fuel < fuel.jobCost
-                ? "Out of fuel — deep-dive expansion paused. Add memories, forge links, or clear action items to refuel."
-                : "Powers deep-dive research + sector charting. Earn it by adding memories or forging links."}
+                ? "Out of fuel — Research Mode research paused. Add memories, forge links, or clear action items to refuel."
+                : "Powers Research Mode research + sector charting. Earn it by adding memories or forging links."}
             </p>
             {/* A player-controlled SINK so Fuel isn't just a number that pins at the cap:
                 spend it to have Soumaya warm your coldest memories on demand, right now. */}
@@ -451,7 +553,14 @@ export function SoumayaPanel({
               {commissioning ? "Warming…" : "⚡ Commission: warm the cold belt (−25⛽)"}
             </button>
           </div>
-        )}
+        ) : fuelError ? (
+          <div className="budget-box" style={{ marginTop: "10px" }}>
+            <p className="budget-note budget-over" style={{ fontSize: "11px" }}>
+              Couldn't load fuel — this is a failed connection, not an empty tank.
+            </p>
+            <button className="mini" onClick={() => fetchData()}>Try again</button>
+          </div>
+        ) : null}
       </div>
 
       {/* (The Captain's Log moved to the Insights tab — it's her narrative read on
@@ -495,6 +604,11 @@ export function SoumayaPanel({
                 </>
               );
             })()}
+          </>
+        ) : streakError ? (
+          <>
+            <p className="empty">Couldn't load your streak — this is a failed connection, not an empty record.</p>
+            <button className="mini" onClick={() => fetchData()}>Try again</button>
           </>
         ) : (
           <p className="empty">Streak unavailable right now.</p>
@@ -638,16 +752,23 @@ export function SoumayaPanel({
               <p className="budget-note" style={{ fontSize: "11px" }}>
                 Message the bot, then connect this brain with your login:
               </p>
+              {/* REG-173/SF-08: this is a TEMPLATE, not a copyable command —
+                  the old "Tap to copy" wrote the literal placeholder. The
+                  client cannot fill in the login name: /link takes the
+                  gamer tag, and the client only stores the brain's display
+                  name (which may differ from the tag) — inserting it could
+                  mis-link or create a stray brain. So the block is
+                  labelled as a template to fill in. */}
               <code
                 className="brain-id"
-                title="Tap to copy"
-                onClick={() => navigator.clipboard?.writeText("/link <name> <passcode>")}
-                style={{ cursor: "pointer", display: "block", margin: "6px 0", padding: "4.5px", background: "rgba(0,0,0,0.35)", borderRadius: "4px", fontSize: "11px" }}
+                title="Template — fill in your gamer tag and passcode"
+                style={{ cursor: "default", display: "block", margin: "6px 0", padding: "4.5px", background: "rgba(0,0,0,0.35)", borderRadius: "4px", fontSize: "11px" }}
               >
                 /link &lt;name&gt; &lt;passcode&gt;
               </code>
               <p className="budget-note" style={{ fontSize: "11px" }}>
-                Use the same name + passcode you signed in with. After that I'll answer
+                Template — replace &lt;name&gt; with the gamer tag you signed in with, and
+                &lt;passcode&gt; with your passcode. After that I'll answer
                 from this brain, log what you send, and bring you a daily digest.
               </p>
             </div>
@@ -727,7 +848,7 @@ export function SoumayaPanel({
                   step={1}
                   placeholder={`$${usage.budgetUsd}`}
                   value={budgetInput}
-                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onChange={(e) => { setBudgetInput(e.target.value); setBudgetZeroArmed(false); }}
                   style={{
                     width: "60px",
                     background: "rgba(0,0,0,0.3)",
@@ -742,19 +863,33 @@ export function SoumayaPanel({
                 <button
                   className="mini"
                   onClick={() => {
-                    const v = Number(budgetInput);
-                    if (!Number.isFinite(v) || v < 0) return;
-                    ensureAdminToken(async () => {
-                      const u = await apiSetBudget(v);
-                      if (u) {
-                        setUsage(u);
-                        setBudgetError(null);
-                        setBudgetInput("");
-                      } else {
-                        setAdminToken(""); // forget a bad token so the next click re-asks
-                        setBudgetError("Rejected — check the admin token and try again.");
-                      }
-                    });
+                    // REG-172/SF-07: validate locally and VISIBLY. The old
+                    // guard silently returned on bad input — and Number("")
+                    // is 0, so an untouched field submitted a $0 budget
+                    // (the "Budget reached — AI is paused" state).
+                    const raw = budgetInput.trim();
+                    if (raw === "") {
+                      setBudgetError("Enter an amount first — e.g. 10.");
+                      return;
+                    }
+                    const v = Number(raw);
+                    if (!Number.isFinite(v)) {
+                      setBudgetError("Enter an amount — that doesn't look like a number.");
+                      return;
+                    }
+                    if (v < 0) {
+                      setBudgetError("Enter an amount — budgets can't be negative.");
+                      return;
+                    }
+                    if (v === 0 && !budgetZeroArmed) {
+                      // A $0 budget is the "Budget reached — AI is paused"
+                      // state: arm the confirmation and ask first.
+                      setBudgetError(null);
+                      setBudgetZeroArmed(true);
+                      return;
+                    }
+                    setBudgetZeroArmed(false);
+                    submitBudget(v);
                   }}
                   style={{ padding: "4px 8px", fontSize: "11px" }}
                 >
@@ -779,9 +914,38 @@ export function SoumayaPanel({
                   Reset
                 </button>
               </div>
+              {budgetZeroArmed && (
+                <p className="budget-note budget-over" style={{ marginTop: "6px" }}>
+                  A $0 budget means "Budget reached — AI is paused" until you raise it. Set it to $0?
+                  <span style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                    <button
+                      className="mini"
+                      onClick={() => { setBudgetZeroArmed(false); submitBudget(0); }}
+                      style={{ padding: "4px 8px", fontSize: "11px" }}
+                    >
+                      Yes, set $0
+                    </button>
+                    <button
+                      className="mini"
+                      onClick={() => setBudgetZeroArmed(false)}
+                      style={{ padding: "4px 8px", fontSize: "11px" }}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                </p>
+              )}
               {budgetError && (
                 <p className="budget-note budget-over" style={{ marginTop: "6px" }}>{budgetError}</p>
               )}
+            </div>
+          )}
+          {usageError && (
+            <div className="budget-box">
+              <p className="budget-note budget-over" style={{ fontSize: "11px" }}>
+                Couldn't load the API budget — try again.
+              </p>
+              <button className="mini" onClick={() => fetchData()}>Try again</button>
             </div>
           )}
         </div>

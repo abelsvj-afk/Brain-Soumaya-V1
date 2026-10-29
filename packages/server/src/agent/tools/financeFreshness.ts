@@ -176,7 +176,10 @@ export const financeFreshnessTool: Tool = {
     const msg = buildFinanceFreshnessMessage({ incomeStale, assetStale, incomeDays, assetDays, preferConcise, recurring });
 
     let delivered = false;
-    try { await tc.notify(msg); delivered = true; } catch { /* router logs it regardless */ }
+    // REG-027: tool identity + a stable per-day occurrence (the pattern
+    // checkin/reviewNudge follow) so the outbox's notif_key dedup and
+    // audit attribution apply to this producer.
+    try { await tc.notify(msg, { tool: "finance_freshness" }); delivered = true; } catch { /* router logs it regardless */ }
     return { ok: true, summary: "finance freshness nudge", delivered, message: msg };
   },
 };

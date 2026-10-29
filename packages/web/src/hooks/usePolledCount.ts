@@ -6,15 +6,24 @@ import { useEffect, useState } from "react";
  * DRY the badge-count effects (suggested-connections, due-reviews). Behaviour matches
  * the originals exactly: load immediately, poll on the interval, refresh 1s after the
  * event, and tear everything down on unmount / dependency change.
+ *
+ * Batch G (REG-196): the count is `number | null` — null means UNKNOWN (no
+ * successful poll yet, or the last refresh failed), never 0. A dead server used
+ * to hold the badge at 0 — indistinguishable from "nothing due" — because the
+ * hook swallowed poll errors and held its initial 0. Callers render null as an
+ * unknown state (ToolsMenu shows "?"); a successful poll restores the number.
+ *
+ * Batch H (REG-201 / CN-02) relies on the same unknown-state contract for the
+ * connections badge: null is unknown, never 0.
  */
 export function usePolledCount(
   fetchCount: () => Promise<number>,
   enabled: boolean,
   intervalMs: number,
   opts: { refreshEvent?: string; refreshKey?: unknown } = {},
-): number {
+): number | null {
   const { refreshEvent, refreshKey } = opts;
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -23,7 +32,9 @@ export function usePolledCount(
         .then((n) => {
           if (alive) setCount(n);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (alive) setCount(null); // unknown, not 0 — the last refresh failed
+        });
     };
     load();
     const onEvent = refreshEvent ? () => window.setTimeout(load, 1000) : undefined;

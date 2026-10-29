@@ -242,33 +242,58 @@ export function resolveShipStatusOpen(
  * preference (mirrors App's `ship.task.${space.id}` pattern): written
  * only on the owner's explicit toggle, under `ship.status.${spaceId}`
  * ("1" = expanded, "0" = collapsed).
+ *
+ * Batch I (REG-068 / GH-14): the state is resolved BEFORE the first
+ * paint — the old useState(true) + effect flashed the stack expanded
+ * for one frame even with a stored collapsed preference. `override` is
+ * the owner's explicit toggle, keyed by space so a brain switch
+ * re-resolves; `revealedId` is sticky for the space currently in its
+ * one-time first-run reveal, so marking it seen does not immediately
+ * collapse the reveal under the owner — and it clears when the space
+ * changes, so a returned-to brain never re-reveals.
  */
 export function useShipStatusOpen(spaceId: string | null): [boolean, (v: boolean) => void] {
-  const [open, setOpen] = useState(true);
+  const [override, setOverride] = useState<{ id: string; open: boolean } | null>(null);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const resolved = spaceId
+    ? resolveShipStatusOpen(spaceId, window.innerWidth, window.innerHeight)
+    : { open: true, reveal: false };
   useEffect(() => {
     if (!spaceId) return;
-    const resolved = resolveShipStatusOpen(spaceId, window.innerWidth, window.innerHeight);
-    setOpen(resolved.open);
     if (resolved.reveal) {
+      setRevealedId(spaceId);
       try {
         localStorage.setItem(shipStatusSeenKey(spaceId), "1");
       } catch {
         /* private mode */
       }
+    } else {
+      setRevealedId(null);
     }
+    // Resolved from spaceId + the viewport at mount — same as before.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceId]);
   const setShipStatusOpen = useCallback(
     (v: boolean) => {
-      setOpen(v);
-      if (!spaceId) return;
-      try {
-        localStorage.setItem(shipStatusPrefKey(spaceId), v ? "1" : "0");
-      } catch {
-        /* private mode */
+      if (spaceId) {
+        setOverride({ id: spaceId, open: v });
+        try {
+          localStorage.setItem(shipStatusPrefKey(spaceId), v ? "1" : "0");
+        } catch {
+          /* private mode */
+        }
+      } else {
+        setOverride(null);
       }
     },
     [spaceId],
   );
+  const open =
+    override && spaceId && override.id === spaceId
+      ? override.open
+      : revealedId === spaceId
+        ? true
+        : resolved.open;
   return [open, setShipStatusOpen];
 }
 

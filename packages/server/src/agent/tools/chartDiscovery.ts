@@ -155,7 +155,10 @@ export const chartDiscoveryTool: Tool = {
     const msg = `✦ Charted a new Codex entry: ${String(args.title)}. Take a look.`;
     let delivered = false;
     try {
-      await tc.notify(msg);
+      // REG-027: tool identity + a stable occurrence (the Codex key — one
+      // occurrence per charted entry, never per-call) so the outbox's
+      // notif_key dedup and audit attribution apply to this producer.
+      await tc.notify(msg, { tool: "chart_discovery", discoveryKey: key });
       delivered = true;
     } catch {
       /* logged regardless */

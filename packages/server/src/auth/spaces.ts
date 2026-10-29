@@ -206,6 +206,16 @@ export const SPACE_SCOPED_TABLES = [
   "source_corrections",
   "source_chunks",
   "sources",
+  // Fleet defense (Wave 2): the releases, the defenses, and the log
+  // are per-space rows — brain deletion must remove them too.
+  "fleet_defense_releases",
+  "fleet_defense_defenses",
+  "fleet_defense_log",
+  // Fleets on automated missions: the mission ledger, the log, and
+  // the fleet stop flag are per-space rows too.
+  "mission_missions",
+  "mission_log",
+  "mission_fleet_state",
 ] as const;
 
 /**

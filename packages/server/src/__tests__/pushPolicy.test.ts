@@ -237,7 +237,7 @@ describe("dispatchPush + sweepPendingPushes", () => {
     });
     expect(ok.deferred).toBe(true);
     const sweep = await sweepPendingPushes(handle, { now: AFTER_QUIET, config: null, sender });
-    expect(sweep).toEqual({ sent: 0, deferred: 0, dropped: 0, ambiguous: 0 });
+    expect(sweep).toEqual({ sent: 0, deferred: 0, dropped: 0, ambiguous: 0, failed: 0 });
     expect(sender).not.toHaveBeenCalled();
     expect(pendingRows(handle)[0]!.status).toBe("pending");
   });

@@ -21,8 +21,12 @@ import {
  *    non-OK status, and malformed bodies — and `{ ok: true, … }` (possibly
  *    empty) ONLY for a real successful response.
  *  - The legacy fail-soft functions keep their EXACT old contract — `[]` on
- *    any failure, the array on success — so no other consumer (DigestPanel,
- *    NodeList, ReviewPanel, App's due-count poll, …) changes behaviour.
+ *    any failure, the array on success — so no other consumer changes
+ *    behaviour. EXCEPTION (Batch G, REG-196): `getDueReviews` THROWS on
+ *    failure instead of resolving `[]` — it is the badge count's source
+ *    (`getDueReviews().length` in App's poll), so a dead server used to read
+ *    as "0 due". Its only remaining caller is that poll (ReviewPanel moved to
+ *    the Result variant); the throw is what lets the poll report unknown.
  *
  * Falsification: against the pre-change client the Result variants don't
  * exist (import failure); against a variant that fail-softs, the
@@ -81,19 +85,25 @@ describe("IM-124 residual — legacy fail-soft contract is UNCHANGED for other c
   });
   const fetchMock = () => fetch as unknown as ReturnType<typeof vi.fn>;
 
-  it("getDigest / getConstellations / getDueReviews still resolve [] on ANY failure", async () => {
+  it("getDigest / getConstellations still resolve [] on ANY failure", async () => {
     fetchMock().mockRejectedValue(new Error("network down"));
     await expect(getDigest()).resolves.toEqual([]);
     await expect(getConstellations()).resolves.toEqual([]);
-    await expect(getDueReviews()).resolves.toEqual([]);
     fetchMock().mockResolvedValue(jsonResponse({ error: "boom" }, false, 500));
     await expect(getDigest()).resolves.toEqual([]);
     await expect(getConstellations()).resolves.toEqual([]);
-    await expect(getDueReviews()).resolves.toEqual([]);
     fetchMock().mockResolvedValue(jsonResponse({ nope: true }));
     await expect(getDigest()).resolves.toEqual([]);
     await expect(getConstellations()).resolves.toEqual([]);
-    await expect(getDueReviews()).resolves.toEqual([]);
+  });
+
+  it("getDueReviews THROWS on any failure (Batch G, REG-196) — never [] as '0 due'", async () => {
+    fetchMock().mockRejectedValue(new Error("network down"));
+    await expect(getDueReviews()).rejects.toThrow();
+    fetchMock().mockResolvedValue(jsonResponse({ error: "boom" }, false, 500));
+    await expect(getDueReviews()).rejects.toThrow();
+    fetchMock().mockResolvedValue(jsonResponse({ nope: true }));
+    await expect(getDueReviews()).rejects.toThrow();
   });
 
   it("…and still resolve the real array on success", async () => {

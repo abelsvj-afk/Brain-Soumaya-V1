@@ -7,6 +7,8 @@ import { SectorView } from "./SectorView.js";
 import { DigestPanel } from "./DigestPanel.js";
 import { SoumayaPanel } from "./SoumayaPanel.js";
 import { FleetPanel } from "./FleetPanel.js";
+import FleetMissionsPanel from "./FleetMissionsPanel.js";
+import FleetDefensePanel from "./FleetDefensePanel.js";
 import { AchievementsPanel } from "./AchievementsPanel.js";
 import { HangarPanel, type HangarViewTarget } from "./HangarPanel.js";
 import type { UnlockStats } from "@brain/shared";
@@ -14,6 +16,7 @@ import { InboxPanel } from "./InboxPanel.js";
 import { LibraryPanel } from "./LibraryPanel.js";
 import { CodexPanel } from "./CodexPanel.js";
 import { DailyQuests } from "./DailyQuests.js";
+import { questDayStorageKey } from "./quests.js";
 import { MindPanel } from "./MindPanel.js";
 import { FinancePanel } from "./FinancePanel.js";
 import { JourneysPanel } from "./JourneysPanel.js";
@@ -99,6 +102,10 @@ interface Props {
   onPlayTrack?: (index: number) => void;
   currentTrackIndex?: number | null;
   musicPlaying?: boolean;
+  /** REG-181/HN-07: the transient trail preview (never persisted) + the
+   *  callback that starts/stops it — owned by App, passed through. */
+  previewTrail?: string | null;
+  onPreviewTrail?: (value: string | null) => void;
 }
 
 // Each tab carries a human `name` (tooltip + accessible label) so the icon row is
@@ -214,6 +221,8 @@ export function RightDock({
   onPlayTrack,
   currentTrackIndex,
   musicPlaying,
+  previewTrail,
+  onPreviewTrail,
 }: Props) {
   const [unseenCount, setUnseenCount] = useState(0);
   // Progressive Discovery: no server fetch needed for gating. Codex entries
@@ -225,6 +234,10 @@ export function RightDock({
   const [browseView, setBrowseView] = useState<BrowseView>("all");
   const [progressView, setProgressView] = useState<ProgressView>("codex");
   const [fleetOpen, setFleetOpen] = useState(true); // IM-68: Fleet starts open/prominent
+  // Fleet defense (Wave 2): closed by default — the defense is a
+  // deliberate visit, not ambient. Opening it mounts the panel and
+  // its one overview fetch; closed, it fetches nothing.
+  const [defenseOpen, setDefenseOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   // IM-02: the ambient strip shows REAL state only (see dockAmbientDetail).
   // The clock ticks so the greeting/time stay current; everything else is
@@ -423,6 +436,18 @@ export function RightDock({
               {fleetOpen && (
                 <FleetPanel getStatus={getFleetStatus ?? (() => undefined)} onFocus={onFocus} />
               )}
+              {/* Fleet missions live inside the Fleet section, not a
+                  second fleet UI: a fleet out on a mission shows as
+                  out here, with its destination and return. */}
+              {fleetOpen && <FleetMissionsPanel />}
+            </details>
+            <details
+              className="dock-section fleet-defense-section"
+              open={defenseOpen}
+              onToggle={(e) => setDefenseOpen((e.target as HTMLDetailsElement).open)}
+            >
+              <summary>🛡️ Fleet defense — what you chose to let go</summary>
+              {defenseOpen && <FleetDefensePanel nodes={graph.nodes} />}
             </details>
           </div>
         )}
@@ -440,6 +465,10 @@ export function RightDock({
               onFocus={onFocus}
               onCapture={onCapture}
               onOpenInsights={() => setTab("insights")}
+              // REG-045 (PG-01): the same persisted dayState key the Observatory
+              // uses (`questDayStorageKey(spaceId)`), so both surfaces render
+              // the same quests, targets, and done states for the day.
+              questKey={questDayStorageKey(spaceId || spaceName || "default")}
             />
             <div className="subtabs" role="tablist" aria-label="Progress view">
               <button className={progressView === "codex" ? "on" : ""} onClick={() => setProgressView("codex")}>
@@ -477,6 +506,8 @@ export function RightDock({
             onPlayTrack={onPlayTrack}
             currentTrackIndex={currentTrackIndex}
             musicPlaying={musicPlaying}
+            previewTrail={previewTrail}
+            onPreviewTrail={onPreviewTrail}
           />
         )}
       </div>

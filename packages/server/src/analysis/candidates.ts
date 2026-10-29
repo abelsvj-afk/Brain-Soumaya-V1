@@ -234,25 +234,36 @@ export function pruneWeakLinks(
  * names no longer matching, this clears the bogus "20-30 connections to a person";
  * these are wrong, so they're removed + remembered as rejected, not queued. (2) thin
  * the weakest associative links into the review queue (restorable). Returns both counts.
+ *
+ * Batch G (REG-203): the anchor half is split — `wrongPruned` counts the
+ * permanently-removed non-naming links (pruneAnchorLinks), `capTrimmed` counts the
+ * legitimate thematic links dropped only because the anchor exceeded its 12-link cap
+ * (trimAnchorLinks, no rejection recorded). `anchorPruned` stays their sum so existing
+ * consumers keep working; the panel reports the two halves separately because a
+ * cap-trimmed link is not "wrong".
  */
-export function declutterGraph(ctx: AppContext, spaceId: string): { anchorPruned: number; weakPruned: number } {
+export function declutterGraph(
+  ctx: AppContext,
+  spaceId: string,
+): { anchorPruned: number; wrongPruned: number; capTrimmed: number; weakPruned: number } {
   const h = ctx.handle;
   const anchors = h.sqlite
     .prepare(
       `SELECT id, kind FROM nodes WHERE space_id = ? AND deleted_at IS NULL AND kind IN (${COGNITIVE_KINDS.map(() => "?").join(",")})`,
     )
     .all(spaceId, ...COGNITIVE_KINDS) as { id: number; kind: string }[];
-  let anchorPruned = 0;
+  let wrongPruned = 0;
+  let capTrimmed = 0;
   for (const a of anchors) {
     if (NAME_ONLY_KINDS.has(a.kind)) {
       // People/identities: sever every link whose memory doesn't actually name them.
-      anchorPruned += pruneAnchorLinks(ctx, spaceId, a.id);
+      wrongPruned += pruneAnchorLinks(ctx, spaceId, a.id);
     } else {
       // Goals/skills/…: keep them thematic but trim a runaway hub down to the cap.
-      anchorPruned += trimAnchorLinks(ctx, spaceId, a.id);
+      capTrimmed += trimAnchorLinks(ctx, spaceId, a.id);
     }
   }
   // Also thin the weakest memory-to-memory associative links into the review queue.
   const { pruned: weakPruned } = pruneWeakLinks(h, spaceId, { maxWeight: 0.75 });
-  return { anchorPruned, weakPruned };
+  return { anchorPruned: wrongPruned + capTrimmed, wrongPruned, capTrimmed, weakPruned };
 }

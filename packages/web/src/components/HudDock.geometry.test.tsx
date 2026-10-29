@@ -549,7 +549,7 @@ describe("Mobile HUD — streak ember leaves the mid-left band (S7)", () => {
 vi.mock("../api/lenses.js", () => ({
   createLens: vi.fn().mockResolvedValue(null),
   getLenses: vi.fn().mockResolvedValue([]),
-  lensNodes: vi.fn().mockResolvedValue([]),
+  lensNodes: vi.fn().mockResolvedValue({ ids: [], total: 0, capped: false, totalIsLowerBound: false, shown: 0 }),
 }));
 vi.mock("../api/finance.js", () => ({ getMoneySky: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/journeys.js", () => ({ getJourneys: vi.fn().mockResolvedValue([]) }));
@@ -672,7 +672,9 @@ describe("HUD round 3 — captions live inside the footprint (source gate)", () 
       expect(a, `anchor ${from}`).toBeGreaterThan(-1);
       return appSrc.slice(a, a + len);
     };
-    expect(win("fab-focus-toggle", 1000)).toContain('fab-cap">Focus');
+    // GH-06 (Batch B): the 🌌 toggle's caption is "Calm" — "Focus" belongs
+    // to the 🎯 fan alone (asserted separately below).
+    expect(win("fab-focus-toggle", 1000)).toContain('fab-cap">Calm');
     expect(win("className={t.className}", 400)).toContain("{t.caption}");
     expect(win("fan-more", 700)).toContain("fab-cap");
     // The 🎯's caption is "Focus" (OC-1) — asserted by its exact text so

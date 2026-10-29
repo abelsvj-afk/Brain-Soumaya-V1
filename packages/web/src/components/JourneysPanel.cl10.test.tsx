@@ -127,6 +127,10 @@ describe("IM-85 — edit flow", () => {
       icon: "💵",
       description: "New desc",
       color: "#ffcd46",
+      // REG-161/JN-04: the edit form always carries the span dates now —
+      // blank here, so null (clear) rides the same save.
+      startedAt: null,
+      endedAt: null,
     });
     await screen.findByText("New desc");
   });
@@ -171,7 +175,10 @@ describe("IM-88 — dates", () => {
     // LOCAL time by design (IM-88) — noon-UTC fixtures shift a day at UTC+14.
     const started = new Date("2026-01-02T12:00:00.000Z").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
     const moved = new Date("2026-03-04T12:00:00.000Z").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    await screen.findByText(new RegExp(`Started ${started} · Last moved ${moved}`));
+    // REG-161/JN-04: with no explicit span the creation date is labeled
+    // "Created", never "Started" (the old copy called the record's creation
+    // date the journey's start).
+    await screen.findByText(new RegExp(`Created ${started} · Last moved ${moved}`));
   });
 
   it("shows a linked transaction's occurredAt date (the server always sent it)", async () => {

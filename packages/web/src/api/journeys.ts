@@ -1,4 +1,4 @@
-import { API, afetch } from "./http.js";
+import { API, afetch, DEFAULT_TIMEOUT_MS } from "./http.js";
 import type { Journey, JourneyLink, JourneyLinkKind, JourneyLinksDetail, JourneySuggestions } from "@brain/shared";
 
 /**
@@ -6,8 +6,8 @@ import type { Journey, JourneyLink, JourneyLinkKind, JourneyLinksDetail, Journey
  * A Journey is a life chapter; we LINK objects to it (never copy). Offline-safe (guard on null).
  */
 
-async function getJson<T>(path: string): Promise<T | null> {
-  try { const res = await afetch(`${API}/journeys${path}`); return res.ok ? ((await res.json()) as T) : null; } catch { return null; }
+async function getJson<T>(path: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T | null> {
+  try { const res = await afetch(`${API}/journeys${path}`, {}, timeoutMs); return res.ok ? ((await res.json()) as T) : null; } catch { return null; }
 }
 async function send<T>(path: string, method: string, body?: unknown): Promise<T | null> {
   try {
@@ -20,9 +20,9 @@ async function send<T>(path: string, method: string, body?: unknown): Promise<T 
   } catch { return null; }
 }
 
-export const getJourneys = () => getJson<Journey[]>("/");
+export const getJourneys = (timeoutMs: number = DEFAULT_TIMEOUT_MS) => getJson<Journey[]>("/", timeoutMs);
 export const getJourney = (id: number) => getJson<Journey & { links: JourneyLink[] }>(`/${id}`);
-export interface JourneyInput { title: string; description?: string; color?: string; icon?: string }
+export interface JourneyInput { title: string; description?: string; color?: string; icon?: string; startedAt?: string | null; endedAt?: string | null }
 export const createJourney = (j: JourneyInput) => send<Journey>("/", "POST", j);
 export const patchJourney = (id: number, patch: Partial<JourneyInput> & { status?: "active" | "paused" | "done"; progress?: number }) => send<Journey>(`/${id}`, "PATCH", patch);
 export const deleteJourney = (id: number) => send<{ ok: boolean }>(`/${id}`, "DELETE");

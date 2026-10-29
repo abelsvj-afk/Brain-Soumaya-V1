@@ -38,7 +38,11 @@ export function ingestRoutes(ctx: AppContext): Router {
   r.post("/", async (req, res) => {
     const parsed = IngestBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { text: string }" });
+      // REG-040: a length rejection says it is a length rejection and names
+      // the limit — the old shape message blamed the body's shape for an
+      // input whose only problem was length.
+      const tooLong = parsed.error.issues.some((i) => i.path[0] === "text" && i.code === "too_big");
+      res.status(400).json({ error: tooLong ? "Text is too long — the limit is 20,000 characters." : "Body must be { text: string }" });
       return;
     }
     const { text, kind, ttlHours, occurredAt, remindAt, tags, sourceKind, idempotencyKey } = parsed.data;

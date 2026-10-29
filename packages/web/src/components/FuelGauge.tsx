@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Fuel } from "@brain/shared";
+import { LOW_FUEL_THRESHOLD, type Fuel } from "@brain/shared";
 import { playSfx } from "../graph/sfx.js";
 import { pushToast } from "./Toasts.js";
 
@@ -15,6 +15,12 @@ export function FuelGauge({
   pops,
   busy,
   onClick,
+  /** Batch I (REG-067 / GH-09): how the fuel load is going. Defaults to
+   *  "ready" when fuel is present, "loading" while it has never arrived
+   *  — so a null fuel renders a visible placeholder, never nothing. */
+  loadState,
+  /** Retry the fuel load after a failed fetch (only used with loadState "error"). */
+  onRetry,
 }: {
   fuel: Fuel | null;
   pops: { id: number; text: string; spend?: boolean }[];
@@ -22,6 +28,8 @@ export function FuelGauge({
   busy?: boolean;
   /** Tap the gauge to open the "Ways to earn Fuel" cheat-sheet. */
   onClick?: () => void;
+  loadState?: "loading" | "error" | "ready";
+  onRetry?: () => void;
 }) {
   const [flash, setFlash] = useState<null | "up" | "down">(null);
   const prev = useRef<number | null>(null);
@@ -54,9 +62,42 @@ export function FuelGauge({
     wasAtCap.current = atCap;
   }, [fuel?.fuel, fuel?.capacity]);
 
-  if (!fuel) return null;
+  if (!fuel) {
+    // Batch I (REG-067 / GH-09): absent fuel is a visible state, not
+    // nothing — a failed fetch and a still-loading one are
+    // distinguishable traces, never silent absence.
+    const state = loadState ?? "loading";
+    if (state === "error") {
+      return (
+        <button
+          type="button"
+          className="fuel-gauge fuel-gauge-error"
+          onClick={onRetry}
+          aria-label="Fuel unavailable — tap to retry"
+          title="Fuel couldn't load — tap to retry."
+        >
+          <span className="fg-ic">⛽</span>
+          <span className="fg-val">Fuel unavailable — tap to retry</span>
+        </button>
+      );
+    }
+    return (
+      <div
+        className="fuel-gauge fuel-gauge-loading"
+        role="status"
+        aria-label="Fuel loading"
+        title="Fuel is loading…"
+      >
+        <span className="fg-ic">⛽</span>
+        <span className="fg-val">Fuel loading…</span>
+      </div>
+    );
+  }
   const pct = Math.max(0, Math.min(1, fuel.fuel / fuel.capacity));
-  const low = pct < 0.2;
+  // REG-048 (PG-05): one low-fuel definition, shared with the Notifications-bar
+  // alert (LOW_FUEL_THRESHOLD in @brain/shared) — the gauge used to glow at
+  // <20% of cap while the alert fired at <15, so they disagreed for 25 units.
+  const low = fuel.fuel < LOW_FUEL_THRESHOLD;
 
   // aria-value* (valuenow/min/max) are only valid on the range-widget roles
   // (meter/progressbar/slider/spinbutton) — they used to stay attached even

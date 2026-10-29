@@ -59,6 +59,12 @@ const dateOf = (n: GraphNode): string => {
  *  character cap keeps what's shown identical (still clipped well before this
  *  length) while bounding actual DOM/memory size. */
 const PREVIEW_CHARS = 400;
+/** REG-116: Folders had no render bound where All caps at 300 with a
+ * disclosure line — opening a folder rendered every item, and while filtering
+ * all matching folders auto-opened and rendered all matching items. Each
+ * folder now renders at most this many rows, with a "+N more" disclosure in
+ * All's honesty pattern (cap stated + a way to narrow). */
+const FOLDER_RENDER_CAP = 100;
 function previewOf(content: string): string {
   return content.length > PREVIEW_CHARS ? `${content.slice(0, PREVIEW_CHARS)}…` : content;
 }
@@ -190,7 +196,9 @@ export function LibraryPanel({
           (n) =>
             !needle ||
             n.label.toLowerCase().includes(needle) ||
-            n.content.toLowerCase().includes(needle),
+            n.content.toLowerCase().includes(needle) ||
+            // REG-118: tags are part of the text match, as in All/Hubs.
+            (n.tags ?? []).some((t) => t.toLowerCase().includes(needle)),
         );
         const sorted = [...items].sort((a, b) => {
           switch (sort) {
@@ -312,6 +320,14 @@ export function LibraryPanel({
           // While searching/filtering, matching folders open themselves —
           // the matches are the point of the view.
           const isOpen = !!open[f.key] || filtering;
+          // REG-113: the per-folder export used to take the FILTERED folder
+          // object, so an export under an active filter silently contained
+          // only the matching subset — contradicting the file's own IM-38
+          // rule that its sibling Export all honors. The export always takes
+          // the folder's full set; the button says so.
+          const fullFolder = folders.find((x) => x.key === f.key) ?? f;
+          const shownItems = f.items.slice(0, FOLDER_RENDER_CAP);
+          const hiddenItems = f.items.length - shownItems.length;
           return (
             <div key={f.key} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", overflow: "hidden" }}>
               <div
@@ -339,16 +355,16 @@ export function LibraryPanel({
                   style={{ padding: "0.15rem 0.4rem", fontSize: "0.72rem" }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    exportFolder(f.label, f.items);
+                    exportFolder(f.label, fullFolder.items);
                   }}
-                  title={`Export ${f.label} as Markdown`}
+                  title={`Export the full ${f.label} folder as Markdown (${fullFolder.items.length} memories)`}
                 >
                   ⬇
                 </button>
               </div>
               {isOpen && (
                 <ul style={{ listStyle: "none", margin: 0, padding: "0.3rem 0.5rem 0.5rem" }}>
-                  {f.items.map((n) => {
+                  {shownItems.map((n) => {
                     const expanded = expandedNotes.has(n.id);
                     const emo = emotionBucketOf(n.emotionalWeight);
                     const humanDate = fmtBrowseDateWithRelative(n.occurredAt ?? n.createdAt);
@@ -381,9 +397,12 @@ export function LibraryPanel({
                         <span title="growth stage">
                           {CELESTIAL_ICON[n.celestial ?? "moon"]} {CELESTIAL_LABEL[n.celestial ?? "moon"]}
                         </span>
-                        <span title={`${emo} feeling`}>
-                          · <span className="nl-emodot" style={{ background: BROWSE_EMOTION_DOT[emo] }} /> {BROWSE_EMOTION_LABEL[emo]}
-                        </span>
+                        {/* REG-115: an unscored memory shows no emotion label. */}
+                        {emo !== "unscored" && (
+                          <span title={`${emo} feeling`}>
+                            · <span className="nl-emodot" style={{ background: BROWSE_EMOTION_DOT[emo] }} /> {BROWSE_EMOTION_LABEL[emo]}
+                          </span>
+                        )}
                         {(n.degree ?? 0) > 0 && (
                           <span title="connections">· {n.degree} link{n.degree === 1 ? "" : "s"}</span>
                         )}
@@ -427,6 +446,12 @@ export function LibraryPanel({
                     </li>
                     );
                   })}
+                  {/* REG-116: the folder's render cap, stated like All's. */}
+                  {hiddenItems > 0 && (
+                    <li className="empty small">
+                      +{hiddenItems} more in {f.label} — narrow your search or filters to see them
+                    </li>
+                  )}
                 </ul>
               )}
             </div>

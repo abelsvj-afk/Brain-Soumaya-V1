@@ -30,15 +30,37 @@ describe("SectorView — a transient action never forms a sector", () => {
   });
 });
 
-describe("SectorView — orbiting count prefers the server's own degree", () => {
-  it("uses node.degree instead of undercounting when a linked neighbor isn't in graph.nodes", () => {
+describe("SectorView — the headline count equals the listable members (REG-117)", () => {
+  it("headlines the listable count and names the remainder when the server degree is higher", () => {
     const graph: GraphData = {
       nodes: [node({ id: 1, label: "Hub", mass: 0.9, degree: 5 })], // 5 real edges server-side
       // No links array entry for the hub at all client-side (e.g. neighbors filtered out).
       links: [],
     } as unknown as GraphData;
     render(<SectorView graph={graph} onFocus={() => {}} onIsolate={() => {}} />);
-    expect(screen.getByText("5 memories orbiting")).toBeTruthy();
+    // The card used to headline the server's degree ("5 memories orbiting")
+    // above a list that could show zero members — the same card disagreeing
+    // with itself. Now the headline is the listable count, with the
+    // remainder named on the card.
+    expect(screen.getByText(/0 memories orbiting/)).toBeTruthy();
+    expect(screen.getByText(/\+5 more not in this view/)).toBeTruthy();
+  });
+
+  it("headlines the member count with no remainder when every neighbor is present", () => {
+    const graph: GraphData = {
+      nodes: [
+        node({ id: 1, label: "Hub", mass: 0.9, degree: 2 }),
+        node({ id: 2, label: "Member one", mass: 0.1 }),
+        node({ id: 3, label: "Member two", mass: 0.1 }),
+      ],
+      links: [
+        { source: 1, target: 2 },
+        { source: 1, target: 3 },
+      ],
+    } as unknown as GraphData;
+    render(<SectorView graph={graph} onFocus={() => {}} onIsolate={() => {}} />);
+    expect(screen.getByText(/2 memories orbiting/)).toBeTruthy();
+    expect(screen.queryByText(/more not in this view/)).toBeNull();
   });
 });
 

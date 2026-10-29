@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { AppContext } from "../../context.js";
 import { InsightsRepo } from "../../repositories/insights.repo.js";
-import { runSynthesis, DEFAULT_SYNTHESIS } from "../../synthesis/engine.js";
+import { runSynthesis, synthesisOptionsFor } from "../../synthesis/engine.js";
 import { runContradictionScan, contradictionOptionsFor } from "../../synthesis/contradictions.js";
 import { buildDailyDigest } from "../../synthesis/dailyDigest.js";
 import { buildEmotionalTrajectory } from "../../analysis/emotional.js";
@@ -82,9 +82,16 @@ export function digestRoutes(ctx: AppContext): Router {
     res.json({ ok: true });
   });
 
-  // POST /api/digest/run -> scan for latent connections and synthesize new insights
+  // POST /api/digest/run -> scan for latent connections and synthesize new insights.
+  // REG-151 / INS-04: the similarity gate adapts to the embeddings provider
+  // (0.5 under hash, 0.82 for real embeddings) — the same provider-awareness
+  // the contradiction scan below already has. NOTE (REG-227 cross-link): the
+  // maintenance latent job in maintenance/agent.ts feeds latent insights
+  // through its OWN explicit flat gate (threshold 0.85) — it does not go
+  // through this route or synthesisOptionsFor, so it is untouched here and
+  // stays tracked at REG-227.
   r.post("/run", llmLimiter, async (_req, res) => {
-    const created = await runSynthesis(ctx.handle, ctx.llm, DEFAULT_SYNTHESIS, spaceOf(res));
+    const created = await runSynthesis(ctx.handle, ctx.llm, synthesisOptionsFor(ctx.embeddings.model), spaceOf(res));
     res.json(created);
   });
 

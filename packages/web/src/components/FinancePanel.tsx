@@ -447,6 +447,11 @@ function History({ onChanged }: { onChanged: () => void }) {
                 >
                   {row.label || (row.category ?? "—")}
                 </button>
+                {/* REG-091: an expense row carries both its fields — merchant
+                    and category — so rows from every door read the same. */}
+                {row.kind === "expense" && row.label && row.category ? (
+                  <span className="fin-muted">{row.category}</span>
+                ) : null}
                 <span className="fin-txn-date">{fmtMoneyDate(row.date)}</span>
                 {row.balanceAppliedAt == null && <span className="fin-tag-scheduled">scheduled</span>}
                 <strong>{fmt(row.cents)}</strong>
@@ -571,6 +576,10 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
   const [mode, setMode] = useState<"income" | "expense" | null>(null);
   const [amount, setAmount] = useState("");
   const [label, setLabel] = useState("");
+  // REG-091: the manual expense door records a merchant as well as a
+  // category, like paste/snap imports do — history rows from every door
+  // then carry the same fields for the same kind of event.
+  const [merchant, setMerchant] = useState("");
   const [date, setDate] = useState(today());
   // docs/specs/income-net-worth-trend.md Decision #2: a pure UI convenience, not a schema
   // change — picking "Self-employed" just pre-fills the free-text platform field (still
@@ -602,10 +611,10 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
       });
       onDone("Income", !!r, !!r?.duplicate);
     } else {
-      const r = await addExpense({ date, amountCents: c, category: label || "misc", direction: "out" });
+      const r = await addExpense({ date, amountCents: c, merchant: merchant.trim() || undefined, category: label.trim() || "misc", direction: "out" });
       onDone("Expense", !!r, !!r?.duplicate);
     }
-    setMode(null); setAmount(""); setLabel(""); setSource("paycheck"); setGross(""); setTax(""); setHours("");
+    setMode(null); setAmount(""); setLabel(""); setMerchant(""); setSource("paycheck"); setGross(""); setTax(""); setHours("");
   };
 
   if (!mode) return (
@@ -627,6 +636,14 @@ function AddMoney({ onDone }: { onDone: (kind: string, ok: boolean, dup: boolean
         </div>
       )}
       <input inputMode="decimal" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Amount in dollars" />
+      {mode === "expense" && (
+        <input
+          placeholder="Merchant (optional)"
+          value={merchant}
+          onChange={(e) => setMerchant(e.target.value)}
+          aria-label="Merchant"
+        />
+      )}
       <input
         placeholder={mode === "expense" ? "Category (e.g. food)" : source === "self-employed" ? "e.g. Rideshare, freelance design" : "Platform (e.g. GoPuff)"}
         value={label}
@@ -728,6 +745,13 @@ function PasteImport({ onDone }: { onDone: (committed: number) => void }) {
         <>
           <div className="fin-form-title">Type it in your own words, or paste an export</div>
           <textarea className="fin-paste-area" rows={5} placeholder={"e.g.\ngot 44.30 from DoorDash today\nspent 12 at the store\n01/09 rent -600"} value={text} onChange={(e) => setText(e.target.value)} aria-label="Type or paste transactions" />
+          {/* REG-232: the 20,000-character paste cap is visible before submit —
+              a live counter, with a plain warning past the cap instead of a
+              misleading shape error after it (REG-040's shape, mirrored). */}
+          <div className="fin-muted" aria-live="polite">
+            {text.length.toLocaleString()} / 20,000 characters
+            {text.length > 20000 ? " — over the 20,000-character limit; trim it before reading" : ""}
+          </div>
           <div className="fin-muted">One per line. Say where money came from or went, and I'll sort out the amounts — you confirm before anything's added.</div>
           <div className="fin-form-actions">
             <button className="fin-primary" onClick={read} disabled={busy}>{busy ? "Reading…" : "Read"}</button>
@@ -1357,7 +1381,9 @@ function PaystubSection({ onChanged }: { onChanged: () => void }) {
       return;
     }
     setDraft(null);
-    setMsg("Pay stub saved");
+    // REG-010: the API returns a duplicate flag for a re-confirmed stub —
+    // say so instead of a plain "saved" that reads like a second income.
+    setMsg(res.data.duplicate ? "Pay stub saved — it was already recorded, so no duplicate income was added" : "Pay stub saved");
     await load();
     onChanged();
   };

@@ -203,7 +203,10 @@ describe("ChatDock — clearing a conversation is destructive and needs confirma
 
     act(() => clearBtn.click());
     await screen.findByRole("dialog", { name: "Clear this conversation?" });
-    act(() => screen.getByText("Clear").click());
+    // REG-084: the header tool now carries a visible "Clear" caption too,
+    // so the bare text query is ambiguous — target the confirm button by
+    // its accessible name (the header tool's name is "Clear conversation").
+    act(() => screen.getByRole("button", { name: "Clear" }).click());
     expect(screen.queryByText("Keep me")).toBeNull();
   });
 });

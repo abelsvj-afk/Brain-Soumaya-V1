@@ -82,6 +82,10 @@ describe("telegram GraphRAG fallback history", () => {
     const fallbackReply = outbox.at(-1)!.text;
     expect(fallbackReply.length).toBeGreaterThan(0);
     expect(fallbackReply).not.toMatch(/isn't linked/i);
+    // REG-033: a fallback-delivered reply is distinguishable as such —
+    // the full agent was unavailable for that turn, and the reply says so.
+    expect(fallbackReply).toMatch(/simpler answer/i);
+    expect(fallbackReply).toMatch(/couldn't take actions/i);
 
     // The fallback exchange is in the store: user turn + the sent reply.
     const stored = getTelegramHistory(spaceId, 9);

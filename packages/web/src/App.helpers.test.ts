@@ -345,3 +345,140 @@ describe("fanLayout — inset-true geometry (PR #89 follow-up, trace Finding 1)"
     expect(helpers.measureSafeBottomInset()).toBe(0);
   });
 });
+
+/**
+ * Batch I — Galaxy/HUD (REG-060…REG-072, REG-110, REG-111). Fail-before:
+ * every describe below asserts behavior that does not exist on the base
+ * tip 140b6249; the helpers are reached through the `helpers` namespace
+ * so a missing export fails its own test instead of the import.
+ */
+describe("Batch I — fanLayout folds by available height, not portrait alone (REG-062 / GH-03)", () => {
+  it("a 700px-tall desktop window folds the fan UPWARD — every target stays under the header band", () => {
+    const l = helpers.fanLayout(1440, 700, 7);
+    expect(l.direction).toBe("up");
+    expect(l.folded).toBe(true);
+    expect(l.capacity).toBe(4);
+    expect(l.pageSize).toBe(3);
+    expect(l.pageCount).toBe(3);
+    expect(helpers.fanTopEdge(l)).toBeLessThanOrEqual(700 - FAN_HEADER_BAND_PX);
+    const seen: number[] = [];
+    for (let p = 0; p < l.pageCount; p++) {
+      const w = helpers.fanWindow(7, l, p);
+      for (let i = 0; i < w.count; i++) seen.push(w.start + i);
+    }
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("landscape 844×390 flips the fan DOWNWARD — the upward room is negative", () => {
+    const l = helpers.fanLayout(844, 390, 7);
+    expect(l.direction).toBe("down");
+    expect(l.folded).toBe(true);
+    expect(l.capacity).toBe(5);
+    expect(l.pageSize).toBe(4);
+    expect(l.pageCount).toBe(2);
+    // The lowest visible slot (the paging item included) stays on-screen.
+    expect(helpers.fanDownBottomPx(l, 390)).toBeLessThanOrEqual(390);
+    const seen: number[] = [];
+    for (let p = 0; p < l.pageCount; p++) {
+      const w = helpers.fanWindow(7, l, p);
+      for (let i = 0; i < w.count; i++) seen.push(w.start + i);
+    }
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("focusItemStyle honours the downward direction (positive translateY)", () => {
+    expect(helpers.focusItemStyle(0, true, 54, "down").transform).toBe("translateY(54px)");
+    expect(helpers.focusItemStyle(2, true, 54, "down").transform).toBe("translateY(162px)");
+    expect(helpers.focusItemStyle(0, false, 54, "down").transform).toBe("translateY(0) scale(0.4)");
+    // Upward is unchanged.
+    expect(helpers.focusItemStyle(0, true, 54, "up").transform).toBe("translateY(-54px)");
+    expect(helpers.focusItemStyle(0, true).transform).toBe("translateY(-54px)");
+  });
+
+  it("a tall desktop window keeps today's geometry exactly (no fold, upward)", () => {
+    const l = helpers.fanLayout(1440, 900, 7);
+    expect(l.direction).toBe("up");
+    expect(l.folded).toBe(false);
+  });
+});
+
+describe("Batch I — figurine fan captions are the equipped figurine's short name (REG-064 / GH-04)", () => {
+  it("two different equipped figurines wear two different visible captions", () => {
+    expect(helpers.fanTargetCaption("fig1", undefined, "station")).toBe("Waystation");
+    expect(helpers.fanTargetCaption("fig2", undefined, "blackhole")).toBe("Singularity");
+    expect(helpers.fanTargetCaption("fig1", undefined, "station")).not.toBe(
+      helpers.fanTargetCaption("fig2", undefined, "blackhole"),
+    );
+  });
+
+  it("the short label drops the 'Figurine' suffix but keeps the distinctive name", () => {
+    expect(helpers.getFigurineShortLabel("station")).toBe("Waystation");
+    expect(helpers.getFigurineShortLabel("satellite")).toBe("Aura Beacon");
+    expect(helpers.getFigurineShortLabel("star_center")).toBe("Solar Monument");
+    expect(helpers.getFigurineShortLabel("dyson_sphere")).toBe("Dyson");
+    expect(helpers.getFigurineShortLabel("quantum_core")).toBe("Quantum Core");
+    expect(helpers.getFigurineShortLabel("hyper_array")).toBe("Hyper-Array");
+    expect(helpers.getFigurineShortLabel("shield_spire")).toBe("Aegis Spire");
+    expect(helpers.getFigurineShortLabel("mystery")).toBe("mystery");
+  });
+
+  it("with no equipped type the caption falls back to 'Figurine'", () => {
+    expect(helpers.fanTargetCaption("fig1")).toBe("Figurine");
+    expect(helpers.fanTargetCaption("fig2")).toBe("Figurine");
+  });
+});
+
+describe("Batch I — galaxy-entity flight toasts (REG-111)", () => {
+  it("a flown entity keeps the success wording", () => {
+    const t = helpers.galaxyEntityToastText("journey", "Spring launch", "Hub of 12 memories", true);
+    expect(t).toBe("🧭 Spring launch — Hub of 12 memories");
+  });
+
+  it("a missed flight says so in words that cannot be mistaken for success", () => {
+    const t = helpers.galaxyEntityToastText("journey", "Spring launch", "Hub of 12 memories", false);
+    expect(t).toMatch(/couldn't fly/i);
+    expect(t).toContain("Journeys");
+    expect(t).not.toBe("🧭 Spring launch — Hub of 12 memories");
+    const bill = helpers.galaxyEntityToastText("bill", "Rent", "Due in 3 days", false);
+    expect(bill).toMatch(/couldn't fly/i);
+    expect(bill).toContain("Money");
+  });
+});
+
+describe("Batch I — one shared chrome-hidden predicate (REG-068 / GH-15)", () => {
+  const bare = { panel: null, showChat: false, showObs: false, showSettings: false, showConnections: false, showTimeline: false };
+  it("the bare galaxy shows the chrome", () => {
+    expect(helpers.hudChromeHidden(bare)).toBe(false);
+  });
+
+  it("any single chrome surface hides it — panel, chat, Observatory, Settings, Connections, Timeline", () => {
+    for (const key of ["panel", "showChat", "showObs", "showSettings", "showConnections", "showTimeline"] as const) {
+      const opts = { ...bare, [key]: key === "panel" ? "dock" : true };
+      expect(helpers.hudChromeHidden(opts), key).toBe(true);
+    }
+  });
+});
+
+describe("Batch I — the shield-save toast teaches what shields do (REG-070 / GH-13)", () => {
+  it("names the forgiveness rule in plain words, not only in hover text", () => {
+    const t = helpers.shieldSavedToastText();
+    expect(t).toMatch(/forgave your missed day/i);
+    expect(t).toMatch(/each shield forgives one missed day/i);
+  });
+});
+
+describe("Batch I — enterLiteMode (REG-060 / GH-01)", () => {
+  it("persists lite and navigates to ?lite=1", () => {
+    const origLocation = window.location;
+    const stub = { href: "" };
+    Object.defineProperty(window, "location", { value: stub, writable: true, configurable: true });
+    try {
+      localStorage.clear();
+      helpers.enterLiteMode();
+      expect(localStorage.getItem("brain.lite")).toBe("1");
+      expect(stub.href).toBe("/?lite=1");
+    } finally {
+      Object.defineProperty(window, "location", { value: origLocation, configurable: true });
+    }
+  });
+});

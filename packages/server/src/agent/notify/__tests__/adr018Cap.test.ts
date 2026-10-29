@@ -85,6 +85,9 @@ function makeDeps(handle: DbHandle, sent: string[], auditLog: string[]): Boundar
     handle,
     send: async (spaceId: string, text: string) => {
       sent.push(`${spaceId}:${text}`);
+      // H-2: the send reports per-chat outcomes; this double stands in for
+      // a one-chat space that accepted.
+      return { attempted: [{ chatId: 1, outcome: "sent" as const }] };
     },
     audit: (_spaceId: string, action: string, detail: string) => {
       auditLog.push(`${action}:${detail}`);

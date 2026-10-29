@@ -30,6 +30,21 @@ const STOP = new Set([
   "but", "not", "all", "out", "about", "into", "just", "like", "some", "more", "than", "then",
   "them", "they", "what", "when", "from", "been", "over", "very", "got", "get", "day", "today",
   "really", "much", "well", "also", "still", "back", "went", "feel", "felt", "time", "one",
+  // REG-228: the frequent-word theme fallback titled a chapter "Rising through
+  // Same" — "same" dominated the window text and nothing filtered it. The
+  // audit below adds the high-frequency non-content words the `[a-z]{4,}`
+  // fallback can pick: "same" itself, plus pronouns/demonstratives,
+  // quantifiers, ordinals/position words, frequency/time adverbs, generic
+  // nouns ("thing", "stuff", "something", …), and prepositions. Deliberately
+  // NOT extended to content verbs/nouns ("run", "work", "love") — those can
+  // be a genuine theme; the set covers only words that can never be one.
+  "same", "these", "those", "their", "which", "whose", "where", "there", "here",
+  "such", "many", "most", "other", "another", "every", "each", "both", "either", "neither",
+  "first", "last", "next", "only",
+  "always", "never", "often", "again", "once",
+  "thing", "things", "stuff", "something", "anything", "everything", "nothing",
+  "anyone", "someone", "everyone",
+  "around", "between", "through", "without", "within", "after", "before", "during", "while",
 ]);
 
 /** SQLite CURRENT_TIMESTAMP is "YYYY-MM-DD HH:MM:SS" (UTC, no Z). Parse to ms. */
@@ -43,6 +58,69 @@ function toMs(iso: string | null | undefined): number {
 
 function clamp01(n: number): number {
   return n < 0 ? 0 : n > 1 ? 1 : n;
+}
+
+/**
+ * Split text into lowercase word tokens (letters + digits). The token is
+ * the unit of anchor matching (CHR-03): "Sam's" tokenizes to ["sam", "s"],
+ * so a possessive still counts as a mention, while "same" stays one token
+ * that never equals "sam".
+ *
+ * REG-229: a hyphenated compound stays ONE token ("state-of-the-art" is a
+ * single token, not four) — otherwise a label matches one segment of a
+ * compound that isn't a mention of it ("Art" matching "state-of-the-art",
+ * "Run" matching "home-run"). The boundary logic lives in `matchesAnchor`,
+ * which expands compounds back into segments only to check whole-compound
+ * coverage, so a genuine mention still matches: "Mary Jane" matches
+ * "Mary-Jane", and "state of the art" matches "state-of-the-art".
+ */
+export function tokenize(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [];
+}
+
+/**
+ * Expand tokens into hyphen segments, tracking compound boundaries: a
+ * segment knows whether it starts / ends its compound. A plain token is
+ * its own compound (start and end).
+ */
+function anchorSegments(tokens: string[]): { text: string; start: boolean; end: boolean }[] {
+  const out: { text: string; start: boolean; end: boolean }[] = [];
+  for (const t of tokens) {
+    const parts = t.split("-").filter((p) => p.length > 0);
+    parts.forEach((p, i) => out.push({ text: p, start: i === 0, end: i === parts.length - 1 }));
+  }
+  return out;
+}
+
+/**
+ * True when every token of `needleTokens` appears as a CONTIGUOUS token
+ * subsequence of `haystackTokens` — a single-word label matches as a
+ * whole word; a multi-word label ("Mary Jane") matches as the phrase,
+ * never as its words scattered or glued ("Maryjane").
+ *
+ * REG-229: the match must align to compound boundaries — it may neither
+ * start nor end inside a hyphenated compound. "Art" does not match
+ * "state-of-the-art" (a middle segment), "Run" does not match "home-run",
+ * but "Mary Jane" still matches "Mary-Jane" and "state of the art" still
+ * matches "state-of-the-art" (whole-compound coverage).
+ */
+export function matchesAnchor(haystackTokens: string[], needleTokens: string[]): boolean {
+  if (needleTokens.length === 0) return false;
+  const hay = anchorSegments(haystackTokens);
+  const needle = anchorSegments(needleTokens);
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    if (!hay[i]!.start) continue; // never start inside a compound
+    if (!hay[i + needle.length - 1]!.end) continue; // never end inside one
+    let ok = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j]!.text !== needle[j]!.text) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return true;
+  }
+  return false;
 }
 
 interface MemRow {
@@ -80,16 +158,28 @@ function rowToChapter(r: Record<string, unknown>): TimelineChapter {
 }
 
 /**
- * All chapters for a space, oldest → newest (timeline order). Capped as a safety net,
- * not a real limit — chapters land roughly 1-3x/month (see maybeGenerateChapter), so
- * even a decade of daily use stays well under this; real pagination is a bigger
+ * All chapters for a space, oldest → newest (timeline order). Capped at 500
+ * as a safety net — but the cap keeps the NEWEST 500 (CHR-07): the query
+ * reads newest-first with the limit and the rows are reversed, so past the
+ * cap the OLDEST chapters are the ones dropped, never the newest — recency
+ * is this surface's value, and "Latest" must always reach the true latest
+ * chapter. The true total is countChapters(); real pagination is a bigger
  * redesign (docs/specs/timeline-life-seasons.md), deferred separately.
  */
 export function listChapters(ctx: AppContext, spaceId: string = DEFAULT_SPACE): TimelineChapter[] {
   const rows = ctx.handle.sqlite
-    .prepare(`SELECT * FROM timeline_chapters WHERE space_id = ? ORDER BY period_end ASC, id ASC LIMIT 500`)
+    .prepare(`SELECT * FROM timeline_chapters WHERE space_id = ? ORDER BY period_end DESC, id DESC LIMIT 500`)
     .all(spaceId) as Record<string, unknown>[];
-  return rows.map(rowToChapter);
+  return rows.reverse().map(rowToChapter);
+}
+
+/** True total chapter count for a space (listChapters above is capped at
+ *  500) — the client states the truncation from this number. */
+export function countChapters(ctx: AppContext, spaceId: string = DEFAULT_SPACE): number {
+  const row = ctx.handle.sqlite
+    .prepare(`SELECT COUNT(*) AS c FROM timeline_chapters WHERE space_id = ?`)
+    .get(spaceId) as { c: number };
+  return row.c;
 }
 
 export function deleteChapter(ctx: AppContext, spaceId: string, id: number): boolean {
@@ -171,6 +261,12 @@ export function assessChange(
   else if (emotionDelta < -EMO_TREND) trend = "decline";
 
   // Theme + threads: which named anchors (people / goals / skills) recur in the window.
+  // CHR-03 (REG-122): matching is TOKEN-aware — a label matches only as whole
+  // words (a contiguous token phrase for multi-word labels), never as a
+  // character sequence inside another word. "Sam" must not match "same",
+  // "Art" must not match "start"/"part", a goal "Run" must not match
+  // "running" — the theme, the title, and the "kept showing up" claim are
+  // only ever built from genuine mentions.
   const anchors = s
     .prepare(
       `SELECT label, kind FROM nodes
@@ -178,14 +274,17 @@ export function assessChange(
     )
     .all(spaceId) as { label: string; kind: string }[];
   const windowText = windowMems.map((m) => `${m.label}. ${m.content}`.toLowerCase());
+  const windowTokens = windowMems.map((m) => tokenize(`${m.label}. ${m.content}`));
   const anchorHits = new Map<string, { count: number; emo: number; kind: string }>();
   for (const a of anchors) {
     const needle = a.label.trim().toLowerCase();
     if (needle.length < 3) continue;
+    const needleTokens = tokenize(needle);
+    if (needleTokens.length === 0) continue;
     let count = 0;
     let emo = 0;
     windowMems.forEach((m, i) => {
-      if (windowText[i]!.includes(needle)) {
+      if (matchesAnchor(windowTokens[i]!, needleTokens)) {
         count++;
         emo += m.emotional_weight ?? 0;
       }
@@ -561,7 +660,16 @@ export function backfillInitialChapter(
   const flag = s.prepare(`SELECT timeline_backfilled AS f FROM space_meta WHERE space_id = ?`).get(spaceId) as { f: number } | undefined;
   if (flag?.f) return null;
 
-  const already = (s.prepare(`SELECT COUNT(*) AS c FROM timeline_chapters WHERE space_id = ?`).get(spaceId) as { c: number }).c;
+  // A content-free manual chapter (no memories — e.g. marked over an empty
+  // window before the CHR-12 guard) narrates nothing, so it must NOT count
+  // as "chapters exist" here: it must never foreclose the opening chapter
+  // that summarizes the user's real early history once it exists.
+  const already = (
+    s.prepare(
+      `SELECT COUNT(*) AS c FROM timeline_chapters
+       WHERE space_id = ? AND NOT (origin = 'user' AND (memory_ids IS NULL OR memory_ids = '[]'))`,
+    ).get(spaceId) as { c: number }
+  ).c;
   const markDone = () => s.prepare(`UPDATE space_meta SET timeline_backfilled = 1 WHERE space_id = ?`).run(spaceId);
   if (already > 0) {
     markDone(); // chapters already exist → never auto-seed later
@@ -577,13 +685,18 @@ export function backfillInitialChapter(
 }
 
 /** Manual path: you mark a chapter now. Summarizes the current window regardless of
- *  threshold (you asked for it), with an optional custom title. */
+ *  threshold (you asked for it), with an optional custom title. Returns null — and
+ *  writes NOTHING — when the window since the last chapter is empty (CHR-12): a
+ *  chapter about nothing is not a chapter, and a content-free manual chapter must
+ *  never suppress the opening backfill (see backfillInitialChapter). The caller
+ *  (route) turns the null into the plain-language refusal the surface shows. */
 export function createManualChapter(
   ctx: AppContext,
   spaceId: string = DEFAULT_SPACE,
   opts: { title?: string; nowISO?: string } = {},
-): TimelineChapter {
+): TimelineChapter | null {
   const nowISO = opts.nowISO ?? new Date().toISOString();
   const a = assessChange(ctx, spaceId, nowISO);
+  if (a.windowMems.length === 0) return null;
   return insertChapter(ctx, spaceId, a, "user", nowISO, opts.title);
 }

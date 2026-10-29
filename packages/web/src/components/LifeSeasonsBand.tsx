@@ -48,6 +48,12 @@ export interface AxisSpan { span: JourneySpan; leftPct: number; widthPct: number
 export interface SeasonAxis {
   domainStartMs: number;
   domainEndMs: number;
+  /** CHR-10: the TRUE earliest start and latest end of what is plotted —
+   *  un-padded season end dates and raw span ends. Band geometry padding
+   *  (+1 day, so a multi-day era has real width) lives in the domain only
+   *  and never reaches a displayed date; the header renders this range. */
+  rangeStartMs: number;
+  rangeEndMs: number;
   bands: AxisBand[];
   spans: AxisSpan[];
   /** Number of season lanes the packing needed (axis grows vertically). */
@@ -101,21 +107,32 @@ function instantMs(raw: string): number {
  */
 export function buildSeasonAxis(seasons: LifeSeason[], spans: JourneySpan[], nowMs: number): SeasonAxis | null {
   const items: { startMs: number; endMs: number }[] = [];
+  // CHR-10: the displayed range tracks the TRUE ends (a season's end
+  // calendar day, a span's raw end) — the +1 day band padding below is
+  // geometry only and is never shown.
+  const trueItems: { startMs: number; endMs: number }[] = [];
   for (const s of seasons) {
     const a = utcDayMs(s.startDate);
     const b = utcDayMs(s.endDate);
-    if (Number.isFinite(a) && Number.isFinite(b)) items.push({ startMs: a, endMs: b + DAY_MS });
+    if (Number.isFinite(a) && Number.isFinite(b)) {
+      items.push({ startMs: a, endMs: b + DAY_MS });
+      trueItems.push({ startMs: a, endMs: b });
+    }
   }
   for (const sp of spans) {
     const a = instantMs(sp.start);
     if (!Number.isFinite(a)) continue;
     const b = sp.end ? instantMs(sp.end) : nowMs;
-    items.push({ startMs: a, endMs: Number.isFinite(b) && b > a ? b : a + DAY_MS });
+    const end = Number.isFinite(b) && b > a ? b : a + DAY_MS;
+    items.push({ startMs: a, endMs: end });
+    trueItems.push({ startMs: a, endMs: Number.isFinite(b) && b > a ? b : a });
   }
   if (items.length === 0) return null;
   const domainStartMs = Math.min(...items.map((i) => i.startMs));
   let domainEndMs = Math.max(...items.map((i) => i.endMs));
   if (!(domainEndMs > domainStartMs)) domainEndMs = domainStartMs + DAY_MS;
+  const rangeStartMs = Math.min(...trueItems.map((i) => i.startMs));
+  const rangeEndMs = Math.max(rangeStartMs, ...trueItems.map((i) => i.endMs));
   const range = domainEndMs - domainStartMs;
   const pct = (ms: number) => Math.min(100, Math.max(0, ((ms - domainStartMs) / range) * 100));
   const width = (a: number, b: number) => Math.max(1.5, pct(b) - pct(a));
@@ -156,7 +173,7 @@ export function buildSeasonAxis(seasons: LifeSeason[], spans: JourneySpan[], now
     const b = Number.isFinite(rawB) && rawB > a ? rawB : a + DAY_MS;
     axisSpans.push({ span: sp, leftPct: pct(a), widthPct: width(a, b) });
   }
-  return { domainStartMs, domainEndMs, bands, spans: axisSpans, laneCount, legendBands };
+  return { domainStartMs, domainEndMs, rangeStartMs, rangeEndMs, bands, spans: axisSpans, laneCount, legendBands };
 }
 
 export function LifeSeasonsBand({ seasons, spans }: { seasons: LifeSeason[]; spans: JourneySpan[] }) {
@@ -178,7 +195,7 @@ export function LifeSeasonsBand({ seasons, spans }: { seasons: LifeSeason[]; spa
       <div className="tl-seasons-head">
         <span className="tl-seasons-title">Life Seasons</span>
         <span className="tl-seasons-range">
-          {fmtDay(axis.domainStartMs)} – {fmtDay(axis.domainEndMs)}
+          {fmtDay(axis.rangeStartMs)} – {fmtDay(axis.rangeEndMs)}
         </span>
       </div>
       <div className="tl-seasons-axis" style={{ height: axisHeight }}>

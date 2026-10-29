@@ -35,6 +35,24 @@ export interface AssociativeLinkOptions {
 export const DEFAULT_LINK_OPTIONS: AssociativeLinkOptions = { threshold: 0.72, k: 12, maxLinks: 3 };
 
 /**
+ * Provider-aware ingest-time gate (Batch H, REG-215 / CN-17). Hash embeddings
+ * produce much lower cosines than a real model — the contradiction scan
+ * documents the same asymmetry (`contradictionOptionsFor` drops its threshold
+ * to 0.5 under hash, after measuring ~0.69 for an obvious same-topic pair:
+ * the old flat 0.86 made that scan find NOTHING offline). The flat 0.72 here
+ * starved the suggestion queue the same way on a hash brain: genuinely
+ * related pairs never reached the validate gate, and the panel honestly
+ * reported "Nothing waiting" for a brain whose pairs were never reachable.
+ * Mirror the contradiction gate: 0.5 under hash, 0.72 for real embeddings.
+ * The validate gate downstream still filters out superficial matches, so the
+ * lower hash bar admits candidates for review — it never auto-draws a weak link.
+ */
+export function linkOptionsFor(embeddingsModel: string): AssociativeLinkOptions {
+  const isHash = embeddingsModel.toLowerCase().includes("hash");
+  return { ...DEFAULT_LINK_OPTIONS, threshold: isHash ? 0.5 : DEFAULT_LINK_OPTIONS.threshold };
+}
+
+/**
  * D4: max concurrent `validateLink` calls within one node's linking job.
  * Combined with pipeline.ts's max 2 concurrent `associativeLink` jobs, the
  * aggregate in-flight bound is 2 × 3 = 6 — structural (fixed worker counts),

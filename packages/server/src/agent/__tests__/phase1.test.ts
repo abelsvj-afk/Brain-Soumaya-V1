@@ -268,10 +268,66 @@ describe("crash-safe execution", () => {
     const nodeId = seedNode("dentist");
     const req = requestApproval(tc, taskCreatorTool, { nodeId, label: "sweep me" }, "web:test");
     confirmApproval(ctx, SPACE, "web:test", req.approvalId!, NOW);
-    // Simulate a crash mid-execution 10 minutes ago.
+    // Simulate a crash mid-execution 10 minutes ago: BOTH clocks are old —
+    // confirmed 10 min ago AND executing for 10 min.
     handle.sqlite.prepare(
-      `UPDATE tool_approvals SET status = 'executing', decided_at = ?, execution_attempts = 1 WHERE id = ?`
-    ).run(new Date(NOW - 10 * 60_000).toISOString(), req.approvalId!);
+      `UPDATE tool_approvals SET status = 'executing', decided_at = ?, execution_started_at = ?, execution_attempts = 1 WHERE id = ?`
+    ).run(
+      new Date(NOW - 10 * 60_000).toISOString(),
+      new Date(NOW - 10 * 60_000).toISOString(),
+      req.approvalId!,
+    );
+    const swept = await sweepApprovals({ ...tc, now: NOW });
+    expect(swept.retried).toBe(1);
+    const row = handle.sqlite.prepare(`SELECT status FROM tool_approvals WHERE id = ?`).get(req.approvalId!) as { status: string };
+    expect(row.status).toBe("executed");
+  });
+
+  it("executeApproval stamps execution_started_at when it claims a row", async () => {
+    const nodeId = seedNode("dentist");
+    const req = requestApproval(tc, taskCreatorTool, { nodeId, label: "stamp me" }, "web:test");
+    const c = confirmApproval(ctx, SPACE, "web:test", req.approvalId!, NOW);
+    const exec = await executeApproval(tc, c.approval!);
+    expect(exec.ok).toBe(true);
+    const row = handle.sqlite.prepare(
+      `SELECT execution_started_at FROM tool_approvals WHERE id = ?`
+    ).get(req.approvalId!) as { execution_started_at: string | null };
+    expect(row.execution_started_at).toBe(new Date(NOW).toISOString());
+  });
+
+  it("sweepApprovals does NOT retry an executing row confirmed long ago but executing briefly (REG-194)", async () => {
+    const nodeId = seedNode("dentist");
+    const req = requestApproval(tc, taskCreatorTool, { nodeId, label: "still running" }, "web:test");
+    confirmApproval(ctx, SPACE, "web:test", req.approvalId!, NOW);
+    // The defect: staleness was measured from decided_at (confirmation
+    // time), so this row — confirmed 6 min ago, executing for 10 s — was
+    // flipped back to `confirmed` and re-executed concurrently.
+    handle.sqlite.prepare(
+      `UPDATE tool_approvals SET status = 'executing', decided_at = ?, execution_started_at = ?, execution_attempts = 1 WHERE id = ?`
+    ).run(
+      new Date(NOW - 6 * 60_000).toISOString(),
+      new Date(NOW - 10_000).toISOString(),
+      req.approvalId!,
+    );
+    const swept = await sweepApprovals({ ...tc, now: NOW });
+    expect(swept).toEqual({ expired: 0, retried: 0, failed: 0 });
+    const row = handle.sqlite.prepare(`SELECT status FROM tool_approvals WHERE id = ?`).get(req.approvalId!) as { status: string };
+    expect(row.status).toBe("executing");
+  });
+
+  it("sweepApprovals retries an executing row whose EXECUTION start is stale even when confirmed recently (REG-194)", async () => {
+    const nodeId = seedNode("dentist");
+    const req = requestApproval(tc, taskCreatorTool, { nodeId, label: "stuck execution" }, "web:test");
+    confirmApproval(ctx, SPACE, "web:test", req.approvalId!, NOW);
+    // Confirmed 1 min ago, but executing for 10 min (crashed mid-run) —
+    // stale by the execution clock, so it must be retried.
+    handle.sqlite.prepare(
+      `UPDATE tool_approvals SET status = 'executing', decided_at = ?, execution_started_at = ?, execution_attempts = 1 WHERE id = ?`
+    ).run(
+      new Date(NOW - 60_000).toISOString(),
+      new Date(NOW - 10 * 60_000).toISOString(),
+      req.approvalId!,
+    );
     const swept = await sweepApprovals({ ...tc, now: NOW });
     expect(swept.retried).toBe(1);
     const row = handle.sqlite.prepare(`SELECT status FROM tool_approvals WHERE id = ?`).get(req.approvalId!) as { status: string };

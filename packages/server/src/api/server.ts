@@ -13,6 +13,8 @@ import { travelRoutes } from "./routes/travel.js";
 import { worldChangesRoutes } from "./routes/worldChanges.js";
 import { toursRoutes } from "./routes/tours.js";
 import { npcsRoutes } from "./routes/npcs.js";
+import { fleetDefenseRoutes } from "./routes/fleetDefense.js";
+import { missionsRoutes } from "./routes/missions.js";
 import { usageRoutes } from "./routes/usage.js";
 import { constellationRoutes } from "./routes/constellations.js";
 import { loreRoutes } from "./routes/lore.js";
@@ -42,6 +44,21 @@ import { pushRoutes } from "./routes/push.js";
 import { securityHeaders, rateLimit, requireSpace } from "./middleware.js";
 
 /** Assemble the Express app over an AppContext. */
+/**
+ * True for Vite's content-hashed build output: files under `<webDir>/assets/` named
+ * `name-<hash>.ext` (e.g. `index-BX3EQEE3.js`). The hash is part of the name, so the bytes
+ * behind a URL never change and the browser may keep them for a year. The old test
+ * looked for a DOT before the hash (`name.<hash>.js`) while Vite writes a HYPHEN, so it
+ * never matched and the 2 MB bundle was revalidated on every launch. Deliberately NOT
+ * applied to un-hashed public files (the .glb models, /draco, /basis): those keep their
+ * names across deploys, so they must stay revalidatable.
+ */
+export function isHashedBuildAsset(filePath: string, webDir: string): boolean {
+  const rel = path.relative(webDir, filePath).split(path.sep);
+  if (rel[0] !== "assets" || rel.length < 2) return false;
+  return /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/.test(rel[rel.length - 1]!);
+}
+
 export function createApp(ctx: AppContext): Express {
   const app = express();
   app.set("trust proxy", 1); // behind Fly's proxy — needed for correct req.ip
@@ -112,6 +129,8 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/world-changes", guard, worldChangesRoutes(ctx));
   app.use("/api/tours", guard, toursRoutes(ctx));
   app.use("/api/npcs", guard, npcsRoutes(ctx));
+  app.use("/api/fleet-defense", guard, fleetDefenseRoutes(ctx));
+  app.use("/api/missions", guard, missionsRoutes(ctx));
   app.use("/api/constellations", guard, constellationRoutes(ctx));
   app.use("/api/lore", guard, loreRoutes(ctx));
   app.use("/api/instructions", guard, instructionsRoutes(ctx));
@@ -143,15 +162,15 @@ export function createApp(ctx: AppContext): Express {
   if (webDir) {
     const dir = path.resolve(webDir);
     // The shell (index.html / sw.js / manifest) must NEVER be cached, or a deploy
-    // won't reach an installed PWA. Content-hashed assets (…-AbC123.js/.css) are
-    // immutable, so cache them hard. This is what makes new builds actually show up.
+    // won't reach an installed PWA. Content-hashed assets are immutable, so cache
+    // them hard. This is what makes new builds actually show up.
     app.use(
       express.static(dir, {
         setHeaders: (res, filePath) => {
           const base = path.basename(filePath);
           if (base === "index.html" || base === "sw.js" || base.endsWith(".webmanifest")) {
             res.setHeader("Cache-Control", "no-cache, must-revalidate");
-          } else if (/\.[A-Za-z0-9]{8,}\.(?:js|css)$/.test(base)) {
+          } else if (isHashedBuildAsset(filePath, dir)) {
             res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           }
         },

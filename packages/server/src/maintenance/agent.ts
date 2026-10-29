@@ -1,6 +1,6 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import type { AppContext } from "../context.js";
-import { findCandidates } from "../synthesis/engine.js";
+import { findCandidates, latentSynthesisOptionsFor } from "../synthesis/engine.js";
 import { researchSteer } from "../analysis/researchType.js";
 import { pickResearchTarget } from "./researchPriority.js";
 import { rationaleFor } from "./jobRationale.js";
@@ -199,9 +199,9 @@ function jobForRequest(ctx: AppContext, spaceId: string, id: number): AgentJob |
   if (!node) return null;
   const economy = new EconomyRepo(ctx.handle, spaceId);
   const expansionOn = researchEnabled(ctx, spaceId) && !ctx.usage.overBudget() && economy.canRunJob();
-  // Richest action first: deep-dive research (if Research Mode + fuel allow).
+  // Richest action first: Research Mode research (if Research Mode + fuel allow).
   if (expansionOn) {
-    return mkJob(ctx, spaceId, "research", [id], `On request: deep-dive research on "${node.label}".`);
+    return mkJob(ctx, spaceId, "research", [id], `On request: Research Mode research on "${node.label}".`);
   }
   // Else pair it with its nearest not-yet-linked neighbour for synthesis.
   const emb = getEmbedding(ctx.handle.sqlite, id);
@@ -225,7 +225,7 @@ function researchGapJob(ctx: AppContext, spaceId: string): AgentJob | null {
   if (!pick) return null;
   const factorsText = pick.factors.length ? pick.factors.join(", ") : undefined;
   const why = factorsText ? ` — prioritized for ${factorsText}` : "";
-  return mkJob(ctx, spaceId, "research", [pick.id], `Gap-filling: deep-dive research on a high-priority memory${why}.`, factorsText);
+  return mkJob(ctx, spaceId, "research", [pick.id], `Gap-filling: Research Mode research on a high-priority memory${why}.`, factorsText);
 }
 
 /** Compact, cheap brain summary for the planner's decision. */
@@ -345,7 +345,10 @@ function selectJobInner(ctx: AppContext, spaceId: string): AgentJob | null {
     }
   }
 
-  const candidates = findCandidates(ctx.handle, { threshold: 0.85, k: 5, minHops: 3, maxCandidates: 15 }, spaceId);
+  // Batch R (REG-227): the latent-job gate adapts to the embeddings provider
+  // (latentSynthesisOptionsFor — 0.5 under hash, 0.85 for real embeddings), the
+  // same provider-awareness shape REG-215 gave the ingest-time gate.
+  const candidates = findCandidates(ctx.handle, latentSynthesisOptionsFor(ctx.embeddings.model), spaceId);
   let c0 = null;
   for (const candidate of candidates) {
     const exists = ctx.handle.db
@@ -390,7 +393,7 @@ function selectJobInner(ctx: AppContext, spaceId: string): AgentJob | null {
         spaceId,
         "research",
         [pick.id],
-        `Gap-filling: deep-dive research on a high-priority memory${why}.`,
+        `Gap-filling: Research Mode research on a high-priority memory${why}.`,
         factorsText,
       );
     }
@@ -572,7 +575,7 @@ export async function executeJob(
   } else if (type === "research" && targets.length === 1) {
     const original = nodesRepo.getById(t0);
     // Precondition re-check (complete-job supplies client-crafted targets): a memory
-    // already deep-dived doesn't get a second stacked dive (mirrors selection).
+    // already researched in Research Mode doesn't get a second stacked dive (mirrors selection).
     if (original?.content.includes("--- Research Deep Dive ---")) return null;
     if (original) {
       const research = await ctx.llm.research({ label: original.label, content: original.content }, researchSteer(original as any));
@@ -593,11 +596,13 @@ export async function executeJob(
           })
           .where(and(eq(nodes.id, original.id), eq(nodes.spaceId, spaceId)))
           .run();
-        upsertEmbedding(ctx.handle.sqlite, original.id, await ctx.embeddings.embed(expandedContent));
+        // REG-190: same "label. content" composition as the edit path (the
+        // autonomous research expansion is the same write shape as synthesize).
+        upsertEmbedding(ctx.handle.sqlite, original.id, await ctx.embeddings.embed(`${research.label || original.label}. ${expandedContent}`));
         ftsUpsert(ctx.handle.sqlite, original.id, research.label || original.label, expandedContent);
         nodesRepo.tend(original.id);
-        nodesRepo.setAgent(original.id, "soumaya"); // attribute the deep-dive to her
-        description = `Expanded memory hub "${original.label}" with deep-dive research. Node mass increased.`;
+        nodesRepo.setAgent(original.id, "soumaya"); // attribute the Research Mode research to her
+        description = `Expanded memory hub "${original.label}" with Research Mode research. Node mass increased.`;
       }
     }
   } else if (type === "merging" && targets.length === 2) {
@@ -641,6 +646,7 @@ export async function executeJob(
         .set({ content: `${center.content}\n\n--- Sector Vibe ---\n${vibe}` })
         .where(and(eq(nodes.id, center.id), eq(nodes.spaceId, spaceId)))
         .run();
+      upsertEmbedding(ctx.handle.sqlite, center.id, await ctx.embeddings.embed(`${center.label}. ${center.content}\n\n--- Sector Vibe ---\n${vibe}`));
       ftsUpsert(ctx.handle.sqlite, center.id, center.label, `${center.content}\n\n--- Sector Vibe ---\n${vibe}`);
       nodesRepo.tend(center.id);
       description = `Charted sector vibe around "${center.label}": ${vibe}`;

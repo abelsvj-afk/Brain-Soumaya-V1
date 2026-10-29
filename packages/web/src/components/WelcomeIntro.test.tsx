@@ -44,9 +44,13 @@ describe("WelcomeIntro", () => {
 
   // Phase AC.1 (docs/specs/soumaya-connective-tissue-onboarding.md): the audit found this
   // screen never named Money/Wealth, Life Vision, or Journeys as real, separate places to go.
-  it("names Money, Life Vision, and Journeys as real product surfaces, not just words in a sentence", () => {
+  // Batch P REG-223: Life Vision is not a tab — it is a real section at the top of the Mind
+  // tab — so the old "Money, Life Vision, and Journeys are real tabs" wording is retired.
+  it("names Money and Journeys as real tabs and Life Vision as a real section at the top of the Mind tab", () => {
     render(<WelcomeIntro companionName="Soumaya" onClose={() => {}} />);
-    expect(screen.getByText("Money, Life Vision, and Journeys", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Money and Journeys")).toBeTruthy();
+    expect(screen.getByText(/are real tabs, not just words/i)).toBeTruthy();
+    expect(screen.getByText(/a real section at the top of the Mind tab/i)).toBeTruthy();
   });
 
   it("omits the Help link entirely when onSeeHelp isn't provided", () => {

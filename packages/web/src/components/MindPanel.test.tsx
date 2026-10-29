@@ -12,6 +12,7 @@ const getUpcomingEvents = vi.fn();
 const getUpcomingEventsResult = vi.fn();
 const getThoughts = vi.fn();
 const getThoughtsResult = vi.fn();
+const addThought = vi.fn();
 const getPersonSuggestions = vi.fn();
 const getPersonSuggestionsResult = vi.fn();
 const getCognitiveEvidence = vi.fn();
@@ -39,7 +40,7 @@ vi.mock("../api/client.js", () => ({
   dismissPersonSuggestion: vi.fn(),
   getThoughts: (...a: unknown[]) => getThoughts(...a),
   getThoughtsResult: (...a: unknown[]) => getThoughtsResult(...a),
-  addThought: vi.fn(),
+  addThought: (...a: unknown[]) => addThought(...a),
   reinforceThought: vi.fn(),
   promoteThought: vi.fn(),
   dismissThought: vi.fn(),
@@ -48,9 +49,11 @@ vi.mock("../api/client.js", () => ({
 }));
 
 const getWealthSummary = vi.fn();
+const getWealthSummaryResult = vi.fn();
 const patchGoal = vi.fn();
 vi.mock("../api/finance.js", () => ({
   getWealthSummary: (...a: unknown[]) => getWealthSummary(...a),
+  getWealthSummaryResult: (...a: unknown[]) => getWealthSummaryResult(...a),
   patchGoal: (...a: unknown[]) => patchGoal(...a),
 }));
 
@@ -132,6 +135,14 @@ beforeEach(() => {
   mergeIdeas.mockResolvedValue(true);
   setCognitiveProgress.mockResolvedValue(true);
   getWealthSummary.mockResolvedValue(wealth());
+  // Batch L (MIN-07): the panel loads Wealth via the truthful-state Result
+  // variant; by default it faithfully wraps the getWealthSummary mock so
+  // existing setups keep working. Failure tests override the Result mock
+  // directly with { ok: false }.
+  getWealthSummaryResult.mockImplementation(async (...a: unknown[]) => ({
+    ok: true as const,
+    summary: (await getWealthSummary(...a)) as WealthSummary,
+  }));
 });
 afterEach(() => cleanup());
 
@@ -219,18 +230,16 @@ describe("MindPanel — Life Vision target date display (never a reminder)", () 
     expect(screen.queryByText(/overdue/)).toBeNull();
   });
 
-  it("a naive SQLite-format remindAt is read as UTC (parseTolerantMs), not local time", async () => {
-    // "2026-10-20 01:30:00" is the stored column-default shape. Read as UTC it
-    // is Oct 19 evening in America/New_York; a direct new Date() reads it as
-    // local wall time (Oct 20). The label must show the tolerant-parser date —
-    // the same date every other panel shows for this instant.
-    const { parseTolerantMs } = await import("../utils/dueReminders.js");
+  it("a naive SQLite-format remindAt reads as its WRITTEN date (Batch L, MIN-01)", async () => {
+    // Batch L supersedes the old instant reading: a Life Vision target date
+    // has no time-of-day meaning (docs/specs/life-vision.md §9), so the
+    // stored value's written calendar date IS the target date. The old test
+    // pinned the tolerant-parser instant ("2026-10-20 01:30:00" read as UTC
+    // → Oct 19 evening in America/New_York) — that reading is exactly the
+    // one-day-early defect MIN-01 fixes, so the expectation moves to Oct 20.
+    const { formatCalendarDate } = await import("../utils/localDay.js");
     const remindAt = "2026-10-20 01:30:00";
-    const expectedDate = new Date(parseTolerantMs(remindAt)).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    const expectedDate = formatCalendarDate("2026-10-20");
     getCognitive.mockResolvedValue([vision({ remindAt })]);
     render(<MindPanel onFocus={() => {}} />);
     await screen.findByText("Our first house");
@@ -688,5 +697,44 @@ describe("MindPanel — cognitive load failure is not an empty mind (Finding 2)"
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     expect(await screen.findByText(/Couldn't refresh your mind/)).toBeTruthy();
     expect(screen.getByText("Run a 5k")).toBeTruthy();
+  });
+});
+
+describe("CAP-09 (Batch B) — a failed thought capture never loses the words", () => {
+  it("keeps the text in the input when addThought fails, and shows the failure", async () => {
+    addThought.mockResolvedValue(null);
+    render(<MindPanel onFocus={() => {}} />);
+    const input = (await screen.findByPlaceholderText(/Hold a thought/)) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "a thought I can't lose" } });
+    fireEvent.click(screen.getByText("Hold"));
+    await waitFor(() => expect(addThought).toHaveBeenCalledWith("a thought I can't lose"));
+    await waitFor(() =>
+      expect(pushToastMock).toHaveBeenCalledWith(expect.stringMatching(/couldn't hold/i), "⚠️", expect.any(Number)),
+    );
+    // The words survive the failure — still in the input, ready to retry.
+    expect(input.value).toBe("a thought I can't lose");
+  });
+
+  it("clears the input only after a verified save", async () => {
+    addThought.mockResolvedValue({ id: 42 });
+    render(<MindPanel onFocus={() => {}} />);
+    const input = (await screen.findByPlaceholderText(/Hold a thought/)) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "a keeper" } });
+    fireEvent.click(screen.getByText("Hold"));
+    await waitFor(() => expect(addThought).toHaveBeenCalledWith("a keeper"));
+    await waitFor(() => expect(input.value).toBe(""));
+  });
+
+  it("an over-500-character thought gets length-specific copy, not a doomed 'try again'", async () => {
+    addThought.mockResolvedValue(null);
+    render(<MindPanel onFocus={() => {}} />);
+    const input = (await screen.findByPlaceholderText(/Hold a thought/)) as HTMLInputElement;
+    const long = "x".repeat(501);
+    fireEvent.change(input, { target: { value: long } });
+    fireEvent.click(screen.getByText("Hold"));
+    await waitFor(() =>
+      expect(pushToastMock).toHaveBeenCalledWith(expect.stringMatching(/too long/i), "⚠️", expect.any(Number)),
+    );
+    expect(input.value).toBe(long);
   });
 });

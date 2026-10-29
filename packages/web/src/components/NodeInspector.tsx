@@ -12,12 +12,13 @@ import { JourneyChips } from "./JourneyChips.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 import { DeepDive } from "./DeepDive.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
+import { visionTargetDateKey, formatCalendarDate } from "../utils/localDay.js";
 
 interface Props {
   node: GraphNode | null;
   graph: GraphData;
   onFocus: (id: number) => void;
-  /** Called after a node's weight is changed so the galaxy can re-render. */
+  /** Called after a node's importance is changed so the galaxy can re-render. */
   onChanged?: (id: number) => void;
   /** Called after a node is deleted. */
   onDeleted?: () => void;
@@ -53,7 +54,7 @@ export function fmtWhen(raw: string): string {
 }
 
 /** Plain-language "why is it this size" from the node's real mass signals —
- *  turns an abstract weight% into understanding you learn by seeing it. */
+ *  turns an abstract mass% into understanding you learn by seeing it. */
 function sizeReason(n: GraphNode): string {
   const bits: string[] = [];
   if ((n.importance ?? 0) >= 0.66) bits.push("it matters to you");
@@ -251,7 +252,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           // saved (the sync effect above only fires when node.importance actually
           // changes, which it won't have here).
           setWeight(reverted);
-          pushToast("Couldn't save that weight — try again.", "⚠️", 3500);
+          pushToast("Couldn't save that importance — try again.", "⚠️", 3500);
         });
     }, 350);
   };
@@ -355,7 +356,9 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
       {node.celestial && node.kind !== "belief" && node.kind !== "moc" && (
         <>
           <span className="meta">
-            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]} · weight{" "}
+            {/* REG-106: the derived figure is named mass, never weight — the
+                slider below sets importance, a different quantity. */}
+            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]} · mass{" "}
             {Math.round((node.mass ?? 0) * 100)}%
             {node.degree ? ` · ${node.degree} link${node.degree === 1 ? "" : "s"}` : ""}
           </span>
@@ -444,7 +447,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           </summary>
           <div style={{ padding: "0 1rem 1rem 1rem" }}>
             <p style={{ fontSize: "0.82rem", opacity: 0.85, margin: "0 0 1rem 0" }}>
-              Soumaya needs more context to finalize the deep-dive research for this memory.
+              Soumaya needs more context to finalize the Research Mode research for this memory.
             </p>
             {researchError && (
               <p style={{ color: "#ff5252", fontSize: "0.82rem", margin: "0 0 0.75rem 0" }}>
@@ -557,8 +560,17 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
             // A Life Vision's remindAt is a target date, not a reminder
             // (docs/specs/life-vision.md) — it never fires anything, but the passive
             // "⏰ Reminder" label would still misleadingly imply it does.
+            // Batch L (MIN-01): the target date is DATE-ONLY, so it renders
+            // through the date-key helper, never fmtWhen's instant math — a
+            // date-only value through fmtWhen would print a bogus midnight
+            // time and the one-day-early date. Other kinds keep fmtWhen.
             <p className="node-when">
-              {node.kind === "life_vision" ? `🌅 Target date ${fmtWhen(node.remindAt)}` : `⏰ Reminder ${fmtWhen(node.remindAt)}`}
+              {node.kind === "life_vision"
+                ? (() => {
+                    const key = visionTargetDateKey(node.remindAt);
+                    return `🌅 Target date ${key ? formatCalendarDate(key) : "date unavailable"}`;
+                  })()
+                : `⏰ Reminder ${fmtWhen(node.remindAt)}`}
             </p>
           )}
         </div>
@@ -659,10 +671,12 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
         </details>
       )}
 
-      {/* IM-37: the Investigator's face — a cited deep-dive over this memory. */}
+      {/* IM-37: the Investigator's face — a cited deep-dive over this memory.
+          REG-152: the summary names the Investigator, because a second system
+          (Research Mode research) shares the name "deep-dive". */}
       {node.kind !== "action" && (
         <details className="dock-section" open={!isMobile}>
-          <summary>🔍 Deep-dive</summary>
+          <summary>🔍 Deep-dive (Investigator)</summary>
           <div style={{ padding: "10px" }}>
             <DeepDive nodeId={node.id} nodeLabel={node.label} onFocus={onFocus} />
           </div>
@@ -671,7 +685,9 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
 
       <div className="weight">
         <div className="weight-head">
-          <h3>Weight (gravity)</h3>
+          {/* REG-106: the slider sets importance — one ingredient in the
+              mass % above, not the mass itself. */}
+          <h3>Importance</h3>
           <button
             className="link-btn"
             title="Reset to the automatic rating (offline, no API)"
@@ -694,6 +710,10 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           }}
         />
         <span className="weight-val">{Math.round(weight * 100)}%</span>
+        <p className="weight-note">
+          Importance is one ingredient in the memory&apos;s mass — connections, age, and feeling add the rest,
+          so the mass above can sit below the importance you set.
+        </p>
         <div className="tier-legend" aria-hidden="true">
           {CELESTIAL_CLASSES.map((c) => (
             <span
@@ -735,7 +755,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
       {confirmingDelete && onDeleted && (
         <ConfirmDialog
           title="Delete this memory?"
-          message={`"${node.label}" will be permanently deleted. This can't be undone.`}
+          message={`"${node.label}" will be permanently deleted, along with its connections, attachments, and insights about it. This can't be undone.`}
           confirmLabel="Delete"
           onConfirm={() => {
             setConfirmingDelete(false);
@@ -782,7 +802,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
               pushToast("Couldn't queue that — try again.", "⚠️", 3500);
             }
           }}
-          title="She'll prioritize this memory on her next round. With Research Mode on (and fuel in the tank) she deep-dives it — that spends 2 ⛽; otherwise it's a free recalibration."
+          title="She'll prioritize this memory on her next round. With Research Mode on (and fuel in the tank) she researches it in Research Mode — that spends 2 ⛽; otherwise it's a free recalibration."
         >
           {requested ? "🛰️ Queued for Soumaya" : `🛰️ Ask Soumaya to tend this · up to ${FUEL_JOB_COST} ⛽`}
         </button>

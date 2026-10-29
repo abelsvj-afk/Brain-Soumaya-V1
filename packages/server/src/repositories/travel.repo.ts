@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isOwnerSpace } from "../auth/owner.js";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { EconomyRepo, type JourneyBonusCreditor, type JourneyBonusResult } from "../economy.js";
@@ -6,8 +7,17 @@ import { spaceTimezone } from "../agent/notify/policy.js";
 import {
   EARN_JOURNEY_COMPLETE,
   EARN_JOURNEY_DRIFT,
+  ETERNITY_CHAIN_INTERMEDIATES,
+  ETERNITY_CHAIN_LEGS,
+  ETERNITY_WORLD_KEY,
+  NO_ETERNITY_HOLDINGS,
+  PEOPLE_GATE_MIN_MEMORIES_EACH,
+  PEOPLE_GATE_MIN_PEOPLE,
+  PEOPLE_GATE_MIN_SHARED_MEMORIES,
   TRAVEL_CANCEL_WINDOW_SECONDS,
   WARP_COST,
+  eternityGateOpens,
+  type EternityGateHoldings,
   type TravelJourney,
   type TravelJourneyState,
   type TravelKind,
@@ -42,17 +52,37 @@ import {
  * (Unrelated to `JourneysRepo` — those journeys are life chapters.)
  */
 
-/** World keys a Phase 2 journey may target. Server-side allow-list: a
- *  client-invented destination would corrupt the derived current world. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station"];
+/** World keys a journey may target. Server-side allow-list: a
+ *  client-invented destination would corrupt the derived current world.
+ *  Phase 3 (P3-1) adds the Growing Place — the first memory-bearing world.
+ *  P3-2 adds the Deep Past; P3-3 adds the People (gated — see
+ *  peopleGateOpen: the key alone does not admit travel there). Wave 2
+ *  adds Quiet/Archive — ungated: any traveller may visit, and an empty
+ *  archive renders the still field itself (the note's C1–C3). Wave 2
+ *  also adds Scale — ungated, public: the real ISS at real size.
+ *  Eternity's world joins the list as a GATED world (B-01): it is on the
+ *  chart, but depart() admits it only through the gate below — the
+ *  allow-list alone never opens the way there. */
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", ETERNITY_WORLD_KEY];
 export const HOME_WORLD = "home";
+
+/** Plain-language refusals for the Eternity gate (B-01): a closed gate
+ *  or a short chain is never an error in the traveller's record — the
+ *  journey simply is not admitted, and the server says what the way
+ *  needs. Nothing is charged, nothing is lost, nothing is lesser. */
+export const ETERNITY_GATE_CLOSED_MESSAGE =
+  "The way to Eternity's world opens only for those carrying the Witness Without a Name and two other relics — the gate has not opened for you yet.";
+export const ETERNITY_CHAIN_REQUIRED_MESSAGE = `The way to Eternity's world runs through ${ETERNITY_CHAIN_INTERMEDIATES} other worlds first — travel there step by step, and the last leg opens from the far end of the chain.`;
 
 export type TravelErrorCode =
   | "INVALID_CLIENT_KEY"
   | "INVALID_KIND"
   | "UNKNOWN_DESTINATION"
+  | "PEOPLE_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
-  | "JOURNEY_NOT_DEPARTED";
+  | "JOURNEY_NOT_DEPARTED"
+  | "ETERNITY_GATE_CLOSED"
+  | "ETERNITY_CHAIN_REQUIRED";
 
 export class TravelError extends Error {
   constructor(
@@ -142,7 +172,80 @@ export class TravelRepo implements JourneyBonusCreditor {
   constructor(
     private h: DbHandle,
     private spaceId: string = DEFAULT_SPACE,
+    /**
+     * Relic holdings for the Eternity gate (B-01). The relic increment
+     * owns the source of truth (discovery + codex) and supplies it
+     * here; the default is "holds nothing", so the gate is honestly
+     * closed until that wiring lands. The provider is read inside the
+     * departure transaction, so a holdings change between admission
+     * and arrival cannot smuggle a traveller through.
+     */
+    private holdings: () => EternityGateHoldings = () => NO_ETERNITY_HOLDINGS,
   ) {}
+
+  /** Arrived journeys for this space, newest first — the chain walk's input. */
+  private arrivedRowsNewest(): JourneyRow[] {
+    return this.h.sqlite
+      .prepare(
+        `SELECT * FROM travel_journeys WHERE space_id = ? AND state = 'arrived' ORDER BY created_at DESC, rowid DESC`,
+      )
+      .all(this.spaceId) as JourneyRow[];
+  }
+
+  /**
+   * B-01, persistence half: once the gate has opened for a traveller
+   * it stays open to them. "Opened" is derivable — an arrived journey
+   * to Eternity's world — so no new table and no migration carries it:
+   * the ledger itself remembers the first crossing.
+   */
+  eternityGateOpened(): boolean {
+    const row = this.h.sqlite
+      .prepare(
+        `SELECT COUNT(*) AS n FROM travel_journeys WHERE space_id = ? AND destination = ? AND state = 'arrived'`,
+      )
+      .get(this.spaceId, ETERNITY_WORLD_KEY) as { n: number };
+    return row.n > 0;
+  }
+
+  /** The gate is open for this traveller: opened before, or the
+   *  holdings satisfy B-01 right now (key + any two other relics). */
+  eternityGateReachable(): boolean {
+    // Owner access: the deployment owner's brain is exempt from the relic
+    // gate (see auth/owner.ts) — it is an earned-progression gate.
+    if (isOwnerSpace(this.spaceId)) return true;
+    return this.eternityGateOpened() || eternityGateOpens(this.holdings());
+  }
+
+  /**
+   * B-01, chain half: the journey to Eternity's world is the last leg
+   * of a three-leg chain through at least two intermediate worlds. The
+   * current outing — the arrived legs since the traveller last left
+   * home — must hold at least two legs through at least two distinct
+   * non-home worlds, and the traveller must be standing at the far end
+   * of it (not home). A turn-back or a cancellation breaks the chain:
+   * only arrived legs count, and the walk stops at the leg that left
+   * home. Pure over the ledger rows — no new state.
+   */
+  eternityChainSatisfied(): boolean {
+    // Owner access: no three-leg chain to walk first (auth/owner.ts). Only
+    // the chain is waived — a departure to the world you are already in is
+    // still refused, owner or not.
+    if (isOwnerSpace(this.spaceId)) return this.deriveWorld(this.latestRow()) !== ETERNITY_WORLD_KEY;
+    const latest = this.latestRow();
+    if (!latest) return false;
+    if (this.deriveWorld(latest) === HOME_WORLD) return false;
+    if (this.deriveWorld(latest) === ETERNITY_WORLD_KEY) return false;
+    const arrived = this.arrivedRowsNewest();
+    let legs = 0;
+    const intermediates = new Set<string>();
+    for (const row of arrived) {
+      legs++;
+      if (row.destination !== HOME_WORLD && row.destination !== ETERNITY_WORLD_KEY)
+        intermediates.add(row.destination);
+      if (row.origin === HOME_WORLD) break;
+    }
+    return legs >= ETERNITY_CHAIN_LEGS - 1 && intermediates.size >= ETERNITY_CHAIN_INTERMEDIATES;
+  }
 
   // --- row access (all space-scoped: another space's journeys are invisible) ---
 
@@ -275,6 +378,28 @@ export class TravelRepo implements JourneyBonusCreditor {
         throw new TravelError("INVALID_KIND", "A journey is either a warp or a drift.");
       if (!TRAVEL_WORLD_KEYS.includes(input.destination))
         throw new TravelError("UNKNOWN_DESTINATION", "That destination isn't on the chart yet.");
+      // The People gate (P3-3, Q1) is enforced here, on the server, never
+      // by the client: a departure to People is admitted only while the
+      // brain meets the threshold. A same-key retry still returns the
+      // original journey (the F-01 replay contract above) — the gate
+      // guards creation, not replay.
+      if (input.destination === "people" && !this.peopleGateOpen())
+        throw new TravelError(
+          "PEOPLE_GATE_CLOSED",
+          "The People isn't open yet — it appears once your brain holds at least three people with two linked memories each, and one memory shared between two of them.",
+        );
+      // B-01 (Eternity's gate): the allow-list admits the world onto
+      // the chart, but only the gate admits a traveller to it. The
+      // credential first (key + two relics, or opened before), then the
+      // chain (three legs through two intermediates). Either refusal
+      // writes nothing and charges nothing — the traveller simply stays
+      // where they are, and the server says what the way needs.
+      if (input.destination === ETERNITY_WORLD_KEY) {
+        if (!this.eternityGateReachable())
+          throw new TravelError("ETERNITY_GATE_CLOSED", ETERNITY_GATE_CLOSED_MESSAGE);
+        if (!this.eternityChainSatisfied())
+          throw new TravelError("ETERNITY_CHAIN_REQUIRED", ETERNITY_CHAIN_REQUIRED_MESSAGE);
+      }
       if (this.activeRow())
         throw new TravelError("ACTIVE_JOURNEY_EXISTS", "A journey is already in progress — finish or cancel it first.");
       const origin = this.deriveWorld(this.latestRow());
@@ -512,14 +637,102 @@ export class TravelRepo implements JourneyBonusCreditor {
     return this.settle(journeyId, nowMs);
   }
 
-  /** The state P2-3 renders: where the brain is, and its active journey. */
-  getState(nowMs: number = Date.now()): { currentWorld: string; activeJourney: TravelJourney | null } {
+  /** The state P2-3 renders: where the brain is, and its active journey.
+   *  `peopleGateOpen` tells the board whether the People gate stands open
+   *  (Q1, P3-3) — the board offers People only when the server says so;
+   *  the client never decides. `eternityReachable` tells the board
+   *  whether the gate to Eternity's world stands open for this traveller
+   *  (opened before, or the holdings satisfy B-01 now) — the board
+   *  offers the world only then, so it never offers a journey the server
+   *  would refuse. */
+  getState(nowMs: number = Date.now()): {
+    currentWorld: string;
+    activeJourney: TravelJourney | null;
+    /** Whether the People gate is open (Q1, P3-3) — the board offers
+     *  People only when the server says so; the client never decides. */
+    peopleGateOpen: boolean;
+    eternityReachable: boolean;
+  } {
     this.settleActive(nowMs);
     const active = this.activeRow();
     return {
       currentWorld: this.deriveWorld(this.latestRow()),
       activeJourney: active ? this.map(active, nowMs) : null,
+      peopleGateOpen: this.peopleGateOpen(),
+      eternityReachable: this.eternityGateReachable(),
     };
+  }
+
+  /**
+   * The People gate (P3-3, Q1 — settled by the build-all delegation,
+   * 2026-10-26): the gate is open when the brain holds at least
+   * PEOPLE_GATE_MIN_PEOPLE people with at least
+   * PEOPLE_GATE_MIN_MEMORIES_EACH linked memories each, plus at least
+   * PEOPLE_GATE_MIN_SHARED_MEMORIES memories shared between two people.
+   * A "person" is a node the brain knows as one — `kind =
+   * 'person_entity'` (the tracked person) or extraction-typed `type =
+   * 'person'` (the legacy `relationship_reflection` alias included, the
+   * same rule the web layout applies via normalizeNodeType). A "linked
+   * memory" is an incident edge to a live, non-archived, non-person node.
+   * Archived people never count (P4 — the archive wins everywhere), and
+   * a person linked only to another person has no linked memory.
+   * This reads the database, never the client's graph window — the
+   * overview caps at 300 nodes, so the window can hold fewer people than
+   * the brain does.
+   */
+  peopleGateOpen(): boolean {
+    // Owner access: the deployment owner's brain is exempt (auth/owner.ts).
+    if (isOwnerSpace(this.spaceId)) return true;
+    const personWhere = `(kind = 'person_entity' OR type = 'person' OR type = 'relationship_reflection')`;
+    // Null-safe negation: a memory node has kind NULL, and in SQLite
+    // `NOT (NULL = 'person_entity')` is NULL, not true — a bare NOT
+    // would silently drop every kind-less memory from this set and the
+    // gate could never open. Spell the complement out instead.
+    const nonPersonWhere = `((kind IS NULL OR kind <> 'person_entity') AND type <> 'person' AND type <> 'relationship_reflection')`;
+    const people = this.h.sqlite
+      .prepare(
+        `SELECT id FROM nodes WHERE space_id = ? AND deleted_at IS NULL AND status IS NOT 'archived' AND ${personWhere}`,
+      )
+      .all(this.spaceId) as { id: number }[];
+    if (people.length < PEOPLE_GATE_MIN_PEOPLE) return false;
+    const personIds = new Set(people.map((p) => p.id));
+    const others = this.h.sqlite
+      .prepare(
+        `SELECT id FROM nodes WHERE space_id = ? AND deleted_at IS NULL AND status IS NOT 'archived' AND ${nonPersonWhere}`,
+      )
+      .all(this.spaceId) as { id: number }[];
+    const otherIds = new Set(others.map((o) => o.id));
+    const placeholders = [...personIds].map(() => "?").join(",");
+    const edges = this.h.sqlite
+      .prepare(
+        `SELECT source, target FROM edges WHERE space_id = ? AND (source IN (${placeholders}) OR target IN (${placeholders}))`,
+      )
+      .all(this.spaceId, ...personIds, ...personIds) as { source: number; target: number }[];
+    const memoryCounts = new Map<number, Set<number>>();
+    const personsByMemory = new Map<number, Set<number>>();
+    for (const e of edges) {
+      for (const [personSide, otherSide] of [
+        [e.source, e.target],
+        [e.target, e.source],
+      ] as const) {
+        if (!personIds.has(personSide) || !otherIds.has(otherSide)) continue;
+        const mems = memoryCounts.get(personSide) ?? new Set<number>();
+        mems.add(otherSide);
+        memoryCounts.set(personSide, mems);
+        const persons = personsByMemory.get(otherSide) ?? new Set<number>();
+        persons.add(personSide);
+        personsByMemory.set(otherSide, persons);
+      }
+    }
+    let qualifying = 0;
+    for (const mems of memoryCounts.values()) {
+      if (mems.size >= PEOPLE_GATE_MIN_MEMORIES_EACH) qualifying++;
+    }
+    let shared = 0;
+    for (const persons of personsByMemory.values()) {
+      if (persons.size >= 2) shared++;
+    }
+    return qualifying >= PEOPLE_GATE_MIN_PEOPLE && shared >= PEOPLE_GATE_MIN_SHARED_MEMORIES;
   }
 
   /** The append-only record for one journey (tests; future "World Changes"). */

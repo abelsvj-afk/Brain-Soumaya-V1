@@ -39,14 +39,23 @@ import {
 import { buildDailyDigest } from "../../synthesis/dailyDigest.js";
 import { EMBED_DIM } from "../../db/vec.js";
 import type { NotifyPreferences } from "../notify/policy.js";
+import { decideWorldChange, listProposals } from "../../worlds/mutation.js";
+import "../../worlds/brainAppliers.js"; // side effect: registers the brain_dedup applier for decide/approve
+import { HashEmbeddingProvider } from "../../embeddings/hash.js";
+import { HeuristicProvider } from "../../llm/heuristic.js";
+import { UsageTracker } from "../../usage.js";
+import type { AppContext } from "../../context.js";
 
 const SPACE = "w3-m3-space";
 const DAY = 86_400_000;
 
 let handle: DbHandle;
+let ctx: AppContext;
+const embeddings = new HashEmbeddingProvider(EMBED_DIM);
 
 beforeEach(() => {
   handle = createDb(":memory:");
+  ctx = { handle, embeddings, llm: new HeuristicProvider(), usage: new UsageTracker(handle) } as AppContext;
   resetAccessCoalescing();
 });
 
@@ -177,6 +186,21 @@ async function adjudicateOnce(): Promise<void> {
   });
 }
 
+/**
+ * Phase 4: approve the run's single pending brain_dedup proposal through
+ * the world-change rail. The applier replays the consolidation mutation
+ * via the boundary and records the episode outcomes — this is the step
+ * that used to happen inside the run itself.
+ */
+async function approvePendingDedup(): Promise<number> {
+  const proposals = listProposals(handle.sqlite, SPACE, { kind: "brain_dedup", status: "pending" });
+  expect(proposals).toHaveLength(1);
+  const decided = await decideWorldChange(ctx, SPACE, proposals[0]!.id, "approve", SPACE);
+  expect(decided.ok).toBe(true);
+  expect(decided.proposal?.status).toBe("applied");
+  return proposals[0]!.id;
+}
+
 /* ---------------- claim & window (T-C4–T-C8, T-C22) ---------------- */
 
 describe("T-C4/T-C22: claim atomicity and fencing", () => {
@@ -304,7 +328,7 @@ function samsoniteExtractor(ids: number[]) {
 }
 
 describe("T-C9/T-C10/T-C13: happy path, idempotence, counters", () => {
-  it("completes, writes the consolidated entry via the boundary, advances the date, counters exact", async () => {
+  it("completes, proposes the consolidated entry, advances the date, counters exact; approval writes it via the boundary", async () => {
     const e1 = seedEpisode("conv:a");
     const e2 = seedEpisode("conv:b");
     const out = await runConsolidation(handle, SPACE, {
@@ -314,6 +338,22 @@ describe("T-C9/T-C10/T-C13: happy path, idempotence, counters", () => {
     });
     expect(out.status).toBe("completed");
     if (out.status !== "completed") return;
+    // Phase 4: the run PROPOSES instead of applying — no entry yet, one
+    // pending brain_dedup proposal covering both episodes, and no outcome
+    // rows (distill marks episodes processed in-memory only).
+    expect(out.phases.distillation?.proposed).toBe(2);
+    expect(out.consolidationsWritten).toBe(0);
+    const none = handle.sqlite
+      .prepare(`SELECT * FROM user_model WHERE space_id = ? AND origin = 'consolidated'`)
+      .get(SPACE);
+    expect(none).toBeUndefined();
+    expect(
+      handle.sqlite
+        .prepare(`SELECT COUNT(*) AS n FROM consolidation_episodes WHERE space_id = ?`)
+        .get(SPACE) as { n: number },
+    ).toEqual({ n: 0 });
+    // Approval through the rail replays the boundary insert.
+    await approvePendingDedup();
     const entry = handle.sqlite
       .prepare(`SELECT * FROM user_model WHERE space_id = ? AND origin = 'consolidated'`)
       .get(SPACE) as Record<string, unknown>;
@@ -330,16 +370,16 @@ describe("T-C9/T-C10/T-C13: happy path, idempotence, counters", () => {
       .all(SPACE) as Record<string, unknown>[];
     expect(book).toHaveLength(2);
     expect(book[0]!.outcome).toBe("consolidated");
+    expect(book[0]!.resulting_entry_id).toBe(entry.id);
     expect(JSON.parse(book[0]!.evidence_group_set as string)).toEqual(["conv:a", "conv:b"]);
-    // Counters exact.
-    expect(out.consolidationsWritten).toBe(1);
+    // Counters exact (run-time: proposed, not written).
     expect(out.llmCalls).toBe(1);
     expect(out.itemsProcessed).toBe(2); // two distillation candidates
     const runRow = handle.sqlite
       .prepare(`SELECT * FROM consolidation_runs WHERE id = ?`)
       .get(out.runId) as Record<string, unknown>;
     expect(runRow.status).toBe("completed");
-    expect(runRow.consolidations_written).toBe(1);
+    expect(runRow.consolidations_written).toBe(0);
     expect(runRow.llm_calls).toBe(1);
     expect(runRow.items_processed).toBe(out.itemsProcessed);
     expect(meta().last_consolidation_date).toBe(out.windowDate);
@@ -913,13 +953,20 @@ describe("T-C20: abstained bookkeeping", () => {
     expect(selectCandidates(handle.sqlite, SPACE, 50).map((c) => c.episodeId)).toEqual(
       expect.arrayContaining([e1, e2]),
     );
-    // Now consolidate them: they leave the candidate set.
+    // Now consolidate them: the run proposes first — the episodes stay
+    // eligible (no outcome rows yet) until the owner approves, and only
+    // then leave the candidate set.
     const done = await runConsolidation(handle, SPACE, {
       force: true,
       now: new Date(Date.now() + DAY),
       extractor: samsoniteExtractor([e1, e2]),
     });
     expect(done.status).toBe("completed");
+    if (done.status === "completed") expect(done.phases.distillation?.proposed).toBe(2);
+    expect(selectCandidates(handle.sqlite, SPACE, 50).map((c) => c.episodeId)).toEqual(
+      expect.arrayContaining([e1, e2]),
+    );
+    await approvePendingDedup();
     expect(selectCandidates(handle.sqlite, SPACE, 50)).toHaveLength(0);
   });
 });
@@ -947,7 +994,7 @@ describe("T-C47: Tier 2 judgment inside a run protects stated beliefs", () => {
 });
 
 describe("T-C48: one budget ledger shared by the extractor and Tier 2", () => {
-  it("budget 1: the extractor's call exhausts the ledger, Tier 2 defers, total LLM calls = 1, run aborts on budget", async () => {
+  it("budget 1: the extractor's call exhausts the ledger, Tier 2 rejects at proposal time, total LLM calls = 1, run aborts on budget", async () => {
     setMeta({ w3_llm_budget: 1 });
     const E = seedEpisode("conv:t48");
     recordStated(handle, SPACE, "belief", "works at Samsonite warehouse", ev(E));
@@ -965,12 +1012,33 @@ describe("T-C48: one budget ledger shared by the extractor and Tier 2", () => {
       ],
     });
     expect(judgeCalls).toBe(0); // the boundary never spent past the ledger
+    // Phase 4 (Tier 2 restoration): the deterministic Tier 2 pass rejects
+    // the insert at PROPOSAL time — the same rejection the old auto-apply
+    // flow recorded — so no proposal is created, the episodes are counted
+    // rejected with no outcome row (staying eligible), and the run aborts
+    // on budget exactly as on the pristine tip (rejected > 0 with the
+    // ledger empty). Nothing unjudged is proposed or written.
     expect(out.status).toBe("aborted_budget");
-    if (out.status === "aborted_budget") expect(out.llmCalls).toBe(1);
+    if (out.status === "aborted_budget") {
+      expect(out.llmCalls).toBe(1);
+      expect(out.phases.distillation?.proposed).toBe(0);
+      expect(out.phases.distillation?.rejected).toBe(2);
+    }
     const n = handle.sqlite
       .prepare(`SELECT COUNT(*) AS n FROM user_model WHERE space_id = ? AND origin = 'consolidated'`)
       .get(SPACE) as { n: number };
     expect(n.n).toBe(0);
+    expect(listProposals(handle.sqlite, SPACE, { kind: "brain_dedup", status: "pending" })).toHaveLength(0);
+    // No outcome row for the rejected episodes (they stay eligible).
+    // (The seed episode E, which the extractor saw but proposed nothing
+    // for, is recorded abstained by the tail loop — as in the old flow.)
+    expect(
+      handle.sqlite
+        .prepare(
+          `SELECT COUNT(*) AS n FROM consolidation_episodes WHERE space_id = ? AND episode_id IN (?, ?)`,
+        )
+        .get(SPACE, e1, e2) as { n: number },
+    ).toEqual({ n: 0 });
   });
 });
 
@@ -1071,6 +1139,13 @@ describe("T-C53/T-C54: strengthening — extractor path and no-LLM template path
       ],
     });
     expect(out.status).toBe("completed");
+    // Phase 4: the run proposes the strengthen — the entry is untouched
+    // until the owner approves.
+    if (out.status === "completed") expect(out.phases.distillation?.proposed).toBe(2);
+    const unapproved = umRow(entryId);
+    expect(JSON.parse(unapproved.evidence_ids as string)).toEqual(JSON.parse(before.evidence_ids as string));
+    expect(Number(unapproved.evidence_strength)).toBe(Number(before.evidence_strength));
+    await approvePendingDedup();
     const entries = handle.sqlite
       .prepare(`SELECT * FROM user_model WHERE space_id = ? AND origin = 'consolidated'`)
       .all(SPACE) as Record<string, unknown>[];
@@ -1090,6 +1165,12 @@ describe("T-C53/T-C54: strengthening — extractor path and no-LLM template path
     const e1 = seedEpisode("conv:tmpl", undefined, "prefers morning shifts at the warehouse");
     const out = await runConsolidation(handle, SPACE, { force: true });
     expect(out.status).toBe("completed");
+    // Phase 4: the template path proposes the strengthen — nothing is
+    // applied until the owner approves.
+    if (out.status === "completed") expect(out.phases.distillation?.proposed).toBe(1);
+    const unapproved = umRow(entryId);
+    expect(JSON.parse(unapproved.evidence_ids as string).map((r: { id: number }) => r.id)).not.toContain(e1);
+    await approvePendingDedup();
     const after = umRow(entryId);
     const evAfter = JSON.parse(after.evidence_ids as string) as { id: number }[];
     expect(evAfter.map((r) => r.id)).toContain(e1);
@@ -1152,7 +1233,7 @@ describe("T-C43: forget propagation escalates with 'evidence_forgotten'", () => 
 });
 
 describe("T-C19: the digest line renders only when a run changed something", () => {
-  it("zero-change run → no line; a consolidating run → the quiet factual line appears", async () => {
+  it("zero-change run → no line; a consolidating run → the quiet factual line appears once approved", async () => {
     const quiet = await runConsolidation(handle, SPACE, { force: true });
     expect(quiet.status).toBe("completed");
     const d1 = buildDailyDigest(handle, SPACE);
@@ -1166,8 +1247,14 @@ describe("T-C19: the digest line renders only when a run changed something", () 
       extractor: samsoniteExtractor([e1, e2]),
     });
     expect(loud.status).toBe("completed");
+    // Phase 4: the run only proposes — the digest must not claim a
+    // consolidation the owner has not approved yet.
+    if (loud.status === "completed") expect(loud.phases.distillation?.proposed).toBe(2);
     const d2 = buildDailyDigest(handle, SPACE);
-    expect(d2.closing).toContain("Overnight I consolidated 1 new belief");
+    expect(d2.closing).not.toContain("Overnight I");
+    await approvePendingDedup();
+    const d3 = buildDailyDigest(handle, SPACE);
+    expect(d3.closing).toContain("Overnight I consolidated 1 new belief");
   });
 });
 

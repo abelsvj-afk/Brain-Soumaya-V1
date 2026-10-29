@@ -102,7 +102,10 @@ export function NoticingCard({
     try {
       const r = await answerInquiry(q.id, reply.trim());
       if (r) {
-        playSfx("achievement");
+        // REG-226: answering an inquiry pays no economy event, so this is a
+        // neutral confirmation ("complete"), not the achievement jingle —
+        // the same shape REG-212 fixed in the panel/ManualLink doors.
+        playSfx("complete");
         pushToast("Answered — woven into your galaxy 🧠", "💭", 4000);
         setReply("");
         await refresh();
@@ -121,13 +124,26 @@ export function NoticingCard({
     else setIndex((i) => Math.min(i, remaining.length - 1));
   };
   const wave = async () => {
+    // GH-19: dismiss honestly, like send() — the inquiry leaves only on a
+    // verified success. Before, it was removed locally first and a failed
+    // dismiss silently resurrected it at the next poll, unexplained.
+    const ok = await dismissInquiry(q.id).catch(() => false);
+    if (!ok) {
+      pushToast("Couldn't wave that off — it's still here.", "⚠️", 3500);
+      return;
+    }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    await dismissInquiry(q.id);
     void afterAct();
   };
   const reject = async () => {
+    // Batch I (REG-110): mirror wave() — a failed reject must say so and
+    // keep the inquiry, never toast a success it did not earn.
+    const ok = await rejectInquiry(q.id).catch(() => false);
+    if (!ok) {
+      pushToast("Couldn't mark those as unrelated — it's still here.", "⚠️", 3500);
+      return;
+    }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    await rejectInquiry(q.id);
     pushToast("Got it — I won't tie those together.", "🧠", 3500);
     onAnswered?.(); // the galaxy may lose an edge → refresh
     void afterAct();
@@ -140,9 +156,21 @@ export function NoticingCard({
       ? "Lens saved ⧉ — pinned to your galaxy."
       : "Connected ✦ — woven into your galaxy.";
   const confirm = async () => {
+    // GH-19: celebrate ONLY a verified success (send() is the in-file
+    // template). Before, the inquiry was removed locally first and the
+    // success sound + toast fired without ever checking the result — a
+    // connection that was never made got announced as woven in.
+    const r = await confirmInquiry(q.id).catch(() => ({ ok: false, hubId: null }));
+    if (!r.ok) {
+      pushToast("Couldn't connect those — try again.", "⚠️", 3500);
+      return;
+    }
     setInquiries((xs) => xs.filter((x) => x.id !== q.id));
-    const r = await confirmInquiry(q.id);
-    playSfx("achievement");
+    // REG-226: the achievement jingle sounds only for a real pay/unlock
+    // moment — hub formation (a constellation forms) or lens creation.
+    // Anchor/bridge confirms are plain links that pay nothing, so they get
+    // the neutral confirmation ("complete"), the REG-212 shape.
+    playSfx(isHub || isLens ? "achievement" : "complete");
     pushToast(confirmToast, "🧠", 3500);
     if (isLens) window.dispatchEvent(new Event("brain-lenses-changed")); // refresh the chips
     // A constellation just formed → let the galaxy fly-to-isolate the new hub with a burst

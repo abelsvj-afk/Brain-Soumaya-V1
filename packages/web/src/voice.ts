@@ -83,6 +83,34 @@ export function stopSpeaking(): void {
   if (isVoiceSupported()) window.speechSynthesis.cancel();
 }
 
+/**
+ * CH-09: her replies are Markdown on screen (rendered via MarkdownView) —
+ * read aloud, the markup itself must never be spoken ("asterisk asterisk",
+ * heading hashes, backticks). Strip it to the words the screen shows.
+ * Applied centrally in speak(): ChatDock's performSend is speak()'s only
+ * caller, so no call site can bypass it.
+ */
+export function stripMarkdownForSpeech(text: string): string {
+  return text
+    // Code fences: keep the code's words, drop the fence lines.
+    .replace(/```[^\n]*\n?/g, "")
+    // Images and links become their visible text.
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    // Emphasis / strike markers (paired delimiters only).
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1$2")
+    .replace(/(^|[^_\w])_([^_\n]+)_/g, "$1$2")
+    // Inline code backticks.
+    .replace(/`([^`]*)`/g, "$1")
+    // Line-leading structure: headings, blockquotes, list bullets, rules.
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "")
+    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, "");
+}
+
 const splitSentences = (text: string): string[] =>
   text
     .replace(/\s+/g, " ")
@@ -106,7 +134,7 @@ export function speak(
   stopSpeaking();
   const voice = pickVoice();
   const base = prosodyFor(tone);
-  const sentences = splitSentences(text);
+  const sentences = splitSentences(stripMarkdownForSpeech(text));
   let started = false;
 
   sentences.forEach((sentence, i) => {

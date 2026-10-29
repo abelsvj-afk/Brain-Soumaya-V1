@@ -5,6 +5,8 @@ import type { Thought } from "../api/client.js";
 let mockThoughts: Thought[] = [];
 vi.mock("../api/client.js", () => ({
   getThoughts: () => Promise.resolve(mockThoughts),
+  // Batch L (MIN-04): MindSpace loads via the strict Result variant now.
+  getThoughtsResult: () => Promise.resolve({ ok: true as const, thoughts: mockThoughts }),
 }));
 
 import { MindSpace, setMindSpaceEnabled } from "./MindSpace.js";

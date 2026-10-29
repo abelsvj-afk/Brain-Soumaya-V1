@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { WORLD_CHART, buildRouteBoard } from "../lib/routeBoard.js";
 import WorldCredits from "./WorldCredits.js";
+import { requestEnterWorld } from "../lib/travelEvents.js";
 
 /**
  * The travel surface (Phase 2, P2-3): route board + journey controls,
@@ -19,11 +20,32 @@ import WorldCredits from "./WorldCredits.js";
  *  skipped immediately; reduced-motion travellers are never held. */
 export const TRANSIT_MS = { warp: 12_000, drift: 45_000 } as const;
 
-export default function TravelPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enabled?: boolean }) {
+export default function TravelPanel({
+  enabled = WORLDS_TRAVEL_ENABLED,
+  focusWorld = null,
+  onTransit,
+}: {
+  enabled?: boolean;
+  /** Called once when a journey leaves the cancel window and the ship is
+   *  actually under way — the host closes the sheet so the flight (drawn by
+   *  the scene layer) is what you see, not a text status behind a scrim. */
+  onTransit?: () => void;
+  /** A world the map sent the traveller here for: its route entry is
+   *  highlighted and scrolled into view. The panel itself is unchanged
+   *  — departure still goes through the server, as always. */
+  focusWorld?: string | null;
+}) {
   const travel = useTravel(enabled);
   const [showCredits, setShowCredits] = useState(false);
   const [elapsedJourneyId, setElapsedJourneyId] = useState<string | null>(null);
   const activeJourney = travel.state?.activeJourney ?? null;
+
+  // A map handoff focuses one route entry (highlight + scroll). The
+  // highlight is view-only; it never changes what the panel offers.
+  useEffect(() => {
+    if (!focusWorld) return;
+    document.getElementById(`route-${focusWorld}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [focusWorld]);
 
   // The transit presentation clock: presentation only — the server
   // accepts arrival whenever it is asked; this clock decides when the
@@ -41,6 +63,15 @@ export default function TravelPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enabl
     );
     return () => window.clearTimeout(timer);
   }, [activeJourney]);
+
+  // Once per journey: hand the screen to the flight.
+  const transitNotified = useRef<string | null>(null);
+  const underWay = activeJourney && (activeJourney.state === "in_transit" || activeJourney.state === "returning");
+  useEffect(() => {
+    if (!underWay || !activeJourney || transitNotified.current === activeJourney.id) return;
+    transitNotified.current = activeJourney.id;
+    onTransit?.();
+  }, [underWay, activeJourney, onTransit]);
 
   if (!enabled) return null;
 
@@ -81,13 +112,32 @@ export default function TravelPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enabl
       {state && !journey && (
         <ul className="route-board">
           {buildRouteBoard(state).map((entry) => (
-            <li key={entry.world} className="route-entry">
+            <li
+              key={entry.world}
+              id={`route-${entry.world}`}
+              className={`route-entry${entry.world === focusWorld && !entry.isCurrent ? " route-focused" : ""}`}
+            >
               <div>
                 <strong>{entry.name}</strong>
                 <span> {entry.blurb}</span>
               </div>
               {entry.isCurrent ? (
-                <span className="route-current">You are here</span>
+                <>
+                  <span className="route-current">You are here</span>
+                  {/* Opening the app lands in the home galaxy, not in the world the server last
+                      saw you in. This is the way back into that world's view. */}
+                  {entry.world !== "home" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        requestEnterWorld();
+                        onTransit?.(); // close the sheet so the world is what you see
+                      }}
+                    >
+                      Look around
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="route-options">
                   {entry.options.map((opt) => (

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import type { Fuel } from "@brain/shared";
 
 const playSfx = vi.fn();
@@ -34,5 +34,33 @@ describe("FuelGauge — reaching a full tank is celebrated", () => {
     playSfx.mockClear();
     rerender(<FuelGauge fuel={fuel({ fuel: 100, capacity: 100 })} pops={[]} />);
     expect(playSfx).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Batch I — GH-09 (REG-067): while fuel data is absent (loading or
+ * failed), the gauge must not render nothing at all — a failed fetch and
+ * a still-loading one are distinguishable traces, never silent absence.
+ * Fail-before: the gauge returns null for every null-fuel render.
+ */
+describe("FuelGauge — absent fuel is a visible state, not nothing", () => {
+  it("renders a loading placeholder while fuel has never arrived", () => {
+    const { container } = render(<FuelGauge fuel={null} pops={[]} />);
+    expect(container.textContent).toMatch(/loading/i);
+  });
+
+  it("renders an error state with a retry when the load failed", () => {
+    const onRetry = vi.fn();
+    render(<FuelGauge fuel={null} pops={[]} loadState="error" onRetry={onRetry} />);
+    const btn = screen.getByRole("button", { name: /fuel unavailable/i });
+    btn.click();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("a loaded gauge is unchanged (still a meter, still tappable)", () => {
+    const onClick = vi.fn();
+    const { container } = render(<FuelGauge fuel={fuel({ fuel: 50, capacity: 100 })} pops={[]} onClick={onClick} />);
+    expect(container.querySelector(".fuel-gauge")).toBeTruthy();
+    expect(screen.queryByText(/loading/i)).toBeNull();
   });
 });

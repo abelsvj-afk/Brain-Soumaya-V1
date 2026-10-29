@@ -21,9 +21,14 @@ import {
 import { TRACKS } from "../graph/audio.js";
 import {
   buildUnlockStats,
+  firstAlwaysUnlockedTrackIndex,
   firstUnlockedTrackIndex,
+  isTrackAlwaysUnlocked,
   isTrackUnlocked,
+  lockedTrackNotes,
+  nextAlwaysUnlockedTrackIndex,
   nextUnlockedTrackIndex,
+  trackLocked,
   unlockableForTrack,
 } from "./unlockables.js";
 import type { GraphNode } from "@brain/shared";
@@ -248,5 +253,57 @@ describe("music gating helpers (IM-133)", () => {
     expect(s.streakBest).toBe(9);
     expect(s.codexPct).toBe(42);
     expect(isUnlocked("trail-gold", s)).toBe(false);
+  });
+});
+
+/**
+ * Batch I — GH-07 (REG-065): while unlock stats are in flight, a track
+ * must never render (or play) as pickable when it is not known-unlocked.
+ * The only tracks playable before stats arrive are the `always` ones
+ * (Deep Space). Fail-before: the helpers do not exist on the base tip.
+ */
+describe("Batch I — track gating while unlock stats are in flight (REG-065 / GH-07)", () => {
+  it("Deep Space is always-unlocked; the other loops are not", () => {
+    expect(isTrackAlwaysUnlocked("deep-space")).toBe(true);
+    expect(isTrackAlwaysUnlocked("slow-tide")).toBe(false);
+    expect(isTrackAlwaysUnlocked("interstellar")).toBe(false);
+    expect(isTrackAlwaysUnlocked("no-such-track")).toBe(false);
+  });
+
+  it("trackLocked fails closed with null stats — except always-unlocked tracks", () => {
+    expect(trackLocked("deep-space", null)).toBe(false);
+    expect(trackLocked("slow-tide", null)).toBe(true);
+    expect(trackLocked("interstellar", null)).toBe(true);
+    expect(trackLocked("no-such-track", null)).toBe(true);
+  });
+
+  it("trackLocked follows the evaluated gate once stats arrive", () => {
+    const rich = stats({ memoriesCount: 150 });
+    expect(trackLocked("deep-space", rich)).toBe(false);
+    expect(trackLocked("slow-tide", rich)).toBe(false);
+    expect(trackLocked("interstellar", rich)).toBe(false);
+    const poor = stats({ memoriesCount: 0 });
+    expect(trackLocked("slow-tide", poor)).toBe(true);
+    expect(trackLocked("interstellar", poor)).toBe(true);
+    expect(trackLocked("deep-space", poor)).toBe(false);
+  });
+
+  it("firstAlwaysUnlockedTrackIndex finds Deep Space at index 0", () => {
+    expect(firstAlwaysUnlockedTrackIndex(TRACK_IDS)).toBe(0);
+    expect(firstAlwaysUnlockedTrackIndex(["slow-tide", "interstellar"])).toBe(-1);
+  });
+
+  it("nextAlwaysUnlockedTrackIndex advances only across always-unlocked tracks", () => {
+    expect(nextAlwaysUnlockedTrackIndex(0, TRACK_IDS)).toBe(0); // Deep Space is the only one
+    expect(nextAlwaysUnlockedTrackIndex(1, TRACK_IDS)).toBe(0); // wraps back to Deep Space
+    expect(nextAlwaysUnlockedTrackIndex(0, ["slow-tide"])).toBe(0); // none playable — stays put
+  });
+
+  it("lockedTrackNotes names each locked track and its requirement, visibly", () => {
+    const notes = lockedTrackNotes(TRACK_IDS, null);
+    expect(notes.map((n) => n.id)).toEqual(["slow-tide", "interstellar"]);
+    expect(notes[0]?.requirement).toMatch(/25 memories/);
+    expect(notes[1]?.requirement).toMatch(/100 memories/);
+    expect(lockedTrackNotes(TRACK_IDS, stats({ memoriesCount: 150 }))).toEqual([]);
   });
 });

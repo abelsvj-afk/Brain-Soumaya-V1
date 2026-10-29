@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { SUGGESTED_TAGS } from "@brain/shared";
-import { ingestText } from "../api/client.js";
+import { ingestText, getSpaceId } from "../api/client.js";
 import { extractFileText } from "../lib/extractFileText.js";
 import { JourneyChips } from "./JourneyChips.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
@@ -23,16 +23,42 @@ function toIso(local: string): string | undefined {
  * IM-117: a brain-dump draft survives closing the panel. It lives in
  * localStorage (like ChatDock's history), restores on reopen, clears only on
  * a successful save or an explicit confirmed discard.
+ *
+ * CAP-05: the draft is scoped PER BRAIN — `brain.ingestDraft.${id}` — like
+ * every sibling store (queue `brain.ingestQueue.${id}`, chat
+ * `brain.chat.${id}`, quests `brain.quests.${id}`). The old single global
+ * key let one brain's unsaved words render in another brain's capture box,
+ * one tap from being filed into the wrong brain.
+ *
+ * Legacy handling — ADOPT-ONCE: the first panel opened after the upgrade
+ * moves a legacy global draft into that brain's scoped key and removes the
+ * legacy key. Discarding it instead would silently destroy the user's
+ * unsaved words (the exact loss IM-117 exists to prevent); adoption's
+ * cross-brain risk is one-time and self-limiting — the legacy key is gone
+ * after the first adoption, and from then on scoping is strict. No draft
+ * expiry is introduced: draft lifetime is a pending owner decision.
  */
-const DRAFT_KEY = "brain.ingestDraft";
+const LEGACY_DRAFT_KEY = "brain.ingestDraft";
+const draftKey = (): string => `brain.ingestDraft.${getSpaceId() ?? "default"}`;
 interface IngestDraft {
   text: string; details: string; tags: string[]; action: boolean; ttl: number;
   occurred: string; remind: string;
 }
 function loadDraft(): Partial<IngestDraft> {
   try {
-    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null") as IngestDraft | null;
-    return raw && typeof raw === "object" ? raw : {};
+    const key = draftKey();
+    let raw = localStorage.getItem(key);
+    if (raw == null) {
+      const legacy = localStorage.getItem(LEGACY_DRAFT_KEY);
+      if (legacy != null) {
+        // Adopt-once: move the pre-scoping draft into this brain's key.
+        localStorage.setItem(key, legacy);
+        localStorage.removeItem(LEGACY_DRAFT_KEY);
+        raw = legacy;
+      }
+    }
+    const parsed = JSON.parse(raw || "null") as IngestDraft | null;
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch { return {}; }
 }
 const draftIsEmpty = (d: Partial<IngestDraft>) => !(d.text?.trim() || d.details?.trim());
@@ -90,8 +116,8 @@ export function IngestPanel({
   // Persist the draft as it changes (cleared explicitly on save/discard).
   useEffect(() => {
     try {
-      if (!text && !details) localStorage.removeItem(DRAFT_KEY);
-      else localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, details, tags, action, ttl, occurred, remind } satisfies IngestDraft));
+      if (!text && !details) localStorage.removeItem(draftKey());
+      else localStorage.setItem(draftKey(), JSON.stringify({ text, details, tags, action, ttl, occurred, remind } satisfies IngestDraft));
     } catch { /* ignore */ }
   }, [text, details, tags, action, ttl, occurred, remind]);
 
@@ -105,6 +131,8 @@ export function IngestPanel({
   };
 
   const dirty = !!(text.trim() || details.trim());
+  // REG-040: the length of what submit() will actually send (text + details).
+  const submittedLen = (details.trim() ? `${text.trim()}\n\n${details.trim()}` : text.trim()).length;
   const requestClose = () => {
     if (!onClose) return;
     // IM-117: closing with a draft asks first (shared ConfirmDialog) instead
@@ -113,14 +141,39 @@ export function IngestPanel({
     onClose();
   };
   const discardAndClose = () => {
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(draftKey()); } catch { /* ignore */ }
     setConfirmDiscard(false);
     onClose?.();
   };
 
+  /** Clear the box + draft — shared by the online success path and the
+   *  CAP-06 queued path (a queued capture is saved, so its words must not
+   *  stay live inviting a manual duplicate re-submit). */
+  function clearAfterSave() {
+    setText("");
+    setDetails("");
+    setShowDetails(false);
+    setTags([]);
+    setOccurred("");
+    setRemind("");
+    setShowWhen(false);
+    try { localStorage.removeItem(draftKey()); } catch { /* ignore */ }
+  }
+
   async function submit() {
     const body = details.trim() ? `${text.trim()}\n\n${details.trim()}` : text.trim();
     if (!body) return;
+    // REG-144/AG-05: an action item can never carry a reminder — the firing
+    // tool would deliver it while every web reminder surface excludes
+    // actions, so it would fire invisibly (unseeable, unsnoozeable,
+    // unacknowledgeable). Refuse the combination up front and say so, instead
+    // of silently dropping the remindAt the user asked for; the server's
+    // action branch drops it too as a backstop. An action's due time is its
+    // expiry (ttl), which Agenda already shows and counts down.
+    if (action && toIso(remind)) {
+      setError("Action items can't carry a separate reminder — their due time is the expiry above. Untick \"📌 Action item\" to set a reminder, or clear the reminder time.");
+      return;
+    }
     stopMic();
     setBusy(true);
     setMsg("");
@@ -138,22 +191,26 @@ export function IngestPanel({
       const n = r.nodes.length;
       const e = r.extractedEdges.length + r.associativeEdges.length;
       const fuelBit = r.fuelEarned ? ` · +${r.fuelEarned.toFixed(1)} ⛽` : "";
-      const weighty = r.nodes.some((x: any) => (x.importance ?? 0) >= 0.6);
-      const researchBit = action ? "" : weighty ? " · 🔬 may deep-dive in Research Mode" : " · 🗃️ stored, no research needed";
+      // REG-150 / INS-03: the Research Mode claim must match the picker's
+      // reality. The autonomous picker pools importance >= 0.45 with degree
+      // <= 1, not already deep-dived (researchPriority.ts) — the 0.6 figure
+      // was the self-check's blind-spot count, a different quantity — and a
+      // job runs only when Research Mode is on for the space + the USD budget
+      // + fuel allow, so even a pool-eligible memory only "may" be researched.
+      // The negative branch claims nothing about research: a user-requested
+      // tend researches a memory at ANY importance, so "stored" stands alone.
+      const weighty = r.nodes.some((x: any) => (x.importance ?? 0) >= 0.45);
+      const researchBit = action ? "" : weighty ? " · 🔬 may be researched in Research Mode" : " · 🗃️ stored";
+      // REG-143/AG-04: the pipeline stamps the reminder on the FIRST node
+      // only — name that carrier here so the user knows which memory holds it.
+      const reminderBit = !action && toIso(remind) && r.nodes[0] ? ` · 🔔 reminder on "${(r.nodes[0].label ?? "").slice(0, 30)}"` : "";
       setMsg(
         action
           ? `Action item added (expires in ${ttl}h)${fuelBit}`
-          : `+${n} node${n !== 1 ? "s" : ""}, ${e} connection${e !== 1 ? "s" : ""}${fuelBit}${researchBit}`,
+          : `+${n} node${n !== 1 ? "s" : ""}, ${e} connection${e !== 1 ? "s" : ""}${fuelBit}${researchBit}${reminderBit}`,
       );
       setCreatedNodes(r.nodes.map((x: any) => ({ id: x.id, label: x.label })));
-      setText("");
-      setDetails("");
-      setShowDetails(false);
-      setTags([]);
-      setOccurred("");
-      setRemind("");
-      setShowWhen(false);
-      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+      clearAfterSave();
       const firstId = r.nodes[0]?.id ?? null;
       setSavedNodeId(firstId);
       if (firstId != null) {
@@ -161,7 +218,18 @@ export function IngestPanel({
       }
       onIngested(r.nodes.map((x: any) => x.id), r.fuelEarned, e);
     } catch (err) {
-      setError((err as Error).message);
+      // CAP-06: an OfflineQueuedError means the capture WAS saved (into
+      // the offline queue) — present it as queued in the success span,
+      // never in the ⚠️ error surface, and clear like a success. Matched
+      // by name so the panel needs no new import surface. Genuine
+      // failures (including the queue's honest no-brain / queue-full
+      // errors, which are plain Errors) keep the error surface + words.
+      if ((err as Error)?.name === "OfflineQueuedError") {
+        setMsg((err as Error).message);
+        clearAfterSave();
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       setBusy(false);
     }
@@ -279,6 +347,14 @@ export function IngestPanel({
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
         }}
       />
+      {/* REG-040: the 20,000-character ingest cap is visible before submit —
+          a live counter over what will actually be sent (text + details),
+          with a plain warning past the cap instead of a misleading shape
+          error after it. */}
+      <div className="ingest-count" aria-live="polite">
+        {submittedLen.toLocaleString()} / 20,000 characters
+        {submittedLen > 20000 ? " — over the 20,000-character limit; trim it before adding" : ""}
+      </div>
 
       {/* IM-116: import a document (PDF / Word / text) — or drag one in. */}
       <div className="ingest-import">
@@ -374,6 +450,11 @@ export function IngestPanel({
       <label className="action-toggle">
         <input type="checkbox" checked={action} onChange={(e) => setAction(e.target.checked)} />
         📌 Action item (a to-do that times out)
+        {action && remind && (
+          <span className="ingest-warn" style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
+            ⚠️ A reminder time is set above — action items can't carry one (their due time is the expiry). Clear it, or untick this to save a reminder.
+          </span>
+        )}
         {action && (
           <select value={ttl} onChange={(e) => setTtl(Number(e.target.value))}>
             <option value={24}>today (24h)</option>

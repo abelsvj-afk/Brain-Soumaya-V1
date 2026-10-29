@@ -284,6 +284,17 @@ export function Toasts() {
     removeToast(t.id);
   };
 
+  // Batch I (REG-072 / GH-21): the overflow chip is a real link — the
+  // same tab action every actionable toast dispatches. The App listener
+  // already routes kind:"tab" to the dock; Inbox is a dock tab.
+  const openInbox = () => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("brain-toast-action", { detail: { kind: "tab", value: "inbox" } }),
+      );
+    } catch { /* no window */ }
+  };
+
   if (items.length === 0 && overflowCount === 0) return null;
   return (
     <div className="toast-wrap" role="status" aria-live="polite">
@@ -328,7 +339,19 @@ export function Toasts() {
         </div>
       ))}
       {overflowCount > 0 && (
-        <div className="toast toast-overflow" role="status">
+        <div
+          className="toast toast-overflow actionable"
+          role="button"
+          tabIndex={0}
+          onClick={openInbox}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openInbox();
+            }
+          }}
+          title="Open the Inbox to see them all"
+        >
           <span className="toast-ic" aria-hidden>➕</span>
           <span className="toast-msg">
             {overflowCount} more notification{overflowCount === 1 ? "" : "s"} — see Inbox

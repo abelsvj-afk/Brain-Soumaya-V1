@@ -706,6 +706,44 @@ function findCoveringStatedRow(
   return null;
 }
 
+/**
+ * Phase 4 — proposal-time Tier 2 evaluation (read-only).
+ *
+ * Runs EXACTLY Phase A of the insert protocol — snapshot +
+ * evaluateTier2 with the caller's run ctx (judge + shared budget) —
+ * and NOTHING else: no validation, no Tier 1 check, no write, no
+ * transaction. Distillation calls this before creating a
+ * `brain_dedup` insert proposal so the Tier 2 semantic judgment the
+ * old auto-apply flow ran inside applyConsolidationMutation still runs
+ * on distill-proposed content, with its verdict stored in the proposal
+ * payload for the applier to enforce. A "clean" verdict here is not a
+ * promise the insert will land: the applier still runs the full
+ * boundary (fresh snapshot, deterministic Tier 2, Tier 1 coverage) at
+ * approval time, which fail-closes on anything that changed since.
+ */
+export interface InsertTier2Verdict {
+  verdict: "clean" | "contradiction" | "deferred";
+  detail: string;
+  deterministicHits: number;
+  ambiguousPairs: number;
+  selectedBeliefs: number;
+  selectedTokens: number;
+  judgedEntryId: number | null;
+  /** Fingerprint of the stated snapshot this verdict was judged against. */
+  snapshotFingerprint: string;
+}
+
+export async function evaluateInsertTier2(
+  sqlite: RawDb,
+  ctx: ConsolidationRunContext,
+  entry: InsertConsolidatedEntry,
+): Promise<InsertTier2Verdict> {
+  const snapshot = readStatedRows(sqlite, ctx.spaceId, true);
+  const snapshotFingerprint = fingerprintStatedRows(snapshot);
+  const tier2 = await evaluateTier2(ctx, entry, snapshot);
+  return { ...tier2, snapshotFingerprint };
+}
+
 /* ------------------------------------------------------------------ */
 /* The boundary                                                        */
 /* ------------------------------------------------------------------ */

@@ -9,6 +9,7 @@ import {
   handleTelegramUpdate,
   sendDailyDigests,
   tgSend,
+  createTelegramSpaceSender,
   type TelegramUpdate,
 } from "../telegram/bot.js";
 import { TelegramLinksRepo } from "../telegram/links.js";
@@ -129,17 +130,12 @@ describe("RE-01 tgSend honesty", () => {
 // ---------------------------------------------------------------------------
 
 function boundaryDepsWithRealSender(spaceId: string): BoundaryDeps {
-  const links = new TelegramLinksRepo(handle);
   return {
     sqlite: handle.sqlite,
     handle,
-    // The index.ts rawSend composition at base: loop the space's linked
-    // chats calling tgSend. tgSend's honesty is what the boundary sees.
-    send: async (sp: string, text: string) => {
-      for (const l of links.all().filter((x) => x.spaceId === sp)) {
-        await tgSend("TOKEN", l.chatId, text);
-      }
-    },
+    // The index.ts rawSend composition: the production sender, reporting
+    // per-chat outcomes (H-2). tgSend's honesty is what the boundary sees.
+    send: createTelegramSpaceSender(handle, "TOKEN"),
     audit: () => {},
     workerId: "batch-a-test",
   };

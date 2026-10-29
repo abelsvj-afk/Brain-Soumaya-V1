@@ -25,6 +25,54 @@ export const DEFAULT_SYNTHESIS: SynthesisOptions = {
   maxCandidates: 12,
 };
 
+/**
+ * REG-151 / INS-04: provider-aware synthesis gate, mirroring the sibling
+ * contradiction scan's `contradictionOptionsFor`. Hash embeddings produce
+ * much lower cosines than a real model — the contradiction scan's own
+ * measurement puts an obvious planted pair at ~0.69 under hash, so the old
+ * flat 0.82 made "🔍 Find new links" effectively inert offline while
+ * honestly reporting "No new connections yet". Under hash the gate drops to
+ * 0.5, the same floor the contradiction scan uses; real embeddings keep 0.82.
+ */
+export function synthesisOptionsFor(embeddingsModel: string): SynthesisOptions {
+  const isHash = embeddingsModel.toLowerCase().includes("hash");
+  return { ...DEFAULT_SYNTHESIS, threshold: isHash ? 0.5 : DEFAULT_SYNTHESIS.threshold };
+}
+
+/**
+ * The maintenance latent job's own gate: stricter than the default synthesis
+ * gate (0.85 vs 0.82) — it feeds latent insights, so it asks for a closer pair.
+ */
+export const LATENT_SYNTHESIS: SynthesisOptions = {
+  threshold: 0.85,
+  k: 5,
+  minHops: 3,
+  maxCandidates: 15,
+};
+
+/**
+ * Provider-aware latent-job gate (Batch R, REG-227). Hash embeddings produce
+ * much lower cosines than a real model — the contradiction scan documents the
+ * same asymmetry (`contradictionOptionsFor` drops its threshold to 0.5 under
+ * hash, after measuring ~0.69 for an obvious same-topic pair: the old flat
+ * 0.86 made that scan find NOTHING offline). The flat 0.85 here starved the
+ * latent-insight supply the same way on a hash brain — and 0.85 is even less
+ * reachable under hash than REG-215's 0.72. Mirror the contradiction gate:
+ * 0.5 under hash, 0.85 for real embeddings. Only the cosine floor adapts;
+ * the latent job's own k/minHops/maxCandidates are unchanged, and the LLM
+ * synthesis step downstream still judges each pair, so the lower hash bar
+ * admits candidates for synthesis — it never auto-draws a link.
+ *
+ * Renamed from `synthesisOptionsFor` at the Batch R rebase onto f2f8611c:
+ * Batch N (REG-151) had already taken that name for the DEFAULT-based gate
+ * (0.82), and both helpers are pinned by their own tests — the latent job
+ * keeps its stricter 0.85 base under its own name.
+ */
+export function latentSynthesisOptionsFor(embeddingsModel: string): SynthesisOptions {
+  const isHash = embeddingsModel.toLowerCase().includes("hash");
+  return { ...LATENT_SYNTHESIS, threshold: isHash ? 0.5 : LATENT_SYNTHESIS.threshold };
+}
+
 export interface Candidate {
   a: number;
   b: number;

@@ -6,6 +6,8 @@ import { createApp } from "../api/server.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { HeuristicProvider } from "../llm/heuristic.js";
 import { EMBED_DIM } from "../db/vec.js";
+import { reminderTool } from "../agent/tools/reminder.js";
+import type { ToolContext } from "../agent/tools/types.js";
 
 let ctx: AppContext; let server: Server; let base: string; let spaceId: string;
 beforeAll(async () => {
@@ -61,5 +63,83 @@ describe("IM-51 PATCH /api/nodes/:id/agenda", () => {
     const other = ((await auth.json()) as { id: string }).id;
     const res = await fetch(`${base}/api/nodes/${id}/agenda`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-space-id": other }, body: JSON.stringify({ label: "hijacked" }) });
     expect(res.status).toBe(404);
+  });
+});
+
+// REG-140 (AG-01): a reminder that already fired must re-fire when snoozed
+// or rescheduled — the firing tool only proposes reminder_fired_at IS NULL
+// rows, so moving remind_at without clearing the fired state silently voids
+// the reschedule. The web also surfaces the fired state (reminderFiredAt).
+describe("REG-140 fired reminders re-arm on reschedule", () => {
+  function makeFiredReminder(label = "fired reminder"): number {
+    const info = ctx.handle.sqlite
+      .prepare(
+        `INSERT INTO nodes (space_id, label, type, content, remind_at, reminder_fired_at, fired_by_approval)
+         VALUES (?, ?, 'event', ?, ?, ?, ?)`,
+      )
+      .run(
+        spaceId,
+        label,
+        label,
+        new Date(Date.now() - 3600_000).toISOString(),
+        new Date(Date.now() - 3500_000).toISOString(),
+        7,
+      );
+    return Number(info.lastInsertRowid);
+  }
+  const firedState = (id: number) =>
+    ctx.handle.sqlite
+      .prepare(`SELECT reminder_fired_at AS f, fired_by_approval AS a FROM nodes WHERE id = ?`)
+      .get(id) as { f: string | null; a: number | null };
+  const toolCtx = (now: number): ToolContext => ({ ctx, spaceId, now, notify: async () => {} });
+
+  it("snoozing a fired reminder clears the fired state so detect() proposes it again", async () => {
+    const id = makeFiredReminder();
+    // A fired reminder is invisible to the firing tool before the fix.
+    expect(reminderTool.detect(toolCtx(Date.now())).some((i) => i.args.nodeId === id)).toBe(false);
+    const later = new Date(Date.now() + 3600_000).toISOString();
+    const { status, body } = await req("PATCH", `/api/nodes/${id}/agenda`, { remindAt: later });
+    expect(status).toBe(200);
+    expect(body.remindAt).toBe(later);
+    expect(body.reminderFiredAt ?? null).toBeNull();
+    const st = firedState(id);
+    expect(st.f).toBeNull();
+    expect(st.a).toBeNull();
+    // At the new time the firing tool proposes it again.
+    expect(reminderTool.detect(toolCtx(Date.now() + 3600_000 + 1000)).some((i) => i.args.nodeId === id)).toBe(true);
+  });
+
+  it("editing a fired reminder's label without moving remindAt leaves the fired state alone", async () => {
+    const id = makeFiredReminder();
+    const { status } = await req("PATCH", `/api/nodes/${id}/agenda`, { label: "renamed fired reminder" });
+    expect(status).toBe(200);
+    expect(firedState(id).f).not.toBeNull();
+    expect(reminderTool.detect(toolCtx(Date.now())).some((i) => i.args.nodeId === id)).toBe(false);
+  });
+
+  it("pre-fire snooze still works and leaves the fired state clear", async () => {
+    const { body: made } = await req("POST", "/api/ingest", { text: "remember to call the dentist soon", remindAt: new Date(Date.now() + 3600_000).toISOString() });
+    const id = made.nodes[0].id as number;
+    const later = new Date(Date.now() + 7200_000).toISOString();
+    const { status, body } = await req("PATCH", `/api/nodes/${id}/agenda`, { remindAt: later });
+    expect(status).toBe(200);
+    expect(body.remindAt).toBe(later);
+    expect(firedState(id).f).toBeNull();
+  });
+
+  it("acknowledging a fired reminder clears its fired state", async () => {
+    const id = makeFiredReminder();
+    const { status } = await req("POST", `/api/nodes/${id}/ack-reminder`);
+    expect(status).toBe(200);
+    expect(firedState(id).f).toBeNull();
+    expect(firedState(id).a).toBeNull();
+  });
+
+  it("clearing remindAt on a fired reminder also clears the fired state", async () => {
+    const id = makeFiredReminder();
+    const { status } = await req("PATCH", `/api/nodes/${id}/agenda`, { remindAt: null });
+    expect(status).toBe(200);
+    expect(firedState(id).f).toBeNull();
+    expect(firedState(id).a).toBeNull();
   });
 });

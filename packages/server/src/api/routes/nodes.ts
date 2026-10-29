@@ -8,7 +8,7 @@ import { ftsUpsert } from "../../db/fts.js";
 import { GraphService } from "../../graph/service.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { AttachmentsRepo } from "../../repositories/attachments.repo.js";
-import { EconomyRepo, EARN_ACTION_DONE } from "../../economy.js";
+import { EconomyRepo, EARN_ACTION_DONE, actionEarnsFuel } from "../../economy.js";
 import { JourneysRepo } from "../../repositories/journeys.repo.js";
 import { requestMaintenance } from "../../maintenance/agent.js";
 import { spaceOf, rateLimit } from "../middleware.js";
@@ -221,19 +221,23 @@ export function nodesRoutes(ctx: AppContext): Router {
           text = research.content;
           const expandedContent = `${node.content}\n\n--- Research Deep Dive ---\n${text}`;
           const newImp = Math.min(1.0, (node.importance ?? 0.5) + 0.2);
+          const newLabel = research.label || node.label;
           ctx.handle.db
             .update(nodes)
             .set({
               content: expandedContent,
               importance: newImp,
-              label: research.label || node.label,
+              label: newLabel,
               researchQuestions: null,
               researchAnswers: null
             })
             .where(and(eq(nodes.id, id), eq(nodes.spaceId, spaceId)))
             .run();
-          upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(expandedContent));
-          ftsUpsert(ctx.handle.sqlite, id, research.label || node.label, expandedContent);
+          // REG-190: embed the same "label. content" composition the edit path
+          // uses — content-only here made semantic findability depend on which
+          // doors the node had passed through.
+          upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(`${newLabel}. ${expandedContent}`));
+          ftsUpsert(ctx.handle.sqlite, id, newLabel, expandedContent);
         }
       }
     } catch (err) {
@@ -249,7 +253,9 @@ export function nodesRoutes(ctx: AppContext): Router {
 
   // POST /api/nodes/:id/ack-reminder -> acknowledge a due reminder. Without this,
   // remind_at lived forever: the digest's 5 oldest-first slots filled with stale
-  // reminders and newer ones never surfaced.
+  // reminders and newer ones never surfaced. REG-140: acking also clears the
+  // fired state — the fired state never outlives its remind_at, so a later
+  // re-scheduled remind_at starts clean.
   r.post("/:id/ack-reminder", (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -258,7 +264,7 @@ export function nodesRoutes(ctx: AppContext): Router {
     }
     const spaceId = spaceOf(res);
     const changed = ctx.handle.sqlite
-      .prepare(`UPDATE nodes SET remind_at = NULL WHERE id = ? AND space_id = ?`)
+      .prepare(`UPDATE nodes SET remind_at = NULL, reminder_fired_at = NULL, fired_by_approval = NULL WHERE id = ? AND space_id = ?`)
       .run(id, spaceId).changes;
     if (changed === 0) {
       res.status(404).json({ error: "Not found" });
@@ -343,13 +349,11 @@ export function nodesRoutes(ctx: AppContext): Router {
     const existing = graph.getNode(id); // check kind before removing
     // Only actions that have existed a little while pay out — a create-then-delete
     // loop was a free offline fuel farm. (Checked before the row is removed.)
-    const oldEnough =
-      existing?.kind === "action" &&
-      ctx.handle.sqlite
-        .prepare(
-          `SELECT 1 FROM nodes WHERE id = ? AND space_id = ? AND created_at <= datetime('now', '-10 minutes')`,
-        )
-        .get(id, spaceId) != null;
+    // REG-141 (AG-02): true elapsed-time math on the stored timestamp. The old
+    // gate compared the ISO `created_at` string against SQLite's
+    // `datetime('now', '-10 minutes')` output — `T` > ` ` at byte 10, so every
+    // same-UTC-date comparison failed and same-day completions never paid.
+    const oldEnough = existing?.kind === "action" && actionEarnsFuel(existing.createdAt);
     // Living Galaxy (IM-140): completing an ACTION item is completing a
     // mission — capture its linked journeys BEFORE the node (and the meaning
     // of its links) is gone, then auto-credit them after the delete lands.
@@ -365,7 +369,7 @@ export function nodesRoutes(ctx: AppContext): Router {
     const journeyProgress = linkedJourneys
       .map((j) => new JourneysRepo(ctx.handle, spaceId).creditCompletedMission(j.id, id))
       .filter((c): c is NonNullable<typeof c> => c != null)
-      .map((c) => ({ journeyId: c.journey.id, progress: c.journey.progress, missionsCompleted: c.completedCount }));
+      .map((c) => ({ journeyId: c.journey.id, title: c.journey.title, progress: c.journey.progress, missionsCompleted: c.completedCount }));
     res.json({ ok: true, id, ...(journeyProgress.length > 0 ? { journeyProgress } : {}) });
   });
 
@@ -420,21 +424,26 @@ export function nodesRoutes(ctx: AppContext): Router {
       const research = await ctx.llm.research({ label: node.label, content: node.content }, `${researchSteer(node as any)}\n\n${userAnswersText}`);
       const expandedContent = `${node.content}\n\n--- Research Deep Dive ---\n${research.content}`;
       const newImp = Math.min(1.0, (node.importance ?? 0.5) + 0.2);
+      // REG-104: FTS must index the POST-update label — the old code passed
+      // node.label (the pre-update label), so BM25 matched a title the memory
+      // no longer had and missed the title it now has.
+      const newLabel = research.label || node.label;
 
       ctx.handle.db
         .update(nodes)
         .set({
           content: expandedContent,
           importance: newImp,
-          label: research.label || node.label,
+          label: newLabel,
           researchQuestions: null,
           researchAnswers: JSON.stringify(answersMap),
         })
         .where(and(eq(nodes.id, id), eq(nodes.spaceId, spaceId)))
         .run();
 
-      upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(expandedContent));
-      ftsUpsert(ctx.handle.sqlite, id, node.label, expandedContent);
+      // REG-190: same "label. content" composition as the edit path.
+      upsertEmbedding(ctx.handle.sqlite, id, await ctx.embeddings.embed(`${newLabel}. ${expandedContent}`));
+      ftsUpsert(ctx.handle.sqlite, id, newLabel, expandedContent);
       nodesRepo.tend(id);
 
       const updatedNode = graphFor(res).getNode(id);

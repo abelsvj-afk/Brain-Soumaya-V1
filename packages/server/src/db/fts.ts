@@ -77,6 +77,38 @@ export function keywordSearch(
   }
 }
 
+/** Tag hits for search (REG-118 / BR-07): the FTS index is label+content only,
+ * so a tag query found nothing on the Search/palette surface while Hubs search
+ * matched member tags. Tags are a JSON array string; a LIKE on the raw token
+ * is the same approach evalLens uses. Terms come from the same tokenizer as
+ * the BM25 query (≥2 chars, max 12); matching is by substring, so a query
+ * for "paris" finds the tag "paris-trip". Live, current nodes only, with the
+ * same eligibility as keywordSearch — ineligible nodes never occupy fusion
+ * slots. Terms cannot contain LIKE wildcards (the tokenizer strips them). */
+export function tagSearch(
+  sqlite: RawDb,
+  spaceId: string,
+  query: string,
+  k: number,
+): { nodeId: number; rank: number }[] {
+  const terms = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((t) => t.length >= 2)
+    .slice(0, 12);
+  if (terms.length === 0) return [];
+  const ors = terms.map(() => `n.tags LIKE ?`).join(" OR ");
+  const rows = sqlite
+    .prepare(
+      `SELECT n.id AS nodeId FROM nodes n
+       WHERE n.space_id = ? AND n.deleted_at IS NULL AND n.status != 'archived'
+         AND n.superseded_at IS NULL AND (${ors})
+       ORDER BY n.id DESC LIMIT ?`,
+    )
+    .all(spaceId, ...terms.map((t) => `%${t}%`), k) as { nodeId: number }[];
+  return rows.map((r, i) => ({ nodeId: r.nodeId, rank: i + 1 }));
+}
+
 /**
  * Reciprocal Rank Fusion of the vector and keyword result lists (k=60, the
  * standard constant): score = Σ 1/(60 + rank). Deterministic, tune-free.

@@ -10,8 +10,9 @@ import {
   type CognitiveKind,
   type WealthSummary,
 } from "@brain/shared";
-import { getWealthSummary, patchGoal } from "../api/finance.js";
+import { getWealthSummary, getWealthSummaryResult, patchGoal } from "../api/finance.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
+import { spaceLocalDay, visionTargetDateKey, formatCalendarDate } from "../utils/localDay.js";
 import {
   getCognitiveResult,
   createCognitive,
@@ -88,6 +89,11 @@ export function MindPanel({
   onChanged?: () => void;
 }) {
   const [items, setItems] = useState<CognitiveItem[]>([]);
+  // Batch L (MIN-06, REG-137) — the TRUE mapped total, independent of the
+  // 100-row page getCognitiveResult returns. The search placeholder and the
+  // truncation line read this, never items.length, so a capped list can't
+  // present its returned count as the mapped count.
+  const [totalItems, setTotalItems] = useState(0);
   // True when the cognitive-list fetch itself FAILED (server dead/slow/errored),
   // as opposed to succeeding with an empty list — the two render differently
   // (error + Retry vs "Nothing mapped yet"), so a dead server can no longer
@@ -160,9 +166,15 @@ export function MindPanel({
   // Identity evidence (Phase 5): lazy-loaded per identity when expanded.
   const [evidence, setEvidence] = useState<Record<number, CognitiveEvidence>>({});
   const [evidenceOpen, setEvidenceOpen] = useState<number | null>(null);
+  // Batch L (MIN-07, REG-138) — lazy expansions carry their own truthful
+  // state: loading / error-with-retry, never blank-on-failure. The primary
+  // reads solved exactly this (strict Results + error + Retry); the lazy
+  // reads one level down did not inherit it.
+  const [evidenceStatus, setEvidenceStatus] = useState<Record<number, "loading" | "error">>({});
   // People (Phase 6): CRM profiles (lazy) + "people you mention" suggestions.
   const [profiles, setProfiles] = useState<Record<number, PersonProfile>>({});
   const [profileOpen, setProfileOpen] = useState<number | null>(null);
+  const [profileStatus, setProfileStatus] = useState<Record<number, "loading" | "error">>({});
   const [suggestions, setSuggestions] = useState<{ name: string; count: number }[]>([]);
   // Life Vision (docs/specs/life-vision.md): target date on the edit form, and the
   // "Financial Goals" section — reuses the existing Wealth summary (already-computed
@@ -170,6 +182,9 @@ export function MindPanel({
   const [editDate, setEditDate] = useState(""); // life_vision only — YYYY-MM-DD
   const [visionGoalsOpen, setVisionGoalsOpen] = useState<number | null>(null);
   const [wealth, setWealth] = useState<WealthSummary | null>(null);
+  // Batch L (MIN-07): the Financial Goals expansion's own truthful state —
+  // a failed Wealth fetch is an error + Retry, never an unbounded "Loading…".
+  const [wealthState, setWealthState] = useState<"idle" | "loading" | "error">("idle");
   const [goalBusy, setGoalBusy] = useState<number | null>(null); // goal id mid-link/unlink
   const [pickGoalId, setPickGoalId] = useState<Record<number, string>>({}); // per-vision picker selection
 
@@ -178,6 +193,7 @@ export function MindPanel({
       .then((r) => {
         if (r.ok) {
           setItems(r.items);
+          setTotalItems(r.total ?? r.items.length);
           setLoadError(false);
         } else {
           // Keep whatever is already on screen; just flag the failure so the
@@ -230,7 +246,18 @@ export function MindPanel({
     if (!label.trim()) return;
     setBusy(true);
     try {
-      const iso = (kind === "future_event" || kind === "life_vision") && eventDate ? new Date(eventDate).toISOString() : undefined;
+      // Batch L (MIN-01, REG-132): a Life Vision target date is DATE-ONLY
+      // (docs/specs/life-vision.md §9 — no time-of-day meaning). Pass the
+      // picked YYYY-MM-DD straight through, never via new Date().toISOString()
+      // (UTC midnight), which rendered one day early in America/New_York.
+      // future_event keeps the instant conversion — its wall-clock semantics
+      // are DB-8's open owner decision, untouched here.
+      const iso =
+        kind === "future_event" && eventDate
+          ? new Date(eventDate).toISOString()
+          : kind === "life_vision" && eventDate
+            ? eventDate
+            : undefined;
       const aliases = aliasText.split(",").map((t) => t.trim()).filter(Boolean);
       const r = await createCognitive(kind, label.trim(), content.trim() || undefined, iso, aliases.length ? aliases : undefined);
       if (r) {
@@ -283,7 +310,10 @@ export function MindPanel({
       content: editContent.trim(),
       aliases,
     };
-    if (editingVision) patch.date = editDate ? new Date(editDate).toISOString() : null;
+    // Batch L (MIN-01): the edit path keeps the date date-only too — the
+    // picked YYYY-MM-DD goes straight through, never via a UTC-midnight
+    // instant (see add() above). null clears a previously-set date.
+    if (editingVision) patch.date = editDate ? editDate : null;
     const ok = await updateCognitive(editId, patch);
     setEditId(null);
     if (ok) {
@@ -294,14 +324,26 @@ export function MindPanel({
       pushToast("Couldn't save that edit — try again.", "⚠️", 3500);
     }
   };
+  // Batch L (MIN-07): the Wealth summary behind the Financial Goals
+  // expansion, fetched as a strict Result — a failed fetch is an error state
+  // with Retry, never a null that reads as "still loading".
+  const loadWealth = async () => {
+    setWealthState("loading");
+    const r = await getWealthSummaryResult();
+    if (r.ok) {
+      setWealth(r.summary);
+      setWealthState("idle");
+    } else {
+      setWealthState("error");
+    }
+  };
   const toggleVisionGoals = async (it: CognitiveItem) => {
     if (visionGoalsOpen === it.id) {
       setVisionGoalsOpen(null);
       return;
     }
     setVisionGoalsOpen(it.id);
-    const w = await getWealthSummary();
-    if (w) setWealth(w);
+    if (!wealth) void loadWealth();
   };
   const linkGoal = async (visionId: number, goalId: number) => {
     setGoalBusy(goalId);
@@ -310,7 +352,10 @@ export function MindPanel({
     if (updated) {
       playSfx("tap");
       const w = await getWealthSummary();
-      if (w) setWealth(w);
+      if (w) {
+        setWealth(w);
+        setWealthState("idle");
+      }
       setPickGoalId((m) => ({ ...m, [visionId]: "" }));
     } else {
       pushToast("Couldn't link that Financial Goal — try again.", "⚠️", 3500);
@@ -323,7 +368,10 @@ export function MindPanel({
     if (updated) {
       playSfx("tap");
       const w = await getWealthSummary();
-      if (w) setWealth(w);
+      if (w) {
+        setWealth(w);
+        setWealthState("idle");
+      }
     } else {
       pushToast("Couldn't unlink that Financial Goal — try again.", "⚠️", 3500);
     }
@@ -333,18 +381,31 @@ export function MindPanel({
   const think = async () => {
     const text = thought.trim();
     if (!text) return;
-    setThought("");
+    // CAP-09: the input used to be cleared BEFORE the save, so a failure
+    // destroyed the words (Mind has no draft store). Clear only on a
+    // verified save; on failure the words stay in the input.
     const r = await addThought(text);
     if (r) {
+      setThought("");
       playSfx("tap");
       await refreshThoughts();
+    } else if (text.length > 500) {
+      // The 500-char case: "try again" with the same words can never
+      // succeed — say what's actually wrong. (Working memory holds 500.)
+      pushToast("That thought is too long to hold (500 characters max) — your words are still here; trim it and try again.", "⚠️", 4500);
     } else {
-      pushToast("Couldn't hold that thought — try again.", "⚠️", 3500);
+      pushToast("Couldn't hold that thought — your words are still here, try again.", "⚠️", 3500);
     }
   };
   const reinforce = async (t: Thought) => {
     const r = await reinforceThought(t.id);
-    if (r?.promotedNodeId != null) {
+    // Batch L (MIN-02): a null result is a FAILED Keep, not a silent refresh
+    // — say so, and don't pretend the timer reset.
+    if (!r) {
+      pushToast("Couldn't keep that thought — try again.", "⚠️", 3500);
+      return;
+    }
+    if (r.promotedNodeId != null) {
       playSfx("achievement");
       pushToast(`💭 A recurring thought settled into memory`, "🧠", 4500);
       onChanged?.();
@@ -355,18 +416,32 @@ export function MindPanel({
   };
   const promote = async (t: Thought) => {
     const r = await promoteThought(t.id);
-    if (r) {
-      playSfx("achievement");
-      pushToast(`💭 Consolidated into your galaxy`, "🧠", 4000);
-      onChanged?.();
-      settleThenRefresh(t.id);
+    // Batch L (MIN-02): a null result is a FAILED promote, not a silent refresh.
+    if (!r) {
+      pushToast("Couldn't make that a memory — try again.", "⚠️", 3500);
       return;
     }
-    await refreshThoughts();
+    playSfx("achievement");
+    pushToast(`💭 Consolidated into your galaxy`, "🧠", 4000);
+    onChanged?.();
+    settleThenRefresh(t.id);
   };
   const dismiss = async (t: Thought) => {
+    // Batch L (MIN-02): optimistic removal WITH rollback — the old code
+    // removed the mote and ignored dismissThought's boolean, so a failed
+    // dismiss read as done until the next poll resurrected the thought.
+    const idx = thoughts.findIndex((x) => x.id === t.id);
     setThoughts((xs) => xs.filter((x) => x.id !== t.id));
-    await dismissThought(t.id);
+    const ok = await dismissThought(t.id);
+    if (!ok) {
+      setThoughts((xs) => {
+        if (xs.some((x) => x.id === t.id)) return xs;
+        const next = [...xs];
+        next.splice(Math.max(0, Math.min(idx, next.length)), 0, t);
+        return next;
+      });
+      pushToast("Couldn't let go of that thought — it's still here.", "⚠️", 3500);
+    }
   };
   const promoteToGoal = async (it: CognitiveItem) => {
     const ok = await promoteIdea(it.id);
@@ -379,15 +454,44 @@ export function MindPanel({
       pushToast("Couldn't promote that — try again.", "⚠️", 3500);
     }
   };
+  // Batch L (MIN-07): lazy Evidence/Profile fetches with truthful state —
+  // loading, cached success, or error + Retry. The old code cached only on a
+  // non-null result, so a failed fetch left an expanded header over blank
+  // nothing (no spinner, error, or retry short of closing and reopening).
+  const loadEvidence = async (it: CognitiveItem) => {
+    setEvidenceStatus((m) => ({ ...m, [it.id]: "loading" }));
+    const ev = await getCognitiveEvidence(it.id);
+    if (ev) {
+      setEvidence((m) => ({ ...m, [it.id]: ev }));
+      setEvidenceStatus((m) => {
+        const c = { ...m };
+        delete c[it.id];
+        return c;
+      });
+    } else {
+      setEvidenceStatus((m) => ({ ...m, [it.id]: "error" }));
+    }
+  };
   const toggleEvidence = async (it: CognitiveItem) => {
     if (evidenceOpen === it.id) {
       setEvidenceOpen(null);
       return;
     }
     setEvidenceOpen(it.id);
-    if (!evidence[it.id]) {
-      const ev = await getCognitiveEvidence(it.id);
-      if (ev) setEvidence((m) => ({ ...m, [it.id]: ev }));
+    if (!evidence[it.id]) void loadEvidence(it);
+  };
+  const loadProfile = async (it: CognitiveItem) => {
+    setProfileStatus((m) => ({ ...m, [it.id]: "loading" }));
+    const p = await getPersonProfile(it.id);
+    if (p) {
+      setProfiles((m) => ({ ...m, [it.id]: p }));
+      setProfileStatus((m) => {
+        const c = { ...m };
+        delete c[it.id];
+        return c;
+      });
+    } else {
+      setProfileStatus((m) => ({ ...m, [it.id]: "error" }));
     }
   };
   const toggleProfile = async (it: CognitiveItem) => {
@@ -396,25 +500,47 @@ export function MindPanel({
       return;
     }
     setProfileOpen(it.id);
-    if (!profiles[it.id]) {
-      const p = await getPersonProfile(it.id);
-      if (p) setProfiles((m) => ({ ...m, [it.id]: p }));
-    }
+    if (!profiles[it.id]) void loadProfile(it);
   };
   const unlinkOne = async (anchorId: number, memoryId: number) => {
-    setProfiles((m) => {
-      const p = m[anchorId];
-      if (!p) return m;
-      return { ...m, [anchorId]: { ...p, interactions: p.interactions.filter((i) => i.id !== memoryId), count: Math.max(0, p.count - 1) } };
-    });
-    await unlinkCognitive(anchorId, memoryId);
-    onChanged?.();
+    // Batch L (MIN-03): optimistic removal WITH rollback — the old code
+    // removed the interaction, ignored unlinkCognitive's boolean, and fired
+    // onChanged regardless, so a failed unlink read as done until the cached
+    // profile was discarded.
+    const prev = profiles[anchorId];
+    if (!prev) return;
+    setProfiles((m) => ({
+      ...m,
+      [anchorId]: { ...prev, interactions: prev.interactions.filter((i) => i.id !== memoryId), count: Math.max(0, prev.count - 1) },
+    }));
+    const ok = await unlinkCognitive(anchorId, memoryId);
+    if (ok) {
+      onChanged?.();
+    } else {
+      setProfiles((m) => ({ ...m, [anchorId]: prev }));
+      pushToast("Couldn't unlink that memory — it's still linked.", "⚠️", 3500);
+    }
   };
   const pruneLinks = async (it: CognitiveItem) => {
-    const n = await pruneCognitive(it.id);
-    setProfiles((m) => ({ ...m })); // force re-fetch on next open
-    setProfiles((m) => { const c = { ...m }; delete c[it.id]; return c; });
-    pushToast(n > 0 ? `Cleaned up ${n} link${n === 1 ? "" : "s"} that didn't name ${it.label}.` : `Nothing to clean — every link names ${it.label}.`, "🧹", 4000);
+    // Batch L (MIN-03): pruneCognitive is a strict Result now — a failed
+    // prune is { ok: false }, distinct from a verified zero. The old code
+    // trusted a number the wrapper had already collapsed every failure into,
+    // and certified a failed cleanup as "Nothing to clean".
+    const r = await pruneCognitive(it.id);
+    if (!r.ok) {
+      pushToast("Couldn't check the links — try again.", "⚠️", 4000);
+      return;
+    }
+    setProfiles((m) => {
+      const c = { ...m };
+      delete c[it.id];
+      return c;
+    }); // force re-fetch on next open
+    pushToast(
+      r.pruned > 0 ? `Cleaned up ${r.pruned} link${r.pruned === 1 ? "" : "s"} that didn't name ${it.label}.` : `Nothing to clean — every link names ${it.label}.`,
+      "🧹",
+      4000,
+    );
     await refresh();
     onChanged?.();
   };
@@ -491,38 +617,57 @@ export function MindPanel({
       setSuggestions((xs) => xs.filter((s) => s.name !== name));
       await refresh();
       onChanged?.();
+    } else {
+      // Batch L (MIN-03): a null create used to pass in total silence.
+      pushToast("Couldn't add that person — try again.", "⚠️", 3500);
     }
   };
   const notAPerson = async (name: string) => {
-    setSuggestions((xs) => xs.filter((s) => s.name !== name));
-    await dismissPersonSuggestion(name);
-    pushToast(`Got it — "${name}" isn't a person. I won't suggest it again.`, "🚫", 3500);
+    // Batch L (MIN-03): the permanence promise toasts ONLY on a confirmed
+    // dismiss. The old code removed the chip, ignored the boolean, and
+    // promised "I won't suggest it again" before the server had agreed —
+    // the next refresh could return the same name after the promise.
+    const ok = await dismissPersonSuggestion(name);
+    if (ok) {
+      setSuggestions((xs) => xs.filter((s) => s.name !== name));
+      pushToast(`Got it — "${name}" isn't a person. I won't suggest it again.`, "🚫", 3500);
+    } else {
+      pushToast("Couldn't dismiss that suggestion — try again.", "⚠️", 3500);
+    }
   };
   const saveThoughtEdit = async () => {
     if (editThoughtId == null || !editThoughtText.trim()) return;
     const id = editThoughtId;
     const text = editThoughtText.trim();
-    setThoughts((xs) => xs.map((x) => (x.id === id ? { ...x, text } : x)));
-    setEditThoughtId(null);
-    await editThought(id, text);
+    // Batch L (MIN-02): honour editThought's boolean — apply locally and
+    // close ONLY on a confirmed save. The old code applied the text, closed
+    // the editor, and ignored the result, displaying wording the server
+    // never stored until the next poll silently reverted it. On failure the
+    // editor stays open with the attempted words still in it.
+    const ok = await editThought(id, text);
+    if (ok) {
+      setThoughts((xs) => xs.map((x) => (x.id === id ? { ...x, text } : x)));
+      setEditThoughtId(null);
+    } else {
+      pushToast("Couldn't save that edit — your words are still here, try again.", "⚠️", 3500);
+    }
   };
 
   // Life Vision (docs/specs/life-vision.md): a quiet, non-reminder read of the target
   // date for the card summary line — never "overdue" framing (that's reminder language).
+  // Batch L (MIN-01, REG-132): the target date is a DATE, not an instant. The
+  // stored value's written calendar date IS the target date (see
+  // visionTargetDateKey in utils/localDay.ts) — rendering it through the
+  // tolerant instant parser named the day before in America/New_York, and
+  // the "passed" cue flipped at 20:00 ET the evening before the target day.
+  // "Passed" compares calendar dates in the SPACE's timezone: the cue turns
+  // only once the target date has passed; the target day itself is not passed.
   const visionDateLabel = (it: CognitiveItem): string | null => {
     if (!it.remindAt) return null;
-    // Parse via the shared tolerant parser (date/time accuracy audit gap
-    // #16): a naive SQLite "YYYY-MM-DD HH:MM:SS" remindAt is a UTC instant,
-    // but a direct new Date() reads it as LOCAL time — shifting the shown
-    // date (and the passed/target call) by the viewer's offset.
-    // parseTolerantMs reads it the way every other panel does.
-    const t = parseTolerantMs(it.remindAt);
-    // An unparseable stored date is NO date, not a label: without this guard the
-    // card renders the literal text "Invalid Date" (new Date(NaN)). Returning null
-    // lets the caller fall back to its plain "no target date" wording.
-    if (Number.isNaN(t)) return null;
-    const passed = t < Date.now();
-    const date = new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    const key = visionTargetDateKey(it.remindAt);
+    if (!key) return null;
+    const passed = key < spaceLocalDay(new Date());
+    const date = formatCalendarDate(key);
     return passed ? `target date passed · ${date}` : `target: ${date}`;
   };
 
@@ -604,6 +749,9 @@ export function MindPanel({
         <p className="mind-ws-sub" style={{ textAlign: "left", marginBottom: 2 }}>
           A thought fades over a few days. Tap <b>↑ Keep</b> to reset its timer — keep returning to
           one (3×) and it becomes a permanent memory in your galaxy. <b>×</b> lets it go now.
+          {/* REG-042: the 30-mote cap is stated where thoughts are captured —
+              when the mind is full, the faintest thought fades to make room. */}
+          {" "}Your mind holds up to 30 thoughts — when it&apos;s full, the faintest one fades to make room for the new one.
         </p>
         <div className="mind-ws-input">
           <input
@@ -618,6 +766,11 @@ export function MindPanel({
           <button className="mini" onClick={() => void think()} disabled={!thought.trim()}>
             Hold
           </button>
+        </div>
+        {/* REG-040: the 500-character thought cap is visible before submit. */}
+        <div className="mind-ws-count" aria-live="polite">
+          {thought.length}/500
+          {thought.length > 500 ? " — over the 500-character limit; trim it before holding" : ""}
         </div>
         {/* IM-49: legend for the mote source colours — the colour was the only
             encoding and it was explained nowhere in this tab. */}
@@ -680,19 +833,24 @@ export function MindPanel({
                   </span>
                 )}
                 <span className="mind-mote-actions">
+                  {/* Batch L (MIN-08, REG-139): every lifecycle action carries
+                      its name visibly — glyph-only + title-only names are
+                      unreachable on a touch device with no hover — and the
+                      targets meet the 46px standard (see index.css). */}
                   <button
                     className="mini ghost"
+                    aria-label="Edit thought"
                     onClick={() => {
                       setEditThoughtId(t.id);
                       setEditThoughtText(t.text);
                     }}
                     title="Edit"
                   >
-                    ✎
+                    ✎ Edit
                   </button>
-                  <button className="mini ghost" onClick={() => void reinforce(t)} title="Keep it — resets the fade timer (3 keeps → becomes a memory)">↑ Keep</button>
-                  <button className="mini ghost" onClick={() => void promote(t)} title="Make it a permanent memory now">★</button>
-                  <button className="mini ghost" onClick={() => void dismiss(t)} title="Let it go">×</button>
+                  <button className="mini ghost" aria-label="Keep thought" onClick={() => void reinforce(t)} title="Keep it — resets the fade timer (3 keeps → becomes a memory)">↑ Keep</button>
+                  <button className="mini ghost" aria-label="Make thought a memory" onClick={() => void promote(t)} title="Make it a permanent memory now">★ Promote</button>
+                  <button className="mini ghost" aria-label="Let go of thought" onClick={() => void dismiss(t)} title="Let it go">× Let go</button>
                 </span>
               </li>
             ))}
@@ -857,7 +1015,7 @@ export function MindPanel({
             className="tag-input wide"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${items.length} mapped item${items.length === 1 ? "" : "s"}…`}
+            placeholder={`Search ${totalItems} mapped item${totalItems === 1 ? "" : "s"}…`}
             aria-label="Search your mind"
           />
           <div className="mind-search-row">
@@ -903,6 +1061,16 @@ export function MindPanel({
             </p>
           )}
         </div>
+      )}
+
+      {/* Batch L (MIN-06): the 100-row cap is stated, never silent — when the
+          mapped total exceeds the loaded page, the oldest items are beyond
+          this view and the tab says so instead of presenting the page as
+          the whole mind. */}
+      {totalItems > items.length && items.length > 0 && (
+        <p className="mind-search-count">
+          Showing {items.length} of {totalItems} mapped items — the oldest are beyond this view.
+        </p>
       )}
 
       {eventsError && (
@@ -1010,11 +1178,18 @@ export function MindPanel({
                             })()
                           : k === "life_vision"
                             ? (visionDateLabel(it) ?? "no target date")
-                            : `${it.degree} linked`}
+                            : k === "idea"
+                              // Batch L (MIN-05): the support count is shown
+                              // distinctly from the total link count — "Ripe"
+                              // is defined on the former, not the latter.
+                              ? `${it.supportCount ?? 0} supporting · ${it.degree} linked`
+                              : `${it.degree} linked`}
                       </span>
                     </button>
-                    <button className="mini ghost" onClick={() => startEdit(it)} title="Edit">✎</button>
-                    <button className="mini ghost" onClick={() => setPendingDelete(it)} title="Delete">🗑️</button>
+                    {/* Batch L (MIN-08): card Edit/Delete carry visible captions,
+                        not glyph-only titles — and meet the 46px standard. */}
+                    <button className="mini ghost" aria-label={`Edit ${it.label}`} onClick={() => startEdit(it)} title="Edit">✎ Edit</button>
+                    <button className="mini ghost" aria-label={`Delete ${it.label}`} onClick={() => setPendingDelete(it)} title="Delete">🗑 Delete</button>
                   </div>
                 )}
                 {/* IM-46 + IM-48: the item's own words and when it was mapped —
@@ -1039,21 +1214,25 @@ export function MindPanel({
                         {skillTier(it.progress ?? 0)}
                       </span>
                     )}
-                    <button className="mini" onClick={() => void bumpProgress(it, -0.1)} title="Less">–</button>
+                    <button className="mini" aria-label={`Decrease progress for ${it.label}`} onClick={() => void bumpProgress(it, -0.1)} title="Less">–</button>
                     <span className="mind-bar">
                       <span style={{ width: `${Math.round((it.progress ?? 0) * 100)}%`, background: COGNITIVE_META[k].color }} />
                     </span>
-                    <button className="mini" onClick={() => void bumpProgress(it, 0.1)} title="More">+</button>
+                    <button className="mini" aria-label={`Increase progress for ${it.label}`} onClick={() => void bumpProgress(it, 0.1)} title="More">+</button>
                     <span className="mind-pct">{Math.round((it.progress ?? 0) * 100)}%</span>
                   </div>
                 )}
                 {editId !== it.id && k === "idea" && (
                   <button
-                    className={`mind-promote ${it.degree >= IDEA_PROMOTE_SUPPORT ? "ripe" : ""}`}
+                    className={`mind-promote ${(it.supportCount ?? 0) >= IDEA_PROMOTE_SUPPORT ? "ripe" : ""}`}
                     onClick={() => void promoteToGoal(it)}
                     title="Commit to this — turn it into a goal your memories orbit"
                   >
-                    {it.degree >= IDEA_PROMOTE_SUPPORT ? "✨ Ripe — promote to Goal" : "💡→🎯 Promote to Goal"}
+                    {/* Batch L (MIN-05): "Ripe" is defined on incoming
+                        `supports` (the server's ripeIdeaIds), never on total
+                        degree — an idea with ≥4 links of any kind and <4
+                        supporters is not ripe. */}
+                    {(it.supportCount ?? 0) >= IDEA_PROMOTE_SUPPORT ? "✨ Ripe — promote to Goal" : "💡→🎯 Promote to Goal"}
                   </button>
                 )}
                 {/* IM-136: split / merge — the rest of the idea lifecycle. Split
@@ -1124,6 +1303,17 @@ export function MindPanel({
                         </span>
                       )}
                     </button>
+                    {/* Batch L (MIN-07): a failed lazy fetch is a visible error
+                        + Retry, never an expanded header over blank nothing. */}
+                    {evidenceOpen === it.id && !evidence[it.id] && evidenceStatus[it.id] === "loading" && (
+                      <p className="empty small">Loading evidence…</p>
+                    )}
+                    {evidenceOpen === it.id && !evidence[it.id] && evidenceStatus[it.id] === "error" && (
+                      <p className="empty small">
+                        ⚠️ Couldn't load the evidence —{" "}
+                        <button className="mini" onClick={() => void loadEvidence(it)}>Retry</button>
+                      </p>
+                    )}
                     {evidenceOpen === it.id && evidence[it.id] && (
                       <div className="mind-ev-body">
                         <div className="mind-ev-bar" title="How affirmed this identity is">
@@ -1160,6 +1350,17 @@ export function MindPanel({
                       {evidenceOpen === it.id ? "▾" : "▸"} {k === "mental_model" ? "Applied to" : "Pulls on"}
                       {evidence[it.id] && <span className="mind-ev-counts"><span className="ev-for">{evidence[it.id]!.for.length}</span></span>}
                     </button>
+                    {/* Batch L (MIN-07): same truthful failure state as the
+                        identity Evidence block above. */}
+                    {evidenceOpen === it.id && !evidence[it.id] && evidenceStatus[it.id] === "loading" && (
+                      <p className="empty small">Loading…</p>
+                    )}
+                    {evidenceOpen === it.id && !evidence[it.id] && evidenceStatus[it.id] === "error" && (
+                      <p className="empty small">
+                        ⚠️ Couldn't load this —{" "}
+                        <button className="mini" onClick={() => void loadEvidence(it)}>Retry</button>
+                      </p>
+                    )}
                     {evidenceOpen === it.id && evidence[it.id] && (
                       <div className="mind-ev-body">
                         <div className="mind-ev-group">
@@ -1184,6 +1385,17 @@ export function MindPanel({
                         </span>
                       )}
                     </button>
+                    {/* Batch L (MIN-07): a failed lazy fetch is a visible error
+                        + Retry, never an expanded header over blank nothing. */}
+                    {profileOpen === it.id && !profiles[it.id] && profileStatus[it.id] === "loading" && (
+                      <p className="empty small">Loading this profile…</p>
+                    )}
+                    {profileOpen === it.id && !profiles[it.id] && profileStatus[it.id] === "error" && (
+                      <p className="empty small">
+                        ⚠️ Couldn't load this profile —{" "}
+                        <button className="mini" onClick={() => void loadProfile(it)}>Retry</button>
+                      </p>
+                    )}
                     {profileOpen === it.id && profiles[it.id] && (
                       <div className="mind-ev-body">
                         <p className="person-meta">
@@ -1203,10 +1415,25 @@ export function MindPanel({
                                     {fmtBrowseDate(n.createdAt)}
                                     {n.emotionalWeight != null && ` · ${BROWSE_EMOTION_LABEL[emotionBucketOf(n.emotionalWeight)]}`}
                                   </span>
-                                  <button className="mind-ev-chip-x" title="Not related — unlink" onClick={() => void unlinkOne(it.id, n.id)}>×</button>
+                                  <button
+                                    className="mind-ev-chip-x"
+                                    title="Not related — unlink"
+                                    aria-label={`Unlink ${n.label} from ${it.label}`}
+                                    onClick={() => void unlinkOne(it.id, n.id)}
+                                  >
+                                    Unlink
+                                  </button>
                                 </span>
                               ))}
                               {moreToggle(`person-${it.id}`, profiles[it.id]!.interactions.length - 12, !!expandedLists[`person-${it.id}`])}
+                              {/* Batch L (MIN-06): the profile page is 100 rows;
+                                  when the true total runs past it, the cap is
+                                  stated instead of silent. */}
+                              {profiles[it.id]!.count > profiles[it.id]!.interactions.length && (
+                                <p className="empty small">
+                                  Showing {profiles[it.id]!.interactions.length} of {profiles[it.id]!.count} interactions — the oldest are beyond this view.
+                                </p>
+                              )}
                             </div>
                             <button className="mind-prune" onClick={() => void pruneLinks(it)} title="Sever every link that doesn't actually name this person">
                               🧹 Clean up links that don't name {it.label}
@@ -1235,8 +1462,19 @@ export function MindPanel({
                       </button>
                       {visionGoalsOpen === it.id && (
                         <div className="mind-ev-body">
+                          {/* Batch L (MIN-07): a failed Wealth fetch is an error
+                              + Retry — the old code rendered "Loading…" whenever
+                              wealth was null, so a failed fetch presented as a
+                              load that never finishes. */}
                           {!wealth ? (
-                            <p className="empty small">Loading…</p>
+                            wealthState === "error" ? (
+                              <p className="empty small">
+                                ⚠️ Couldn't load your Financial Goals —{" "}
+                                <button className="mini" onClick={() => void loadWealth()}>Retry</button>
+                              </p>
+                            ) : (
+                              <p className="empty small">Loading…</p>
+                            )
                           ) : (
                             (() => {
                               const linked = wealth.goals.filter((g) => g.visionNodeId === it.id);
@@ -1270,10 +1508,11 @@ export function MindPanel({
                                           <button
                                             className="mind-ev-chip-x"
                                             title={`Unlink "${g.name}" from this Life Vision`}
+                                            aria-label={`Unlink "${g.name}" from this Life Vision`}
                                             disabled={goalBusy === g.id}
                                             onClick={() => void unlinkGoal(it.id, g.id)}
                                           >
-                                            ×
+                                            Unlink
                                           </button>
                                         </span>
                                       ))}

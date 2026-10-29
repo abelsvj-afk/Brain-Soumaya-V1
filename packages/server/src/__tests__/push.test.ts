@@ -25,7 +25,8 @@ import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { HeuristicProvider } from "../llm/heuristic.js";
 import { EMBED_DIM } from "../db/vec.js";
 import { PushSubscriptionsRepo } from "../repositories/pushSubscriptions.repo.js";
-import { getVapidConfig, sendPushToSpace, type VapidConfig } from "../push/service.js";
+import { getVapidConfig, sendPushToSpace, type PushSender, type VapidConfig } from "../push/service.js";
+import { dispatchPush } from "../push/outbox.js";
 import { reminderTool } from "../agent/tools/reminder.js";
 import type { ToolContext } from "../agent/tools/types.js";
 
@@ -440,5 +441,65 @@ describe("reminder firing dispatches web push", () => {
     expect(res.ok).toBe(true);
     expect(res.summary).toMatch(/retired stale/);
     expect(mockSendNotification).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REG-029 (RE-08): partial push delivery is recorded as partial, never as
+// full success; failed subscriptions are not silently dropped from the record.
+// ---------------------------------------------------------------------------
+
+describe("REG-029 partial push delivery", () => {
+  let handle: DbHandle;
+  const SPACE = "push-partial-space";
+
+  beforeEach(() => {
+    handle = createDb(":memory:");
+  });
+  afterEach(() => handle.sqlite.close());
+
+  // Fixed clock: 08:00 ET, outside quiet hours, so the policy decision is
+  // deterministic no matter when the suite runs.
+  const NOW = new Date("2026-10-19T12:00:00Z");
+  const meta = { tool: "fire_reminder", nodeId: 1, remindAt: "2026-10-19T11:59:00.000Z" } as const;
+  const payload = { title: "⏰ Soumaya reminder", body: "Call the dentist" };
+
+  it("sent>0 + failed>0 leaves a 'partial' row with the counts, claim sent, and no retry to the delivered sub", async () => {
+    new PushSubscriptionsRepo(handle, SPACE).upsert({ endpoint: "https://push.example.com/good", p256dh: "pk", auth: "au" });
+    new PushSubscriptionsRepo(handle, SPACE).upsert({ endpoint: "https://push.example.com/bad", p256dh: "pk", auth: "au" });
+    const calls: string[] = [];
+    const sender: PushSender = async (target) => {
+      calls.push(target.endpoint);
+      if (target.endpoint.endsWith("/bad")) throw new Error("push service 503");
+    };
+    const res = await dispatchPush(handle, SPACE, payload, meta, { config: CONFIG, sender, now: NOW });
+    expect(res.sent).toBe(1);
+    expect(calls).toHaveLength(2); // exactly one attempt per subscription
+    const row = handle.sqlite
+      .prepare(`SELECT status, last_error FROM push_outbox WHERE space_id = ?`)
+      .get(SPACE) as { status: string; last_error: string | null };
+    expect(row.status).toBe("partial");
+    expect(row.last_error).toMatch(/1 subscription\(s\); 1 failed/);
+    // The cap claim consumed its slot as a real (partial) delivery.
+    const claim = handle.sqlite
+      .prepare(`SELECT state FROM notification_cap_claims WHERE channel = 'push'`)
+      .get() as { state: string };
+    expect(claim.state).toBe("sent");
+    // A repeat dispatch of the same occurrence dedups — the delivered
+    // subscription is never sent the same push twice.
+    const again = await dispatchPush(handle, SPACE, payload, meta, { config: CONFIG, sender, now: NOW });
+    expect(again.deduped).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("full delivery still records 'sent'", async () => {
+    new PushSubscriptionsRepo(handle, SPACE).upsert({ endpoint: "https://push.example.com/good", p256dh: "pk", auth: "au" });
+    const sender: PushSender = async () => {};
+    const res = await dispatchPush(handle, SPACE, payload, meta, { config: CONFIG, sender, now: NOW });
+    expect(res.sent).toBe(1);
+    const row = handle.sqlite
+      .prepare(`SELECT status FROM push_outbox WHERE space_id = ?`)
+      .get(SPACE) as { status: string };
+    expect(row.status).toBe("sent");
   });
 });

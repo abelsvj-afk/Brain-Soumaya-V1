@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
-import { listChapters, createManualChapter, deleteChapter, backfillInitialChapter } from "../../analysis/timeline.js";
+import { listChapters, countChapters, createManualChapter, deleteChapter, backfillInitialChapter } from "../../analysis/timeline.js";
 import { LifeSeasonsRepo } from "../../repositories/lifeSeasons.repo.js";
 import { JourneysRepo } from "../../repositories/journeys.repo.js";
 import { spaceOf } from "../middleware.js";
@@ -12,8 +12,11 @@ const createSchema = z.object({ title: z.string().max(120).optional() });
 export function timelineRoutes(ctx: AppContext): Router {
   const r = Router();
 
-  // GET /api/timeline -> TimelineChapter[] (oldest → newest). First open of an
-  // established brain seeds a one-time opening chapter from its existing history.
+  // GET /api/timeline -> { chapters: TimelineChapter[] (oldest → newest, the
+  // NEWEST 500), total: number }. First open of an established brain seeds a
+  // one-time opening chapter from its existing history. The total lets the
+  // surface state the truncation past the cap (CHR-07) instead of silently
+  // dropping the newest chapters.
   r.get("/", (_req, res) => {
     const space = spaceOf(res);
     try {
@@ -21,7 +24,7 @@ export function timelineRoutes(ctx: AppContext): Router {
     } catch (e) {
       console.error("[timeline] backfill failed:", e);
     }
-    res.json(listChapters(ctx, space));
+    res.json({ chapters: listChapters(ctx, space), total: countChapters(ctx, space) });
   });
 
   // GET /api/timeline/seasons -> Life Seasons + Journey spans (IM-132).
@@ -46,11 +49,21 @@ export function timelineRoutes(ctx: AppContext): Router {
     });
   });
 
-  // POST /api/timeline { title? } -> mark a chapter now (manual).
+  // POST /api/timeline { title? } -> mark a chapter now (manual). An empty
+  // window (nothing new since the last chapter) is a 409 with the
+  // machine-readable reason — the surface explains it and writes nothing
+  // (CHR-12), instead of storing a content-free chapter.
   r.post("/", (req, res) => {
     const parsed = createSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
-    res.json(createManualChapter(ctx, spaceOf(res), { title: parsed.data.title }));
+    const chapter = createManualChapter(ctx, spaceOf(res), { title: parsed.data.title });
+    if (!chapter) {
+      return res.status(409).json({
+        error: "empty-window",
+        message: "Nothing new to narrate yet — add a few memories first, then mark the moment.",
+      });
+    }
+    res.json(chapter);
   });
 
   // DELETE /api/timeline/:id -> remove a chapter.

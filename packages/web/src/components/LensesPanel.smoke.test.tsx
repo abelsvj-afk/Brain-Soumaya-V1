@@ -11,7 +11,7 @@ describe("LensesPanel", () => {
     vi.spyOn(api, "getLenses").mockResolvedValue([
       { id: 1, name: "Heavy work", query: { emotion: "heavy" }, pinned: true, count: 4 },
     ]);
-    vi.spyOn(api, "lensNodes").mockResolvedValue([11, 22, 33]);
+    vi.spyOn(api, "lensNodes").mockResolvedValue({ ids: [11, 22, 33], total: 3, capped: false, totalIsLowerBound: false, shown: 3 });
     const onOpen = vi.fn();
     const onClose = vi.fn();
 
@@ -20,7 +20,7 @@ describe("LensesPanel", () => {
     expect(screen.getByText("4")).toBeTruthy(); // live count
 
     fireEvent.click(screen.getByText(/Heavy work/));
-    await waitFor(() => expect(onOpen).toHaveBeenCalledWith([11, 22, 33], "Heavy work"));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith([11, 22, 33], "Heavy work", 3));
     expect(onClose).toHaveBeenCalled();
   });
 

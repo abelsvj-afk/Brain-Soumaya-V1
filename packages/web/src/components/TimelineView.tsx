@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { GraphNode, LifeSeasonsTimeline, TimelineChapter, ChapterTrend } from "@brain/shared";
 import {
-  getTimeline,
+  getTimelineResult,
   getLifeSeasons,
-  addTimelineChapter,
+  addTimelineChapterResult,
   deleteTimelineChapter,
   listAttachments,
   attachmentObjectUrl,
@@ -166,6 +166,12 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
   const [chapters, setChapters] = useState<TimelineChapter[] | null>(null);
   const [seasonsData, setSeasonsData] = useState<LifeSeasonsTimeline | null>(null);
   const [loadError, setLoadError] = useState(false);
+  // CHR-07: the server's true chapter total (list is capped at the newest
+  // 500) — null until a load reports it.
+  const [totalChapters, setTotalChapters] = useState<number | null>(null);
+  // CHR-11: a failed seasons fetch is its own state, distinct from a brain
+  // with no seasons yet (which is a successful empty object, not null).
+  const [seasonsError, setSeasonsError] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [images, setImages] = useState<Record<number, string>>({});
@@ -190,18 +196,38 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
 
   const labelOf = (id: number) => nodes.find((n) => n.id === id)?.label ?? `Memory #${id}`;
 
+  // CHR-01: strict Result — a failed fetch sets loadError and leaves the
+  // chapters exactly as they were (null on first load → the error state;
+  // a list on refresh → the list stays, with a refresh error + retry).
+  // The empty state below renders only on a confirmed empty success.
   const loadChapters = () => {
     setLoadError(false);
-    void getTimeline()
-      .then(setChapters)
-      .catch(() => setLoadError(true));
+    void getTimelineResult().then((r) => {
+      if (r.ok) {
+        setChapters(r.chapters);
+        setTotalChapters(r.total);
+      } else {
+        setLoadError(true);
+      }
+    });
+  };
+
+  // CHR-11: null from getLifeSeasons means the fetch FAILED (a brain with
+  // no seasons yet is a successful empty object) — the section shows its
+  // own error + retry instead of vanishing silently.
+  const loadSeasons = () => {
+    setSeasonsError(false);
+    void getLifeSeasons()
+      .then((d) => {
+        if (d) setSeasonsData(d);
+        else setSeasonsError(true);
+      })
+      .catch(() => setSeasonsError(true));
   };
 
   useEffect(() => {
     loadChapters();
-    // Life Seasons + Journey spans (IM-132) — additive section; a failure here
-    // leaves seasonsData null and never disturbs the chapters list.
-    void getLifeSeasons().then(setSeasonsData).catch(() => setSeasonsData(null));
+    loadSeasons();
   }, []);
 
   // IM-137: load the future-events section (strict Result variant — a failed
@@ -234,21 +260,47 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
   };
 
   const reload = async () => {
-    setChapters(await getTimeline());
+    const r = await getTimelineResult();
+    if (r.ok) {
+      setChapters(r.chapters);
+      setTotalChapters(r.total);
+      setLoadError(false);
+    } else {
+      // CHR-01: a failed refresh never empties the list — keep what was
+      // shown and surface the failure (refresh error + retry).
+      setLoadError(true);
+    }
   };
   const addNow = async () => {
     setAdding(true);
-    const ch = await addTimelineChapter();
-    const fresh = await getTimeline();
-    setChapters(fresh);
-    setAdding(false);
-    if (ch) {
-      const idx = fresh.findIndex((c) => c.id === ch.id);
-      if (idx >= 0) setSelected(idx);
-    } else {
-      // IM-122: add failures were silent — the button just stopped spinning.
-      pushToast("Couldn't mark this moment — nothing was saved. Try again in a moment.", "⚠️", 4500);
+    const r = await addTimelineChapterResult();
+    if (!r.ok) {
+      setAdding(false);
+      if (r.empty) {
+        // CHR-12: nothing new to narrate yet — the server wrote nothing;
+        // say so plainly instead of a generic "couldn't mark" failure.
+        pushToast("Nothing new to narrate yet — add a few memories first, then mark the moment.", "✍️", 4500);
+      } else {
+        // IM-122: add failures were silent — the button just stopped spinning.
+        pushToast("Couldn't mark this moment — nothing was saved. Try again in a moment.", "⚠️", 4500);
+      }
+      return;
     }
+    const fresh = await getTimelineResult();
+    setAdding(false);
+    if (!fresh.ok) {
+      // The chapter WAS saved — only the refresh failed. Keep the list
+      // and surface the refresh failure (CHR-01), never a fake empty state.
+      setLoadError(true);
+      return;
+    }
+    setChapters(fresh.chapters);
+    setTotalChapters(fresh.total);
+    setLoadError(false);
+    const idx = fresh.chapters.findIndex((c) => c.id === r.chapter.id);
+    if (idx >= 0) setSelected(idx);
+    // CHR-08 (disclosure): confirm what marking just did to the chain.
+    pushToast("Marked — this chapter gathers everything since your last chapter, and Soumaya's next chapter starts from here.", "✍️", 4500);
   };
   const removeChapter = async (id: number) => {
     const ok = await deleteTimelineChapter(id);
@@ -354,7 +406,12 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
               ↓ Latest
             </button>
           )}
-          <button className="tl-add" onClick={() => void addNow()} disabled={adding}>
+          <button
+            className="tl-add"
+            onClick={() => void addNow()}
+            disabled={adding}
+            title="Marking a chapter gathers the memories since your last chapter into it — Soumaya's next chapter starts fresh from this moment."
+          >
             {adding ? "…" : "✍️ Mark this moment"}
           </button>
           <button className="tl-close" onClick={onClose} aria-label="Close">×</button>
@@ -363,6 +420,25 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
 
       {seasonsData && (seasonsData.seasons.length > 0 || seasonsData.journeySpans.length > 0) && (
         <LifeSeasonsBand seasons={seasonsData.seasons} spans={seasonsData.journeySpans} />
+      )}
+      {seasonsError && (
+        <div className="tl-seasons-error">
+          <span>Couldn't load Life Seasons.</span>
+          <button className="tl-add" onClick={loadSeasons}>↻ Try again</button>
+        </div>
+      )}
+
+      {chapters && totalChapters !== null && totalChapters > chapters.length && (
+        <div className="tl-truncated">
+          Showing the newest {chapters.length} of {totalChapters} chapters — the earliest ones aren't listed here.
+        </div>
+      )}
+
+      {chapters !== null && loadError && (
+        <div className="timeline-empty">
+          <p>Couldn't refresh your timeline.</p>
+          <button className="tl-add" onClick={loadChapters}>↻ Try again</button>
+        </div>
       )}
 
       {rows.length > 0 && (
@@ -416,7 +492,8 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
           <p>Your chronicle begins as you live.</p>
           <p className="tl-empty-sub">
             Soumaya writes a chapter when enough truly changes — growth, a hard season, a turning point.
-            You can mark one yourself anytime.
+            You can mark one yourself anytime. Marking a chapter gathers everything since your last chapter into it,
+            and Soumaya's next chapter starts from that moment.
           </p>
           <button className="tl-add" onClick={() => void addNow()} disabled={adding}>✍️ Write my first chapter</button>
         </div>
@@ -466,7 +543,11 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
           <h3>{sel.title}</h3>
           <div className="tl-card-when">
             {fmtLocalDate(sel.periodStart)} → {fmtLocalDate(sel.periodEnd)}
-            {sel.origin === "user" && <span className="tl-origin"> · you marked this</span>}
+            {sel.origin === "user" ? (
+              <span className="tl-origin"> · you marked this</span>
+            ) : (
+              <span className="tl-origin"> · Soumaya wrote this</span>
+            )}
           </div>
           {/* IM-121: theme + change magnitude, on the card as on the row. */}
           {(sel.theme || sel.score > 0) && (
@@ -527,7 +608,11 @@ export function TimelineView({ spaceName, nodes, onClose, onFocus }: Props) {
       {confirmDelete && (
         <ConfirmDialog
           title="Delete this chapter?"
-          message={`“${confirmDelete.title}” will be removed from your Chronicle. The memories themselves stay in your galaxy.`}
+          message={`“${confirmDelete.title}” will be removed from your Chronicle. The memories themselves stay in your galaxy.${
+            chapters !== null && chapters.length > 0 && confirmDelete.id === chapters[chapters.length - 1]?.id
+              ? " This was your newest chapter, so deleting it re-opens its stretch — those memories can be told again in a later chapter."
+              : ""
+          }`}
           confirmLabel="Delete chapter"
           onConfirm={() => void removeChapter(confirmDelete.id)}
           onCancel={() => setConfirmDelete(null)}

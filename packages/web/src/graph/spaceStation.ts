@@ -23,6 +23,29 @@ export function shouldHideStationModel(dist: number, wasHidden: boolean): boolea
 }
 
 /**
+ * WHEN to start downloading the 14 MB station model. It used to start the instant the
+ * galaxy was built, so on a phone it competed for bandwidth with the models the first
+ * screen actually needs (sun, Soumaya's ship, the comet) — measured: the home galaxy alone
+ * pulls 21.6 MB at startup and this one file is two thirds of it. The procedural stand-in
+ * (torus + glow) is already on screen and fades into the real model when it lands, so
+ * nothing visible is lost by starting later; only the critical path gets clearer.
+ *
+ *  - never before `STATION_LOAD_MIN_MS` — let first paint and the other startup models finish;
+ *  - in between, as soon as the camera is where the model would actually be SHOWN
+ *    (inside the LOD far edge) — so a user flying to it is not left looking at the stand-in;
+ *  - at the latest `STATION_LOAD_MAX_MS` — an idle galaxy still warms it, so a later flight
+ *    there finds it ready (and, once cached by the service worker, it costs nothing next visit).
+ * Pure so the timing can be unit-tested without a renderer.
+ */
+export const STATION_LOAD_MIN_MS = 6_000;
+export const STATION_LOAD_MAX_MS = 20_000;
+export function shouldStartStationLoad(distToCamera: number | null, elapsedMs: number): boolean {
+  if (elapsedMs < STATION_LOAD_MIN_MS) return false;
+  if (elapsedMs >= STATION_LOAD_MAX_MS) return true;
+  return distToCamera !== null && distToCamera <= STATION_LOD_FAR + STATION_LOD_HYST;
+}
+
+/**
  * A large space station that orbits the center of the galaxy.
  */
 export function makeSpaceStation(): THREE.Object3D {
@@ -109,42 +132,54 @@ export function makeSpaceStation(): THREE.Object3D {
   let model: THREE.Object3D | null = null;
   let modelHidden = false; // hysteresis state for shouldHideStationModel
 
-  gltfLoader().load(
-    "/space_station_3.glb",
-    (gltf) => {
-      model = gltf.scene;
+  const createdAt = performance.now();
+  let loadStarted = false;
+  const startLoad = () => {
+    if (loadStarted) return;
+    loadStarted = true;
+    gltfLoader().load(
+      "/space_station_3.glb",
+      (gltf) => {
+        model = gltf.scene;
 
-      // Keep the model's ORIGINAL materials/colors/textures (do NOT override them).
-      const box = new THREE.Box3().setFromObject(model);
-      const dim = new THREE.Vector3();
-      box.getSize(dim);
-      const maxDim = Math.max(dim.x, dim.y, dim.z) || 1;
-      const k = 460 / maxDim; // colossal — a looming celestial megastructure
-      model.scale.setScalar(k);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      model.position.copy(center.multiplyScalar(-k)); // recenter
+        // Keep the model's ORIGINAL materials/colors/textures (do NOT override them).
+        const box = new THREE.Box3().setFromObject(model);
+        const dim = new THREE.Vector3();
+        box.getSize(dim);
+        const maxDim = Math.max(dim.x, dim.y, dim.z) || 1;
+        const k = 460 / maxDim; // colossal — a looming celestial megastructure
+        model.scale.setScalar(k);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        model.position.copy(center.multiplyScalar(-k)); // recenter
 
-      // Play any animation clips baked into the model (rotating rings, lights…).
-      if (gltf.animations && gltf.animations.length > 0) {
-        mixer = new THREE.AnimationMixer(model);
-        for (const clip of gltf.animations) mixer.clipAction(clip).play();
-      }
+        // Play any animation clips baked into the model (rotating rings, lights…).
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(model);
+          for (const clip of gltf.animations) mixer.clipAction(clip).play();
+        }
 
-      // Default to visible (close/no-distance-info state); update() re-gates this every
-      // frame once a camera position is supplied. IM-24: fade in over the
-      // procedural fallback instead of popping it out.
-      group.add(model);
-      fadeSwapIn(model, () => {
-        fallback.visible = false;
-      });
-    },
-    undefined,
-    (err) => {
-      console.warn("[space-station] model failed to load", err);
-      noteModelFallback("The Waystation model");
-    },
-  );
+        // Default to visible (close/no-distance-info state); update() re-gates this every
+        // frame once a camera position is supplied. IM-24: fade in over the
+        // procedural fallback instead of popping it out.
+        group.add(model);
+        fadeSwapIn(model, () => {
+          fallback.visible = false;
+        });
+      },
+      undefined,
+      (err) => {
+        console.warn("[space-station] model failed to load", err);
+        noteModelFallback("The Waystation model");
+      },
+    );
+  };
+
+  // The idle path: whatever the camera is doing, start by STATION_LOAD_MAX_MS. Skipped if the
+  // station was removed from the scene before then (a stale timer must not fetch 14 MB for nothing).
+  window.setTimeout(() => {
+    if (group.parent) startLoad();
+  }, STATION_LOAD_MAX_MS);
 
   // Orbit just beyond the memory cluster so planets can never pass through it.
   // The radius is set live from the current galaxy size (setOrbit, below) so the
@@ -189,6 +224,10 @@ export function makeSpaceStation(): THREE.Object3D {
     if (nameLabel) {
       const up = new THREE.Vector3(0, 310, 0).applyQuaternion(group.quaternion.clone().invert());
       nameLabel.position.copy(up);
+    }
+
+    if (!loadStarted && shouldStartStationLoad(cameraPos ? group.position.distanceTo(cameraPos) : null, performance.now() - createdAt)) {
+      startLoad();
     }
 
     if (model && cameraPos) {

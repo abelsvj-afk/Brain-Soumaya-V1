@@ -155,6 +155,40 @@ export function mergeGraphData(prev: GraphData, fresh: GraphData): GraphData {
 }
 
 /**
+ * SP-01 / REG-184 — resolve the node a focus request targets against the
+ * LOADED payload, force-including it when it lives outside the top-300
+ * overview cut.
+ *
+ * The loaded galaxy is only the top-`limit` nodes by degree, but Search,
+ * the command palette, Recall's due list, Observatory's due-review card,
+ * and NoticingCard chips all present ids from the FULL node set — so a
+ * presented hit can be absent from `nodes`. The old `goTo` answered that
+ * with a silent `return`: the click did nothing, and the palette had
+ * already closed, mimicking a successful jump.
+ *
+ * Resolution: present in the payload → return it with no fetch. Absent →
+ * fetch through `fetchIncluding` (the caller's `getGraphWithCompletion`,
+ * i.e. `getGraph(limit, includeIds)` + edge completion) and return the
+ * node together with the fetched graph when the server can produce it.
+ * When the server cannot — deleted / archived / foreign-space id, which
+ * `overview` skips silently — return `node: null` so the caller can say
+ * so visibly instead of no-op-ing. A fetch failure (network / server)
+ * throws, so the caller can distinguish "couldn't load" from "doesn't
+ * exist".
+ */
+export async function resolveFocusNode(
+  nodes: GraphNode[],
+  id: number,
+  fetchIncluding: (ids: number[]) => Promise<GraphData>,
+): Promise<{ node: GraphNode | null; fetched: GraphData | null }> {
+  const inPayload = nodes.find((x) => x.id === id);
+  if (inPayload) return { node: inPayload, fetched: null };
+  const g = await fetchIncluding([id]);
+  const fetched = g.nodes.find((x) => x.id === id) ?? null;
+  return { node: fetched, fetched: fetched ? g : null };
+}
+
+/**
  * Focus-fan geometry (Mobile HUD layout pass, screenshot round 2 S3).
  *
  * The fan opens UPWARD from the 🎯 cluster (bottom slot
@@ -206,6 +240,15 @@ export interface FanLayout {
   pageSize: number;
   pageCount: number;
   /**
+   * Batch I (REG-062 / GH-03): which way the fan unfolds. "up" is the
+   * historical direction; "down" is the escape when there is no room to
+   * fold upward at all (a short landscape phone, or a very short
+   * portrait window) — the fan hangs below the cluster instead of
+   * running off the top of the screen. fanTopEdge measures the upward
+   * case only; fanDownBottomPx measures the downward case.
+   */
+  direction: "up" | "down";
+  /**
    * The cluster's TRUE bottom edge (px from the screen bottom): the CSS
    * slot (298) PLUS the device's bottom safe-area inset, which the
    * stylesheet's anchor adds and this model must count (PR #89
@@ -221,29 +264,68 @@ export function fanLayout(
   total: number,
   safeBottomInsetPx = 0,
 ): FanLayout {
-  if (!isPhonePortraitViewport(viewW, viewH) || total <= 0) {
+  const portrait = isPhonePortraitViewport(viewW, viewH);
+  const step = portrait ? FAN_STEP_PHONE : FAN_STEP_DESKTOP;
+  // The safe-area inset only shifts the CSS cluster anchor in portrait;
+  // desktop/landscape keeps the bare slot (today's geometry, unchanged).
+  const clusterBottomPx = portrait
+    ? FAN_CLUSTER_BOTTOM_PX + Math.max(0, safeBottomInsetPx)
+    : FAN_CLUSTER_BOTTOM_PX;
+  if (total <= 0) {
     return {
-      step: FAN_STEP_DESKTOP,
-      capacity: Math.max(total, 1),
+      step,
+      capacity: 1,
       folded: false,
-      pageSize: Math.max(total, 1),
+      pageSize: 1,
       pageCount: 1,
-      clusterBottomPx: FAN_CLUSTER_BOTTOM_PX,
+      direction: "up",
+      clusterBottomPx,
     };
   }
-  const clusterBottomPx = FAN_CLUSTER_BOTTOM_PX + Math.max(0, safeBottomInsetPx);
-  const capacity = Math.max(
-    2, // a folded fan always shows at least one target beside its "more" item
-    Math.floor((viewH - FAN_HEADER_BAND_PX - clusterBottomPx - FAN_ITEM_PX) / FAN_STEP_PHONE),
+  // Upward room is a property of the HEIGHT, not of portrait-ness: a
+  // short desktop window folds exactly like a short phone (REG-062).
+  const upCapacity = Math.floor(
+    (viewH - FAN_HEADER_BAND_PX - clusterBottomPx - FAN_ITEM_PX) / step,
   );
-  const folded = total > capacity;
-  const pageSize = folded ? capacity - 1 : total;
+  if (total <= upCapacity) {
+    return {
+      step,
+      capacity: Math.max(upCapacity, 1),
+      folded: false,
+      pageSize: total,
+      pageCount: 1,
+      direction: "up",
+      clusterBottomPx,
+    };
+  }
+  // A folded page needs at least two targets beside its "more" item
+  // (capacity >= 3); with less upward room than that, the fan folds
+  // DOWN from the cluster instead of running off the top of the screen.
+  if (upCapacity >= 3) {
+    const pageSize = upCapacity - 1;
+    return {
+      step,
+      capacity: upCapacity,
+      folded: true,
+      pageSize,
+      pageCount: Math.ceil(total / pageSize),
+      direction: "up",
+      clusterBottomPx,
+    };
+  }
+  const clusterTopPx = viewH - clusterBottomPx - FAN_ITEM_PX;
+  const downCapacity = Math.max(
+    2, // a folded fan always shows at least one target beside its "more" item
+    Math.floor((viewH - clusterTopPx - FAN_ITEM_PX) / step),
+  );
+  const downPageSize = downCapacity - 1;
   return {
-    step: FAN_STEP_PHONE,
-    capacity,
-    folded,
-    pageSize,
-    pageCount: folded ? Math.ceil(total / pageSize) : 1,
+    step,
+    capacity: downCapacity,
+    folded: true,
+    pageSize: downPageSize,
+    pageCount: Math.ceil(total / downPageSize),
+    direction: "down",
     clusterBottomPx,
   };
 }
@@ -259,10 +341,21 @@ export function fanWindow(
   return { start, count: Math.min(layout.pageSize, total - start), page: p };
 }
 
-/** Top edge (px from the bottom) of the highest fan slot a layout can show. */
+/** Top edge (px from the bottom) of the highest fan slot a layout can show. Upward-only — see fanDownBottomPx for a downward fold. */
 export function fanTopEdge(layout: FanLayout): number {
   const slots = layout.folded ? layout.capacity : layout.pageSize;
   return layout.clusterBottomPx + slots * layout.step + FAN_ITEM_PX;
+}
+
+/**
+ * Batch I (REG-062 / GH-03): bottom edge (px from the screen bottom) of
+ * the lowest fan slot when the fan folds DOWN — the mirror of
+ * fanTopEdge for a downward fold. Only meaningful when
+ * `layout.direction === "down"`: the cluster's top edge plus one item
+ * per slot plus the item's own height.
+ */
+export function fanDownBottomPx(layout: FanLayout, viewH: number): number {
+  return viewH - layout.clusterBottomPx + layout.capacity * layout.step;
 }
 
 /**
@@ -273,7 +366,11 @@ export function fanTopEdge(layout: FanLayout): number {
  * for an unnamed space). The fan math above is untouched; this is the
  * fan's labelling seam so the rule is testable without rendering App.
  */
-export function fanTargetCaption(key: string, spaceName?: string | null): string {
+export function fanTargetCaption(
+  key: string,
+  spaceName?: string | null,
+  figurineType?: string | null,
+): string {
   switch (key) {
     case "ship":
       return spaceName ?? "Soumaya";
@@ -287,11 +384,36 @@ export function fanTargetCaption(key: string, spaceName?: string | null): string
       return "Visitor";
     case "fig1":
     case "fig2":
-      return "Figurine";
+      // Batch I (REG-064 / GH-04): two equipped figurines are no longer
+      // both captioned "Figurine" — each names what it is. Without an
+      // equipped type the old generic caption stands.
+      return figurineType ? getFigurineShortLabel(figurineType) : "Figurine";
     case "more":
       return "More";
     default:
       return "";
+  }
+}
+
+/**
+ * Batch I (REG-064 / GH-04): the SHORT name of a figurine type — the
+ * fan caption, where there is room for the kind but not the full
+ * "Waystation Figurine" label. The full label lives in
+ * getFigurineLabel; the short one drops the "Figurine" suffix (and the
+ * long "Megastructure"/"Singularity Core" tails) so two equipped
+ * figurines read as two different things at a glance.
+ */
+export function getFigurineShortLabel(type: string): string {
+  switch (type) {
+    case "station": return "Waystation";
+    case "satellite": return "Aura Beacon";
+    case "star_center": return "Solar Monument";
+    case "dyson_sphere": return "Dyson";
+    case "quantum_core": return "Quantum Core";
+    case "hyper_array": return "Hyper-Array";
+    case "shield_spire": return "Aegis Spire";
+    case "blackhole": return "Singularity";
+    default: return type;
   }
 }
 
@@ -324,11 +446,20 @@ export function measureSafeBottomInset(): number {
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
-/** Pop-up offset for an item in the focus cluster (stacks upward when open). */
-export function focusItemStyle(index: number, open: boolean, stepPx: number = FAN_STEP_DESKTOP): CSSProperties {
-  return open
-    ? { transform: `translateY(${-(index + 1) * stepPx}px)`, opacity: 1, pointerEvents: "auto" }
-    : { transform: "translateY(0) scale(0.4)", opacity: 0, pointerEvents: "none" };
+/** Pop-up offset for an item in the focus cluster. Upward when open by
+ * default; a downward-folding fan (REG-062) stacks BELOW the cluster
+ * instead — same step, positive translateY. */
+export function focusItemStyle(
+  index: number,
+  open: boolean,
+  stepPx: number = FAN_STEP_DESKTOP,
+  direction: "up" | "down" = "up",
+): CSSProperties {
+  if (!open) {
+    return { transform: "translateY(0) scale(0.4)", opacity: 0, pointerEvents: "none" };
+  }
+  const dy = direction === "down" ? (index + 1) * stepPx : -(index + 1) * stepPx;
+  return { transform: `translateY(${dy}px)`, opacity: 1, pointerEvents: "auto" };
 }
 
 /** Position a song dot on an arc fanning up-and-right from the music FAB (bottom-left). */
@@ -357,6 +488,77 @@ export function getFigurineIcon(type: string): string {
     case "blackhole": return "🕳️";
     default: return "🗿";
   }
+}
+
+/**
+ * Batch I (REG-111): the galaxy-entity click toast, which must not say
+ * the same thing whether the flight happened or not. When the flight
+ * happened the toast names the destination and the reason; when it
+ * missed, it says plainly that the flight didn't happen and names where
+ * the thing opened instead (the panel focus below still runs either
+ * way, so "opened it in…" stays accurate).
+ */
+export function galaxyEntityToastText(
+  kind: "journey" | "goal" | "bill",
+  label: string,
+  reason: string,
+  flew: boolean,
+): string {
+  const icon = kind === "journey" ? "🧭" : "💵";
+  if (flew) return `${icon} ${label} — ${reason}`;
+  // Journeys open in the Journeys tab; goals and bills both open in Money.
+  const where = kind === "journey" ? "Journeys" : "Money";
+  return `${icon} Couldn't fly to ${label} — opened it in ${where} instead.`;
+}
+
+/**
+ * Batch I (REG-068 / GH-15): the one hide rule for the HUD chrome —
+ * the Fuel/Streak block, the ship-status stack, and the empty-galaxy cue
+ * all hide under exactly the same condition. A panel, the chat, the
+ * observatory, settings, connections, or the timeline being up hides
+ * them; nothing else does. (The `panel` type lives in App.tsx; this
+ * helper takes `string | null` so the helpers module never imports App.)
+ */
+export function hudChromeHidden(args: {
+  panel: string | null;
+  showChat: boolean;
+  showObs: boolean;
+  showSettings: boolean;
+  showConnections: boolean;
+  showTimeline: boolean;
+}): boolean {
+  return (
+    args.panel !== null ||
+    args.showChat ||
+    args.showObs ||
+    args.showSettings ||
+    args.showConnections ||
+    args.showTimeline
+  );
+}
+
+/**
+ * Batch I (REG-070 / GH-13): the shield-save toast, which must explain
+ * what a shield forgives — the StreakEmber's hover text is not the
+ * explanation. One shield forgives one missed day; the streak is safe.
+ */
+export function shieldSavedToastText(): string {
+  return "A nebula shield forgave your missed day — your streak is safe. Each shield forgives one missed day.";
+}
+
+/**
+ * Batch I (REG-060 / GH-01): enter Lite mode — the escape for a device
+ * that cannot render the 3D galaxy. Same pattern as the loading screen:
+ * set the flag, then navigate to `/?lite=1` so the app boots without
+ * WebGL instead of looping on Reload.
+ */
+export function enterLiteMode(): void {
+  try {
+    localStorage.setItem("brain.lite", "1");
+  } catch {
+    // A storage failure must not strand the user on the error card.
+  }
+  window.location.href = "/?lite=1";
 }
 
 export function getFigurineLabel(type: string): string {

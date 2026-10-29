@@ -89,6 +89,7 @@ import {
 import { cameraDepthFromNdc, clampLabelCenter, isPhonePortraitViewport, labelHalfExtentsPx } from "./labelFrame.js";
 import { makeOrbitSystem } from "./orbits.js";
 import { makeVisitors, type VisitorSystem } from "./visitors.js";
+import { createGalaxyDrifters, type GalaxyDrifters } from "./galaxyDrifters.js";
 import { isNodeProcessing, logVisits } from "../api/client.js";
 import { makeSatellites, type SatelliteSystem } from "./satellites.js";
 import { makeTaskSatellites, type TaskSatellites } from "./taskSatellites.js";
@@ -1260,6 +1261,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
   let prevShipPos: THREE.Vector3 | null = null;
   const shipPanScratch = new THREE.Vector3(); // IM-135: ship screen-x projection for engine stereo pan
   let visitors: VisitorSystem | null = null;
+  let galaxyDrifters: GalaxyDrifters | null = null;
   let satellites: SatelliteSystem | null = null;
   let taskSatellites: TaskSatellites | null = null; // IM-140a: completed-task satellites
   let subAgents: SubAgentSystem | null = null;
@@ -1539,6 +1541,12 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       });
       visitorsRef.current = visitors;
       scene.add(visitors.group);
+      // Galaxy drifters (population increment refinement): four benign
+      // visitors on slow bounded paths — NOT the visitors system above
+      // (those visit memories; these never do) and NOT the fleet's
+      // hostile drifters. No labels, no clicks, no visits.
+      galaxyDrifters = createGalaxyDrifters();
+      scene.add(galaxyDrifters.group);
       satellites = makeSatellites();
       satellitesRef.current = satellites;
       scene.add(satellites.group);
@@ -1553,6 +1561,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // simulation change), matching every other diagnostic category's approach.
       if (diag.enabled && !diag.aux) {
         visitors.group.visible = false;
+        galaxyDrifters.group.visible = false;
         satellites.group.visible = false;
         subAgents.group.visible = false;
       }
@@ -2167,6 +2176,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           ? { beaconedIds: satellites.getBeaconedIds(), positions: satellites.getPositions() }
           : undefined,
       );
+      // Galaxy drifters: slow bounded visitors on their own paths —
+      // calm motion (prefers-reduced-motion / focus mode) holds them
+      // still, like the worlds' reduced motion. They are not visitors
+      // (no memory visits) and not fleet drifters (no interception).
+      galaxyDrifters?.update(nowMs, { reducedMotion: calmMotionRef.current });
       // Tell React how many beacons are live, so the focus button can pulse.
       // Tell React how many beacons are live, so the focus button can pulse.
       if (satellites) {
@@ -2610,6 +2624,71 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                 // full speed regardless of prefers-reduced-motion.
                 mq.t += motionDt * 0.36;
                 mat.map!.offset.x = (Math.sin(mq.t) * 0.5 + 0.5) * mq.range;
+              }
+              // Batch I (REG-061 / GH-02): sector titles get the same
+              // whole-box edge clamp the planet labels carry — a wide
+              // title anchored near the screen edge slides its CENTRE
+              // until the whole box lands inside the safe frame, instead
+              // of running off-screen. Same machinery, same guarantee:
+              // the base position is captured once and every pass
+              // recomputes from it, so as the camera moves the title
+              // restores exactly — no drift. Runs AFTER the scale is
+              // set above, so the half extents are the on-screen size.
+              if (IS_PHONE_PORTRAIT) {
+                if (!child.userData.titleBasePos) {
+                  child.userData.titleBasePos = child.position.clone();
+                }
+                const titleBasePos = child.userData.titleBasePos as THREE.Vector3;
+                const titleParentScale = o.scale.x > 0 ? o.scale.x : 1;
+                labelProjScratch.set(
+                  tmp.x + titleBasePos.x * titleParentScale,
+                  tmp.y + titleBasePos.y * titleParentScale,
+                  tmp.z + titleBasePos.z * titleParentScale,
+                );
+                const titleDistCam = camera.position.distanceTo(labelProjScratch);
+                labelProjScratch.project(camera);
+                if (labelProjScratch.z < 1 && titleDistCam > 0) {
+                  const titlePersp = camera as THREE.PerspectiveCamera;
+                  const titleVw = window.innerWidth;
+                  const titleVh = window.innerHeight;
+                  const titleTanV = Math.tan((titlePersp.fov * Math.PI) / 360);
+                  const titleDepth = cameraDepthFromNdc(
+                    titleDistCam,
+                    labelProjScratch.x,
+                    labelProjScratch.y,
+                    titleTanV,
+                    titlePersp.aspect,
+                  );
+                  const { halfW: titleHalfW, halfH: titleHalfH } = labelHalfExtentsPx(
+                    child.scale.x * titleParentScale,
+                    child.scale.y * titleParentScale,
+                    titleDepth,
+                    titlePersp.fov,
+                    titlePersp.aspect,
+                    titleVw,
+                    titleVh,
+                  );
+                  const titleClamped = clampLabelCenter(
+                    (labelProjScratch.x * 0.5 + 0.5) * titleVw,
+                    (0.5 - labelProjScratch.y * 0.5) * titleVh,
+                    titleHalfW,
+                    titleHalfH,
+                    titleVw,
+                    titleVh,
+                  );
+                  if (titleClamped.clamped) {
+                    labelProjScratch
+                      .set((titleClamped.x / titleVw) * 2 - 1, 1 - (titleClamped.y / titleVh) * 2, labelProjScratch.z)
+                      .unproject(camera);
+                    child.position.set(
+                      (labelProjScratch.x - tmp.x) / titleParentScale,
+                      (labelProjScratch.y - tmp.y) / titleParentScale,
+                      (labelProjScratch.z - tmp.z) / titleParentScale,
+                    );
+                  } else {
+                    child.position.copy(titleBasePos);
+                  }
+                }
               }
             }
           }

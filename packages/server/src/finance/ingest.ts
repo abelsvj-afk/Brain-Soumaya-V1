@@ -47,14 +47,29 @@ function annotate(handle: DbHandle, spaceId: string, raw: FinExtractionResult): 
   return { incomes, expenses, provider: raw.provider };
 }
 
+/** REG-010: the retained raw paste is capped at this length — a longer paste's
+ *  retained record is cut, so the cut must be MARKED (rawTruncated +
+ *  rawLength), never silent. Extraction still runs on the full text; only
+ *  the retained record is capped. */
+const RETAINED_SOURCE_MAX_CHARS = 20_000;
+
 /** Persist a pending source with its (truncated) raw + annotated result for traceability. */
 function persistSource(handle: DbHandle, spaceId: string, kind: FinSourceKind, mime: string | null, rawText: string | null, result: FinExtractionResult): number {
+  const truncated = rawText != null && rawText.length > RETAINED_SOURCE_MAX_CHARS;
   return new FinSourceRepo(handle, spaceId).create({
     kind,
     mime,
     // NOTE: raw image blobs are NOT written to disk yet (Stage 2 hardening, decision D1);
     // for paste we retain the text, for image we retain the mime + extraction only.
-    extractionJson: JSON.stringify({ raw: rawText ? rawText.slice(0, 20_000) : undefined, result }),
+    extractionJson: JSON.stringify({
+      raw: rawText ? rawText.slice(0, RETAINED_SOURCE_MAX_CHARS) : undefined,
+      // REG-010: a truncated retained source says so on the record itself,
+      // with the true length — a later reader must never mistake the kept
+      // prefix for the whole paste.
+      rawTruncated: truncated,
+      rawLength: rawText?.length ?? null,
+      result,
+    }),
   }).id;
 }
 
@@ -67,11 +82,11 @@ export async function ingestPaste(
   handle: DbHandle,
   spaceId: string = DEFAULT_SPACE,
   text: string,
-): Promise<{ sourceId: number; result: FinExtractionResult }> {
+): Promise<{ sourceId: number; result: FinExtractionResult; sourceTruncated: boolean }> {
   const raw = await new HeuristicOcrProvider().extract({ kind: "paste", text });
   const result = annotate(handle, spaceId, raw);
   const sourceId = persistSource(handle, spaceId, "paste", null, text, result);
-  return { sourceId, result };
+  return { sourceId, result, sourceTruncated: text.length > RETAINED_SOURCE_MAX_CHARS };
 }
 
 /**
@@ -84,7 +99,7 @@ export async function ingestImage(
   llm: LlmProvider,
   spaceId: string = DEFAULT_SPACE,
   image: { dataUrl: string; mime: string },
-): Promise<{ sourceId: number; result: FinExtractionResult; readable: boolean }> {
+): Promise<{ sourceId: number; result: FinExtractionResult; readable: boolean; sourceTruncated: boolean }> {
   let raw: FinExtractionResult | null = null;
   try {
     raw = (await llm.extractFinancialImage?.(image)) ?? null;
@@ -95,7 +110,8 @@ export async function ingestImage(
   const result = annotate(handle, spaceId, base);
   const kind: FinSourceKind = image.mime === "application/pdf" ? "pdf" : "image";
   const sourceId = persistSource(handle, spaceId, kind, image.mime, null, result);
-  return { sourceId, result, readable: !!raw && (result.incomes.length > 0 || result.expenses.length > 0) };
+  // Images retain no raw text at all, so there is nothing to truncate.
+  return { sourceId, result, readable: !!raw && (result.incomes.length > 0 || result.expenses.length > 0), sourceTruncated: false };
 }
 
 /**
@@ -214,49 +230,35 @@ export function confirmPaystub(
   // gross, YTD, source file) are NOT identity: a re-upload whose parse
   // differs in any of them is still the same stub, and counting it again
   // would double-count the income.
-  // The branch decision is SET-based over every income at (date, net),
-  // never keyed off a single findDuplicate pick (whose LIMIT 1 row is
-  // arbitrary — with a manual + a stub-owned income at the same
-  // date+net, the old single-row pick made a distinct stub's fate
-  // depend on insertion order):
-  //  - Any stored stub matches the ADR key: it IS this stub — NO second
-  //    income, NO new stub; the existing stub is returned, duplicate.
-  //  - No income in the set is stub-owned (e.g. it came from a MANUAL
-  //    entry): no second income either, and the stub is saved UNLINKED
-  //    rather than linked to an income it didn't create.
-  //  - A set income IS stub-owned but its stub does not match the ADR
-  //    key: a genuinely distinct stub (different employer or period)
-  //    that merely shares date + net — it confirms normally (its own
-  //    income), flagged duplicate like the manual path flags it.
-  const allIncomes = incomeRepo.list();
-  const duplicateIncomes = allIncomes.filter(
-    (i) => i.date === date && i.netCents === Math.round(input.netCents),
-  );
+  // REG-009: the branch decision is SET-based over every income at (date,
+  // net), queried by that key directly — never a capped list() page (whose
+  // LIMIT 200, newest-first, could hide a match older than the 200 most
+  // recent incomes and double-count it). Same for the stub lookup below.
+  const duplicateIncomes = incomeRepo.findAllByDateAndNet(date, input.netCents);
   let duplicate = false;
   if (duplicateIncomes.length > 0) {
     duplicate = true;
-    const stubs = paystubRepo.list();
-    const incomeDateById = new Map(allIncomes.map((i) => [i.id, i.date]));
+    // The stub candidates already match (effective date, net) by
+    // construction — the re-upload check is only the ADR key's remaining
+    // terms (employer / period, where both sides carry a value).
+    const stubs = paystubRepo.findAllByDateAndNet(date, input.netCents);
     const matchesWhereAvailable = (
       a: string | null | undefined,
       b: string | null | undefined,
     ): boolean => a == null || b == null || a === b;
-    const sameStub = (s: FinPaystub): boolean => {
-      const effectiveDate = s.payDate ?? (s.incomeId != null ? incomeDateById.get(s.incomeId) ?? null : null);
-      return (
-        effectiveDate === date &&
-        s.netCents === Math.round(input.netCents) &&
-        matchesWhereAvailable(s.employer, input.employer) &&
-        matchesWhereAvailable(s.periodStart, input.periodStart) &&
-        matchesWhereAvailable(s.periodEnd, input.periodEnd)
-      );
-    };
+    const sameStub = (s: FinPaystub): boolean =>
+      matchesWhereAvailable(s.employer, input.employer) &&
+      matchesWhereAvailable(s.periodStart, input.periodStart) &&
+      matchesWhereAvailable(s.periodEnd, input.periodEnd);
     const reupload = stubs.find(sameStub) ?? null;
     if (reupload) {
       return { paystub: reupload, budget: getBudgetSummary(handle, spaceId), duplicate: true };
     }
     const duplicateIncomeIds = new Set(duplicateIncomes.map((i) => i.id));
-    const anyStubOwned = stubs.some((s) => s.incomeId != null && duplicateIncomeIds.has(s.incomeId));
+    // Stub-ownership is checked by income id, not by (date, net): an
+    // income's date can be edited after its stub was saved, so a stub that
+    // owns a duplicate income need not share the stub's payDate.
+    const anyStubOwned = paystubRepo.findAllByIncomeIds([...duplicateIncomeIds]).length > 0;
     if (!anyStubOwned) {
       const paystub = paystubRepo.create({ ...input, incomeId: null });
       return { paystub, budget: getBudgetSummary(handle, spaceId), duplicate: true };

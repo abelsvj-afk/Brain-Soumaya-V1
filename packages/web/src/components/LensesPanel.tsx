@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Lens, LensQuery } from "@brain/shared";
-import { getLenses, createLens, deleteLens, updateLens, lensNodes, previewLens } from "../api/lenses.js";
+import { getLenses, createLens, deleteLens, updateLens, lensNodes, previewLens, type LensPreview } from "../api/lenses.js";
 import { NODE_TYPES, NODE_TYPE_LABEL, SUGGESTED_TAGS } from "@brain/shared";
 import { pushToast } from "./Toasts.js";
 
@@ -19,14 +19,20 @@ export function LensesPanel({
   presetLinkedTo,
 }: {
   onClose: () => void;
-  /** Isolate the galaxy to these ids under this lens name. */
-  onOpen: (ids: number[], name: string) => void;
+  /** Isolate the galaxy to these ids under this lens name. `total` is the
+   *  lens's true match count (Batch H, REG-207/208) — the banner states it,
+   *  and the shown subset when the match list itself was capped. */
+  onOpen: (ids: number[], name: string, total?: number) => void;
   presetLinkedTo?: { id: number; label: string } | null;
 }) {
   const [lenses, setLenses] = useState<Lens[]>([]);
   // IM-118: a truthful initial loading state — "No lenses yet" used to flash
   // for every user on every open while getLenses was still in flight.
   const [loading, setLoading] = useState(true);
+  // Batch H (REG-205 / CN-06): a failed fetch is an error state with a retry,
+  // never the "No lenses yet" copy — the empty state renders only on a
+  // confirmed empty list.
+  const [loadError, setLoadError] = useState(false);
   const [building, setBuilding] = useState(false);
   const [name, setName] = useState("");
   const [text, setText] = useState("");
@@ -42,7 +48,8 @@ export function LensesPanel({
   const [customTag, setCustomTag] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   // IM-118: live preview count for the unsaved query (save is no longer blind).
-  const [preview, setPreview] = useState<number | null>(null);
+  // Batch H (REG-208): the full evaluation — true total + cap flags + shown.
+  const [preview, setPreview] = useState<LensPreview | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   // Per-lens in-flight guard for delete/pin — busy above only ever gated the
   // builder's own Save button, so rapid double-clicking a row's 🗑/📌 while its
@@ -51,10 +58,17 @@ export function LensesPanel({
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
-  const refresh = useCallback(
-    () => getLenses().then((ls) => { if (mounted.current) { setLenses(ls); setLoading(false); } }).catch(() => { if (mounted.current) setLoading(false); }),
-    [],
-  );
+  const refresh = useCallback(async () => {
+    if (mounted.current) { setLoading(true); setLoadError(false); }
+    try {
+      const ls = await getLenses();
+      if (mounted.current) { setLenses(ls); setLoading(false); }
+    } catch {
+      // A failed fetch with lenses already shown keeps the stale-but-real list;
+      // the error branch renders only when there is nothing confirmed to show.
+      if (mounted.current) { setLoading(false); setLoadError(true); }
+    }
+  }, []);
   // Let the on-galaxy pinned-lens chips re-sync when lenses change here.
   const broadcast = () => window.dispatchEvent(new Event("brain-lenses-changed"));
   useEffect(() => {
@@ -118,32 +132,56 @@ export function LensesPanel({
     setBusy(true);
     // IM-118: editing goes through updateLens with the full name+query patch —
     // previously the only patch ever sent was {pinned}.
+    // Batch H (REG-211 / CN-12): new lenses start UNPINNED on both doors —
+    // the old explicit `true` flooded the pinned-chips list with lenses the
+    // user never pinned. The `false` is stated here, identically to the Views
+    // door, so the one rule is visible at each creation site (createLens's
+    // own default is `false` too). Batch H (REG-209 / CN-10): the Lenscrafter
+    // increment lives inside createLens now (creation only, once per lens,
+    // every door) — editing here never increments it.
     const lens = editingId != null
       ? await updateLens(editingId, { name: finalName, query: buildQuery() })
-      : await createLens(finalName, buildQuery(), true);
+      : await createLens(finalName, buildQuery(), false);
     setBusy(false);
     if (!lens) {
       pushToast("Couldn't save that lens — try again.", "⚠️", 3500);
       return;
     }
     pushToast(`Lens saved: ${finalName} (${lens.count ?? 0})`, "⧉", 3500);
-    try {
-      const sid = localStorage.getItem("brain.spaceId") || "default";
-      const k = `stat.lenses_made.${sid}`;
-      localStorage.setItem(k, String((parseInt(localStorage.getItem(k) || "0", 10) || 0) + 1));
-    } catch { /* ignore */ }
     resetBuilder();
     refresh();
     broadcast();
   };
 
   const open = async (l: Lens) => {
-    const ids = await lensNodes(l.id);
-    if (ids.length === 0) {
+    // Batch H (REG-214 / CN-16): a broken lens never opens as an
+    // all-matching lens — say which lens is broken and stop here.
+    if (l.broken) {
+      pushToast(`"${l.name}" couldn't be read — its saved query is damaged.`, "⚠️", 4000);
+      return;
+    }
+    // Batch H (REG-206 / CN-07): a failed node load reports the failure —
+    // never the "no matches" claim. Batch H (REG-208 / CN-09): a capped lens
+    // says so before isolating to its first 2,000.
+    let ev;
+    try {
+      ev = await lensNodes(l.id);
+    } catch {
+      pushToast(`Couldn't load "${l.name}" — try again.`, "⚠️", 3500);
+      return;
+    }
+    if (ev.ids.length === 0) {
       pushToast(`"${l.name}" has no matches right now.`, "⧉", 3000);
       return;
     }
-    onOpen(ids, l.name);
+    if (ev.capped) {
+      pushToast(
+        `Showing the first ${ev.shown.toLocaleString()} of ${ev.total.toLocaleString()} matches for "${l.name}".`,
+        "⧉",
+        4000,
+      );
+    }
+    onOpen(ev.ids, l.name, ev.total);
     onClose();
   };
 
@@ -172,7 +210,13 @@ export function LensesPanel({
     if (rowBusy.has(l.id)) return;
     setRowBusy((s) => new Set(s).add(l.id));
     try {
-      await updateLens(l.id, { pinned: !l.pinned });
+      // Batch H (REG-210 / CN-11): a failed pin/unpin toasts the same ⚠️ the
+      // panel's other row actions use — the row just not changing said nothing.
+      const ok = await updateLens(l.id, { pinned: !l.pinned });
+      if (!ok) {
+        pushToast(`Couldn't ${l.pinned ? "unpin" : "pin"} that lens — try again.`, "⚠️", 3500);
+        return;
+      }
       refresh();
       broadcast();
     } finally {
@@ -215,14 +259,33 @@ export function LensesPanel({
 
         <ul className="lenses-list">
           {loading && lenses.length === 0 && <li className="lenses-empty">Loading lenses…</li>}
-          {!loading && lenses.length === 0 && <li className="lenses-empty">No lenses yet — build one below.</li>}
+          {!loading && loadError && lenses.length === 0 && (
+            <li className="lenses-empty" role="alert">
+              Couldn't load your lenses — something went wrong reaching Soumaya.{" "}
+              <button className="mini ghost" onClick={() => void refresh()}>Try again</button>
+            </li>
+          )}
+          {!loading && !loadError && lenses.length === 0 && <li className="lenses-empty">No lenses yet — build one below.</li>}
           {lenses.map((l) => (
             <li key={l.id} className="lens-row">
               <button className="lens-open" onClick={() => void open(l)} title="Open this view">
                 <span className="lens-name">{l.pinned ? "📌 " : ""}{l.name}</span>
-                <span className="lens-desc">{desc(l.query)}</span>
+                {/* Batch H (REG-214): a broken lens says so with its name — never
+                    the "all active memories" description of the empty query it
+                    used to fail open to. */}
+                <span className="lens-desc">{l.broken ? "⚠️ saved query couldn't be read" : desc(l.query)}</span>
               </button>
-              <span className="lens-count" aria-label={`${l.count ?? 0} matches`}>{l.count ?? 0}</span>
+              {/* Batch H (REG-208): the count is the TRUE total — formatted, with
+                  a "+" when the total itself is only a lower bound, and a title
+                  naming the shown subset when a cap truncated the set. A broken
+                  lens has no count at all ("?", never the whole-brain count). */}
+              <span
+                className="lens-count"
+                aria-label={l.broken ? "matches unknown — this lens couldn't be read" : `${(l.count ?? 0).toLocaleString()}${l.totalIsLowerBound ? "+" : ""} matches`}
+                title={l.broken ? "This lens's saved query couldn't be read." : l.capped ? `Showing the first ${(l.shown ?? l.count ?? 0).toLocaleString()} of ${(l.count ?? 0).toLocaleString()} matches` : undefined}
+              >
+                {l.broken ? "?" : `${(l.count ?? 0).toLocaleString()}${l.totalIsLowerBound ? "+" : ""}`}
+              </span>
               <button className="lens-mini" onClick={() => startEdit(l)} title="Edit lens" aria-label="Edit lens">✎</button>
               <button className="lens-mini" disabled={rowBusy.has(l.id)} onClick={() => void togglePin(l)} title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"}>{l.pinned ? "📌" : "📍"}</button>
               <button className="lens-mini" disabled={rowBusy.has(l.id)} onClick={() => void remove(l)} title="Delete lens" aria-label="Delete lens">🗑</button>
@@ -291,7 +354,11 @@ export function LensesPanel({
             </div>
             {presetLinkedTo && editingId == null && <p className="lens-note">Includes: linked to “{presetLinkedTo.label}”.</p>}
             <p className="lens-preview" role="status">
-              {previewFailed ? "Couldn't count matches right now." : preview != null ? `${preview} match${preview === 1 ? "" : "es"} with these settings` : "Counting matches…"}
+              {previewFailed
+                ? "Couldn't count matches right now."
+                : preview != null
+                  ? `${preview.count.toLocaleString()}${preview.totalIsLowerBound ? "+" : ""} match${preview.count === 1 ? "" : "es"} with these settings${preview.capped ? ` — showing the first ${preview.shown.toLocaleString()}` : ""}`
+                  : "Counting matches…"}
             </p>
             <div className="lens-builder-actions">
               <button className="lens-save" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : editingId != null ? "Save changes" : "Save lens"}</button>

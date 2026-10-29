@@ -43,11 +43,15 @@ export function fmtBrowseDateWithRelative(raw?: string): string {
   return rel ? `${abs} (${rel})` : abs;
 }
 
-export type BrowseEmotion = "positive" | "neutral" | "negative";
+export type BrowseEmotion = "positive" | "neutral" | "negative" | "unscored";
 
-/** Same buckets/labels NodeList's emotion filter uses ("● warm/neutral/heavy"). */
+/** Same buckets/labels NodeList's emotion filter uses ("● warm/neutral/heavy").
+ * REG-115: an absent weight is "unscored", NOT "neutral" — mapping it to
+ * neutral presented a derived label as a fact about the memory, and filed
+ * never-scored memories under the neutral filter indistinguishably from
+ * scored-neutral ones. Renderers show no emotion label for "unscored". */
 export function emotionBucketOf(ew?: number): BrowseEmotion {
-  if (typeof ew !== "number") return "neutral";
+  if (typeof ew !== "number") return "unscored";
   if (ew > 0.2) return "positive";
   if (ew < -0.2) return "negative";
   return "neutral";
@@ -57,10 +61,12 @@ export const BROWSE_EMOTION_DOT: Record<BrowseEmotion, string> = {
   positive: "#ffcf6b",
   neutral: "#9b96c4",
   negative: "#6bb7ff",
+  unscored: "#4a4a5e",
 };
 
 export const BROWSE_EMOTION_LABEL: Record<BrowseEmotion, string> = {
   positive: "warm",
   neutral: "neutral",
   negative: "heavy",
+  unscored: "unscored",
 };

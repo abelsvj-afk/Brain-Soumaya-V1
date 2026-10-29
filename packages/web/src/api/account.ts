@@ -40,3 +40,18 @@ export async function deleteBrain(passcode: string, confirmation: string): Promi
     throw new Error(body.error ?? `Couldn't delete this brain (${res.status})`);
   }
 }
+
+/** Whether this brain has owner access (exempt from the worlds' progression
+ *  gates — decided by the server's OWNER_SPACE_IDS secret, never the client).
+ *  A read, so it never throws: unknown reads as `null`, and the UI says so
+ *  rather than presenting a failed check as "off". */
+export async function getOwnerStatus(): Promise<boolean | null> {
+  try {
+    const res = await afetch(`${API}/space/me`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { owner?: boolean };
+    return body.owner === true;
+  } catch {
+    return null;
+  }
+}

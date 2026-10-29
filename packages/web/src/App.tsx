@@ -1,9 +1,9 @@
 import { logDiagnosticEvent } from "./diagnostics/buffer";
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
 import type { GraphData, GraphNode, Fuel, Streak, AwayDigest, UnlockableItem, UnlockStats } from "@brain/shared";
-import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY } from "@brain/shared";
+import { CELESTIAL_CLASSES, CELESTIAL_LABEL, COOLING_ENTROPY, WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 // Pure presentational helpers live in App.helpers.ts (Post-MVP D4 split).
-import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanTargetCaption, measureSafeBottomInset } from "./App.helpers.js";
+import { focusItemStyle, songDotStyle, getFigurineIcon, getFigurineLabel, mergeGraphData, resolveFocusNode, billNotificationKey, hasLoggedToday, fanLayout, fanWindow, fanDownBottomPx, fanTargetCaption, galaxyEntityToastText, hudChromeHidden, shieldSavedToastText, measureSafeBottomInset } from "./App.helpers.js";
 import { useSpaceTimeZone } from "./utils/spaceTimezone.js";
 import { foresightChipText, flashbackLoreLine } from "./components/cl1a.helpers.js";
 
@@ -26,7 +26,7 @@ import { ReviewPanel } from "./components/ReviewPanel.js";
 import { getDueReviews } from "./api/client.js";
 import { FuelGauge } from "./components/FuelGauge.js";
 import { StreakEmber } from "./components/StreakEmber.js";
-import { SearchBox } from "./components/SearchBox.js";
+import { SearchBox, type SearchSession } from "./components/SearchBox.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { isCaptureShortcut, isPaletteShortcut, isTextEntryTarget, parseShareLanding } from "./lib/quickCapture.js";
 import type { PaletteCommand } from "./lib/commandPalette.js";
@@ -38,8 +38,14 @@ import { Legend } from "./components/Legend.js";
 import { WelcomeIntro } from "./components/WelcomeIntro.js";
 import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
+import { GalaxyErrorCard } from "./components/GalaxyErrorCard.js";
 import TravelPanel from "./components/TravelPanel.js";
+import ToursPanel from "./components/ToursPanel.js";
+import ApprovalsInbox from "./components/ApprovalsInbox.js";
+import WorldChangesView from "./components/WorldChangesView.js";
 import WorldsSurface from "./components/WorldsSurface.js";
+import WorldMap from "./components/WorldMap.js";
+import TravelSheet from "./components/TravelSheet.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
@@ -67,16 +73,23 @@ import { PerfHUD } from "./components/PerfHUD.js";
 import { setFocusCalm } from "./graph/motion.js";
 import { ACHIEVEMENTS, unlockedIds, loadUnlocked, recordUnlocked } from "./components/achievements.js";
 import { pilotRank } from "./components/rank.js";
-import { buildCodex, codexProgress } from "./components/codex.js";
+import { buildCodex, codexProgress, fieldNoteEntries } from "./components/codex.js";
 import {
   buildUnlockStats,
+  firstAlwaysUnlockedTrackIndex,
   firstUnlockedTrackIndex,
+  isTrackAlwaysUnlocked,
   isTrackUnlocked,
+  lockedTrackNotes,
+  nextAlwaysUnlockedTrackIndex,
   nextUnlockedTrackIndex,
   readDevUnlockAll,
+  trackLocked,
   unlockableForTrack,
 } from "./components/unlockables.js";
 import { useUnlockWatcher } from "./hooks/useUnlockWatcher.js";
+import { useCodexDiscoveryClaims } from "./components/useCodexDiscoveryClaims.js";
+import { useCelebrationQueue } from "./hooks/useCelebrationQueue.js";
 import { UnlockCelebration } from "./components/UnlockCelebration.js";
 import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
@@ -102,6 +115,8 @@ import {
   tendNode,
   getCandidates,
   burnFuel,
+  getCodexDiscoveries,
+  type AgentDiscovery,
   type Health,
   type ProactiveContext,
   type ProactiveContextSource,
@@ -140,6 +155,20 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   // Fuel on the main HUD (was buried in the Soumaya tab) — polled while signed in.
   const [fuel, setFuel] = useState<Fuel | null>(null);
+  // Batch I (REG-067 / GH-09): whether the fuel load has FAILED. The
+  // gauge keeps the last known value while offline, but when fuel has
+  // never arrived the gauge must say the load failed (with a retry),
+  // not render nothing at all.
+  const [fuelError, setFuelError] = useState(false);
+  const retryFuel = useCallback(() => {
+    setFuelError(false);
+    void getFuel()
+      .then((f) => {
+        setFuel(f);
+        setFuelError(false);
+      })
+      .catch(() => setFuelError(true));
+  }, []);
   const [fuelPops, setFuelPops] = useState<{ id: number; text: string; spend?: boolean }[]>([]);
   const prevFuelRef = useRef<number | null>(null);
   // Daily-tending streak (flame on the HUD + Awards tab) — polled while signed in.
@@ -156,6 +185,20 @@ export default function App() {
   // real "Ask Soumaya about this" click in JourneysPanel; consumed by ChatDock on the
   // very next message it actually sends, then cleared.
   const [pendingJourneyId, setPendingJourneyId] = useState<number | null>(null);
+  // REG-159/JN-01: the armed journey's title, carried alongside its id so the
+  // chat banner can NAME the scope (an id alone names nothing on screen).
+  const [pendingJourneyTitle, setPendingJourneyTitle] = useState<string | null>(null);
+  // REG-159/JN-01: the armed journey context dies with the chat — every path
+  // that hides the dock (×, Escape, FAB toggle, quick-tool navigation) flows
+  // through showChat going false, so disarm here, once, instead of hunting
+  // each close call site. An unrelated question later must never silently
+  // inherit a stale journey scope.
+  useEffect(() => {
+    if (!showChat) {
+      setPendingJourneyId(null);
+      setPendingJourneyTitle(null);
+    }
+  }, [showChat]);
   const [showWealthFullscreen, setShowWealthFullscreen] = useState(false);
   const [showFinanceFullscreen, setShowFinanceFullscreen] = useState(false);
   const [chatPulse, setChatPulse] = useState(false); // she's hailing — pulse the FAB
@@ -165,10 +208,31 @@ export default function App() {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showFuelWays, setShowFuelWays] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  // The world map overlay (Rev 116) and the world it should focus the
+  // travel panel on when the map hands the traveller over.
+  const [showWorldMap, setShowWorldMap] = useState(false);
+  const [travelFocus, setTravelFocus] = useState<string | null>(null);
+  // The travel sheet: the worlds panels' one positioned home. Every way in
+  // (Tools → Travel, the map's handoff, a Try-It "travel" action) goes
+  // through openTravel, so no entry point can set a focus the traveller
+  // never sees. Opening from Tools passes no world and clears a stale one.
+  const [showTravel, setShowTravel] = useState(false);
+  const openTravel = useCallback((world: string | null = null) => {
+    setTravelFocus(world);
+    setShowTravel(true);
+  }, []);
   // A full-screen "rank up" celebration moment (not just a quiet toast).
   const [rankUp, setRankUp] = useState<{ title: string; level: number } | null>(null);
   // The "🔓 Unlocked!" celebration moment for the Unlockables system (IM-133).
-  const [unlockMoment, setUnlockMoment] = useState<UnlockableItem | null>(null);
+  // A QUEUE (REG-178/HN-04): several items routinely unlock in one
+  // evaluation, and a single slot collapsed them to the last item's card.
+  // Every item now gets its moment in unlock order; dismissing the head
+  // reveals the next.
+  const {
+    current: unlockMoment,
+    enqueue: enqueueUnlockMoment,
+    dismissCurrent: dismissUnlockMoment,
+  } = useCelebrationQueue();
   const [awayDigest, setAwayDigest] = useState<AwayDigest | null>(null);
   // The Observatory home overlay — fades in once, after the cinematic fly-in settles.
   const [showObs, setShowObs] = useState(false);
@@ -176,7 +240,7 @@ export default function App() {
   // "what is Soumaya / the companion / the Galaxy" card, shown before the Observatory/Legend
   // reveals so a genuinely new space doesn't stack three separate "welcome" surfaces at once.
   const [showIntro, setShowIntro] = useState(false);
-  // Deep-space focus mode (#2): a distraction-free reading session — dims the chrome,
+  // Deep-space calm mode (#2): a distraction-free reading session — dims the chrome,
   // calms ambient motion, and quiets non-essential toasts. Ephemeral (not persisted).
   const [focusMode, setFocusMode] = useState(false);
   const focusModeSeenRef = useRef(false);
@@ -184,7 +248,7 @@ export default function App() {
     // IM-15: announce focus-mode entry/exit (it used to change silently).
     if (!focusModeSeenRef.current) { focusModeSeenRef.current = true; return; }
     pushToast(
-      focusMode ? "Focus mode on — the chrome has dimmed for a calm read. Toggle it in Tools to exit." : "Focus mode off — welcome back.",
+      focusMode ? "Calm mode on — the chrome has dimmed for a calm read. Toggle it in Tools to exit." : "Calm mode off — welcome back.",
       "🎯",
       3500,
       focusMode ? "high" : "normal",
@@ -213,6 +277,10 @@ export default function App() {
   // Hangar system equipped states
   const [equippedShip, setEquippedShip] = useState<string>("default");
   const [equippedTrail, setEquippedTrail] = useState<string>("blue");
+  // Trail preview (REG-181/HN-07): a transient, never-persisted trail
+  // override so the Hangar can show a trail in the galaxy before equip.
+  // Cleared by any equip, by a space change, or by Stop preview.
+  const [previewTrail, setPreviewTrail] = useState<string | null>(null);
   const [equippedFig1, setEquippedFig1] = useState<string>("none");
   const [equippedFig2, setEquippedFig2] = useState<string>("none");
   const [showFocusFig1, setShowFocusFig1] = useState<boolean>(true);
@@ -230,6 +298,7 @@ export default function App() {
 
     setEquippedShip(localStorage.getItem(shipKey) || "default");
     setEquippedTrail(localStorage.getItem(trailKey) || "blue");
+    setPreviewTrail(null); // a preview never survives a space change
     setEquippedFig1(localStorage.getItem(fig1Key) || "none");
     setEquippedFig2(localStorage.getItem(fig2Key) || "none");
     setShowFocusFig1(localStorage.getItem(focusFig1Key) !== "false");
@@ -245,9 +314,14 @@ export default function App() {
     let alive = true;
     const load = () => {
       void getFuel().then((f) => {
-        if (alive) setFuel(f);
+        if (alive) {
+          setFuel(f);
+          setFuelError(false);
+        }
       }).catch(() => {
-        /* retain the last known gauge value while offline */
+        // Retain the last known gauge value while offline — but if fuel
+        // has never arrived, the gauge must say the load failed (REG-067).
+        if (alive) setFuelError(true);
       });
       void getStreak().then((s) => {
         if (alive) setStreak(s);
@@ -294,6 +368,13 @@ export default function App() {
   // keys the panel so a share arriving while capture is already open still
   // remounts it with the shared text; cleared when the panel closes.
   const [ingestSeed, setIngestSeed] = useState<{ text: string; nonce: number } | null>(null);
+  // REG-187 (SP-04): the search session, held above the panel switch so a
+  // search survives choosing a hit (which unmounts Search) and returning.
+  const [searchSession, setSearchSession] = useState<SearchSession | null>(null);
+  // REG-188 (SP-05): a seed question carried in from a zero-results escape
+  // hatch — the exact text already typed, prefilled in ChatDock instead of
+  // making the user retype it. Cleared when Chat closes.
+  const [chatSeed, setChatSeed] = useState<{ text: string; nonce: number } | null>(null);
   // Startup recovery: set when initialization fails/stalls so we show a recovery
   // screen (Retry / Performance Mode / Diagnostics) instead of freezing on the sun.
   const [initError, setInitError] = useState<null | "timeout" | "error">(null);
@@ -461,7 +542,38 @@ export default function App() {
   // useShipStatusOpen hook in GalaxyHud); the phone default is collapsed
   // after a one-time first-run expanded reveal, desktop starts expanded.
   const [shipStatusOpen, setShipStatusOpen] = useShipStatusOpen(space?.id ?? null);
-  const [shipViewMode, setShipViewMode] = useState<"orbit" | "cockpit">("orbit");
+  // Camera mode persists PER BRAIN like the ship-task label beside it
+  // (REG-171/SF-06 — it used to be a plain useState, so a locked cockpit
+  // camera silently returned to orbit on every reload). Same pattern as
+  // showShipTask above: the old global "ship.view" key is the one-time
+  // fallback for brains that predate the per-brain key.
+  const [shipViewMode, setShipViewModeState] = useState<"orbit" | "cockpit">(() => {
+    try {
+      return localStorage.getItem("ship.view") === "cockpit" ? "cockpit" : "orbit";
+    } catch {
+      return "orbit";
+    }
+  });
+  useEffect(() => {
+    if (!space) return;
+    try {
+      const v = localStorage.getItem(`ship.view.${space.id}`) ?? localStorage.getItem("ship.view");
+      setShipViewModeState(v === "cockpit" ? "cockpit" : "orbit");
+    } catch {
+      /* private mode */
+    }
+  }, [space?.id]);
+  const setShipViewMode = useCallback(
+    (v: "orbit" | "cockpit") => {
+      setShipViewModeState(v);
+      try {
+        localStorage.setItem(space ? `ship.view.${space.id}` : "ship.view", v);
+      } catch {
+        /* private mode */
+      }
+    },
+    [space?.id],
+  );
   const [tasks, setTasks] = useState<any[]>([]);
   const handleReorderTasks = useCallback((newOrder: any[]) => {
     graphRef.current?.reorderTasks(newOrder);
@@ -509,6 +621,11 @@ export default function App() {
   // The active Smart Lens (its name), shown as a dismissable banner while the galaxy is
   // isolated to it. Clearing it exits the isolated view.
   const [activeLens, setActiveLens] = useState<string | null>(null);
+  // Batch H (REG-207/208 / CN-08/09): the banner states the lens's TRUE match
+  // total, and how many the isolate actually shows when the match list itself
+  // was capped. Null = no count known (e.g. an overlay layer).
+  const [activeLensCount, setActiveLensCount] = useState<number | null>(null);
+  const [activeLensShown, setActiveLensShown] = useState<number | null>(null);
   // Ambient Level-2 read on you (foresight or newest belief) shown as a HUD pill.
   const [selfInsight, setSelfInsight] = useState<{ kind: "foresight" | "belief"; text: string; inDays?: number } | null>(null);
   const [clustered, setClustered] = useState(false);
@@ -637,10 +754,13 @@ export default function App() {
     // Unlockables gate (IM-133): if the remembered track has since been
     // locked (or was never earned), start from the first unlocked track
     // instead of playing a locked loop. Deep Space is always unlocked.
+    // Batch I (REG-065 / GH-07): while stats are still in flight, only
+    // an `always` track may start — a possibly-locked remembered track
+    // must not play before the gate has been evaluated.
     if (!a.playing) {
       const { stats, devUnlockAll: dev } = unlockGateRef.current;
+      const ids = TRACKS.map((t) => t.id);
       if (stats) {
-        const ids = TRACKS.map((t) => t.id);
         if (!isTrackUnlocked(ids[a.index]!, stats, { devUnlockAll: dev })) {
           const first = firstUnlockedTrackIndex(ids, stats, { devUnlockAll: dev });
           if (first >= 0 && first !== a.index) {
@@ -648,6 +768,13 @@ export default function App() {
             setMusic(a.playing);
             return;
           }
+        }
+      } else if (!dev && !isTrackAlwaysUnlocked(ids[a.index]!)) {
+        const first = firstAlwaysUnlockedTrackIndex(ids);
+        if (first >= 0 && first !== a.index) {
+          a.playTrack(first);
+          setMusic(a.playing);
+          return;
         }
       }
     }
@@ -657,9 +784,12 @@ export default function App() {
     if (!audioRef.current) audioRef.current = makeAmbientAudio();
     const a = audioRef.current;
     // Unlockables gate (IM-133): skip advances only across UNLOCKED tracks.
+    // Batch I (REG-065 / GH-07): while stats are in flight, only `always`
+    // tracks are playable — the skip stays on Deep Space rather than
+    // landing on a possibly-locked loop.
     const { stats, devUnlockAll: dev } = unlockGateRef.current;
+    const ids = TRACKS.map((t) => t.id);
     if (stats) {
-      const ids = TRACKS.map((t) => t.id);
       const nxt = nextUnlockedTrackIndex(a.index, ids, stats, { devUnlockAll: dev });
       if (nxt !== a.index) {
         a.playTrack(nxt);
@@ -669,13 +799,30 @@ export default function App() {
       setMusic(a.playing);
       return;
     }
-    a.next();
+    if (dev) {
+      a.next();
+      setMusic(a.playing);
+      return;
+    }
+    const nxt = nextAlwaysUnlockedTrackIndex(a.index, ids);
+    if (nxt !== a.index) {
+      a.playTrack(nxt);
+    } else if (!a.playing) {
+      a.toggle(); // the current track is the only playable one — just start it
+    }
     setMusic(a.playing);
   }, []);
   const playSong = useCallback((i: number) => {
     // Unlockables gate (IM-133): a locked track never plays; say why instead.
     const track = TRACKS[i];
     const { stats, devUnlockAll: dev } = unlockGateRef.current;
+    // Batch I (REG-065 / GH-07): while stats are still in flight, only
+    // an `always` track may play — anything else waits for the gate.
+    if (track && !dev && !stats && !isTrackAlwaysUnlocked(track.id)) {
+      pushToast("Still checking what's unlocked — try again in a moment.", "⏳", 4000);
+      setSongMenuOpen(false);
+      return;
+    }
     if (track && stats && !isTrackUnlocked(track.id, stats, { devUnlockAll: dev })) {
       const item = unlockableForTrack(track.id);
       pushToast(
@@ -724,6 +871,18 @@ export default function App() {
       }
     },
     [followStation, followFig1, followFig2],
+  );
+  // Hangar trail preview (REG-181/HN-07): apply the trail transiently
+  // (never written to localStorage) and focus the ship so the trail is
+  // seen in the galaxy. The dock closes, as with any View in galaxy —
+  // the preview banner in the Hangar (on reopen) names the preview and
+  // offers Stop preview / Equip to keep it.
+  const handlePreviewTrail = useCallback(
+    (value: string | null) => {
+      setPreviewTrail(value);
+      if (value) handleViewInGalaxy("ship");
+    },
+    [handleViewInGalaxy],
   );
   // Single click = play/pause; double click = next track (a short timer lets a
   // second click cancel the toggle so a double-click cleanly skips the song).
@@ -784,8 +943,10 @@ export default function App() {
   // A banked nebula shield just forgave a missed day — celebrate the save gently so the
   // forgiving-streak mechanic is actually FELT (a broken streak is data, not punishment).
   useEffect(() => {
+    // Batch I (REG-070 / GH-13): the toast explains what a shield
+    // forgives — the StreakEmber's hover text is not the explanation.
     const onShield = () =>
-      pushToast("A nebula shield forgave your missed day — your streak is safe.", "🛡️", 7000, "normal", { kind: "tab", value: "awards" });
+      pushToast(shieldSavedToastText(), "🛡️", 7000, "normal", { kind: "tab", value: "awards" });
     window.addEventListener("brain-shield-saved", onShield);
     return () => window.removeEventListener("brain-shield-saved", onShield);
   }, []);
@@ -1166,9 +1327,56 @@ export default function App() {
     devUnlockAll,
     onUnlock: (item) => {
       playSfx("achievement");
-      setUnlockMoment(item);
+      enqueueUnlockMoment(item);
       pushToast(`🔓 Unlocked! ${item.label} — ${item.description}`, "🔓", 9000, "high");
     },
+  });
+
+  // REG-047 (PG-04): Soumaya's autonomously-charted field notes, fetched at App
+  // level so the global Codex claim hook covers them too — not just the
+  // graph-derived entries. The Codex panel fetches the same endpoint for
+  // display; this is the claim-side copy (a failed fetch here is silent —
+  // the panel surfaces it visibly, IM-91 — and the entries are re-claimed
+  // when the panel opens).
+  const [codexDiscoveries, setCodexDiscoveries] = useState<AgentDiscovery[]>([]);
+  useEffect(() => {
+    if (!space) return;
+    let alive = true;
+    void getCodexDiscoveries()
+      .then((d) => {
+        if (alive) setCodexDiscoveries(d);
+      })
+      .catch(() => {
+        /* panel surfaces the failure visibly (IM-91) */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [space]);
+
+  // REG-047: the full Codex entry list at App level (graph-derived + field
+  // notes), so a discovery is announced and its reward claimed at the moment
+  // it first becomes true, on any surface — not only when the Codex panel
+  // opens. A claim refreshes the fuel gauge immediately; the 30s poll would
+  // pick it up anyway, this just names the moment.
+  const codexEntries = useMemo(() => {
+    if (!space || !loaded) return [];
+    const allNodes = data.nodes as GraphNode[];
+    return [
+      ...buildCodex({
+        memories: allNodes.filter((n) => n.kind !== "moc" && n.kind !== "action"),
+        constellations: allNodes.filter((n) => n.kind === "moc"),
+        links: data.links.length,
+      }),
+      ...fieldNoteEntries(codexDiscoveries),
+    ];
+  }, [space, loaded, data.nodes, data.links, codexDiscoveries]);
+  useCodexDiscoveryClaims(codexEntries, space?.id ?? null, () => {
+    void getFuel()
+      .then((f) => {
+        if (f) setFuel(f);
+      })
+      .catch(() => {});
   });
 
   // Random idle FLY-BY: when you're just watching the galaxy (nothing open or focused),
@@ -1351,7 +1559,7 @@ export default function App() {
     if (!space || !loaded) return;
     const key = `brain.replay.lastLog.${space.id}`;
     const VERBS: Record<string, { replay: string; live: string }> = {
-      research: { replay: "deep-dived", live: "just deep-dived" },
+      research: { replay: "researched", live: "just researched" },
       merging: { replay: "fused a duplicate into", live: "just fused a duplicate into" },
       sector_vibe: { replay: "charted the sector around", live: "just charted the sector around" },
       synthesis: { replay: "connected a thread to", live: "just connected a thread to" },
@@ -1479,15 +1687,45 @@ export default function App() {
   }, [space, refresh]);
 
   // Navigate to a memory, recording where we came from so Back works.
+  // Returns true when the jump landed, false when it could not — every
+  // door (Search, palette, Recall, Observatory, NoticingCard chips) funnels
+  // through here, so a false lets the caller say so instead of mimicking
+  // success.
   const goTo = useCallback(
-    (id: number, record = true, ripple = false) => {
-      const n = view.nodes.find((x) => x.id === id);
-      if (!n) return;
+    async (id: number, record = true, ripple = false): Promise<boolean> => {
+      // SP-01 / REG-184: the loaded galaxy is only the top-300 nodes by
+      // degree, but Search, the palette, Recall, Observatory, and
+      // NoticingCard chips all present ids from the FULL node set. A
+      // presented hit outside the cut used to die here in a silent
+      // `return` — force-include it through the existing
+      // getGraph(limit, includeIds) machinery instead. When the node
+      // genuinely cannot be loaded (deleted / archived / foreign space),
+      // or the fetch itself fails, say so visibly: no silent no-op may
+      // remain on this path.
+      let resolved: { node: GraphNode | null; fetched: GraphData | null };
+      try {
+        resolved = await resolveFocusNode(view.nodes, id, (ids) => getGraphWithCompletion(ids));
+      } catch {
+        pushToast("Couldn't open that memory — the galaxy didn't load. Try again.", "⚠️", 8000);
+        return false;
+      }
+      const n = resolved.node;
+      if (!n) {
+        pushToast("Couldn't open that memory — it may have been deleted or archived.", "⚠️", 8000);
+        return false;
+      }
+      if (resolved.fetched) {
+        // Merge exactly like refresh() does, then fly once the node has
+        // reached the renderer (the same 550ms settle refresh() uses).
+        const fetched = resolved.fetched;
+        setData((prev) => mergeGraphData(prev, fetched));
+        window.setTimeout(() => graphRef.current?.focusNode(id), 550);
+      }
       setHistory((h) => (record && selected && selected.id !== id ? [...h, selected.id] : h));
       setSelected(n);
       setTab("details");
       setPanel("dock");
-      graphRef.current?.focusNode(id);
+      if (!resolved.fetched) graphRef.current?.focusNode(id);
       if (ripple) graphRef.current?.spawnBurst(id, "user");
       if (space) {
         void tendNode(id); // revisiting a memory warms it back up (entropy)
@@ -1519,6 +1757,7 @@ export default function App() {
         // Force evaluation of achievements
         setTimeout(() => handleChanged(-1), 100);
       }
+      return true;
     },
     [view, selected, space],
   );
@@ -1529,17 +1768,32 @@ export default function App() {
   // open a tab/panel, or open chat) — so every notification can take you to the thing.
   useEffect(() => {
     const onAction = (e: Event) => {
-      const a = (e as CustomEvent).detail as { kind: string; value?: string | number } | undefined;
+      const a = (e as CustomEvent).detail as { kind: string; value?: string | number; text?: string } | undefined;
       if (!a) return;
       if (a.kind === "focus" && a.value != null) { focus(Number(a.value)); }
       else if (a.kind === "tab" && a.value != null) { dismissObs(); setTab(String(a.value) as any); setPanel("dock"); }
-      else if (a.kind === "panel" && a.value != null) { setPanel(String(a.value) as any); }
+      // Verb 1 (Tend a plot): the Help card's "Travel to Growing Place"
+      // Try-It — the same travel-focus mechanism the world map uses.
+      else if (a.kind === "travel" && a.value != null) { openTravel(String(a.value)); }
+      else if (a.kind === "panel" && a.value != null) {
+        // REG-188: a panel-kind action may carry the text the user already
+        // typed (SearchBox's "Add as memory" hatch) — seed the capture box
+        // with it instead of opening an empty one.
+        if (String(a.value) === "ingest" && typeof a.text === "string" && a.text.trim()) {
+          setIngestSeed({ text: a.text.trim(), nonce: Date.now() });
+        }
+        setPanel(String(a.value) as any);
+      }
       else if (a.kind === "chat") {
         // Phase Y/Z: a proactive toast's "chat" action carries "<source>:<targetId>"
         // (goal_trend or bill_risk) — any other chat-kind action (there are none today,
         // but any future one) falls through to opening Chat with no proactive context.
         const m = typeof a.value === "string" ? /^(goal_trend|bill_risk):(\d+)$/.exec(a.value) : null;
         if (m) setPendingProactiveContext({ source: m[1] as ProactiveContextSource, targetId: Number(m[2]) });
+        // REG-188: a chat-kind action carrying plain text (not a proactive
+        // "<source>:<id>") is a seed question from an escape hatch —
+        // prefill the chat input with the text already typed.
+        else if (typeof a.value === "string" && a.value) setChatSeed({ text: a.value, nonce: Date.now() });
         setShowChat(true);
       }
     };
@@ -1666,21 +1920,47 @@ export default function App() {
   // in Graph3D (isolateSet/isolateLayer/isolateSystem all call the same setCluster), so
   // each entry point must clear the OTHER's exit-UI flag or both exit controls (the
   // "⧉ Lens" banner and "✕ Exit system view" button) can show at once.
-  const openLens = useCallback((ids: number[], name: string) => {
+  // Batch H (REG-207 / CN-08): a lens evaluates over the FULL node set, but the
+  // galaxy only renders the loaded payload — opening one used to isolate to the
+  // payload's intersection with its matches, silently showing a subset as the
+  // whole lens. Force-include the missing bodies first via the existing
+  // includeIds machinery (getGraphWithCompletion), then isolate; the banner
+  // states the true match total, and the shown subset when the match list
+  // itself was capped (REG-208). A failed force-include is disclosed, and the
+  // isolate still runs over what is loaded.
+  const openLens = useCallback(async (ids: number[], name: string, total?: number) => {
+    const shown = ids.length;
+    const matchTotal = total ?? shown;
+    const loaded = new Set(data.nodes.map((n) => n.id));
+    const missing = ids.filter((id) => !loaded.has(id));
+    if (missing.length > 0) {
+      try {
+        const g = await getGraphWithCompletion(missing);
+        setData((prev) => mergeGraphData(prev, g));
+      } catch {
+        pushToast("Couldn't load every match — showing the ones already here.", "⚠️", 4000);
+      }
+    }
     graphRef.current?.isolateSet(ids);
     setActiveLens(name);
+    setActiveLensCount(matchTotal);
+    setActiveLensShown(shown);
     setClustered(false);
     setSelected(null);
-  }, []);
+  }, [data.nodes]);
   const exitLens = useCallback(() => {
     graphRef.current?.exitCluster();
     setActiveLens(null);
+    setActiveLensCount(null);
+    setActiveLensShown(null);
     setClustered(false);
   }, []);
   // View only an overlay layer (money-sky / journey hubs) — their own category view.
   const openLayer = useCallback((layer: "money" | "journeys", name: string) => {
     graphRef.current?.isolateLayer(layer);
     setActiveLens(name);
+    setActiveLensCount(null);
+    setActiveLensShown(null);
     setClustered(false);
     setSelected(null);
   }, []);
@@ -1760,6 +2040,7 @@ export default function App() {
 
         setEquippedShip(localStorage.getItem(shipKey) || "default");
         setEquippedTrail(localStorage.getItem(trailKey) || "blue");
+        setPreviewTrail(null); // equipping ends any preview — the real pick now shows
         setEquippedFig1(localStorage.getItem(fig1Key) || "none");
         setEquippedFig2(localStorage.getItem(fig2Key) || "none");
         setShowFocusFig1(localStorage.getItem(focusFig1Key) !== "false");
@@ -1823,10 +2104,11 @@ export default function App() {
           Settings or ?perf=1, and polls at 2Hz rather than reading anything per frame. */}
       <PerfHUD nodeCount={view.nodes.length} />
       {/* Left-edge HUD (fuel + streak) — hidden whenever a panel/chat/Observatory is up
-          so it never overlaps their content. */}
-      {panel === null && !showChat && !showObs && !showSettings && !showConnections && !showTimeline && (
+          so it never overlaps their content. Batch I (REG-068 / GH-15):
+          one shared hide rule with the stack and the empty-galaxy cue. */}
+      {!hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <>
-          <FuelGauge fuel={fuel} pops={fuelPops} busy={aiBusy > 0} onClick={() => setShowFuelWays(true)} />
+          <FuelGauge fuel={fuel} pops={fuelPops} busy={aiBusy > 0} onClick={() => setShowFuelWays(true)} loadState={fuel ? "ready" : fuelError ? "error" : "loading"} onRetry={retryFuel} />
           <StreakEmber streak={streak?.current ?? 0} best={streak?.best} atRisk={streakAtRisk} shields={streak?.shields ?? 0} onClick={() => { setTab("awards"); setPanel("dock"); }} />
         </>
       )}
@@ -1841,7 +2123,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <UnlockCelebration item={unlockMoment} onDismiss={() => setUnlockMoment(null)} />
+      <UnlockCelebration item={unlockMoment} onDismiss={dismissUnlockMoment} />
       {/* Lite mode: a calm static backdrop instead of the WebGL galaxy, so the app is
           fully usable (Mind, chat, memories, tabs) even when the 3D can't render. */}
       {lite && <div className="lite-backdrop" aria-hidden />}
@@ -1872,10 +2154,10 @@ export default function App() {
         fallback={
           <>
             <div className="lite-backdrop" aria-hidden />
-            <div className="galaxy-off-note galaxy-err" role="alert">
-              <span>⚠️ The 3D galaxy hit an error</span>
-              <button onClick={() => window.location.reload()}>Reload</button>
-            </div>
+            {/* Batch I (REG-060 / GH-01): the error card offers the Lite
+                escape, not only Reload — a device that cannot render
+                WebGL loops on Reload otherwise. */}
+            <GalaxyErrorCard onReload={() => window.location.reload()} />
           </>
         }
       >
@@ -1916,8 +2198,18 @@ export default function App() {
           void galaxyEntity(kind, id).then((r) => {
             if (!r) return;
             const flew = graphRef.current?.flyToGalaxyEntity(kind, id) ?? false;
-            const icon = kind === "journey" ? "🧭" : "💵";
-            pushToast(`${icon} ${r.descriptor.ref.label} — ${r.navigation.reason}`, icon, flew ? 7000 : 5000);
+            // Batch I (REG-111): the toast must not say the same thing
+            // whether the flight happened or not.
+            pushToast(
+              galaxyEntityToastText(
+                kind,
+                r.descriptor.ref.label ?? (kind === "journey" ? "this journey" : "this item"),
+                r.navigation.reason,
+                flew,
+              ),
+              kind === "journey" ? "🧭" : "💵",
+              flew ? 7000 : 5000,
+            );
             // Galaxy entity detail focus (Phase O, docs/specs/galaxy-entity-citizenship-audit.md
             // §14/§18): the fly-to above already proved "that's a real thing" — this additionally
             // opens the SAME domain panel/card that already shows its full detail (JourneysPanel/
@@ -1951,7 +2243,7 @@ export default function App() {
         shipViewMode={shipViewMode}
         fuel={fuel}
         equippedShip={equippedShip}
-        equippedTrail={equippedTrail}
+        equippedTrail={previewTrail ?? equippedTrail}
         equippedFig1={equippedFig1}
         equippedFig2={equippedFig2}
         spaceId={space?.id ?? ""}
@@ -2126,6 +2418,15 @@ export default function App() {
               setData({ nodes: [], links: [] });
               setSelected(null);
               setPanel(null);
+              // REG-159 (JN-01): disarm the chat too — without setShowChat(false)
+              // the dock unmounts with showChat still true, and on the next login
+              // it remounts with the old journey armed, its stale id resolving
+              // in the NEW space. The showChat-false effect clears the pending
+              // journey as well; clear it explicitly so the disarm does not
+              // depend on effect timing.
+              setShowChat(false);
+              setPendingJourneyId(null);
+              setPendingJourneyTitle(null);
             }}
           >
             {space.name} ⏏
@@ -2138,6 +2439,7 @@ export default function App() {
           fuel={fuel}
           nodes={view.nodes as GraphNode[]}
           health={health}
+          spaceId={space?.id}
           onFocusNode={goTo}
           onOpenTab={(t) => {
             setTab(t);
@@ -2194,27 +2496,82 @@ export default function App() {
         />
       )}
 
-      {/* Worlds travel (Phase 2, P2-3) — ships dark: while the worlds
-          flag is off, TravelPanel renders nothing and fetches nothing. */}
+      {/* The worlds panels live in ONE positioned sheet (Tools → Travel,
+          or a map / Try-It handoff). Mounted loose in .app they laid out
+          in flow below the screen's bottom edge and were unreachable. The
+          sheet stays mounted while closed so the panels keep their state;
+          each panel still ships dark on its own while the worlds flag is
+          off (renders nothing, fetches nothing). */}
       {space && (
-        <ErrorBoundary label="travel" fallback={null}>
-          <TravelPanel />
+        <TravelSheet open={showTravel} onClose={() => setShowTravel(false)}>
+          {/* Worlds travel (Phase 2, P2-3). */}
+          <ErrorBoundary label="travel" fallback={null}>
+            <TravelPanel focusWorld={travelFocus} onTransit={() => setShowTravel(false)} />
+          </ErrorBoundary>
+
+          {/* Guided tours (Wave 2, N7) — saved Chronicle routes with a voice. */}
+          <ErrorBoundary label="tours" fallback={null}>
+            <ToursPanel />
+          </ErrorBoundary>
+
+          {/* World changes (Phase 4, §17 M1/M6) — the rail's two doors over
+              one log: the approvals inbox (the calm batched review moment)
+              and the browsable World Changes view. */}
+          <ErrorBoundary label="approvals-inbox" fallback={null}>
+            <ApprovalsInbox />
+          </ErrorBoundary>
+          <ErrorBoundary label="world-changes-view" fallback={null}>
+            <WorldChangesView />
+          </ErrorBoundary>
+        </TravelSheet>
+      )}
+
+      {/* World map (Rev 116) — the full-screen star map from the Tools
+          popup menu. Travelling still happens in the travel panel: the
+          map hands over with a focus world, closes, and opens the sheet. */}
+      {space && showWorldMap && (
+        <ErrorBoundary label="world-map" fallback={null}>
+          <WorldMap
+            onClose={() => setShowWorldMap(false)}
+            onTravelTo={(world) => {
+              setShowWorldMap(false);
+              openTravel(world);
+            }}
+          />
         </ErrorBoundary>
       )}
 
-      {/* Worlds surface (Phase 2, P2-4 — the F-01 mount): the Great
-          Station scene appears when travel state places the brain
-          there. Same dark contract, same flag. */}
+      {/* Worlds surface (Phase 2, P2-4 — the F-01 mount; P3-1 adds the
+          garden): the scene for the world travel state places the brain
+          in appears here. Same dark contract, same flag. The graph the
+          app already holds is the garden's only data source — one
+          source of truth, shared with the home galaxy. Verb 1: a tend
+          in the garden re-pulls the graph (a line tend plants a new
+          node) so the garden's own warm glow refreshes from the same
+          source — no fuel toast here, the tend sheet already says it. */}
       {space && (
         <ErrorBoundary label="worlds-surface" fallback={null}>
-          <WorldsSurface />
+          <WorldsSurface
+            graph={data}
+            onChanged={(result) => void refresh(result.newNodeId ? [result.newNodeId] : undefined)}
+            getFleetStatus={() => graphRef.current?.getFleetStatus()}
+            onFocus={focus}
+            onHangarEquipChanged={() => void handleChanged(-1)}
+            onGardenChanged={(ids) => void refresh(ids)}
+          />
         </ErrorBoundary>
       )}
 
-      {/* Active-lens banner — mirrors "Exit system view"; ✕ restores the full galaxy. */}
+      {/* Active-lens banner — mirrors "Exit system view"; ✕ restores the full galaxy.
+          Batch H (REG-207/208): states the true match total, and the shown subset
+          when the match list itself was capped — the view never silently passes
+          for the whole lens. */}
       {activeLens && panel === null && (
         <button className="lens-banner" onClick={exitLens} title="Exit this lens">
-          ⧉ Lens: {activeLens} &nbsp;✕
+          ⧉ Lens: {activeLens}
+          {activeLensCount != null ? ` · ${activeLensCount.toLocaleString()} match${activeLensCount === 1 ? "" : "es"}` : ""}
+          {activeLensCount != null && activeLensShown != null && activeLensShown < activeLensCount ? ` — showing first ${activeLensShown.toLocaleString()}` : ""}
+          &nbsp;✕
         </button>
       )}
 
@@ -2275,8 +2632,10 @@ export default function App() {
           beacon box = body, sounds pill = footer) with a single negotiated
           anchor + height cap, instead of three independently-fixed boxes
           that grew through each other. While the noticed card is up, the
-          stack docks in its low slot (§6.5.5). */}
-      {panel === null && !showObs && (
+          stack docks in its low slot (§6.5.5). Batch I (REG-068 / GH-15):
+          the stack hides under the same shared rule as the Fuel/Streak
+          block — it used to stay up over chat/settings/connections. */}
+      {!hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <ShipStatusStack
           belowNoticing={noticingOpen}
           collapsed={!shipStatusOpen}
@@ -2306,8 +2665,10 @@ export default function App() {
 
       {/* CL-1b (IM-23): an empty galaxy names where the first star goes,
           in-scene — the Observatory hero covers arrival, this covers the
-          galaxy itself once you're standing in it. */}
-      {loaded && data.nodes.length === 0 && panel === null && !showObs && !showChat && !showSettings && (
+          galaxy itself once you're standing in it. Batch I (REG-068 /
+          GH-15): same shared hide rule — the cue used to stay up over
+          Connections and the Timeline. */}
+      {loaded && data.nodes.length === 0 && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <EmptyGalaxyCue onAdd={() => toggle("ingest")} />
       )}
 
@@ -2349,6 +2710,8 @@ export default function App() {
             dueCount={dueCount}
             onTimeline={() => setShowTimeline(true)}
             onLegend={() => setShowLegend(true)}
+            onWorldMap={() => setShowWorldMap(true)}
+            onTravel={WORLDS_TRAVEL_ENABLED ? () => openTravel() : undefined}
             onFlashback={triggerFlashback}
             onFocusMode={() => setFocusMode((v) => !v)}
             focusMode={focusMode}
@@ -2384,12 +2747,12 @@ export default function App() {
           <button
             className={`fab fab-focus-toggle ${focusMode ? "on" : ""}`}
             onClick={() => setFocusMode((v) => !v)}
-            aria-label={focusMode ? "Exit focus mode" : "Focus mode"}
+            aria-label={focusMode ? "Exit calm" : "Calm mode"}
             aria-pressed={focusMode}
-            title={focusMode ? "Exit deep-space focus mode" : "Deep-space focus mode — dim the chrome for a calm read"}
+            title={focusMode ? "Exit deep-space calm mode" : "Deep-space calm mode — dim the chrome for a calm read"}
           >
             {focusMode ? "🌐" : "🌌"}
-            <span className="fab-cap">Focus</span>
+            <span className="fab-cap">Calm</span>
           </button>
           {/* Game-style focus cluster: one button that pops up the camera targets. */}
           {(() => {
@@ -2517,7 +2880,7 @@ export default function App() {
                 ariaLabel: `Focus ${getFigurineLabel(equippedFig1)}`,
                 title: `Focus ${getFigurineLabel(equippedFig1)}`,
                 icon: getFigurineIcon(equippedFig1),
-                caption: fanTargetCaption("fig1"),
+                caption: fanTargetCaption("fig1", undefined, equippedFig1),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.toggleFollowFig1() ?? false;
@@ -2539,7 +2902,7 @@ export default function App() {
                 ariaLabel: `Focus ${getFigurineLabel(equippedFig2)}`,
                 title: `Focus ${getFigurineLabel(equippedFig2)}`,
                 icon: getFigurineIcon(equippedFig2),
-                caption: fanTargetCaption("fig2"),
+                caption: fanTargetCaption("fig2", undefined, equippedFig2),
                 onClick: () => {
                   setLoreDismissed(false);
                   const on = graphRef.current?.toggleFollowFig2() ?? false;
@@ -2563,7 +2926,7 @@ export default function App() {
                   <button
                     key={t.key}
                     className={t.className}
-                    style={focusItemStyle(i, focusMenuOpen, layout.step)}
+                    style={focusItemStyle(i, focusMenuOpen, layout.step, layout.direction)}
                     onClick={t.onClick}
                     aria-label={t.ariaLabel}
                     title={t.title}
@@ -2575,7 +2938,7 @@ export default function App() {
                 {layout.folded && (
                   <button
                     className="fab focus-item fan-more"
-                    style={focusItemStyle(visible.length, focusMenuOpen, layout.step)}
+                    style={focusItemStyle(visible.length, focusMenuOpen, layout.step, layout.direction)}
                     onClick={() => setFanPage((p) => (p + 1) % layout.pageCount)}
                     aria-label={`More focus targets (page ${win.page + 1} of ${layout.pageCount})`}
                     title="More focus targets"
@@ -2615,13 +2978,17 @@ export default function App() {
           </button>
           {/* Radial song menu — dots circling the music button (press-and-hold to open).
               Unlockables gate (IM-133): locked tracks render locked with their
-              requirement and cannot be picked (playSong also guards). */}
-          {songMenuOpen &&
-            TRACKS.map((t, i) => {
+              requirement and cannot be picked (playSong also guards). Batch I
+              (REG-065 / GH-07): the dots gate on trackLocked, which fails
+              CLOSED while stats are in flight — they used to render unlocked
+              until the stats arrived. Batch I (REG-066 / GH-08): the gesture
+              hint and the locked-track requirements are visible text, not
+              hover-only. */}
+          {songMenuOpen && (
+            <>
+            {TRACKS.map((t, i) => {
               const gateItem = unlockableForTrack(t.id);
-              const locked = unlockStats
-                ? !isTrackUnlocked(t.id, unlockStats, { devUnlockAll })
-                : false;
+              const locked = trackLocked(t.id, unlockStats, { devUnlockAll });
               return (
                 <button
                   key={t.id}
@@ -2637,6 +3004,18 @@ export default function App() {
                 </button>
               );
             })}
+            <div className="song-menu-notes">
+              <div className="song-menu-hint" role="note">
+                Tap play/pause · double-tap skip · hold for songs
+              </div>
+              {lockedTrackNotes(TRACKS.map((t) => t.id), unlockStats, { devUnlockAll }).map((n) => (
+                <div key={n.id} className="song-lock-notes" role="note">
+                  🔒 {TRACKS.find((t) => t.id === n.id)?.title ?? n.id} — unlocks at {n.requirement}
+                </div>
+              ))}
+            </div>
+            </>
+          )}
           {music && musicTrack && nowPlayingVisible && (
             <button
               className="now-playing"
@@ -2647,7 +3026,9 @@ export default function App() {
               <span className="np-eq"><i /><i /><i /></span>
               <span className="np-title">{musicTrack.title}</span>
               <span className="np-count">{musicTrack.index + 1}/{musicTrack.total}</span>
-              <span className="np-skip">⏭</span>
+              {/* Batch I (REG-066 / GH-08): the skip is labelled in visible
+                  text — the ⏭ glyph alone said nothing on touch. */}
+              <span className="np-skip">⏭ Skip</span>
             </button>
           )}
           <ActionRail
@@ -2676,12 +3057,17 @@ export default function App() {
             // The brain is deleted server-side and AccountSettings already
             // cleared the local credential via logoutSpace(); mirror the
             // switch-brain handler above so the app returns to the login
-            // screen with no stale in-memory state.
+            // screen with no stale in-memory state — including the armed
+            // journey (REG-159/JN-01): the dock must not remount on the next
+            // login with the old journey armed in the new space.
             logoutSpace();
             setSpace(null);
             setData({ nodes: [], links: [] });
             setSelected(null);
             setPanel(null);
+            setShowChat(false);
+            setPendingJourneyId(null);
+            setPendingJourneyTitle(null);
             setShowSettings(false);
           }}
           focusAudio={settingsFocusAudio}
@@ -2740,14 +3126,17 @@ export default function App() {
       {showChat && space && (
         <ChatDock
           spaceName={space.name}
-          onClose={() => setShowChat(false)}
+          hasMemories={data.nodes.length > 0}
+          onClose={() => { setShowChat(false); setChatSeed(null); }}
+          seedQuestion={chatSeed}
           onFocus={(id) => focus(id)}
           onRecall={(ids) => graphRef.current?.fireRecall(ids)}
           onCreated={(ids) => void refresh(ids)}
           proactiveContext={pendingProactiveContext}
           onConsumeProactiveContext={() => setPendingProactiveContext(null)}
           journeyId={pendingJourneyId}
-          onConsumeJourneyContext={() => setPendingJourneyId(null)}
+          journeyTitle={pendingJourneyTitle}
+          onConsumeJourneyContext={() => { setPendingJourneyId(null); setPendingJourneyTitle(null); }}
           onNavigate={(nav) => {
             // Maya Chat → Galaxy Navigation: user clicked the chip — this is the ONLY
             // trigger, never automatic. Same imperative path + safety as a direct click
@@ -2757,7 +3146,13 @@ export default function App() {
             if (!kind) return;
             const flew = graphRef.current?.flyToGalaxyEntity(kind, nav.target.id) ?? false;
             const icon = kind === "journey" ? "🧭" : "💵";
-            pushToast(`${icon} ${nav.target.label ?? "Navigating"} — ${nav.reason}`, icon, flew ? 7000 : 5000);
+            // CH-02: a failed flight must not wear the success wording —
+            // the old toast read identically whether she flew or not.
+            if (flew) {
+              pushToast(`${icon} ${nav.target.label ?? "Navigating"} — ${nav.reason}`, icon, 7000);
+            } else {
+              pushToast(`${icon} Couldn't fly to ${nav.target.label ?? "that"} — she couldn't find it in your galaxy.`, "⚠️", 5000);
+            }
           }}
         />
       )}
@@ -2797,10 +3192,19 @@ export default function App() {
             dismissObs();
             setPanel("search");
           }}
+          onAnswered={() => {
+            // OB-06: the answer changed graph + streak state — refresh
+            // both through the existing paths (refresh() for the graph/
+            // fuel, the same getStreak the 30s poll uses) so the quests
+            // card, header streak and "Jump back in" agree with the
+            // answer's toast immediately, not at the next poll/close.
+            void refresh();
+            void getStreak().then((s) => { if (s) setStreak(s); }).catch(() => {});
+          }}
         />
       )}
 
-      {panel === "search" && <SearchBox onFocus={focus} onClose={() => setPanel(null)} />}
+      {panel === "search" && <SearchBox onFocus={focus} onClose={() => setPanel(null)} initialSession={searchSession} onSessionChange={setSearchSession} />}
       {panel === "ingest" && (
         <IngestPanel
           key={ingestSeed ? `share-${ingestSeed.nonce}` : "capture"}
@@ -2817,8 +3221,11 @@ export default function App() {
           onClose={() => setShowPalette(false)}
           onCommand={runPaletteCommand}
           onFocusNode={(id) => {
-            setShowPalette(false);
-            focus(id);
+            // SP-01: only close once the jump actually landed — closing
+            // first mimicked a successful jump when focus silently no-opped.
+            void focus(id).then((ok) => {
+              if (ok) setShowPalette(false);
+            });
           }}
         />
       )}
@@ -2874,11 +3281,14 @@ export default function App() {
           onPlayTrack={playSong}
           currentTrackIndex={musicTrack?.index ?? null}
           musicPlaying={music}
+          previewTrail={previewTrail}
+          onPreviewTrail={handlePreviewTrail}
           onAskJourney={(j) => {
             // Phase AC.1 — Journey → Chat: reuses the exact one-shot handoff pattern
             // Phase Y/Z already established for proactiveContext, just keyed by a
             // Journey id instead of a proactive source. No new scoping system.
             setPendingJourneyId(j.id);
+            setPendingJourneyTitle(j.title);
             setShowChat(true);
             pushToast(`🧭 Opening chat about "${j.title}"`, "🧭", 3500);
           }}

@@ -235,12 +235,78 @@ describe("machine legality, drift, and current-world derivation", () => {
     expect(departed?.detail?.fuelCharged).toBe(0);
   });
 
+  it("admits the Growing Place (P3-1): warp there and back, same ledger", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "gp-1", kind: "warp", destination: "growing-place" }, T0);
+    expect(out.destination).toBe("growing-place");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("growing-place");
+    const home = t.depart({ clientKey: "gp-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
+
+  it("admits the Deep Past (P3-2): warp there and back, same ledger", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "dp-1", kind: "warp", destination: "deep-past" }, T0);
+    expect(out.destination).toBe("deep-past");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("deep-past");
+    const home = t.depart({ clientKey: "dp-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
+
   it("rejects off-chart destinations and bad kinds before anything is written", () => {
     const t = travel();
     expect(() => t.depart({ clientKey: "x1", kind: "warp", destination: "narnia" }, T0)).toThrowError(
       TravelError,
     );
     expect(journeyCount()).toBe(0);
+  });
+
+  it("admits People (P3-3) once the gate is open: warp there and back, same ledger", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    expect(t.peopleGateOpen()).toBe(true);
+    const out = t.depart({ clientKey: "pp-1", kind: "warp", destination: "people" }, T0);
+    expect(out.destination).toBe("people");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("people");
+    const home = t.depart({ clientKey: "pp-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
+  it("admits Quiet/Archive (Wave 2): warp there and back, same ledger — no gate", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "qa-1", kind: "warp", destination: "quiet-archive" }, T0);
+    expect(out.destination).toBe("quiet-archive");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("quiet-archive");
+    const home = t.depart({ clientKey: "qa-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
+  });
+
+  it("admits Scale (Phase 3): warp there and back, same ledger — no gate, it is public", () => {
+    const t = travel();
+    const out = t.depart({ clientKey: "sc-1", kind: "warp", destination: "scale" }, T0);
+    expect(out.destination).toBe("scale");
+    const arrived = t.arrive(out.id, past(out.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("scale");
+    const home = t.depart({ clientKey: "sc-2", kind: "drift", destination: "home" }, T0);
+    const back = t.arrive(home.id, past(home.cancelDeadline));
+    expect(back?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("home");
   });
 });
 
@@ -519,5 +585,263 @@ describe("HTTP contract", () => {
     });
     expect(clash.status).toBe(409);
     expect(clash.body.code).toBe("ACTIVE_JOURNEY_EXISTS");
+  });
+});
+
+/**
+ * The People gate (P3-3, Q1): the server — never the client — decides
+ * whether People is open. The threshold: ≥3 people with ≥2 linked
+ * memories each, plus ≥1 memory shared between two people.
+ */
+function seedPerson(h: DbHandle, space: string, id: number, over: Record<string, unknown> = {}): void {
+  h.sqlite
+    .prepare(
+      `INSERT INTO nodes (id, space_id, label, type, content, importance, status, kind)
+       VALUES (?, ?, ?, ?, ?, 0.5, ?, ?)`,
+    )
+    .run(
+      id,
+      space,
+      over.label ?? `Person ${id}`,
+      (over.type as string) ?? "daily",
+      (over.label as string) ?? `Person ${id}`,
+      (over.status as string) ?? "active",
+      over.kind === undefined ? "person_entity" : (over.kind as string | null),
+    );
+}
+function seedMemory(h: DbHandle, space: string, id: number): void {
+  h.sqlite
+    .prepare(`INSERT INTO nodes (id, space_id, label, type, content, importance, status) VALUES (?, ?, ?, 'daily', ?, 0.5, 'active')`)
+    .run(id, space, `Memory ${id}`, `Memory ${id}`);
+}
+function seedLink(h: DbHandle, space: string, source: number, target: number, relationship = "relates_to"): void {
+  h.sqlite
+    .prepare(`INSERT INTO edges (space_id, source, target, relationship) VALUES (?, ?, ?, ?)`)
+    .run(space, source, target, relationship);
+}
+/** The minimal open gate: 3 people × 2 memories, one memory shared by two of them. */
+function seedPeopleGate(h: DbHandle, space: string): void {
+  seedPerson(h, space, 1);
+  seedPerson(h, space, 2);
+  seedPerson(h, space, 3);
+  for (const id of [10, 11, 12, 13, 14, 15]) seedMemory(h, space, id);
+  seedLink(h, space, 10, 1);
+  seedLink(h, space, 11, 1);
+  seedLink(h, space, 12, 2);
+  seedLink(h, space, 13, 2);
+  seedLink(h, space, 14, 3);
+  seedLink(h, space, 15, 3);
+  seedLink(h, space, 15, 1); // memory 15 is shared between persons 1 and 3
+}
+
+describe("C9 — the People gate (P3-3, Q1, server-enforced)", () => {
+  it("closed on an empty brain — a departure to People is refused, nothing is written", () => {
+    const t = travel();
+    expect(t.peopleGateOpen()).toBe(false);
+    expect(t.getState(T0).peopleGateOpen).toBe(false);
+    let code: string | undefined;
+    try {
+      t.depart({ clientKey: "pg-1", kind: "warp", destination: "people" }, T0);
+    } catch (e) {
+      expect(e).toBeInstanceOf(TravelError);
+      code = (e as TravelError).code;
+    }
+    expect(code).toBe("PEOPLE_GATE_CLOSED");
+    expect(journeyCount()).toBe(0);
+  });
+
+  it("open at the threshold: 3 people × 2 memories + 1 shared memory", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    expect(t.peopleGateOpen()).toBe(true);
+    expect(t.getState(T0).peopleGateOpen).toBe(true);
+  });
+
+  it("closed with only two qualifying people, however many memories they hold", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1);
+    seedPerson(handle, "spaceA", 2);
+    for (const id of [10, 11, 12, 13, 14]) seedMemory(handle, "spaceA", id);
+    seedLink(handle, "spaceA", 10, 1);
+    seedLink(handle, "spaceA", 11, 1);
+    seedLink(handle, "spaceA", 12, 1);
+    seedLink(handle, "spaceA", 13, 2);
+    seedLink(handle, "spaceA", 14, 2);
+    seedLink(handle, "spaceA", 14, 1); // shared, but only two people qualify
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("closed with three people but no memory shared between two of them", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1);
+    seedPerson(handle, "spaceA", 2);
+    seedPerson(handle, "spaceA", 3);
+    for (const id of [10, 11, 12, 13, 14, 15]) seedMemory(handle, "spaceA", id);
+    seedLink(handle, "spaceA", 10, 1);
+    seedLink(handle, "spaceA", 11, 1);
+    seedLink(handle, "spaceA", 12, 2);
+    seedLink(handle, "spaceA", 13, 2);
+    seedLink(handle, "spaceA", 14, 3);
+    seedLink(handle, "spaceA", 15, 3);
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("a person with only one linked memory does not qualify toward the three", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    // Person 3 keeps only one memory: remove its link to 14.
+    handle.sqlite.prepare(`DELETE FROM edges WHERE space_id = ? AND source = 14 AND target = 3`).run("spaceA");
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("an archived person never counts — even with linked memories", () => {
+    const t = travel();
+    seedPeopleGate(handle, "spaceA");
+    handle.sqlite.prepare(`UPDATE nodes SET status = 'archived' WHERE space_id = ? AND id = 3`).run("spaceA");
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("a person linked only to another person has no linked memory", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1);
+    seedPerson(handle, "spaceA", 2);
+    seedPerson(handle, "spaceA", 3);
+    seedLink(handle, "spaceA", 1, 2);
+    seedLink(handle, "spaceA", 2, 3);
+    expect(t.peopleGateOpen()).toBe(false);
+  });
+
+  it("an extraction-typed person node counts, and so does the legacy alias", () => {
+    const t = travel();
+    seedPerson(handle, "spaceA", 1, { kind: null, type: "person" });
+    seedPerson(handle, "spaceA", 2, { kind: null, type: "relationship_reflection" });
+    seedPerson(handle, "spaceA", 3);
+    for (const id of [10, 11, 12, 13, 14, 15]) seedMemory(handle, "spaceA", id);
+    seedLink(handle, "spaceA", 10, 1);
+    seedLink(handle, "spaceA", 11, 1);
+    seedLink(handle, "spaceA", 12, 2);
+    seedLink(handle, "spaceA", 13, 2);
+    seedLink(handle, "spaceA", 14, 3);
+    seedLink(handle, "spaceA", 15, 3);
+    seedLink(handle, "spaceA", 15, 1);
+    expect(t.peopleGateOpen()).toBe(true);
+  });
+
+  it("the gate is space-scoped: another space's people do not open this space's gate", () => {
+    seedPeopleGate(handle, "spaceB");
+    expect(travel("spaceA").peopleGateOpen()).toBe(false);
+    expect(travel("spaceB").peopleGateOpen()).toBe(true);
+  });
+});
+
+describe("Eternity's gate (B-01): key + two relics, then a three-leg chain", () => {
+  const HOLDINGS = () => ({ witnessWithoutName: true, otherRelicCount: 2 });
+  const travelWithHoldings = (space = "spaceA") => new TravelRepo(handle, space, HOLDINGS);
+  const codeOf = (fn: () => unknown): string => {
+    try {
+      fn();
+    } catch (e) {
+      return (e as TravelError).code;
+    }
+    return "NO_ERROR";
+  };
+  /** Warp to a destination and arrive — one leg of a chain. */
+  function warpTo(t: TravelRepo, key: string, dest: string, at: number): void {
+    const j = t.depart({ clientKey: key, kind: "warp", destination: dest }, at);
+    const arrived = t.arrive(j.id, past(j.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+  }
+  /** Drift to a destination and arrive — a free leg of a chain. */
+  function driftTo(t: TravelRepo, key: string, dest: string, at: number): void {
+    const j = t.depart({ clientKey: key, kind: "drift", destination: dest }, at);
+    const arrived = t.arrive(j.id, past(j.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+  }
+
+  it("no relics, no way in: the gate refuses and nothing is written", () => {
+    const t = travel();
+    expect(codeOf(() => t.depart({ clientKey: "e1", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_GATE_CLOSED",
+    );
+    expect(journeyCount()).toBe(0);
+    expect(t.getState(T0).eternityReachable).toBe(false);
+  });
+
+  it("the key and two relics open the gate — but not from home: the chain refuses", () => {
+    const t = travelWithHoldings();
+    expect(t.getState(T0).eternityReachable).toBe(true);
+    expect(codeOf(() => t.depart({ clientKey: "e2", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+    expect(journeyCount()).toBe(0);
+  });
+
+  it("one intermediate is not a chain — and repeating the same world does not count twice", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e3a", "great-station", T0);
+    expect(codeOf(() => t.depart({ clientKey: "e3b", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+    warpTo(t, "e3c", "great-station", T0 + 60_000);
+    expect(codeOf(() => t.depart({ clientKey: "e3d", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+  });
+
+  it("the full chain admits: home → station → garden → eternity", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e4a", "great-station", T0);
+    warpTo(t, "e4b", "growing-place", T0 + 60_000);
+    const j = t.depart({ clientKey: "e4c", kind: "warp", destination: "eternity" }, T0 + 120_000);
+    expect(j.state).toBe("arming");
+    expect(j.origin).toBe("growing-place");
+    const arrived = t.arrive(j.id, past(j.cancelDeadline));
+    expect(arrived?.state).toBe("arrived");
+    expect(t.currentWorld(T0)).toBe("eternity");
+  });
+
+  it("a turn-back breaks the chain: only arrived legs count", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e5a", "great-station", T0);
+    const out = t.depart({ clientKey: "e5b", kind: "warp", destination: "growing-place" }, T0);
+    const turned = t.turnBack(out.id, past(out.cancelDeadline));
+    expect(turned?.state).toBe("returning");
+    const back = t.arrive(out.id, past(out.cancelDeadline) + 30_000);
+    expect(back?.state).toBe("returned");
+    expect(t.currentWorld(T0)).toBe("great-station");
+    expect(codeOf(() => t.depart({ clientKey: "e5c", kind: "warp", destination: "eternity" }, T0))).toBe(
+      "ETERNITY_CHAIN_REQUIRED",
+    );
+  });
+
+  it("once opened, the gate stays open: a later chain admits with no holdings", () => {
+    const t = travelWithHoldings();
+    warpTo(t, "e6a", "great-station", T0);
+    warpTo(t, "e6b", "growing-place", T0 + 60_000);
+    warpTo(t, "e6c", "eternity", T0 + 120_000);
+    expect(t.currentWorld(T0)).toBe("eternity");
+    // Drift home (free), then walk the chain again — this time the
+    // repo holds nothing, and the ledger itself remembers the opening.
+    const home = t.depart({ clientKey: "e6d", kind: "drift", destination: "home" }, T0 + 180_000);
+    expect(t.arrive(home.id, past(home.cancelDeadline))?.state).toBe("arrived");
+    const plain = travel();
+    expect(plain.getState(T0).eternityReachable).toBe(true);
+    // The second chain drifts (free legs still count — fuel buys
+    // speed, never access; five net −5 warps would drain the 25
+    // starting fuel before the chain completes).
+    driftTo(plain, "e6e", "great-station", T0 + 240_000);
+    driftTo(plain, "e6f", "growing-place", T0 + 300_000);
+    const again = plain.depart({ clientKey: "e6g", kind: "warp", destination: "eternity" }, T0 + 360_000);
+    expect(again.state).toBe("arming");
+  });
+
+  it("the key alone, or two others without the key, does not open the gate", () => {
+    const keyOnly = new TravelRepo(handle, "spaceA", () => ({ witnessWithoutName: true, otherRelicCount: 0 }));
+    expect(keyOnly.getState(T0).eternityReachable).toBe(false);
+    const othersOnly = new TravelRepo(handle, "spaceA", () => ({
+      witnessWithoutName: false,
+      otherRelicCount: 5,
+    }));
+    expect(othersOnly.getState(T0).eternityReachable).toBe(false);
   });
 });

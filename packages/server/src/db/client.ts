@@ -1355,6 +1355,50 @@ export function migrateSchema(sqlite: RawDb): void {
       opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, npc_id)
     );
+
+    -- Fleet defense (Wave 2): the releases, the defenses, and the
+    -- append-only log. Identical DDL to BOOTSTRAP_SQL in
+    -- db/schemaSql.ts (fresh DBs already have them; this is a no-op
+    -- there).
+    CREATE TABLE IF NOT EXISTS fleet_defense_releases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      size TEXT NOT NULL,
+      label TEXT NOT NULL,
+      node_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'offered',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_defense_releases_space_status
+      ON fleet_defense_releases(space_id, status, created_at);
+    CREATE TABLE IF NOT EXISTS fleet_defense_defenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      release_id INTEGER NOT NULL,
+      space_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      invaders_json TEXT NOT NULL,
+      tick_count INTEGER NOT NULL DEFAULT 0,
+      last_mode TEXT,
+      last_line TEXT,
+      outcome_line TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_defense_defenses_space_status
+      ON fleet_defense_defenses(space_id, status, created_at);
+    CREATE TABLE IF NOT EXISTS fleet_defense_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      defense_id INTEGER,
+      release_id INTEGER,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_defense_log_space_created
+      ON fleet_defense_log(space_id, created_at);
   `);
 
   // Guided tours (Wave 2, N7): the saved route, its §17 rail log, and
@@ -1400,6 +1444,53 @@ export function migrateSchema(sqlite: RawDb): void {
     );
     CREATE INDEX IF NOT EXISTS idx_tour_sessions_space_updated
       ON tour_sessions(space_id, updated_at);
+  `);
+
+  // Fleets on automated missions: the mission ledger, the log, and
+  // the fleet stop flag. New tables, both paths: identical DDL to
+  // BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have them;
+  // this is a no-op there).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS mission_missions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      client_key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT 'home',
+      fleet_size INTEGER NOT NULL,
+      ships TEXT NOT NULL,
+      duration_minutes INTEGER NOT NULL,
+      fuel_cost REAL NOT NULL,
+      state TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      departed_at TEXT,
+      arrive_at TEXT,
+      depart_back_at TEXT,
+      complete_at TEXT,
+      completed_at TEXT,
+      outcome TEXT,
+      report TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mission_missions_space_client_key
+      ON mission_missions(space_id, client_key);
+    CREATE INDEX IF NOT EXISTS idx_mission_missions_space_state
+      ON mission_missions(space_id, state, created_at);
+    CREATE TABLE IF NOT EXISTS mission_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mission_id TEXT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      act TEXT NOT NULL,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mission_log_space_created
+      ON mission_log(space_id, created_at);
+    CREATE TABLE IF NOT EXISTS mission_fleet_state (
+      space_id TEXT PRIMARY KEY,
+      stopped INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   // P2-4 journey-bonus outcome columns on existing travel_journeys volumes

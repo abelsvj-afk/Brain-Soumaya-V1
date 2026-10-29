@@ -116,8 +116,15 @@ function zonedMidnightMs(y: number, m: number, d: number, tz: string): number {
  *  rather than the UTC day. DST days are 23/25 hours — the bounds reflect
  *  the real local midnights, never startMs + 86_400_000. */
 export function localDayBoundsMs(instantMs: number, tz: string): { startMs: number; endMs: number } {
-  const day = localDayInZone(instantMs, tz);
-  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  return localDayBoundsForDate(localDayInZone(instantMs, tz), tz);
+}
+
+/** [start, end) epoch-ms bounds of a NAMED zone-local calendar day
+ *  (`YYYY-MM-DD` in zone `tz`) — the date-keyed form of `localDayBoundsMs`,
+ *  for callers that already hold the day string (e.g. a digest's `today`)
+ *  rather than an instant inside it. Same DST-safe midnight math. */
+export function localDayBoundsForDate(date: string, tz: string): { startMs: number; endMs: number } {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
   const startMs = zonedMidnightMs(y, m, d, tz);
   const next = new Date(Date.UTC(y, m - 1, d + 1));
   const endMs = zonedMidnightMs(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), tz);

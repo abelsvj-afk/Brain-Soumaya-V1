@@ -39,7 +39,7 @@ describe("hybrid retrieval (FTS5 keyword + vector, RRF-fused)", () => {
     const svc = new GraphService(handle, "legacy");
     // "Delgado" is an exact name — hash cosine may rank fillers above it, but the
     // BM25 side pins it, and RRF puts it in the results.
-    const hits = await svc.search(embeddings, "Delgado", 5);
+    const { hits } = await svc.search(embeddings, "Delgado", 5);
     expect(hits.some((h) => h.id === target.id)).toBe(true);
   });
 

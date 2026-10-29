@@ -140,5 +140,62 @@ in — is still ahead, not behind.
 
 ---
 
+## ENTRY 2026-10-29 — asked directly: "what is this app supposed to be, because we added a lot"
+
+**THE VERDICT: THE CORE IS INTACT, BUT THE LAST WEEK GREW THE APP FASTER THAN ANYONE COULD LOOK AT IT —
+AND IT SHOWED. THE MOST VISIBLE FAILURE WAS REAL: FOR ABOUT SIX DAYS NONE OF THE WORLDS COULD BE REACHED,
+AND THEN, ONCE THEY COULD, OPENING THE APP DROPPED THE OWNER INTO A FLYING SHIP INSTEAD OF HOME.**
+
+### What it is supposed to be (from the owner's own documents)
+A second brain you talk to: dump a thought, it becomes a star in a galaxy; chat with cited answers; the daily
+loop lands on a front face (Observatory + home galaxy); Journeys, money, people connect through it. The Worlds
+vision brief says it directly: *"The core stays a second brain. All of this sits ON TOP of the brain, to make
+coming back to remember things entertaining — scenery and gamification in service of memory, never instead of it."*
+It also asked for "a few" spaces, "not dozens," each answering *what second-brain job lives here.*
+
+### What actually happened — measured, not felt
+Between 2026-10-21 (`6160d00`) and today, eight days:
+- source code **99,700 → 135,100 lines** (+36%), **+106 source files**, **+182 test files**
+- 3D models **9 files / 33 MB → 185 files / 108 MB**
+- database tables **66 → 90**; **7 new server route modules** (fleet defense, garden, missions, NPCs, tours,
+  travel, world changes); **10 new top-level screens/overlays** mounted in the app
+- on top of that, the owner's own 11 dock tabs and the Tools menu are unchanged — the new surface is mostly
+  *beside* the core, reached through Tools → Travel. That part was done right.
+
+### What went wrong (all found by running the real app in a browser, none by the test suite)
+1. **Unreachable for ~6 days.** Seven PRs of world UI were mounted where the screen couldn't show them, and a
+   merged PR broke the stylesheet. 2,400 tests passed throughout: they never lay anything out.
+2. **Travel never played.** The panel, the scene layer and the map each held their own copy of state and never
+   told each other, so warping drew nothing.
+3. **The app opened into a saved world / an unfinished flight** instead of home. The old build never finished
+   journeys, so most brains were left mid-flight and every launch replayed one. (Fixed 2026-10-29.)
+4. **Built work didn't match approved work.** The Growing Place the owner approved ("Pass. Lets move on",
+   2026-10-22) is a warm, dawn-lit forested hillside; the shipped scene is a dark brown plain with a tree.
+5. **Work landed on the wrong branch.** GitHub's default branch was still the old one, so PR #125 (Station
+   interior) merged where Fly doesn't deploy. Two branches silently diverged.
+6. **Content that was promised isn't there.** Scale's centrepiece `ISS-A.glb` and probe models were never uploaded.
+7. **A delegated task has no trace.** Muse's model-slimming brief has no branch, no report, and every model is
+   byte-for-byte unchanged.
+
+### How this maps onto the five original reasons (2026-08-29)
+- **#3 the owner can't hold the whole app in their head — got worse, with evidence.** The owner could not tell
+  whether any world worked, and it took a week and an outside check to find out why.
+- **#5 deploy fragility — got worse.** Two live branches, a wrong default, and a "pushed" fix the owner hasn't
+  seen because it isn't deployed.
+- **#1 taxonomy tax / #2 trust in automation** — unchanged by Worlds; the front face is as light as before.
+- **#4 retrieval** — Worlds neither helps nor hurts it; ~108 MB of scenery now sits beside a search box.
+
+### What I'd do, in order (nothing here removes a feature — the roadmap's ground rule stands)
+1. Deploy and confirm on the owner's phone that the app opens on home and a warp plays start to finish.
+2. **Declare the next stretch stabilisation, not expansion** (CLAUDE.md already says to re-freeze before the
+   next major expansion; Worlds was one). Per world, "done" means: matches its approved mock-up, passes
+   `scripts/worlds-check.mjs`, and the owner has seen it on a phone — not "tests pass."
+3. Make `main` the GitHub default branch and keep it the only target.
+4. Resolve the two open content gaps (Scale uploads; Muse's slimming) before adding anything new.
+5. Before any new world system (fleets, missions, defense, commissions…), ask the brief's own question: what
+   second-brain job does it do? Several of those answer it only loosely.
+
+---
+
 <!-- Next entry: copy the "## ENTRY <date>" pattern above and append below this line. Do not
      overwrite prior entries — the comparison over time is the entire point of this file. -->

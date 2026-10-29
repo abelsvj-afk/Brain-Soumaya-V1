@@ -168,3 +168,31 @@ describe("cameraDepthFromNdc / labelHalfExtentsPx — depth-true sizing (PR #89 
     expect(clampLabelCenter(100, 100, halfW, halfH, VW, VH).clamped).toBe(false);
   });
 });
+
+describe("Batch I — sector titles get the same whole-box clamp as planet labels (REG-061 / GH-02)", () => {
+  // A far-view sector title anchored at the right edge on phone portrait:
+  // the title is wide (its capped width is ~55% of the screen) and its
+  // anchor sits at the screen edge, so the unclamped box runs off-screen.
+  // The clamp must slide the CENTRE so the whole box lands inside the
+  // safe frame — the same guarantee the planet labels carry.
+  it("a wide sector title anchored at the right edge stays wholly inside the frame", () => {
+    const W = 390;
+    const H = 844;
+    // Anchor centre x=360 (near the right edge), half-width 105 (~54% of 390).
+    const r = clampLabelCenter(360, 422, 105, 12, W, H);
+    expect(r.clamped).toBe(true);
+    expect(r.x + 105).toBe(W - LABEL_SAFE_FRAME.right);
+    expect(r.x - 105).toBeGreaterThanOrEqual(LABEL_SAFE_FRAME.left);
+    expect(r.y - 12).toBeGreaterThanOrEqual(LABEL_SAFE_FRAME.top);
+    expect(r.y + 12).toBeLessThanOrEqual(H - LABEL_SAFE_FRAME.bottom);
+  });
+
+  it("a wide sector title anchored at the left edge stays wholly inside the frame", () => {
+    const W = 390;
+    const H = 844;
+    const r = clampLabelCenter(30, 422, 105, 12, W, H);
+    expect(r.clamped).toBe(true);
+    expect(r.x - 105).toBe(LABEL_SAFE_FRAME.left);
+    expect(r.x + 105).toBeLessThanOrEqual(W - LABEL_SAFE_FRAME.right);
+  });
+});

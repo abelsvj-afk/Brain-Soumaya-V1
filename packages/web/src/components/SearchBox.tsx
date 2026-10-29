@@ -1,10 +1,27 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { NODE_TYPE_LABEL, type NodeType } from "@brain/shared";
 import { searchDetailed, type SearchHit } from "../api/client.js";
+import { matchLabel, moreMatchesText } from "../utils/searchFormat.js";
 
 interface Props {
   onFocus: (id: number) => void;
   onClose?: () => void;
+  /** REG-187 (SP-04): the session App holds above the panel switch — the
+   *  query + result set a remount restores, so choosing a hit (which
+   *  unmounts this panel) no longer destroys the search being browsed. */
+  initialSession?: SearchSession | null;
+  /** REG-187: report the live session upward on every change, so App can
+   *  hold it past unmount. */
+  onSessionChange?: (s: SearchSession) => void;
+}
+
+/** REG-187: the search session, lifted above the panel switch. */
+export interface SearchSession {
+  q: string;
+  hits: SearchHit[];
+  total?: number;
+  hasMore: boolean;
+  totalCapped: boolean;
 }
 
 /**
@@ -43,28 +60,51 @@ function snippet(content?: string): string {
   return flat.length > 110 ? `${flat.slice(0, 110)}…` : flat;
 }
 
-export function SearchBox({ onFocus, onClose }: Props) {
-  const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [open, setOpen] = useState(false);
+export function SearchBox({ onFocus, onClose, initialSession, onSessionChange }: Props) {
+  const [q, setQ] = useState(initialSession?.q ?? "");
+  const [hits, setHits] = useState<SearchHit[]>(initialSession?.hits ?? []);
+  // REG-186: the top-k page's honesty envelope — whether more matches exist
+  // than the page shows, and whether the total is exact or a lower bound.
+  const [total, setTotal] = useState<number | undefined>(initialSession?.total);
+  const [hasMore, setHasMore] = useState(initialSession?.hasMore ?? false);
+  const [totalCapped, setTotalCapped] = useState(initialSession?.totalCapped ?? false);
+  const [open, setOpen] = useState(initialSession != null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [active, setActive] = useState(-1);
+  const [active, setActive] = useState(initialSession?.hits?.length ? 0 : -1);
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
   // A slow first search resolving after a faster second one used to let the
   // stale response silently overwrite the newer results.
   const requestSeq = useRef(0);
-  const lastRunRef = useRef("");
+  // REG-187: seeded from the restored session, so a remount with the same
+  // query does not re-run the search the moment it mounts.
+  const lastRunRef = useRef(initialSession?.q ?? "");
+  // REG-187: report the session upward without re-subscribing on every
+  // render (the callback identity changes when App re-renders).
+  const onSessionChangeRef = useRef(onSessionChange);
+  onSessionChangeRef.current = onSessionChange;
+  useEffect(() => {
+    onSessionChangeRef.current?.({ q, hits, total, hasMore, totalCapped });
+  }, [q, hits, total, hasMore, totalCapped]);
 
   async function runSearch(query: string) {
     const seq = ++requestSeq.current;
     lastRunRef.current = query;
+    // REG-189 (SP-06): a query that produces a search is recorded by the
+    // same rule on every path — the debounced as-you-type flow runs here,
+    // not through run(), so recording only in run() left the primary flow
+    // with no recents at all. (Recording before the fetch resolves: the
+    // search was produced; a failed one still counts as searched.)
+    setRecents(saveRecent(query));
     setBusy(true);
     setError(null);
     const r = await searchDetailed(query);
     if (seq !== requestSeq.current || !r) return; // a newer search superseded this one
     setBusy(false);
     setHits(r.hits);
+    setTotal(r.total);
+    setHasMore(r.hasMore ?? false);
+    setTotalCapped(r.totalCapped ?? false);
     setError(r.error ?? null);
     setActive(r.hits.length > 0 ? 0 : -1);
     setOpen(true);
@@ -74,7 +114,8 @@ export function SearchBox({ onFocus, onClose }: Props) {
     e.preventDefault();
     const query = q.trim();
     if (!query) return;
-    setRecents(saveRecent(query));
+    // REG-189: recording lives in runSearch (the one path every search
+    // funnels through) — no second save here.
     void runSearch(query);
   }
 
@@ -91,6 +132,10 @@ export function SearchBox({ onFocus, onClose }: Props) {
   const choose = (h: SearchHit) => {
     // IM-115: preserve the result set — flying to a hit no longer destroys
     // the list the user was browsing.
+    // REG-189: choosing is a path that produces a search too — record the
+    // query that produced this hit (covers a restored session, where no
+    // fresh runSearch fired in this mount).
+    if (q.trim()) setRecents(saveRecent(q.trim()));
     onFocus(h.id);
     setActive(hits.findIndex((x) => x.id === h.id));
   };
@@ -155,14 +200,14 @@ export function SearchBox({ onFocus, onClose }: Props) {
                 <button
                   type="button"
                   className="mini"
-                  onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "chat" } }))}
+                  onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "chat", value: q.trim() } }))}
                 >
                   💬 Ask Soumaya
                 </button>
                 <button
                   type="button"
                   className="mini ghost"
-                  onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "panel", value: "ingest" } }))}
+                  onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "panel", value: "ingest", text: q.trim() } }))}
                 >
                   ➕ Add as memory
                 </button>
@@ -190,10 +235,16 @@ export function SearchBox({ onFocus, onClose }: Props) {
                       {fmtDate(h.createdAt) ? ` · ${fmtDate(h.createdAt)}` : ""}
                     </span>
                   </span>
-                  <em>{typeof h.similarity === "number" ? `${(h.similarity * 100).toFixed(0)}%` : ""}</em>
+                  {/* REG-185: no invented percentage — the row names which
+                      retrieval side produced the hit instead. */}
+                  <em>{matchLabel(h)}</em>
                 </button>
               </li>
             ))}
+          {/* REG-186: the page is top-k — say so when more matches exist. */}
+          {!error && hasMore && (
+            <li className="empty small">{moreMatchesText(hits.length, total ?? hits.length, totalCapped)}</li>
+          )}
         </ul>
       )}
     </div>

@@ -194,10 +194,16 @@ describe("REST API", () => {
   it("semantic search returns the relevant node with a similarity score", async () => {
     const { status, body } = await get(`/api/search?q=${encodeURIComponent("coffee subscription")}`);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(1);
-    expect(body[0]).toHaveProperty("similarity");
-    expect(body[0].content.toLowerCase()).toContain("coffee");
+    // REG-186: the route returns the { hits, total, hasMore, totalCapped }
+    // envelope now, not a bare array — the page is top-k and the envelope
+    // says whether more matches exist.
+    expect(Array.isArray(body.hits)).toBe(true);
+    expect(body.hits.length).toBeGreaterThanOrEqual(1);
+    expect(body.hits[0]).toHaveProperty("similarity");
+    expect(body.hits[0].content.toLowerCase()).toContain("coffee");
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.hasMore).toBe("boolean");
+    expect(body.total).toBeGreaterThanOrEqual(body.hits.length);
   });
 
   it("returns a node's neighborhood subgraph", async () => {
@@ -439,7 +445,7 @@ describe("REST API", () => {
     expect(fetched.body.label).toBe("Renamed by edit");
     // FTS was refreshed: the new body text is searchable, the old isn't the hit.
     const hits = await get(`/api/search?q=${encodeURIComponent("zebrafish")}`);
-    expect(hits.body.some((n: { id: number }) => n.id === id)).toBe(true);
+    expect(hits.body.hits.some((n: { id: number }) => n.id === id)).toBe(true);
   });
 
   it("PATCH /api/nodes/:id still adjusts importance alone, and rejects an empty patch", async () => {
@@ -454,4 +460,41 @@ describe("REST API", () => {
     expect(missing.status).toBe(404);
   });
 
+});
+
+describe("Batch L — MIN-01/MIN-06: cognitive route date-only writes and total shape", () => {
+  it("POST life_vision with a date-only target stores it verbatim (no UTC-midnight instant)", async () => {
+    const created = await post("/api/cognitive", { kind: "life_vision", label: "Sail the world", date: "2030-06-01" });
+    expect(created.status).toBe(200);
+    expect(created.body.remindAt).toBe("2030-06-01");
+  });
+
+  it("PATCH life_vision with a date-only target stores it verbatim", async () => {
+    const created = await post("/api/cognitive", { kind: "life_vision", label: "Build the studio", date: "2030-06-01" });
+    expect(created.status).toBe(200);
+    const patched = await patchReq(`/api/cognitive/${created.body.id}`, { date: "2031-07-04" });
+    expect(patched.status).toBe(200);
+    expect(patched.body.remindAt).toBe("2031-07-04");
+  });
+
+  it("POST future_event still accepts a full ISO datetime", async () => {
+    const created = await post("/api/cognitive", { kind: "future_event", label: "Launch party", date: "2030-06-01T10:00:00.000Z" });
+    expect(created.status).toBe(200);
+    expect(created.body.remindAt).toBe("2030-06-01T10:00:00.000Z");
+  });
+
+  it("POST rejects an unparseable date", async () => {
+    const bad = await post("/api/cognitive", { kind: "life_vision", label: "Bad date", date: "not-a-date" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("GET /api/cognitive returns {items, total} with the total past the page", async () => {
+    const listed = await get("/api/cognitive");
+    expect(listed.status).toBe(200);
+    expect(Array.isArray(listed.body.items)).toBe(true);
+    expect(typeof listed.body.total).toBe("number");
+    expect(listed.body.total).toBeGreaterThanOrEqual(listed.body.items.length);
+    const goals = await get("/api/cognitive?kind=goal");
+    expect(goals.body.items.every((i: { kind: string }) => i.kind === "goal")).toBe(true);
+  });
 });

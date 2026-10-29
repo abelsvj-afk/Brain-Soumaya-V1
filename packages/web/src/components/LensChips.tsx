@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Lens } from "@brain/shared";
 import { getLenses, lensNodes } from "../api/lenses.js";
+import { pushToast } from "./Toasts.js";
 
 /**
  * PINNED Smart Lenses — one-tap switching between your saved views without opening the
@@ -23,17 +24,29 @@ export function LensChips({
   hidden,
 }: {
   activeLens: string | null;
-  /** Isolate the galaxy to these ids under this lens name. */
-  onOpen: (ids: number[], name: string) => void;
+  /** Isolate the galaxy to these ids under this lens name. `total` is the
+   *  lens's true match count (Batch H, REG-207/208) — the banner states it,
+   *  and the shown subset when the match list itself was capped. */
+  onOpen: (ids: number[], name: string, total?: number) => void;
   onExit: () => void;
   hidden?: boolean;
 }) {
   const [pinned, setPinned] = useState<Lens[]>([]);
+  // Batch H (REG-205 / CN-06): a failed pinned-list fetch is an error state
+  // with a retry — the chips used to silently render nothing, so a user with
+  // pinned lenses saw an empty dropdown on exactly the days the server was
+  // unreachable, with no signal at all.
+  const [failed, setFailed] = useState(false);
 
-  const refresh = useCallback(
-    () => getLenses().then((ls) => setPinned(ls.filter((l) => l.pinned))).catch(() => {}),
-    [],
-  );
+  const refresh = useCallback(async () => {
+    try {
+      const ls = await getLenses();
+      setPinned(ls.filter((l) => l.pinned));
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
+  }, []);
   useEffect(() => {
     // While hidden (the Views dropdown is collapsed, or a full panel/chat/Observatory is
     // open), there's no reason to keep fetching on every memory add. Re-running this
@@ -50,15 +63,53 @@ export function LensChips({
     };
   }, [refresh, hidden]);
 
-  if (hidden || pinned.length === 0) return null;
+  if (hidden) return null;
+  if (failed && pinned.length === 0) {
+    return (
+      <div className="lens-list" role="list" aria-label="Pinned lenses">
+        <div className="lens-list-label">📌 Pinned Lenses</div>
+        <div className="lens-list-error" role="alert">
+          Couldn't load pinned lenses.{" "}
+          <button className="mini ghost" onClick={() => void refresh()}>Try again</button>
+        </div>
+      </div>
+    );
+  }
+  if (pinned.length === 0) return null;
 
   const tap = async (l: Lens) => {
     if (activeLens === l.name) {
       onExit();
       return;
     }
-    const ids = await lensNodes(l.id);
-    if (ids.length > 0) onOpen(ids, l.name);
+    // Batch H (REG-214 / CN-16): a broken lens never opens as everything.
+    if (l.broken) {
+      pushToast(`"${l.name}" couldn't be read — its saved query is damaged.`, "⚠️", 4000);
+      return;
+    }
+    // Batch H (REG-206 / CN-07): a failed node load reports the failure on
+    // this door too — the chip used to silently do nothing, while the panel
+    // asserted "no matches" for the same failure. Batch H (REG-208 / CN-09):
+    // a capped lens says so before isolating.
+    let ev;
+    try {
+      ev = await lensNodes(l.id);
+    } catch {
+      pushToast(`Couldn't load "${l.name}" — try again.`, "⚠️", 3500);
+      return;
+    }
+    if (ev.ids.length === 0) {
+      pushToast(`"${l.name}" has no matches right now.`, "⧉", 3000);
+      return;
+    }
+    if (ev.capped) {
+      pushToast(
+        `Showing the first ${ev.shown.toLocaleString()} of ${ev.total.toLocaleString()} matches for "${l.name}".`,
+        "⧉",
+        4000,
+      );
+    }
+    onOpen(ev.ids, l.name, ev.total);
   };
 
   return (
@@ -76,7 +127,9 @@ export function LensChips({
             title={on ? `Exit “${l.name}”` : `View “${l.name}”`}
           >
             <span className="lens-list-name">{l.name}</span>
-            <span className="lens-list-count">{on ? "✕" : (l.count ?? 0)}</span>
+            <span className="lens-list-count" title={l.broken ? "This lens's saved query couldn't be read." : l.capped ? `Showing the first ${(l.shown ?? l.count ?? 0).toLocaleString()} of ${(l.count ?? 0).toLocaleString()} matches` : undefined}>
+              {on ? "✕" : l.broken ? "?" : `${(l.count ?? 0).toLocaleString()}${l.totalIsLowerBound ? "+" : ""}`}
+            </span>
           </button>
         );
       })}

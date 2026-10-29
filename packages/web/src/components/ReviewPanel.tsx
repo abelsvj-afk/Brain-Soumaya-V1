@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getDueReviews, gradeReviewDetailed, type DueReview } from "../api/client.js";
+import { getDueReviewsResult, gradeReviewDetailed, type DueReview } from "../api/client.js";
 import { pushToast } from "./Toasts.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 
@@ -62,25 +62,62 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
   const [due, setDue] = useState<DueReview[] | null>(null);
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [done, setDone] = useState(0);
+  // Batch G (REG-199): the session resumes from the day's graded set — reopening
+  // after a label jump restarts at card 1 no longer. `doneAtStart` is how many
+  // reviews today already happened before this mount (localStorage, space-local
+  // day — the same key the daily cap reads); `done` counts from there, so the
+  // progress line reads "4 of 7" instead of restarting at "1 of 7".
+  // `sessionDone` counts only this sitting's grades, for the complete screen.
+  const [doneAtStart] = useState(() => doneToday());
+  const [done, setDone] = useState(doneAtStart);
+  const [sessionDone, setSessionDone] = useState(0);
   const [why, setWhy] = useState(false);
   const [cappedForToday, setCappedForToday] = useState(false);
   const [grading, setGrading] = useState(false);
+  // Batch G (REG-195): a failed due-list fetch is an error state, never the
+  // "nothing due / fresh" empty state. The empty state renders only on a
+  // confirmed empty list.
+  const [loadError, setLoadError] = useState(false);
+  // REG-197 (RC-04): one idempotency key per grade attempt (one card, one
+  // tap-series). Minted on the first grade tap for a card and reused for
+  // every retry of that card, so a retry of a grade the server committed but
+  // the client never heard replays the committed outcome instead of grading,
+  // paying, and rescheduling twice. Discarded once the card advances, so the
+  // next genuine grade of the same memory mints a fresh key and applies.
+  const attemptKeysRef = useRef<Map<number, string>>(new Map());
+  const attemptKeyFor = (id: number): string => {
+    let k = attemptKeysRef.current.get(id);
+    if (!k) {
+      k = `${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      attemptKeysRef.current.set(id, k);
+    }
+    return k;
+  };
   // IM-114: after a grade, when this memory comes back ("next review in ~N
   // days") — the reschedule used to be invisible, so grading felt consequence-free.
   const [lastFeedback, setLastFeedback] = useState<string | null>(null);
 
-  useEffect(() => {
+  /** Load the due list with the strict fetch: failure is an error state, never []. */
+  const reload = () => {
     pruneOldDoneTodayKeys();
     const already = doneToday();
+    setLoadError(false);
     if (already >= DAILY_CAP) { setCappedForToday(true); setDue([]); return; }
     const room = Math.min(SESSION_SIZE, DAILY_CAP - already);
-    // Falls back to an empty list on failure (renders the existing "nothing due" state)
-    // rather than leaving `due` null forever — an unhandled rejection here previously left
-    // the panel stuck on "Finding memories ready to revisit…" indefinitely.
-    void getDueReviews().then((d) => setDue(d.slice(0, room))).catch(() => setDue([]));
+    setDue(null);
+    void getDueReviewsResult()
+      .then((r) => {
+        if (r.ok) setDue(r.reviews.slice(0, room));
+        else setLoadError(true);
+      })
+      .catch(() => setLoadError(true));
+  };
+
+  useEffect(() => {
+    reload();
     // Re-run when the space's configured timezone arrives: the cap key's
     // day (todayKey) is derived from it, not the device zone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceTimeZone]);
 
   const current = due && idx < due.length ? due[idx] : null;
@@ -93,24 +130,38 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
       // Honour that: a failed grade must NOT advance the session, bump the
       // daily count, or earn the streak nudge. It gets the same toast + retry
       // posture as a thrown error (previously unreachable for HTTP failures).
-      const result = await gradeReviewDetailed(current.id, remembered);
+      const result = await gradeReviewDetailed(current.id, remembered, attemptKeyFor(current.id));
       if (!result.ok) {
         pushToast("Couldn't save that — try again.", "⚠️", 3500);
         return;
       }
+      // REG-200 (RC-07): name the reward the grade paid, in the earn sheet's
+      // terms — the fuel and any streak advance — alongside the reschedule, so
+      // the reward is visible at the moment it is paid instead of moving the
+      // HUD numbers silently behind the overlay. A replayed retry (REG-197)
+      // reports the same reward as the first attempt; it is counted once here
+      // because the lost first response was never counted.
+      let schedule: string;
       if (typeof result.nextIntervalDays === "number") {
         const n = result.nextIntervalDays;
-        setLastFeedback(n <= 0 ? "Next review tomorrow." : n === 1 ? "Next review in ~1 day." : `Next review in ~${n} days.`);
+        schedule = n <= 0 ? "Next review tomorrow." : n === 1 ? "Next review in ~1 day." : `Next review in ~${n} days.`;
       } else if (result.nextReviewAt) {
         const days = Math.max(0, Math.round((Date.parse(result.nextReviewAt) - Date.now()) / 86_400_000));
-        setLastFeedback(days <= 1 ? "Next review in ~1 day." : `Next review in ~${days} days.`);
+        schedule = days <= 1 ? "Next review in ~1 day." : `Next review in ~${days} days.`;
       } else {
-        setLastFeedback(null);
+        schedule = "";
       }
+      const rewardBits: string[] = [];
+      if (typeof result.fuelEarned === "number" && result.fuelEarned > 0) rewardBits.push(`+${result.fuelEarned} ⛽`);
+      if (result.streakAdvanced) rewardBits.push("streak kept alive");
+      const parts = [...(schedule ? [schedule] : []), ...rewardBits];
+      setLastFeedback(parts.length > 0 ? parts.join(" · ") : null);
+      attemptKeysRef.current.delete(current.id);
       bumpToday();
       // A recall earns Fuel + keeps the streak alive — nudge the HUD to refresh.
       window.dispatchEvent(new Event("brain-memory-added"));
       setDone((n) => n + 1);
+      setSessionDone((n) => n + 1);
       setRevealed(false);
       setIdx((i) => i + 1);
     } catch {
@@ -149,7 +200,15 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
           </div>
         )}
 
-        {due === null && <div className="rv-empty">Finding memories ready to revisit…</div>}
+        {due === null && !loadError && <div className="rv-empty">Finding memories ready to revisit…</div>}
+
+        {loadError && (
+          <div className="rv-empty" role="alert">
+            <p>Couldn't check what's due — Soumaya didn't answer.</p>
+            <p className="rv-empty-sub">Your reviews are still there; this is a connection problem, not an empty list.</p>
+            <button className="rv-btn primary" onClick={() => reload()}>Try again</button>
+          </div>
+        )}
 
         {cappedForToday && (
           <div className="rv-empty">
@@ -169,7 +228,7 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
 
         {!cappedForToday && due && due.length > 0 && !current && (
           <div className="rv-empty">
-            <p>Session complete — you revisited {done} memor{done === 1 ? "y" : "ies"}. ✨</p>
+            <p>Session complete — you revisited {sessionDone} memor{sessionDone === 1 ? "y" : "ies"}. ✨</p>
             {lastFeedback && <p className="rv-feedback" role="status">{lastFeedback}</p>}
             <p className="rv-empty-sub">That's a good session. Come back later for the next few.</p>
             <button className="rv-btn primary" onClick={onClose}>Done</button>
@@ -178,7 +237,7 @@ export function ReviewPanel({ onClose, onFocus }: { onClose: () => void; onFocus
 
         {current && (
           <div className="rv-body" aria-live="polite">
-            <div className="rv-progress">{idx + 1} of {due!.length} this session</div>
+            <div className="rv-progress">{done + 1} of {due!.length + doneAtStart} this session</div>
             {lastFeedback && idx > 0 && <div className="rv-feedback" role="status">{lastFeedback}</div>}
             <div className="rv-prompt">Do you remember this one?</div>
             {/* IM-114: strength + review count were fetched but never shown —

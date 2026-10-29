@@ -126,3 +126,43 @@ describe("LifeSeasonsBand.buildSeasonAxis — lane packing + label fit (finding 
     expect(labelFitsInBand("", 1.5)).toBe(false); // padding alone exceeds a min-width sliver? see policy: 0 chars still needs the pad — an empty label renders nothing either way
   });
 });
+
+describe("LifeSeasonsBand.buildSeasonAxis — header range is the TRUE plotted range (CHR-10, REG-129)", () => {
+  it("the header range ends on the last season's true end date, not the padded band end", () => {
+    const now = Date.UTC(2026, 6, 1);
+    const axis = buildSeasonAxis([season({ startDate: "2026-01-01", endDate: "2026-03-10" })], [], now)!;
+    expect(axis.rangeStartMs).toBe(utcDayMs("2026-01-01"));
+    expect(axis.rangeEndMs).toBe(utcDayMs("2026-03-10"));
+    // Geometry still pads the band by a day so a multi-day era has real
+    // width — the padding just never reaches a displayed date.
+    expect(axis.domainEndMs).toBe(utcDayMs("2026-03-11"));
+    expect(axis.bands[0]!.widthPct).toBeGreaterThan(0);
+  });
+
+  it("a single-day season reports its own day as the range end", () => {
+    const now = Date.UTC(2026, 6, 1);
+    const axis = buildSeasonAxis([season({ startDate: "2026-03-10", endDate: "2026-03-10" })], [], now)!;
+    expect(axis.rangeStartMs).toBe(utcDayMs("2026-03-10"));
+    expect(axis.rangeEndMs).toBe(utcDayMs("2026-03-10"));
+    // The geometry domain still needs a non-zero span to plot.
+    expect(axis.domainEndMs).toBeGreaterThan(axis.domainStartMs);
+  });
+
+  it("spans contribute their raw ends to the header range", () => {
+    const now = Date.UTC(2026, 6, 1);
+    const axis = buildSeasonAxis(
+      [season({ startDate: "2026-01-01", endDate: "2026-03-31" })],
+      [span({ start: "2026-01-01T00:00:00Z", end: "2026-07-01T00:00:00Z" })],
+      now,
+    )!;
+    expect(axis.rangeStartMs).toBe(utcDayMs("2026-01-01"));
+    expect(axis.rangeEndMs).toBe(Date.parse("2026-07-01T00:00:00Z"));
+  });
+
+  it("an ongoing span's header range ends at now", () => {
+    const now = Date.UTC(2026, 6, 1);
+    const ongoing = span({ end: null, endDate: null, ongoing: true, endSource: "open", start: "2026-06-01T00:00:00Z", startDate: "2026-06-01" });
+    const axis = buildSeasonAxis([], [ongoing], now)!;
+    expect(axis.rangeEndMs).toBe(now);
+  });
+});

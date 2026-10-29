@@ -8,7 +8,7 @@ import {
   type UnlockableItem,
 } from "@brain/shared";
 import { loadUnlocked } from "./achievements.js";
-import { readDevUnlockAll } from "./unlockables.js";
+import { loadHangarSeenIds, readDevUnlockAll, saveHangarSeenIds } from "./unlockables.js";
 import { TRACKS } from "../graph/audio.js";
 import { getFigurineIcon } from "../App.helpers.js";
 import { pushToast } from "./Toasts.js";
@@ -51,6 +51,10 @@ export interface HangarPanelProps {
   /** Index into TRACKS of the track the player last reported, if any. */
   currentTrackIndex?: number | null;
   musicPlaying?: boolean;
+  /** REG-181/HN-07: the transient trail preview (owned by App) + the
+   *  callback that starts/stops it. Absent in standalone use. */
+  previewTrail?: string | null;
+  onPreviewTrail?: (value: string | null) => void;
 }
 
 /**
@@ -123,6 +127,8 @@ export function HangarPanel({
   onPlayTrack,
   currentTrackIndex,
   musicPlaying,
+  previewTrail,
+  onPreviewTrail,
 }: HangarPanelProps) {
   const shipKey = `brain.hangar.ship.${spaceId}`;
   const trailKey = `brain.hangar.trail.${spaceId}`;
@@ -140,6 +146,8 @@ export function HangarPanel({
   const [focusFig1, setFocusFig1State] = useState(() => localStorage.getItem(focusFig1Key) !== "false");
   const [focusFig2, setFocusFig2State] = useState(() => localStorage.getItem(focusFig2Key) !== "false");
   const [feedback, setFeedback] = useState<string | null>(null);
+  // REG-183/HN-09: ids currently marked "✨ New" in this visit.
+  const [newIds, setNewIds] = useState<Set<string>>(() => new Set());
 
   // A different brain = a different loadout: reload this panel's state.
   useEffect(() => {
@@ -154,6 +162,9 @@ export function HangarPanel({
   }, [shipKey, trailKey, fig1Key, fig2Key, focusFig1Key, focusFig2Key]);
 
   const devAll = devUnlockAll ?? readDevUnlockAll();
+  // REG-175/HN-01: `null` means App's stats haven't arrived yet — distinct
+  // from `undefined` (standalone use), which derives its own snapshot.
+  const statsPending = unlockStats === null;
   const stats: UnlockStats = useMemo(
     () =>
       unlockStats ?? {
@@ -176,6 +187,34 @@ export function HangarPanel({
   // double-counted here).
   const hangarItems = [...ships, ...trails, ...figurines, ...musicItems];
   const unlockedCount = hangarItems.filter((i) => unlocked(i)).length;
+
+  // REG-183/HN-09: the "✨ New" mark — an unlocked item not yet seen in
+  // this panel. The record is the device-local Hangar-seen set (same
+  // pattern as the watcher's celebrated set; its first read seeds from
+  // it). Viewing the panel marks everything currently unlocked as seen,
+  // so a mark lasts for that visit; equipping/playing clears it at once.
+  useEffect(() => {
+    if (statsPending) return;
+    const seen = loadHangarSeenIds(spaceId);
+    const fresh = hangarItems.filter((i) => unlocked(i) && !seen.has(i.id)).map((i) => i.id);
+    if (fresh.length > 0) setNewIds((prev) => new Set([...prev, ...fresh]));
+    saveHangarSeenIds(
+      spaceId,
+      new Set([...seen, ...hangarItems.filter((i) => unlocked(i)).map((i) => i.id)]),
+    );
+    // `unlocked`/`hangarItems` close over stats/devAll; depending on those covers them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats, spaceId, devAll, statsPending]);
+
+  /** Drop one item's New mark (equip / play = engaged with it). */
+  const clearNew = (id: string) => {
+    setNewIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
 
   const labelOf = (items: readonly UnlockableItem[], equipValue: string) =>
     items.find((i) => i.equipValue === equipValue)?.label ?? equipValue;
@@ -200,6 +239,7 @@ export function HangarPanel({
     setState(value);
     onEquipChanged();
     announceEquip(item.label);
+    clearNew(item.id);
   };
 
   const setFocusFig = (slot: 1 | 2, on: boolean) => {
@@ -214,9 +254,11 @@ export function HangarPanel({
     active: boolean,
     onEquip: () => void,
     preview: ReactNode,
+    extra?: ReactNode,
   ) => {
     const isLocked = !unlocked(item);
     const hint = progressHint(item, stats, devAll);
+    const isNew = newIds.has(item.id);
     return (
       <div key={item.id} style={rowStyle(active, isLocked)}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0 }}>
@@ -224,6 +266,23 @@ export function HangarPanel({
           <div>
             <div style={{ fontWeight: 600, fontSize: "0.86rem" }}>
               {item.label} {isLocked && "🔒"}
+              {isNew && (
+                <span
+                  style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    color: "var(--accent)",
+                    background: "rgba(122,249,255,0.14)",
+                    border: "1px solid rgba(122,249,255,0.4)",
+                    borderRadius: "999px",
+                    padding: "1px 6px",
+                    marginLeft: "0.35rem",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ✨ New
+                </span>
+              )}
             </div>
             <div style={{ fontSize: "0.74rem", opacity: 0.7 }}>
               {isLocked ? item.requirementText : item.description}
@@ -231,14 +290,17 @@ export function HangarPanel({
             </div>
           </div>
         </div>
-        <button
-          className="mini"
-          disabled={isLocked || active}
-          onClick={onEquip}
-          aria-label={active ? `${item.label} (equipped)` : isLocked ? `${item.label} (locked)` : `Equip ${item.label}`}
-        >
-          {active ? "Equipped" : isLocked ? "Locked" : "Equip"}
-        </button>
+        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexShrink: 0 }}>
+          {extra}
+          <button
+            className="mini hangar-action"
+            disabled={isLocked || active}
+            onClick={onEquip}
+            aria-label={active ? `${item.label} (equipped)` : isLocked ? `${item.label} (locked)` : `Equip ${item.label}`}
+          >
+            {active ? "Equipped" : isLocked ? "Locked" : "Equip"}
+          </button>
+        </div>
       </div>
     );
   };
@@ -254,7 +316,7 @@ export function HangarPanel({
           Background Slot {slot}
           {own !== "none" && onViewInGalaxy && (
             <button
-              className="mini"
+              className="mini hangar-action"
               style={{ marginLeft: "0.5rem" }}
               data-testid={`hangar-view-fig${slot}`}
               onClick={() => onViewInGalaxy(slot === 1 ? "fig1" : "fig2")}
@@ -302,6 +364,27 @@ export function HangarPanel({
     );
   };
 
+  // REG-175/HN-01: while App's stats are null the panel must not present
+  // fallback-derived locked states as fact. Defer the gated lists (the
+  // loadout + all sections) and say the unlocks are loading. Standalone
+  // use (unlockStats undefined) keeps its own derived snapshot.
+  if (statsPending) {
+    return (
+      <div className="dock-body hangar" style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto", paddingRight: "4px" }}>
+        <div className="awards-head">
+          <h3 className="awards-title">🛠️ Hangar</h3>
+        </div>
+        <p style={{ fontSize: "0.82rem", opacity: 0.8, margin: "0 0 1.25rem 0" }}>
+          Customize Soumaya's spaceship hull, adjust her cosmic engine trail, choose the ambient
+          music loop, and mount colossal, civilization-scale monuments in the deep space background.
+        </p>
+        <p role="status" style={{ fontSize: "0.86rem", opacity: 0.85 }}>
+          Checking what you've unlocked — the Hangar's rows will appear once your unlocks have loaded.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="dock-body hangar" style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto", paddingRight: "4px" }}>
       <div className="awards-head">
@@ -332,7 +415,14 @@ export function HangarPanel({
           <span>✨ {labelOf(trails, trail)}</span>
           <span>🪐 {labelOf(figurines, fig1)}</span>
           <span>🪐 {labelOf(figurines, fig2)}</span>
-          <span>🎵 {currentTrack ? currentTrack.title : "—"}</span>
+          {/* REG-182/HN-08: the music line names its own semantics — playing
+              IS the selection, and a track played last session is a playback
+              remnant, not a current pick. Never a bare "—". */}
+          <span>
+            {currentTrack && musicPlaying
+              ? `🎵 Now playing: ${currentTrack.title}`
+              : "🎵 Nothing playing — pick a loop below"}
+          </span>
         </div>
         <div
           aria-hidden
@@ -353,7 +443,7 @@ export function HangarPanel({
           </div>
         )}
         {onViewInGalaxy && (
-          <button className="mini" style={{ marginTop: "0.5rem" }} data-testid="hangar-view-ship" onClick={() => onViewInGalaxy("ship")}>
+          <button className="mini hangar-action" style={{ marginTop: "0.5rem" }} data-testid="hangar-view-ship" onClick={() => onViewInGalaxy("ship")}>
             👁 View ship in galaxy
           </button>
         )}
@@ -386,6 +476,31 @@ export function HangarPanel({
 
       {/* SECTION: Engine Trails (IM-101: styled option list, no native select) */}
       <h4 style={{ margin: "1rem 0 0.5rem 0", color: "var(--accent)" }}>✨ Cosmic Trails</h4>
+      {/* REG-181/HN-07: while a preview is live, name it — and offer the way out. */}
+      {previewTrail && (
+        <div
+          role="status"
+          style={{
+            padding: "0.6rem 0.75rem",
+            borderRadius: "6px",
+            border: "1px solid rgba(122,249,255,0.35)",
+            background: "rgba(122,249,255,0.08)",
+            marginBottom: "0.75rem",
+            fontSize: "0.82rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.6rem",
+          }}
+        >
+          <span>Previewing {labelOf(trails, previewTrail)} in the galaxy — equip it to keep it.</span>
+          {onPreviewTrail && (
+            <button className="mini hangar-action" onClick={() => onPreviewTrail(null)}>
+              Stop preview
+            </button>
+          )}
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.5rem" }} role="radiogroup" aria-label="Cosmic trail">
         {trails.map((item) =>
           renderOption(
@@ -403,6 +518,34 @@ export function HangarPanel({
                 background: TRAIL_SWATCHES[item.equipValue] ?? TRAIL_SWATCHES.blue,
               }}
             />,
+            // REG-181/HN-07: trails are previewable before equip, on the same
+            // terms as the other categories — a view action that shows the
+            // trail in the galaxy (transiently, never persisted). Locked
+            // trails can't preview; the equipped one needs no preview.
+            onPreviewTrail ? (
+              <button
+                className="mini hangar-action"
+                data-testid={`hangar-preview-trail-${item.equipValue}`}
+                disabled={!unlocked(item) || trail === item.equipValue}
+                onClick={() => onPreviewTrail(item.equipValue)}
+                aria-label={
+                  !unlocked(item)
+                    ? `${item.label} (locked)`
+                    : trail === item.equipValue
+                      ? `${item.label} (equipped)`
+                      : `Preview ${item.label} in the galaxy`
+                }
+                title={
+                  !unlocked(item)
+                    ? "Unlock it first to preview"
+                    : trail === item.equipValue
+                      ? "Already equipped"
+                      : "Preview this trail in the galaxy"
+                }
+              >
+                👁 Preview
+              </button>
+            ) : undefined,
           ),
         )}
       </div>
@@ -415,11 +558,29 @@ export function HangarPanel({
           const isLocked = !unlocked(item);
           const hint = progressHint(item, stats, devAll);
           const isCurrent = trackIdx >= 0 && currentTrackIndex === trackIdx;
+          const isNew = newIds.has(item.id);
           return (
             <div key={item.id} style={rowStyle(isCurrent, isLocked)}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: "0.86rem" }}>
                   🎵 {item.label} {isLocked && "🔒"}
+                  {isNew && (
+                    <span
+                      style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        color: "var(--accent)",
+                        background: "rgba(122,249,255,0.14)",
+                        border: "1px solid rgba(122,249,255,0.4)",
+                        borderRadius: "999px",
+                        padding: "1px 6px",
+                        marginLeft: "0.35rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      ✨ New
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: "0.74rem", opacity: 0.7 }}>
                   {isLocked ? item.requirementText : item.description}
@@ -429,9 +590,9 @@ export function HangarPanel({
               </div>
               {onPlayTrack && trackIdx >= 0 && (
                 <button
-                  className="mini"
+                  className="mini hangar-action"
                   disabled={isLocked}
-                  onClick={() => onPlayTrack(trackIdx)}
+                  onClick={() => { clearNew(item.id); onPlayTrack(trackIdx); }}
                   aria-label={isLocked ? `${item.label} (locked)` : `Play ${item.label}`}
                 >
                   {isCurrent && musicPlaying ? "Playing" : "Play"}
@@ -450,6 +611,19 @@ export function HangarPanel({
         Select monuments to mount in the distant starry background. Each monument can be
         mounted in only one slot.
       </p>
+      {/* REG-181/HN-07: the "station" view target the shell implements is
+          reachable from the surface that owns the type — the Waystation is
+          the station's monument, so its view lives here. */}
+      {onViewInGalaxy && (
+        <button
+          className="mini hangar-action"
+          style={{ marginBottom: "0.75rem" }}
+          data-testid="hangar-view-station"
+          onClick={() => onViewInGalaxy("station")}
+        >
+          👁 View station in galaxy
+        </button>
+      )}
       {renderFigSlot(1)}
       {renderFigSlot(2)}
 

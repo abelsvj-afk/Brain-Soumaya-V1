@@ -10,6 +10,8 @@ import {
   type TravelBonus,
   type TravelState,
 } from "../api/travel.js";
+import { prefetchWorld } from "../graph/worldPrefetch.js";
+import { TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelAction, type TravelChangedDetail } from "../lib/travelEvents.js";
 
 /**
  * Travel state binding (Phase 2, P2-3). Owns the client side of the
@@ -66,6 +68,20 @@ function traversedRoutes(): string[] {
   }
 }
 const routeKey = (origin: string, destination: string) => `${origin}>${destination}`;
+
+/** Traversed routes as origin/destination pairs — the client's discovery
+ *  record (the same record the skip rule reads). The world map draws
+ *  discovered worlds and routes from this; it fetches nothing new. */
+export function readTraversedRoutes(): { origin: string; destination: string }[] {
+  return traversedRoutes()
+    .map((r) => r.split(">"))
+    .filter(
+      (p): p is [string, string] =>
+        p.length === 2 && p[0] !== undefined && p[0] !== "" && p[1] !== undefined && p[1] !== "",
+    )
+    .map(([origin, destination]) => ({ origin, destination }));
+}
+
 const TERMINAL: ReadonlySet<string> = new Set(["arrived", "returned", "cancelled"]);
 
 export interface UseTravel {
@@ -123,6 +139,11 @@ export function useTravel(enabled: boolean = true): UseTravel {
     if (s) {
       setState(s);
       reconcile(s);
+      // The journey's dead time (free-cancel window + flight) is when the destination's models
+      // are fetched, so the world isn't bare when you arrive. Covers a departure made here AND a
+      // reload mid-flight; idempotent, so the arming poll calling it every 2 s is free.
+      const j = s.activeJourney;
+      if (j && (j.state === "arming" || j.state === "in_transit")) void prefetchWorld(j.destination);
       setError(null);
     } else {
       setError("Can't reach the brain right now — travel state may be out of date.");
@@ -134,12 +155,29 @@ export function useTravel(enabled: boolean = true): UseTravel {
     if (enabled) void refresh();
   }, [enabled, refresh]);
 
+  // Another copy of this hook acted: re-read. The acting copy already
+  // refreshed itself (its event carries its own tag), so it skips its echo.
+  const selfTag = useRef(Math.random().toString(36).slice(2));
+  useEffect(() => {
+    if (!enabled) return;
+    const onChanged = (e: Event) => {
+      if ((e as CustomEvent<TravelChangedDetail>).detail?.from === selfTag.current) return;
+      void refresh();
+    };
+    window.addEventListener(TRAVEL_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(TRAVEL_CHANGED_EVENT, onChanged);
+  }, [enabled, refresh]);
+
   // While a journey is arming, poll so the window's close (settlement)
   // shows up promptly, and tick the display countdown. Presentation
   // only — the server settles regardless of this hook.
   const arming = state?.activeJourney?.state === "arming";
   useEffect(() => {
     if (!enabled || !arming) return;
+    // The countdown reads nowMs, which is only kept fresh while arming — so
+    // it must be refreshed the instant arming begins, or the first frames
+    // show a countdown computed from a stale clock (seen as "49s left").
+    setNowMs(Date.now());
     const poll = window.setInterval(() => void refresh(), ARMING_POLL_MS);
     const tick = window.setInterval(() => setNowMs(Date.now()), 500);
     return () => {
@@ -149,7 +187,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
   }, [enabled, arming, refresh]);
 
   const act = useCallback(
-    async (fn: () => Promise<TravelJourney>): Promise<TravelJourney | null> => {
+    async (fn: () => Promise<TravelJourney>, action: TravelAction): Promise<TravelJourney | null> => {
       setBusy(true);
       setError(null);
       try {
@@ -163,6 +201,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
           if (!routes.includes(rk)) write(TRAVERSED_STORAGE, JSON.stringify([...routes, rk]));
         }
         await refresh();
+        announceTravelChanged(action, selfTag.current);
         return journey;
       } catch (e) {
         if (e instanceof TravelClientError) {
@@ -199,26 +238,26 @@ export function useTravel(enabled: boolean = true): UseTravel {
         const journey = await departJourney({ clientKey, kind, destination });
         write(KEY_JOURNEY_STORAGE, journey.id);
         return journey;
-      });
+      }, "depart");
     },
     [act],
   );
 
   const withActive = useCallback(
-    (fn: (id: string) => Promise<TravelJourney>) => {
+    (fn: (id: string) => Promise<TravelJourney>, action: TravelAction) => {
       const id = stateRef.current?.activeJourney?.id;
       if (!id) return Promise.resolve(null);
-      return act(() => fn(id));
+      return act(() => fn(id), action);
     },
     [act],
   );
 
   const cancel = useCallback(async () => {
-    const j = await withActive(cancelJourney);
+    const j = await withActive(cancelJourney, "cancel");
     if (j) clearKey();
     return j;
   }, [withActive, clearKey]);
-  const turnBack = useCallback(() => withActive(turnBackJourney), [withActive]);
+  const turnBack = useCallback(() => withActive(turnBackJourney, "turn-back"), [withActive]);
   // Arrival additionally captures the server's bonus outcome from the
   // response sibling (P2-4) — the panel renders it verbatim.
   const arrive = useCallback(async () => {
@@ -228,7 +267,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
       const r = await arriveJourney(id);
       setLastBonus(r.bonus);
       return r.journey;
-    });
+    }, "arrive");
   }, [act]);
 
   const hasTraversed = useCallback(

@@ -45,6 +45,7 @@ export interface ApprovalRow {
   created_at: string;
   expires_at: string;
   decided_at: string | null;
+  execution_started_at: string | null;
   execution_attempts: number;
   last_error: string | null;
   execution_log_id: number | null;
@@ -225,14 +226,18 @@ export async function executeApproval(
   approval: ApprovalRow,
 ): Promise<{ ok: boolean; result?: ToolResult; error?: string }> {
   const ctx = tc.ctx;
-  // confirmed -> executing (atomic; only one executor proceeds)
+  // confirmed -> executing (atomic; only one executor proceeds). The claim
+  // stamps execution_started_at: the sweep's stale-executing predicate
+  // measures from here, NOT from decided_at (confirmation time) — a row
+  // confirmed long ago but executing briefly is not stale.
   const claimed = ctx.handle.sqlite
     .prepare(
       `UPDATE tool_approvals
-       SET status = 'executing', execution_attempts = execution_attempts + 1
+       SET status = 'executing', execution_attempts = execution_attempts + 1,
+           execution_started_at = ?
        WHERE id = ? AND status = 'confirmed'`
     )
-    .run(approval.id);
+    .run(new Date(tc.now).toISOString(), approval.id);
   if (claimed.changes === 0) {
     const current = getApproval(ctx, approval.id);
     return { ok: false, error: `approval #${approval.id} is ${current?.status ?? "unknown"}; cannot execute` };
@@ -343,9 +348,14 @@ export async function sweepApprovals(
     expireApproval(ctx, a);
     expired++;
   }
+  // Stale `executing` rows are measured from EXECUTION START, not from
+  // confirmation: decided_at is when the user said yes, which can long
+  // predate the claim. A row confirmed 6 min ago but executing for 10 s
+  // must not be flipped back to `confirmed` and re-executed while the
+  // first execution is still running.
   const staleExecuting = ctx.handle.sqlite
     .prepare(
-      `SELECT * FROM tool_approvals WHERE status = 'executing' AND decided_at <= ?`
+      `SELECT * FROM tool_approvals WHERE status = 'executing' AND execution_started_at <= ?`
     )
     .all(new Date(tc.now - STALE_EXECUTING_MS).toISOString()) as ApprovalRow[];
   for (const a of staleExecuting) {

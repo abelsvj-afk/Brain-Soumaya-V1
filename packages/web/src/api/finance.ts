@@ -1,4 +1,4 @@
-import { API, afetch } from "./http.js";
+import { API, afetch, DEFAULT_TIMEOUT_MS } from "./http.js";
 import type {
   FinAccount, FinBill, FinBillOccurrence, FinIncome, FinExpense, BudgetSummary, BillFrequency,
   ExpenseDirection, FinExtractionResult, MoneyStar, FinBucket, FinGoal, FinAllocation, WealthSummary,
@@ -20,9 +20,9 @@ export interface FinanceSummary {
   upcomingTotal: number;
 }
 
-async function getJson<T>(path: string): Promise<T | null> {
+async function getJson<T>(path: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T | null> {
   try {
-    const res = await afetch(`${API}/finance${path}`);
+    const res = await afetch(`${API}/finance${path}`, {}, timeoutMs);
     return res.ok ? ((await res.json()) as T) : null;
   } catch {
     return null;
@@ -77,7 +77,7 @@ async function sendChecked<T>(path: string, method: string, body?: unknown): Pro
   }
 }
 
-export const getFinanceSummary = () => getJson<FinanceSummary>("/summary");
+export const getFinanceSummary = (timeoutMs: number = DEFAULT_TIMEOUT_MS) => getJson<FinanceSummary>("/summary", timeoutMs);
 export const getMoneySky = () => getJson<MoneyStar[]>("/sky");
 
 export interface AffordResult {
@@ -135,9 +135,9 @@ export const editExpense = (id: number, patch: { date?: string; amountCents?: nu
 export const deleteExpense = (id: number) => send<{ ok: boolean; budget: BudgetSummary }>(`/expense/${id}`, "DELETE");
 
 // ---- Ingestion (Stage 1b/1c): paste / image → drafts → confirm ----
-export const ingestPaste = (text: string) => send<{ sourceId: number; result: FinExtractionResult }>("/ingest/paste", "POST", { text });
+export const ingestPaste = (text: string) => send<{ sourceId: number; result: FinExtractionResult; sourceTruncated: boolean }>("/ingest/paste", "POST", { text });
 export const ingestImage = (dataUrl: string, mime: string) =>
-  send<{ sourceId: number; result: FinExtractionResult; readable: boolean }>("/ingest/image", "POST", { dataUrl, mime });
+  send<{ sourceId: number; result: FinExtractionResult; readable: boolean; sourceTruncated: boolean }>("/ingest/image", "POST", { dataUrl, mime });
 export interface ConfirmInput {
   sourceId: number;
   incomes: Array<{ date?: string; netCents: number; platform?: string }>;
@@ -150,6 +150,16 @@ export const confirmIngest = (input: ConfirmInput) => send<{ committed: number; 
 // dispatches "brain-finance-changed" automatically, for free, exactly like a bill/income/
 // expense change already does. No separate event wiring needed anywhere.
 export const getWealthSummary = () => getJson<WealthSummary>("/wealth/summary");
+/**
+ * Batch L (MIN-07, REG-138) — truthful-state variant of getWealthSummary
+ * (the IM-45 pattern): a failed fetch is `{ ok: false }`, never a null that
+ * the Financial Goals expansion reads as "still loading". The fail-soft
+ * wrapper above stays for callers that only refresh an already-loaded copy.
+ */
+export async function getWealthSummaryResult(): Promise<{ ok: true; summary: WealthSummary } | { ok: false }> {
+  const s = await getWealthSummary();
+  return s ? { ok: true, summary: s } : { ok: false };
+}
 
 export const listBuckets = () => getJson<FinBucket[]>("/wealth/buckets");
 export interface BucketInput { name: string; category?: string }
@@ -205,7 +215,7 @@ export interface PaystubConfirmInput {
   sourceData?: string; // base64
 }
 export const confirmPaystub = (input: PaystubConfirmInput) =>
-  sendChecked<{ paystub: FinPaystub; budget: BudgetSummary }>("/paystub/confirm", "POST", input);
+  sendChecked<{ paystub: FinPaystub; budget: BudgetSummary; duplicate: boolean }>("/paystub/confirm", "POST", input);
 export const listPaystubs = () => getJson<FinPaystub[]>("/paystub");
 export const getPaystub = (id: number) => getJson<FinPaystub>(`/paystub/${id}`);
 export const deletePaystub = (id: number) => send<{ ok: boolean }>(`/paystub/${id}`, "DELETE");

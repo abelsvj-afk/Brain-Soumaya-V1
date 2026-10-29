@@ -59,7 +59,7 @@ describe("narrate — distinct active days, worded exactly", () => {
   it("the finding's case: 19 memories on ONE day of a 9-day window reads 'on 1 different day'", () => {
     const base = Date.UTC(2026, 8, 5); // Sep 5
     for (let i = 0; i < 19; i++) mem("bulk log", 0.2, iso(base + (6 + i) * HOUR)); // all within Sep 5 (NY)
-    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 8, 13)) }); // Sep 13
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 8, 13)) })!; // Sep 13
     expect(ch.summary.startsWith("You added 19 memories on 1 different day.")).toBe(true);
     expect(ch.summary).not.toContain("Across about");
   });
@@ -70,7 +70,7 @@ describe("narrate — distinct active days, worded exactly", () => {
     mem("b", 0.2, iso(base + DAY + 12 * HOUR));
     mem("c", 0.2, iso(base + 2 * DAY + 12 * HOUR));
     mem("d", 0.2, iso(base + 2 * DAY + 13 * HOUR));
-    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(base + 3 * DAY) });
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(base + 3 * DAY) })!;
     expect(ch.summary.startsWith("You added 4 memories on 3 different days.")).toBe(true);
   });
 
@@ -83,14 +83,18 @@ describe("narrate — distinct active days, worded exactly", () => {
     const base = Date.UTC(2026, 0, 1, 2);
     mem("late night", 0.2, iso(base));
     mem("after midnight", 0.2, iso(base + 4 * HOUR));
-    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 3)) });
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 3)) })!;
     expect(ch.summary.startsWith("You added 2 memories on 2 different days.")).toBe(true);
   });
 
-  it("an empty window says so instead of inventing a span", () => {
+  it("an empty window writes no chapter — the empty formula stays a pure function, not a stored chapter", () => {
     expect(narrativeOpening(0, 0)).toBe("No new memories landed in this stretch.");
+    // CHR-12 (REG-131): marking over an empty window writes nothing (the
+    // surface explains instead) — the old behaviour stored a content-free
+    // chapter here, which also suppressed the opening backfill forever.
     const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 3)) });
-    expect(ch.summary.startsWith("No new memories landed in this stretch.")).toBe(true);
+    expect(ch).toBeNull();
+    expect(listChapters(ctx, "legacy")).toHaveLength(0);
   });
 });
 
@@ -162,27 +166,27 @@ describe("regenerateChapterNarratives — stored-text backfill with exclusion ru
   function seed() {
     const base = Date.UTC(2026, 0, 1);
     for (let i = 0; i < 5; i++) mem("early", 0.1, iso(base + i * DAY + 12 * HOUR));
-    const ch1 = createManualChapter(ctx, "legacy", { nowISO: iso(base + 5 * DAY) });
+    const ch1 = createManualChapter(ctx, "legacy", { nowISO: iso(base + 5 * DAY) })!;
     setSummary(ch1.id, OLD_CH1);
 
     for (let i = 0; i < 19; i++) mem("bulk", 0.7, iso(Date.UTC(2026, 0, 7) + (6 + i) * HOUR));
-    const ch2 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 15)) });
+    const ch2 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 15)) })!;
     setSummary(ch2.id, OLD_CH2);
 
     for (let i = 0; i < 4; i++) mem("hand", 0.1, iso(Date.UTC(2026, 0, 16) + i * HOUR));
-    const ch3 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 17)) });
+    const ch3 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 17)) })!;
     setSummary(ch3.id, HAND_EDITED);
 
     mem("prose", 0.1, iso(Date.UTC(2026, 0, 18)));
-    const ch4 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 19)) });
+    const ch4 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 19)) })!;
     setSummary(ch4.id, PROSE);
 
     for (let i = 0; i < 3; i++) mem("current", 0.1, iso(Date.UTC(2026, 0, 20) + i * DAY));
-    const ch5 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 23)) });
+    const ch5 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 23)) })!;
     const ch5Summary = ch5.summary; // already current formula — untouched
 
     for (let i = 0; i < 4; i++) mem("drift", 0.1, iso(Date.UTC(2026, 0, 24) + i * HOUR));
-    const ch6 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 25)) });
+    const ch6 = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 0, 25)) })!;
     setSummary(ch6.id, WRONG_COUNT);
 
     return { ch1, ch2, ch3, ch4, ch5, ch6, ch5Summary };
@@ -221,7 +225,7 @@ describe("regenerateChapterNarratives — stored-text backfill with exclusion ru
   it("never rewrites a narrative whose THEME clause absorbed hand-appended prose (audit-2 #5)", () => {
     const base = Date.UTC(2026, 1, 1); // Feb 1
     for (let i = 0; i < 19; i++) mem("absorbed", 0.3, iso(base + (6 + i) * HOUR)); // all on Feb 1 (NY)
-    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 1, 9)) });
+    const ch = createManualChapter(ctx, "legacy", { nowISO: iso(Date.UTC(2026, 1, 9)) })!;
     // Stated count (19) matches the recomputed window, so under the old
     // matcher this WAS rewritten — the exclusion guarantee is what broke.
     const absorbed =

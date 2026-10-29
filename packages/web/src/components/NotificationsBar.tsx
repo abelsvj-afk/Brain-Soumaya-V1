@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { type GraphNode, type Fuel } from "@brain/shared";
+import { useEffect, useState } from "react";
+import { type GraphNode, type Fuel, LOW_FUEL_THRESHOLD } from "@brain/shared";
 import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
 import { isReminderDue } from "../utils/dueReminders.js";
@@ -13,26 +13,43 @@ interface NotificationsBarProps {
   onOpenTab: (tab: DockTab) => void;
   /** Open the "Ways to earn Fuel" cheat-sheet (from the low-fuel alert). */
   onEarnFuel?: () => void;
+  /** Batch I (REG-069 / GH-16): the space these alerts belong to.
+   * Dismissals are scoped per space — dismissing an alert in one brain
+   * must never hide it in another. */
+  spaceId?: string | null;
 }
 
-const DISMISS_KEY = "brain.dismissedAlerts";
+/** Per-space dismissal key — the session evaporation is the intended
+ * half (a dismissal lasts the session); only the cross-brain bleed is
+ * the defect. Spaces without an id share the legacy key. */
+export function dismissedAlertsKey(spaceId?: string | null): string {
+  return `brain.dismissedAlerts.${spaceId ?? "legacy"}`;
+}
 
-export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, onEarnFuel }: NotificationsBarProps) {
+export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, onEarnFuel, spaceId }: NotificationsBarProps) {
+  const dismissKey = dismissedAlertsKey(spaceId);
   const [dismissed, setDismissed] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(sessionStorage.getItem(DISMISS_KEY) || "[]")); } catch { return new Set(); }
+    try { return new Set(JSON.parse(sessionStorage.getItem(dismissKey) || "[]")); } catch { return new Set(); }
   });
+  // The bar stays mounted across brain switches — re-read the new
+  // space's dismissals when the space changes, or brain A's dismissals
+  // would leak into brain B's render until a remount.
+  useEffect(() => {
+    try { setDismissed(new Set(JSON.parse(sessionStorage.getItem(dismissKey) || "[]"))); } catch { setDismissed(new Set()); }
+  }, [dismissKey]);
   const dismiss = (id: string) =>
     setDismissed((prev) => {
       const next = new Set(prev);
       next.add(id);
-      try { sessionStorage.setItem(DISMISS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      try { sessionStorage.setItem(dismissKey, JSON.stringify([...next])); } catch { /* ignore */ }
       return next;
     });
 
   const alerts: { id: string; type: "warning" | "info" | "error"; text: string; icon: string; actionText?: string; onClick?: () => void }[] = [];
 
-  // 1. Low Fuel Alert (under 15 units)
-  if (fuel && fuel.fuel < 15) {
+  // 1. Low Fuel Alert (under LOW_FUEL_THRESHOLD units — REG-048: the same
+  // definition the fuel gauge glows by, so gauge and alert always agree).
+  if (fuel && fuel.fuel < LOW_FUEL_THRESHOLD) {
     alerts.push({
       id: "low-fuel",
       type: "warning",
@@ -71,7 +88,10 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
       id: "pending-questions",
       type: "info",
       icon: "🛸",
-      text: `${pendingNodes.length} memory deep-dive${pendingNodes.length === 1 ? "" : "s"} awaiting clarification.`,
+      text:
+        pendingNodes.length === 1
+          ? "1 memory with Research Mode research awaiting clarification."
+          : `${pendingNodes.length} memories with Research Mode research awaiting clarification.`,
       actionText: "Resolve",
       onClick: () => {
         onFocusNode(pendingNodes[0]!.id);

@@ -1,6 +1,6 @@
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
-import { parseTolerantMs } from "../lib/time.js";
+import { parseTolerantMs, localDateOfStored } from "../lib/time.js";
 import { getPreferences, localDay, DEFAULT_PREFS } from "../agent/notify/policy.js";
 import type { Journey, JourneyLink, JourneyLinkKind, JourneySpan, JourneyStatus } from "@brain/shared";
 
@@ -96,8 +96,16 @@ export class JourneysRepo {
     goal: { table: "fin_goal", column: "created_at" },
   };
 
-  /** Earliest/latest dated instants among a journey's links (raw stored strings), or nulls. */
+  /** Earliest/latest dated instants among a journey's links (raw stored strings), or nulls.
+   *  REG-162/JN-05: the min/max is chosen by SPACE-LOCAL CALENDAR DAY
+   *  (`localDateOfStored`), not by parsed instant. A bare fin date ("2026-01-01")
+   *  is a calendar fact — it parses to UTC midnight — while a node's created_at
+   *  is an instant; comparing instants let the bare date win over a memory
+   *  logged the previous evening in the space's zone, shifting the span a day.
+   *  Ties on local day keep the earliest/latest instant, deterministically. */
   linkedDateRange(journeyId: number): { min: string | null; max: string | null } {
+    const tz = this.spaceTz();
+    let minDay: string | null = null, maxDay: string | null = null;
     let minMs = Infinity, maxMs = -Infinity, min: string | null = null, max: string | null = null;
     const links = this.links(journeyId);
     for (const l of links) {
@@ -109,8 +117,10 @@ export class JourneysRepo {
       if (!row?.d) continue;
       const ms = parseTolerantMs(row.d);
       if (!Number.isFinite(ms)) continue;
-      if (ms < minMs) { minMs = ms; min = row.d; }
-      if (ms > maxMs) { maxMs = ms; max = row.d; }
+      const day = localDateOfStored(row.d, tz);
+      if (day === null) continue;
+      if (minDay === null || day < minDay || (day === minDay && ms < minMs)) { minDay = day; minMs = ms; min = row.d; }
+      if (maxDay === null || day > maxDay || (day === maxDay && ms > maxMs)) { maxDay = day; maxMs = ms; max = row.d; }
     }
     return { min, max };
   }
@@ -135,14 +145,22 @@ export class JourneysRepo {
 
     // Guard: an inverted explicit pair (end before start) clamps end to start
     // rather than producing a negative-width band on the axis.
+    // REG-162/JN-05: the inversion check compares SPACE-LOCAL CALENDAR DAYS,
+    // not raw instants — a bare end date ("2026-01-11") parses to UTC midnight,
+    // which instant-compares as "before" a same-day memory logged at 04:30 UTC
+    // (Jan 10 evening in the space's zone) and wrongly clamped the end to the
+    // start. Days fall back to instant comparison only when unparseable.
+    const tz = this.spaceTz();
     if (end !== null) {
-      const sMs = parseTolerantMs(start), eMs = parseTolerantMs(end);
-      if (Number.isFinite(sMs) && Number.isFinite(eMs) && eMs < sMs) end = start;
+      const sDay = localDateOfStored(start, tz), eDay = localDateOfStored(end, tz);
+      const inverted = sDay !== null && eDay !== null
+        ? eDay < sDay
+        : (() => { const sMs = parseTolerantMs(start), eMs = parseTolerantMs(end); return Number.isFinite(sMs) && Number.isFinite(eMs) && eMs < sMs; })();
+      if (inverted) end = start;
     }
     // Displayed span dates follow the SPACE's local calendar (owner rule
     // 2026-10-21): an explicit bare date stays itself; a stored instant
     // (from linked memories / created / updated) renders as its local day.
-    const tz = this.spaceTz();
     const displayDate = (raw: string): string => {
       const t = raw.trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;

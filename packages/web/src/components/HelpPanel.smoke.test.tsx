@@ -64,7 +64,9 @@ describe("HelpPanel — zero search results is no longer a dead end", () => {
     fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "zzzznomatch" } });
     const askBtn = screen.getByText("💬 Ask Soumaya instead");
     fireEvent.click(askBtn);
-    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "chat" } }));
+    // REG-188 (C-06): the hatch carries the searched text as the question,
+    // so Chat opens prefilled instead of empty.
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "chat", value: "zzzznomatch" } }));
     window.removeEventListener("brain-toast-action", onAction);
   });
 });
@@ -121,7 +123,10 @@ describe("HelpPanel — reading the whole manual is finally rewarded", () => {
     for (const tab of tabs) {
       act(() => tab.click());
     }
-    expect(playSfx).toHaveBeenCalledWith("achievement");
+    // Batch H (REG-212 / CN-13): reading the manual pays no fuel and unlocks
+    // nothing, so the celebration is the neutral "complete", not the
+    // achievement jingle — the jingle is reserved for moments that pay/unlock.
+    expect(playSfx).toHaveBeenCalledWith("complete");
     expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Pilot Manual"), "📖", expect.any(Number));
   });
 
@@ -179,5 +184,17 @@ describe("HelpPanel — IM-131 remainder: Connections card, Getting Started land
     fireEvent.click(screen.getByText("💵 Open Money"));
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "tab", value: "money" } }));
     window.removeEventListener("brain-toast-action", onAction);
+  });
+});
+
+describe("HelpPanel — MindSpace discoverability (REG-071 / GH-18)", () => {
+  it("has a MindSpace card naming the ambient layer and its Mind-tab switch", () => {
+    render(<HelpPanel onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search pilot guide/), { target: { value: "MindSpace" } });
+    // The card's own title — not the search header's echo of the query,
+    // and not the icon (the icon renders in its own element).
+    expect(screen.getByText("MindSpace — thoughts drifting in your galaxy")).toBeTruthy();
+    expect(screen.getByText(/off until switched on/i)).toBeTruthy();
+    expect(screen.getByText("🧠 Open Mind")).toBeTruthy();
   });
 });

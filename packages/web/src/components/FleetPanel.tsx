@@ -17,10 +17,19 @@ export function FleetPanel({
   onFocus: (id: number) => void;
 }) {
   const [status, setStatus] = useState<FleetStatus>({});
+  // REG-169/SF-04: whether ANY status source has ever reported. The scene
+  // getter is undefined until the 3D scene mounts (the Lite/no-WebGL path
+  // may never mount it) — until a first report arrives, the panel must not
+  // claim an idle fleet. `hasSource` only ever flips false → true.
+  const [hasSource, setHasSource] = useState(false);
   const [openLore, setOpenLore] = useState<string | null>(null);
 
   useEffect(() => {
-    const tick = () => setStatus(getStatus() ?? {});
+    const tick = () => {
+      const next = getStatus();
+      if (next !== undefined) setHasSource(true);
+      setStatus(next ?? {});
+    };
     tick();
     const iv = window.setInterval(tick, 1500);
     return () => window.clearInterval(iv);
@@ -32,7 +41,11 @@ export function FleetPanel({
     <div className="dock-body">
       <div className="fleet-summary">
         <span className="fleet-summary-dot" />
-        {activeCount} of {FLEET.length} units active · she coordinates them for you
+        {hasSource ? (
+          <>{activeCount} of {FLEET.length} units active · she coordinates them for you</>
+        ) : (
+          <>Fleet status unavailable — the galaxy hasn't reported yet, so this isn't an idle fleet, it's an unknown one.</>
+        )}
       </div>
       <ul className="fleet-list">
         {FLEET.map((u) => {
@@ -48,11 +61,17 @@ export function FleetPanel({
                   <span className="fleet-name">{u.name}</span>
                   <span className="fleet-role">{u.role}</span>
                 </div>
-                <span className={`fleet-dot ${dispatching ? "dispatch" : active ? "on" : ""}`} title={active ? "active" : "idle"} />
+                <span className={`fleet-dot ${dispatching ? "dispatch" : active ? "on" : ""}`} title={hasSource ? (active ? "active" : "idle") : "status unavailable"} />
               </div>
               <div className={`fleet-status ${dispatching ? "dispatching" : ""}`}>
-                {dispatching ? "🚀 " : active ? "" : "💤 "}
-                {st?.detail ?? "Standing by"}
+                {!hasSource ? (
+                  "Status unavailable"
+                ) : (
+                  <>
+                    {dispatching ? "🚀 " : active ? "" : "💤 "}
+                    {st?.detail ?? "Standing by"}
+                  </>
+                )}
               </div>
               {targets.length > 0 && (
                 <div className="fleet-targets">
@@ -61,6 +80,14 @@ export function FleetPanel({
                       {t.label}
                     </button>
                   ))}
+                  {/* REG-170/SF-05: a truncated list states its full count —
+                      the tab's own disclosure pattern (cf. the log list's
+                      "Showing X of Y entries"). */}
+                  {targets.length > 4 && (
+                    <span className="fleet-targets-more">
+                      Showing 4 of {targets.length} targets
+                    </span>
+                  )}
                 </div>
               )}
               <button
