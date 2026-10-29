@@ -42,8 +42,11 @@ describe("localDateOfStored", () => {
     // "2026-10-22" — the old `.slice(0, 10)` answer. The correct answer is the
     // local day of that instant on THIS device (the gate runs this file under
     // both America/New_York → 2026-10-21 and Pacific/Kiritimati → 2026-10-22).
-    const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const expected = deviceZone === "Pacific/Kiritimati" ? "2026-10-22" : "2026-10-21";
+    // Derived for whatever zone this machine is in (NY → 10-21, Kiritimati
+    // and UTC → 10-22) — the claim is "the local day of the instant", never
+    // "the string prefix", so the expectation comes from the instant itself.
+    const instant = new Date(Date.UTC(2026, 9, 22, 1, 30));
+    const expected = `${instant.getFullYear()}-${String(instant.getMonth() + 1).padStart(2, "0")}-${String(instant.getDate()).padStart(2, "0")}`;
     expect(localDateOfStored("2026-10-22 01:30:00", parseTolerantMs)).toBe(expected);
     expect(localDateOfStored("2026-10-22T01:30:00.000Z", parseTolerantMs)).toBe(expected);
   });
