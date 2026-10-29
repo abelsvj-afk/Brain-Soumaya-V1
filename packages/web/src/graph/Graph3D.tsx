@@ -604,6 +604,25 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
+  // The worlds layer covers the whole screen with its own opaque scene. Measured (2026-10-29): the home galaxy
+  // kept drawing at full rate behind it — double the GPU and CPU work on a phone for pixels nobody sees.
+  // While a world is up, stop the library's render loop and this component's tick; resume on return
+  // (dt is clamped, so nothing jumps).
+  const pausedRef = useRef(false);
+  useEffect(() => {
+    const onSurface = (e: Event) => {
+      const up = !!(e as CustomEvent<{ visible?: boolean }>).detail?.visible;
+      pausedRef.current = up;
+      try {
+        if (up) fgRef.current?.pauseAnimation?.();
+        else fgRef.current?.resumeAnimation?.();
+      } catch {
+        /* the graph is not mounted yet; the flag alone gates tick() */
+      }
+    };
+    window.addEventListener("worlds:surface-visible", onSurface);
+    return () => window.removeEventListener("worlds:surface-visible", onSurface);
+  }, []);
   const loadedRef = useRef(false);
   useEffect(() => {
     loadedRef.current = !!loaded;
@@ -1909,6 +1928,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     const stationWorldScratch2 = new THREE.Vector3();
     const tick = () => {
       raf = requestAnimationFrame(tick); // keep the loop alive even on capped frames
+      if (pausedRef.current) return; // a world is covering the galaxy — do no work for it
       // FPS cap (adaptive graphics): on Performance / battery-saver, skip this frame's
       // animation work when we're ahead of the target rate — a real CPU saving on weak
       // phones without touching functionality.

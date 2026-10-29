@@ -526,6 +526,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   NO gate GLB in the repo (checked every branch); the gate is still the generated torus. Requested from Muse in
   `docs/specs/muse-gate-asset-2026-10-29.md`. Design pass: `docs/DESIGN_PASS_WORLDS_2026-10-29.md`. Look at: whether the home
   sky is visible enough in the worlds on a real screen (the nebula bake reads dark in headless), the warp sky swinging round.
+- **Speed: the home galaxy no longer renders behind a world; Observatory header collision (2026-10-29) — MEASURED in a real
+  browser, needs on-device confirmation** (Graph3D.tsx, WorldsSurface.tsx, index.css; full audit
+  `docs/AUDIT_SPEED_UI_UX_2026-10-29.md`): the worlds layer announces `worlds:surface-visible`; Graph3D pauses its library render
+  loop and its own tick while a world covers it and resumes on return (measured: 0 draw calls behind a world; 543/4 s again at
+  home; the world's own frame budget rose ~4×). The Observatory's 🔍/× buttons overlapped the greeting at 412 px — the header now
+  reserves their width. Look at: that returning to the galaxy from a world resumes instantly and nothing animates oddly after a
+  long stay, and that the greeting wraps cleanly on a real phone.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

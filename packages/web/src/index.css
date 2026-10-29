@@ -3567,6 +3567,9 @@ button {
   padding-top: 2px;
   padding-bottom: 6px;
 }
+/* The 🔍 and × (46px each, absolutely placed at the right) sat on top of the greeting on a phone — measured at
+   412px. Reserve their width (2 × 46 + gap) on both sides so the centred title wraps instead of colliding. */
+.obs-head { padding-inline: 104px; }
 .obs-head h2 { margin: 0 0 4px; font-size: 1.25rem; font-weight: 600; }
 .obs-sub { font-size: 0.85rem; color: #9fd0ff; font-variant-numeric: tabular-nums; }
 .obs-card {

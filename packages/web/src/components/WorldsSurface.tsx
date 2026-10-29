@@ -694,6 +694,13 @@ export default function WorldsSurface({
   const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
   const mode = inFlightScene ? "transit" : atWorld ? "world" : null;
   const visible = !!mode && !dismissed && engaged;
+  // Tell the home galaxy it is covered, so it stops rendering (Graph3D listens).
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("worlds:surface-visible", { detail: { visible } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("worlds:surface-visible", { detail: { visible: false } }));
+    };
+  }, [visible]);
   journeyRef.current = journey;
   const refreshTravelRef = useRef<() => Promise<void>>(async () => {});
   refreshTravelRef.current = travel.refresh;
