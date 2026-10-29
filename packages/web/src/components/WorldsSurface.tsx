@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
+import { WORLDS_TRAVEL_ENABLED, relicCodexKey, relicsForWorld } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { getArchivedNodesStrict, getIncidentEdges, getSpaceId } from "../api/client.js";
-import type { GraphData, GraphEdge, GraphNode, Journey, JourneyLinkSummary } from "@brain/shared";
+import type { GraphData, GraphEdge, GraphNode, Journey, JourneyLinkSummary, RelicDef, RelicWorld } from "@brain/shared";
 import {
   getGardenSuggestions,
   getRecentGardenTends,
@@ -79,6 +79,8 @@ import {
 } from "../graph/scaleScene.js";
 import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
+import { pushToast } from "./Toasts.js";
+import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -329,9 +331,8 @@ interface WorldSceneEntry {
     layout?: GardenLayout | DeepPastLayout | PeopleLayout | QuietArchiveLayout | ScaleLayout,
     /**
      * Relic visibility (relics increment): the scene calls this per relic
-     * whose real GLB has actually loaded. WorldsSurface passes nothing on
-     * this tip — the relics store does not exist here yet — but the
-     * wiring point is the relics increment's rebase, not a second edit.
+     * whose real GLB has actually loaded; the host records it so the
+     * "something glimmers" find is offered only for a landed relic.
      */
     onRelicVisible?: (slug: string) => void,
   ) => WorldSceneHandle;
@@ -355,7 +356,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: STATION_ORBIT_HEIGHT,
     lookAtY: 0,
     fallback: "The Station view needs graphics support on this device — your journeys are unaffected.",
-    build: () => createStationScene(),
+    build: (_layout, onRelicVisible) => createStationScene({ onRelicVisible }),
   },
   "growing-place": {
     title: "The Growing Place",
@@ -366,7 +367,13 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     lookAtY: 60,
     cameraFloorY: GARDEN_CAMERA_FLOOR_Y,
     fallback: "The garden view needs graphics support on this device — your memories are unaffected.",
-    build: (layout) => createGardenScene(isGardenLayout(layout) ? layout : EMPTY_GARDEN_LAYOUT),
+    build: (layout, onRelicVisible) =>
+      createGardenScene(
+        isGardenLayout(layout) ? layout : EMPTY_GARDEN_LAYOUT,
+        undefined,
+        undefined,
+        { onRelicVisible },
+      ),
   },
   "deep-past": {
     title: "The Deep Past",
@@ -376,8 +383,8 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: 150,
     lookAtY: -200,
     fallback: "The Deep Past view needs graphics support on this device — your memories are unaffected.",
-    build: (layout) =>
-      createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT),
+    build: (layout, onRelicVisible) =>
+      createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT, { onRelicVisible }),
   },
   people: {
     title: "The People",
@@ -387,8 +394,10 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     orbitHeight: 140,
     lookAtY: 0,
     fallback: "The People view needs graphics support on this device — your people are unaffected.",
-    build: (layout) =>
-      createPeopleScene(isPeopleLayout(layout) ? layout : EMPTY_PEOPLE_LAYOUT),
+    build: (layout, onRelicVisible) =>
+      createPeopleScene(isPeopleLayout(layout) ? layout : EMPTY_PEOPLE_LAYOUT, {
+        onRelicVisible,
+      }),
   },
   "quiet-archive": {
     title: "Quiet/Archive",
@@ -443,6 +452,16 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
 };
 
+/** The worlds with scenes — the only worlds a relic find can happen in. */
+function isSceneRelicWorld(key: string): key is RelicWorld {
+  return (
+    key === "great-station" ||
+    key === "growing-place" ||
+    key === "deep-past" ||
+    key === "people"
+  );
+}
+
 export default function WorldsSurface({
   enabled = WORLDS_TRAVEL_ENABLED,
   graph = null,
@@ -450,6 +469,7 @@ export default function WorldsSurface({
   getFleetStatus,
   onFocus,
   onHangarEquipChanged,
+  spaceId = "",
 }: {
   enabled?: boolean;
   graph?: GraphData | null;
@@ -466,6 +486,8 @@ export default function WorldsSurface({
   onFocus?: (id: number) => void;
   /** Fired when the interior's hangar pick changes, so the host refreshes its own hangar copies. */
   onHangarEquipChanged?: () => void;
+  /** The brain the viewer is in; the relic find is recorded per space. */
+  spaceId?: string;
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -527,6 +549,15 @@ export default function WorldsSurface({
   const layoutRef = useRef<GardenLayout | undefined>(undefined);
   const atGardenRef = useRef(false);
 
+  // Relics (relics increment): slugs whose GLB has actually landed in the
+  // current world's scene, and the per-space found record. A find is
+  // offered only for a visible relic that has not been found yet.
+  const [visibleRelics, setVisibleRelics] = useState<string[]>([]);
+  const foundRelics = useFoundRelics(spaceId || null);
+  const handleRelicVisible = useCallback((slug: string) => {
+    setVisibleRelics((v) => (v.includes(slug) ? v : [...v, slug]));
+  }, []);
+
   const currentWorld = travel.state?.currentWorld;
   const journey = travel.state?.activeJourney ?? null;
   const atWorld =
@@ -561,6 +592,7 @@ export default function WorldsSurface({
   useEffect(() => {
     setDismissed(false);
     setGraphicsFailed(false);
+    setVisibleRelics([]);
     setGuided(false);
     setShowController(false);
     setInside(false);
@@ -893,6 +925,23 @@ export default function WorldsSurface({
     if (node) setTendNode(node);
   };
 
+  // Relics (relics increment): the world's relics that are actually
+  // visible right now and not yet found — each one gets a plain-language
+  // "something glimmers" line with a "Look closer" button. A relic whose
+  // GLB has not landed is not visible, so its find is never offered.
+  const glimmers = useMemo(() => {
+    if (!atWorld || !currentWorld || !isSceneRelicWorld(currentWorld)) return [];
+    return relicsForWorld(currentWorld).filter(
+      (r) => r.discoverable && visibleRelics.includes(r.id) && !foundRelics.has(relicCodexKey(r.id)),
+    );
+  }, [atWorld, currentWorld, visibleRelics, foundRelics]);
+
+  const onFindRelic = (relic: RelicDef) => {
+    if (!spaceId) return;
+    markRelicFound(spaceId, relicCodexKey(relic.id));
+    pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
+  };
+
   const toggleGuided = () => {
     if (guidedRef.current) {
       // Leaving the descent parks the view at the last progress.
@@ -961,6 +1010,8 @@ export default function WorldsSurface({
         gardenScene = createGardenScene(
           isGardenLayout(sceneLayout) ? sceneLayout : EMPTY_GARDEN_LAYOUT,
           gardenGlow,
+          undefined,
+          { onRelicVisible: handleRelicVisible },
         );
         built = gardenScene;
       } else if (currentWorld === "great-station" && inside) {
@@ -971,7 +1022,7 @@ export default function WorldsSurface({
           { shipSkin: interiorShipSkin },
         );
       } else {
-        built = entry.build(sceneLayout);
+        built = entry.build(sceneLayout, handleRelicVisible);
       }
     }
     const world =
@@ -1164,7 +1215,7 @@ export default function WorldsSurface({
       gardenSceneRef.current = null;
       gardenCameraRef.current = null;
     };
-  }, [visible, mode, entry, currentWorld, sceneLayout, gardenGlow, transitKind, transitTotalMs, journey?.origin, journey?.destination, inside, interiorLayout, interiorShipSkin]);
+  }, [visible, mode, entry, currentWorld, sceneLayout, gardenGlow, transitKind, transitTotalMs, journey?.origin, journey?.destination, inside, interiorLayout, interiorShipSkin, handleRelicVisible]);
 
   if (!visible || !mode) return null;
   const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
@@ -1256,6 +1307,15 @@ export default function WorldsSurface({
           {eternityGesture ? ` He is holding ${eternityGesture}.` : ""}
         </p>
       )}
+      {mode === "world" &&
+        glimmers.map((r) => (
+          <p key={r.id} className="worlds-surface-fallback">
+            Something glimmers {r.glimmer}.{" "}
+            <button type="button" onClick={() => onFindRelic(r)}>
+              Look closer
+            </button>
+          </p>
+        ))}
       {mode === "world" && currentWorld === "growing-place" && !layout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}

@@ -3,6 +3,7 @@ import type { GraphData, GraphNode } from "@brain/shared";
 import { buildCodex, codexProgress, CODEX_CATEGORIES, fieldNoteEntries, type CodexEntry, type CodexCategory } from "./codex.js";
 import { getCodexDiscoveries, type AgentDiscovery } from "../api/client.js";
 import { useCodexDiscoveryClaims } from "./useCodexDiscoveryClaims.js";
+import { useFoundRelics } from "./relicsFound.js";
 
 /**
  * The Codex — a gamified, living atlas of the galaxy. Entries start locked, unlock as
@@ -46,6 +47,7 @@ export function CodexPanel({
     };
   }, [spaceId, notesRetry]);
 
+  const foundRelics = useFoundRelics(spaceId);
   const entries = useMemo(() => {
     const nodes = graph.nodes as GraphNode[];
     return [
@@ -53,10 +55,11 @@ export function CodexPanel({
         memories: nodes.filter((n) => n.kind !== "action" && n.kind !== "moc"),
         constellations: nodes.filter((n) => n.kind === "moc"),
         links: graph.links.length,
+        foundRelics,
       }),
       ...fieldNoteEntries(discoveries),
     ];
-  }, [graph, discoveries]);
+  }, [graph, discoveries, foundRelics]);
   const progress = useMemo(() => codexProgress(entries), [entries]);
   const [tab, setTab] = useState<CodexCategory>("sectors");
 

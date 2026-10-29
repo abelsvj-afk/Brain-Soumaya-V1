@@ -90,6 +90,7 @@ import {
 import { useUnlockWatcher } from "./hooks/useUnlockWatcher.js";
 import { useCodexDiscoveryClaims } from "./components/useCodexDiscoveryClaims.js";
 import { useCelebrationQueue } from "./hooks/useCelebrationQueue.js";
+import { useFoundRelics } from "./components/relicsFound.js";
 import { UnlockCelebration } from "./components/UnlockCelebration.js";
 import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
@@ -1297,6 +1298,10 @@ export default function App() {
   // live the way achievements.ts codexPctFrom does it. The dev-unlock-all
   // flag is dev-only (docs/UNLOCKABLES.md); nothing in the normal UI sets it.
   const devUnlockAll = useMemo(() => readDevUnlockAll(), [space?.id]);
+  // Found relics (relics increment): the per-space record of relics found
+  // in their worlds — both Codex builders below read it, so a find unlocks
+  // its entry on every surface at once (panel + global claim hook).
+  const foundRelics = useFoundRelics(space?.id ?? null);
   const unlockStats = useMemo<UnlockStats | null>(() => {
     if (!space || !loaded) return null;
     const allNodes = data.nodes as GraphNode[];
@@ -1309,6 +1314,7 @@ export default function App() {
       memories: allNodes.filter((n) => n.kind !== "moc" && n.kind !== "action"),
       constellations: allNodes.filter((n) => n.kind === "moc"),
       links: data.links.length,
+      foundRelics,
     });
     return buildUnlockStats({
       nodes: allNodes,
@@ -1317,7 +1323,7 @@ export default function App() {
       achievementIds: earned,
       codexPct: codexProgress(codex).pct,
     });
-  }, [space, loaded, data.nodes, data.links, fuel, streak]);
+  }, [space, loaded, data.nodes, data.links, fuel, streak, foundRelics]);
   unlockGateRef.current = { stats: unlockStats, devUnlockAll };
   // "🔓 Unlocked!" celebrations: fires once per newly unlocked catalog item
   // (music included — a new loop unlocking celebrates AND becomes playable).
@@ -1367,10 +1373,11 @@ export default function App() {
         memories: allNodes.filter((n) => n.kind !== "moc" && n.kind !== "action"),
         constellations: allNodes.filter((n) => n.kind === "moc"),
         links: data.links.length,
+        foundRelics,
       }),
       ...fieldNoteEntries(codexDiscoveries),
     ];
-  }, [space, loaded, data.nodes, data.links, codexDiscoveries]);
+  }, [space, loaded, data.nodes, data.links, codexDiscoveries, foundRelics]);
   useCodexDiscoveryClaims(codexEntries, space?.id ?? null, () => {
     void getFuel()
       .then((f) => {
@@ -2553,6 +2560,7 @@ export default function App() {
         <ErrorBoundary label="worlds-surface" fallback={null}>
           <WorldsSurface
             graph={data}
+            spaceId={space.id}
             onChanged={(result) => void refresh(result.newNodeId ? [result.newNodeId] : undefined)}
             getFleetStatus={() => graphRef.current?.getFleetStatus()}
             onFocus={focus}

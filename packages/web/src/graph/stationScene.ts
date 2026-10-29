@@ -47,6 +47,7 @@ import {
   scaleGeometryToSize,
   singleMeshGeometry,
 } from "./stationAssets.js";
+import { placeWorldRelics } from "./relicAssets.js";
 
 /**
  * The Great Station scene (Phase 2, P2-3; scaled up P2-6): three.js
@@ -232,7 +233,7 @@ export function dockingPose(
   return { position: lanePoint, rotationY: laneFacing, docked: false };
 }
 
-export function createStationScene(opts: { hull?: THREE.Object3D } = {}): StationScene {
+export function createStationScene(opts: { hull?: THREE.Object3D; onRelicVisible?: (slug: string) => void } = {}): StationScene {
   const group = new THREE.Group();
   // The rotating frame (R-S4): the hull, beacons, work lights, hero,
   // docked ships, and dressing are ATTACHED to the Station, so they
@@ -241,6 +242,12 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
   const station = new THREE.Group();
   station.name = "station-rotating";
   group.add(station);
+
+  // Relics (relics increment): the Station's two relics rest on the
+  // harbor, attached to the rotating frame so they turn with it. A
+  // relic whose GLB has not landed is simply absent — no stand-in, and
+  // its find is never offered (the host learns of it via onRelicVisible).
+  const cancelRelics = placeWorldRelics(station, "great-station", opts.onRelicVisible);
 
   // The proxy form is the standing backup (D-37): it renders
   // immediately, and the real Profondo hull swaps in when it loads —
@@ -827,6 +834,7 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
     update,
     dispose: () => {
       disposed = true;
+      cancelRelics();
       disposeObject3D(group);
     },
   };
