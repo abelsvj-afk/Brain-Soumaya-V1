@@ -591,6 +591,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   warp → Station handoff on the reused renderer ran with 0 errors. Entry time unchanged in headless (software GL makes contexts
   cheap) — the saving is on phones, where a context costs 50–200 ms and can fail under memory pressure. Look at: repeated
   world-hopping on the phone (no blank/black canvas after several trips).
+- **Speed S2 — the entry bundle 2,251 KB → 701 KB (gzip 720 → ~215 KB) (2026-10-30) — MEASURED (source-map attribution + a
+  real browser), needs on-device confirmation** (lib/lazyPanel.tsx, App.tsx, RightDock.tsx, useTravel.ts, peopleScene.ts): the
+  rarely used panels (Settings, Help, Wealth/Finance fullscreen, Timeline, Review, Lenses, Connections, Ingest and the right-dock
+  panels), the whole worlds layer (WorldsSurface, WorldMap, TravelSheet) and the destination prefetcher are now loaded on demand via
+  `lazyPanel` (call sites and prop types unchanged; fallback is nothing — panels already show their own loading states); the People
+  world's leftover 156 KB HYG star catalog is gone (the shared sky replaced it). Measured: three.js (685 KB) and the star catalog
+  left the entry chunk; Settings loads its own chunk when tapped and renders; the worlds layer loads in the background right after
+  first paint. Look at: the first tap on a lazy panel on a slow network (a blank beat before it appears) — if it is noticeable, we
+  preload on idle.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

@@ -15,14 +15,9 @@ const Graph3D = lazy(() => import("./graph/Graph3D.js").then((m) => ({ default: 
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { makeAmbientAudio, TRACKS, type AmbientAudio } from "./graph/audio.js";
 import { setGraphicsMode, resolveGraphics, getGraphics } from "./graph/graphicsConfig.js";
-import { IngestPanel } from "./components/IngestPanel.js";
 import { Observatory } from "./components/Observatory.js";
 import { ChatDock } from "./components/ChatDock.js";
-import { SettingsPanel } from "./components/SettingsPanel.js";
-import { ConnectionsPanel } from "./components/ConnectionsPanel.js";
-import { TimelineView } from "./components/TimelineView.js";
 import { FuelEarnSheet, type EarnKind } from "./components/FuelEarnSheet.js";
-import { ReviewPanel } from "./components/ReviewPanel.js";
 import { getDueReviews } from "./api/client.js";
 import { FuelGauge } from "./components/FuelGauge.js";
 import { StreakEmber } from "./components/StreakEmber.js";
@@ -31,21 +26,14 @@ import { CommandPalette } from "./components/CommandPalette.js";
 import { isCaptureShortcut, isPaletteShortcut, isTextEntryTarget, parseShareLanding } from "./lib/quickCapture.js";
 import type { PaletteCommand } from "./lib/commandPalette.js";
 import { RightDock, type DockTab } from "./components/RightDock.js";
-import { HelpPanel } from "./components/HelpPanel.js";
-import { WealthFullscreen } from "./components/WealthFullscreen.js";
-import { FinanceFullscreen } from "./components/FinanceFullscreen.js";
 import { Legend } from "./components/Legend.js";
 import { WelcomeIntro } from "./components/WelcomeIntro.js";
-import { LensesPanel } from "./components/LensesPanel.js";
 import { GalaxyViews } from "./components/GalaxyViews.js";
 import { GalaxyErrorCard } from "./components/GalaxyErrorCard.js";
 import TravelPanel from "./components/TravelPanel.js";
 import ToursPanel from "./components/ToursPanel.js";
 import ApprovalsInbox from "./components/ApprovalsInbox.js";
 import WorldChangesView from "./components/WorldChangesView.js";
-import WorldsSurface from "./components/WorldsSurface.js";
-import WorldMap from "./components/WorldMap.js";
-import TravelSheet from "./components/TravelSheet.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
@@ -122,6 +110,21 @@ import {
   type ProactiveContext,
   type ProactiveContextSource,
 } from "./api/client.js";
+import { lazyPanel } from "./lib/lazyPanel.js";
+
+// Loaded on demand (speed audit S2): rarely opened panels and the whole worlds layer stay out of the entry bundle.
+const SettingsPanel = lazyPanel(() => import("./components/SettingsPanel.js").then((m) => m.SettingsPanel));
+const ConnectionsPanel = lazyPanel(() => import("./components/ConnectionsPanel.js").then((m) => m.ConnectionsPanel));
+const TimelineView = lazyPanel(() => import("./components/TimelineView.js").then((m) => m.TimelineView));
+const ReviewPanel = lazyPanel(() => import("./components/ReviewPanel.js").then((m) => m.ReviewPanel));
+const HelpPanel = lazyPanel(() => import("./components/HelpPanel.js").then((m) => m.HelpPanel));
+const WealthFullscreen = lazyPanel(() => import("./components/WealthFullscreen.js").then((m) => m.WealthFullscreen));
+const FinanceFullscreen = lazyPanel(() => import("./components/FinanceFullscreen.js").then((m) => m.FinanceFullscreen));
+const LensesPanel = lazyPanel(() => import("./components/LensesPanel.js").then((m) => m.LensesPanel));
+const IngestPanel = lazyPanel(() => import("./components/IngestPanel.js").then((m) => m.IngestPanel));
+const WorldsSurface = lazyPanel(() => import("./components/WorldsSurface.js").then((m) => m.default));
+const WorldMap = lazyPanel(() => import("./components/WorldMap.js").then((m) => m.default));
+const TravelSheet = lazyPanel(() => import("./components/TravelSheet.js").then((m) => m.default));
 
 type Panel = "search" | "ingest" | "dock" | null;
 

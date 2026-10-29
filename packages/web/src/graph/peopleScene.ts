@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { buildHygStarfield } from "./hygStars.js";
 import { PEOPLE_BACKDROP_PLANETS, PEOPLE_FORMS, PEOPLE_HEARTH, PEOPLE_PALETTE, loadPeopleAsset } from "./peopleAssets.js";
 import {
   PEOPLE_FIELD_RADIUS,
@@ -312,14 +311,7 @@ export function createPeopleScene(layout: PeopleLayout): PeopleScene {
   motes.name = "ember-motes";
   group.add(motes);
 
-  // The faintest HYG points far above the field — the same real data as
-  // the Station's and the garden's, dimmed: the field is low and near,
-  // the sky is not its subject.
-  const stars = buildHygStarfield();
-  const starMat = stars.material as THREE.PointsMaterial;
-  starMat.transparent = true;
-  starMat.opacity = 0.2;
-  group.add(stars);
+  // The sky is the host's shared home sky (homeSky.ts) — one universe, not a backdrop per world.
 
   // Distant backdrop planets (EVE-style, 2026-10-27): Earth and Moon —
   // home, far away — and a Quaternius planet, 4,000 units out at ~7°

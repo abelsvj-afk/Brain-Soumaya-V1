@@ -4,25 +4,29 @@ import { NodeInspector } from "./NodeInspector.js";
 import { NodeList } from "./NodeList.js";
 import { ActionsPanel } from "./ActionsPanel.js";
 import { SectorView } from "./SectorView.js";
-import { DigestPanel } from "./DigestPanel.js";
-import { SoumayaPanel } from "./SoumayaPanel.js";
 import { FleetPanel } from "./FleetPanel.js";
-import FleetMissionsPanel from "./FleetMissionsPanel.js";
-import FleetDefensePanel from "./FleetDefensePanel.js";
-import { AchievementsPanel } from "./AchievementsPanel.js";
-import { HangarPanel, type HangarViewTarget } from "./HangarPanel.js";
+import type { HangarViewTarget } from "./HangarPanel.js";
 import type { UnlockStats } from "@brain/shared";
 import { InboxPanel } from "./InboxPanel.js";
-import { LibraryPanel } from "./LibraryPanel.js";
-import { CodexPanel } from "./CodexPanel.js";
 import { DailyQuests } from "./DailyQuests.js";
 import { questDayStorageKey } from "./quests.js";
-import { MindPanel } from "./MindPanel.js";
-import { FinancePanel } from "./FinancePanel.js";
-import { JourneysPanel } from "./JourneysPanel.js";
 import { SoumayaEye } from "./SoumayaEye.js";
 import type { FleetStatus } from "../graph/Graph3D.js";
 import type { Fuel, Streak } from "@brain/shared";
+import { lazyPanel } from "../lib/lazyPanel.js";
+
+// Loaded on demand (speed audit S2).
+const DigestPanel = lazyPanel(() => import("./DigestPanel.js").then((m) => m.DigestPanel));
+const SoumayaPanel = lazyPanel(() => import("./SoumayaPanel.js").then((m) => m.SoumayaPanel));
+const AchievementsPanel = lazyPanel(() => import("./AchievementsPanel.js").then((m) => m.AchievementsPanel));
+const LibraryPanel = lazyPanel(() => import("./LibraryPanel.js").then((m) => m.LibraryPanel));
+const CodexPanel = lazyPanel(() => import("./CodexPanel.js").then((m) => m.CodexPanel));
+const MindPanel = lazyPanel(() => import("./MindPanel.js").then((m) => m.MindPanel));
+const FinancePanel = lazyPanel(() => import("./FinancePanel.js").then((m) => m.FinancePanel));
+const JourneysPanel = lazyPanel(() => import("./JourneysPanel.js").then((m) => m.JourneysPanel));
+const FleetMissionsPanel = lazyPanel(() => import("./FleetMissionsPanel.js").then((m) => m.default));
+const FleetDefensePanel = lazyPanel(() => import("./FleetDefensePanel.js").then((m) => m.default));
+const HangarPanel = lazyPanel(() => import("./HangarPanel.js").then((m) => m.HangarPanel));
 
 // The dock was 13 icon tabs — it overflowed off-screen on phones and several
 // tabs were near-duplicates. Consolidated: Browse absorbs List/Library/Sectors

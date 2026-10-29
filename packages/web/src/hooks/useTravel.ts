@@ -10,7 +10,6 @@ import {
   type TravelBonus,
   type TravelState,
 } from "../api/travel.js";
-import { prefetchWorld } from "../graph/worldPrefetch.js";
 import { TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelAction, type TravelChangedDetail } from "../lib/travelEvents.js";
 
 /**
@@ -143,7 +142,11 @@ export function useTravel(enabled: boolean = true): UseTravel {
       // are fetched, so the world isn't bare when you arrive. Covers a departure made here AND a
       // reload mid-flight; idempotent, so the arming poll calling it every 2 s is free.
       const j = s.activeJourney;
-      if (j && (j.state === "arming" || j.state === "in_transit")) void prefetchWorld(j.destination);
+      // Loaded on departure only (speed audit S2): the prefetcher reads every world's asset module, which pulls three.js
+      // and the model loaders — none of it belongs in the first screen's bundle.
+      if (j && (j.state === "arming" || j.state === "in_transit")) {
+        void import("../graph/worldPrefetch.js").then((m) => m.prefetchWorld(j.destination)).catch(() => {});
+      }
       setError(null);
     } else {
       setError("Can't reach the brain right now — travel state may be out of date.");
