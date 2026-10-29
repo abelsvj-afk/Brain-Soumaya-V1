@@ -6572,6 +6572,29 @@ button.mindspace-more { cursor: pointer; }
 .worlds-surface-canvas {
   position: absolute;
   inset: 0;
+  /* Free look: the canvas owns drag and pinch. Without this the browser scrolls or zooms the
+     page under the finger and the pointer events arrive cancelled. */
+  touch-action: none;
+  cursor: grab;
+}
+.worlds-surface-canvas:active {
+  cursor: grabbing;
+}
+.worlds-look-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 3.5rem;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: calc(100% - 2rem);
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(12, 16, 34, 0.82);
+  border: 1px solid rgba(150, 140, 220, 0.35);
+  color: #ecebff;
+  font-size: 0.8rem;
+  text-align: center;
+  pointer-events: none;
 }
 .worlds-surface-canvas canvas {
   display: block;

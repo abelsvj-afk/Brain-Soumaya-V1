@@ -82,6 +82,7 @@ import HarborControllerPanel from "./HarborControllerPanel.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, type TravelChangedDetail } from "../lib/travelEvents.js";
+import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
 import { createEternityScene } from "../graph/eternityScene.js";
@@ -522,6 +523,16 @@ export default function WorldsSurface({
   // Station arrival glide (A13): any pointer press skips it. Reset per stay.
   const arrivalSkippedRef = useRef(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  // Free look: the traveller's own drag / pinch / scroll, layered on the world's camera pose
+  // (graph/worldLook.ts). A ref, not state — it changes every pointer move and must not re-render.
+  const lookRef = useRef<LookState>(NO_LOOK);
+  // Whether the camera is currently free (not in a scripted move). The frame loop sets it; input
+  // is ignored while it is false so a drag can't build up an offset that then jumps in.
+  const lookAllowedRef = useRef(false);
+  // A drag that ends on the canvas is followed by a click; it must not count as a tap on the garden.
+  const suppressClickRef = useRef(false);
+  const [lookHint, setLookHint] = useState(false);
+  const lookedRef = useRef<() => void>(() => {});
   // The mounted scene handle — the Eternity gesture/tool buttons below
   // call into it. Set in the mount effect, cleared in its cleanup.
   const sceneHandleRef = useRef<WorldSceneHandle | null>(null);
@@ -563,6 +574,36 @@ export default function WorldsSurface({
   const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
   const mode = inTransit ? "transit" : atWorld ? "world" : null;
   const visible = !!mode && !dismissed && engaged;
+
+  // First time in a world: say that it can be moved. Shown once per browser, gone on the first
+  // gesture or after a few seconds — a world that silently ignored touch was the complaint.
+  useEffect(() => {
+    // Start when the world is actually ON SCREEN — not when the app loads at a saved world, whose
+    // layer stays hidden until the traveller acts (the timer would run out before they ever got there).
+    if (!enabled || !visible || mode !== "world") return;
+    let seen = false;
+    try {
+      seen = localStorage.getItem("worlds.lookHintSeen") === "1";
+    } catch {
+      /* storage unavailable — show it; it just won't be remembered */
+    }
+    if (seen) return;
+    setLookHint(true);
+    const done = () => {
+      setLookHint(false);
+      try {
+        localStorage.setItem("worlds.lookHintSeen", "1");
+      } catch {
+        /* ignore */
+      }
+    };
+    lookedRef.current = done;
+    const t = window.setTimeout(done, 9000);
+    return () => {
+      window.clearTimeout(t);
+      lookedRef.current = () => {};
+    };
+  }, [enabled, visible, mode, currentWorld]);
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
   const atStation = atWorld && currentWorld === "great-station";
@@ -917,6 +958,10 @@ export default function WorldsSurface({
   // live camera (it orbits every frame); a tap that lands on no plot
   // does nothing — the garden stays a place to look, not a minefield.
   const handleCanvasClick = (e: { clientX: number; clientY: number }) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false; // the end of a drag, not a tap
+      return;
+    }
     if (!atGarden || mode !== "world") return;
     const scene = gardenSceneRef.current;
     const camera = gardenCameraRef.current;
@@ -1064,11 +1109,85 @@ export default function WorldsSurface({
     };
     host.addEventListener("pointerdown", skipArrival);
 
+    // --- Free look (graph/worldLook.ts): one finger / mouse drag turns the view around the world,
+    // two fingers pinch to zoom, the wheel zooms, a double tap resets. Ignored while the world is
+    // running a scripted camera move.
+    lookRef.current = NO_LOOK;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let lastPinch = 0;
+    let travelled = 0; // total pixels this gesture has moved — separates a tap from a drag
+    let lastTapAt = 0;
+    const DRAG_PX = 8;
+    const markLooked = () => lookedRef.current();
+    const onLookDown = (e: PointerEvent) => {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) travelled = 0;
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        lastPinch = pinchDistance(a!, b!);
+      }
+    };
+    const onLookMove = (e: PointerEvent) => {
+      const prev = pointers.get(e.pointerId);
+      if (!prev) return;
+      const next = { x: e.clientX, y: e.clientY };
+      pointers.set(e.pointerId, next);
+      if (!lookAllowedRef.current) return;
+      if (pointers.size === 1) {
+        const dx = next.x - prev.x;
+        const dy = next.y - prev.y;
+        travelled += Math.hypot(dx, dy);
+        if (travelled > DRAG_PX) {
+          lookRef.current = dragLook(lookRef.current, dx, dy);
+          markLooked();
+        }
+      } else if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = pinchDistance(a!, b!);
+        if (lastPinch > 0 && d > 0) lookRef.current = zoomLook(lookRef.current, d / lastPinch);
+        lastPinch = d;
+        travelled += DRAG_PX + 1; // a pinch is never a tap
+        markLooked();
+      }
+    };
+    const onLookUp = (e: PointerEvent) => {
+      if (!pointers.delete(e.pointerId)) return;
+      if (pointers.size < 2) lastPinch = 0;
+      if (travelled > DRAG_PX) {
+        // The click that follows the end of a drag is not a tap. Clear the flag if no click comes.
+        suppressClickRef.current = true;
+        window.setTimeout(() => (suppressClickRef.current = false), 350);
+      } else if (pointers.size === 0 && lookAllowedRef.current) {
+        // A real tap: two quick ones put the view back where the world had it.
+        const now = performance.now();
+        if (now - lastTapAt < 320) lookRef.current = NO_LOOK;
+        lastTapAt = now;
+      }
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!lookAllowedRef.current) return;
+      e.preventDefault();
+      lookRef.current = zoomLook(lookRef.current, Math.exp(-e.deltaY * 0.0015));
+      markLooked();
+    };
+    const onDouble = () => {
+      lookRef.current = NO_LOOK;
+    };
+    host.addEventListener("pointerdown", onLookDown);
+    host.addEventListener("pointermove", onLookMove);
+    host.addEventListener("pointerup", onLookUp);
+    host.addEventListener("pointercancel", onLookUp);
+    host.addEventListener("wheel", onWheel, { passive: false });
+    host.addEventListener("dblclick", onDouble);
+
     let raf = 0;
     const startedAt = performance.now();
     const BASE_ANGLE = 0.6;
     const frame = () => {
       const elapsed = performance.now() - startedAt;
+      // True while this world is running a scripted camera move the traveller's offset must not disturb.
+      let scripted = false;
+      let pivotY = orbit ? orbit.lookAtY : 0;
       world.update(elapsed, { reducedMotion });
       if (mode === "world" && currentWorld === "growing-place") {
         // A8: the fog takes the warmer tint of the warmth now rendered.
@@ -1085,6 +1204,7 @@ export default function WorldsSurface({
         engine?.setLevel(1, transitKind === "warp" ? 1 : 0.35);
       } else if (orbit) {
         if (currentWorld === "great-station" && inside) {
+          scripted = true; // the interior orbits its own room; not free-look (yet)
           // Station interior: the camera holds a slow orbit in the
           // current room — that orbit is how you look around your
           // docked ship in the hangar bay. Room changes jump: the
@@ -1119,7 +1239,9 @@ export default function WorldsSurface({
             lastProgressRef.current = progress;
           }
           const pose = deepPastDescentCamera(progress);
+          pivotY = pose.lookAt[1];
           if (guidedRef.current) {
+            scripted = true; // following the thread down
             camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
             camera.lookAt(pose.lookAt[0], pose.lookAt[1], pose.lookAt[2]);
           } else {
@@ -1143,6 +1265,7 @@ export default function WorldsSurface({
           const arrivalHeight = Math.sin(arrival.elevation) * arrival.distance;
           const t = elapsed / STATION_ARRIVAL_MS;
           if (t < 1) {
+            scripted = true; // the arrival glide; a tap skips it and frees the camera
             const pose = approachPose(t);
             const d = pose.distance;
             camera.position.set(
@@ -1168,6 +1291,20 @@ export default function WorldsSurface({
           );
           camera.lookAt(0, orbit.lookAtY, 0);
         }
+        // Free look: the traveller's own offset on top of the pose the world just chose.
+        lookAllowedRef.current = !scripted;
+        if (!scripted && isLooked(lookRef.current)) {
+          const p = applyLook(
+            [camera.position.x, camera.position.y, camera.position.z],
+            [0, pivotY, 0],
+            lookRef.current,
+          );
+          camera.position.set(p[0], p[1], p[2]);
+          camera.lookAt(0, pivotY, 0);
+        }
+        host.dataset.look = isLooked(lookRef.current)
+          ? `${lookRef.current.yaw.toFixed(3)},${lookRef.current.pitch.toFixed(3)},${lookRef.current.zoom.toFixed(3)}`
+          : "";
         // Camera floor: where the world sets one (the garden), the view
         // never drops below it — no pose can ever sink under the garden.
         if (orbit.cameraFloorY !== undefined) {
@@ -1199,6 +1336,13 @@ export default function WorldsSurface({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       host.removeEventListener("pointerdown", skipArrival);
+      host.removeEventListener("pointerdown", onLookDown);
+      host.removeEventListener("pointermove", onLookMove);
+      host.removeEventListener("pointerup", onLookUp);
+      host.removeEventListener("pointercancel", onLookUp);
+      host.removeEventListener("wheel", onWheel);
+      host.removeEventListener("dblclick", onDouble);
+      lookAllowedRef.current = false;
       gardenSceneRef.current = null;
       engine?.dispose();
       world.dispose();
@@ -1222,6 +1366,11 @@ export default function WorldsSurface({
   return (
     <section className={`worlds-surface${atEternity && mode === "world" ? " worlds-surface-light" : ""}`} role="dialog" aria-label={title}>
       <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
+      {lookHint && visible && mode === "world" && (
+        <p className="worlds-look-hint" role="status">
+          Drag to look around · pinch or scroll to zoom · double-tap to reset
+        </p>
+      )}
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
         {atStation && (

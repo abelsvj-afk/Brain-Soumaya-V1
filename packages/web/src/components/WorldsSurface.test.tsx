@@ -797,3 +797,52 @@ describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () =
     expect(screen.queryByText(/The Observation Deck —/)).toBeNull();
   });
 });
+
+
+describe("free look — the first-time hint", () => {
+  // The hint tells the traveller the world can be moved. It once started its timer when the app LOADED
+  // at a saved world (layer still hidden), so it had expired before the traveller ever saw the world.
+  beforeEach(() => {
+    localStorage.removeItem("worlds.lookHintSeen");
+    mockUseTravel.mockReturnValue(atGarden());
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("is NOT shown while the world is hidden at launch — and its clock has not started", () => {
+    vi.useFakeTimers();
+    render(<WorldsSurface enabled />);
+    vi.advanceTimersByTime(60_000); // a long time at the home galaxy
+    act(() => requestEnterWorld());
+    expect(screen.getByText(/Drag to look around/)).toBeTruthy(); // still there when they DO enter
+  });
+
+  it("is shown on entering a world, then gone after a while and never again", () => {
+    vi.useFakeTimers();
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.getByText(/Drag to look around/)).toBeTruthy();
+    act(() => vi.advanceTimersByTime(9_500));
+    expect(screen.queryByText(/Drag to look around/)).toBeNull();
+    expect(localStorage.getItem("worlds.lookHintSeen")).toBe("1");
+    // a fresh mount (next visit) stays quiet
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.queryByText(/Drag to look around/)).toBeNull();
+  });
+
+  it("is not shown over the transit flight (nothing to look around yet)", () => {
+    mockUseTravel.mockReturnValue(
+      fakeTravel({
+        state: {
+          currentWorld: "home",
+          activeJourney: {
+            id: "j-h", kind: "warp", origin: "home", destination: "great-station", state: "in_transit",
+            fuelCharged: 10, cancellable: false, createdAt: "2026-10-23T12:00:00.000Z",
+            cancelDeadline: "2026-10-23T12:00:10.000Z", departedAt: new Date().toISOString(),
+          },
+          fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+        },
+      }),
+    );
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.queryByText(/Drag to look around/)).toBeNull();
+  });
+});
