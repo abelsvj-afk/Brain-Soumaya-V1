@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { WORLD_CHART, buildRouteBoard } from "../lib/routeBoard.js";
-import WorldCredits from "./WorldCredits.js";
 import { requestEnterWorld } from "../lib/travelEvents.js";
 
 /**
@@ -36,7 +35,6 @@ export default function TravelPanel({
   focusWorld?: string | null;
 }) {
   const travel = useTravel(enabled);
-  const [showCredits, setShowCredits] = useState(false);
   const [elapsedJourneyId, setElapsedJourneyId] = useState<string | null>(null);
   const activeJourney = travel.state?.activeJourney ?? null;
 
@@ -211,13 +209,6 @@ export default function TravelPanel({
           </button>
         </div>
       )}
-
-      <footer>
-        <button type="button" onClick={() => setShowCredits((v) => !v)}>
-          {showCredits ? "Hide credits" : "Credits"}
-        </button>
-        {showCredits && <WorldCredits />}
-      </footer>
     </section>
   );
 }

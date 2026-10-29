@@ -7,6 +7,7 @@ import { isVoiceEnabled, setVoiceEnabled, isVoiceSupported } from "../voice.js";
 import { sfxEnabled, setSfxEnabled } from "../graph/sfx.js";
 import { isColorblind, setColorblind } from "../graph/theme.js";
 import { prefersReducedMotion, setReducedMotionOverride } from "../graph/motion.js";
+import WorldCredits from "./WorldCredits.js";
 import {
   isDiagnosticsEnabled,
   setDiagnosticsEnabled,
@@ -741,6 +742,15 @@ export function SettingsPanel({
           <button onClick={() => void downloadExport()} disabled={exporting}>
             {exporting ? "Preparing…" : "⬇ Download brain export (JSON)"}
           </button>
+        </section>
+
+        <section className="settings-section">
+          <details>
+            <summary>
+              <strong>Credits</strong> — models and art used in the worlds
+            </summary>
+            <WorldCredits />
+          </details>
         </section>
 
         <section className="settings-section">

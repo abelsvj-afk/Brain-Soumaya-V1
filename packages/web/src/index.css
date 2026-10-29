@@ -7050,11 +7050,6 @@ button.mindspace-more { cursor: pointer; }
   text-align: center;
   opacity: 0.85;
 }
-.worlds-surface-credits {
-  position: absolute;
-  left: 1rem;
-  bottom: 1rem;
-}
 
 /* Harbor controller panel (Wave 2, NPC autonomy): a readable card
    over the Station scene, bottom-left above the credits. Functional

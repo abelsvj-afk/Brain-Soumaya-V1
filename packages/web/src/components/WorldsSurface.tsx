@@ -81,7 +81,6 @@ import {
   createScaleScene,
   EMPTY_SCALE_LAYOUT,
 } from "../graph/scaleScene.js";
-import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -566,7 +565,6 @@ export default function WorldsSurface({
       window.removeEventListener(ENTER_WORLD_EVENT, onEnter);
     };
   }, [enabled]);
-  const [showCredits, setShowCredits] = useState(false);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
@@ -2256,12 +2254,6 @@ export default function WorldsSurface({
           )}
         </div>
       )}
-      <footer className="worlds-surface-credits">
-        <button type="button" onClick={() => setShowCredits((v) => !v)}>
-          {showCredits ? "Hide credits" : "Credits"}
-        </button>
-        {showCredits && <WorldCredits />}
-      </footer>
     </section>
   );
 }
