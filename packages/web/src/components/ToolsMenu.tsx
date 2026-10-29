@@ -25,6 +25,10 @@ export interface ToolsMenuProps {
   onTimeline: () => void;
   onLegend: () => void;
   onWorldMap: () => void;
+  /** Opens the travel sheet (route board, tours, world changes). Omitted
+   *  while the worlds flag is off — the item then doesn't render at all,
+   *  rather than opening an empty sheet. */
+  onTravel?: () => void;
   onFlashback: () => void;
   onFocusMode: () => void;
   focusMode: boolean;
@@ -45,6 +49,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
     { icon: "🕰️", label: "Timeline", on: p.onTimeline },
     { icon: "🗺️", label: "Legend", on: p.onLegend },
     { icon: "🪐", label: "World map", on: p.onWorldMap },
+    ...(p.onTravel ? [{ icon: "🚀", label: "Travel", on: p.onTravel }] : []),
     { icon: "☄️", label: "Flashback", on: p.onFlashback },
     { icon: p.focusMode ? "🌐" : "🌌", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
     { icon: "❓", label: "Help", on: p.onHelp },

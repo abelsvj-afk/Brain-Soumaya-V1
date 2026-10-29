@@ -36,6 +36,18 @@ describe("ToolsMenu (mobile-first tool consolidation)", () => {
     expect(screen.queryByText("World map")).toBeNull();
   });
 
+  it("routes the Travel item to the travel sheet, and omits it when travel is off", () => {
+    const onTravel = vi.fn();
+    render(<ToolsMenu {...props({ onTravel })} />);
+    fireEvent.click(screen.getByLabelText("Tools"));
+    fireEvent.click(screen.getByText("Travel"));
+    expect(onTravel).toHaveBeenCalled();
+    cleanup();
+    render(<ToolsMenu {...props()} />);
+    fireEvent.click(screen.getByLabelText("Tools"));
+    expect(screen.queryByText("Travel")).toBeNull();
+  });
+
   it("shows a combined alert badge for pending connections + due recalls", () => {
     const { container } = render(<ToolsMenu {...props({ candCount: 2, dueCount: 3 })} />);
     expect(container.querySelector(".fab-badge")?.textContent).toBe("5");

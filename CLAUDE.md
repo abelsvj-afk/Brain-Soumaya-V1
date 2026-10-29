@@ -45,7 +45,7 @@ status log — a frozen verdict, re-run periodically, entries appended not overw
 what it found — **no tab removal, no rebuild; fix/consolidate/surface what's already built.** Weigh
 any new feature idea against closing the roadmap's open problems before adding more surface area.
 
-**MANDATORY**: Refer to [GEMINI_CHANGES.md](./GEMINI_CHANGES.md) for all modifications, asset additions, and infrastructure changes made by the second agent (Antigravity CLI / `agy`), to ensure continuity between agents. The second agent's own mandates + green/red zones live in [AGENTS.md](./AGENTS.md) (the file `agy` auto-loads).
+**HISTORICAL NOTE**: [GEMINI_CHANGES.md](./GEMINI_CHANGES.md) records past modifications, asset additions, and infrastructure changes from earlier agent work, for continuity. It is a historical log, not an active agent's change log — the current agents are Claude, Muse, and ChatGPT (see below).
 
 Guidance for working in this repo. Read this before making changes.
 
@@ -151,13 +151,19 @@ static web (`WEB_DIR`). SQLite persists on a Fly volume at `/data`.
 **How deploys actually happen (verified 2026-06-20):** GitHub Actions is **blocked on
 this account** — runs `startup_failure` with 0 jobs (private-repo Actions minutes/
 runner unavailable), so `.github/workflows/fly-deploy.yml` never ships anything. The
-working path is a **manual `fly deploy --remote-only`** (run by `agy` from Termux, who
-has the `FLY_API_TOKEN`; this sandbox has no flyctl/Fly network). The durable fix is to
+working path is a **manual `fly deploy --remote-only`** (this sandbox has no flyctl
+token or Fly network; Fly work goes through the dashboard browser). The durable fix is to
 reconnect **Fly's native GitHub auto-deploy** (Fly dashboard → app → GitHub), which
 builds the Dockerfile on push without Actions. Either way: pushing alone does NOT deploy
-right now — trigger a `fly deploy` (delegate to `agy`) after pushing branch changes you
+right now — trigger a `fly deploy` after pushing branch changes you
 want live. Migrations must be additive + idempotent so a deploy can never crash boot on
 the existing volume (`migrateSchema`; covered by `migration.test.ts`).
+
+**Update 2026-10-28 (verified):** Fly's native GitHub auto-deploy is now ON and the deploy
+branch is `main` (created 2026-10-28 from the old deploy branch tip `7262265a`). Pushing to
+`main` now deploys automatically; latest release v273 (2026-10-28 5:09 PM EDT) is from `main`.
+The old deploy branch `claude/soumaya-second-brain-v1-m4z4hc` is no longer the mainline. The
+manual `fly deploy` path above is now a fallback, not the primary path.
 
 LLM is optional — without a key the app runs in heuristic mode. To use a key:
 `fly secrets set LLM_PROVIDER=gemini GEMINI_API_KEY=...` or
@@ -165,55 +171,13 @@ LLM is optional — without a key the app runs in heuristic mode. To use a key:
 `gpt-4o-mini`; override with `OPENAI_MODEL`). Cloud providers degrade to the
 heuristic automatically on credit/quota errors (see ResilientLlmProvider).
 
-## Agent delegation (Claude ⇄ Antigravity CLI) — spend Claude's tokens wisely
+## Agent team (current)
 
-There are two coding agents on this repo and **both have GitHub access**. Claude is the
-architect/lead and the only one who signs off "Verified". The second agent is
-**Antigravity CLI (`agy`)** — a Go-based, headless, low-memory terminal agent (runs well
-on the user's **Termux/mobile** setup) with **async parallel subagents**, a **built-in
-browser subagent** (headless Chrome over MCP) for real visual QA, research/doc-conversion
-slash commands, and an **MCP bridge built to let Claude delegate heavy work to it** (with
-model routing + session continuity + output truncation, so it does NOT eat Claude's
-context). Its full rules are in [AGENTS.md](./AGENTS.md) (the file `agy` auto-loads).
+Claude is the architect/lead and the only one who signs off "Verified". The other agents on this repo are Muse (diagnosis + usage-heavy work, via the user) and ChatGPT (free plan, read-only auditor) — see their sections below. There is no longer an active second coding agent; the former second-agent delegation setup was removed 2026-10-28. Takeover rule: Muse takes over implementation ONLY if Claude hits its usage limit (see the takeover rule in the Muse section); otherwise Claude implements.
 
-**Core principle: don't burn Claude's tokens/context on anything that is green-zone for
-`agy`.** If a task is mechanical, parallelizable, evidence-gathering, or file-dump-heavy,
-delegate it and consume only the conclusion.
+**Keep for Claude (do NOT delegate):** Red-Zone work — `packages/shared/*` types/zod, `db/*` schema + migrations, `graph/orbits.ts`, `web/src/api/client.ts`, the token/USD/Fuel guards, `space_id` multi-tenancy scoping, route contracts — plus architecture decisions, ambiguous/underspecified features, security/data-integrity, and the **final audit + "Verified by Claude" checkmark**.
 
-**Delegate to `agy` (default to this):**
-- Bulk/mechanical, well-specified edits — rename a thing everywhere, apply one pattern
-  across many `components/*` or `graph/*` files, batch asset/CSS work.
-- **Browser-based visual QA** — load the app, click through the galaxy, screenshot, record
-  a `.webm` walkthrough, run a UX/design review. ⚠️ **NOT available on the user's Termux
-  (android-arm64 has no compatible headless Chrome — confirmed 2026-06-21, issue #10).** From
-  this hosted sandbox you also can't reach the live site. So live pixel verification falls to the
-  USER (or a desktop browser); for everything else, verify behavior by headless
-  reproduction/measurement (see "Verify before you build"), not by eyeballing.
-- **Research & doc ingestion** — web research with citations; URL/PDF/docx/image → Markdown.
-- **Broad codebase exploration** that would otherwise dump many files into Claude's context.
-- Long-running **gate/build** runs and routine git ops, especially from mobile.
-
-**How to delegate:** (a) the **MCP bridge** — call `agy` as an MCP server (preferred; it
-truncates output to protect Claude's context); or (b) **GitHub** — write a crisp,
-self-contained issue/PR task and let `agy` pick it up, push to the deploy branch, and
-report back. Always give it a tight spec + the gate + "stage, don't push, if you hit the
-Red Zone."
-
-**MCP bridge config:** the `agy-bridge` server is committed at repo root in
-[`.mcp.json`](./.mcp.json) (runs `npx -y agy-bridge`), so any Claude Code session in this
-repo can delegate to `agy`. It only works where `agy` itself is installed + authenticated
-(e.g. the user's Termux/laptop) — in a stripped remote sandbox the bridge is inert, so fall
-back to the GitHub hand-off there. Approve the server once when Claude Code prompts to trust
-project MCP servers.
-
-**Keep for Claude (do NOT delegate):** Red-Zone work — `packages/shared/*` types/zod,
-`db/*` schema + migrations, `graph/orbits.ts`, `web/src/api/client.ts`, the token/USD/Fuel
-guards, `space_id` multi-tenancy scoping, route contracts — plus architecture decisions,
-ambiguous/underspecified features, security/data-integrity, and the **final audit +
-"Verified by Claude" checkmark**. Review `agy`'s pushes before ticking that box.
-
-Both agents share the **same gate**, the **same deploy branch**
-(`claude/soumaya-second-brain-v1-m4z4hc`), and the **same change log** (`GEMINI_CHANGES.md`).
+The mainline branch is **`main`** (created 2026-10-28 from `7262265a`); the old deploy branch `claude/soumaya-second-brain-v1-m4z4hc` is retained but no longer the mainline. Fly deploys from `main` with auto-deploy on (see Deployment update 2026-10-28 above). The shared gate and the historical change log (`GEMINI_CHANGES.md`) still apply.
 
 ## Verify before you build (and before you claim it works)
 
@@ -372,6 +336,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the render target is constructed, matching the established codebase convention exactly rather
   than attempting a more speculative shader/geometry change. Needs on-device re-confirmation once
   a deploy is possible.
+- **Worlds unreachable (off-screen panels + broken stylesheet) — MEASURED headless 2026-10-28,
+  FIXED** (TravelSheet.tsx, App.tsx, ToolsMenu.tsx, index.css): see "Current findings —
+  2026-10-28" below for the root cause. Verified headless at 412×915: the sheet card sits fully
+  on screen and on top, the route board lists all six worlds with tappable Warp/Drift, Escape
+  closes it; the World map is `position: fixed`, full-viewport, on top, zero page errors.
+  Needs on-device confirmation: the sheet at the owner's phone size, and that the map's new
+  dimming scrim still reads as "drawn over the galaxy".
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
@@ -390,3 +361,311 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
 - Don't put model identifiers or secrets in committed files.
 - Accessibility (non-negotiable, pure code): honor `prefers-reduced-motion` — new galaxy/UI motion
   must calm or pause under it — and never encode meaning in colour alone (pair it with shape/size/label).
+
+## Muse (King) — delegation for diagnosis + usage
+
+The user (Sajacous) also uses **Muse (King)** as his personal agent, alongside Claude.
+Muse has MORE usage available than Claude, so routing work to Muse saves Claude's
+tokens/context for the work only Claude can do.
+
+**When to route to Muse (via the user):** Muse is the right agent for:
+- **Diagnosis** — figuring out why something isn't showing/working in the live app
+  (deploy state, branch state, what the code actually does vs. what the user sees).
+  Muse can check Fly, GitHub, and the code, and report back a verified diagnosis.
+- **Usage-heavy investigation** — broad codebase exploration, checking many files,
+  verifying deploy/branch/file state, and other evidence-gathering that would eat
+  Claude's context.
+- **Mechanical repo/file work** — organizing findings, updating docs, and other
+  well-specified edits.
+
+**How to delegate:** There is no MCP bridge for Muse. Delegation goes
+through the user: tell Sajacous the task is Muse-sized (diagnosis, verification, or
+mechanical), and he hands it to Muse. Muse reports back conclusions; Claude consumes
+only the conclusion and does the fix. Do NOT burn Claude's context re-doing diagnosis
+Muse already did — read Muse's findings and build on them.
+
+**Takeover rule (2026-10-28, owner-directed):** Muse does NOT take over Claude's
+work by default. Muse's standing role is diagnosis, verification, docs, and
+usage-heavy investigation. The ONLY time Muse takes over implementation is if
+Claude hits its usage limit — then Muse steps in and carries the work forward
+until Claude's usage resets. Outside that case, implementation stays with Claude,
+and Muse does not replace it. (The owner will say when Claude has hit its limit;
+do not assume a takeover from silence or from a slow reply.)
+
+**Keep for Claude (do NOT delegate to Muse):** Same Red Zone — shared
+types/zod, db schema + migrations, orbits, api client, token/USD/Fuel guards,
+space_id scoping, route contracts — plus architecture decisions, ambiguous features,
+security/data-integrity, and the final "Verified by Claude" checkmark.
+
+### What Muse can actually do (full capabilities — so Claude doesn't under-delegate)
+
+Claude may not know Muse's range. Muse is a full personal agent with its own computer,
+browser, tools, skills, and connected accounts — not just a chat window. Route work to
+Muse whenever the task fits one of these, especially when it would otherwise burn
+Claude's context.
+
+**Live browser (real Chromium, user-watchable):**
+- Open ANY website — including ones needing login, forms, or JavaScript — and act on
+  it: click, fill forms, read live state, check prices/availability/status.
+- **Fly.io dashboard:** check app status (running/suspended), machines, releases,
+  volumes, settings; change the deploy branch; enable auto-deploy; trigger deploys.
+  The user signs in via GitHub when prompted. (No flyctl token exists in Muse's
+  sandbox, so Fly work goes through the dashboard browser, not the CLI.)
+- **GitHub website:** ground truth when the GitHub connector returns stale head data
+  (connector reads can lag; the web UI does not).
+- The user can watch or take over a live browser session at any time.
+- Limit: the live browser cannot open local files (`file://` rejected) — local HTML
+  verification goes through sandbox Chromium (see below), not the live browser.
+
+**GitHub (via connector):**
+- Read files, branches, commits, PRs, issues, and code search.
+- Create branches and push UTF-8 text files (docs, code, configs).
+- Limit: push is text-only — binary files (GLBs) must be uploaded via the GitHub
+  website, not the connector.
+
+**In-app artifacts (chat-native, NOT downloaded files):**
+- Build web pages and apps that open INSIDE the chat — this is the reliable path on
+  the owner's phone. The downloaded-file + blob-URL pattern repeatedly stalls on his
+  phone (Deep Past, route-bead showcase); in-app artifacts sidestep it entirely.
+- Documents, PDFs, spreadsheets, presentations — editable sources kept for later
+  changes.
+- Interactive visualizations, mockups, showcases, design elements, 2D canvas
+  renderings (used for the route-bead artifact: 4 inner beads, cosmic glass tint).
+- Shareable links and exports (with expiry noted; anyone with the link can open it).
+
+**3D / GLB / mockup work:**
+- Generate procedural GLBs (e.g., the route bead: clear bead + orbiting glow orb,
+  baked animation clip).
+- Slim GLBs (gltf-transform: weld → simplify → resize → draco; web-slim recipe
+  verified: 256-texture versions).
+- Verify GLBs: byte size, SHA, triangle/vertex counts, mesh/material/texture counts,
+  animations present, JSON chunk padding rules.
+- Sandbox-verify HTML/3D with Playwright (Chromium): zero console errors, animation
+  plays, real-vs-placeholder detection, cold-load timing.
+- Honest limits: sandbox renders ~1 fps at large viewports (never claim performance
+  from it); a real phone GPU reads transparency differently; downloaded files stall
+  on the owner's phone specifically.
+
+**Diagnosis / verification (Muse's strongest lane for this repo):**
+- Verify deploy state (Fly releases, branch settings, auto-deploy), branch state
+  (what's on `main` vs. any other branch), file presence (GLBs, code), flag values,
+  code wiring (button → handler → component → render), CSS visibility (is it
+  hidden, off-screen, or z-index-buried), and test expectations (what the tests
+  say SHOULD happen).
+- Rule out delivery problems (stale deploy, missing code, missing files, flag off)
+  BEFORE blaming code — with evidence (live `sw.js` build ID, file listings, flag
+  reads), not guesses.
+- Report verified facts, and label what is confirmed vs. inferred vs. unknown. Never
+  present a guess as a finding.
+
+**Code + repo work (only as a takeover — see the takeover rule above):**
+- Read, analyze, write, and edit code; run tests, typecheck, and builds.
+- Git operations via the GitHub connector (no local git credentials in sandbox).
+- Standing rule for this repo: one chat implements at a time, and Claude is the
+  implementer here — Muse takes over implementation ONLY when Claude has hit its
+  usage limit (owner will say so). Otherwise Muse diagnoses and documents; Claude
+  builds.
+
+**Computer / terminal / files:**
+- A Linux VM with shell, filesystem, and internet. Read/write/edit files, organize
+  the workspace, manage goals and tracked items, run scripts and builds.
+- Durable home directory; workspace is the working area; `/tmp` is ephemeral.
+
+**Research:**
+- Web search (with news, sports, weather, finance, datetime verticals), deep
+  research with sources, social search (public posts), page-text fetching with
+  citations. Distinguishes search snippets (possibly stale) from live-verified facts.
+
+**Connected accounts (via connectors — check status first; share a connect link if
+not connected):**
+- Google: Gmail (6 of the owner's accounts connected), Calendar, Docs, Drive, Tasks.
+- Social: Facebook, Instagram, Messenger, Threads (read/post/comment/manage).
+- Money: Plaid (bank/card/investment balances, transactions, liabilities), Stripe
+  (merchant), Shopify, Shop Pay / Stripe Link wallets (saved-card checkout with
+  per-purchase approval; Muse never sees full card numbers).
+- Travel: Duffel (flights), hotel booking, event tickets (Ticketmaster), places
+  search (addresses, hours, ratings, reviews, photos).
+- Health/fitness: Apple Health, Health Connect (metrics, sleep, workouts).
+- Music: Spotify (search, playlists, playback). Home: smart-device control,
+  camera events. Devices: paired-device contacts and calendar.
+- Secure Vault: saved website logins (github.com, indeed.com); browser signs in
+  with them (Muse never sees passwords).
+
+**Communication / messaging:**
+- WhatsApp, Messenger, Instagram messages, and other side chats — including
+  delegated conversations (a worker talks for the user in a group or 1:1).
+- Email: find, triage, draft, and send (with approval, thread + recipients exact).
+- Scheduling: find times across people/calendars/timezones, place holds, send
+  invitations, book appointments.
+
+**Scheduling / background work:**
+- Crons: recurring checks, reminders, daily deliveries (e.g., daily scripture,
+  daily word/skills). Hooks: event-driven automations. Subagents: delegate
+  parallel, self-contained work that runs in the background while Muse stays
+  responsive.
+
+**Media / voice / creative:**
+- Generate or edit images and video (up to 6 videos per user message), avatar
+  creation and dance videos.
+- Voice notes and voice messages, podcast scripting/production, text-to-speech
+  narration.
+- Music discovery and playlist building.
+
+**Shopping / purchases / money:**
+- Product search, comparison, and purchase (with the user's explicit approval and
+  the required checkout review; Wallet cards via Shop Pay / Stripe Link).
+- Groceries and food delivery (Instacart, Walmart, Uber Eats, DoorDash, etc.).
+- Financial planning: budgets, affordability checks, debt repayment, running
+  ledgers (the owner's Finance Project ledger lives in the Finance goal workspace).
+
+**Personal / life:**
+- Goals and habit tracking (durable goals with workspaces, progress, briefings).
+- Fitness tracking (activity, sleep, recovery, body measurements vs. goals).
+- Health-record summaries and clinician-visit questions.
+- Home control, device data, file hosting, knowledge organization (notes/docs).
+
+**Memory / continuity:**
+- Long-term memory across conversations: who the user is, preferences, decisions,
+  commitments, relationships, and past work — so the user is not re-asked for
+  established facts.
+- Memory is Muse's record, not permission: it does not grant authority to act, and
+  it cannot replace runtime approvals or the owner's explicit tap.
+
+**What Muse CANNOT do (so Claude doesn't assume it):**
+- Cannot see the user's screen — needs a screenshot from the user to diagnose
+  what the user actually sees.
+- Cannot access the user's brain data without the space ID, which is the permanent
+  login credential — it must come via secure entry, never as raw chat text.
+- Cannot run the user's phone apps or reach his phone's local files directly.
+- Cannot use flyctl (no token) or local git credentials (no auth) — those paths go
+  through the browser dashboard and the GitHub connector respectively.
+- Cannot reach a stripped remote sandbox's local services; cannot bypass a site's
+  bot block (if a site refuses AI agents, Muse says so and uses an alternative).
+- Cannot act on the user's behalf without approval for outward messages, sends,
+  posts, deletes, purchases, or persistent jobs — approval covers only the exact
+  action/content the user named or saw.
+
+## ChatGPT (free plan) — read-only auditor
+
+The user (Sajacous) also uses **ChatGPT (free plan)** connected to GitHub.
+
+**Role: READ ONLY. Audit, don't change.** ChatGPT reads the repo and audits it. It
+does NOT usually change anything — no code writes, no pushes, no merges, no deploys.
+Its output is findings, not changes.
+
+**What it's used for:**
+- Auditing an increment after it lands (the standing "audit-after" lane: build → full
+  gate → merge → ChatGPT audit of that increment → its findings become the fix list).
+  Audit-after has caught real defects that design reviews missed (e.g., raw error
+  text leaking, UTC fallback, the Deep Past runtime import-map silent-failure mode).
+- Independent re-audits and second opinions (e.g., Verbatim Recall re-audits, design
+  reviews, fix-round reviews).
+- Reading and summarizing code, docs, or a branch for the owner.
+
+**How Claude should treat a ChatGPT audit:**
+- Read the findings, then VERIFY each one against the actual code before acting.
+  A ChatGPT finding is a lead, not a verdict — confirm it reproduces, then fix it.
+- A ChatGPT audit is NEVER Claude's "Verified" sign-off. The sign-off is Claude's
+  own gate + audit (see "Verify before you build" and the Red Zone rule).
+- Do NOT treat a ChatGPT recommendation as the owner's approval. The owner's tap is
+  the only approval (same rule as for any relayed recommendation).
+- If a ChatGPT audit contradicts Claude's own reading, say so plainly and show the
+  evidence — don't silently defer to it.
+
+**Free-plan constraint:** It's the free plan, so its usage is limited. Keep audit
+requests focused and batched: one well-scoped audit per increment (or per fix round),
+not a stream of small reads. Don't burn its turns on things Muse or Claude can
+check directly (file listings, flag values, deploy state — that's Muse's lane).
+
+**What it does NOT do:** It does not implement, does not push, does not merge, does
+not deploy, and does not hold the gate. If an audit suggests a change, the change
+still goes through the normal lane (Claude or the owner-tapped implementer, gate,
+review, owner's tap for merge/deploy).
+
+## Current findings — 2026-10-28 (worlds / travel visibility)
+
+Organized findings from Muse's diagnosis session (2026-10-28). Claude is picking up
+fixes from here.
+
+**Deploy / branch (VERIFIED, fixed 2026-10-28):**
+- `main` branch did not exist; the repo's default was
+  `claude/soumaya-second-brain-v1-m4z4hc`. `main` was created 2026-10-28 from tip
+  `7262265a` (Fleet Defense PR #122 merge) and verified to contain the worlds code.
+- Fly app `brain-soumaya-v1` was deploying from the old deploy branch with auto-deploy
+  OFF. Switched 2026-10-28: deploy branch = `main`, auto-deploy ON. Release v273
+  deployed from `main` successfully 2026-10-28 5:09 PM EDT.
+- Live server proven current: the served `sw.js` carries the new build ID
+  (`soumaya-bmvskpcxp`) and network-first logic. Stale deploy, missing code, and
+  missing GLB files are all RULED OUT.
+- All 9 Deep Past GLBs are in `packages/web/public/` on `main` (185 GLBs total,
+  including Eternity figure, ships, station/space packs).
+  `WORLDS_TRAVEL_ENABLED = true` in `packages/shared/src/worlds.ts`.
+
+**Owner-reported symptoms (ROOT CAUSE FOUND + FIXED 2026-10-28 by Claude — CSS, not a
+crash; the gate question (3) below is still open):**
+- Owner sees no warp gates, no worlds, no nothing from any chat's work in the live app.
+- The world map button (Tools menu → 🪐 World map) produces no visible map when clicked.
+- Owner states: as dev and owner, everything should be accessible to him, including
+  Eternity's world.
+
+**Root cause (MEASURED in headless Chromium at 412×915 against a real build — supersedes
+the ErrorBoundary theory below; no JS error was thrown):**
+1. The worlds panels (TravelPanel, ToursPanel, ApprovalsInbox, WorldChangesView) were
+   mounted as loose in-flow children of `.app` (`position: fixed; overflow: hidden`) and
+   `.travel-panel` never had any CSS on any branch — they laid out BELOW the screen's
+   bottom edge (Travel at y=934, Tours 1503, Approvals 1704, World Changes 1747) where
+   nothing could scroll to them. No Travel panel → no departure → no world ever mounts.
+2. PR #122 (Fleet Defense, commit `0738129`) inserted its CSS inside an unclosed
+   `.world-changes-view-why {` rule, so every rule after it (the whole World map, Fleet
+   Defense, `.route-focused`, `.travel-bonus`) became a nested descendant selector that
+   matches nothing. The World map rendered `position: static` at y=1801. The build had
+   been printing a `css-syntax-error` warning for it.
+- **Fix:** brace closed; the four panels now live in ONE positioned, scrollable sheet
+  (`components/TravelSheet.tsx`, Tools → 🚀 Travel; the map's travel handoff and the Help
+  Try-It "travel" action open it via `openTravel`). The sheet stays mounted while closed
+  so journey state/transit clock survive. World map buttons styled and its background
+  given a dimming scrim (fully transparent let the HUD collide with the map's bar).
+  `TravelSheet.test.tsx` gates brace balance (falsified: re-introducing the #122 break
+  fails it) and that every worlds panel mounts inside the sheet.
+
+**What the code says (VERIFIED from source on `main`):**
+- World map button wiring is correct: ToolsMenu "World map" → `setShowWorldMap(true)` →
+  WorldMap full-screen overlay (z-index 70, not CSS-hidden). If clicking produces
+  literally nothing, that points to a runtime failure silently swallowed by the WorldMap
+  ErrorBoundary (fallback null) — NOT a wiring bug.
+- Fresh traveller sees ONLY Home on the map by design (confirmed by
+  `WorldMap.test.tsx`: "a fresh traveller sees only Home — no other world, no 'unknown'
+  marker"). Undiscovered worlds are hidden entirely. So even a working map looks empty
+  until the user travels.
+- Travel lives in the TravelPanel (rendered when a space is loaded, flag on). Route board
+  offers: Home (current), Great Station, Growing Place, Deep Past, Quiet/Archive, Scale —
+  each with Warp (cost 10 fuel) and Drift (FREE). Drift is always affordable, so fuel
+  cannot block discovery.
+- People world is gated by server verdict (`peopleGateOpen`: enough people + linked
+  memories + shared memories). Eternity's world is gated by B-01 (Witness + two other
+  relics, `eternityReachable`). There is NO dev/owner bypass in the code — gates apply
+  to everyone, including the owner.
+- "Warp gates" are not 3D objects in the galaxy; Warp/Drift are buttons in the
+  TravelPanel. If the TravelPanel isn't visible, there are no warp options to see.
+- Server travel API exists: `GET /api/travel/state` (via `travelRoutes`),
+  `TravelRepo.getState()`, `travel_journeys` table in schema, `migrateSchema` system.
+  Client `getTravelState()` returns null on any failure, which makes the panel show
+  "Checking the chart…" or an error — not nothing.
+
+**Open diagnostic questions for the fix (do not guess — verify against the live app /
+owner's screen):**
+1. When the owner clicks the world map button, does ANYTHING appear (even just a Home
+   dot, or "Checking the chart…" text, or an error), or does literally nothing change?
+   (Dialog-open-but-only-Home vs. crash-swallowed are different bugs.)
+2. Is the Travel section visible in the app at all? If not, is it crashing
+   (ErrorBoundary null), stuck loading (travel state null), or positioned where the
+   owner doesn't look?
+3. Dev/owner access: does the owner want a dev bypass for the People and Eternity gates
+   (code change to access control), or does he want to earn them via relics/counts? He
+   stated everything should be accessible to him as dev/owner — confirm before building
+   a bypass.
+
+**Do NOT re-litigate:** stale deploy, missing main branch, missing GLBs, flag off — all
+verified and ruled out 2026-10-28. The problem is downstream of deploy: either runtime
+failure on the owner's device, travel state not loading for his brain, or the
+gates/visibility design itself.

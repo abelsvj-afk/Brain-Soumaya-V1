@@ -6689,7 +6689,9 @@ button.mindspace-more { cursor: pointer; }
 /* Approvals inbox + World Changes view (Phase 4, §17 M1/M6) — the calm
    review moment and the browsable log. Deliberately quiet: no urgency
    colors, no countdowns, no badges. The collapsed toggle is one line;
-   the expanded body is a plain panel, in flow like the travel panel. */
+   the expanded body is a plain panel, in flow inside the travel sheet
+   (.travel-sheet) — never loose in .app, where in-flow content lands
+   below the fold of the overflow-hidden root and can't be reached. */
 .approvals-inbox,
 .world-changes-view {
   margin: 0.5rem 0;
@@ -6760,6 +6762,7 @@ button.mindspace-more { cursor: pointer; }
   margin: 0.5rem 0;
   padding-left: 0.75rem;
   border-left: 2px solid rgba(255, 210, 122, 0.5);
+}
 
 /* Fleet defense (Wave 2) — the lane board in the Soumaya tab, beside
    the Fleet roster. A calm turn-based presentation: static text and
@@ -6862,16 +6865,141 @@ button.mindspace-more { cursor: pointer; }
   border-radius: 8px;
 }
 
+/* Travel sheet — the one positioned home for the worlds panels (travel,
+   tours, approvals inbox, world changes), opened from Tools → Travel or
+   by a world-map / Try-It handoff. Those panels lay out in flow; before
+   this sheet they were loose children of the fixed, overflow-hidden
+   .app root, so they stacked below the screen's bottom edge where no
+   one could reach them. The sheet stays MOUNTED while closed ([hidden]
+   only) so the panels' server-bound state and transit clock survive a
+   close. Above the worlds layer (70) so a handoff from the map lands on
+   top. No animation, so reduced motion needs no separate treatment. */
+.travel-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+  background: rgba(4, 6, 18, 0.6);
+  backdrop-filter: blur(6px);
+}
+.travel-sheet[hidden] {
+  display: none;
+}
+.travel-sheet-card {
+  width: min(460px, 100%);
+  max-height: min(86dvh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, rgba(18, 22, 44, 0.97), rgba(10, 12, 28, 0.97));
+  border: 1px solid rgba(122, 200, 255, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: #e8ecff;
+  overflow: hidden;
+}
+.travel-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(122, 200, 255, 0.15);
+}
+.travel-sheet-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.travel-sheet-close {
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.travel-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 1rem 1rem;
+  font-size: 0.9rem;
+}
+.travel-sheet-body h2,
+.travel-sheet-body h3 {
+  font-size: 0.95rem;
+  margin: 0.75rem 0 0.4rem;
+}
+.travel-sheet-body button,
+.world-map button {
+  background: rgba(12, 16, 34, 0.82);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 0.45rem 0.8rem;
+  min-height: 38px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.travel-sheet-body button:disabled,
+.world-map button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.travel-panel > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.travel-fuel,
+.route-note,
+.route-current {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.route-board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.route-entry {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+}
+.route-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.travel-error,
+.tours-panel-error {
+  color: #ffb4a2;
+}
+.travel-panel > footer {
+  margin-top: 0.75rem;
+}
+
 /* World map (Rev 116) — a full-screen star map on the worlds-surface
-   layer (z-index 70), with a TRANSPARENT background: the live galaxy
-   shows through and the map is drawn over it. No animation anywhere in
-   this block — the map renders once and redraws only on interaction, so
-   reduced motion needs no separate treatment. */
+   layer (z-index 70). The live galaxy shows through a dimming scrim and
+   the map is drawn over it — fully transparent let the galaxy HUD (title,
+   dock, rails, cards) show through at full strength, colliding with the
+   map's own bar and controls (seen in a 412×915 headless render). No
+   animation anywhere in this block — the map renders once and redraws
+   only on interaction, so reduced motion needs no separate treatment. */
 .world-map {
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: transparent;
+  background: rgba(4, 6, 18, 0.82);
   color: #e8ecff;
   overflow: hidden;
 }
