@@ -31,7 +31,7 @@ const grove: GardenGrove = {
   unshown: 0,
 };
 const node = (id: number, label: string, kind?: GraphNode["kind"]) =>
-  ({ id, label, kind, type: "memory", content: "", createdAt: "2026-10-01T00:00:00.000Z" }) as GraphNode;
+  ({ id, label, kind, type: "memory", content: "", createdAt: "2026-10-01T00:00:00.000Z" }) as unknown as GraphNode;
 
 function mount(over: Partial<Parameters<typeof GardenGroveSheet>[0]> = {}) {
   const props = {
