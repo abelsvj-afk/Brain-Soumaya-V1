@@ -460,6 +460,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   when the rest lands. A grove action (done / plant / place) still rebuilds, by design. Pinned by
   `WorldsSurface.test.tsx` (falsified: removing the wait fails it). Needs on-device confirmation that the
   wait is invisible on a real network.
+- **Worlds controls: one header, one dock (2026-10-29, owner: "make the buttons yourself… and for navigation") —
+  MEASURED headless at 412×915, needs on-device confirmation** (WorldsDock.tsx, WorldsSurface.tsx, index.css;
+  spec `docs/specs/worlds-controls-2026-10-29.md`): every world's header is now one constant 56px row (title +
+  "← Galaxy", 44px) and a world's controls are icon-over-word tiles in a scrollable dock under it (measured:
+  header 0–56, dock 56–127 in garden, Station, Eternity). Eternity's 13 pills became two labelled groups
+  (6 gestures, 4 tools; the held gesture shows ✓ + a heavier outline, never colour alone). Overlays now
+  position from `--worlds-bar-h`. Replaces the "wait for Muse's v3.4 mock-up" blocker for the controls
+  (the mock-up can still refine them). Look at: tile size/spacing on a real thumb, whether Eternity's tools
+  (off-screen to the right until you scroll the row) are discoverable enough, icon legibility.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

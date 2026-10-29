@@ -48,11 +48,29 @@ describe("stylesheet integrity", () => {
   });
 });
 
-describe("worlds surface header", () => {
-  // Eternity's header carries 13 items. In one non-wrapping row it was 937px
-  // on a 412px phone and pushed "Back to your galaxy" off the screen edge.
-  it("wraps, so every control — including Back — stays reachable on a phone", () => {
-    expect(ruleBody(".worlds-surface-bar")).toMatch(/flex-wrap:\s*wrap/);
+describe("worlds surface header and dock", () => {
+  // Every world's header is ONE constant-height row (title + back), so no other
+  // overlay has to guess where it ends; a world's controls live in a scrollable
+  // dock row under it (docs/specs/worlds-controls-2026-10-29.md). Eternity's 13
+  // controls used to wrap to 195px of header and pushed "Back" off the edge.
+  it("the header never wraps and the back button is a 44px target", () => {
+    const bar = ruleBody(".worlds-surface-bar");
+    expect(bar).toMatch(/height:\s*3\.5rem/);
+    expect(bar).not.toMatch(/flex-wrap:\s*wrap/);
+    expect(ruleBody(".worlds-surface-back")).toMatch(/min-height:\s*44px/);
+  });
+
+  it("the dock is one scrollable row of ≥56px tiles", () => {
+    expect(ruleBody(".worlds-dock")).toMatch(/overflow-x:\s*auto/);
+    expect(ruleBody(".worlds-dock-tile")).toMatch(/min-height:\s*3\.75rem/);
+  });
+
+  it("overlays position from the shared header height, not their own guesses", () => {
+    for (const sel of [".worlds-surface-fallback", ".garden-groves", ".garden-harvest"]) {
+      // The base rule (the Eternity variant above it only overrides colours/position).
+      expect(css, sel).toMatch(new RegExp(`\\n${sel.replace(".", "\\.")} \\{\\s*position: absolute;\\s*(?:right: [^;]+;\\s*)?top: calc\\(var\\(--worlds-bar-h\\)`));
+    }
+    expect(ruleBody(".worlds-surface-docked")).toMatch(/--worlds-bar-h:/);
   });
 });
 

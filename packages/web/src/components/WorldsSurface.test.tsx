@@ -736,7 +736,7 @@ describe("opening the app lands in the home galaxy — the layer wakes only on a
   it("after it is awake, 'Back to your galaxy' still closes it, and Look around reopens it", () => {
     mockUseTravel.mockReturnValue(savedAtGarden());
     mountEngaged(<WorldsSurface enabled />);
-    fireEvent.click(screen.getByText("Back to your galaxy"));
+    fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
     expect(screen.queryByRole("dialog", { name: "The Growing Place" })).toBeNull();
     act(() => requestEnterWorld());
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();

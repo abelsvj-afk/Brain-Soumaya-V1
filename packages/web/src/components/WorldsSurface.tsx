@@ -19,6 +19,7 @@ import { warmPlotNodeIds, litPathEdgeIds } from "../graph/gardenTend.js";
 import { GardenTendSheet } from "./GardenTendSheet.js";
 import { GardenGroveSheet } from "./GardenGroveSheet.js";
 import { GardenRecallSheet } from "./GardenRecallSheet.js";
+import WorldsDock, { type DockGroup } from "./WorldsDock.js";
 import { createStationScene } from "../graph/stationScene.js";
 import {
   INTERIOR_ORBIT_RATE_RAD_PER_MS,
@@ -1586,8 +1587,121 @@ export default function WorldsSurface({
       ? (interiorLayout?.spaces.find((s) => s.id === interiorRoom) ?? null)
       : null;
 
+  // The dock (docs/specs/worlds-controls-2026-10-29.md): each world's controls
+  // as icon-over-word tiles. Accessible names keep the full phrases.
+  const ROOM_TILE: Record<string, { icon: string; label: string }> = {
+    "hangar-bay": { icon: "🛠", label: "Hangar" },
+    "commission-board": { icon: "📋", label: "Board" },
+    "fleet-deck": { icon: "🚀", label: "Fleet" },
+    "observation-deck": { icon: "🔭", label: "Deck" },
+  };
+  const GESTURE_ICON: Record<string, string> = {
+    stillness: "🕊",
+    regard: "👁",
+    blessing: "✨",
+    sorrow: "💧",
+    joy: "☀️",
+    warning: "✋",
+  };
+  const TOOL_TILE: Record<string, { icon: string; label: string; name: string }> = {
+    reorder: { icon: "🌀", label: "Reorder", name: "Reorder the heavens" },
+    "part-veil": { icon: "🌫", label: "Veil", name: "Part the veil" },
+    shield: { icon: "🛡", label: "Shield", name: "Raise the shield" },
+    comet: { icon: "☄️", label: "Comet", name: "Send a comet" },
+  };
+  const dockGroups: DockGroup[] = [];
+  {
+    if (atGarden && mode === "world") {
+      dockGroups.push({
+        id: "garden",
+        tiles: [
+          { id: "groves", icon: "🌳", label: "Groves", name: "Groves", expanded: grovesOpen, onClick: () => setGrovesOpen((v) => !v) },
+          {
+            id: "meadow",
+            icon: "🌾",
+            label: "Meadow",
+            name: "Walk to the meadow",
+            onClick: () => {
+              setGrovesOpen(false);
+              walkTo(initialWalk().pos, null);
+            },
+          },
+        ],
+      });
+    }
+    if (atStation) {
+      const tiles: DockGroup["tiles"] = [
+        {
+          id: "harbor",
+          icon: "🛰",
+          label: "Harbor",
+          name: showController ? "Hide the harbor controller" : "Harbor controller",
+          active: showController,
+          onClick: () => setShowController((v) => !v),
+        },
+        inside
+          ? { id: "outside", icon: "🌌", label: "Back outside", name: "Step back outside", onClick: () => setInside(false) }
+          : { id: "inside", icon: "🚪", label: "Step inside", name: "Step inside the Station", onClick: () => setInside(true) },
+      ];
+      if (inside) {
+        for (const room of interiorLayout?.spaces.filter((sp) => sp.id !== interiorRoom) ?? []) {
+          const t = ROOM_TILE[room.id] ?? { icon: "🚪", label: room.title.replace(/^The /, "") };
+          tiles.push({
+            id: `room-${room.id}`,
+            icon: t.icon,
+            label: t.label,
+            name: `Go to the ${room.title.replace(/^The /, "")}`,
+            onClick: () => goToInteriorRoom(room.id),
+          });
+        }
+      }
+      dockGroups.push({ id: "station", tiles });
+    }
+    if (atDeepPast && thread) {
+      dockGroups.push({
+        id: "deep-past",
+        tiles: [
+          guided
+            ? { id: "rim", icon: "⬆", label: "Rim", name: "Back to the rim", onClick: toggleGuided }
+            : { id: "descend", icon: "⬇", label: "Descend", name: "Descend the Chronicle", onClick: toggleGuided },
+        ],
+      });
+    }
+    if (atEternity) {
+      dockGroups.push(
+        {
+          id: "gestures",
+          label: "His gestures",
+          tiles: ETERNITY_GESTURE_NAMES.map((name) => ({
+            id: `gesture-${name}`,
+            icon: GESTURE_ICON[name] ?? "✦",
+            label: name[0]!.toUpperCase() + name.slice(1),
+            name: name[0]!.toUpperCase() + name.slice(1),
+            active: eternityGesture === name,
+            onClick: () => {
+              // The label names what he holds only when the scene
+              // actually mounted — a fallback world holds nothing.
+              const e = sceneHandleRef.current?.eternity;
+              if (!e) return;
+              e.setGesture(name);
+              setEternityGesture(name);
+            },
+          })),
+        },
+        {
+          id: "tools",
+          label: "His tools",
+          tiles: ETERNITY_TOOL_NAMES.map((name) => {
+            const t = TOOL_TILE[name]!;
+            return { id: `tool-${name}`, icon: t.icon, label: t.label, name: t.name, onClick: () => sceneHandleRef.current?.eternity?.useTool(name) };
+          }),
+        },
+      );
+    }
+  }
+
   return (
-    <section className={`worlds-surface${atEternity && mode === "world" ? " worlds-surface-light" : ""}`} role="dialog" aria-label={title}>
+    <section className={`worlds-surface${atEternity && mode === "world" ? " worlds-surface-light" : ""}${dockGroups.length > 0 ? " worlds-surface-docked" : ""}`} role="dialog" aria-label={title}>
       <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
       {lookHint && visible && mode === "world" && (
         <p className="worlds-look-hint" role="status">
@@ -1598,81 +1712,11 @@ export default function WorldsSurface({
       )}
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
-        {atGarden && mode === "world" && (
-          <button type="button" aria-expanded={grovesOpen} onClick={() => setGrovesOpen((v) => !v)}>
-            🌳 Groves {grovesOpen ? "▴" : "▾"}
-          </button>
-        )}
-        {atStation && (
-          <button type="button" onClick={() => setShowController((v) => !v)}>
-            {showController ? "Hide the harbor controller" : "Harbor controller"}
-          </button>
-        )}
-        {atStation && !inside && (
-          <button type="button" onClick={() => setInside(true)}>
-            Step inside the Station
-          </button>
-        )}
-        {atStation && inside && (
-          <>
-            <button type="button" onClick={() => setInside(false)}>
-              Step back outside
-            </button>
-            {interiorLayout?.spaces
-              .filter((s) => s.id !== interiorRoom)
-              .map((s) => (
-                <button key={s.id} type="button" onClick={() => goToInteriorRoom(s.id)}>
-                  Go to the {s.title.replace(/^The /, "")}
-                </button>
-              ))}
-          </>
-        )}
-        {atDeepPast && thread && (
-          <button type="button" onClick={toggleGuided}>
-            {guided ? "Back to the rim" : "Descend the Chronicle"}
-          </button>
-        )}
-        {atEternity && (
-          <>
-            <span className="worlds-surface-eternity-label">His gestures</span>
-            {ETERNITY_GESTURE_NAMES.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => {
-                  // The label names what he holds only when the scene
-                  // actually mounted — a fallback world holds nothing.
-                  const e = sceneHandleRef.current?.eternity;
-                  if (!e) return;
-                  e.setGesture(name);
-                  setEternityGesture(name);
-                }}
-              >
-                {name[0]!.toUpperCase() + name.slice(1)}
-              </button>
-            ))}
-            <span className="worlds-surface-eternity-label">His tools</span>
-            {ETERNITY_TOOL_NAMES.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => sceneHandleRef.current?.eternity?.useTool(name)}
-              >
-                {name === "reorder"
-                  ? "Reorder the heavens"
-                  : name === "part-veil"
-                    ? "Part the veil"
-                    : name === "shield"
-                      ? "Raise the shield"
-                      : "Send a comet"}
-              </button>
-            ))}
-          </>
-        )}
-        <button type="button" onClick={() => setDismissed(true)}>
-          Back to your galaxy
+        <button type="button" className="worlds-surface-back" onClick={() => setDismissed(true)} aria-label="Back to your galaxy">
+          <span aria-hidden="true">←</span> Galaxy
         </button>
       </header>
+      {dockGroups.length > 0 && <WorldsDock groups={dockGroups} label={`${title} controls`} />}
       {mode === "world" && atEternity && (
         <p className="worlds-surface-fallback">
           When he speaks, his words appear in the world near his mouth — never over your view.
@@ -1728,9 +1772,8 @@ export default function WorldsSurface({
           aria-label="Soumaya suggests"
           style={{
             position: "absolute",
-            // Below the header's second row (it wraps on a phone), so
-            // "Back to your galaxy" is never covered.
-            top: "6.5rem",
+            // Below the header + dock (a constant height), so neither is covered.
+            top: "calc(var(--worlds-bar-h) + 0.5rem)",
             left: "12px",
             width: "min(320px, 82vw)",
             background: "rgba(10, 16, 12, 0.92)",

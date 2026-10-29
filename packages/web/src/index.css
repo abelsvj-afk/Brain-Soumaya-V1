@@ -6599,7 +6599,7 @@ button.mindspace-more { cursor: pointer; }
 /* Garden v2: the Groves list — every Journey's grove, one tap to walk there. */
 .garden-groves {
   position: absolute;
-  top: 3.6rem;
+  top: calc(var(--worlds-bar-h) + 0.5rem);
   left: 0.75rem;
   z-index: 25;
   display: flex;
@@ -6749,7 +6749,7 @@ button.mindspace-more { cursor: pointer; }
 .garden-harvest {
   position: absolute;
   right: 0.75rem;
-  top: 3.6rem;
+  top: calc(var(--worlds-bar-h) + 0.5rem);
   z-index: 24;
   display: flex;
   flex-direction: column;
@@ -6801,37 +6801,157 @@ button.mindspace-more { cursor: pointer; }
 .worlds-surface-canvas canvas {
   display: block;
 }
+/* One constant header (title + back), plus a dock row where a world has controls
+   (docs/specs/worlds-controls-2026-10-29.md). Overlays position from --worlds-bar-h
+   instead of guessing where a wrapped header ends. */
+.worlds-surface {
+  --worlds-bar-h: 3.5rem;
+}
+.worlds-surface-docked {
+  --worlds-bar-h: 8.25rem;
+}
 .worlds-surface-bar {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
+  height: 3.5rem;
   display: flex;
-  /* Wrap: Eternity's header carries 13 items; in one row it was 937px on a
-     412px phone and pushed "Back to your galaxy" off the edge, unreachable. */
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.4rem;
-  padding: 0.75rem 1rem;
+  gap: 0.5rem;
+  padding: 0 1rem;
   pointer-events: none;
 }
-.worlds-surface-bar button {
-  background: rgba(12, 16, 34, 0.82);
-  border: 1px solid rgba(150, 140, 220, 0.35);
+.worlds-surface-bar > * {
+  pointer-events: auto;
+}
+.worlds-surface-bar h3 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.worlds-surface-back {
+  flex: none;
+  min-height: 44px;
+  padding: 0 0.95rem;
   border-radius: 999px;
+  border: 1px solid rgba(150, 140, 220, 0.45);
+  background: rgba(12, 16, 34, 0.82);
   color: #ecebff;
-  padding: 0.4rem 0.8rem;
-  min-height: 38px;
-  font-size: 0.82rem;
+  font: inherit;
+  font-size: 0.85rem;
   cursor: pointer;
 }
-/* Eternity's world is a white void: the light-on-dark title and caption
-   vanish into it. Dark text there; the pill buttons above stay dark glass,
-   readable on white. */
+/* The dock: icon-over-word tiles, one scrollable row. */
+.worlds-dock {
+  position: absolute;
+  top: 3.5rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.2rem 1rem 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: none;
+  /* Edge fades hint that the row scrolls. */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1.5rem), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1.5rem), transparent 100%);
+}
+.worlds-dock::-webkit-scrollbar {
+  display: none;
+}
+.worlds-dock-group {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.worlds-dock-label {
+  flex: none;
+  max-width: 3.4rem;
+  font-size: 0.66rem;
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.worlds-dock-tile {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 4.1rem;
+  min-height: 3.75rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 14px;
+  border: 1px solid rgba(150, 140, 220, 0.4);
+  background: rgba(12, 16, 34, 0.86);
+  color: #ecebff;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.worlds-dock-tile:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.worlds-dock-tile:focus-visible,
+.worlds-surface-back:focus-visible {
+  outline: 2px solid #ffd27a;
+  outline-offset: 2px;
+}
+.worlds-dock-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.worlds-dock-word {
+  font-size: 0.7rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+/* Active / open: a heavier outline AND a ✓ or ▾ badge — never colour alone. */
+.worlds-dock-tile.is-active,
+.worlds-dock-tile[aria-expanded="true"] {
+  border: 2px solid #ffd27a;
+  background: rgba(40, 34, 18, 0.92);
+}
+.worlds-dock-badge {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.3rem;
+  font-size: 0.65rem;
+  color: #ffd27a;
+}
+/* Eternity's world is a white void: the light-on-dark title and group captions
+   vanish into it. Dark text there; the dock tiles stay dark glass, readable on white. */
 .worlds-surface-light .worlds-surface-bar h3,
-.worlds-surface-light .worlds-surface-bar .worlds-surface-eternity-label,
+.worlds-surface-light .worlds-dock-label {
+  color: #1b1b2e;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+}
+/* Eternity's caption sits at the bottom; the look hint goes above it. */
+.worlds-surface-light .worlds-look-hint {
+  bottom: 7.5rem;
+}
 .worlds-surface-light .worlds-surface-fallback {
+  color: #1b1b2e;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  /* The caption lives at the bottom, clear of the header and dock. */
+  top: auto;
+  bottom: 3.75rem;
+}
+.worlds-surface-fallback {
   color: #1b1b2e;
   text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
   /* The wrapped header can be four rows tall here; the caption lives at the
@@ -6849,7 +6969,7 @@ button.mindspace-more { cursor: pointer; }
 }
 .worlds-surface-fallback {
   position: absolute;
-  top: 4rem;
+  top: calc(var(--worlds-bar-h) + 0.5rem);
   left: 1rem;
   right: 1rem;
   text-align: center;
