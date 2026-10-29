@@ -6760,8 +6760,13 @@ button.mindspace-more { cursor: pointer; }
   background: rgba(10, 22, 16, 0.85);
   border: 1px solid rgba(255, 210, 122, 0.35);
   color: #f3ecd6;
+  font: inherit;
   font-size: 0.75rem;
-  pointer-events: none;
+  min-height: 44px;
+  cursor: pointer;
+}
+.garden-harvest:disabled {
+  cursor: default;
 }
 .garden-harvest span:first-child {
   font-size: 0.95rem;

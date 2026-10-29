@@ -1781,15 +1781,32 @@ export default function WorldsSurface({
         const total = Math.min(GARDEN_POD_MAX, harvest + layout.pods.length);
         const caught = Math.min(harvest, total);
         return (
-          <div className="garden-harvest" role="status" aria-label={`Seed pods: ${caught} of ${total} caught today`}>
+          <button
+            type="button"
+            className="garden-harvest"
+            aria-label={`Seed pods: ${caught} of ${total} caught today${layout.pods.length > 0 ? " — go to the nearest" : ""}`}
+            disabled={layout.pods.length === 0}
+            onClick={() => {
+              // Pods ripen wherever their memory rests, often out of view:
+              // this walks her to the nearest one still waiting.
+              const here = walkRef.current.pos;
+              const next = [...layout.pods].sort(
+                (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
+              )[0];
+              if (!next) return;
+              setSuggestionsHidden(true);
+              setGrovesOpen(false);
+              walkTo(approachPoint(here, next, 22), { kind: "pod", nodeId: next.nodeId });
+            }}
+          >
             <span aria-hidden="true">
               {"🌼".repeat(caught)}
               {"✨".repeat(Math.max(0, total - caught))}
             </span>
             <span>
-              {caught} of {total} caught
+              {caught} of {total} caught{layout.pods.length > 0 ? " · find one ›" : ""}
             </span>
-          </div>
+          </button>
         );
       })()}
       {mode === "world" && atGarden && recallPod !== null && layout && (() => {
