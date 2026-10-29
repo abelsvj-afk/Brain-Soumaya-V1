@@ -61,7 +61,7 @@ function mulberry32(seed: number) {
 /** The procedural ship: fuselage + wings + engine glow, her colors.
  *  The load-failure fallback — the holder is named "transit-ship",
  *  this child is named for what it is. */
-function buildProceduralShip(): THREE.Group {
+export function buildProceduralShip(): THREE.Group {
   const ship = new THREE.Group();
   ship.name = "transit-ship-procedural";
   const hullMat = new THREE.MeshStandardMaterial({

@@ -813,19 +813,19 @@ describe("free look — the first-time hint", () => {
     render(<WorldsSurface enabled />);
     vi.advanceTimersByTime(60_000); // a long time at the home galaxy
     act(() => requestEnterWorld());
-    expect(screen.getByText(/Drag to look around/)).toBeTruthy(); // still there when they DO enter
+    expect(screen.getByText(/drag to look around/i)).toBeTruthy(); // still there when they DO enter
   });
 
   it("is shown on entering a world, then gone after a while and never again", () => {
     vi.useFakeTimers();
     mountEngaged(<WorldsSurface enabled />);
-    expect(screen.getByText(/Drag to look around/)).toBeTruthy();
+    expect(screen.getByText(/drag to look around/i)).toBeTruthy();
     act(() => vi.advanceTimersByTime(9_500));
-    expect(screen.queryByText(/Drag to look around/)).toBeNull();
+    expect(screen.queryByText(/drag to look around/i)).toBeNull();
     expect(localStorage.getItem("worlds.lookHintSeen")).toBe("1");
     // a fresh mount (next visit) stays quiet
     mountEngaged(<WorldsSurface enabled />);
-    expect(screen.queryByText(/Drag to look around/)).toBeNull();
+    expect(screen.queryByText(/drag to look around/i)).toBeNull();
   });
 
   it("is not shown over the transit flight (nothing to look around yet)", () => {
@@ -843,6 +843,6 @@ describe("free look — the first-time hint", () => {
       }),
     );
     mountEngaged(<WorldsSurface enabled />);
-    expect(screen.queryByText(/Drag to look around/)).toBeNull();
+    expect(screen.queryByText(/drag to look around/i)).toBeNull();
   });
 });

@@ -83,6 +83,18 @@ import HarborControllerPanel from "./HarborControllerPanel.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, type TravelChangedDetail } from "../lib/travelEvents.js";
+import {
+  approachPoint,
+  easeAngle,
+  followPose,
+  groundHeightAt,
+  initialWalk,
+  stepWalk,
+  walkRoute,
+  WALK_HOVER,
+  type WalkPoint,
+  type WalkState,
+} from "../graph/gardenWalk.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
@@ -213,6 +225,9 @@ interface GardenWorldChanges {
   warmth: number;
   proposals: WorldChangeProposal[];
 }
+
+/** What the garden opens when her ship arrives (garden v2 walk). */
+type GardenArrival = { kind: "plot" | "pod"; nodeId: number } | { kind: "grove"; journeyId: number };
 
 function gardenMutationFrom(
   wc: GardenWorldChanges | null,
@@ -539,6 +554,15 @@ export default function WorldsSurface({
   const suppressClickRef = useRef(false);
   const [lookHint, setLookHint] = useState(false);
   const lookedRef = useRef<() => void>(() => {});
+  // Garden v2 walk (graph/gardenWalk.ts): where her ship is and where it's
+  // going, the follow camera's own (smoothed) pose, and what to open when
+  // she arrives. Refs — the frame loop moves them every frame — so a scene
+  // rebuild (new layout, a tend) never loses her place.
+  const walkRef = useRef<WalkState>(initialWalk());
+  const followRef = useRef<{ yaw: number; y: number; cam: [number, number, number] | null }>({ yaw: 0, y: 0, cam: null });
+  const arrivalRef = useRef<GardenArrival | null>(null);
+  const onArriveRef = useRef<(a: GardenArrival) => void>(() => {});
+  const [grovesOpen, setGrovesOpen] = useState(false);
   // The mounted scene handle — the Eternity gesture/tool buttons below
   // call into it. Set in the mount effect, cleared in its cleanup.
   const sceneHandleRef = useRef<WorldSceneHandle | null>(null);
@@ -690,6 +714,11 @@ export default function WorldsSurface({
   useEffect(() => {
     if (!atGarden) return;
     let cancelled = false;
+    // Each stay starts on the meadow, facing the tree.
+    walkRef.current = initialWalk();
+    followRef.current = { yaw: 0, y: 0, cam: null };
+    arrivalRef.current = null;
+    setGrovesOpen(false);
     setSuggestions(null);
     setSuggestionsHidden(false);
     setTendNode(null);
@@ -999,10 +1028,29 @@ export default function WorldsSurface({
       x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
       y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
     };
-    const nodeId = scene.pickPlot(ndc, camera);
-    if (nodeId === null) return;
-    const node = graph.nodes.find((n) => n.id === nodeId);
-    if (node) setTendNode(node);
+    // Garden v2: a tap is a place to go. Ground → she skims there; a plot
+    // or a pod → she goes to stand beside it and its sheet opens when she
+    // arrives. Sky → nothing (the garden stays a place to look).
+    const pick = scene.pickTarget(ndc, camera);
+    if (!pick) return;
+    setSuggestionsHidden(true); // once you're walking, the arrival panel steps aside
+    if (pick.kind === "ground") walkTo({ x: pick.x, z: pick.z }, null);
+    else walkTo(approachPoint(walkRef.current.pos, pick, pick.kind === "pod" ? 22 : 28), { kind: pick.kind, nodeId: pick.nodeId });
+  };
+
+  // Send her ship somewhere; `arrival` is what opens when she gets there.
+  const walkTo = (target: WalkPoint, arrival: GardenArrival | null) => {
+    const w = walkRef.current;
+    walkRef.current = { ...w, route: walkRoute(w.pos, target) };
+    arrivalRef.current = arrival;
+  };
+
+  // Arrival: the frame loop calls this through a ref (it is set every render).
+  onArriveRef.current = (a) => {
+    if (a.kind === "plot" || a.kind === "pod") {
+      const node = graph?.nodes.find((n) => n.id === a.nodeId);
+      if (node) setTendNode(node);
+    }
   };
 
   const toggleGuided = () => {
@@ -1209,12 +1257,18 @@ export default function WorldsSurface({
 
     let raf = 0;
     const startedAt = performance.now();
+    let lastFrameAt = startedAt;
     const BASE_ANGLE = 0.6;
     const frame = () => {
       const elapsed = performance.now() - startedAt;
       // True while this world is running a scripted camera move the traveller's offset must not disturb.
       let scripted = false;
       let pivotY = orbit ? orbit.lookAtY : 0;
+      // The point free look turns around; null = the world's centre at pivotY.
+      let pivot: [number, number, number] | null = null;
+      const now = performance.now();
+      const dt = Math.min(250, now - lastFrameAt); // a backgrounded tab must not teleport her
+      lastFrameAt = now;
       world.update(elapsed, { reducedMotion });
       if (mode === "world" && currentWorld === "growing-place") {
         // A8: the fog takes the warmer tint of the warmth now rendered.
@@ -1309,6 +1363,37 @@ export default function WorldsSurface({
             camera.position.set(Math.sin(az) * radius, height, Math.cos(az) * radius);
             camera.lookAt(0, orbit.lookAtY, 0);
           }
+        } else if (currentWorld === "growing-place" && gardenSceneRef.current) {
+          // Garden v2 walk: her ship skims along the route; the camera
+          // follows behind and above her (graph/gardenWalk.ts). Reduced
+          // motion: she jumps, and the camera cuts instead of easing.
+          const step = stepWalk(walkRef.current, dt, { reducedMotion });
+          walkRef.current = step.state;
+          const moving = step.state.route.length > 0 || step.arrived;
+          if (step.arrived && arrivalRef.current) {
+            const a = arrivalRef.current;
+            arrivalRef.current = null;
+            onArriveRef.current(a);
+          }
+          const f = followRef.current;
+          const pos = step.state.pos;
+          const groundY = groundHeightAt(pos.x, pos.z) + WALK_HOVER;
+          const ease = (ms: number) => (reducedMotion || f.cam === null ? 1 : 1 - Math.exp(-dt / ms));
+          f.y += (groundY - f.y) * ease(220);
+          if (f.cam === null) f.yaw = step.state.heading;
+          if (moving) f.yaw = easeAngle(f.yaw, step.state.heading, ease(450));
+          gardenSceneRef.current.setAvatar(pos.x, f.y, pos.z, step.state.heading);
+          const pose = followPose(pos, f.y, f.yaw);
+          const k = ease(260);
+          const prev = f.cam ?? pose.position;
+          f.cam = [
+            prev[0] + (pose.position[0] - prev[0]) * k,
+            prev[1] + (pose.position[1] - prev[1]) * k,
+            prev[2] + (pose.position[2] - prev[2]) * k,
+          ];
+          camera.position.set(f.cam[0], f.cam[1], f.cam[2]);
+          pivot = pose.target;
+          camera.lookAt(pivot[0], pivot[1], pivot[2]);
         } else {
           const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
           camera.position.set(
@@ -1320,14 +1405,15 @@ export default function WorldsSurface({
         }
         // Free look: the traveller's own offset on top of the pose the world just chose.
         lookAllowedRef.current = !scripted;
+        if (!pivot) pivot = [0, pivotY, 0];
         if (!scripted && isLooked(lookRef.current)) {
           const p = applyLook(
             [camera.position.x, camera.position.y, camera.position.z],
-            [0, pivotY, 0],
+            pivot,
             lookRef.current,
           );
           camera.position.set(p[0], p[1], p[2]);
-          camera.lookAt(0, pivotY, 0);
+          camera.lookAt(pivot[0], pivot[1], pivot[2]);
         }
         host.dataset.look = isLooked(lookRef.current)
           ? `${lookRef.current.yaw.toFixed(3)},${lookRef.current.pitch.toFixed(3)},${lookRef.current.zoom.toFixed(3)}`
@@ -1395,11 +1481,18 @@ export default function WorldsSurface({
       <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
       {lookHint && visible && mode === "world" && (
         <p className="worlds-look-hint" role="status">
-          Drag to look around · pinch or scroll to zoom · double-tap to reset
+          {atGarden
+            ? "Tap the ground to walk · drag to look around · pinch to zoom"
+            : "Drag to look around · pinch or scroll to zoom · double-tap to reset"}
         </p>
       )}
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
+        {atGarden && mode === "world" && (
+          <button type="button" aria-expanded={grovesOpen} onClick={() => setGrovesOpen((v) => !v)}>
+            🌳 Groves {grovesOpen ? "▴" : "▾"}
+          </button>
+        )}
         {atStation && (
           <button type="button" onClick={() => setShowController((v) => !v)}>
             {showController ? "Hide the harbor controller" : "Harbor controller"}
@@ -1525,7 +1618,9 @@ export default function WorldsSurface({
           aria-label="Soumaya suggests"
           style={{
             position: "absolute",
-            top: "56px",
+            // Below the header's second row (it wraps on a phone), so
+            // "Back to your galaxy" is never covered.
+            top: "6.5rem",
             left: "12px",
             width: "min(320px, 82vw)",
             background: "rgba(10, 16, 12, 0.92)",
@@ -1562,6 +1657,37 @@ export default function WorldsSurface({
           <p style={{ margin: "8px 0 0", opacity: 0.7, fontSize: "12px" }}>
             Or tap any plot in the garden.
           </p>
+        </div>
+      )}
+      {/* Garden v2: every grove (and the meadow) one tap away — she walks there. */}
+      {mode === "world" && atGarden && grovesOpen && layout && (
+        <div className="garden-groves" role="menu" aria-label="Groves">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setGrovesOpen(false);
+              walkTo(initialWalk().pos, null);
+            }}
+          >
+            🌾 The meadow <span>{layout.plots.filter((p) => p.role === "wild").length} loose memories</span>
+          </button>
+          {layout.groves.length === 0 && <p>No Journeys yet — start one and it grows a grove here.</p>}
+          {layout.groves.map((g) => (
+            <button
+              key={g.journeyId}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setGrovesOpen(false);
+                setSuggestionsHidden(true);
+                walkTo(approachPoint(walkRef.current.pos, g, g.radius + 14), { kind: "grove", journeyId: g.journeyId });
+              }}
+            >
+              {g.icon ?? "🌳"} {g.title}
+              <span>{g.status === "paused" ? "resting" : g.status === "done" ? "completed" : `${g.missionsCompleted} done`}</span>
+            </button>
+          ))}
         </div>
       )}
       {mode === "world" && atGarden && tendNode && graph && (

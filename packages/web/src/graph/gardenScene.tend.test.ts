@@ -100,3 +100,39 @@ describe("garden scene glow + tap-to-tend (Verb 1)", () => {
     scene.dispose();
   });
 });
+
+describe("garden v2 walk — what a tap lands on", () => {
+  it("a tap on a plot is that plot; a tap on open terrace is ground with its point; sky is nothing", () => {
+    const scene = createGardenScene(layout);
+    scene.group.updateMatrixWorld(true);
+    const camera = orbitCamera();
+    const plot = scene.pickTarget(plotNdc(1, camera), camera);
+    expect(plot).toMatchObject({ kind: "plot", nodeId: 1 });
+    // Straight down at an empty spot of the meadow.
+    const down = new THREE.PerspectiveCamera(30, 1, 1, 9000);
+    down.position.set(-600, 400, 600);
+    down.lookAt(-600, 0, 600);
+    down.updateMatrixWorld();
+    const ground = scene.pickTarget({ x: 0, y: 0 }, down);
+    expect(ground?.kind).toBe("ground");
+    expect(ground!.x).toBeCloseTo(-600, 0);
+    expect(ground!.z).toBeCloseTo(600, 0);
+    const up = new THREE.PerspectiveCamera(30, 1, 1, 9000);
+    up.position.set(0, 2000, 0);
+    up.lookAt(0, 5000, 10);
+    up.updateMatrixWorld();
+    expect(scene.pickTarget({ x: 0, y: 0 }, up)).toBeNull();
+    scene.dispose();
+  });
+
+  it("her ship is hidden until placed, then stands where the host puts it, nose along the heading", () => {
+    const scene = createGardenScene(layout);
+    const avatar = scene.group.getObjectByName("garden-avatar")!;
+    expect(avatar.visible).toBe(false);
+    scene.setAvatar(100, 9, -50, 0);
+    expect(avatar.visible).toBe(true);
+    expect(avatar.position.toArray()).toEqual([100, 9, -50]);
+    expect(avatar.rotation.y).toBeCloseTo(Math.PI, 6); // hull nose is −z; heading 0 faces +z
+    scene.dispose();
+  });
+});

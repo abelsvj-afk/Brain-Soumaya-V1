@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { GARDEN_BACKDROP_PLANETS, loadGardenAsset } from "./gardenAssets.js";
 import { buildHygStarfield } from "./hygStars.js";
+import { loadSoumayaShip } from "./soumayaShip.js";
+import { buildProceduralShip } from "./transitScene.js";
 import {
   GARDEN_TERRACE_COUNT,
   GARDEN_TERRACE_RADIUS,
@@ -148,6 +150,14 @@ export interface GardenScene {
    * node id, or null when the tap hits ground, sky, or nothing.
    */
   pickPlot: (ndc: { x: number; y: number }, camera: THREE.Camera) => number | null;
+  /**
+   * Garden v2 (walk): what a tap lands on — a seed pod, a plot, or the
+   * ground (with the point), nearest first; null for sky. Mist, signs and
+   * glows are never targets.
+   */
+  pickTarget: (ndc: { x: number; y: number }, camera: THREE.Camera) => GardenPick | null;
+  /** Place Soumaya's ship (her avatar in the garden). heading: atan2(dx, dz) of travel. */
+  setAvatar: (x: number, y: number, z: number, heading: number) => void;
   /** Push new mutation state (warmth target, previews, landings, undos). */
   setMutation: (input: GardenMutationInput) => void;
   /** Jump every in-progress landing/undo to its final state (tap to skip). */
@@ -166,6 +176,10 @@ export interface GardenScene {
  * as before. The layout's own paths already carry edge ids (GardenPath),
  * so the scene resolves lit endpoints from the layout — no re-derivation.
  */
+export type GardenPick =
+  | { kind: "pod" | "plot"; nodeId: number; x: number; z: number }
+  | { kind: "ground"; x: number; z: number };
+
 export interface GardenGlow {
   warmNodeIds: Set<number>;
   litEdgeIds: Set<number>;
@@ -428,7 +442,7 @@ function groveSign(text: string): THREE.Sprite | null {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  sprite.scale.set((w / 60) * 22, 22, 1);
+  sprite.scale.set((w / 60) * 13, 13, 1);
   sprite.raycast = () => {}; // signs are reached through the Groves list, not tapped in the scene
   return sprite;
 }
@@ -477,13 +491,15 @@ export function createGardenScene(
   // Seed pods bob gently; kept so update() can move them (still under reduced motion).
   const pods: { mesh: THREE.InstancedMesh | null; base: { x: number; y: number; z: number }[] } = { mesh: null, base: [] };
   // Verb 1: the plot meshes, kept for tap-to-tend raycasting.
-  const plotMeshes: { mesh: THREE.InstancedMesh; plots: readonly { nodeId: number }[] }[] = [];
+  const plotMeshes: { mesh: THREE.InstancedMesh; plots: readonly { nodeId: number; x: number; z: number }[] }[] = [];
 
   // Terraces: every band is built, whether or not a plot sits on it yet —
   // the garden is always a complete, layered hillside (as in the mock-up),
   // never bare rings with the underside showing through the gaps. Greens
   // step per terrace. Ring i spans radius[i+1]..radius[i].
   const presentTerraces = new Set(Array.from({ length: GARDEN_TERRACE_COUNT }, (_, t) => t));
+  // What a tap can land on as "ground" (walk targets).
+  const groundMeshes: THREE.Object3D[] = [];
   const riserMat = new THREE.MeshLambertMaterial({ color: 0x2e4d2a, side: THREE.DoubleSide });
   for (const t of [...presentTerraces].sort((a, b) => a - b)) {
     const inner = t + 1 < GARDEN_TERRACE_COUNT ? GARDEN_TERRACE_RADIUS[t + 1]! : 60;
@@ -496,6 +512,7 @@ export function createGardenScene(
     ring.position.y = GARDEN_TERRACE_HEIGHT[t]!;
     ring.name = `terrace-${t}`;
     group.add(ring);
+    groundMeshes.push(ring);
     // The step down to the terrace below: without a riser each ring floats
     // as a flat disc and the garden reads as a plate, not as terraces.
     if (t > 0) {
@@ -517,6 +534,7 @@ export function createGardenScene(
   crownDisc.rotation.x = -Math.PI / 2;
   crownDisc.position.y = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]!;
   group.add(crownDisc);
+  groundMeshes.push(crownDisc);
 
   // Finished underside: the garden is a solid, not flat rings over void.
   // A stone skirt drops from the lowest terrace (y=0) to the solid floor,
@@ -622,7 +640,7 @@ export function createGardenScene(
       z = Math.sin(angle) * radius;
       if (
         !vegBlocked.some((o) => Math.hypot(o.x - x, o.z - z) < 40) &&
-        !groves.some((g) => Math.hypot(g.x - x, g.z - z) < g.radius + 14)
+        !groves.some((g) => Math.hypot(g.x - x, g.z - z) < g.radius + 45)
       ) {
         break;
       }
@@ -755,6 +773,30 @@ export function createGardenScene(
   }
 
   buildGroves(group, layout, dummy, pods);
+  const lawns = group.getObjectByName("grove-lawns");
+  if (lawns) groundMeshes.push(lawns);
+
+  // Her ship: the traveller's avatar in the garden (v2 walk). The
+  // procedural hull stands in until her real ship loads (the proxy
+  // pattern), and forever if it can't. Hidden until the host places it.
+  const avatar = new THREE.Group();
+  avatar.name = "garden-avatar";
+  avatar.visible = false;
+  const avatarBody = new THREE.Group();
+  avatarBody.scale.setScalar(2);
+  avatar.add(avatarBody);
+  const proceduralShip = buildProceduralShip();
+  avatarBody.add(proceduralShip);
+  group.add(avatar);
+  void loadSoumayaShip().then((hero) => {
+    if (!hero || disposed) {
+      if (hero) disposeObject3D(hero);
+      return;
+    }
+    avatarBody.remove(proceduralShip);
+    disposeObject3D(proceduralShip);
+    avatarBody.add(hero);
+  });
 
   // Landmarks: presence-only arches for completed Journeys — pale stone and
   // living branch weaving upward. No rising animation here (A6, Phase 4).
@@ -1341,6 +1383,31 @@ export function createGardenScene(
     },
     getWarmthFogColor() {
       return warmthSeen ? warmthColors(warmthCurrent).fog : null;
+    },
+    pickTarget(ndc: { x: number; y: number }, camera: THREE.Camera): GardenPick | null {
+      if (disposed) return null;
+      raycaster.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), camera);
+      const targets: THREE.Object3D[] = [...plotMeshes.map((p) => p.mesh), ...groundMeshes];
+      if (pods.mesh) targets.push(pods.mesh);
+      for (const hit of raycaster.intersectObjects(targets, false)) {
+        if (hit.object === pods.mesh && hit.instanceId != null) {
+          const pod = layout.pods[hit.instanceId];
+          if (pod) return { kind: "pod", nodeId: pod.nodeId, x: pod.x, z: pod.z };
+        }
+        const entry = plotMeshes.find((p) => p.mesh === hit.object);
+        if (entry && hit.instanceId != null) {
+          const plot = entry.plots[hit.instanceId];
+          if (plot) return { kind: "plot", nodeId: plot.nodeId, x: plot.x, z: plot.z };
+        }
+        if (groundMeshes.includes(hit.object)) return { kind: "ground", x: hit.point.x, z: hit.point.z };
+      }
+      return null;
+    },
+    setAvatar(x: number, y: number, z: number, heading: number) {
+      avatar.visible = true;
+      avatar.position.set(x, y, z);
+      // Her hull's nose points down −z; heading 0 faces +z.
+      avatar.rotation.y = heading + Math.PI;
     },
     pickPlot(ndc: { x: number; y: number }, camera: THREE.Camera): number | null {
       if (disposed || plotMeshes.length === 0) return null;

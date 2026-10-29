@@ -6596,6 +6596,49 @@ button.mindspace-more { cursor: pointer; }
   text-align: center;
   pointer-events: none;
 }
+/* Garden v2: the Groves list — every Journey's grove, one tap to walk there. */
+.garden-groves {
+  position: absolute;
+  top: 3.6rem;
+  left: 0.75rem;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: min(300px, calc(100% - 1.5rem));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 0.5rem;
+  border-radius: 14px;
+  background: rgba(10, 22, 16, 0.92);
+  border: 1px solid rgba(255, 210, 122, 0.4);
+}
+.garden-groves button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 210, 122, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3ecd6;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+.garden-groves button span {
+  opacity: 0.7;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.garden-groves p {
+  margin: 0.25rem 0.5rem;
+  color: #d8d2bd;
+  font-size: 0.8rem;
+}
 .worlds-surface-canvas canvas {
   display: block;
 }

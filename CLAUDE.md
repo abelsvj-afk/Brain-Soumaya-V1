@@ -429,6 +429,14 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   Fetches each Journey's links + `/api/review/due` on garden entry (a failed fetch renders that part empty,
   never guessed). Look at: whether groves read clearly among the forest from the orbit camera (step 2's
   walking camera is the real view).
+- **Growing Place v2, step 2 — tap to walk (2026-10-29) — MEASURED headless, needs on-device confirmation**
+  (gardenWalk.ts, gardenScene.ts `pickTarget`/`setAvatar`, WorldsSurface.tsx): Soumaya's ship is your avatar
+  in the garden. Tap ground → she skims there along the terraces (never off the edge, never through the
+  witness tree — 400 random routes pinned by test); tap a plot/pod → she goes beside it and its sheet opens
+  on arrival; "🌳 Groves" lists the meadow + every grove (with "resting"/"completed"/"N done" in words) and
+  walks her there. The camera follows behind/above her and drag/pinch still turn/zoom around her. Reduced
+  motion: she jumps, the camera cuts. Headless ran at ~2 fps, so judge smoothness on the phone only. Look
+  at: follow-camera height/angle feel, walking speed (150 u/s ≈ 12 s across), sign size up close.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
