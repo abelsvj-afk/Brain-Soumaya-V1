@@ -207,3 +207,8 @@ Freesound page before public distribution.
 **Ship engine loop** — `ship-engine-loop.wav`
 Sustained engine loop supplied by the project owner; retain its original source license.
 
+
+"Sci-Fi Stargate Portal" by Inditrion Dradnon — CC-BY-4.0 — https://sketchfab.com/3d-models/sci-fi-stargate-portal-951b001358104611b75bda62dced54bd
+ISS and NASA probe models (ISS-A, Dawn, Kepler-A, Pioneer10, Voyager-A) — NASA 3D Resources — free and without copyright; NASA media guidelines apply
+
+
