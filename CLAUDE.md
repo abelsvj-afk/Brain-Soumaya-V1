@@ -185,6 +185,13 @@ Claude is the architect/lead and the only one who signs off "Verified". The othe
 
 **Keep for Claude (do NOT delegate):** Red-Zone work — `packages/shared/*` types/zod, `db/*` schema + migrations, `graph/orbits.ts`, `web/src/api/client.ts`, the token/USD/Fuel guards, `space_id` multi-tenancy scoping, route contracts — plus architecture decisions, ambiguous/underspecified features, security/data-integrity, and the **final audit + "Verified by Claude" checkmark**.
 
+**BRANCH RULE (2026-10-29): every change — and every pull request's BASE — must be `main`.** On 2026-10-28 PR #125
+(Station interior) was merged into the OLD branch, not main, so it never reached Fly: GitHub's default branch
+setting was still `claude/soumaya-second-brain-v1-m4z4hc`, and a PR opened without choosing a base targets the
+default. (Reconciled into `main` 2026-10-29 as `3574c1b`; the old branch is now fully contained in `main`.)
+**Owner action still needed:** GitHub → Settings → Branches → default branch → `main`. Until then, ALWAYS pass
+`base: main` explicitly when opening a PR, and never merge into the old branch.
+
 The mainline branch is **`main`** (created 2026-10-28 from `7262265a`); the old deploy branch `claude/soumaya-second-brain-v1-m4z4hc` is retained but no longer the mainline. Fly deploys from `main` with auto-deploy on (see Deployment update 2026-10-28 above). The shared gate and the historical change log (`GEMINI_CHANGES.md`) still apply.
 
 ## Verify before you build (and before you claim it works)
