@@ -6638,6 +6638,35 @@ button.mindspace-more { cursor: pointer; }
 .harbor-controller-answer {
   white-space: pre-line;
 }
+
+/* Station interior room panel (Wave 2, settled design): a readable
+   card over the interior hall, bottom-left above the credits — the
+   same card pattern as the harbor controller. The room's work lives
+   here; the hall carries the visuals. The observation deck renders
+   no card: quiet is the feature. */
+.worlds-surface-room {
+  position: absolute;
+  left: 1rem;
+  bottom: 4rem;
+  max-width: min(30rem, calc(100% - 2rem));
+  max-height: calc(100% - 12rem);
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  background: rgba(11, 16, 38, 0.88);
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+  color: #e8e6df;
+  font-size: 0.9rem;
+}
+.commission-board-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.commission-board-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
 .harbor-controller-questions {
   display: flex;
   flex-wrap: wrap;

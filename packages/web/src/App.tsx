@@ -2544,7 +2544,13 @@ export default function App() {
           source — no fuel toast here, the tend sheet already says it. */}
       {space && (
         <ErrorBoundary label="worlds-surface" fallback={null}>
-          <WorldsSurface graph={data} onChanged={(result) => void refresh(result.newNodeId ? [result.newNodeId] : undefined)} />
+          <WorldsSurface
+            graph={data}
+            onChanged={(result) => void refresh(result.newNodeId ? [result.newNodeId] : undefined)}
+            getFleetStatus={() => graphRef.current?.getFleetStatus()}
+            onFocus={focus}
+            onHangarEquipChanged={() => void handleChanged(-1)}
+          />
         </ErrorBoundary>
       )}
 
