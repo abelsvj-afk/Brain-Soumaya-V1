@@ -18,6 +18,7 @@ import {
 import { warmPlotNodeIds, litPathEdgeIds } from "../graph/gardenTend.js";
 import { GardenTendSheet } from "./GardenTendSheet.js";
 import { GardenGroveSheet } from "./GardenGroveSheet.js";
+import { GardenRecallSheet } from "./GardenRecallSheet.js";
 import { createStationScene } from "../graph/stationScene.js";
 import {
   INTERIOR_ORBIT_RATE_RAD_PER_MS,
@@ -36,7 +37,7 @@ import {
   approachPose,
 } from "../graph/stationLayout.js";
 import { ensureKtx2Support } from "../graph/gltf.js";
-import { buildGardenLayout, clampToGardenFloor, GARDEN_CAMERA_FLOOR_Y, landmarkPositionFor, type GardenLayout } from "../graph/gardenLayout.js";
+import { buildGardenLayout, clampToGardenFloor, GARDEN_POD_MAX, GARDEN_CAMERA_FLOOR_Y, landmarkPositionFor, type GardenLayout } from "../graph/gardenLayout.js";
 import { createGardenScene, EMPTY_GARDEN_MUTATION, type GardenMutationInput, type GardenMutationLanding, type GardenMutationPreview, type GardenMutationUndo, type GardenScene } from "../graph/gardenScene.js";
 import {
   getWorldChangesState,
@@ -225,6 +226,33 @@ interface WorldSceneHandle {
 interface GardenWorldChanges {
   warmth: number;
   proposals: WorldChangeProposal[];
+}
+
+/**
+ * Seed Pods harvest: how many pods were caught today, per brain, kept in
+ * this browser (a per-viewer convenience — the real record is the review
+ * log). Every access is guarded: private mode just starts from zero.
+ */
+function harvestKey(spaceId: string | null): string {
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `garden.harvest.${spaceId ?? "local"}.${day}`;
+}
+export function readHarvest(spaceId: string | null): number {
+  try {
+    return Math.max(0, Number(localStorage.getItem(harvestKey(spaceId))) || 0);
+  } catch {
+    return 0;
+  }
+}
+export function bumpHarvest(spaceId: string | null): number {
+  const next = readHarvest(spaceId) + 1;
+  try {
+    localStorage.setItem(harvestKey(spaceId), String(next));
+  } catch {
+    /* private mode: the count lives for this stay only */
+  }
+  return next;
 }
 
 /** What the garden opens when her ship arrives (garden v2 walk). */
@@ -572,6 +600,11 @@ export default function WorldsSurface({
   const [groveSheet, setGroveSheet] = useState<number | null>(null);
   const [carrying, setCarrying] = useState<number | null>(null);
   const [gardenVersion, setGardenVersion] = useState(0);
+  // Garden v2 step 4 (Seed Pods): the pod being recalled, pods set aside
+  // ("Not today") or caught this stay, and today's harvest count.
+  const [recallPod, setRecallPod] = useState<number | null>(null);
+  const [podsAside, setPodsAside] = useState<Set<number>>(new Set());
+  const [harvest, setHarvest] = useState(0);
   const carryingRef = useRef<number | null>(null);
   carryingRef.current = carrying;
   // The mounted scene handle — the Eternity gesture/tool buttons below
@@ -732,6 +765,9 @@ export default function WorldsSurface({
     setGrovesOpen(false);
     setGroveSheet(null);
     setCarrying(null);
+    setRecallPod(null);
+    setPodsAside(new Set());
+    setHarvest(readHarvest(getSpaceId()));
     setSuggestions(null);
     setSuggestionsHidden(false);
     setTendNode(null);
@@ -909,9 +945,9 @@ export default function WorldsSurface({
     if (!atGarden || !graph) return undefined;
     return buildGardenLayout(graph, journeys ?? [], new Date(), {
       links: journeyLinksMap ?? undefined,
-      due: dueReviews ?? undefined,
+      due: dueReviews?.filter((d) => !podsAside.has(d.id)),
     });
-  }, [atGarden, graph, journeys, journeyLinksMap, dueReviews]);
+  }, [atGarden, graph, journeys, journeyLinksMap, dueReviews, podsAside]);
 
   useEffect(() => {
     layoutRef.current = layout;
@@ -1066,7 +1102,11 @@ export default function WorldsSurface({
 
   // Arrival: the frame loop calls this through a ref (it is set every render).
   onArriveRef.current = (a) => {
-    if (a.kind === "plot" || a.kind === "pod") {
+    if (a.kind === "pod") {
+      setTendNode(null);
+      setGroveSheet(null);
+      setRecallPod(a.nodeId);
+    } else if (a.kind === "plot") {
       const node = graph?.nodes.find((n) => n.id === a.nodeId);
       if (node) setTendNode(node);
     } else if (a.kind === "grove") {
@@ -1736,6 +1776,52 @@ export default function WorldsSurface({
           }
         />
       )}
+      {mode === "world" && atGarden && layout && (layout.pods.length > 0 || harvest > 0) && (() => {
+        // Today's harvest: caught pods + those still ripening, at most five.
+        const total = Math.min(GARDEN_POD_MAX, harvest + layout.pods.length);
+        const caught = Math.min(harvest, total);
+        return (
+          <div className="garden-harvest" role="status" aria-label={`Seed pods: ${caught} of ${total} caught today`}>
+            <span aria-hidden="true">
+              {"🌼".repeat(caught)}
+              {"✨".repeat(Math.max(0, total - caught))}
+            </span>
+            <span>
+              {caught} of {total} caught
+            </span>
+          </div>
+        );
+      })()}
+      {mode === "world" && atGarden && recallPod !== null && layout && (() => {
+        const pod = layout.pods.find((p) => p.nodeId === recallPod);
+        const due = dueReviews?.find((d) => d.id === recallPod);
+        if (!pod) return null;
+        const grove = pod.journeyId != null ? layout.groves.find((g) => g.journeyId === pod.journeyId) : undefined;
+        return (
+          <GardenRecallSheet
+            key={pod.nodeId}
+            memory={{ id: pod.nodeId, label: pod.label, content: due?.content }}
+            groveTitle={grove?.title ?? null}
+            onCaught={() => {
+              const scene = gardenSceneRef.current;
+              scene?.celebrate("bloom", { x: pod.x, y: pod.y, z: pod.z });
+              const left = layout.pods.filter((p) => p.nodeId !== pod.nodeId).length;
+              if (left === 0) scene?.celebrate("harvest");
+              const stored = bumpHarvest(getSpaceId());
+              setHarvest((h) => Math.max(h + 1, stored));
+            }}
+            onNotToday={() => {
+              setPodsAside((prev) => new Set(prev).add(pod.nodeId));
+              setRecallPod(null);
+            }}
+            onClose={() => {
+              // Caught: it's no longer due — the pod is gone from the garden.
+              setDueReviews((prev) => prev?.filter((d) => d.id !== pod.nodeId) ?? prev);
+              setRecallPod(null);
+            }}
+          />
+        );
+      })()}
       {mode === "world" && atGarden && carrying !== null && groveSheet === null && (
         <div className="garden-carrying" role="status">
           🧺 Carrying “{graph?.nodes.find((n) => n.id === carrying)?.label ?? "a memory"}” — walk to a grove to place it

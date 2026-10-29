@@ -136,3 +136,42 @@ describe("garden v2 walk — what a tap lands on", () => {
     scene.dispose();
   });
 });
+
+describe("garden v2 — Seed Pods celebrations", () => {
+  it("a bloom bursts outward from the pod and clears itself; the harvest shower falls and clears", () => {
+    const scene = createGardenScene(layout);
+    scene.update(0);
+    scene.celebrate("bloom", { x: 100, y: 0, z: 0 });
+    scene.celebrate("harvest");
+    const bloom = scene.group.getObjectByName("celebrate-bloom") as THREE.InstancedMesh;
+    const shower = scene.group.getObjectByName("celebrate-harvest") as THREE.InstancedMesh;
+    expect(bloom.count).toBe(12);
+    expect(shower.count).toBe(140);
+    scene.update(900);
+    const m = new THREE.Matrix4();
+    bloom.getMatrixAt(0, m);
+    const p = new THREE.Vector3().setFromMatrixPosition(m);
+    expect(Math.hypot(p.x - 100, p.z)).toBeGreaterThan(5); // spreading out
+    scene.update(5000);
+    expect(scene.group.getObjectByName("celebrate-bloom")).toBeUndefined();
+    expect(scene.group.getObjectByName("celebrate-harvest")).toBeUndefined();
+    scene.dispose();
+  });
+
+  it("under reduced motion a bloom holds still at its settled spread and fades — it never animates outward", () => {
+    const scene = createGardenScene(layout);
+    scene.update(0, { reducedMotion: true });
+    scene.celebrate("bloom", { x: 0, y: 0, z: 200 });
+    const bloom = scene.group.getObjectByName("celebrate-bloom") as THREE.InstancedMesh;
+    const at = (ms: number) => {
+      scene.update(ms, { reducedMotion: true });
+      const m = new THREE.Matrix4();
+      bloom.getMatrixAt(3, m);
+      return new THREE.Vector3().setFromMatrixPosition(m).toArray();
+    };
+    expect(at(100)).toEqual(at(1000));
+    at(1600); // past 70% of the bloom: it fades
+    expect((bloom.material as THREE.MeshBasicMaterial).opacity).toBeLessThan(1);
+    scene.dispose();
+  });
+});

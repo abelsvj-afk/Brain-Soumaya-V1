@@ -160,6 +160,12 @@ export interface GardenScene {
   setAvatar: (x: number, y: number, z: number, heading: number) => void;
   /** Show the memory she's carrying to a grove — a warm glow riding above her ship. */
   setCarrying: (on: boolean) => void;
+  /**
+   * Seed Pods: "bloom" bursts gold petals outward where a pod was caught;
+   * "harvest" (the day's last pod) showers gold motes from the witness
+   * tree over the garden. Under reduced motion both hold still and fade.
+   */
+  celebrate: (kind: "bloom" | "harvest", at?: { x: number; y: number; z: number }) => void;
   /** Push new mutation state (warmth target, previews, landings, undos). */
   setMutation: (input: GardenMutationInput) => void;
   /** Jump every in-progress landing/undo to its final state (tap to skip). */
@@ -257,6 +263,12 @@ function fitToSize(root: THREE.Object3D, size: number): void {
 
 /** Height a seed pod floats above the ground it ripened over. */
 export const POD_FLOAT = 16;
+/** Seed Pods celebrations: a bloom burst, and the harvest's gold shower. */
+export const BLOOM_PETALS = 12;
+export const BLOOM_MS = 1800;
+export const HARVEST_MOTES = 140;
+export const HARVEST_MS = 4500;
+const GARDEN_SEED_SCENE = "growing-place / celebrate";
 
 /** A grove tree's growth factor: one tier per completed mission, up to ten — it only grows. */
 export function groveGrowth(missionsCompleted: number): number {
@@ -875,6 +887,16 @@ export function createGardenScene(
 
   const raycaster = new THREE.Raycaster();
   const podMatrix = new THREE.Matrix4();
+  // Seed Pods celebrations in flight (bloom bursts, the harvest shower).
+  const celebrations: {
+    kind: "bloom" | "harvest";
+    mesh: THREE.InstancedMesh;
+    mat: THREE.MeshBasicMaterial;
+    seeds: { angle: number; r: number; x: number; z: number; delay: number }[];
+    at: { x: number; y: number; z: number };
+    startMs: number;
+  }[] = [];
+  const celebrateMatrix = new THREE.Matrix4();
   // --- Phase 4 mutation presentation (A6/A7/A8/A23/A24/A25) ---
   // The scene renders exactly what setMutation is given — never a
   // position it was not given, never a change the rail did not approve.
@@ -1313,6 +1335,35 @@ export function createGardenScene(
         mistMat.color.setHex(colors.mist);
       }
 
+      // Seed Pods celebrations. Reduced motion: each holds its settled
+      // shape and simply fades — the news is kept, the motion is not.
+      for (let ci = celebrations.length - 1; ci >= 0; ci--) {
+        const c = celebrations[ci]!;
+        const dur = c.kind === "bloom" ? BLOOM_MS : HARVEST_MS;
+        const t = Math.min(1, (clockMs - c.startMs) / dur);
+        c.seeds.forEach((sd, i) => {
+          if (c.kind === "bloom") {
+            const r = (rm ? 1 : t) * 26;
+            celebrateMatrix.makeTranslation(
+              c.at.x + Math.cos(sd.angle) * r,
+              c.at.y + POD_FLOAT + (rm ? 4 : Math.sin(t * Math.PI) * 10),
+              c.at.z + Math.sin(sd.angle) * r,
+            );
+          } else {
+            const fall = rm ? 0.5 : Math.min(1, Math.max(0, (clockMs - c.startMs - sd.delay) / (HARVEST_MS - 1500)));
+            celebrateMatrix.makeTranslation(sd.x, 340 - fall * 300, sd.z);
+          }
+          c.mesh.setMatrixAt(i, celebrateMatrix);
+        });
+        c.mesh.instanceMatrix.needsUpdate = true;
+        c.mat.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+        if (t >= 1) {
+          group.remove(c.mesh);
+          disposeObject3D(c.mesh);
+          celebrations.splice(ci, 1);
+        }
+      }
+
       if (!rm) {
         const sway = Math.sin(elapsedMs * 0.0004) * 0.012;
         for (const obj of swaying) {
@@ -1421,6 +1472,29 @@ export function createGardenScene(
     },
     setCarrying(on: boolean) {
       carried.visible = on;
+    },
+    celebrate(kind: "bloom" | "harvest", at?: { x: number; y: number; z: number }) {
+      if (disposed) return;
+      const n = kind === "bloom" ? BLOOM_PETALS : HARVEST_MOTES;
+      const mat = new THREE.MeshBasicMaterial({ color: DAWN_GOLD, transparent: true, opacity: 1, depthWrite: false });
+      const mesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(kind === "bloom" ? 2.4 : 2.8), mat, n);
+      mesh.name = `celebrate-${kind}`;
+      mesh.raycast = () => {};
+      const rand = mulberry32(hashSeeded(`${GARDEN_SEED_SCENE}:${kind}:${clockMs}`));
+      const seeds = Array.from({ length: n }, (_, i) =>
+        kind === "bloom"
+          ? { angle: (i / n) * Math.PI * 2, r: 0, x: 0, z: 0, delay: 0 }
+          : { angle: 0, r: Math.sqrt(rand()) * 700, x: 0, z: 0, delay: rand() * 1500 },
+      );
+      for (const sd of seeds) {
+        if (kind === "harvest") {
+          const a = rand() * Math.PI * 2;
+          sd.x = Math.cos(a) * sd.r;
+          sd.z = Math.sin(a) * sd.r;
+        }
+      }
+      group.add(mesh);
+      celebrations.push({ kind, mesh, mat, seeds, at: at ?? { x: 0, y: 0, z: 0 }, startMs: clockMs });
     },
     pickPlot(ndc: { x: number; y: number }, camera: THREE.Camera): number | null {
       if (disposed || plotMeshes.length === 0) return null;

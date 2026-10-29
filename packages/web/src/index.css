@@ -6746,6 +6746,36 @@ button.mindspace-more { cursor: pointer; }
   line-height: 1.45;
   white-space: pre-wrap;
 }
+.garden-harvest {
+  position: absolute;
+  right: 0.75rem;
+  top: 3.6rem;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(10, 22, 16, 0.85);
+  border: 1px solid rgba(255, 210, 122, 0.35);
+  color: #f3ecd6;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+.garden-harvest span:first-child {
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+.garden-recall-actions {
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+.garden-sheet button.garden-recall-later {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #d8d2bd;
+}
 .garden-carrying {
   position: absolute;
   left: 50%;
