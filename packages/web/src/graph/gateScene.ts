@@ -137,6 +137,11 @@ export function loadWarpGate(): Promise<THREE.Object3D | null> {
       WARP_GATE_URL,
       (gltf) => {
         const root = gltf.scene;
+        // As authored the iris is shut inside the bore (Muse's prep note): open the gate by hiding the iris —
+        // its own named piece ("SG Iris") — and keep the event horizon ("SG Ereignishorizont") that she flies through.
+        root.traverse((o) => {
+          if (/iris/i.test(o.name)) o.visible = false;
+        });
         const box = new THREE.Box3().setFromObject(root);
         const size = box.getSize(new THREE.Vector3());
         const open = Math.max(size.x, size.y);
