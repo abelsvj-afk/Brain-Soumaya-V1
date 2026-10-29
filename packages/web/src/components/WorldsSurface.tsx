@@ -106,6 +106,7 @@ import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../gr
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { useEternityAutonomy } from "../hooks/useEternityAutonomy.js";
+import { purposeSeenKey, worldPurpose } from "../graph/worldPurpose.js";
 import { installHomeSky, releaseHomeSky } from "../graph/homeSky.js";
 import { loadSoumayaShip } from "../graph/soumayaShip.js";
 import { loadWarpGate } from "../graph/gateScene.js";
@@ -691,6 +692,14 @@ export default function WorldsSurface({
   const atGardenRef = useRef(false);
 
   const currentWorld = travel.state?.currentWorld;
+  /** True once this world's purpose line has been shown (read when the hint renders; it flips only after the hint ends). */
+  const purposeShown = (() => {
+    try {
+      return !worldPurpose(currentWorld) || localStorage.getItem(purposeSeenKey(currentWorld ?? "")) === "1";
+    } catch {
+      return false;
+    }
+  })();
   const journey = travel.state?.activeJourney ?? null;
   const atWorld =
     enabled && !!currentWorld && currentWorld in WORLD_SCENES && !journey;
@@ -773,23 +782,27 @@ export default function WorldsSurface({
     // layer stays hidden until the traveller acts (the timer would run out before they ever got there).
     if (!enabled || !visible || mode !== "world") return;
     let seen = false;
+    let purposeSeen = true;
     try {
       seen = localStorage.getItem("worlds.lookHintSeen") === "1";
+      // Audit X4: the first time in each world it says what the world is for (before the look-around hint).
+      purposeSeen = !worldPurpose(currentWorld) || localStorage.getItem(purposeSeenKey(currentWorld ?? "")) === "1";
     } catch {
       /* storage unavailable — show it; it just won't be remembered */
     }
-    if (seen) return;
+    if (seen && purposeSeen) return;
     setLookHint(true);
     const done = () => {
       setLookHint(false);
       try {
         localStorage.setItem("worlds.lookHintSeen", "1");
+        if (currentWorld && worldPurpose(currentWorld)) localStorage.setItem(purposeSeenKey(currentWorld), "1");
       } catch {
         /* ignore */
       }
     };
     lookedRef.current = done;
-    const t = window.setTimeout(done, 9000);
+    const t = window.setTimeout(done, purposeSeen ? 9000 : 12000);
     return () => {
       window.clearTimeout(t);
       lookedRef.current = () => {};
@@ -2031,9 +2044,10 @@ export default function WorldsSurface({
       )}
       {lookHint && visible && mode === "world" && (
         <p className="worlds-look-hint" role="status">
-          {atGarden
-            ? "Tap the ground to walk · drag to look around · pinch to zoom"
-            : "Drag to look around · pinch or scroll to zoom · double-tap to reset"}
+          {(!purposeShown && worldPurpose(currentWorld)) ||
+            (atGarden
+              ? "Tap the ground to walk · drag to look around · pinch to zoom"
+              : "Drag to look around · pinch or scroll to zoom · double-tap to reset")}
         </p>
       )}
       <header className="worlds-surface-bar">

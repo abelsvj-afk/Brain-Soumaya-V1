@@ -600,6 +600,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   left the entry chunk; Settings loads its own chunk when tapped and renders; the worlds layer loads in the background right after
   first paint. Look at: the first tap on a lazy panel on a slow network (a blank beat before it appears) — if it is noticeable, we
   preload on idle.
+- **UI audit U2/U3/X4 — tap targets, the invisible Focus fan, a purpose line per world (2026-10-30) — MEASURED in a real browser,
+  needs on-device confirmation** (index.css tail block, App.helpers.ts `focusItemStyle`, graph/worldPurpose.ts, WorldsSurface.tsx,
+  tapTargets.test.ts): (U2) probing `elementFromPoint` outward from every visible control on the galaxy screen, 16 of 31 had a
+  hit area under 44 px (14–41); now 0. Cards that clip a pseudo-element hit area (Noticing card buttons, beacon link, audio chip,
+  streak ember) simply grow to 44 px; the toast ×, the account chip and the ship-status collapse keep their look and gain an
+  invisible `::after` hit area. (U3) the four collapsed "Focus …" buttons were invisible and click-proof but still keyboard-focusable
+  and announced, stacked on one spot — closed they are now `visibility:hidden` (fade-out kept via a visibility transition). (X4) the
+  first arrival in each world shows one plain line saying what it is for and one thing to do, once per world (before the look-around
+  hint). Look at: the 44 px chips on the Noticing card and the audio chip (they are taller now), and the purpose lines' wording.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

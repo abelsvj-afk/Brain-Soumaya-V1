@@ -823,9 +823,25 @@ describe("free look — the first-time hint", () => {
   // at a saved world (layer still hidden), so it had expired before the traveller ever saw the world.
   beforeEach(() => {
     localStorage.removeItem("worlds.lookHintSeen");
+    // These tests are about the look-around hint; the world's purpose line (audit X4) has its own test below.
+    localStorage.setItem("worlds.purposeSeen.growing-place", "1");
     mockUseTravel.mockReturnValue(atGarden());
   });
   afterEach(() => vi.useRealTimers());
+
+  it("the first time in a world it says what the world is for, once, before the look-around hint (audit X4)", () => {
+    localStorage.removeItem("worlds.purposeSeen.growing-place");
+    vi.useFakeTimers();
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.getByText(/grows your Journeys as groves/i)).toBeTruthy();
+    expect(screen.queryByText(/drag to look around/i)).toBeNull();
+    act(() => vi.advanceTimersByTime(12_500));
+    expect(screen.queryByText(/grows your Journeys as groves/i)).toBeNull();
+    expect(localStorage.getItem("worlds.purposeSeen.growing-place")).toBe("1");
+    // the next visit does not repeat it
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.queryByText(/grows your Journeys as groves/i)).toBeNull();
+  });
 
   it("is NOT shown while the world is hidden at launch — and its clock has not started", () => {
     vi.useFakeTimers();

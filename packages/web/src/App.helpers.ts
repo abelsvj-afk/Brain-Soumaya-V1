@@ -456,10 +456,12 @@ export function focusItemStyle(
   direction: "up" | "down" = "up",
 ): CSSProperties {
   if (!open) {
-    return { transform: "translateY(0) scale(0.4)", opacity: 0, pointerEvents: "none" };
+    // visibility:hidden takes the closed fan out of the tab order and the accessibility tree too (audit U3: four invisible,
+    // stacked buttons were still keyboard-focusable and announced). The CSS transition on `visibility` keeps the fade-out.
+    return { transform: "translateY(0) scale(0.4)", opacity: 0, pointerEvents: "none", visibility: "hidden" };
   }
   const dy = direction === "down" ? (index + 1) * stepPx : -(index + 1) * stepPx;
-  return { transform: `translateY(${dy}px)`, opacity: 1, pointerEvents: "auto" };
+  return { transform: `translateY(${dy}px)`, opacity: 1, pointerEvents: "auto", visibility: "visible" };
 }
 
 /** Position a song dot on an arc fanning up-and-right from the music FAB (bottom-left). */

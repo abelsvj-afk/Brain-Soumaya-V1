@@ -28,6 +28,12 @@ describe("App.helpers", () => {
     expect(JSON.stringify(open)).not.toBe(JSON.stringify(closed));
   });
 
+  it("a closed fan is out of the tab order and the accessibility tree; an open one is back (audit U3)", () => {
+    expect(focusItemStyle(0, false).visibility).toBe("hidden");
+    expect(focusItemStyle(0, false).pointerEvents).toBe("none");
+    expect(focusItemStyle(0, true).visibility).toBe("visible");
+  });
+
   it("spreads song dots around the ring (each index a distinct position)", () => {
     const a = songDotStyle(0, 3);
     const b = songDotStyle(1, 3);
