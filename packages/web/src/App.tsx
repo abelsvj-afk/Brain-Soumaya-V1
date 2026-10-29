@@ -2557,6 +2557,7 @@ export default function App() {
             getFleetStatus={() => graphRef.current?.getFleetStatus()}
             onFocus={focus}
             onHangarEquipChanged={() => void handleChanged(-1)}
+            onGardenChanged={(ids) => void refresh(ids)}
           />
         </ErrorBoundary>
       )}

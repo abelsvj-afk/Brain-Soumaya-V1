@@ -437,6 +437,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   walks her there. The camera follows behind/above her and drag/pinch still turn/zoom around her. Reduced
   motion: she jumps, the camera cuts. Headless ran at ~2 fps, so judge smoothness on the phone only. Look
   at: follow-camera height/angle feel, walking speed (150 u/s ≈ 12 s across), sign size up close.
+- **Growing Place v2, step 3 — grove actions (2026-10-29) — MEASURED in a real browser, needs on-device
+  confirmation** (GardenGroveSheet.tsx, GardenTendSheet.tsx `onCarry`, WorldsSurface.tsx, App.tsx
+  `onGardenChanged`): arriving at a grove (Groves list, or tapping its lawn) opens its sheet — ✓ Done on a
+  mission (the app's own DELETE, which credits the Journey; the tree grows), Plant a next step (a 30-day
+  action item linked as a task), Place the memory she's carrying (tap a meadow wildflower → "🧺 Carry it to
+  a grove" → a glow rides on her ship → place it), and Ask Soumaya about this Journey (journey-scoped chat).
+  Verified end to end headless: plant → linked; done → "the tree grows (1 done)"; ask → answer; sheet
+  refreshes in place. Carry → place is unit-tested only. Look at: the sheet's height over the scene on a
+  phone, and whether a mission planted here showing as a 30-day to-do elsewhere in the app is expected.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

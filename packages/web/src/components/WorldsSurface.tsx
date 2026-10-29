@@ -17,6 +17,7 @@ import {
 } from "../api/garden.js";
 import { warmPlotNodeIds, litPathEdgeIds } from "../graph/gardenTend.js";
 import { GardenTendSheet } from "./GardenTendSheet.js";
+import { GardenGroveSheet } from "./GardenGroveSheet.js";
 import { createStationScene } from "../graph/stationScene.js";
 import {
   INTERIOR_ORBIT_RATE_RAD_PER_MS,
@@ -472,6 +473,7 @@ export default function WorldsSurface({
   getFleetStatus,
   onFocus,
   onHangarEquipChanged,
+  onGardenChanged,
 }: {
   enabled?: boolean;
   graph?: GraphData | null;
@@ -488,6 +490,8 @@ export default function WorldsSurface({
   onFocus?: (id: number) => void;
   /** Fired when the interior's hangar pick changes, so the host refreshes its own hangar copies. */
   onHangarEquipChanged?: () => void;
+  /** Garden v2: a grove action changed the brain (mission done, step planted, memory placed). */
+  onGardenChanged?: (newNodeIds?: number[]) => void;
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -563,6 +567,13 @@ export default function WorldsSurface({
   const arrivalRef = useRef<GardenArrival | null>(null);
   const onArriveRef = useRef<(a: GardenArrival) => void>(() => {});
   const [grovesOpen, setGrovesOpen] = useState(false);
+  // Garden v2 step 3: the grove whose sheet is open, the memory her ship is
+  // carrying, and a counter that re-reads Journeys + links after a change.
+  const [groveSheet, setGroveSheet] = useState<number | null>(null);
+  const [carrying, setCarrying] = useState<number | null>(null);
+  const [gardenVersion, setGardenVersion] = useState(0);
+  const carryingRef = useRef<number | null>(null);
+  carryingRef.current = carrying;
   // The mounted scene handle — the Eternity gesture/tool buttons below
   // call into it. Set in the mount effect, cleared in its cleanup.
   const sceneHandleRef = useRef<WorldSceneHandle | null>(null);
@@ -702,7 +713,7 @@ export default function WorldsSurface({
     return () => {
       cancelled = true;
     };
-  }, [atGarden, atDeepPast]);
+  }, [atGarden, atDeepPast, gardenVersion]);
 
   // Verb 1 (Tend a plot): on garden arrival Soumaya suggests 3 plots, and
   // the garden reads its recent tends for the warm glow and lit paths.
@@ -719,6 +730,8 @@ export default function WorldsSurface({
     followRef.current = { yaw: 0, y: 0, cam: null };
     arrivalRef.current = null;
     setGrovesOpen(false);
+    setGroveSheet(null);
+    setCarrying(null);
     setSuggestions(null);
     setSuggestionsHidden(false);
     setTendNode(null);
@@ -1034,7 +1047,13 @@ export default function WorldsSurface({
     const pick = scene.pickTarget(ndc, camera);
     if (!pick) return;
     setSuggestionsHidden(true); // once you're walking, the arrival panel steps aside
-    if (pick.kind === "ground") walkTo({ x: pick.x, z: pick.z }, null);
+    // Ground inside a grove's lawn is "go to that grove": its sheet opens on arrival.
+    const grove =
+      pick.kind === "ground"
+        ? layoutRef.current?.groves.find((g) => Math.hypot(g.x - pick.x, g.z - pick.z) <= g.radius)
+        : undefined;
+    if (grove) walkTo(approachPoint(walkRef.current.pos, grove, grove.radius * 0.6), { kind: "grove", journeyId: grove.journeyId });
+    else if (pick.kind === "ground") walkTo({ x: pick.x, z: pick.z }, null);
     else walkTo(approachPoint(walkRef.current.pos, pick, pick.kind === "pod" ? 22 : 28), { kind: pick.kind, nodeId: pick.nodeId });
   };
 
@@ -1050,7 +1069,15 @@ export default function WorldsSurface({
     if (a.kind === "plot" || a.kind === "pod") {
       const node = graph?.nodes.find((n) => n.id === a.nodeId);
       if (node) setTendNode(node);
+    } else if (a.kind === "grove") {
+      setTendNode(null);
+      setGroveSheet(a.journeyId);
     }
+  };
+
+  const gardenChanged = (newNodeIds?: number[]) => {
+    setGardenVersion((v) => v + 1);
+    onGardenChanged?.(newNodeIds);
   };
 
   const toggleGuided = () => {
@@ -1383,6 +1410,7 @@ export default function WorldsSurface({
           if (f.cam === null) f.yaw = step.state.heading;
           if (moving) f.yaw = easeAngle(f.yaw, step.state.heading, ease(450));
           gardenSceneRef.current.setAvatar(pos.x, f.y, pos.z, step.state.heading);
+          gardenSceneRef.current.setCarrying(carryingRef.current !== null);
           const pose = followPose(pos, f.y, f.yaw);
           const k = ease(260);
           const prev = f.cam ?? pose.position;
@@ -1691,8 +1719,51 @@ export default function WorldsSurface({
         </div>
       )}
       {mode === "world" && atGarden && tendNode && graph && (
-        <GardenTendSheet node={tendNode} graph={graph} onClose={() => setTendNode(null)} onTended={handleTended} />
+        <GardenTendSheet
+          node={tendNode}
+          graph={graph}
+          onClose={() => setTendNode(null)}
+          onTended={handleTended}
+          onCarry={
+            // A loose meadow memory can be picked up and carried to a grove.
+            layout?.plots.some((p) => p.nodeId === tendNode.id && p.role === "wild")
+              ? () => {
+                  setCarrying(tendNode.id);
+                  setTendNode(null);
+                  setGrovesOpen(true);
+                }
+              : undefined
+          }
+        />
       )}
+      {mode === "world" && atGarden && carrying !== null && groveSheet === null && (
+        <div className="garden-carrying" role="status">
+          🧺 Carrying “{graph?.nodes.find((n) => n.id === carrying)?.label ?? "a memory"}” — walk to a grove to place it
+          <button type="button" className="mini" onClick={() => setCarrying(null)} aria-label="Put it down">
+            ✕
+          </button>
+        </div>
+      )}
+      {mode === "world" && atGarden && groveSheet !== null && layout && graph && (() => {
+        const grove = layout.groves.find((g) => g.journeyId === groveSheet);
+        if (!grove) return null;
+        const inGrove = layout.plots.filter((p) => p.journeyId === grove.journeyId);
+        const nodeOf = (id: number) => graph.nodes.find((n) => n.id === id);
+        const pick = (role: "mission" | "memory") =>
+          inGrove.filter((p) => p.role === role).map((p) => nodeOf(p.nodeId)).filter((n): n is GraphNode => !!n);
+        return (
+          <GardenGroveSheet
+            key={grove.journeyId}
+            grove={grove}
+            missions={pick("mission")}
+            memories={pick("memory")}
+            carrying={carrying !== null ? (nodeOf(carrying) ?? null) : null}
+            onClose={() => setGroveSheet(null)}
+            onChanged={gardenChanged}
+            onPlaced={() => setCarrying(null)}
+          />
+        );
+      })()}
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
       {mode === "world" && atStation && showController && (
         <HarborControllerPanel enabled onClose={() => setShowController(false)} />

@@ -32,11 +32,14 @@ export function GardenTendSheet({
   graph,
   onClose,
   onTended,
+  onCarry,
 }: {
   node: GraphNode;
   graph: GraphData;
   onClose: () => void;
   onTended: (result: TendResult) => void;
+  /** Garden v2: offered for a loose meadow memory — pick it up and carry it to a grove. */
+  onCarry?: () => void;
 }) {
   const [mode, setMode] = useState<TendMode>("line");
   const [text, setText] = useState("");
@@ -165,6 +168,11 @@ export function GardenTendSheet({
             <div>
               <h3 style={{ margin: "0 0 4px", fontSize: "17px" }}>🌱 Tend this plot</h3>
               <p style={{ margin: 0, opacity: 0.85, fontSize: "14px", lineHeight: 1.4 }}>{node.label}</p>
+              {onCarry && (
+                <button type="button" className="mini" onClick={onCarry} style={{ marginTop: "8px" }}>
+                  🧺 Carry it to a grove
+                </button>
+              )}
             </div>
             <button className="mini" onClick={onClose} aria-label="Close">
               ✕

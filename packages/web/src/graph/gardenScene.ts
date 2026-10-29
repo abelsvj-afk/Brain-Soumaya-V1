@@ -158,6 +158,8 @@ export interface GardenScene {
   pickTarget: (ndc: { x: number; y: number }, camera: THREE.Camera) => GardenPick | null;
   /** Place Soumaya's ship (her avatar in the garden). heading: atan2(dx, dz) of travel. */
   setAvatar: (x: number, y: number, z: number, heading: number) => void;
+  /** Show the memory she's carrying to a grove — a warm glow riding above her ship. */
+  setCarrying: (on: boolean) => void;
   /** Push new mutation state (warmth target, previews, landings, undos). */
   setMutation: (input: GardenMutationInput) => void;
   /** Jump every in-progress landing/undo to its final state (tap to skip). */
@@ -787,6 +789,14 @@ export function createGardenScene(
   avatar.add(avatarBody);
   const proceduralShip = buildProceduralShip();
   avatarBody.add(proceduralShip);
+  const carried = new THREE.Mesh(
+    new THREE.OctahedronGeometry(4),
+    new THREE.MeshBasicMaterial({ color: 0xf3e6c4 }),
+  );
+  carried.name = "garden-carried";
+  carried.position.y = 14;
+  carried.visible = false;
+  avatar.add(carried);
   group.add(avatar);
   void loadSoumayaShip().then((hero) => {
     if (!hero || disposed) {
@@ -1408,6 +1418,9 @@ export function createGardenScene(
       avatar.position.set(x, y, z);
       // Her hull's nose points down −z; heading 0 faces +z.
       avatar.rotation.y = heading + Math.PI;
+    },
+    setCarrying(on: boolean) {
+      carried.visible = on;
     },
     pickPlot(ndc: { x: number; y: number }, camera: THREE.Camera): number | null {
       if (disposed || plotMeshes.length === 0) return null;

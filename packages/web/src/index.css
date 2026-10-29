@@ -6639,6 +6639,130 @@ button.mindspace-more { cursor: pointer; }
   color: #d8d2bd;
   font-size: 0.8rem;
 }
+/* Garden v2: the grove sheet (a bottom sheet over the garden) and the carrying chip. */
+.garden-sheet {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: min(480px, calc(100% - 1.5rem));
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 1rem;
+  border-radius: 16px;
+  background: rgba(10, 18, 13, 0.96);
+  border: 1px solid rgba(255, 210, 122, 0.45);
+  color: #ece6d2;
+}
+.garden-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.garden-sheet h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+}
+.garden-sheet h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.92rem;
+}
+.garden-sheet-head p,
+.garden-sheet-quiet {
+  margin: 0;
+  opacity: 0.75;
+  font-size: 0.82rem;
+}
+.garden-sheet section {
+  margin-top: 0.9rem;
+}
+.garden-sheet ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.garden-sheet li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+}
+.garden-sheet-memories li {
+  opacity: 0.85;
+}
+.garden-sheet-row {
+  display: flex;
+  gap: 0.4rem;
+}
+.garden-sheet input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 210, 122, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+}
+.garden-sheet button:not(.mini) {
+  min-height: 40px;
+  padding: 0.4rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 210, 122, 0.5);
+  background: rgba(255, 210, 122, 0.14);
+  color: #fff4d6;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.garden-sheet button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.garden-sheet-note {
+  margin: 0.6rem 0 0;
+  color: #ffe2a0;
+  font-size: 0.85rem;
+}
+.garden-sheet-error {
+  margin: 0.6rem 0 0;
+  color: #ffb4a0;
+  font-size: 0.85rem;
+}
+.garden-sheet-answer {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.garden-carrying {
+  position: absolute;
+  left: 50%;
+  bottom: 3.5rem;
+  transform: translateX(-50%);
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(10, 22, 16, 0.92);
+  border: 1px solid rgba(243, 230, 196, 0.5);
+  color: #f3ecd6;
+  font-size: 0.82rem;
+}
 .worlds-surface-canvas canvas {
   display: block;
 }
