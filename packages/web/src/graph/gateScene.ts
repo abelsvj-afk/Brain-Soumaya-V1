@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { gltfLoader, noteModelFallback } from "./gltf.js";
 
 /**
  * Warp gate (Phase 2, P2-5) — the one shared gate every world plugs into.
@@ -121,6 +122,53 @@ export interface GateScene {
   dispose: () => void;
 }
 
+export const WARP_GATE_URL = "/warp-gate.glb";
+
+/**
+ * The real warp gate model (docs/specs/muse-gate-asset-2026-10-29.md), when `public/warp-gate.glb` exists.
+ * Its opening is expected to face +Z; it is centred and scaled so the opening matches the procedural gate
+ * (2 × GATE_RADIUS), so every place that positions a gate keeps working. Resolves null when the file is
+ * absent — the generated ring is then the gate. Loaded once and cloned per gate.
+ */
+let warpGateLoad: Promise<THREE.Object3D | null> | null = null;
+export function loadWarpGate(): Promise<THREE.Object3D | null> {
+  warpGateLoad ??= new Promise((resolve) => {
+    gltfLoader().load(
+      WARP_GATE_URL,
+      (gltf) => {
+        const root = gltf.scene;
+        const box = new THREE.Box3().setFromObject(root);
+        const size = box.getSize(new THREE.Vector3());
+        const open = Math.max(size.x, size.y);
+        if (!(open > 0)) return resolve(null);
+        const k = (GATE_RADIUS * 2) / open;
+        const center = box.getCenter(new THREE.Vector3());
+        // Every gate clones this model, so its geometry and textures are shared (disposeObject3D leaves
+        // `userData.shared` resources alone); each clone gets its own materials.
+        root.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          m.geometry.userData.shared = true;
+          for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+            for (const v of Object.values(mat)) if (v && (v as THREE.Texture).isTexture) (v as THREE.Texture).userData.shared = true;
+          }
+        });
+        const holder = new THREE.Group();
+        root.scale.setScalar(k);
+        root.position.set(-center.x * k, -center.y * k, -center.z * k);
+        holder.add(root);
+        resolve(holder);
+      },
+      undefined,
+      () => {
+        noteModelFallback("warp-gate.glb");
+        resolve(null);
+      },
+    );
+  });
+  return warpGateLoad;
+}
+
 /** Build one gate, dressed for `worldKey` (falls back to the home dressing). */
 export function buildGate(worldKey: string): GateScene {
   const dressing = GATE_DRESSINGS[worldKey] ?? HOME_DRESSING;
@@ -161,6 +209,24 @@ export function buildGate(worldKey: string): GateScene {
   group.add(disc);
 
   let disposed = false;
+  // The real model replaces the generated ring the moment it is available (instantly when preloaded).
+  void loadWarpGate().then((model) => {
+    if (!model || disposed) return;
+    for (const name of ["gate-ring", "gate-beads", "gate-disc"]) {
+      const part = group.getObjectByName(name);
+      if (part) {
+        group.remove(part);
+        disposeObject3D(part);
+      }
+    }
+    const hull = model.clone(true);
+    hull.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.material = Array.isArray(m.material) ? m.material.map((x) => x.clone()) : m.material.clone();
+    });
+    hull.name = "gate-model";
+    group.add(hull);
+  });
   return {
     group,
     dispose: () => {

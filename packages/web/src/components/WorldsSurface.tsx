@@ -107,6 +107,7 @@ import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type L
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { installHomeSky } from "../graph/homeSky.js";
 import { loadSoumayaShip } from "../graph/soumayaShip.js";
+import { loadWarpGate } from "../graph/gateScene.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
 import { createEternityScene } from "../graph/eternityScene.js";
 import {
@@ -1343,6 +1344,7 @@ export default function WorldsSurface({
     scene.add(world.group);
     // Her hull is shown only once it is ready (never a placeholder), so warm it before anything needs it.
     void loadSoumayaShip();
+    void loadWarpGate(); // null (and the generated ring stays) until public/warp-gate.glb exists
     // One universe: every world and the warp draw the same home sky. The garden keeps its own backdrop and
     // Eternity is a white void by design.
     const sky =

@@ -7,7 +7,7 @@ missing a GLB."
 - No gate model exists on `main` or on any remote branch. Searched every branch's tree for `.glb/.gltf` with gate, warp,
   portal, ring, arch, frame: the only hit is `packages/web/public/relics/mooring-ring-slim.glb` (a relic, not a gate).
 - Today's gate is generated in code (`graph/gateScene.ts`: a torus, a ring of beads, a flat disc). The owner wants the real
-  model. The code is ready: when `/warp-gate.glb` exists the warp and the worlds will load and use it (procedural stays
+  model. The code is READY (wired 2026-10-29, verified with a stand-in model): `gateScene.ts` `loadWarpGate()` loads `/warp-gate.glb`, centres it and scales its opening (larger of X/Y) to the generated gate's 120 units, and swaps it in for the ring; if the file is absent nothing changes (procedural stays
   only as the load-failure fallback).
 
 ## What Muse needs to find / upload
