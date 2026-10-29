@@ -228,8 +228,13 @@ describe("deep past layout (P3-2, C1/C2)", () => {
   });
 
   it("the recipe budget is asserted as constants, not as performance proof", () => {
-    expect(DEEP_PAST_BUDGET.maxDrawCalls).toBe(90);
-    expect(DEEP_PAST_BUDGET.maxTris).toBe(440_000);
+    // The 2026-10-29 fix's caps (design note §9): the full dressing —
+    // terrace slices, lanterns, the helix staircase, the route bead —
+    // costs more than the one-of-each estimate the old caps were
+    // written for; points get their own cap (the supernova's cloud).
+    expect(DEEP_PAST_BUDGET.maxDrawCalls).toBe(110);
+    expect(DEEP_PAST_BUDGET.maxTris).toBe(620_000);
+    expect(DEEP_PAST_BUDGET.maxPoints).toBe(220_000);
     // The basin is the finished bottom: below the deepest stratum, solid.
     expect(DEEP_PAST_BASIN_Y).toBeLessThan(-720);
     expect(DEEP_PAST_BASIN_Y).toBe(-830);

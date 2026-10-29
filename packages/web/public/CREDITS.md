@@ -70,18 +70,28 @@ Owner-generated artwork, made for this app at the owner's direction
 (image → GLB, the same flow as the relics). No third-party source and
 no license statement is embedded in any of the five files — the
 pieces are the owner's own work, recorded as owner-generated.
-Slimmed for web use (textures to 256, 88,168 triangles across the
-five pieces); the route bead is still to come from the owner and is not
-in this set.
+Re-slimmed 2026-10-29 from the owner's masters (textures to WebP —
+1024, the lantern 512 — Draco geometry; terrace, stair, and lantern
+simplified): 54,298 triangles across the five pieces. The public
+filenames are unchanged, so the "-256" in a name is history, not a
+texture size.
+
+**The Deep Past — route bead (owner-supplied)** — `route-bead.glb`
+The owner's own file, supplied on 2026-10-28: a small two-part
+marker (Bead + FlowGlow) with a 'Flow' animation clip, floating
+above each stop of a journey's thread. Slimmed 2026-10-29 to 1,597
+triangles (Draco; node names and the clip preserved). No third-party
+source and no license statement is embedded in the file — the piece
+is the owner's own work, recorded as owner-supplied.
 
 **The Deep Past — First Light orb (owner-supplied)** — `sf-first-light-orb-slim.glb`
 The owner's own project file, fixed before placement (the upload was an
 oval ellipsoid, reshaped to a true sphere 2.0 across, warm-gold emissive,
-'FirstLight' animation added). The source is 539,428 triangles — 6.7× the
-basin budget — so only the slimmed derivative ships: 70,120 triangles,
-texture 1024, Draco-compressed, render-checked in a real browser (loads,
-no console errors, clip plays, warm-gold sphere on screen). No
-third-party source and no license statement is embedded in the file — the
+'FirstLight' animation added). The source is 539,428 triangles, so only
+a slimmed derivative ships: re-slimmed 2026-10-29 to 24,576 triangles
+(the silhouette of a smooth sphere at its placed size), texture kept
+at 2048 as WebP, Draco-compressed, the 'FirstLight' clip untouched.
+No third-party source and no license statement is embedded in the file — the
 piece is the owner's own work, recorded as owner-supplied.
 
 **The Deep Past — anchor spire (owner-supplied)** — `sf-anchor-spire.glb`
@@ -91,7 +101,9 @@ a tall stone nail on a rock base, 80,210 triangles, 1 mesh, 1
 material, no animations. No third-party source and no license
 statement is embedded in the file — the piece is the owner's own
 work, recorded as owner-supplied. The tip glows warm in-app, by his
-direction.
+direction. Verified on 2026-10-29 against the Deep Past re-slim spec
+(WebP 1024 texture; triangles at the spec's hard cap) — it already
+meets the spec, so this file ships unchanged.
 
 **The Deep Past — supernova remnant (Sketchfab long game)**
 `sf-supernova-remnant-slim.glb` — "Supernova remnant" by Aiekick,
