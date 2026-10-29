@@ -18,6 +18,15 @@ import { warmPlotNodeIds, litPathEdgeIds } from "../graph/gardenTend.js";
 import { GardenTendSheet } from "./GardenTendSheet.js";
 import { createStationScene } from "../graph/stationScene.js";
 import {
+  INTERIOR_ORBIT_RATE_RAD_PER_MS,
+  buildStationInteriorLayout,
+  interiorSpaceCamera,
+  type InteriorRoomId,
+} from "../graph/stationInteriorLayout.js";
+import { createStationInteriorScene } from "../graph/stationInteriorScene.js";
+import type { FleetStatus } from "../graph/Graph3D.js";
+import StationInteriorRoomPanel from "./StationInteriorRooms.js";
+import {
   STATION_ARRIVAL_MS,
   STATION_ORBIT_HEIGHT,
   STATION_ORBIT_RADIUS,
@@ -149,6 +158,19 @@ import {
  * parks the view — the orbit continues at the parked depth, and re-entering
  * resumes from there; the route is never lost. Reduced motion turns the
  * descent into stratified stage holds (rim → mid → basin).
+ *
+ * Station interior (Wave 2, settled design 2026-10-28): the interior
+ * is the Station's inside, not a new world — a mode of the Station
+ * stay. "Step inside the Station" swaps the exterior scene for the
+ * interior hall, free and reversible; "Step back outside" returns to
+ * the orbit. Inside, a room list jumps instantly between four rooms
+ * — hangar bay (arrival room and ship room: your ship floats in the
+ * center, the Batch O ship picker lives here), commission board,
+ * fleet deck, observation deck (quiet: no task, no counter, nothing
+ * to earn). No walking, no glide, no fuel spent inside. The prior
+ * build's "bay is not the hangar" boundary is superseded — the bay
+ * IS the hangar now. The interior resets per stay, always opening
+ * on the hangar bay.
  */
 
 interface WorldSceneHandle {
@@ -425,6 +447,9 @@ export default function WorldsSurface({
   enabled = WORLDS_TRAVEL_ENABLED,
   graph = null,
   onChanged,
+  getFleetStatus,
+  onFocus,
+  onHangarEquipChanged,
 }: {
   enabled?: boolean;
   graph?: GraphData | null;
@@ -435,6 +460,12 @@ export default function WorldsSurface({
    * graph with it.
    */
   onChanged?: (result: TendResult) => void;
+  /** Live fleet status from the galaxy scene, for the interior's fleet rooms (same getter RightDock uses). */
+  getFleetStatus?: () => FleetStatus | undefined;
+  /** Focus a memory in the galaxy, for the interior's fleet fly-to chips (same callback RightDock uses). */
+  onFocus?: (id: number) => void;
+  /** Fired when the interior's hangar pick changes, so the host refreshes its own hangar copies. */
+  onHangarEquipChanged?: () => void;
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -448,6 +479,17 @@ export default function WorldsSurface({
   const [archivedRetry, setArchivedRetry] = useState(0);
   const [guided, setGuided] = useState(false);
   const [showController, setShowController] = useState(false);
+  // Station interior (Wave 2, settled design): a mode of the Station
+  // stay, not a world. `inside` swaps the exterior scene for the hall;
+  // `interiorRoom` jumps instantly between the four rooms (no walking,
+  // no glide — the room ref is what the frame loop reads). The stay
+  // always opens on the hangar bay, the arrival room. `bayShipNonce`
+  // rebuilds the hall when the hangar pick changes, so the docked ship
+  // follows the newly picked skin.
+  const [inside, setInside] = useState(false);
+  const [interiorRoom, setInteriorRoom] = useState<InteriorRoomId>("hangar-bay");
+  const interiorRoomRef = useRef<InteriorRoomId>("hangar-bay");
+  const [bayShipNonce, setBayShipNonce] = useState(0);
   const guidedRef = useRef(false);
   const descentStartedAtRef = useRef(0);
   const descentFromRef = useRef(0);
@@ -521,6 +563,9 @@ export default function WorldsSurface({
     setGraphicsFailed(false);
     setGuided(false);
     setShowController(false);
+    setInside(false);
+    setInteriorRoom("hangar-bay");
+    interiorRoomRef.current = "hangar-bay";
     guidedRef.current = false;
     parkedProgressRef.current = 0;
     lastProgressRef.current = 0;
@@ -766,6 +811,30 @@ export default function WorldsSurface({
     return buildScaleLayout();
   }, [atScale]);
 
+  // Station interior: the hall is the same for every traveler, every
+  // visit — it surfaces no memories of its own, so it needs no graph.
+  // The docked ship's skin is the HangarPanel pick (the same
+  // `brain.hangar.ship.*` key the panel writes); the nonce re-reads
+  // it after an equip, so the bay follows the new pick.
+  const interiorLayout = useMemo(() => {
+    if (!atStation) return undefined;
+    return buildStationInteriorLayout();
+  }, [atStation]);
+  const interiorShipSkin = useMemo(() => {
+    if (!atStation) return "default";
+    const spaceId = getSpaceId();
+    if (!spaceId) return "default";
+    try {
+      return localStorage.getItem(`brain.hangar.ship.${spaceId}`) || "default";
+    } catch {
+      return "default";
+    }
+  }, [atStation, bayShipNonce]);
+  const goToInteriorRoom = (id: InteriorRoomId) => {
+    interiorRoomRef.current = id;
+    setInteriorRoom(id);
+  };
+
   const sceneLayout =
     currentWorld === "growing-place"
       ? layout
@@ -894,6 +963,13 @@ export default function WorldsSurface({
           gardenGlow,
         );
         built = gardenScene;
+      } else if (currentWorld === "great-station" && inside) {
+        // Station interior: the hall replaces the exterior scene while
+        // inside. The docked ship follows the hangar pick (skin).
+        built = createStationInteriorScene(
+          interiorLayout ?? buildStationInteriorLayout(),
+          { shipSkin: interiorShipSkin },
+        );
       } else {
         built = entry.build(sceneLayout);
       }
@@ -965,7 +1041,29 @@ export default function WorldsSurface({
         camera.lookAt(0, 0, -60);
         engine?.setLevel(1, transitKind === "warp" ? 1 : 0.35);
       } else if (orbit) {
-        if (currentWorld === "deep-past") {
+        if (currentWorld === "great-station" && inside) {
+          // Station interior: the camera holds a slow orbit in the
+          // current room — that orbit is how you look around your
+          // docked ship in the hangar bay. Room changes jump: the
+          // orbit simply holds the new room next frame, no glide, no
+          // walk. Reduced motion holds one still angle. The arrival
+          // glide never plays while inside (see the branch below).
+          const room =
+            interiorLayout?.spaces.find((s) => s.id === interiorRoomRef.current) ??
+            interiorLayout?.spaces[0];
+          if (room) {
+            const cam = interiorSpaceCamera(room);
+            const angle = reducedMotion
+              ? BASE_ANGLE
+              : BASE_ANGLE + elapsed * INTERIOR_ORBIT_RATE_RAD_PER_MS;
+            camera.position.set(
+              cam.center[0] + Math.sin(angle) * cam.radius,
+              cam.height,
+              cam.center[2] + Math.cos(angle) * cam.radius,
+            );
+            camera.lookAt(cam.center[0], cam.lookAtY, cam.center[2]);
+          }
+        } else if (currentWorld === "deep-past") {
           // Guided descent (A21, follow-only): the camera follows the thread
           // down; leaving parks the view at the last progress, and re-entering
           // resumes from there. Reduced motion = stratified stage holds.
@@ -991,7 +1089,7 @@ export default function WorldsSurface({
             );
             camera.lookAt(0, pose.lookAt[1], 0);
           }
-        } else if (currentWorld === "great-station" && !reducedMotion && !arrivalSkippedRef.current) {
+        } else if (currentWorld === "great-station" && !inside && !reducedMotion && !arrivalSkippedRef.current) {
           // Station arrival (A13): fly the approach over 12 s, then
           // settle into the resting orbit over 3 s — radius, height,
           // and azimuth all ease from the arrival pose, so there is no
@@ -1066,12 +1164,16 @@ export default function WorldsSurface({
       gardenSceneRef.current = null;
       gardenCameraRef.current = null;
     };
-  }, [visible, mode, entry, currentWorld, sceneLayout, gardenGlow, transitKind, transitTotalMs, journey?.origin, journey?.destination]);
+  }, [visible, mode, entry, currentWorld, sceneLayout, gardenGlow, transitKind, transitTotalMs, journey?.origin, journey?.destination, inside, interiorLayout, interiorShipSkin]);
 
   if (!visible || !mode) return null;
   const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
   const fallback = mode === "transit" ? transitFallback : (entry?.fallback ?? "");
   const thread = atDeepPast ? deepPastLayout?.thread ?? null : null;
+  const interiorRoomInfo =
+    atStation && inside
+      ? (interiorLayout?.spaces.find((s) => s.id === interiorRoom) ?? null)
+      : null;
 
   return (
     <section className="worlds-surface" role="dialog" aria-label={title}>
@@ -1082,6 +1184,25 @@ export default function WorldsSurface({
           <button type="button" onClick={() => setShowController((v) => !v)}>
             {showController ? "Hide the harbor controller" : "Harbor controller"}
           </button>
+        )}
+        {atStation && !inside && (
+          <button type="button" onClick={() => setInside(true)}>
+            Step inside the Station
+          </button>
+        )}
+        {atStation && inside && (
+          <>
+            <button type="button" onClick={() => setInside(false)}>
+              Step back outside
+            </button>
+            {interiorLayout?.spaces
+              .filter((s) => s.id !== interiorRoom)
+              .map((s) => (
+                <button key={s.id} type="button" onClick={() => goToInteriorRoom(s.id)}>
+                  Go to the {s.title.replace(/^The /, "")}
+                </button>
+              ))}
+          </>
         )}
         {atDeepPast && thread && (
           <button type="button" onClick={toggleGuided}>
@@ -1229,6 +1350,26 @@ export default function WorldsSurface({
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
       {mode === "world" && atStation && showController && (
         <HarborControllerPanel enabled onClose={() => setShowController(false)} />
+      )}
+      {mode === "world" && atStation && inside && interiorRoomInfo && (
+        <p className="worlds-surface-fallback">
+          {interiorRoomInfo.title} — {interiorRoomInfo.blurb}
+        </p>
+      )}
+      {mode === "world" && atStation && inside && interiorRoom !== "observation-deck" && (
+        <div className="worlds-surface-room">
+          <StationInteriorRoomPanel
+            room={interiorRoom}
+            graph={graph}
+            spaceId={getSpaceId() ?? ""}
+            getFleetStatus={getFleetStatus}
+            onFocus={onFocus}
+            onEquipChanged={() => {
+              setBayShipNonce((n) => n + 1);
+              onHangarEquipChanged?.();
+            }}
+          />
+        </div>
       )}
       <footer className="worlds-surface-credits">
         <button type="button" onClick={() => setShowCredits((v) => !v)}>

@@ -34,7 +34,7 @@ export const WORLD_CREDITS: readonly WorldCredit[] = [
   {
     asset: "Traffic, docked ships, and dressing — Kenney Space Kit and Station Kit",
     credit:
-      "Models by Kenney (kenney.nl), CC0 1.0. Converted to GLB; materials re-expressed in-app. The Station Kit is interior furniture — it supplies dressing only, never the hauler or drydock witnesses.",
+      "Models by Kenney (kenney.nl), CC0 1.0. Converted to GLB; materials re-expressed in-app. The Station Kit builds the Station interior's four rooms (hangar bay, commission board, fleet deck, observation deck) and supplies exterior dressing — never the hauler or drydock witnesses.",
   },
   {
     asset: "Traffic regular — WATO spaceship",
