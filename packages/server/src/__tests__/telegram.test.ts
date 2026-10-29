@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createDb, type DbHandle } from "../db/client.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
@@ -165,21 +165,33 @@ describe("telegram /log — verbatim whitespace (fix round 4, re-audit P1)", () 
 
 describe("telegram proactive digest sweep", () => {
   it("pushes one digest per linked chat and is idempotent within the day", async () => {
-    await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
-    await handleTelegramUpdate(ctx, update(1, "/log alice went for a long run today"), send);
-    outbox = [];
+    // V1 follow-up item 4c — pin the clock (Date only; real timers
+    // keep flowing). sendDailyDigests reads the real clock and
+    // skips before the space's 06:00 America/New_York digest time,
+    // so this test used to fail on any pre-06:00 run. 15:00Z is
+    // 11:00 in New York — after digest time, same local day for
+    // both calls, at any real hour.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
+    try {
+      await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
+      await handleTelegramUpdate(ctx, update(1, "/log alice went for a long run today"), send);
+      outbox = [];
 
-    const first = await sendDailyDigests(ctx, send);
-    expect(first).toBe(1);
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]!.chatId).toBe(1);
-    expect(outbox[0]!.text).toMatch(/alice/); // brain name in the header
+      const first = await sendDailyDigests(ctx, send);
+      expect(first).toBe(1);
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]!.chatId).toBe(1);
+      expect(outbox[0]!.text).toMatch(/alice/); // brain name in the header
 
-    // Running again the same day sends nothing.
-    outbox = [];
-    const second = await sendDailyDigests(ctx, send);
-    expect(second).toBe(0);
-    expect(outbox).toHaveLength(0);
+      // Running again the same day sends nothing.
+      outbox = [];
+      const second = await sendDailyDigests(ctx, send);
+      expect(second).toBe(0);
+      expect(outbox).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not push to chats that never linked", async () => {
