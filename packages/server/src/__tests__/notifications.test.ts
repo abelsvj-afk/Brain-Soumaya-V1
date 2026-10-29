@@ -168,7 +168,9 @@ describe("producers — real away-events land in the store", () => {
     // delivery, not the hour the suite happens to run at.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
-    onTestFinished(() => vi.useRealTimers());
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const ctx = {
       handle,
       embeddings: new HashEmbeddingProvider(EMBED_DIM),
