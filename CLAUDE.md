@@ -547,6 +547,19 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   roster list, which never ticks). **Not built (needs the owner):** words drawn from the visitor's memories (consent + cloud-model
   decision + his own key), memory between visits, shared presence, projection into the home galaxy — see the spec's Phase 2.
   Look at: whether a played gesture's tablet line + shake feel right when it comes unprompted, and the rarity.
+- **Eternity phase 2a–2c (2026-10-29, owner-decided): Soumaya knows the worlds + Eternity; his voice; he writes to you —
+  MEASURED (server tests + an end-to-end run on a copy of a real brain), needs on-device confirmation** (worlds/awareness.ts +
+  chat/companionContext.ts; npcs/eternityVoice.ts, npcs/eternityContact.ts, index.ts minute tick; llm `eternalVoice` on
+  Gemini/OpenAI/Resilient; npcs/repo.ts + db/client.ts `npc_state.contact_muted` (additive, PRAGMA-guarded);
+  EternityAutonomyPanel; spec §2a–2c): Soumaya's shared context (web chat AND Telegram) now carries where the ship is, any
+  journey, reachable worlds, and Eternity's last logged acts with causes — she speaks ABOUT him, never as him (golden prompt
+  fixture regenerated; the diff is only that section). Eternity WRITES TO YOU: a wake-up at 06:45 local (sent until 11:00), and
+  at most one more message on a day his loop acted — in the app inbox (source "eternity", ✦) and on Telegram through the policy
+  boundary (quiet hours/caps), signed "✦ Eternity —", each logged as `speak` with its cause. His words come from the configured
+  model with HIS OWN system prompt and a brief of up to 5 recent memories (owner allowed memory text to the model); offline he
+  uses his own lines and names a memory only if it carries feeling/importance (an errand like "Buy socks" never). Stopped or
+  "Eternity may write to me" unticked → silent. Look at: whether 06:45 is the right wake time, the tone of his first real
+  messages, and that Telegram shows them (the bot must be linked).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

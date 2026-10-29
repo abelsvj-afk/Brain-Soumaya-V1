@@ -168,6 +168,10 @@ export interface LlmProvider {
   /** Optional: richer LLM-authored lore prose. Absent on the heuristic provider
    *  (the lore engine's offline chronicler is the always-available fallback). */
   chronicle?(subject: string, context: string): Promise<string>;
+  /** Optional: Eternity's own voice (docs/specs/eternity-autonomy-2026-10-29.md §2b) — one or two sentences for an
+   *  occasion ("wake", "visitation"), from a brief that may hold a few of the user's memories. His OWN identity,
+   *  never Soumaya's. Absent on the heuristic provider → his template lines are the always-available fallback. */
+  eternalVoice?(occasion: string, brief: string): Promise<string>;
   /** Optional: pick the best next maintenance job from candidate options, given a
    *  brain summary. Returns the chosen index. Absent on heuristic → the deterministic
    *  ladder decides (the always-available fallback). */

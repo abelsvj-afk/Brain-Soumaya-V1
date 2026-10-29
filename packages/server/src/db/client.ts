@@ -1865,6 +1865,13 @@ export function migrateSchema(sqlite: RawDb): void {
       sqlite.exec(`ALTER TABLE sources ADD COLUMN capture_params TEXT`);
     }
   }
+
+  // Eternity phase 2c (docs/specs/eternity-autonomy-2026-10-29.md): the owner can turn his messages off.
+  // Additive + idempotent; the npc_state table is created above (or by the bootstrap) before this runs.
+  const npcStateCols = sqlite.prepare(`PRAGMA table_info(npc_state)`).all() as { name: string }[];
+  if (npcStateCols.length > 0 && !npcStateCols.some((c) => c.name === "contact_muted")) {
+    sqlite.exec(`ALTER TABLE npc_state ADD COLUMN contact_muted INTEGER NOT NULL DEFAULT 0`);
+  }
 }
 
 /**

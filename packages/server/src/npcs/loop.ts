@@ -106,6 +106,7 @@ export function getNpcState(h: DbHandle, spaceId: string, npcId: string, nowMs: 
     gateOpen: gate.open,
     relicsHeld: holdings.length,
     recentLog: repo.recentLog(def.id),
+    ...(def.id === "eternity" ? { contactMuted: repo.contactMuted(def.id) } : {}),
   };
 }
 

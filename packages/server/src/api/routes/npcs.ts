@@ -3,6 +3,7 @@ import type { AppContext } from "../../context.js";
 import { NPC_DEFINITIONS, NPC_QUESTION_KINDS, type NpcQuestionKind } from "@brain/shared";
 import { spaceOf } from "../middleware.js";
 import { askNpc, getNpcState, NpcError, resumeNpc, runNpcTick, stopNpc } from "../../npcs/loop.js";
+import { NpcRepo } from "../../npcs/repo.js";
 
 /**
  * NPC autonomy (Wave 2): thin routes over the loop in npcs/loop.ts.
@@ -78,6 +79,23 @@ export function npcsRoutes(ctx: AppContext): Router {
       const spaceId = spaceOf(res);
       const id = String(req.params.id ?? "");
       res.json({ npc: stopNpc(ctx.handle, spaceId, id) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  // Eternity phase 2c: the owner turns his messages (app inbox + Telegram) off or on. Body { muted: boolean }.
+  r.post("/:id/contact", (req, res) => {
+    try {
+      const spaceId = spaceOf(res);
+      const id = String(req.params.id ?? "");
+      const muted = req.body?.muted;
+      if (id !== "eternity" || typeof muted !== "boolean") {
+        res.status(400).json({ error: "Only Eternity writes to you; send { muted: true | false }.", code: "INVALID_CONTACT" });
+        return;
+      }
+      new NpcRepo(ctx.handle, spaceId).setContactMuted("eternity", muted);
+      res.json({ npc: getNpcState(ctx.handle, spaceId, id) });
     } catch (e) {
       fail(res, e);
     }

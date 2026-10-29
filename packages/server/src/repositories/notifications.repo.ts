@@ -77,6 +77,13 @@ export class NotificationsRepo {
     return toNotification(row);
   }
 
+  /** Whether an event with this dedupe key was already recorded (cleared items no longer count). */
+  hasDedupeKey(dedupeKey: string): boolean {
+    return !!this.h.sqlite
+      .prepare(`SELECT 1 FROM inbox_notifications WHERE space_id = ? AND dedupe_key = ? LIMIT 1`)
+      .get(this.spaceId, dedupeKey);
+  }
+
   /** Newest first. Snoozed items are included — the panel decides visibility. */
   list(limit = 200): ServerNotification[] {
     const rows = this.h.sqlite

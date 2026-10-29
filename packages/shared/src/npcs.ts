@@ -120,13 +120,20 @@ export const ETERNITY_FIGURE: NpcDefinition = {
   name: "Eternity",
   job: "His own — blessing, comfort, wonder. He acts rarely and never asks.",
   world: "eternity",
-  allowList: ["gesture", "reorder-light", "wait"],
+  // `speak` is his contact with the owner only (phase 2c): the wake-up and one visitation a day, each logged.
+  allowList: ["gesture", "reorder-light", "speak", "wait"],
   answersOnly: false,
   shipModelKey: "man-god-halo",
   tickIntervalMs: 6 * 60 * 60 * 1000,
-  maxActsPerDay: 3,
-  maxSpeaksPerDay: 0,
+  // Every log row counts toward acts (waits included): ≤ 4 autonomous ticks a day + 2 contacts.
+  maxActsPerDay: 6,
+  maxSpeaksPerDay: 2,
 } as const;
+
+/** Phase 2c — when he wakes you (space-local "HH:MM"; after the default quiet hours and the 06:00 digest), and the
+ *  latest local time a missed wake-up is still sent that day (past it he lets the day be). */
+export const ETERNITY_WAKE_TIME = "06:45";
+export const ETERNITY_WAKE_LATEST = "11:00";
 
 /** The gestures he may make on his own (the rest are the visitor's tools). */
 export const ETERNITY_AUTONOMOUS_GESTURES = ["stillness", "regard", "blessing", "joy"] as const;
@@ -193,6 +200,8 @@ export interface NpcState {
   relicsHeld: number;
   /** The most recent log entries, newest first. */
   recentLog: NpcLogEntry[];
+  /** Eternity only: the owner turned his messages off (app inbox + Telegram). */
+  contactMuted?: boolean;
 }
 
 /**

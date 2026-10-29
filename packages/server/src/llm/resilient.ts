@@ -263,6 +263,12 @@ export class ResilientLlmProvider implements LlmProvider {
     return await withTimeout(this.primary.chronicle(subject, context), this.timeoutMs, "chronicle");
   }
 
+  /** Only when the primary supports it; his own template lines are the fallback (npcs/eternityVoice.ts). */
+  async eternalVoice(occasion: string, brief: string): Promise<string> {
+    if (this.blocked || !this.primary.eternalVoice) throw new Error("eternalVoice unavailable");
+    return await withTimeout(this.primary.eternalVoice(occasion, brief), this.timeoutMs, "eternalVoice");
+  }
+
   /** Only when the primary supports it; the dream cycle's template is the fallback. */
   async consolidate(nodes: LinkCandidate[]): Promise<{ belief: string; confidence: number }> {
     if (this.blocked || !this.primary.consolidate) throw new Error("consolidate unavailable");

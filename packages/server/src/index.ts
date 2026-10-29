@@ -4,6 +4,7 @@ import { NodesRepo } from "./repositories/nodes.repo.js";
 import { setTelegramWebhook, sendDailyDigests, tgSend, createTelegramSpaceSender, type TelegramSpaceSendReport } from "./telegram/bot.js";
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
+import { runEternityContact } from "./npcs/eternityContact.js";
 import { sweepPendingPushes } from "./push/outbox.js";
 import { captureEpisode } from "./agent/episodic.js"; // W2: job_run capture (§5.1)
 import { selectJob, executeJob, researchEnabled } from "./maintenance/agent.js";
@@ -202,6 +203,14 @@ setInterval(() => {
       });
       const notify = tgToken ? policyNotify : undefined;
       for (const spaceId of spaceIds) {
+        // Eternity reaches out on his own (wake-up + one visitation a day; docs/specs/eternity-autonomy-2026-10-29.md
+        // §2c): the in-app inbox always, Telegram through the same policy boundary as every proactive send.
+        try {
+          const contact = await runEternityContact(ctx.handle, spaceId, { llm: ctx.llm, notify: tgToken ? policyNotify : undefined });
+          if (contact.sent) console.log(`[eternity] ${spaceId.slice(0, 8)}: ${contact.sent} (${contact.reason})`);
+        } catch (err) {
+          console.error("[eternity] contact error:", err);
+        }
         const results = await runToolRouter(ctx, spaceId, { notify });
         const acted = results.filter((r) => r.ok).length;
         if (acted > 0) {

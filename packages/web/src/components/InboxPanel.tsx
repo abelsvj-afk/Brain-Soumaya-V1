@@ -47,7 +47,7 @@ export interface MergedInboxItem {
   timestamp: number;
   seen: boolean;
   priority: "low" | "normal" | "high";
-  /** Server source ("digest" | "insight" | "discovery" | "bill-risk" | "system"); local items are "device". */
+  /** Server source ("digest" | "insight" | "discovery" | "bill-risk" | "system" | "eternity"); local items are "device". */
   source: string;
   action?: ToastAction;
   /** Epoch ms until which the item is snoozed, or null. */
@@ -104,6 +104,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   insight: "💡 Insights",
   discovery: "✦ Discoveries",
   "bill-risk": "💸 Bill risk",
+  eternity: "✦ Eternity",
   // Fix round 2: the permanent-failure item is a supported category now,
   // not a stopgap value read through a cast — a plain-language System badge.
   system: "⚙️ System",

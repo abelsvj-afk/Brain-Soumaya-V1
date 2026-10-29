@@ -71,8 +71,9 @@ describe("decideEternity", () => {
 });
 
 describe("the loop", () => {
-  it("his fence: no speak, own world only", () => {
-    expect(() => checkFence(ETERNITY_FIGURE, "speak", "eternity")).toThrow(NpcError);
+  it("his fence: allow-listed kinds only (speak is for contact, phase 2c), own world only", () => {
+    expect(() => checkFence(ETERNITY_FIGURE, "summon-ship", "eternity")).toThrow(NpcError);
+    expect(() => checkFence(ETERNITY_FIGURE, "explore", "eternity")).toThrow(NpcError);
     expect(() => checkFence(ETERNITY_FIGURE, "gesture", "great-station")).toThrow(NpcError);
     expect(() => checkFence(ETERNITY_FIGURE, "gesture", "eternity")).not.toThrow();
   });

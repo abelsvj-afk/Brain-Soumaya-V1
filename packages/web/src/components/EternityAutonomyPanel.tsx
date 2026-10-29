@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { NpcState } from "@brain/shared";
-import { getNpcs, NpcClientError, resumeNpc, stopNpc } from "../api/npcs.js";
+import { getNpcs, NpcClientError, resumeNpc, setNpcContactMuted, stopNpc } from "../api/npcs.js";
 
 /**
  * Settings → Eternity (autonomous): the owner's window onto his autonomy (docs/specs/eternity-autonomy-2026-10-29.md).
@@ -10,6 +10,7 @@ import { getNpcs, NpcClientError, resumeNpc, stopNpc } from "../api/npcs.js";
 const ACT_WORDS: Record<string, string> = {
   gesture: "Gesture",
   "reorder-light": "Reordered the heavens",
+  speak: "Wrote to you",
   wait: "Waited",
 };
 
@@ -25,6 +26,18 @@ export default function EternityAutonomyPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const setMuted = async (muted: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setNpc(await setNpcContactMuted("eternity", muted));
+    } catch (e) {
+      setError(e instanceof NpcClientError ? e.message : "That didn't go through — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const toggle = async (stop: boolean) => {
     setBusy(true);
@@ -46,13 +59,18 @@ export default function EternityAutonomyPanel() {
       {npc && npc !== "loading" && (
         <>
           <p className="settings-note" style={{ fontSize: "12px", opacity: 0.8 }}>
-            He acts rarely, on his own, only while you are in his world, and never reads or changes your memories. Every act
-            or wait is listed here with why. Status: <strong>{npc.stopped ? "stopped" : "running"}</strong> · {npc.actsToday} act
+            He acts rarely and on his own, and he may write to you — a wake-up each morning at 6:45 and at most one more word on a
+            day he acted — here in your inbox and on Telegram. His words may be drawn from your recent memories (he reads them;
+            he never changes them). Every act and message is listed here with why. Status: <strong>{npc.stopped ? "stopped" : "running"}</strong> · {npc.actsToday} act
             {npc.actsToday === 1 ? "" : "s"} today.
           </p>
           <button onClick={() => void toggle(!npc.stopped)} disabled={busy}>
             {npc.stopped ? "▶ Let him act again" : "⏹ Stop him"}
           </button>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, minHeight: 44 }}>
+            <input type="checkbox" checked={!npc.contactMuted} onChange={(e) => void setMuted(!e.target.checked)} disabled={busy} />
+            Eternity may write to me (inbox + Telegram)
+          </label>
           {error && <p className="msg">{error}</p>}
           {npc.recentLog.length === 0 ? (
             <p className="settings-note">Nothing yet — he acts only while you are in Eternity.</p>
@@ -63,6 +81,7 @@ export default function EternityAutonomyPanel() {
                   <strong>
                     {ACT_WORDS[e.kind] ?? e.kind}
                     {e.kind === "gesture" ? ` — ${e.act}` : ""}
+                    {e.kind === "speak" ? `: “${e.act}”` : ""}
                   </strong>{" "}
                   <span style={{ opacity: 0.7 }}>· {new Date(e.createdAt).toLocaleString()}</span>
                   <div style={{ opacity: 0.8 }}>{e.cause}</div>

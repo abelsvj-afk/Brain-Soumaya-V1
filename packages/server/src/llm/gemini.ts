@@ -12,6 +12,7 @@ import {
   SECTOR_SYSTEM,
   composeLogSystem,
   CHRONICLE_SYSTEM,
+  ETERNITY_SYSTEM,
   PLAN_SYSTEM,
   DISTILL_SYSTEM,
   CONSOLIDATE_SYSTEM,
@@ -25,6 +26,7 @@ import {
   buildSectorPrompt,
   buildLogPrompt,
   buildChroniclePrompt,
+  buildEternityPrompt,
   buildPlanPrompt,
   buildDistillPrompt,
   buildConsolidatePrompt,
@@ -585,6 +587,15 @@ export class GeminiProvider implements LlmProvider {
       chronicleSchema,
     );
     return raw.lore;
+  }
+
+  async eternalVoice(occasion: string, brief: string): Promise<string> {
+    const raw = await this.json<{ line: string }>(ETERNITY_SYSTEM, buildEternityPrompt(occasion, brief), {
+      type: Type.OBJECT,
+      properties: { line: { type: Type.STRING } },
+      required: ["line"],
+    });
+    return raw.line;
   }
 
   async planJob(summary: string, options: { type: string; objective: string }[]): Promise<number> {

@@ -112,3 +112,15 @@ export async function resumeNpc(id: string): Promise<NpcState> {
   if (!res.ok || !data?.npc) throw errFrom(res.status, data);
   return data.npc;
 }
+
+/** Eternity phase 2c: turn his messages (app inbox + Telegram) off or on. */
+export async function setNpcContactMuted(id: string, muted: boolean): Promise<NpcState> {
+  const res = await afetch(`${API}/npcs/${encodeURIComponent(id)}/contact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ muted }),
+  });
+  const data = (await res.json().catch(() => null)) as NpcResponse | null;
+  if (!res.ok || !data?.npc) throw errFrom(res.status, data);
+  return data.npc;
+}

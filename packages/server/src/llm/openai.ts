@@ -11,6 +11,8 @@ import {
   SECTOR_SYSTEM,
   composeLogSystem,
   CHRONICLE_SYSTEM,
+  ETERNITY_SYSTEM,
+  buildEternityPrompt,
   PLAN_SYSTEM,
   DISTILL_SYSTEM,
   CONSOLIDATE_SYSTEM,
@@ -709,6 +711,21 @@ export class OpenAiProvider implements LlmProvider {
       "chronicle",
     );
     return raw.lore;
+  }
+
+  async eternalVoice(occasion: string, brief: string): Promise<string> {
+    const raw = await this.json<{ line: string }>(
+      ETERNITY_SYSTEM,
+      buildEternityPrompt(occasion, brief),
+      {
+        type: "object",
+        properties: { line: { type: "string" } },
+        required: ["line"],
+        additionalProperties: false,
+      },
+      "eternalVoice",
+    );
+    return raw.line;
   }
 
   async consolidate(nodes: LinkCandidate[]): Promise<{ belief: string; confidence: number }> {

@@ -195,6 +195,21 @@ export class NpcRepo {
     this.upsertState(npcId, { stopped });
   }
 
+  /** Eternity phase 2c: whether the owner turned his messages off (app inbox + Telegram). */
+  contactMuted(npcId: NpcId): boolean {
+    const row = this.h.sqlite
+      .prepare(`SELECT contact_muted FROM npc_state WHERE space_id = ? AND npc_id = ?`)
+      .get(this.spaceId, npcId) as { contact_muted: number } | undefined;
+    return row?.contact_muted === 1;
+  }
+
+  setContactMuted(npcId: NpcId, muted: boolean): void {
+    this.upsertState(npcId, {}); // make sure the row exists
+    this.h.sqlite
+      .prepare(`UPDATE npc_state SET contact_muted = ? WHERE space_id = ? AND npc_id = ?`)
+      .run(muted ? 1 : 0, this.spaceId, npcId);
+  }
+
   markTick(npcId: NpcId, nowMs: number = Date.now()): void {
     this.upsertState(npcId, { lastTickAt: new Date(nowMs).toISOString() });
   }
