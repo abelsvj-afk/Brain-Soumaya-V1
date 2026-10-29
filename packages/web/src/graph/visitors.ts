@@ -26,6 +26,8 @@ const vecOf = (n: any): THREE.Vector3 => new THREE.Vector3(n.x ?? 0, n.y ?? 0, n
 function makeCraft(index: number): {
   group: THREE.Group;
   setColor: (hull: string, glow: string) => void;
+  /** Start loading the real craft model — called the first time this craft is shown (speed audit S3). */
+  ensureModel: () => void;
 } {
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({
@@ -56,7 +58,12 @@ function makeCraft(index: number): {
 
   let loadedModel: THREE.Object3D | null = null;
 
-  if (index === 0) {
+  // The 921 KB model used to download at startup for a craft nobody had seen yet; it now loads the first time the craft
+  // is shown (the procedural saucer covers the few frames until it lands, as before).
+  let modelRequested = false;
+  const ensureModel = () => {
+    if (index !== 0 || modelRequested) return;
+    modelRequested = true;
     // Replace Visitor 0 completely with the organic spaceship GLB, or procedural fallback
     gltfLoader().load(
       "/organic-spaceship.glb",
@@ -86,9 +93,10 @@ function makeCraft(index: number): {
         noteModelFallback("The visitor craft model");
       }
     );
-  }
+  };
 
   return {
+    ensureModel,
     group,
     setColor: (hull, glow) => {
       bodyMat.color.set(hull);
@@ -227,6 +235,7 @@ export function makeVisitors(maxConcurrent = 3, onVisit?: OnVisit): VisitorSyste
     const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     slot.craft.group.position.copy(vecOf(target).addScaledVector(dir, 1600));
     slot.exit.copy(dir).multiplyScalar(2600);
+    slot.craft.ensureModel();
     slot.craft.group.visible = true;
   };
 

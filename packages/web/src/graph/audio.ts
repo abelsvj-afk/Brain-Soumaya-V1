@@ -127,7 +127,9 @@ export function makeAmbientAudio(): AmbientAudio {
     if (el) return el;
     el = new Audio(track().src);
     el.loop = true; // infinite loop
-    el.preload = "auto";
+    // "none": the 5 MB music loop downloads when someone actually plays it, not on every app start (speed audit S3).
+    // The adaptive-bed routing creates this element at load time, long before any play.
+    el.preload = "none";
     el.volume = 0;
     return el;
   };

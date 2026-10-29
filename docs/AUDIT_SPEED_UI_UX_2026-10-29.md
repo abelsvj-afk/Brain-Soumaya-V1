@@ -118,3 +118,19 @@ What to add instead (all free, none needs a rewrite):
 - Muse: find the gate GLB (`specs/muse-gate-asset-2026-10-29.md`) — still the highest-visibility fix.
 - Owner decision: approve the order in §5 (default: go top to bottom).
 - Optional: tell Muse to set up **Blender + blender-mcp** on a desktop if we want to create characters/worlds assets directly.
+
+## 8. Status — updated 2026-10-30 (all measured in a real browser at 412×915)
+| Item | Result |
+|---|---|
+| S1 home galaxy paused under a world | ✅ 0 draw calls behind a world; the world's own frame budget ~4× |
+| S2 entry bundle | ✅ 2,251 KB → 701 KB (gzip 720 → ~215 KB): rarely used panels, the worlds layer, the prefetcher and the People star catalog load on demand |
+| S3 cold download (home) | ✅ 28.7 → 21.9 MB: the 5 MB music loop loads on first play (`preload="none"`), the 921 KB alternate ship on first visitor. Still open: `space_station_3.glb` 3.9 MB (already deferred ≥ 6 s), `soumaya-ship.glb` 2.3 MB (needed at once), `pp-comet.glb` 1.8 MB, `sun.glb` 1.5 MB |
+| S4 level of detail | ⏸ Not built, deliberately: measured scenes are 15–37 draw calls and 31–106 k triangles (budget ≤ 100 / ≤ 150 k), so an LOD tier would add code for no measured gain. Revisit if a world's triangles pass ~150 k (the per-world numbers are in §2 and `perf-audit` re-measures them) |
+| S5/S6 one renderer + cached sky | ✅ WebGL contexts after 3 world visits 4 → 2 |
+| U1 Observatory header | ✅ |
+| U2 tap targets | ✅ 16 → 0 controls under 44 px on the galaxy screen |
+| U3 stacked Focus buttons | ✅ closed fan is `visibility:hidden` (out of the tab order and the accessibility tree) |
+| U4 home layout slots, U5 tokens, U6 SVG icons, X3 four primary buttons | ⏳ open — design work that needs the owner's eye on the home screen |
+| X1/X2 first run | ✅ one surface at a time, toasts calm, no URGENT for routine news |
+| X4 purpose line per world | ✅ once per world on first arrival |
+| Adaptive quality in the worlds layer | ⏳ open |

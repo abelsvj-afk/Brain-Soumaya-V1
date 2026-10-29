@@ -609,6 +609,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   and announced, stacked on one spot — closed they are now `visibility:hidden` (fade-out kept via a visibility transition). (X4) the
   first arrival in each world shows one plain line saying what it is for and one thing to do, once per world (before the look-around
   hint). Look at: the 44 px chips on the Noticing card and the audio chip (they are taller now), and the purpose lines' wording.
+- **Speed S3 — home cold download 28.7 → 21.9 MB (2026-10-30) — MEASURED (real browser, service worker blocked, every response
+  > 150 KB)** (graph/audio.ts, graph/visitors.ts): the ambient music element is created at load time by the adaptive-bed routing with
+  `preload="auto"`, so the 5.25 MB `ambient-loop.mp3` downloaded on every start before anyone enabled music — now `preload="none"`
+  (it loads on first play); the alternate ship `organic-spaceship.glb` (921 KB) loaded for a visitor craft nobody had seen — now loads
+  the first time that craft is shown. Look at: that the first tap on the music button starts playing without an audible delay on a
+  slow network (the file now starts downloading at that tap). S4 (level of detail) was deliberately NOT built: measured scenes are
+  already inside budget — see `docs/AUDIT_SPEED_UI_UX_2026-10-29.md` §8.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
