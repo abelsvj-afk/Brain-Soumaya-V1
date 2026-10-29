@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { buildHygStarfield } from "./hygStars.js";
 import { buildGate } from "./gateScene.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
 import { glowTexture, heatColor, heatGlow } from "./shipHeat.js";
@@ -240,7 +239,7 @@ export function createTransitScene(opts: {
   const backdrop = new THREE.Group();
   backdrop.name = "transit-backdrop";
   group.add(backdrop);
-  backdrop.add(buildHygStarfield());
+  // The stars are the host's shared home sky (homeSky.ts), turned with this yaw by the host.
 
   const ambient = new THREE.AmbientLight(0x8899bb, 0.7);
   group.add(ambient);
@@ -250,10 +249,9 @@ export function createTransitScene(opts: {
 
   const ship = new THREE.Group();
   ship.name = "transit-ship";
-  const proceduralShip = buildProceduralShip();
-  // The stand-in is modelled larger than her real hull (12 units long); match it so the swap doesn't jump.
-  proceduralShip.scale.setScalar(0.6);
-  ship.add(proceduralShip);
+  // Nobody sees a placeholder: the ship stays hidden until her real hull is ready. The procedural hull is
+  // only the load-FAILURE fallback (and is modelled larger than her 12-unit hull, hence the scale).
+  ship.visible = false;
   group.add(ship);
   // The engines' heat, independent of which hull is loaded: an additive glow
   // behind the tail whose colour and size ramp white → amber → deep red.
@@ -264,17 +262,19 @@ export function createTransitScene(opts: {
   engineGlow.position.set(0, 0, 7.5);
   engineGlow.scale.setScalar(8);
   ship.add(engineGlow);
-  // Her ship swaps in when the GLB lands; the procedural hull stays
-  // until then (and forever, if the load fails) — the proxy pattern.
   let disposed = false;
   void loadSoumayaShip().then((hero) => {
-    if (!hero || disposed) {
+    if (disposed) {
       if (hero) disposeObject3D(hero);
       return;
     }
-    ship.remove(proceduralShip);
-    disposeObject3D(proceduralShip);
-    ship.add(hero);
+    if (hero) ship.add(hero);
+    else {
+      const fallback = buildProceduralShip();
+      fallback.scale.setScalar(0.6);
+      ship.add(fallback);
+    }
+    ship.visible = true;
   });
 
   const departureGate = buildGate(origin);
@@ -330,7 +330,9 @@ export function createTransitScene(opts: {
       // position is a pure function of the distance flown).
       const span = TRANSIT_LENGTH + 300;
       const z = (((s.z + distance * 0.55 * s.speed + 100) % span) + span) % span - 100;
-      dummy.position.set(s.x, s.y, -z);
+      // Ahead of the ship is −z. Streaks start far ahead and stream past her toward the camera (+z),
+      // as they do when you fly forward — z grows with distance flown, so it is used as is.
+      dummy.position.set(s.x, s.y, z - span + 100);
       dummy.scale.set(1, 1, stretch);
       dummy.updateMatrix();
       streaks.setMatrixAt(i, dummy.matrix);

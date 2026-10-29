@@ -91,12 +91,8 @@ describe("deep past scene (P3-2)", () => {
     expect(names.has("marine-snow")).toBe(true);
     expect(names.has("anchors")).toBe(true); // node 2 → node 5 (too young, a non-member)
     expect(names.has("thread-7")).toBe(true);
-    // The HYG sky is present but fainter than the garden's: the helix encloses.
-    const stars = scene.group.children.find(
-      (o): o is THREE.Points => o instanceof THREE.Points && o.name.startsWith("hyg-starfield"),
-    );
-    expect(stars).toBeTruthy();
-    expect((stars!.material as THREE.PointsMaterial).opacity).toBe(0.25);
+    // No per-world starfield: the sky is the host's shared home sky.
+    expect(scene.group.children.some((o) => o.name.startsWith("hyg-starfield"))).toBe(false);
     // Alcove counts reconcile with the layout by form.
     const stones = scene.group.getObjectByName("alcoves-stone") as THREE.InstancedMesh;
     expect(stones.count).toBe(2); // nodes 1, 2 are memory stones

@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { buildHygStarfield } from "./hygStars.js";
 import { gltfLoader, noteModelFallback } from "./gltf.js";
 import { buildSurveyFrame } from "./gateScene.js";
 import { mergeByMaterial, mergeToSingleMaterial, recenterGeometry, scaleGeometryToSize } from "./stationAssets.js";
@@ -618,8 +617,6 @@ export function createScaleScene(
 
   // The true sky: the same real HYG data as the Station's, at full
   // strength — the sky is this world's subject.
-  const stars = buildHygStarfield();
-  group.add(stars);
   // The survey frame: Scale's gate silhouette — a clean rectangular
   // measurement frame of thin light, held against the dark on the
   // approach axis.

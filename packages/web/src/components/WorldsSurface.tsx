@@ -106,6 +106,8 @@ import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, type Flig
 import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
+import { installHomeSky } from "../graph/homeSky.js";
+import { loadSoumayaShip } from "../graph/soumayaShip.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
 import { createEternityScene } from "../graph/eternityScene.js";
 import {
@@ -1341,6 +1343,15 @@ export default function WorldsSurface({
         : built;
     if (!world) return;
     scene.add(world.group);
+    // Her hull is shown only once it is ready (never a placeholder), so warm it before anything needs it.
+    void loadSoumayaShip();
+    // One universe: every world and the warp draw the same home sky. The garden keeps its own backdrop and
+    // Eternity is a white void by design.
+    const sky =
+      mode === "transit" || (currentWorld !== "growing-place" && currentWorld !== "eternity")
+        ? installHomeSky(renderer, scene)
+        : null;
+    if (sky) scene.add(sky.group);
     // Shared lighting for this world (the corridor only takes the environment map — it lights itself otherwise).
     const lighting =
       mode === "transit"
@@ -1737,6 +1748,8 @@ export default function WorldsSurface({
           }
         }
       }
+      // The warp swings the whole sky round the holding ship (the same yaw its gates turn with).
+      sky?.update(camera.position, elapsed / 1000, mode === "transit" ? -((world as TransitScene).view?.yaw ?? 0) : 0);
       try {
         renderer.render(scene, camera);
       } catch (err) {
@@ -1762,6 +1775,7 @@ export default function WorldsSurface({
       gardenSceneRef.current = null;
       engine?.dispose();
       lighting?.dispose();
+      sky?.dispose();
       avatar?.dispose();
       world.dispose();
       sceneHandleRef.current = null;

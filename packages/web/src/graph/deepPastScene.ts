@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { fadeSwapIn } from "./gltf.js";
-import { buildHygStarfield } from "./hygStars.js";
 import {
   DEEP_PAST_BASIN_GLB_Y,
   DEEP_PAST_BASIN_SPAN,
@@ -610,14 +609,7 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   snow.name = "marine-snow";
   group.add(snow);
 
-  // The faintest HYG points far above the rim — the present day, far above.
-  // Same real data as the Station's and the garden's, dimmed further: the
-  // helix encloses, there is no sky here.
-  const stars = buildHygStarfield();
-  const starMat = stars.material as THREE.PointsMaterial;
-  starMat.transparent = true;
-  starMat.opacity = 0.25;
-  group.add(stars);
+  // The sky above the rim is the host's shared home sky (homeSky.ts).
 
   // Violet dusk light: the memories' own lanterns do the warming; the ambient
   // is low and calm, the basin's ember is the one true warmth below.

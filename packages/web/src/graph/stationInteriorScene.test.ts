@@ -61,8 +61,8 @@ describe("createStationInteriorScene", () => {
     expect(n.has("interior-bay-door-lintel")).toBe(true);
     expect(n.has("interior-deck-viewport-lintel")).toBe(true);
     expect(n.has("interior-rim-arc")).toBe(true);
-    // The true sky, seen through the door and the viewport.
-    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(true);
+    // The sky is the host's shared home sky, not a per-scene starfield.
+    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(false);
     scene.dispose();
   });
 
@@ -84,7 +84,7 @@ describe("createStationInteriorScene", () => {
     expect(n.has("interior-light-strips")).toBe(true);
     expect(n.has("interior-nav-markers")).toBe(true);
     expect(n.has("interior-rim-arc")).toBe(true);
-    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(true);
+    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(false);
     scene.dispose();
   });
 

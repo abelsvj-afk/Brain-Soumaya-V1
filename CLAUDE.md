@@ -514,6 +514,18 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   measuring: the Station's real bounding sphere is 879 across (73× the ship), not the 35× its constant suggests.
   Look at: whether the stand-off feels close enough to read scale, tile row scrolling with 8 places (Scale), the ship
   looking small at true scale against a place that big.
+- **Warp consistency: no placeholder ship, streaks past the ship, one shared sky (2026-10-29, owner-reported) — MEASURED
+  in a real browser (simulated journey clock, 412×915), needs on-device confirmation** (transitScene.ts, shipAvatar.ts,
+  homeSky.ts, WorldsSurface.tsx, Graph3D.tsx; spec `docs/specs/warp-consistency-2026-10-29.md`): (1) the transit ship and
+  the in-world avatar are hidden until her real hull is ready — the procedural hull is only the load-FAILURE fallback (the first
+  captured frame has no ship, then the real hull); the hull is preloaded when the worlds layer mounts; (2) warp streaks moved
+  toward −z (away from the camera); they now stream toward +z past the ship (frames show them radiating past the camera; a
+  test pins the direction); (3) every world except the garden (own backdrop) and Eternity (white void) and the warp now use the
+  home galaxy's own stars + Milky Way + baked nebula cubemap, built through a fixed seed (`withSkySeed`) that Graph3D uses
+  too, replacing the per-world HYG starfields; the warp turns the sky with the ship's yaw. **Not fixed — the gate:** there is
+  NO gate GLB in the repo (checked every branch); the gate is still the generated torus. Requested from Muse in
+  `docs/specs/muse-gate-asset-2026-10-29.md`. Design pass: `docs/DESIGN_PASS_WORLDS_2026-10-29.md`. Look at: whether the home
+  sky is visible enough in the worlds on a real screen (the nebula bake reads dark in headless), the warp sky swinging round.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

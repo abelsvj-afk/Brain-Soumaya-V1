@@ -47,6 +47,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import type { GraphData, GraphNode } from "@brain/shared";
 import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds } from "./nodeObject.js";
 import { makeStarfield, makeGalaxies, makeMilkyWay } from "./starfield.js";
+import { withSkySeed } from "./homeSky.js";
 import { makeConstellations } from "./skybox.js";
 import { makeDeepSpace, makeBackdropBakeSources, DEEP_SPACE_BASE } from "./deepSpace.js";
 import { bakeBackdrop, disposeBakedBackdrop, type BakedBackdrop } from "./backdropBake.js";
@@ -1380,11 +1381,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     starLightPoolRef.current = starLightPool;
 
     defer(() => {
-        const starfield = makeStarfield(gfx.starCount);
+        const starfield = withSkySeed(() => makeStarfield(gfx.starCount), 1); // seeded: the worlds draw this same sky
         sceneryRef.current.starfield = starfield;
         scene.add(starfield);
         
-        const milkyway = makeMilkyWay(8600, gfx.tier === "quality" ? "high" : gfx.tier === "balanced" ? "medium" : "low");
+        const milkyway = withSkySeed(() => makeMilkyWay(8600, gfx.tier === "quality" ? "high" : gfx.tier === "balanced" ? "medium" : "low"), 2);
         sceneryRef.current.milkyway = milkyway;
         scene.add(milkyway);
 
@@ -1425,7 +1426,7 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
           // the coarse tier by design (Stage 3: bake at high content density regardless
           // of device, only resolution scales).
           const faceSize = gfx.detailTier === "quality" ? 1024 : gfx.detailTier === "balanced" ? 768 : 512;
-          const sources = makeBackdropBakeSources(level);
+          const sources = withSkySeed(() => makeBackdropBakeSources(level), 3);
           bakedBackdropRef.current = bakeBackdrop(renderer, scene, sources, faceSize);
           // The bake does 6 sub-renders through the SAME instrumented renderer.render()
           // (Stage 0) — clear the rolling window so those atypical one-off samples don't

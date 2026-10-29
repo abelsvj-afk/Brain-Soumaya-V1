@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { buildHygStarfield } from "./hygStars.js";
 import {
   QUIET_ARCHIVE_ARTIFACT,
   QUIET_ARCHIVE_BACKDROP_PLANETS,
@@ -398,11 +397,6 @@ export function createQuietArchiveScene(layout: QuietArchiveLayout): QuietArchiv
   // The faintest HYG points far above the field — the same real data as
   // the Station's and the garden's, dimmed further: the field is low and
   // near, the sky is not its subject, and the night here is quiet.
-  const stars = buildHygStarfield();
-  const starMat = stars.material as THREE.PointsMaterial;
-  starMat.transparent = true;
-  starMat.opacity = 0.15;
-  group.add(stars);
 
   // Dim cool light, low and even: the lamps do the warming; the ambient
   // is low and calm, one cool point light holds the field's center.

@@ -23,9 +23,9 @@ export function createShipAvatar(): ShipAvatar {
   group.name = "ship-avatar";
   group.rotation.order = "YXZ";
   const body = new THREE.Group();
-  const stand = buildProceduralShip();
-  stand.scale.setScalar(0.6); // modelled larger than her real hull
-  body.add(stand);
+  // Hidden until her real hull is ready — nobody sees a placeholder. The procedural hull is the
+  // load-FAILURE fallback only.
+  body.visible = false;
   group.add(body);
   const glow = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: glowTexture(), color: 0x9fe8ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
@@ -36,13 +36,17 @@ export function createShipAvatar(): ShipAvatar {
 
   let disposed = false;
   void loadSoumayaShip().then((hero) => {
-    if (!hero || disposed) {
+    if (disposed) {
       if (hero) disposeObject3D(hero);
       return;
     }
-    body.remove(stand);
-    disposeObject3D(stand);
-    body.add(hero);
+    if (hero) body.add(hero);
+    else {
+      const stand = buildProceduralShip();
+      stand.scale.setScalar(0.6); // modelled larger than her real hull
+      body.add(stand);
+    }
+    body.visible = true;
   });
 
   const tmp = new THREE.Color();

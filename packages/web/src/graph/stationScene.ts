@@ -25,7 +25,6 @@ import {
   type TrafficLane,
 } from "./stationLayout.js";
 import { loadProfondoHull } from "./profondoHull.js";
-import { buildHygStarfield } from "./hygStars.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
 import {
   DOCKED_MODELS,
@@ -327,7 +326,7 @@ export function createStationScene(opts: { hull?: THREE.Object3D } = {}): Statio
   }
   station.add(workLights);
 
-  group.add(buildHygStarfield());
+  // The sky is the host's shared home sky (homeSky.ts) — one universe, not a backdrop per world.
 
   // --- Distant backdrop planets (EVE-style, 2026-10-27): the lava
   // planet and a Quaternius planet, 4,000 units out at ~7° elevation,

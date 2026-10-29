@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { buildHygStarfield } from "./hygStars.js";
 import { STATION_PALETTE } from "./stationLayout.js";
 import {
   INTERIOR_BAY_LANE,
@@ -166,9 +165,7 @@ export function createStationInteriorScene(
   group.name = "station-interior";
   let disposed = false;
 
-  // The true sky: the same real HYG data as the exterior's — seen
-  // through the bay door and the deck viewport, never painted on.
-  group.add(buildHygStarfield());
+  // The sky seen through the bay door and the deck viewport is the host's shared home sky (homeSky.ts).
 
   // Warm inhabited light + a low ambient so the dark side of the hall
   // still reads. The key light is amber, like the exterior's hub light.

@@ -51,7 +51,7 @@ describe("createTransitScene", () => {
     scene.dispose();
   });
 
-  it("the transit-ship holder carries the procedural fallback until her ship lands", () => {
+  it("no placeholder: the ship is hidden and holds no procedural hull until her real hull is ready or fails", () => {
     const scene = createTransitScene({
       kind: "warp",
       totalMs: 12_000,
@@ -60,7 +60,35 @@ describe("createTransitScene", () => {
     });
     const holder = find(scene.group, "transit-ship") as THREE.Group;
     expect(holder).toBeTruthy();
-    expect(find(holder, "transit-ship-procedural")).toBeTruthy();
+    expect(holder.visible).toBe(false);
+    expect(find(holder, "transit-ship-procedural")).toBeUndefined();
+    scene.dispose();
+  });
+
+  it("warp streaks stream toward the camera (+z), past the ship — never away from it", () => {
+    const scene = createTransitScene({
+      kind: "warp",
+      totalMs: 12_000,
+      origin: "home",
+      destination: "great-station",
+    });
+    const streaks = find(scene.group, "transit-streaks") as THREE.InstancedMesh;
+    const zOf = (i: number) => {
+      const m = new THREE.Matrix4();
+      streaks.getMatrixAt(i, m);
+      return new THREE.Vector3().setFromMatrixPosition(m).z;
+    };
+    scene.update(4_000);
+    const before = Array.from({ length: 20 }, (_, i) => zOf(i));
+    scene.update(4_200);
+    const after = Array.from({ length: 20 }, (_, i) => zOf(i));
+    // Compare each streak with the span wrap allowed for: it either moved toward +z or recycled to the far end.
+    let moved = 0;
+    for (let i = 0; i < 20; i++) {
+      if (after[i]! > before[i]!) moved++;
+      else expect(before[i]! - after[i]!).toBeGreaterThan(500); // wrapped back to the far end
+    }
+    expect(moved).toBeGreaterThan(14);
     scene.dispose();
   });
 

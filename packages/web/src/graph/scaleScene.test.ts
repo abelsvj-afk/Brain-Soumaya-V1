@@ -99,8 +99,8 @@ describe("createScaleScene", () => {
     for (const key of ["black-hole", "pillars-1b", "g292", "gas-cloud", "planetary-nebula", "sf-black-hole"]) {
       expect(n.has(`centerpiece-${key}`)).toBe(true);
     }
-    // The true sky: the HYG starfield, at full strength.
-    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(true);
+    // The sky is the host's shared home sky, not a per-world starfield.
+    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(false);
     scene.dispose();
   });
 
@@ -121,7 +121,6 @@ describe("createScaleScene", () => {
     expect(n.has("iss-fallback")).toBe(true);
     expect(n.has("gate-scale-survey-frame")).toBe(true);
     expect(n.has("docked-capsule")).toBe(true);
-    expect([...n].some((name) => name.startsWith("hyg-starfield-"))).toBe(true);
     scene.dispose();
   });
 
