@@ -1,3 +1,4 @@
+import { worldsSnapshotText } from "../worlds/awareness.js";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { knnProfiles } from "../db/vec.js";
@@ -244,6 +245,15 @@ Use this telemetry to guide the user! For example:
     if (cognitive) systemExtra += `\n\n${cognitive}`;
   } catch {
     /* cognitive context is best-effort; never break chat */
+  }
+
+  // The worlds + Eternity (docs/specs/eternity-autonomy-2026-10-29.md §2a): where the ship is, any journey, which
+  // worlds are reachable, and Eternity's own logged acts — so she can talk about them truthfully on web and Telegram.
+  try {
+    const worlds = worldsSnapshotText(h, spaceId);
+    if (worlds) systemExtra += `\n\n${worlds}`;
+  } catch {
+    /* worlds context is best-effort; never break chat */
   }
 
   // Temporal/Contextual Reasoning (docs/specs/temporal-contextual-reasoning.md): a bounded,
