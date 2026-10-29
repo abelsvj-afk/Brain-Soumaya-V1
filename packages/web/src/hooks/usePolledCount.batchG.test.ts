@@ -26,9 +26,12 @@ describe("usePolledCount — unknown, not zero, on failure (REG-196)", () => {
 
   it("a failed refresh after a success returns to unknown", async () => {
     const f = vi.fn().mockResolvedValueOnce(4).mockRejectedValue(new Error("server down"));
-    const { result } = renderHook(() => usePolledCount(f, true, 50));
-    await waitFor(() => expect(result.current).toBe(4));
-    await waitFor(() => expect(result.current).toBeNull(), { timeout: 3000 });
+    // Poll slowly enough that the intermediate "4" state is observable. At 50 ms the hook flipped
+    // 4 -> null within one waitFor poll (also ~50 ms), so under a loaded machine the test could
+    // miss the 4 entirely and time out — it failed in full-suite runs and passed 10/10 alone.
+    const { result } = renderHook(() => usePolledCount(f, true, 400));
+    await waitFor(() => expect(result.current).toBe(4), { timeout: 3000 });
+    await waitFor(() => expect(result.current).toBeNull(), { timeout: 5000 });
   });
 
   it("recovers to the fresh count when the server answers again", async () => {

@@ -11,6 +11,7 @@ import {
   type TravelState,
 } from "../api/travel.js";
 import { prefetchWorld } from "../graph/worldPrefetch.js";
+import { TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelAction, type TravelChangedDetail } from "../lib/travelEvents.js";
 
 /**
  * Travel state binding (Phase 2, P2-3). Owns the client side of the
@@ -34,13 +35,6 @@ const KEY_STORAGE = "worlds.departureKey";
 const KEY_JOURNEY_STORAGE = "worlds.departureJourneyId";
 const TRAVERSED_STORAGE = "worlds.traversedRoutes";
 const ARMING_POLL_MS = 2000;
-/** Fired after any travel ACTION settles, so every mounted copy of this
- *  hook (the travel panel, the world scene layer, the world map) re-reads
- *  the server. Each copy keeps its own state; before this they never heard
- *  about each other, so a departure from the panel was invisible to the
- *  scene layer — no transit flight, no arrival — until a page reload. The
- *  server stays the only authority; this only says "go look again". */
-const TRAVEL_CHANGED_EVENT = "worlds:travel-changed";
 
 function read(key: string): string | null {
   try {
@@ -167,7 +161,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
   useEffect(() => {
     if (!enabled) return;
     const onChanged = (e: Event) => {
-      if ((e as CustomEvent<{ from?: string }>).detail?.from === selfTag.current) return;
+      if ((e as CustomEvent<TravelChangedDetail>).detail?.from === selfTag.current) return;
       void refresh();
     };
     window.addEventListener(TRAVEL_CHANGED_EVENT, onChanged);
@@ -193,7 +187,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
   }, [enabled, arming, refresh]);
 
   const act = useCallback(
-    async (fn: () => Promise<TravelJourney>): Promise<TravelJourney | null> => {
+    async (fn: () => Promise<TravelJourney>, action: TravelAction): Promise<TravelJourney | null> => {
       setBusy(true);
       setError(null);
       try {
@@ -207,7 +201,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
           if (!routes.includes(rk)) write(TRAVERSED_STORAGE, JSON.stringify([...routes, rk]));
         }
         await refresh();
-        window.dispatchEvent(new CustomEvent(TRAVEL_CHANGED_EVENT, { detail: { from: selfTag.current } }));
+        announceTravelChanged(action, selfTag.current);
         return journey;
       } catch (e) {
         if (e instanceof TravelClientError) {
@@ -244,26 +238,26 @@ export function useTravel(enabled: boolean = true): UseTravel {
         const journey = await departJourney({ clientKey, kind, destination });
         write(KEY_JOURNEY_STORAGE, journey.id);
         return journey;
-      });
+      }, "depart");
     },
     [act],
   );
 
   const withActive = useCallback(
-    (fn: (id: string) => Promise<TravelJourney>) => {
+    (fn: (id: string) => Promise<TravelJourney>, action: TravelAction) => {
       const id = stateRef.current?.activeJourney?.id;
       if (!id) return Promise.resolve(null);
-      return act(() => fn(id));
+      return act(() => fn(id), action);
     },
     [act],
   );
 
   const cancel = useCallback(async () => {
-    const j = await withActive(cancelJourney);
+    const j = await withActive(cancelJourney, "cancel");
     if (j) clearKey();
     return j;
   }, [withActive, clearKey]);
-  const turnBack = useCallback(() => withActive(turnBackJourney), [withActive]);
+  const turnBack = useCallback(() => withActive(turnBackJourney, "turn-back"), [withActive]);
   // Arrival additionally captures the server's bonus outcome from the
   // response sibling (P2-4) — the panel renders it verbatim.
   const arrive = useCallback(async () => {
@@ -273,7 +267,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
       const r = await arriveJourney(id);
       setLastBonus(r.bonus);
       return r.journey;
-    });
+    }, "arrive");
   }, [act]);
 
   const hasTraversed = useCallback(

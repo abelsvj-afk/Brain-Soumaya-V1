@@ -72,6 +72,7 @@ import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
+import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, type TravelChangedDetail } from "../lib/travelEvents.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
 import { createEternityScene } from "../graph/eternityScene.js";
@@ -438,6 +439,29 @@ export default function WorldsSurface({
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
+  // The scene layer never takes over the screen just because the SERVER remembers where you
+  // were (a saved world, or a journey the last session never finished — the old build never
+  // arrived anyone, so those are common). Opening the app lands in the home galaxy; the layer
+  // wakes only when the traveller does something in THIS session: departs (the travel panel,
+  // a tour leg), or asks to look around the world they are in. A departure is the signal, not
+  // an arrival — so a stale journey resolving in the background stays silent.
+  const [engaged, setEngaged] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    const onChanged = (e: Event) => {
+      if ((e as CustomEvent<TravelChangedDetail>).detail?.action === "depart") setEngaged(true);
+    };
+    const onEnter = () => {
+      setEngaged(true);
+      setDismissed(false);
+    };
+    window.addEventListener(TRAVEL_CHANGED_EVENT, onChanged);
+    window.addEventListener(ENTER_WORLD_EVENT, onEnter);
+    return () => {
+      window.removeEventListener(TRAVEL_CHANGED_EVENT, onChanged);
+      window.removeEventListener(ENTER_WORLD_EVENT, onEnter);
+    };
+  }, [enabled]);
   const [showCredits, setShowCredits] = useState(false);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
@@ -496,7 +520,7 @@ export default function WorldsSurface({
   const transitKind = inTransit ? journey.kind : null;
   const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
   const mode = inTransit ? "transit" : atWorld ? "world" : null;
-  const visible = !!mode && !dismissed;
+  const visible = !!mode && !dismissed && engaged;
   const entry = atWorld && currentWorld ? WORLD_SCENES[currentWorld] : undefined;
   const atGarden = atWorld && currentWorld === "growing-place";
   const atStation = atWorld && currentWorld === "great-station";

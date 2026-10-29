@@ -3,6 +3,7 @@ import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { WORLD_CHART, buildRouteBoard } from "../lib/routeBoard.js";
 import WorldCredits from "./WorldCredits.js";
+import { requestEnterWorld } from "../lib/travelEvents.js";
 
 /**
  * The travel surface (Phase 2, P2-3): route board + journey controls,
@@ -121,7 +122,22 @@ export default function TravelPanel({
                 <span> {entry.blurb}</span>
               </div>
               {entry.isCurrent ? (
-                <span className="route-current">You are here</span>
+                <>
+                  <span className="route-current">You are here</span>
+                  {/* Opening the app lands in the home galaxy, not in the world the server last
+                      saw you in. This is the way back into that world's view. */}
+                  {entry.world !== "home" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        requestEnterWorld();
+                        onTransit?.(); // close the sheet so the world is what you see
+                      }}
+                    >
+                      Look around
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="route-options">
                   {entry.options.map((opt) => (

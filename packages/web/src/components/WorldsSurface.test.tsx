@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { announceTravelChanged, requestEnterWorld } from "../lib/travelEvents.js";
 import WorldsSurface from "./WorldsSurface.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
@@ -21,6 +23,17 @@ vi.mock("../api/client.js", () => ({
   getSpaceId: vi.fn(() => "space-1"),
 }));
 const mockUseTravel = vi.mocked(useTravel);
+
+/**
+ * The scene layer only wakes after the traveller does something in THIS session (departs, or taps
+ * "Look around") — it never opens just because the server remembers a world. These tests are about
+ * what it shows once awake, so wake it the way the Look around button does.
+ */
+function mountEngaged(ui: ReactElement) {
+  const r = render(ui);
+  act(() => requestEnterWorld());
+  return r;
+}
 const mockUseHarborController = vi.mocked(useHarborController);
 const mockGetJourneys = vi.mocked(getJourneys);
 const mockJourneyLinks = vi.mocked(journeyLinks);
@@ -144,13 +157,13 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
 
   it("flag off renders nothing (the dark contract)", () => {
     mockUseTravel.mockReturnValue(atStation());
-    const { container } = render(<WorldsSurface enabled={false} />);
+    const { container } = mountEngaged(<WorldsSurface enabled={false} />);
     expect(container.firstChild).toBeNull();
   });
 
   it("at home renders nothing — the surface belongs to the Station", () => {
     mockUseTravel.mockReturnValue(fakeTravel());
-    const { container } = render(<WorldsSurface enabled />);
+    const { container } = mountEngaged(<WorldsSurface enabled />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -174,7 +187,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
         },
       }),
     );
-    render(<WorldsSurface enabled />);
+    mountEngaged(<WorldsSurface enabled />);
     expect(
       screen.getByRole("dialog", { name: "Travelling to The Great Station" }),
     ).toBeTruthy();
@@ -218,7 +231,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
       vi.setSystemTime(new Date("2026-10-28T12:00:00.000Z"));
       const arrive = vi.fn(async () => null);
       mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z"), arrive });
-      render(<WorldsSurface enabled />);
+      mountEngaged(<WorldsSurface enabled />);
       vi.advanceTimersByTime(TRANSIT_MS.warp - 500);
       expect(arrive).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1000);
@@ -230,7 +243,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
       vi.setSystemTime(new Date("2026-10-28T12:00:10.000Z"));
       const arrive = vi.fn(async () => null);
       mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z"), arrive });
-      render(<WorldsSurface enabled />);
+      mountEngaged(<WorldsSurface enabled />);
       vi.advanceTimersByTime(TRANSIT_MS.warp - 10_000 + 100);
       expect(arrive).toHaveBeenCalledTimes(1);
     });
@@ -240,7 +253,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
       vi.setSystemTime(new Date("2026-10-28T12:05:00.000Z"));
       const arrive = vi.fn(async () => null);
       mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z"), arrive });
-      render(<WorldsSurface enabled />);
+      mountEngaged(<WorldsSurface enabled />);
       vi.advanceTimersByTime(10);
       expect(arrive).toHaveBeenCalledTimes(1);
     });
@@ -250,7 +263,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
       vi.setSystemTime(new Date("2026-10-28T12:00:00.000Z"));
       const arrive = vi.fn(async () => null);
       mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z", "drift"), arrive });
-      render(<WorldsSurface enabled />);
+      mountEngaged(<WorldsSurface enabled />);
       vi.advanceTimersByTime(TRANSIT_MS.warp + 1000);
       expect(arrive).not.toHaveBeenCalled();
       vi.advanceTimersByTime(TRANSIT_MS.drift - TRANSIT_MS.warp);
@@ -261,7 +274,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
       vi.useFakeTimers();
       const arrive = vi.fn(async () => null);
       mockUseTravel.mockReturnValue({ ...atStation(), arrive });
-      render(<WorldsSurface enabled />);
+      mountEngaged(<WorldsSurface enabled />);
       vi.advanceTimersByTime(TRANSIT_MS.drift * 2);
       expect(arrive).not.toHaveBeenCalled();
     });
@@ -287,7 +300,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
         },
       }),
     );
-    render(<WorldsSurface enabled />);
+    mountEngaged(<WorldsSurface enabled />);
     expect(screen.getByRole("dialog", { name: "Travelling to Home" })).toBeTruthy();
   });
 
@@ -311,13 +324,13 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
         },
       }),
     );
-    const { container } = render(<WorldsSurface enabled />);
+    const { container } = mountEngaged(<WorldsSurface enabled />);
     expect(container.firstChild).toBeNull();
   });
 
   it("at the Station the surface mounts; without WebGL it degrades honestly, and Close is view-only", async () => {
     mockUseTravel.mockReturnValue(atStation());
-    render(<WorldsSurface enabled />);
+    mountEngaged(<WorldsSurface enabled />);
     expect(screen.getByRole("dialog", { name: "The Great Station" })).toBeTruthy();
     // happy-dom has no working WebGL: the honest fallback appears,
     // journeys unaffected.
@@ -328,7 +341,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
 
   it("at the Station the Harbor controller button opens its panel, and only there", async () => {
     mockUseTravel.mockReturnValue(atStation());
-    render(<WorldsSurface enabled />);
+    mountEngaged(<WorldsSurface enabled />);
     expect(screen.getByRole("dialog", { name: "The Great Station" })).toBeTruthy();
     expect(screen.queryByText(/Help you arrive/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Harbor controller" }));
@@ -346,7 +359,7 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
 
   it("at the garden with the graph it mounts the garden; without WebGL it degrades honestly", async () => {
     mockUseTravel.mockReturnValue(atGarden());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
@@ -354,14 +367,14 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
 
   it("outside the Station there is no Harbor controller button", () => {
     mockUseTravel.mockReturnValue(atGarden());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Harbor controller" })).toBeNull();
   });
 
   it("at the garden without the graph yet it shows a loading line and builds nothing", () => {
     mockUseTravel.mockReturnValue(atGarden());
-    render(<WorldsSurface enabled graph={null} />);
+    mountEngaged(<WorldsSurface enabled graph={null} />);
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
     expect(screen.getByText(/Your garden is loading/)).toBeTruthy();
   });
@@ -376,7 +389,7 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
         },
       }),
     );
-    const { container } = render(<WorldsSurface enabled graph={gardenGraph} />);
+    const { container } = mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(container.firstChild).toBeNull();
   });
 });
@@ -398,7 +411,7 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
 
   it("at the Deep Past with the graph it mounts the past; without WebGL it degrades honestly", async () => {
     mockUseTravel.mockReturnValue(atDeepPast());
-    render(<WorldsSurface enabled graph={deepPastGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={deepPastGraph} />);
     expect(screen.getByRole("dialog", { name: "The Deep Past" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
@@ -406,7 +419,7 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
 
   it("at the Deep Past without the graph yet it shows a loading line and builds nothing", () => {
     mockUseTravel.mockReturnValue(atDeepPast());
-    render(<WorldsSurface enabled graph={null} />);
+    mountEngaged(<WorldsSurface enabled graph={null} />);
     expect(screen.getByRole("dialog", { name: "The Deep Past" })).toBeTruthy();
     expect(screen.getByText(/Your past is loading/)).toBeTruthy();
   });
@@ -427,7 +440,7 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
       displayLimit: 50,
       unshownByKind: {},
     } as never);
-    render(<WorldsSurface enabled graph={deepPastGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={deepPastGraph} />);
     expect(await screen.findByText(/Chronicle route: Done chapter — 2 stops along the descent/)).toBeTruthy();
     // The guided descent is user-initiated, never auto-started.
     const descend = screen.getByRole("button", { name: "Descend the Chronicle" });
@@ -437,7 +450,7 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
 
   it("with no qualifying route there is no thread and no guided button", async () => {
     mockUseTravel.mockReturnValue(atDeepPast());
-    render(<WorldsSurface enabled graph={deepPastGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={deepPastGraph} />);
     expect(screen.getByRole("dialog", { name: "The Deep Past" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.queryByText(/Chronicle route:/)).toBeNull();
@@ -466,7 +479,7 @@ describe("WorldsSurface — the People (P3-3)", () => {
 
   it("at People with the graph it mounts the field; without WebGL it degrades honestly", async () => {
     mockUseTravel.mockReturnValue(atPeople());
-    render(<WorldsSurface enabled graph={peopleGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={peopleGraph} />);
     expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your people are unaffected/)).toBeTruthy();
@@ -474,14 +487,14 @@ describe("WorldsSurface — the People (P3-3)", () => {
 
   it("at People without the graph yet it shows a loading line and builds nothing", () => {
     mockUseTravel.mockReturnValue(atPeople());
-    render(<WorldsSurface enabled graph={null} />);
+    mountEngaged(<WorldsSurface enabled graph={null} />);
     expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
     expect(screen.getByText(/Your people are gathering/)).toBeTruthy();
   });
 
   it("an empty graph still mounts the field — honest resting ground, never a locked door", async () => {
     mockUseTravel.mockReturnValue(atPeople());
-    render(<WorldsSurface enabled graph={{ nodes: [], links: [] } as never} />);
+    mountEngaged(<WorldsSurface enabled graph={{ nodes: [], links: [] } as never} />);
     expect(screen.getByRole("dialog", { name: "The People" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
   });
@@ -515,7 +528,7 @@ describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
     mockGetArchivedNodesStrict.mockResolvedValue(archivedNodes as never);
     mockGetIncidentEdges.mockResolvedValue({ edges: archivedEdges, nextCursor: null } as never);
     mockUseTravel.mockReturnValue(atQuietArchive());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(screen.getByRole("dialog", { name: "Quiet/Archive" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
@@ -526,7 +539,7 @@ describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
   it("while the archive is still loading it says so and builds nothing", () => {
     mockGetArchivedNodesStrict.mockReturnValue(new Promise(() => {}) as never);
     mockUseTravel.mockReturnValue(atQuietArchive());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(screen.getByRole("dialog", { name: "Quiet/Archive" })).toBeTruthy();
     expect(screen.getByText(/Your archive is resting/)).toBeTruthy();
     expect(screen.queryByText(/needs graphics support/)).toBeNull();
@@ -534,7 +547,7 @@ describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
 
   it("an empty archive mounts the still field and says so plainly — never a locked door", async () => {
     mockUseTravel.mockReturnValue(atQuietArchive());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(await screen.findByText(/Nothing rests here yet/)).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
   });
@@ -542,7 +555,7 @@ describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
   it("a failed archive fetch renders the error and a retry — never an empty field", async () => {
     mockGetArchivedNodesStrict.mockRejectedValue(new Error("down"));
     mockUseTravel.mockReturnValue(atQuietArchive());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(await screen.findByText(/couldn't load/)).toBeTruthy();
     // Retry re-fetches: the mock now succeeds, and the field mounts.
     mockGetArchivedNodesStrict.mockResolvedValue([]);
@@ -556,7 +569,7 @@ describe("WorldsSurface — Quiet/Archive (Wave 2)", () => {
       .mockResolvedValueOnce({ edges: [archivedEdges[0]], nextCursor: 100 } as never)
       .mockResolvedValueOnce({ edges: [], nextCursor: null } as never);
     mockUseTravel.mockReturnValue(atQuietArchive());
-    render(<WorldsSurface enabled graph={gardenGraph} />);
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], null);
     expect(mockGetIncidentEdges).toHaveBeenCalledWith([1, 10], 100);
@@ -570,7 +583,7 @@ describe("WorldsSurface — Scale (Phase 3)", () => {
 
   it("at Scale it mounts the station view; without WebGL it degrades honestly", async () => {
     mockUseTravel.mockReturnValue(atScale());
-    render(<WorldsSurface enabled graph={null} />);
+    mountEngaged(<WorldsSurface enabled graph={null} />);
     expect(screen.getByRole("dialog", { name: "Scale" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your journeys are unaffected/)).toBeTruthy();
@@ -578,7 +591,7 @@ describe("WorldsSurface — Scale (Phase 3)", () => {
 
   it("at Scale it needs no graph — the space carries no memories of its own", async () => {
     mockUseTravel.mockReturnValue(atScale());
-    render(<WorldsSurface enabled graph={null} />);
+    mountEngaged(<WorldsSurface enabled graph={null} />);
     expect(screen.getByRole("dialog", { name: "Scale" })).toBeTruthy();
     // No loading line: Scale's layout builds without the graph.
     expect(screen.queryByText(/coming into view/)).toBeNull();
@@ -603,7 +616,7 @@ describe("WorldsSurface — Eternity's World", () => {
 
   it("at Eternity's world it mounts; without WebGL it degrades honestly", async () => {
     mockUseTravel.mockReturnValue(atEternity());
-    render(<WorldsSurface enabled />);
+    mountEngaged(<WorldsSurface enabled />);
     expect(screen.getByRole("dialog", { name: "Eternity's World" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your journeys are unaffected/)).toBeTruthy();
@@ -611,7 +624,7 @@ describe("WorldsSurface — Eternity's World", () => {
 
   it("his gestures and tools are offered as buttons; his words live in the world, not over the view", async () => {
     mockUseTravel.mockReturnValue(atEternity());
-    render(<WorldsSurface enabled />);
+    mountEngaged(<WorldsSurface enabled />);
     for (const name of ["Stillness", "Regard", "Blessing", "Sorrow", "Joy", "Warning"]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
@@ -626,5 +639,87 @@ describe("WorldsSurface — Eternity's World", () => {
     // world never mounted to hold it.
     fireEvent.click(screen.getByRole("button", { name: "Blessing" }));
     expect(screen.queryByText(/He is holding/)).toBeNull();
+  });
+});
+
+
+describe("opening the app lands in the home galaxy — the layer wakes only on a session action", () => {
+  // The owner opened the app and was shown a flying ship and a gate instead of the home galaxy:
+  // the layer drew whatever the SERVER had saved (a world, or a journey the old build never
+  // finished). It must stay hidden until the traveller acts.
+  const savedAtGarden = () => atGarden();
+  const staleInTransit = () =>
+    fakeTravel({
+      state: {
+        currentWorld: "home",
+        activeJourney: {
+          id: "stale-1",
+          kind: "warp",
+          origin: "home",
+          destination: "great-station",
+          state: "in_transit",
+          fuelCharged: 10,
+          cancellable: false,
+          createdAt: "2026-10-20T12:00:00.000Z",
+          cancelDeadline: "2026-10-20T12:00:10.000Z",
+          departedAt: "2026-10-20T12:00:11.000Z",
+        },
+        fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+      },
+    });
+
+  it("a saved world does NOT open at launch", () => {
+    mockUseTravel.mockReturnValue(savedAtGarden());
+    const { container } = render(<WorldsSurface enabled />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("a journey saved by an earlier session does NOT open the flight at launch", () => {
+    mockUseTravel.mockReturnValue(staleInTransit());
+    const { container } = render(<WorldsSurface enabled />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("…but the stale journey still gets settled in the background (it must not stay stuck)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-29T12:00:00.000Z"));
+    const arrive = vi.fn(async () => null);
+    mockUseTravel.mockReturnValue({ ...staleInTransit(), arrive });
+    render(<WorldsSurface enabled />);
+    vi.advanceTimersByTime(10);
+    expect(arrive).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("'Look around' opens the world the server says you are in", () => {
+    mockUseTravel.mockReturnValue(savedAtGarden());
+    const { container } = render(<WorldsSurface enabled />);
+    expect(container.firstChild).toBeNull();
+    act(() => requestEnterWorld());
+    expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
+  });
+
+  it("a departure made in this session wakes it — the flight and arrival then show", () => {
+    mockUseTravel.mockReturnValue(staleInTransit());
+    const { container } = render(<WorldsSurface enabled />);
+    expect(container.firstChild).toBeNull();
+    act(() => announceTravelChanged("depart", "some-other-copy"));
+    expect(screen.getByRole("dialog", { name: "Travelling to The Great Station" })).toBeTruthy();
+  });
+
+  it("an arrival, a cancel or a turn-back alone does NOT wake it", () => {
+    mockUseTravel.mockReturnValue(savedAtGarden());
+    const { container } = render(<WorldsSurface enabled />);
+    for (const a of ["arrive", "cancel", "turn-back"] as const) act(() => announceTravelChanged(a, "other"));
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("after it is awake, 'Back to your galaxy' still closes it, and Look around reopens it", () => {
+    mockUseTravel.mockReturnValue(savedAtGarden());
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByText("Back to your galaxy"));
+    expect(screen.queryByRole("dialog", { name: "The Growing Place" })).toBeNull();
+    act(() => requestEnterWorld());
+    expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
   });
 });

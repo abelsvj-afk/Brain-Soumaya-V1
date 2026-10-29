@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { announceTravelChanged } from "../lib/travelEvents.js";
 import type { Tour, TourMoveResult, TourSessionView, TourSuggestion, TravelKind } from "@brain/shared";
 import {
   advanceTour,
@@ -148,7 +149,10 @@ export function useTours(enabled = true) {
   const start = useCallback(
     async (id: string, kind: TravelKind = "drift"): Promise<TourMoveResult | null> => {
       const out = await act(() => startTour(id, kind));
-      if (out) setState((s) => ({ ...s, session: out.session }));
+      if (out) {
+        setState((s) => ({ ...s, session: out.session }));
+        announceTravelChanged("depart"); // a tour leg is a journey: the scene layer must hear it
+      }
       return out;
     },
     [act],
@@ -157,7 +161,10 @@ export function useTours(enabled = true) {
   const advance = useCallback(
     async (id: string, kind: TravelKind = "drift"): Promise<TourMoveResult | null> => {
       const out = await act(() => advanceTour(id, kind));
-      if (out) setState((s) => ({ ...s, session: out.session }));
+      if (out) {
+        setState((s) => ({ ...s, session: out.session }));
+        announceTravelChanged("depart");
+      }
       return out;
     },
     [act],

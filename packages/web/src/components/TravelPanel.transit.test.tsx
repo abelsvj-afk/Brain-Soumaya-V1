@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import TravelPanel from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
+import { ENTER_WORLD_EVENT } from "../lib/travelEvents.js";
+import { fireEvent } from "@testing-library/react";
 
 vi.mock("../hooks/useTravel.js", () => ({ useTravel: vi.fn() }));
 const mockUseTravel = vi.mocked(useTravel);
@@ -71,5 +73,34 @@ describe("TravelPanel — hands the screen to the flight", () => {
     mockUseTravel.mockReturnValue(travel(journey("returning")));
     render(<TravelPanel enabled onTransit={onTransit} />);
     expect(onTransit).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+// Opening the app lands in the home galaxy, not in the world the server last saw you in — so the
+// world you are standing in needs a way back in.
+describe("TravelPanel — Look around", () => {
+  const at = (world: string): UseTravel =>
+    ({
+      ...travel(null),
+      state: { currentWorld: world, activeJourney: null, fuel: { fuel: 40, capacity: 200, jobCost: 2, warpCost: 10 } },
+    }) as unknown as UseTravel;
+
+  it("offers it for the world you are in (not home), and it opens that world and closes the sheet", () => {
+    mockUseTravel.mockReturnValue(at("growing-place"));
+    const onTransit = vi.fn();
+    const entered = vi.fn();
+    window.addEventListener(ENTER_WORLD_EVENT, entered);
+    const { getByText } = render(<TravelPanel enabled onTransit={onTransit} />);
+    fireEvent.click(getByText("Look around"));
+    expect(entered).toHaveBeenCalledTimes(1);
+    expect(onTransit).toHaveBeenCalledTimes(1);
+    window.removeEventListener(ENTER_WORLD_EVENT, entered);
+  });
+
+  it("is not offered at home — there is nothing to look around", () => {
+    mockUseTravel.mockReturnValue(at("home"));
+    const { queryByText } = render(<TravelPanel enabled />);
+    expect(queryByText("Look around")).toBeNull();
   });
 });
