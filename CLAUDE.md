@@ -585,6 +585,12 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   retried at +3, +6, +12 min before his offline lines; a wake-up being retried may finish past 11:00. The boot log prints
   `[eternity] voice: gemini | shared | offline lines`. **Owner check:** confirm `GEMINI_API_KEY` is set on Fly (Secrets) — the key
   must never be pasted into chat or committed.
+- **Speed S5/S6 — one renderer for the worlds layer, sky baked once (2026-10-30) — MEASURED in a real browser** (WorldsSurface.tsx
+  `rendererRef`, homeSky.ts `bakeCache`/`releaseHomeSky`): WebGL contexts after 3 world visits 4 → 2 (home + one persistent
+  worlds renderer); the nebula cubemap is baked once per renderer instead of per world. All 7 worlds PASS `worlds-check`; a full
+  warp → Station handoff on the reused renderer ran with 0 errors. Entry time unchanged in headless (software GL makes contexts
+  cheap) — the saving is on phones, where a context costs 50–200 ms and can fail under memory pressure. Look at: repeated
+  world-hopping on the phone (no blank/black canvas after several trips).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

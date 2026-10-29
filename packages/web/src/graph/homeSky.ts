@@ -36,6 +36,19 @@ export function withSkySeed<T>(build: () => T, salt = 0): T {
 
 export type SkyLevel = "low" | "medium" | "high";
 
+/**
+ * The baked nebula cubemap is the same picture for every world (it is seeded), so it is baked ONCE per renderer and reused
+ * by every world the renderer shows (speed audit S5) — the worlds layer keeps one renderer for its lifetime (S6).
+ */
+const bakeCache = new WeakMap<THREE.WebGLRenderer, BakedBackdrop>();
+
+/** Free the cached bake when its renderer is being disposed. */
+export function releaseHomeSky(renderer: THREE.WebGLRenderer): void {
+  const baked = bakeCache.get(renderer);
+  if (baked) disposeBakedBackdrop(baked);
+  bakeCache.delete(renderer);
+}
+
 export interface HomeSky {
   /** Live stars + Milky Way. Parent it to the scene; `update` keeps it centred on the camera. */
   group: THREE.Group;
@@ -57,12 +70,16 @@ export function installHomeSky(renderer: THREE.WebGLRenderer, scene: THREE.Scene
   // Eternity's presence in every world's sky (spec §2d): a faint arc of his halo at the edge of the heavens.
   const halo = buildEternityHalo(2200, 7000);
   group.add(halo.group);
-  let baked: BakedBackdrop | null = null;
-  try {
-    const sources = withSkySeed(() => makeBackdropBakeSources(level), 3);
-    baked = bakeBackdrop(renderer, scene, sources, level === "low" ? 512 : 768);
-  } catch {
-    // A device that cannot bake keeps the live stars on its plain background; the sky never blocks a world.
+  const cached = bakeCache.get(renderer);
+  if (cached) {
+    scene.background = cached.target.texture;
+  } else {
+    try {
+      const sources = withSkySeed(() => makeBackdropBakeSources(level), 3);
+      bakeCache.set(renderer, bakeBackdrop(renderer, scene, sources, level === "low" ? 512 : 768));
+    } catch {
+      // A device that cannot bake keeps the live stars on its plain background; the sky never blocks a world.
+    }
   }
   let disposed = false;
   return {
@@ -85,7 +102,7 @@ export function installHomeSky(renderer: THREE.WebGLRenderer, scene: THREE.Scene
         const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
         for (const x of mats) x.dispose();
       });
-      if (baked) disposeBakedBackdrop(baked);
+      // The bake belongs to the renderer (releaseHomeSky), not to this scene.
       scene.background = null;
     },
   };

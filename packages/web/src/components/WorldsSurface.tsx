@@ -106,7 +106,7 @@ import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../gr
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { useEternityAutonomy } from "../hooks/useEternityAutonomy.js";
-import { installHomeSky } from "../graph/homeSky.js";
+import { installHomeSky, releaseHomeSky } from "../graph/homeSky.js";
 import { loadSoumayaShip } from "../graph/soumayaShip.js";
 import { loadWarpGate } from "../graph/gateScene.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
@@ -653,6 +653,17 @@ export default function WorldsSurface({
   // The mounted scene handle — the Eternity gesture/tool buttons below
   // call into it. Set in the mount effect, cleared in its cleanup.
   const sceneHandleRef = useRef<WorldSceneHandle | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  useEffect(
+    () => () => {
+      const r = rendererRef.current;
+      if (!r) return;
+      releaseHomeSky(r);
+      r.dispose();
+      rendererRef.current = null;
+    },
+    [],
+  );
   const [eternityGesture, setEternityGesture] = useState<string | null>(null);  // Verb 1 (Tend a plot): the garden's suggestions, recent tends (the warm
   // glow and lit paths), and the plot the tend sheet is open for.
   const [suggestions, setSuggestions] = useState<GardenSuggestion[] | null>(null);
@@ -1284,9 +1295,12 @@ export default function WorldsSurface({
     if (mode === "world" && (atGarden || atDeepPast || atPeople || atQuietArchive) && !sceneLayout) return;
     const host = hostRef.current;
     if (!host) return;
+    // One renderer for the worlds layer's lifetime (speed audit S6): creating a WebGL context per world / per warp cost
+    // 50–200 ms on a phone and can fail under memory pressure. Each world gets a fresh scene; the canvas is re-attached.
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = rendererRef.current ?? new THREE.WebGLRenderer({ antialias: true });
+      rendererRef.current = renderer;
     } catch (err) {
       // Never swallow silently: which world failed, and why, is the only
       // way anyone can tell a broken world from a device without WebGL.
@@ -1803,7 +1817,8 @@ export default function WorldsSurface({
       avatar?.dispose();
       world.dispose();
       sceneHandleRef.current = null;
-      renderer.dispose();
+      // Keep the renderer (and its context) for the next world; free only this scene's render lists.
+      renderer.renderLists.dispose();
       renderer.domElement.remove();
       gardenSceneRef.current = null;
       gardenCameraRef.current = null;
