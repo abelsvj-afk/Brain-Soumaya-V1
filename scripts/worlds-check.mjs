@@ -6,7 +6,8 @@
  *
  * For each world it takes a free drift there through the server (so it works
  * with no fuel), then loads the app fresh in a real headless browser at phone
- * size and waits for the world's 3D canvas. A world PASSES only if its scene
+ * size, asks to look around (the app opens into the home galaxy, not the world),
+ * and waits for the world's 3D canvas. A world PASSES only if its scene
  * mounted, drew a canvas, showed no "needs graphics support" fallback, and the
  * page logged no errors and no failed (4xx/5xx) requests. It also reports how
  * long the canvas took and how many MB of 3D/image assets the load pulled —
@@ -92,6 +93,10 @@ for (const world of worlds) {
   });
   await page.addInitScript((id) => localStorage.setItem("brain.spaceId", id), SPACE);
   await page.goto(BASE + "/");
+  // The app opens into the home galaxy and wakes the world layer only on a traveller action. Ask for
+  // the world the way the "Look around" button does (the same window event), once the app has booted.
+  await page.waitForFunction(() => document.querySelector("canvas") !== null, null, { timeout: 60_000 }).catch(() => {});
+  await page.evaluate(() => window.dispatchEvent(new Event("worlds:enter")));
   let canvasAt = null;
   let fallback = null;
   let title = null;

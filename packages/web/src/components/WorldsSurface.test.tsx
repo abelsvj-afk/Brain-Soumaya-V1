@@ -723,3 +723,77 @@ describe("opening the app lands in the home galaxy — the layer wakes only on a
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
   });
 });
+
+describe("WorldsSurface — the Station Interior (Wave 2, settled design)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+    mockUseHarborController.mockReset();
+    mockUseHarborController.mockReturnValue(fakeController());
+    mockUseTravel.mockReturnValue(atStation());
+  });
+
+  it("outside, the Station offers one way in — and no room list yet", () => {
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.getByRole("button", { name: "Step inside the Station" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Step back outside" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Go to the/ })).toBeNull();
+  });
+
+  it("stepping inside opens on the hangar bay, the arrival room, with the other three rooms on the list", () => {
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
+    expect(screen.getByRole("button", { name: "Step back outside" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Go to the Commission Board" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Go to the Fleet Deck" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Go to the Observation Deck" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Go to the Hangar Bay" })).toBeNull();
+    expect(screen.getByText(/The Hangar Bay —/)).toBeTruthy();
+    // The bay is the ship room now: the Batch O ship picker lives here.
+    expect(screen.getByText(/Spaceship Hull/)).toBeTruthy();
+  });
+
+  it("room changes jump — no walking, no glide, no 'Walk to' anywhere", () => {
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go to the Fleet Deck" }));
+    expect(screen.getByText(/The Fleet Deck —/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Go to the Hangar Bay" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Go to the Fleet Deck" })).toBeNull();
+    expect(screen.queryByText(/Walk to/)).toBeNull();
+    expect(screen.queryByText(/walk/i)).toBeNull();
+    // The fleet deck wires the shipped fleet surfaces.
+    expect(screen.getByRole("heading", { name: "Fleet missions" })).toBeTruthy();
+  });
+
+  it("the commission board room opens the board's four kinds", () => {
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go to the Commission Board" }));
+    expect(screen.getByText(/The Commission Board —/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Link —/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Review —/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Journey step —/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Inbox item —/ })).toBeTruthy();
+  });
+
+  it("the observation deck is quiet: its line, no room panel, no task, no counter, nothing to earn", () => {
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go to the Observation Deck" }));
+    expect(screen.getByText(/The Observation Deck —/)).toBeTruthy();
+    expect(screen.getByText(/nothing to do/)).toBeTruthy();
+    expect(screen.queryByLabelText("Commission board")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Fleet missions" })).toBeNull();
+    expect(screen.queryByText(/Spaceship Hull/)).toBeNull();
+  });
+
+  it("stepping back outside returns to the exterior offer", () => {
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Step inside the Station" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go to the Observation Deck" }));
+    fireEvent.click(screen.getByRole("button", { name: "Step back outside" }));
+    expect(screen.getByRole("button", { name: "Step inside the Station" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Go to the/ })).toBeNull();
+    expect(screen.queryByText(/The Observation Deck —/)).toBeNull();
+  });
+});
