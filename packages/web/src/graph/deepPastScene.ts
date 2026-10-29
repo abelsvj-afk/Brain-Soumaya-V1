@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { fadeSwapIn } from "./gltf.js";
 import { buildHygStarfield } from "./hygStars.js";
+import { placeWorldRelics } from "./relicAssets.js";
 import {
   DEEP_PAST_BASIN_GLB_Y,
   DEEP_PAST_BASIN_SPAN,
@@ -183,12 +184,22 @@ export const EMPTY_DEEP_PAST_LAYOUT: DeepPastLayout = {
   omittedEdgeCount: 0,
 };
 
-export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
+export function createDeepPastScene(
+  layout: DeepPastLayout,
+  opts: { onRelicVisible?: (slug: string) => void } = {},
+): DeepPastScene {
   const group = new THREE.Group();
   group.name = "deep-past";
   let disposed = false;
   const dummy = new THREE.Object3D();
   const glowTex = makeGlowTexture();
+
+  // Relics (relics increment): the Deep Past's four relics — three at the
+  // basin and its lowest alcoves, the Witness at the basin's center, in
+  // the First Light itself. A relic whose GLB has not landed is simply
+  // absent — no stand-in, and its find is never offered (the host learns
+  // of it via onRelicVisible).
+  const cancelRelics = placeWorldRelics(group, "deep-past", opts.onRelicVisible);
 
   // Strata: nine lit walls winding down, warming subtly with depth, each with
   // a thin lit rim band at its top edge (same arc parameters — the band cannot
@@ -700,6 +711,7 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
     dispose() {
       if (disposed) return;
       disposed = true;
+      cancelRelics();
       disposeObject3D(group);
     },
   };

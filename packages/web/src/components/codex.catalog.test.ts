@@ -20,6 +20,22 @@ describe("Codex catalog ↔ server allow-list sync (IM-93)", () => {
     expect(new Set(ids)).toEqual(CODEX_STATIC_KEYS);
   });
 
+  it("relic entries follow the found set — undiscovered until found in their world", () => {
+    const none = buildCodex({ memories: [], constellations: [], links: 0 });
+    const relics = none.filter((e) => e.category === "relics");
+    expect(relics).toHaveLength(15);
+    expect(relics.every((e) => !e.discovered)).toBe(true);
+    const found = buildCodex({
+      memories: [],
+      constellations: [],
+      links: 0,
+      foundRelics: new Set(["relic-harbor-nail", "relic-witness-without-a-name"]),
+    });
+    expect(found.find((e) => e.id === "relic-harbor-nail")?.discovered).toBe(true);
+    expect(found.find((e) => e.id === "relic-witness-without-a-name")?.discovered).toBe(true);
+    expect(found.find((e) => e.id === "relic-witness-seed")?.discovered).toBe(false);
+  });
+
   it("field notes produce fieldnote-* ids from the server-charted key", () => {
     const [entry] = fieldNoteEntries([
       { key: "sector:daily:25", title: "A Sector Comes of Age", lore: "…", icon: "✦", focusId: null, createdAt: "2026-05-01T00:00:00.000Z" },
