@@ -20,6 +20,7 @@ import { reviewNudgeTool } from "../tools/reviewNudge.js";
 import { agendaListTool } from "../tools/agendaList.js";
 import { journeysListTool } from "../tools/journeysList.js";
 import { insightsListTool } from "../tools/insightsList.js";
+import { localDay, spaceTimezone } from "../notify/policy.js";
 import { FinAccountRepo } from "../../repositories/finAccount.repo.js";
 import { FinBillRepo } from "../../repositories/finBill.repo.js";
 import { FinIncomeRepo } from "../../repositories/finIncome.repo.js";
@@ -453,7 +454,16 @@ describe("telegram handler — one grounded tool path per tab", () => {
     await handleTelegramUpdate(ctx, update(chatId, "/link soumaya hunter222"), send);
     const spaceId = new TelegramLinksRepo(handle).get(chatId)!.spaceId;
     const nowMs = Date.now();
-    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    // V1 follow-up item 4b — seed finance dates in the SPACE's local
+    // day, the frame the tools reason in (billRisk computes from
+    // localDay(now, spaceTimezone)). The old UTC day() disagreed
+    // with America/New_York between 00:00 and 05:00 UTC: the income
+    // and bill-anchor dates slid a day, Rent fell outside the
+    // reserved-before-next-income window, and the bills case
+    // intermittently answered with no "Rent" in it — the flake the
+    // gates kept catching on evening (EDT) runs.
+    const tz = spaceTimezone(handle.sqlite, spaceId);
+    const day = (ms: number) => localDay(new Date(ms), tz);
 
     // Money/bills: Rent reserved before next income, balance short.
     new FinAccountRepo(handle, spaceId).setBalance(10000);

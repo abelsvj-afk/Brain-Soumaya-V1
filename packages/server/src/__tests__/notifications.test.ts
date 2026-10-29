@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi, onTestFinished } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { createDb, type DbHandle } from "../db/client.js";
@@ -163,31 +163,35 @@ describe("producers — real away-events land in the store", () => {
   });
 
   it("daily digest delivered → digest notification, once per day", async () => {
-    // The digest sends only once the space's local digest time (06:00 by
-    // default) has passed; pin the clock to mid-afternoon so this tests
-    // delivery, not the hour the suite happens to run at.
+    // V1 follow-up item 4c — pin the clock (Date only; real timers
+    // keep flowing). sendDailyDigests reads the real clock and
+    // skips before the space's 06:00 America/New_York digest time,
+    // so this test used to fail on any pre-06:00 run. 15:00Z is
+    // 11:00 in New York — after digest time, same local day for
+    // both calls, at any real hour.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
-    onTestFinished(() => {
+    try {
+      const ctx = {
+        handle,
+        embeddings: new HashEmbeddingProvider(EMBED_DIM),
+        llm: new HeuristicProvider(),
+        usage: new UsageTracker(handle),
+      } as AppContext;
+      const sent: { chatId: number; text: string }[] = [];
+      const send = async (chatId: number, text: string) => void sent.push({ chatId, text });
+      await handleTelegramUpdate(ctx, { message: { chat: { id: 9 }, text: "/link alice alicepass" } }, send);
+      const spaceId = new TelegramLinksRepo(handle).get(9)!.spaceId;
+
+      expect(await sendDailyDigests(ctx, send)).toBe(1);
+      expect(await sendDailyDigests(ctx, send)).toBe(0); // same day: no second digest
+
+      const list = new NotificationsRepo(handle, spaceId).list();
+      expect(list).toHaveLength(1);
+      expect(list[0]!.source).toBe("digest");
+    } finally {
       vi.useRealTimers();
-    });
-    const ctx = {
-      handle,
-      embeddings: new HashEmbeddingProvider(EMBED_DIM),
-      llm: new HeuristicProvider(),
-      usage: new UsageTracker(handle),
-    } as AppContext;
-    const sent: { chatId: number; text: string }[] = [];
-    const send = async (chatId: number, text: string) => void sent.push({ chatId, text });
-    await handleTelegramUpdate(ctx, { message: { chat: { id: 9 }, text: "/link alice alicepass" } }, send);
-    const spaceId = new TelegramLinksRepo(handle).get(9)!.spaceId;
-
-    expect(await sendDailyDigests(ctx, send)).toBe(1);
-    expect(await sendDailyDigests(ctx, send)).toBe(0); // same day: no second digest
-
-    const list = new NotificationsRepo(handle, spaceId).list();
-    expect(list).toHaveLength(1);
-    expect(list[0]!.source).toBe("digest");
+    }
   });
 });
 

@@ -58,22 +58,25 @@ beforeEach(() => {
 });
 afterEach(() => handle.sqlite.close());
 
-/**
- * The story's calendar, as "days before today" — NOT fixed dates. It used to be hard-coded
- * August dates (accident 2026-08-20, …), and the causal-link detector only looks back
- * CAUSAL_WINDOW_DAYS (65) from an event, so the whole scenario silently aged out on
- * 2026-10-24 and failed from then on. These offsets reproduce the original relationships
- * exactly (income fell 5 days after the accident, the stress notes sit between them and
- * now), so the scenario means the same thing on any day it is run.
- */
-const SCENE = { accident: 10, incomeBefore: 46, incomeAfter: 5, stress1: 8, stress2: 3 } as const;
-const DAY_MS = 86_400_000;
-const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS).toISOString();
-const dayOf = (n: number) => daysAgo(n).slice(0, 10); // YYYY-MM-DD, for money rows
-const stampOf = (n: number) => dayOf(n) + "T00:00:00"; // node occurred_at, as backdate() has always taken it
-
 function backdate(id: number, iso: string) {
   handle.sqlite.prepare(`UPDATE nodes SET occurred_at = ? WHERE id = ?`).run(iso, id);
+}
+
+/** V1 follow-up item 4a — the fixture narrative is dated RELATIVE to
+ *  the run date, never absolute. The original absolute dates
+ *  (accident 2026-08-20, income 2026-07/08) rotted: the causal gate
+ *  (analysis/causal.ts) only considers events within 65 days of now,
+ *  and the income comparison reads a trailing-12-month series, so
+ *  the scenario silently stopped exercising Phase G as the calendar
+ *  moved. Relative spacing preserves the story exactly: income drop
+ *  across two distinct months (35 days apart is always a month
+ *  boundary), the accident 10 days ago, the two stressed memories
+ *  2 and 7 days after it. */
+function daysAgoIso(n: number): string {
+  return `${new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)}T00:00:00`;
+}
+function daysAgoDate(n: number): string {
+  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 }
 function setValence(id: number, v: number) {
   handle.sqlite.prepare(`UPDATE nodes SET emotional_weight = ? WHERE id = ?`).run(v, id);
@@ -86,7 +89,7 @@ async function makeVehicleContradiction(llm: HeuristicProvider, spaceId = SPACE)
   const deps = { embeddings, llm };
   const vehicleId = (await ingest(handle, deps, "I have one vehicle, a 2016 Honda.", spaceId)).nodes[0]!.id;
   const accidentId = (await ingest(handle, deps, "Vehicle accident happened yesterday.", spaceId)).nodes[0]!.id;
-  backdate(accidentId, stampOf(SCENE.accident));
+  backdate(accidentId, daysAgoIso(10));
   new InsightsRepo(handle, spaceId).create(vehicleId, accidentId, "The accident may affect vehicle availability.", 0.9, "contradiction");
   const [claim] = openContradictionClaims(handle, spaceId);
   return { vehicleId, accidentId, claim: claim! };
@@ -104,16 +107,16 @@ describe("Scenario A — a full longitudinal conversation through real chat() ca
 
     // 2. Downstream Money evidence, thematically tied to the accident (a real income drop).
     const income = new FinIncomeRepo(handle, SPACE);
-    income.create({ date: dayOf(SCENE.incomeBefore), netCents: 400_000 });
-    income.create({ date: dayOf(SCENE.incomeAfter), netCents: 250_000 });
+    income.create({ date: daysAgoDate(40), netCents: 400_000 });
+    income.create({ date: daysAgoDate(5), netCents: 250_000 });
 
     // 3. A REAL, repeated (not one-off) emotional pattern about the same situation — the
     // accident's aftermath, so the whole scenario reads as one coherent story rather than an
     // emotional signal manufactured merely to satisfy the test.
     const f1 = (await ingest(handle, deps, "Stressed about getting around without the car after the accident.", SPACE)).nodes[0]!.id;
     const f2 = (await ingest(handle, deps, "Still stressed about not having the car since the accident.", SPACE)).nodes[0]!.id;
-    backdate(f1, stampOf(SCENE.stress1));
-    backdate(f2, stampOf(SCENE.stress2));
+    backdate(f1, daysAgoIso(8));
+    backdate(f2, daysAgoIso(3));
     setValence(f1, -0.6);
     setValence(f2, -0.7);
 
@@ -230,12 +233,12 @@ describe("Scenario C — Galaxy navigation coexists with the full snapshot stack
     // real data to surface at once, plus an active Journey for navigation to resolve to.
     await makeVehicleContradiction(llm);
     const income = new FinIncomeRepo(handle, SPACE);
-    income.create({ date: dayOf(SCENE.incomeBefore), netCents: 400_000 });
-    income.create({ date: dayOf(SCENE.incomeAfter), netCents: 250_000 });
+    income.create({ date: daysAgoDate(40), netCents: 400_000 });
+    income.create({ date: daysAgoDate(5), netCents: 250_000 });
     const f1 = (await ingest(handle, deps, "Stressed about the accident's aftermath.", SPACE)).nodes[0]!.id;
     const f2 = (await ingest(handle, deps, "Still stressed about the accident's aftermath.", SPACE)).nodes[0]!.id;
-    backdate(f1, stampOf(SCENE.stress1));
-    backdate(f2, stampOf(SCENE.stress2));
+    backdate(f1, daysAgoIso(8));
+    backdate(f2, daysAgoIso(3));
     setValence(f1, -0.6);
     setValence(f2, -0.7);
     llm.injectPreference = { signal: "verbosity", value: "concise" };
@@ -290,12 +293,12 @@ describe("cross-pipeline space isolation — the full integrated stack, not just
     const depsA = { embeddings, llm: llmA };
     await makeVehicleContradiction(llmA, "space-a");
     const income = new FinIncomeRepo(handle, "space-a");
-    income.create({ date: dayOf(SCENE.incomeBefore), netCents: 400_000 });
-    income.create({ date: dayOf(SCENE.incomeAfter), netCents: 250_000 });
+    income.create({ date: daysAgoDate(40), netCents: 400_000 });
+    income.create({ date: daysAgoDate(5), netCents: 250_000 });
     const f1 = (await ingest(handle, depsA, "Stressed about the accident's aftermath.", "space-a")).nodes[0]!.id;
     const f2 = (await ingest(handle, depsA, "Still stressed about the accident's aftermath.", "space-a")).nodes[0]!.id;
-    backdate(f1, stampOf(SCENE.stress1));
-    backdate(f2, stampOf(SCENE.stress2));
+    backdate(f1, daysAgoIso(8));
+    backdate(f2, daysAgoIso(3));
     setValence(f1, -0.6);
     setValence(f2, -0.7);
     llmA.injectPreference = { signal: "verbosity", value: "concise" };
@@ -329,12 +332,12 @@ describe("performance — the integrated pipeline adds no NEW full-space scan be
     const deps = { embeddings, llm };
     await makeVehicleContradiction(llm);
     const income = new FinIncomeRepo(handle, SPACE);
-    income.create({ date: dayOf(SCENE.incomeBefore), netCents: 400_000 });
-    income.create({ date: dayOf(SCENE.incomeAfter), netCents: 250_000 });
+    income.create({ date: daysAgoDate(40), netCents: 400_000 });
+    income.create({ date: daysAgoDate(5), netCents: 250_000 });
     const f1 = (await ingest(handle, deps, "Stressed about the accident's aftermath.", SPACE)).nodes[0]!.id;
     const f2 = (await ingest(handle, deps, "Still stressed about the accident's aftermath.", SPACE)).nodes[0]!.id;
-    backdate(f1, stampOf(SCENE.stress1));
-    backdate(f2, stampOf(SCENE.stress2));
+    backdate(f1, daysAgoIso(8));
+    backdate(f2, daysAgoIso(3));
     setValence(f1, -0.6);
     setValence(f2, -0.7);
     llm.injectPreference = { signal: "verbosity", value: "concise" };
