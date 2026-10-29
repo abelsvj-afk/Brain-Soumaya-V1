@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi, onTestFinished } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { createDb, type DbHandle } from "../db/client.js";
@@ -163,6 +163,12 @@ describe("producers — real away-events land in the store", () => {
   });
 
   it("daily digest delivered → digest notification, once per day", async () => {
+    // The digest sends only once the space's local digest time (06:00 by
+    // default) has passed; pin the clock to mid-afternoon so this tests
+    // delivery, not the hour the suite happens to run at.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
+    onTestFinished(() => vi.useRealTimers());
     const ctx = {
       handle,
       embeddings: new HashEmbeddingProvider(EMBED_DIM),

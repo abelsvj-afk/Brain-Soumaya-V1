@@ -15,6 +15,13 @@ vi.mock("../api/client.js", () => ({
   updateProfile: (...a: unknown[]) => updateProfile(...a),
 }));
 const pushToast = vi.fn();
+// REG-216 is about a space STORED as UTC on a device that isn't. Pin the
+// device zone so the test means the same thing on any machine — including
+// a UTC sandbox, where "show the device zone" would legitimately show UTC.
+vi.mock("../utils/spaceTimezone.js", async (orig) => ({
+  ...(await orig<typeof import("../utils/spaceTimezone.js")>()),
+  deviceTimeZone: () => "America/New_York",
+}));
 vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) }));
 
 const getUsage = vi.fn();
@@ -68,10 +75,9 @@ describe("REG-216 — no UTC in the user-facing timezone list", () => {
   it("a space already stored as UTC shows the device zone instead, never a UTC option", async () => {
     getSpacePreferences.mockResolvedValue({ ...PREFS, timezone: "UTC" });
     render(<SettingsPanel onClose={() => {}} />);
-    // The device zone depends on this run's TZ (America/New_York under NY,
-    // Pacific/Kiritimati under KI) — derive it, don't hardcode it. The select
-    // displays the zone with spaces ("America/New York").
-    const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // The device zone is pinned above. The select displays the zone with
+    // spaces ("America/New York").
+    const deviceZone = "America/New_York";
     const tz = (await screen.findByDisplayValue(deviceZone.replaceAll("_", " "))) as HTMLSelectElement;
     expect(tz.value).toBe(deviceZone);
     const options = [...tz.options].map((o) => o.value);

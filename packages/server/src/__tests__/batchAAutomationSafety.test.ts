@@ -208,6 +208,15 @@ describe("RE-01 boundary records with the real sender", () => {
 // ---------------------------------------------------------------------------
 
 describe("RE-01 digest marking", () => {
+  // The digest sends only once the space's local digest time (06:00 by
+  // default) has passed; pin the clock to mid-afternoon so this tests
+  // delivery, not the hour the suite happens to run at.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("a refused digest is not marked sent and does not count as sent", async () => {
     await linkChat(21);
     await handleTelegramUpdate(ctx, update(21, "/log a run in the park"), send);

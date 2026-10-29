@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createDb, type DbHandle } from "../db/client.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { HeuristicProvider } from "../llm/heuristic.js";
@@ -93,6 +93,15 @@ describe("telegram multi-brain routing", () => {
 });
 
 describe("telegram proactive digest sweep", () => {
+  // The digest sends only once the space's local digest time (06:00 by
+  // default) has passed; pin the clock to mid-afternoon so this tests
+  // delivery, not the hour the suite happens to run at.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("pushes one digest per linked chat and is idempotent within the day", async () => {
     await handleTelegramUpdate(ctx, update(1, "/link alice alicepass"), send);
     await handleTelegramUpdate(ctx, update(1, "/log alice went for a long run today"), send);
