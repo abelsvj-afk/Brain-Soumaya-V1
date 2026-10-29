@@ -172,6 +172,12 @@ export interface GardenGlow {
 }
 
 const DAWN_GOLD = 0xffd27a;
+/**
+ * Terrace tops, outermost (lowest) to crown — the approved Growing Place
+ * mock-up's five layered greens, lightening toward the light; the sixth
+ * (crown) repeats the lightest so the top reads as sunlit.
+ */
+const TERRACE_GREENS = [0x3d6b35, 0x477a3a, 0x528741, 0x5d9247, 0x6b9c4e, 0x6b9c4e] as const;
 const STONE = 0xd8d2c4;
 const SOIL = 0x4a3a28;
 
@@ -233,6 +239,30 @@ function fitToSize(root: THREE.Object3D, size: number): void {
   root.position.sub(center);
 }
 
+/**
+ * Soft radial gold glow for the crown halo — computed into a DataTexture
+ * (no canvas, so it also builds where there is no DOM) and no asset to load.
+ */
+function haloTexture(): THREE.Texture {
+  const n = 64;
+  const data = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const d = Math.min(1, Math.hypot(x - n / 2 + 0.5, y - n / 2 + 0.5) / (n / 2));
+      const o = (y * n + x) * 4;
+      data[o] = 255;
+      data[o + 1] = Math.round(215 - 35 * d);
+      data[o + 2] = Math.round(140 - 50 * d);
+      data[o + 3] = Math.round(255 * 0.55 * (1 - d));
+    }
+  }
+  const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export function createGardenScene(
   layout: GardenLayout,
   glowOrMutation?: GardenGlow | GardenMutationInput,
@@ -253,30 +283,40 @@ export function createGardenScene(
   // Verb 1: the plot meshes, kept for tap-to-tend raycasting.
   const plotMeshes: { mesh: THREE.InstancedMesh; plots: readonly { nodeId: number }[] }[] = [];
 
-  // Terraces: one flat ring per band present, greens varied per terrace so
-  // the arcs read as distinct plantings. Ring i spans radius[i+1]..radius[i].
-  const presentTerraces = new Set([
-    ...layout.plots.map((p) => p.terrace),
-    ...layout.landmarks.map((l) => l.terrace),
-  ]);
-  if (presentTerraces.size === 0) presentTerraces.add(0); // empty garden still has ground
+  // Terraces: every band is built, whether or not a plot sits on it yet —
+  // the garden is always a complete, layered hillside (as in the mock-up),
+  // never bare rings with the underside showing through the gaps. Greens
+  // step per terrace. Ring i spans radius[i+1]..radius[i].
+  const presentTerraces = new Set(Array.from({ length: GARDEN_TERRACE_COUNT }, (_, t) => t));
+  const riserMat = new THREE.MeshLambertMaterial({ color: 0x2e4d2a, side: THREE.DoubleSide });
   for (const t of [...presentTerraces].sort((a, b) => a - b)) {
     const inner = t + 1 < GARDEN_TERRACE_COUNT ? GARDEN_TERRACE_RADIUS[t + 1]! : 60;
     const outer = GARDEN_TERRACE_RADIUS[t]!;
-    const green = new THREE.Color().setHSL(0.33 - t * 0.012, 0.42, 0.32 + t * 0.015);
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(inner, outer, 64),
-      new THREE.MeshStandardMaterial({ color: green, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: TERRACE_GREENS[t]!, side: THREE.DoubleSide }),
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = GARDEN_TERRACE_HEIGHT[t]!;
     ring.name = `terrace-${t}`;
     group.add(ring);
+    // The step down to the terrace below: without a riser each ring floats
+    // as a flat disc and the garden reads as a plate, not as terraces.
+    if (t > 0) {
+      const below = GARDEN_TERRACE_HEIGHT[t - 1]!;
+      const riser = new THREE.Mesh(
+        new THREE.CylinderGeometry(outer, outer, GARDEN_TERRACE_HEIGHT[t]! - below, 64, 1, true),
+        riserMat,
+      );
+      riser.position.y = (GARDEN_TERRACE_HEIGHT[t]! + below) / 2;
+      riser.name = `terrace-riser-${t}`;
+      group.add(riser);
+    }
   }
   // Crown disc under the tree.
   const crownDisc = new THREE.Mesh(
     new THREE.CircleGeometry(60, 48),
-    new THREE.MeshStandardMaterial({ color: 0x2e4a2a, roughness: 0.95, metalness: 0 }),
+    new THREE.MeshLambertMaterial({ color: TERRACE_GREENS[GARDEN_TERRACE_COUNT - 1]! }),
   );
   crownDisc.rotation.x = -Math.PI / 2;
   crownDisc.position.y = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]!;
@@ -318,23 +358,39 @@ export function createGardenScene(
   // wide enough to shade the top terraces.
   const tree = new THREE.Group();
   tree.name = "witness-tree";
+  const crownY = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]!;
   const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(14, 22, 190, 12),
-    new THREE.MeshStandardMaterial({ color: SOIL, roughness: 0.9, metalness: 0 }),
+    new THREE.CylinderGeometry(19, 28, 190, 10),
+    new THREE.MeshLambertMaterial({ color: 0x5a4030 }),
   );
-  trunk.position.y = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]! + 95;
+  trunk.position.y = crownY + 95;
   tree.add(trunk);
-  const canopyMat = new THREE.MeshStandardMaterial({ color: 0x3f6b34, roughness: 0.9, metalness: 0 });
-  const canopySpecs = [
-    { r: 150, y: 250 },
-    { r: 105, y: 310 },
-    { r: 60, y: 355 },
+  // Canopy: five overlapping, flattened blobs (the mock-up's silhouette),
+  // faintly self-lit so the crown holds its green against the dark sky.
+  const canopyMat = new THREE.MeshLambertMaterial({ color: 0x74a24b, emissive: 0x1d2f10 });
+  const canopyBlobs = [
+    { x: 0, y: 235, z: 0, r: 146 },
+    { x: 84, y: 202, z: 34, r: 95 },
+    { x: -78, y: 207, z: -28, r: 90 },
+    { x: 22, y: 213, z: -78, r: 84 },
+    { x: -28, y: 218, z: 73, r: 78 },
   ];
-  for (const spec of canopySpecs) {
-    const dome = new THREE.Mesh(new THREE.IcosahedronGeometry(spec.r, 1), canopyMat);
-    dome.position.y = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]! + spec.y;
-    tree.add(dome);
+  const canopyGeo = new THREE.IcosahedronGeometry(1, 1);
+  for (const b of canopyBlobs) {
+    const blob = new THREE.Mesh(canopyGeo, canopyMat);
+    blob.position.set(b.x, crownY + b.y, b.z);
+    blob.scale.set(b.r, b.r * 0.72, b.r);
+    tree.add(blob);
   }
+  // A warm halo behind the crown — the tree is the world's light source.
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: haloTexture(), transparent: true, depthWrite: false, fog: false }),
+  );
+  halo.scale.setScalar(640);
+  halo.position.set(0, crownY + 225, 0);
+  halo.name = "witness-halo";
+  halo.raycast = () => {}; // a glow is never a pick target (and Sprite.raycast needs a camera)
+  tree.add(halo);
   // The whole tree sways as one — a sphere alone would show nothing.
   swaying.push(tree);
   group.add(tree);
@@ -342,22 +398,45 @@ export function createGardenScene(
   // Vegetation: instanced, seeded across the terraces — the recipe's named
   // perf risk, instancing mandatory; density is the fallback dial.
   const vegRand = mulberry32(hashSeeded("growing-place / first-light-1:vegetation"));
-  const vegCount = 600;
+  const vegCount = 300;
+  const vegBlocked = [...layout.plots, ...layout.landmarks];
+  const trunks = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(2.5, 3.9, 22, 5),
+    new THREE.MeshLambertMaterial({ color: 0x54402e }),
+    vegCount,
+  );
   const veg = new THREE.InstancedMesh(
-    new THREE.ConeGeometry(3.5, 14, 5),
-    new THREE.MeshStandardMaterial({ color: 0x4c7a3f, roughness: 0.9, metalness: 0 }),
+    new THREE.IcosahedronGeometry(16, 0),
+    new THREE.MeshLambertMaterial({ color: 0x5c8a42 }),
     vegCount,
   );
   const dummy = new THREE.Object3D();
   for (let i = 0; i < vegCount; i++) {
-    const terrace = Math.floor(vegRand() * GARDEN_TERRACE_COUNT);
-    const angle = vegRand() * Math.PI * 2;
-    const radius = GARDEN_TERRACE_RADIUS[terrace]! * (0.55 + vegRand() * 0.4);
-    dummy.position.set(Math.cos(angle) * radius, GARDEN_TERRACE_HEIGHT[terrace]! + 7, Math.sin(angle) * radius);
+    // Rejection-sample so a tree never stands on a memory: plots are tiny
+    // next to a tree and would vanish behind one.
+    let x = 0;
+    let z = 0;
+    let terrace = 0;
+    for (let tries = 0; tries < 12; tries++) {
+      terrace = Math.floor(vegRand() * GARDEN_TERRACE_COUNT);
+      const angle = vegRand() * Math.PI * 2;
+      const radius = GARDEN_TERRACE_RADIUS[terrace]! * (0.55 + vegRand() * 0.4);
+      x = Math.cos(angle) * radius;
+      z = Math.sin(angle) * radius;
+      if (!vegBlocked.some((o) => Math.hypot(o.x - x, o.z - z) < 40)) break;
+    }
+    const sc = 0.7 + vegRand() * 0.9;
+    dummy.position.set(x, GARDEN_TERRACE_HEIGHT[terrace]! + 11 * sc, z);
     dummy.rotation.y = vegRand() * Math.PI * 2;
+    dummy.scale.setScalar(sc);
+    dummy.updateMatrix();
+    trunks.setMatrixAt(i, dummy.matrix);
+    dummy.position.y = GARDEN_TERRACE_HEIGHT[terrace]! + 30 * sc;
     dummy.updateMatrix();
     veg.setMatrixAt(i, dummy.matrix);
   }
+  trunks.name = "vegetation-trunks";
+  group.add(trunks);
   veg.name = "vegetation";
   group.add(veg);
 
@@ -515,10 +594,10 @@ export function createGardenScene(
   // Dawn light: warm low key + soft ambient. Mist: three slow planes.
   // The key, ambient, and mist are the A8 handles — the mutation block
   // below lerps their colors toward the warmth signal, never a cut.
-  const key = new THREE.DirectionalLight(DAWN_GOLD, 1.4);
+  const key = new THREE.DirectionalLight(0xffc27d, 1.6);
   key.position.set(-400, 260, 300);
   group.add(key);
-  const ambient = new THREE.AmbientLight(0x9db8a0, 0.55);
+  const ambient = new THREE.AmbientLight(0xffd9b0, 1.15);
   group.add(ambient);
   const mistMat = new THREE.MeshBasicMaterial({ color: 0xcfd8b8, transparent: true, opacity: 0.08, side: THREE.DoubleSide });
   const mists: THREE.Mesh[] = [];

@@ -52,6 +52,24 @@ const layout = buildGardenLayout(
 );
 
 describe("garden scene (P3-1)", () => {
+  it("mock-up look: every terrace is built even in an empty garden, the forest is 300 instanced trees, and the draw calls stay under the recipe's 95", () => {
+    const scene = createGardenScene({ plots: [], paths: [], landmarks: [], eligibleCount: 0 } as never);
+    const names = new Set<string>();
+    let drawCalls = 0;
+    scene.group.traverse((o) => {
+      names.add(o.name);
+      if (o instanceof THREE.Mesh || o instanceof THREE.Sprite || o instanceof THREE.Points || o instanceof THREE.Line) drawCalls++;
+    });
+    for (let t = 0; t < 6; t++) expect(names.has(`terrace-${t}`)).toBe(true);
+    for (let t = 1; t < 6; t++) expect(names.has(`terrace-riser-${t}`)).toBe(true);
+    const veg = scene.group.getObjectByName("vegetation") as THREE.InstancedMesh;
+    const trunks = scene.group.getObjectByName("vegetation-trunks") as THREE.InstancedMesh;
+    expect(veg.count).toBe(300);
+    expect(trunks.count).toBe(300);
+    expect(drawCalls).toBeLessThan(95);
+    scene.dispose();
+  });
+
   it("builds the garden from the layout: terraces, tree, plots, paths, landmark, dimmed sky", () => {
     const scene = createGardenScene(layout);
     const names = new Set<string>();

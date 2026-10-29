@@ -408,6 +408,16 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   Deep Past scene appears to rebuild (re-loading its models) after mount — not investigated. **Scale is
   missing files:** 5 URLs its asset module names are not in `public/` (incl. the hero `ISS-A.glb` and probe
   models) — awaiting the owner's upload; the world renders without them. Needs on-device confirmation.
+- **Growing Place ported to the approved mock-up look (2026-10-29) — MEASURED headless at 412×915, needs
+  on-device confirmation** (gardenScene.ts): the real scene had a dark brown void between sparse rings
+  (only terraces holding a plot were built) and dark spike "vegetation". Now: all 6 terraces always built
+  in the mock-up's layered greens with step risers; the witness tree is the mock-up's trunk + five flattened
+  canopy blobs + a warm halo sprite; the forest is 300 seeded instanced trees (trunk + canopy, kept off plots
+  and landmarks); lights are the mock-up's warm ambient 1.15 / key 1.6 (the A8 warmth lerp still overrides
+  their colours once warmth is seen). Deliberately NOT ported: the mock-up's dawn sky dome/sun/ridges — the
+  owner asked for the current space/star backdrop. Draw calls stay far under the 95 ceiling (pinned by a
+  test). Plots/paths/landmarks/tend/mutation untouched. Look at: forest density vs. plot legibility on a real
+  phone, and whether the canopy halo reads against the dark sky.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
