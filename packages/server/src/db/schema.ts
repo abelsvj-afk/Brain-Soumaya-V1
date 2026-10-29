@@ -664,25 +664,71 @@ export type UserModelRow = typeof userModel.$inferSelect;
  * W2 forget / deletion contract: user-authorized forget requests. Scope is
  * resolved to IDs + controlled topic labels at approval time; the free-text
  * target_query is nulled at approval (content-free audit, §3.7).
+ *
+ * Fix round 3 (forget-request binding, D1): target_source_id names the
+ * exact source a source-forget request authorizes. NULL on legacy /
+ * episodic rows — NULL can never authorize a source forget (D5).
  */
-export const forgetRequests = sqliteTable("forget_requests", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  spaceId: text("space_id").notNull(),
-  requestedBy: text("requested_by").notNull().default("user"),
-  targetEpisodeId: integer("target_episode_id"),
-  targetNodeId: integer("target_node_id"),
-  // Set to NULL at approval time — never retained after scope confirmation.
-  targetQuery: text("target_query"),
-  scopeEpisodeIds: text("scope_episode_ids").notNull().default("[]"),
-  scopeNodeIds: text("scope_node_ids").notNull().default("[]"),
-  scopeTopics: text("scope_topics").notNull().default("[]"),
-  status: text("status").notNull().default("pending"),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
-  appliedAt: text("applied_at"),
-});
+export const forgetRequests = sqliteTable(
+  "forget_requests",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull(),
+    requestedBy: text("requested_by").notNull().default("user"),
+    targetEpisodeId: integer("target_episode_id"),
+    targetNodeId: integer("target_node_id"),
+    // Set to NULL at approval time — never retained after scope confirmation.
+    targetQuery: text("target_query"),
+    // Fix round 3 (D1): the bound source id for a source-forget request.
+    targetSourceId: integer("target_source_id"),
+    scopeEpisodeIds: text("scope_episode_ids").notNull().default("[]"),
+    scopeNodeIds: text("scope_node_ids").notNull().default("[]"),
+    scopeTopics: text("scope_topics").notNull().default("[]"),
+    status: text("status").notNull().default("pending"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    appliedAt: text("applied_at"),
+  },
+  (t) => [
+    // Fix round 3 (D9): at most one live (pending/approved) source-forget
+    // request per source per space. Mirrors the SQL partial unique index
+    // in db/client.ts migrateSchema; NULLs never conflict.
+    uniqueIndex("idx_forget_requests_live_source")
+      .on(t.spaceId, t.targetSourceId)
+      .where(sql`status IN ('pending', 'approved')`),
+  ],
+);
 export type ForgetRequestRow = typeof forgetRequests.$inferSelect;
+
+/**
+ * Review surface for flagged forget rows (design note
+ * `unresolved-flag-review-surface-design-2026-10-25.md` §1): one row
+ * per quoting row left in place by policy, per forget act. Written in
+ * the apply transaction; status is the per-row lifecycle
+ * (open/reviewed/resolved_deleted/dismissed).
+ */
+export const forgetUnresolvedFlags = sqliteTable(
+  "forget_unresolved_flags",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    spaceId: text("space_id").notNull(),
+    requestId: integer("request_id").notNull(),
+    sourceId: integer("source_id").notNull(),
+    tableName: text("table_name").notNull(),
+    rowId: integer("row_id").notNull(),
+    policyReason: text("policy_reason").notNull(),
+    status: text("status").notNull().default("open"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    reviewedAt: text("reviewed_at"),
+  },
+  (t) => [
+    index("idx_forget_unresolved_flags_space").on(t.spaceId, t.status),
+  ],
+);
+export type ForgetUnresolvedFlagRow = typeof forgetUnresolvedFlags.$inferSelect;
 
 /**
  * W2 enrichment quota ledger (B4, Rev 3): atomic check-and-increment

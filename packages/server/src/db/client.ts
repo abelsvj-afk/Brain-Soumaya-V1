@@ -361,7 +361,7 @@ export function migrateTtsAudioCacheOwned(sqlite: RawDb): { migrated: boolean } 
  * (e.g. an existing volume on Fly). CREATE TABLE IF NOT EXISTS won't add new
  * columns, so we patch them in idempotently.
  */
-function migrateSchema(sqlite: RawDb): void {
+export function migrateSchema(sqlite: RawDb): void {
   const cols = sqlite.prepare(`PRAGMA table_info(nodes)`).all() as { name: string }[];
   if (!cols.some((c) => c.name === "importance")) {
     sqlite.exec(`ALTER TABLE nodes ADD COLUMN importance REAL`);
@@ -1095,6 +1095,27 @@ function migrateSchema(sqlite: RawDb): void {
       applied_at TEXT
     );
 
+    -- Review surface for flagged forget rows (design note
+    -- unresolved-flag-review-surface-design-2026-10-25.md section 1):
+    -- one row per quoting row left in place by policy, per forget
+    -- act. DDL identical to BOOTSTRAP_SQL in db/schemaSql.ts — a
+    -- no-op on fresh volumes, the migration on legacy ones.
+    CREATE TABLE IF NOT EXISTS forget_unresolved_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      request_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      table_name TEXT NOT NULL CHECK (table_name IN ('user_model', 'instruction_profiles')),
+      row_id INTEGER NOT NULL,
+      policy_reason TEXT NOT NULL CHECK (policy_reason IN ('stated_user_model', 'instruction_profile')),
+      status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'reviewed', 'resolved_deleted', 'dismissed')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      reviewed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_forget_unresolved_flags_space
+      ON forget_unresolved_flags(space_id, status);
+
     CREATE TABLE IF NOT EXISTS enrichment_quota (
       space_id TEXT NOT NULL,
       quota_date TEXT NOT NULL,
@@ -1526,6 +1547,33 @@ function migrateSchema(sqlite: RawDb): void {
   // inquiries with contradiction_id NULL never collide.
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_inquiries_contradiction ON inquiries(space_id, contradiction_id)`);
 
+  // Fix round 3 (forget-request binding, D1/D9): `forget_requests`
+  // gains `target_source_id INTEGER NULL`, plus the partial unique
+  // index for at most one live (pending/approved) source-forget
+  // request per source per space. migrateSchema ONLY, never
+  // BOOTSTRAP_SQL (v252 crash precedent) — the CREATE TABLE above is
+  // a no-op on existing volumes, so only this PRAGMA-guarded ALTER
+  // can add the column, on fresh and legacy volumes alike. No FK, no
+  // backfill: NULL is the only correct default (a pre-column request's
+  // intended source is unknowable — target_query is nulled at
+  // approval — and such rows must refuse, D5). This MUST sit before
+  // the W2 post-migration assertion below (which lists the column)
+  // and AFTER the W2 CREATE TABLE block above (the index cannot
+  // reference a column that does not exist yet). SQLite treats NULLs
+  // as distinct in a unique index, so legacy/episodic NULL rows
+  // never conflict.
+  const forgetCols = sqlite.prepare(`PRAGMA table_info(forget_requests)`).all() as { name: string }[];
+  if (forgetCols.length > 0) {
+    if (!forgetCols.some((c) => c.name === "target_source_id")) {
+      sqlite.exec(`ALTER TABLE forget_requests ADD COLUMN target_source_id INTEGER`);
+    }
+    sqlite.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_forget_requests_live_source
+       ON forget_requests(space_id, target_source_id)
+       WHERE status IN ('pending','approved')`,
+    );
+  }
+
   // W3 Amendment 1 §2 (Milestone 3): extend the user_model.invalid_reason
   // CHECK to seven values via table rebuild when the live table still has
   // the original five. Runs AFTER the review_flag ALTERs above so the
@@ -1559,9 +1607,13 @@ function migrateSchema(sqlite: RawDb): void {
     forget_requests: [
       "id", "space_id", "requested_by", "target_episode_id", "target_node_id",
       "target_query", "scope_episode_ids", "scope_node_ids", "scope_topics",
-      "status", "created_at", "applied_at",
+      "status", "created_at", "applied_at", "target_source_id",
     ],
     enrichment_quota: ["space_id", "quota_date", "claimed"],
+    forget_unresolved_flags: [
+      "id", "space_id", "request_id", "source_id", "table_name", "row_id",
+      "policy_reason", "status", "created_at", "reviewed_at",
+    ],
     // FTS5 virtual table: rowid is implicit (not listed by PRAGMA table_info).
     episodes_fts: ["summary", "detail"],
   };
@@ -1706,6 +1758,111 @@ function migrateSchema(sqlite: RawDb): void {
     if (finCols.length > 0 && !finCols.some((c) => c.name === "balance_applied_at")) {
       sqlite.exec(`ALTER TABLE ${table} ADD COLUMN balance_applied_at TEXT`);
       sqlite.exec(`UPDATE ${table} SET balance_applied_at = created_at WHERE balance_applied_at IS NULL`);
+    }
+  }
+
+  // Verbatim-Recall V1 Source Layer (design note Rev 1-3, sections
+  // 18.2-18.3). New tables via CREATE TABLE IF NOT EXISTS with DDL
+  // identical to BOOTSTRAP_SQL in db/schemaSql.ts (the W2 pattern) —
+  // a no-op on fresh volumes, the migration on legacy ones.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      citation_class TEXT NOT NULL DEFAULT 'verbatim_typed',
+      title TEXT,
+      raw_bytes BLOB NOT NULL,
+      raw_text TEXT,
+      encoding TEXT NOT NULL DEFAULT 'utf8',
+      content_hash TEXT NOT NULL,
+      byte_length INTEGER NOT NULL,
+      speaker TEXT NOT NULL DEFAULT 'owner',
+      occurred_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      idempotency_key TEXT,
+      audio_ref TEXT,
+      processing_status TEXT NOT NULL DEFAULT 'preserved',
+      processing_attempts INTEGER NOT NULL DEFAULT 0,
+      processing_lease_owner TEXT,
+      processing_lease_expires_at TEXT,
+      extraction_hash TEXT,
+      capture_intent TEXT NOT NULL DEFAULT 'extract',
+      capture_params TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sources_space_occurred
+      ON sources(space_id, occurred_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_space_idempotency
+      ON sources(space_id, idempotency_key);
+    CREATE TABLE IF NOT EXISTS source_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      ordinal INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      start_ms INTEGER,
+      end_ms INTEGER,
+      indexed_vec INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_chunks_space_source_ordinal
+      ON source_chunks(space_id, source_id, ordinal);
+    CREATE TABLE IF NOT EXISTS node_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      node_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      chunk_id INTEGER,
+      role TEXT NOT NULL DEFAULT 'origin',
+      active INTEGER NOT NULL DEFAULT 1,
+      superseded_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (node_id, chunk_id, role)
+    );
+    CREATE INDEX IF NOT EXISTS idx_node_sources_node
+      ON node_sources(node_id, active);
+    CREATE INDEX IF NOT EXISTS idx_node_sources_source
+      ON node_sources(source_id, active);
+    CREATE TABLE IF NOT EXISTS source_corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      chunk_id INTEGER,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      corrected_text TEXT NOT NULL,
+      reason TEXT,
+      corrected_by TEXT,
+      seq INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (source_id, seq)
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(text);
+  `);
+
+  // Fix round 2 (audit P1: direct-capture recovery): volumes created
+  // by the V1 build (PR #104, pre-fix-2) already have a `sources`
+  // table WITHOUT capture_intent/capture_params — the CREATE TABLE
+  // above is a no-op for them. PRAGMA-guarded ALTERs backfill the
+  // columns (same pattern as the journeys span columns above).
+  //
+  // Fix round 3 — the 'extract' default is NOT correct for every
+  // pre-fix-2 row, despite what this comment used to claim. Pre-fix-2
+  // direct captures (Telegram /note saves and action captures) were
+  // persisted without intent, so they are defaulted to 'extract' here
+  // and boot recovery runs them through generic extraction — the
+  // recovery routing cannot tell them apart afterwards (see the
+  // disclosed residual in sources/recovery.ts). The default is kept
+  // because there is no safe signal to reclassify them by (no guessing
+  // from content or title); it is a known misroute, not a correct one.
+  const sourceCols = sqlite.prepare(`PRAGMA table_info(sources)`).all() as { name: string }[];
+  if (sourceCols.length > 0) {
+    if (!sourceCols.some((c) => c.name === "capture_intent")) {
+      sqlite.exec(`ALTER TABLE sources ADD COLUMN capture_intent TEXT NOT NULL DEFAULT 'extract'`);
+    }
+    if (!sourceCols.some((c) => c.name === "capture_params")) {
+      sqlite.exec(`ALTER TABLE sources ADD COLUMN capture_params TEXT`);
     }
   }
 }
