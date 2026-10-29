@@ -2,7 +2,8 @@ import type { AppContext } from "../context.js";
 import { ingest, ingestWithContext } from "../ingestion/pipeline.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
-import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../economy.js";
+import { EconomyRepo, EARN_MEMORY } from "../economy.js";
+import { buffsForSpace } from "../relics/buffs.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
 import { detectForesight } from "./foresight.js";
 import { spaceTimezone, localDay } from "../agent/notify/policy.js";
@@ -237,7 +238,7 @@ export async function answerDailyContact(
   // Same earn path as the ingest route (answering IS tending).
   const { advanced } = new StreakRepo(ctx.handle, spaceId).touch();
   const fuelEarned =
-    EARN_MEMORY + EARN_LINK * result.associativeEdges.length + (advanced ? STREAK_DAY_BONUS : 0);
+    EARN_MEMORY + buffsForSpace(ctx.handle, spaceId).linkEarn * result.associativeEdges.length + (advanced ? STREAK_DAY_BONUS : 0);
   new EconomyRepo(ctx.handle, spaceId).add(fuelEarned);
 
   ctx.handle.sqlite

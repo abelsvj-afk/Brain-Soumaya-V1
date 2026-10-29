@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { dueForReview, gradeReview, memoryStrength } from "../../analysis/review.js";
-import { EconomyRepo, EARN_REVIEW } from "../../economy.js";
+import { EconomyRepo } from "../../economy.js";
+import { buffsForSpace } from "../../relics/buffs.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../../streak.js";
 import { spaceOf } from "../middleware.js";
 
@@ -97,7 +98,7 @@ export function reviewRoutes(ctx: AppContext): Router {
       // review feeds the same loop as logging: it keeps the daily streak alive and earns
       // Fuel. This was the game layer's biggest blind spot: it rewarded storage, not recall.
       const { advanced } = new StreakRepo(ctx.handle, spaceId).touch();
-      const fuelEarned = EARN_REVIEW + (advanced ? STREAK_DAY_BONUS : 0);
+      const fuelEarned = buffsForSpace(ctx.handle, spaceId).reviewEarn + (advanced ? STREAK_DAY_BONUS : 0);
       new EconomyRepo(ctx.handle, spaceId).add(fuelEarned);
       // IM-114 (additive): the interval until that next review, in whole days, so
       // the client can say "next review in ~N days" without re-deriving SM-2.

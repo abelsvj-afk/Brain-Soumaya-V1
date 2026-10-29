@@ -4,6 +4,7 @@ import { buildCodex, codexProgress, CODEX_CATEGORIES, fieldNoteEntries, type Cod
 import { getCodexDiscoveries, type AgentDiscovery } from "../api/client.js";
 import { useCodexDiscoveryClaims } from "./useCodexDiscoveryClaims.js";
 import { useFoundRelics } from "./relicsFound.js";
+import { RelicBlessings } from "./RelicBlessings.js";
 
 /**
  * The Codex — a gamified, living atlas of the galaxy. Entries start locked, unlock as
@@ -120,6 +121,8 @@ export function CodexPanel({
       <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden", marginBottom: "0.9rem" }}>
         <div style={{ height: "100%", width: `${progress.pct}%`, background: "linear-gradient(90deg,#7af9ff,#c9a0ff)" }} />
       </div>
+
+      <RelicBlessings spaceId={spaceId} />
 
       {notesError && (
         <div className="codex-notes-error" role="alert">

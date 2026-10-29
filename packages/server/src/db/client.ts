@@ -525,6 +525,18 @@ export function migrateSchema(sqlite: RawDb): void {
     if (!metaCols.some((c) => c.name === "research_enabled")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN research_enabled TEXT`);
     }
+    if (!metaCols.some((c) => c.name === "relic_scarcity_off")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN relic_scarcity_off TEXT`);
+    }
+    if (!metaCols.some((c) => c.name === "relic_legacy_synced")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN relic_legacy_synced INTEGER NOT NULL DEFAULT 0`);
+    }
+    // P1 fix: legacy-sync eligibility marker. Default 0 = NOT eligible; the
+    // one-time ship migration (RelicHoldingsStore.migrateLegacyClaims) sets
+    // it to 1 only for spaces that existed when that migration first ran.
+    if (!metaCols.some((c) => c.name === "relic_legacy_eligible")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN relic_legacy_eligible INTEGER NOT NULL DEFAULT 0`);
+    }
     // Last UTC day a dream-cycle belief was consolidated (Level 2).
     if (!metaCols.some((c) => c.name === "last_dream_date")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN last_dream_date TEXT`);
@@ -676,6 +688,28 @@ export function migrateSchema(sqlite: RawDb): void {
   // Batch E (REG-197 / REG-051): same DDL as BOOTSTRAP_SQL in
   // db/schemaSql.ts — CREATE TABLE IF NOT EXISTS makes this a no-op on fresh
   // volumes and the creation path on volumes that predate the tables.
+  sqlite.exec(`
+    -- Relic Buffs v2: holdings + returns. Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_holdings (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      test_only INTEGER NOT NULL DEFAULT 0,
+      held INTEGER NOT NULL DEFAULT 0,
+      held_at TEXT,
+      anchor_key TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (space_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      reason TEXT NOT NULL CHECK (reason IN ('release','brain-deleted')),
+      from_anchor TEXT,
+      to_anchor TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+  `);
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS review_grade_attempts (
       space_id TEXT NOT NULL DEFAULT 'legacy',

@@ -6,7 +6,8 @@ import type { ToolContext } from "../agent/tools/types.js";
 import { ingest, ingestWithContext } from "../ingestion/pipeline.js";
 import { buildDailyDigest } from "../synthesis/dailyDigest.js";
 import { getDailyContact } from "../analysis/dailyContact.js";
-import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../economy.js";
+import { EconomyRepo, EARN_MEMORY } from "../economy.js";
+import { buffsForSpace } from "../relics/buffs.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
 import { SpacesRepo, UserFacingError } from "../auth/spaces.js";
 import { TelegramLinksRepo } from "./links.js";
@@ -735,7 +736,7 @@ export async function handleTelegramUpdate(
     // Same reward path as the app's ingest route: fuel + the daily streak
     // (logging from Telegram is tending too — the streak is channel-agnostic).
     const { streak, advanced } = new StreakRepo(ctx.handle, spaceId).touch();
-    const fuel = EARN_MEMORY + EARN_LINK * linkCount + (advanced ? STREAK_DAY_BONUS : 0);
+    const fuel = EARN_MEMORY + buffsForSpace(ctx.handle, spaceId).linkEarn * linkCount + (advanced ? STREAK_DAY_BONUS : 0);
     new EconomyRepo(ctx.handle, spaceId).add(fuel);
     const streakNote = advanced ? ` · 🔥 day ${streak.current}` : "";
     await send(chatId, formatLogConfirmation(result.nodes, linkCount, fuel, streakNote));

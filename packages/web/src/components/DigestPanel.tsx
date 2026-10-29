@@ -4,6 +4,7 @@ import { getConstellationsResult, getDailyDigestResult, getDailyLogResult, getDi
 import { colorForType } from "../graph/theme.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
 import { pushToast } from "./Toasts.js";
+import { useRelicBuffs } from "../hooks/useRelicBuffs.js";
 import { playSfx } from "../graph/sfx.js";
 
 /**
@@ -131,14 +132,15 @@ function SectionToggle({
 }
 
 /** Dependency-free valence sparkline (−1..1). Green above the midline, red below. */
-function MoodSparkline({ points }: { points: EmotionalTrajectory["points"] }) {
+function MoodSparkline({ points, swing = 1 }: { points: EmotionalTrajectory["points"]; swing?: number }) {
+  const shown = (v: number) => Math.max(-1, Math.min(1, v * swing));
   if (points.length < 2) return null;
   const W = 240;
   const H = 44;
   const LABEL_H = 12;
   const n = points.length;
   const x = (i: number) => (i / (n - 1)) * W;
-  const y = (v: number) => H / 2 - (v * (H / 2 - 3)); // +1 → top, −1 → bottom
+  const y = (v: number) => H / 2 - (shown(v) * (H / 2 - 3)); // +1 → top, −1 → bottom
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.valence).toFixed(1)}`).join(" ");
   // IM-60: the sparkline had no axis at all — label the window's first and
   // last bucket dates so the curve is anchored in time.
@@ -175,6 +177,7 @@ export function DigestPanel({
   /** Called after a cluster is promoted to a constellation hub, so the galaxy refreshes. */
   onPromoted?: () => void;
 }) {
+  const { state: relicBuffs } = useRelicBuffs(true);
   const [items, setItems] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [daily, setDaily] = useState<DailyDigest | null>(null);
@@ -955,7 +958,8 @@ export function DigestPanel({
           </div>
           {sectionOpen("emotional") && (
           <>
-          <MoodSparkline points={emotional.points} />
+          <MoodSparkline points={emotional.points} swing={relicBuffs?.buffs.emotionalSwingMultiplier ?? 1} />
+          {relicBuffs && relicBuffs.buffs.emotionalSwingMultiplier !== 1 && (<p style={{ fontSize: "0.74rem", opacity: 0.7, margin: "0.35rem 0 0 0" }}>The First Light Shard sharpens these swings in how they are shown — the memories themselves are unchanged.</p>)}
           {/* REG-154 / INS-07: the headline used to mix two windows in one
               statement — trend/volatility from the last 40 day-buckets beside
               an all-history average/sample size, implying one window none of

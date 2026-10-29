@@ -338,3 +338,80 @@ export function eternityGateOpen(
   }
   return others >= 2;
 }
+
+// ---------------------------------------------------------------------------
+// Relic Buffs v2 (design note v2 §§5, 10, 11) — data beside the registry.
+// This stays data only: no buffed value is ever stored anywhere; the server
+// computes effective values fresh from the held set on every read.
+// ---------------------------------------------------------------------------
+
+export type RelicScarcityClass = "public" | "eternity" | "private";
+export interface RelicCopyLimit { scarcityClass: RelicScarcityClass; /** null = 1 per brain, enforced by the holdings primary key. */ limit: number | null; }
+export const RELIC_COPY_LIMITS: Readonly<Record<string, RelicCopyLimit>> = {
+  "harbor-nail": { scarcityClass: "public", limit: 7 },
+  "mooring-ring": { scarcityClass: "public", limit: 7 },
+  "dawn-leaf": { scarcityClass: "private", limit: null },
+  "witness-seed": { scarcityClass: "private", limit: null },
+  "first-light-shard": { scarcityClass: "private", limit: null },
+  "basin-stone": { scarcityClass: "private", limit: null },
+  "lantern-of-keeping": { scarcityClass: "private", limit: null },
+  "witness-without-a-name": { scarcityClass: "eternity", limit: 3 },
+  "hearth-ember": { scarcityClass: "private", limit: null },
+  "thread-of-many": { scarcityClass: "private", limit: null },
+  "star-hanger": { scarcityClass: "public", limit: 7 },
+  "sunward-compass": { scarcityClass: "public", limit: 7 },
+  "stillness-seal": { scarcityClass: "private", limit: null },
+  "unopened-fold": { scarcityClass: "private", limit: null },
+  "unnumbered-fragment": { scarcityClass: "eternity", limit: 3 },
+};
+
+export const MAX_HELD_RELICS = 3;
+export const RELIC_BASE = { fuelCap: 200, fuelRegenPerHour: 3.5, reviewEarn: 3, linkEarn: 2, discoveryEarn: 4, driftBonus: 3, driftDailyCap: 2, riseWindowDays: 30 } as const;
+export const REVIEW_EARN_FLOOR = 1;
+export const FUEL_REGEN_FLOOR_PER_HOUR = 0.5;
+export const DRIFT_BONUS_FLOOR = 1;
+export const GROWTH_MULTIPLIER_FLOOR = 0.25;
+
+export type RelicBlessingStatus = "live" | "cut" | "gate-key";
+export interface RelicBlessing { status: RelicBlessingStatus; giftPlain: string; costPlain: string; cutReason?: string; }
+export const RELIC_BLESSINGS: Readonly<Record<string, RelicBlessing>> = {
+  "harbor-nail": { status: "live", giftPlain: "Your fuel tank holds 225 instead of 200.", costPlain: "Review earnings are 1 less while you hold it." },
+  "mooring-ring": { status: "live", giftPlain: "Drift journeys pay 4 instead of 3, and up to 3 drift bonuses can pay in a day instead of 2.", costPlain: "No trade-off." },
+  "dawn-leaf": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — the app has no way for partial milestones to feed progress, so there is nothing for it to change." },
+  "witness-seed": { status: "live", giftPlain: "Memories from the last 45 days can rise in the Deep Past, instead of 30.", costPlain: "Progress increases grow more slowly (three quarters of the usual step) while you hold it." },
+  "first-light-shard": { status: "live", giftPlain: "Review earnings are 1 more.", costPlain: "The mood curve is shown with its swings a little larger — only how it looks changes, never what is stored." },
+  "basin-stone": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — the app has no way to soften swings from particular memories, and a trade-off on its own would only be a cost." },
+  "lantern-of-keeping": { status: "live", giftPlain: "Memories from the last 45 days can rise in the Deep Past, and a risen memory stays risen for the rest of the visit.", costPlain: "Progress increases grow more slowly (three quarters of the usual step) while you hold it." },
+  "witness-without-a-name": { status: "gate-key", giftPlain: "It is the key to Eternity's gate — with any two other relics found, the way can open.", costPlain: "No trade-off." },
+  "hearth-ember": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — progress already counts for each goal and skill on its own, and there is no combined growth signal for it to feed." },
+  "thread-of-many": { status: "live", giftPlain: "Link earnings pay 4 per link instead of 2.", costPlain: "Memories from only the last 20 days can rise in the Deep Past while you hold it (if it is the most recently held relic that sets the window)." },
+  "star-hanger": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — there is no Alignment measure in the app for it to speed up." },
+  "sunward-compass": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — travelling never changes emotional weight, so there is nothing for it to steady." },
+  "stillness-seal": { status: "live", giftPlain: "Fuel returns faster — 5 per hour instead of 3.5.", costPlain: "Review earnings are 1 less while you hold it." },
+  "unopened-fold": { status: "live", giftPlain: "Discovery earnings pay 6 instead of 4.", costPlain: "Progress increases grow more slowly (three quarters of the usual step) while you hold it." },
+  "unnumbered-fragment": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — there is no Alignment measure in the app for it to speed up." },
+};
+
+/** Anchor pools: at least two resting places per relic in its world (note §6/§10 of the task). A released copy rests at the NEXT anchor in this list, never the one it was just found at. */
+export const RELIC_ANCHORS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(RELICS.map((r) => [r.id, [`${r.id}:resting-place-one`, `${r.id}:resting-place-two`, `${r.id}:resting-place-three`]]));
+export function nextRelicAnchor(relicId: string, fromAnchor: string | null | undefined): string {
+  const pool = RELIC_ANCHORS[relicId] ?? [`${relicId}:resting-place-one`, `${relicId}:resting-place-two`];
+  const idx = fromAnchor ? pool.indexOf(fromAnchor) : -1;
+  return pool[(idx + 1 + pool.length) % pool.length]!;
+}
+export function firstRelicAnchor(relicId: string): string { return (RELIC_ANCHORS[relicId] ?? [`${relicId}:resting-place-one`])[0]!; }
+
+export interface EffectiveRelicBuffs {
+  fuelCap: number; fuelRegenPerHour: number; reviewEarn: number; linkEarn: number; discoveryEarn: number;
+  driftBonus: number; driftDailyCap: number; riseWindowDays: number;
+  riseWindowSetBy: string | null; riseWindowOverruled: string[];
+  growthMultiplier: number; emotionalSwingMultiplier: number; risenHold: boolean;
+}
+export interface RelicHoldingView { relicId: string; name: string; held: boolean; testOnly: boolean; anchorKey: string; blessing: RelicBlessing; }
+export interface RelicReturnView { relicId: string; name: string; reason: "release" | "brain-deleted"; fromAnchor: string | null; toAnchor: string | null; }
+export interface RelicGateView { open: boolean; openedBefore: boolean; missingPlain: string; }
+export interface RelicsStateView {
+  found: string[]; held: string[]; holdings: RelicHoldingView[]; buffs: EffectiveRelicBuffs;
+  gate: RelicGateView; recentDepartures: RelicReturnView[]; isOwnerSpace: boolean; scarcityOff: boolean;
+  currentAnchorByRelic: Record<string, string>;
+}

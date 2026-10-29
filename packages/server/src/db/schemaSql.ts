@@ -191,6 +191,9 @@ export const BOOTSTRAP_SQL = `
       last_active_date TEXT,
       last_seen_at TEXT,
       research_enabled TEXT,
+      relic_scarcity_off TEXT,
+      relic_legacy_synced INTEGER NOT NULL DEFAULT 0,
+      relic_legacy_eligible INTEGER NOT NULL DEFAULT 0,
       last_dream_date TEXT,
       timeline_backfilled INTEGER NOT NULL DEFAULT 0,
       streak_shields INTEGER NOT NULL DEFAULT 2,
@@ -304,6 +307,27 @@ export const BOOTSTRAP_SQL = `
       reward_key TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, reward_key)
+    );
+
+    -- Relic Buffs v2: holdings + returns. Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_holdings (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      test_only INTEGER NOT NULL DEFAULT 0,
+      held INTEGER NOT NULL DEFAULT 0,
+      held_at TEXT,
+      anchor_key TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (space_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      reason TEXT NOT NULL CHECK (reason IN ('release','brain-deleted')),
+      from_anchor TEXT,
+      to_anchor TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     -- REG-197 (RC-04): one receipt per grade attempt, so a retry of the same
     -- attempt replays the committed outcome instead of re-grading, re-paying,

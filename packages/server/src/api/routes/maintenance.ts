@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { CODEX_STATIC_KEYS } from "@brain/shared";
 import type { AppContext } from "../../context.js";
-import { EconomyRepo, EARN_CODEX_DISCOVERY } from "../../economy.js";
+import { EconomyRepo } from "../../economy.js";
+import { buffsForSpace } from "../../relics/buffs.js";
 import { CodexDiscoveriesRepo } from "../../repositories/codexDiscoveries.repo.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { StreakRepo } from "../../streak.js";
@@ -195,6 +196,10 @@ export function maintenanceRoutes(ctx: AppContext): Router {
   r.post("/codex-claim", (req, res) => {
     const key = String(req.body?.key ?? "").slice(0, 80);
     const spaceId = spaceOf(res);
+    if (key.startsWith("relic-")) {
+      res.status(400).json({ error: "Relics are found in their worlds now — use the relic find (POST /api/relics/found) while standing in the relic's world." });
+      return;
+    }
     if (!key || !isClaimableCodexKey(ctx, spaceId, key)) {
       res.status(400).json({ error: "Unknown codex entry." });
       return;
@@ -209,7 +214,7 @@ export function maintenanceRoutes(ctx: AppContext): Router {
     ctx.handle.sqlite
       .prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`)
       .run(spaceId, key);
-    const fuel = new EconomyRepo(ctx.handle, spaceId).add(EARN_CODEX_DISCOVERY);
+    const fuel = new EconomyRepo(ctx.handle, spaceId).add(buffsForSpace(ctx.handle, spaceId).discoveryEarn);
     res.json({ awarded: true, fuel });
   });
 
