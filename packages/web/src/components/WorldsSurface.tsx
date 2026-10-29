@@ -609,7 +609,7 @@ export default function WorldsSurface({
   // EVE-style travel HUD: the latest journey (read by the frame loop), the readout it shows, and the
   // overlays the frame loop drives directly (no re-render per frame).
   const journeyRef = useRef<typeof journey>(null);
-  const [travelHud, setTravelHud] = useState<{ phase: string; countdown: number | null } | null>(null);
+  const [travelHud, setTravelHud] = useState<{ phase: string; countdown: number | null; eta: number; speed: number } | null>(null);
   const travelFlashRef = useRef<HTMLDivElement | null>(null);
   const travelBlurRef = useRef<HTMLDivElement | null>(null);
   const prevModeRef = useRef<string | null>(null);
@@ -1534,8 +1534,13 @@ export default function WorldsSurface({
           }
           if (travelFlashRef.current) travelFlashRef.current.style.opacity = String(tv.flash);
           if (travelBlurRef.current) travelBlurRef.current.style.opacity = String(tv.blur);
+          // ETA in whole seconds and speed in 10% steps, so the HUD re-renders a few times a second, not every frame.
+          const eta = Math.max(0, Math.ceil((armMs + transitTotalMs - t) / 1000));
+          const speed = Math.round(tv.speed * 10) * 10;
           setTravelHud((prev) =>
-            prev && prev.phase === tv.phase && prev.countdown === tv.countdown ? prev : { phase: tv.phase, countdown: tv.countdown },
+            prev && prev.phase === tv.phase && prev.countdown === tv.countdown && prev.eta === eta && prev.speed === speed
+              ? prev
+              : { phase: tv.phase, countdown: tv.countdown, eta, speed },
           );
         }
       } else {
@@ -1555,7 +1560,11 @@ export default function WorldsSurface({
         const sk = (world as TransitScene).view?.shake ?? 0;
         camera.position.set(Math.sin(elapsed * 0.09) * sk, 8 + Math.cos(elapsed * 0.11) * sk, 26);
         camera.lookAt(0, 0, -60);
-        engine?.setLevel(1, transitKind === "warp" ? 1 : 0.35);
+        // The engine's loudness follows its heat and the ship's speed: a low idle in the align, a rising spool,
+        // full on the burn (drift stays quiet).
+        const tvAudio = (world as TransitScene).view;
+        const heat = tvAudio ? 0.25 + 0.5 * tvAudio.engine + 0.25 * tvAudio.speed : 1;
+        engine?.setLevel(1, (transitKind === "warp" ? 1 : 0.35) * heat);
       } else if (orbit) {
         if (currentWorld === "great-station" && inside) {
           scripted = true; // the interior orbits its own room; not free-look (yet)
@@ -1957,6 +1966,17 @@ export default function WorldsSurface({
                         ? "Warp"
                         : `Drifting to ${worldName(journey.destination)}`}
               </span>
+              {journey.state !== "arming" && (
+                <span className="travel-hud-readout">
+                  <span>{`Arrival in ${travelHud.eta} s`}</span>
+                  <span aria-label={`Velocity ${travelHud.speed} percent`}>
+                    {`Velocity ${travelHud.speed}% `}
+                    <span className="travel-hud-bar" aria-hidden="true">
+                      <span style={{ width: `${travelHud.speed}%` }} />
+                    </span>
+                  </span>
+                </span>
+              )}
               {travelHud.countdown !== null && (
                 <span className="travel-hud-count" aria-label={`${travelHud.countdown} seconds to jump`}>
                   {travelHud.countdown}
@@ -1972,6 +1992,11 @@ export default function WorldsSurface({
         </>
       )}
       {arrivalFadeKey > 0 && mode === "world" && <div key={arrivalFadeKey} className="travel-arrive-fade" aria-hidden="true" />}
+      {arrivalFadeKey > 0 && mode === "world" && (
+        <div key={`arrived-${arrivalFadeKey}`} className="travel-arrived" role="status">
+          {`Arrived · ${worldName(currentWorld ?? "home")}`}
+        </div>
+      )}
       {lookHint && visible && mode === "world" && (
         <p className="worlds-look-hint" role="status">
           {atGarden
