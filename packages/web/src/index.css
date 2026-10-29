@@ -6582,10 +6582,37 @@ button.mindspace-more { cursor: pointer; }
   left: 0;
   right: 0;
   display: flex;
+  /* Wrap: Eternity's header carries 13 items; in one row it was 937px on a
+     412px phone and pushed "Back to your galaxy" off the edge, unreachable. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.4rem;
   padding: 0.75rem 1rem;
   pointer-events: none;
+}
+.worlds-surface-bar button {
+  background: rgba(12, 16, 34, 0.82);
+  border: 1px solid rgba(150, 140, 220, 0.35);
+  border-radius: 999px;
+  color: #ecebff;
+  padding: 0.4rem 0.8rem;
+  min-height: 38px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+/* Eternity's world is a white void: the light-on-dark title and caption
+   vanish into it. Dark text there; the pill buttons above stay dark glass,
+   readable on white. */
+.worlds-surface-light .worlds-surface-bar h3,
+.worlds-surface-light .worlds-surface-bar .worlds-surface-eternity-label,
+.worlds-surface-light .worlds-surface-fallback {
+  color: #1b1b2e;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  /* The wrapped header can be four rows tall here; the caption lives at the
+     bottom, clear of it, instead of fixed 4rem from the top. */
+  top: auto;
+  bottom: 3.75rem;
 }
 .worlds-surface-bar > * {
   pointer-events: auto;

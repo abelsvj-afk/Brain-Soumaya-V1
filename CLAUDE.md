@@ -351,6 +351,31 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   closes it; the World map is `position: fixed`, full-viewport, on top, zero page errors.
   Needs on-device confirmation: the sheet at the owner's phone size, and that the map's new
   dimming scrim still reads as "drawn over the galaxy".
+- **Travel never played — flight, gate, arrival (2026-10-29) — MEASURED headless, FIXED**
+  (useTravel.ts, WorldsSurface.tsx, TravelPanel.tsx, App.tsx, index.css): the owner reported that
+  warping did nothing — no flight through the gate, no tunnel, no arrival in the built world. Root
+  cause: TravelPanel, WorldsSurface and WorldMap each run their OWN `useTravel()` with their own
+  state and no sync, so a departure from the panel was invisible to the scene layer until a page
+  reload (measured: across a full 55 s warp `.worlds-surface` never mounted). Even after a reload
+  nothing called `arrive()` except a text button in the sheet. Fixed: (1) a `worlds:travel-changed`
+  window event makes the other copies re-read the server after any action (server still the only
+  authority); (2) the sheet closes itself via `TravelPanel onTransit` once the ship is under way —
+  the sheet (z72) sits above the worlds layer (z70) and was hiding the flight; (3) WorldsSurface
+  arrives the ship when the flight's time is up, from the server's `departedAt` (a reload resumes
+  rather than restarts; reduced-motion is never held); (4) the render/renderer catches now
+  `console.error` which world failed instead of swallowing it; (5) the cancel countdown no longer
+  shows a stale value on its first frames. Eternity's header (13 items, one non-wrapping row = 937px
+  on a 412px phone) pushed "Back to your galaxy" off-screen; it now wraps, buttons are styled, and
+  Eternity's white void gets dark text. Verified end to end at 412×915: depart → 10 s cancel window
+  → sheet closes → "Travelling to The Growing Place" flight → auto-arrival → Growing Place.
+  **`scripts/worlds-check.mjs`** visits each world for real and prints PASS/FAIL + canvas time +
+  MB downloaded (`BASE_URL=… SPACE_ID=… node scripts/worlds-check.mjs`); all 7 worlds PASSED locally.
+  **Known and NOT fixed — weight:** the home galaxy alone downloads 21.6 MB at startup
+  (`space_station_3.glb` 14 MB) and each world adds 6–20 MB (Station ~19, Deep Past ~20, Scale ~19,
+  Growing Place ~13, Eternity ~6, People ~0.2); the biggest files are unslimmed
+  (space_station_3 14 MB, sf-lava-planet 11, sf-ice-planet-procedural 10.5, sf-anchor-spire 8.2) and
+  served `max-age=0`. This is the "very slow" — slimming them is Muse-sized binary work (the verified
+  web-slim recipe). Needs on-device confirmation of the whole flight on the owner's phone.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

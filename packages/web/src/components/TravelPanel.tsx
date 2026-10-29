@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { WORLD_CHART, buildRouteBoard } from "../lib/routeBoard.js";
@@ -22,8 +22,13 @@ export const TRANSIT_MS = { warp: 12_000, drift: 45_000 } as const;
 export default function TravelPanel({
   enabled = WORLDS_TRAVEL_ENABLED,
   focusWorld = null,
+  onTransit,
 }: {
   enabled?: boolean;
+  /** Called once when a journey leaves the cancel window and the ship is
+   *  actually under way — the host closes the sheet so the flight (drawn by
+   *  the scene layer) is what you see, not a text status behind a scrim. */
+  onTransit?: () => void;
   /** A world the map sent the traveller here for: its route entry is
    *  highlighted and scrolled into view. The panel itself is unchanged
    *  — departure still goes through the server, as always. */
@@ -57,6 +62,15 @@ export default function TravelPanel({
     );
     return () => window.clearTimeout(timer);
   }, [activeJourney]);
+
+  // Once per journey: hand the screen to the flight.
+  const transitNotified = useRef<string | null>(null);
+  const underWay = activeJourney && (activeJourney.state === "in_transit" || activeJourney.state === "returning");
+  useEffect(() => {
+    if (!underWay || !activeJourney || transitNotified.current === activeJourney.id) return;
+    transitNotified.current = activeJourney.id;
+    onTransit?.();
+  }, [underWay, activeJourney, onTransit]);
 
   if (!enabled) return null;
 

@@ -33,6 +33,13 @@ const KEY_STORAGE = "worlds.departureKey";
 const KEY_JOURNEY_STORAGE = "worlds.departureJourneyId";
 const TRAVERSED_STORAGE = "worlds.traversedRoutes";
 const ARMING_POLL_MS = 2000;
+/** Fired after any travel ACTION settles, so every mounted copy of this
+ *  hook (the travel panel, the world scene layer, the world map) re-reads
+ *  the server. Each copy keeps its own state; before this they never heard
+ *  about each other, so a departure from the panel was invisible to the
+ *  scene layer — no transit flight, no arrival — until a page reload. The
+ *  server stays the only authority; this only says "go look again". */
+const TRAVEL_CHANGED_EVENT = "worlds:travel-changed";
 
 function read(key: string): string | null {
   try {
@@ -148,12 +155,29 @@ export function useTravel(enabled: boolean = true): UseTravel {
     if (enabled) void refresh();
   }, [enabled, refresh]);
 
+  // Another copy of this hook acted: re-read. The acting copy already
+  // refreshed itself (its event carries its own tag), so it skips its echo.
+  const selfTag = useRef(Math.random().toString(36).slice(2));
+  useEffect(() => {
+    if (!enabled) return;
+    const onChanged = (e: Event) => {
+      if ((e as CustomEvent<{ from?: string }>).detail?.from === selfTag.current) return;
+      void refresh();
+    };
+    window.addEventListener(TRAVEL_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(TRAVEL_CHANGED_EVENT, onChanged);
+  }, [enabled, refresh]);
+
   // While a journey is arming, poll so the window's close (settlement)
   // shows up promptly, and tick the display countdown. Presentation
   // only — the server settles regardless of this hook.
   const arming = state?.activeJourney?.state === "arming";
   useEffect(() => {
     if (!enabled || !arming) return;
+    // The countdown reads nowMs, which is only kept fresh while arming — so
+    // it must be refreshed the instant arming begins, or the first frames
+    // show a countdown computed from a stale clock (seen as "49s left").
+    setNowMs(Date.now());
     const poll = window.setInterval(() => void refresh(), ARMING_POLL_MS);
     const tick = window.setInterval(() => setNowMs(Date.now()), 500);
     return () => {
@@ -177,6 +201,7 @@ export function useTravel(enabled: boolean = true): UseTravel {
           if (!routes.includes(rk)) write(TRAVERSED_STORAGE, JSON.stringify([...routes, rk]));
         }
         await refresh();
+        window.dispatchEvent(new CustomEvent(TRAVEL_CHANGED_EVENT, { detail: { from: selfTag.current } }));
         return journey;
       } catch (e) {
         if (e instanceof TravelClientError) {

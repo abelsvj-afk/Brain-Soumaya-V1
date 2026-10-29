@@ -152,3 +152,52 @@ describe("useTravel", () => {
     expect(mockState.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("useTravel — copies stay in sync", () => {
+  // The travel panel, the world scene layer and the world map each run their
+  // own copy of this hook. Before the sync event, a departure from the panel
+  // was invisible to the scene layer: no transit flight, no arrival scene,
+  // until a page reload (measured in a real browser).
+  it("a departure in one copy makes the other copy re-read the server", async () => {
+    mockState.mockResolvedValue(state(null));
+    mockDepart.mockResolvedValue(journey());
+    const panel = renderHook(() => useTravel());
+    const scene = renderHook(() => useTravel());
+    await waitFor(() => expect(panel.result.current.state).not.toBeNull());
+    await waitFor(() => expect(scene.result.current.state).not.toBeNull());
+    expect(scene.result.current.state?.activeJourney).toBeNull();
+
+    mockState.mockResolvedValue(state(journey({ state: "in_transit" })));
+    await act(async () => {
+      await panel.result.current.depart("warp", "great-station");
+    });
+    await waitFor(() => expect(scene.result.current.state?.activeJourney?.state).toBe("in_transit"));
+  });
+
+  it("the acting copy does not re-fetch for its own echo", async () => {
+    mockState.mockResolvedValue(state(null));
+    mockDepart.mockResolvedValue(journey());
+    const { result } = renderHook(() => useTravel());
+    await waitFor(() => expect(result.current.state).not.toBeNull());
+    mockState.mockClear();
+    await act(async () => {
+      await result.current.depart("warp", "great-station");
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mockState).toHaveBeenCalledTimes(1); // its own refresh — not two
+  });
+
+  it("a disabled copy never reacts to another copy's action", async () => {
+    mockState.mockResolvedValue(state(null));
+    mockDepart.mockResolvedValue(journey());
+    const live = renderHook(() => useTravel());
+    renderHook(() => useTravel(false));
+    await waitFor(() => expect(live.result.current.state).not.toBeNull());
+    mockState.mockClear();
+    await act(async () => {
+      await live.result.current.depart("warp", "great-station");
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mockState).toHaveBeenCalledTimes(1);
+  });
+});

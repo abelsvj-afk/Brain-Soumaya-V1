@@ -528,6 +528,22 @@ export default function WorldsSurface({
     setEternityGesture(null);
   }, [mode, currentWorld, journeyId]);
 
+  // Arrival. The transit flight is the journey: when its time is up the ship
+  // arrives and the destination scene takes over — the scene layer does this
+  // itself rather than waiting for a text button in the travel sheet. The
+  // server accepts arrival whenever asked; this only decides WHEN to ask. The
+  // clock runs from the server's departedAt, so a reload mid-flight resumes
+  // rather than restarting, and reduced-motion travellers are never held.
+  const departedAtMs = journey?.departedAt ? Date.parse(journey.departedAt) : NaN;
+  useEffect(() => {
+    if (!enabled || !inTransit || !journeyId) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const start = Number.isFinite(departedAtMs) ? departedAtMs : Date.now();
+    const left = reduced ? 0 : Math.max(0, start + transitTotalMs - Date.now());
+    const timer = window.setTimeout(() => void travel.arrive(), left);
+    return () => window.clearTimeout(timer);
+  }, [enabled, inTransit, journeyId, departedAtMs, transitTotalMs, travel.arrive]);
+
   // Landmarks (garden) and Chronicle routes (Deep Past) need the user's
   // Journeys; the graph prop already carries the memories. A failed fetch
   // omits that layer and says so — it never blocks the world, and it never
@@ -851,7 +867,10 @@ export default function WorldsSurface({
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true });
-    } catch {
+    } catch (err) {
+      // Never swallow silently: which world failed, and why, is the only
+      // way anyone can tell a broken world from a device without WebGL.
+      console.error(`[worlds] renderer failed for ${mode === "transit" ? "transit" : currentWorld}`, err);
       setGraphicsFailed(true);
       return;
     }
@@ -1045,7 +1064,8 @@ export default function WorldsSurface({
       }
       try {
         renderer.render(scene, camera);
-      } catch {
+      } catch (err) {
+        console.error(`[worlds] render failed for ${mode === "transit" ? "transit" : currentWorld}`, err);
         setGraphicsFailed(true);
         return;
       }
@@ -1074,7 +1094,7 @@ export default function WorldsSurface({
   const thread = atDeepPast ? deepPastLayout?.thread ?? null : null;
 
   return (
-    <section className="worlds-surface" role="dialog" aria-label={title}>
+    <section className={`worlds-surface${atEternity && mode === "world" ? " worlds-surface-light" : ""}`} role="dialog" aria-label={title}>
       <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
       <header className="worlds-surface-bar">
         <h3>{title}</h3>

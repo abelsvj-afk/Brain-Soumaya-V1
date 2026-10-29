@@ -48,6 +48,14 @@ describe("stylesheet integrity", () => {
   });
 });
 
+describe("worlds surface header", () => {
+  // Eternity's header carries 13 items. In one non-wrapping row it was 937px
+  // on a 412px phone and pushed "Back to your galaxy" off the screen edge.
+  it("wraps, so every control — including Back — stays reachable on a phone", () => {
+    expect(ruleBody(".worlds-surface-bar")).toMatch(/flex-wrap:\s*wrap/);
+  });
+});
+
 describe("travel sheet — placement", () => {
   it("is a fixed, full-viewport layer above the worlds layer, and [hidden] really hides it", () => {
     const body = ruleBody(".travel-sheet");

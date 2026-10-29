@@ -2506,7 +2506,7 @@ export default function App() {
         <TravelSheet open={showTravel} onClose={() => setShowTravel(false)}>
           {/* Worlds travel (Phase 2, P2-3). */}
           <ErrorBoundary label="travel" fallback={null}>
-            <TravelPanel focusWorld={travelFocus} />
+            <TravelPanel focusWorld={travelFocus} onTransit={() => setShowTravel(false)} />
           </ErrorBoundary>
 
           {/* Guided tours (Wave 2, N7) — saved Chronicle routes with a voice. */}

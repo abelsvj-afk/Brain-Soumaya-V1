@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import WorldsSurface from "./WorldsSurface.js";
+import { TRANSIT_MS } from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
 import { useHarborController, type UseHarborController } from "../hooks/useHarborController.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
@@ -181,6 +182,89 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     // the journey itself is unaffected.
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your journey is unaffected/)).toBeTruthy();
+  });
+
+  describe("arrival is the scene layer's job when the flight ends", () => {
+    // Before this, only a text button in the travel sheet ever called arrive():
+    // the flight played (once it could be seen at all) and then nothing
+    // happened. The server accepts arrival whenever asked; the scene layer
+    // decides WHEN to ask, from the server's own departedAt.
+    const inTransit = (departedAt: string | undefined, kind: "warp" | "drift" = "warp") =>
+      atStation({
+        state: {
+          currentWorld: "home",
+          activeJourney: {
+            id: "j-arr",
+            kind,
+            origin: "home",
+            destination: "great-station",
+            state: "in_transit",
+            fuelCharged: 10,
+            cancellable: false,
+            createdAt: "2026-10-23T12:00:00.000Z",
+            cancelDeadline: "2026-10-23T12:00:10.000Z",
+            ...(departedAt ? { departedAt } : {}),
+          },
+          fuel: { fuel: 20, capacity: 200, jobCost: 2, warpCost: 10 },
+        },
+      });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("arrives when the warp's transit time is up — not before", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-28T12:00:00.000Z"));
+      const arrive = vi.fn(async () => null);
+      mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z"), arrive });
+      render(<WorldsSurface enabled />);
+      vi.advanceTimersByTime(TRANSIT_MS.warp - 500);
+      expect(arrive).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1000);
+      expect(arrive).toHaveBeenCalledTimes(1);
+    });
+
+    it("resumes from the server's departedAt after a reload — a flight 10s in has 2s left, not 12", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-28T12:00:10.000Z"));
+      const arrive = vi.fn(async () => null);
+      mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z"), arrive });
+      render(<WorldsSurface enabled />);
+      vi.advanceTimersByTime(TRANSIT_MS.warp - 10_000 + 100);
+      expect(arrive).toHaveBeenCalledTimes(1);
+    });
+
+    it("a flight already past its time arrives at once", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-28T12:05:00.000Z"));
+      const arrive = vi.fn(async () => null);
+      mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z"), arrive });
+      render(<WorldsSurface enabled />);
+      vi.advanceTimersByTime(10);
+      expect(arrive).toHaveBeenCalledTimes(1);
+    });
+
+    it("a drift takes its own, longer time", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-28T12:00:00.000Z"));
+      const arrive = vi.fn(async () => null);
+      mockUseTravel.mockReturnValue({ ...inTransit("2026-10-28T12:00:00.000Z", "drift"), arrive });
+      render(<WorldsSurface enabled />);
+      vi.advanceTimersByTime(TRANSIT_MS.warp + 1000);
+      expect(arrive).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(TRANSIT_MS.drift - TRANSIT_MS.warp);
+      expect(arrive).toHaveBeenCalledTimes(1);
+    });
+
+    it("never asks to arrive when nothing is in flight", () => {
+      vi.useFakeTimers();
+      const arrive = vi.fn(async () => null);
+      mockUseTravel.mockReturnValue({ ...atStation(), arrive });
+      render(<WorldsSurface enabled />);
+      vi.advanceTimersByTime(TRANSIT_MS.drift * 2);
+      expect(arrive).not.toHaveBeenCalled();
+    });
   });
 
   it("returning renders the transit view too (P2-5)", () => {
