@@ -500,6 +500,20 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   scene takes the shared environment map). **Test harness:** `warp-sim` style captures need a simulated journey
   clock because software rendering shows the scene only after the align phase has played. Still open: drift and
   turn-back were exercised by unit tests only; the origin gate is only seen at the very start.
+- **Worlds flight: fly your ship to places, feel the scale (2026-10-29, owner: "I want to feel like you can navigate
+  around the spaces … don't know if anything is scaled up yet") — MEASURED in a real browser, needs on-device
+  confirmation** (worldFlight.ts, shipAvatar.ts, worldPlaces.ts, shipHeat.ts, WorldsSurface.tsx; spec
+  `docs/specs/worlds-flight-2026-10-29.md`): the Station, Deep Past, Scale, People and Quiet/Archive get a **Fly to**
+  dock group of *places* found at runtime from the scene's named holders + bounding boxes (measured: Station
+  — The Station, Drydock, planets; Deep Past — the rim, First Light basin, terrace, stair, spire, hero lantern,
+  supernova remnant, orb; Scale — the ISS, Earth, Jupiter, Saturn, the Sun, a black hole…). Tapping one: her ship (true
+  size, 12 units) ALIGNs (eased turn), SPOOLs (engines → deep red), BURNs (2.4–6.5 s, edge blur with speed) and stops at
+  a stand-off (1.35× the place's radius); the chase camera follows and the caption states the scale ("The Station —
+  879 across · 73× your ship"). "Overview" returns to the orbit camera. Reduced motion: faces the place and jumps. Pure
+  maths unit-tested (stand-off, turn-the-short-way, burn bounds, speed profile, cooling, reduced motion). Found by
+  measuring: the Station's real bounding sphere is 879 across (73× the ship), not the 35× its constant suggests.
+  Look at: whether the stand-off feels close enough to read scale, tile row scrolling with 8 places (Scale), the ship
+  looking small at true scale against a place that big.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

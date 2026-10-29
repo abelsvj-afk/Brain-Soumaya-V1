@@ -3,6 +3,7 @@ import { disposeObject3D } from "./graph3dHelpers.js";
 import { buildHygStarfield } from "./hygStars.js";
 import { buildGate } from "./gateScene.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
+import { glowTexture, heatColor, heatGlow } from "./shipHeat.js";
 
 /**
  * Transit scene (Phase 2, P2-5) — the space you fly through between
@@ -98,26 +99,6 @@ export function buildProceduralShip(): THREE.Group {
   glow.position.set(0, 0, 9.2);
   ship.add(glow);
   return ship;
-}
-
-/** Soft radial glow (computed, no canvas — builds where there is no DOM). */
-function glowTexture(): THREE.Texture {
-  const n = 64;
-  const data = new Uint8Array(n * n * 4);
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const d = Math.min(1, Math.hypot(x - n / 2 + 0.5, y - n / 2 + 0.5) / (n / 2));
-      const a = Math.pow(1 - d, 2.2);
-      const o = (y * n + x) * 4;
-      data[o] = data[o + 1] = data[o + 2] = 255;
-      data[o + 3] = Math.round(255 * a);
-    }
-  }
-  const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = tex.minFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
 }
 
 /**
@@ -361,7 +342,6 @@ export function createTransitScene(opts: {
   group.add(streaks);
 
   const view = transitTimeline(0, { kind, totalMs, armMs });
-  const engineColors = [new THREE.Color(0x9fe8ff), new THREE.Color(0xffb040), new THREE.Color(0xff1a0a)];
   const tmpColor = new THREE.Color();
 
   return {
@@ -377,15 +357,13 @@ export function createTransitScene(opts: {
       // The sky swings round the holding ship (see `backdrop`); the ship leans into the turn.
       backdrop.rotation.y = -view.yaw;
       ship.rotation.y = 0;
-      // Engine heat: white → amber → red, and a bigger, brighter glow as it spools.
-      const h = view.engine;
-      if (h < 0.5) tmpColor.copy(engineColors[0]!).lerp(engineColors[1]!, h / 0.5);
-      else tmpColor.copy(engineColors[1]!).lerp(engineColors[2]!, (h - 0.5) / 0.5);
+      // Engine heat: white → amber → red; a halo at the tail, not a wash over the screen (graph/shipHeat.ts).
+      heatColor(view.engine, tmpColor);
       (engineGlow.material as THREE.SpriteMaterial).color.copy(tmpColor);
-      // Heat reads from colour first, size second — a full-spool glow is a bright halo at the tail, not a wash over the screen.
-      engineGlow.scale.setScalar(5 + 6 * h);
-      (engineGlow.material as THREE.SpriteMaterial).opacity = 0.55 + 0.35 * h;
-      // The origin gate whips away astern once the ship jumps.
+      const g = heatGlow(view.engine);
+      engineGlow.scale.setScalar(g.scale);
+      (engineGlow.material as THREE.SpriteMaterial).opacity = g.opacity;
+      // Without a departure cinematic the origin gate whips astern once the ship jumps.
       if (armMs === 0) departureGate.group.position.z = DEP.z + p * 260 + (D / 1000) * 400;
       if (armMs > 0) {
         // The destination gate closes by distance flown, so it slows as the ship does, and finally sweeps

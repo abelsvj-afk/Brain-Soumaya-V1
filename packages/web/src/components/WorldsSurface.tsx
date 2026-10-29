@@ -100,6 +100,9 @@ import {
 } from "../graph/gardenWalk.js";
 import { portraitFit } from "../graph/worldCamera.js";
 import type { TransitScene } from "../graph/transitScene.js";
+import { createShipAvatar, type ShipAvatar } from "../graph/shipAvatar.js";
+import { findPlaces, PLACE_RULES, type Place } from "../graph/worldPlaces.js";
+import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, noseDirection, type FlightState, type V3 } from "../graph/worldFlight.js";
 import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -611,6 +614,16 @@ export default function WorldsSurface({
   const travelBlurRef = useRef<HTMLDivElement | null>(null);
   const prevModeRef = useRef<string | null>(null);
   const [arrivalFadeKey, setArrivalFadeKey] = useState(0);
+  // Flight inside a world (docs/specs/worlds-flight-2026-10-29.md): null = the overview orbit camera.
+  const flightRef = useRef<FlightState | null>(null);
+  const flightTargetRef = useRef<Place | null>(null);
+  const overviewCamRef = useRef<{ pos: V3; look: V3 }>({ pos: [0, 100, 600], look: [0, 0, 0] });
+  const chaseCamRef = useRef<{ pos: V3; target: V3 } | null>(null);
+  const placesSigRef = useRef("");
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [flightTargetId, setFlightTargetId] = useState<string | null>(null);
+  const [flightCaption, setFlightCaption] = useState<string | null>(null);
+  const placesRef = useRef<Place[]>([]);
   const lookedRef = useRef<() => void>(() => {});
   // Garden v2 walk (graph/gardenWalk.ts): where her ship is and where it's
   // going, the follow camera's own (smoothed) pose, and what to open when
@@ -689,6 +702,42 @@ export default function WorldsSurface({
     if (prevModeRef.current === "transit" && mode === "world") setArrivalFadeKey((k) => k + 1);
     prevModeRef.current = mode;
   }, [mode]);
+  // A different world (or leaving) starts over from the overview, with no places until its models are in.
+  useEffect(() => {
+    flightRef.current = null;
+    flightTargetRef.current = null;
+    chaseCamRef.current = null;
+    placesSigRef.current = "";
+    placesRef.current = [];
+    setPlaces([]);
+    setFlightTargetId(null);
+    setFlightCaption(null);
+  }, [currentWorld, mode]);
+
+  // Fly to a place: the ship (true size) aligns, spools, burns and stops at a stand-off. The first flight starts
+  // from just ahead of the overview camera, so the view carries on from where you were looking.
+  const flyTo = (place: Place) => {
+    let fs = flightRef.current;
+    if (!fs) {
+      const { pos, look } = overviewCamRef.current;
+      const start: V3 = [pos[0] + (look[0] - pos[0]) * 0.3, pos[1] + (look[1] - pos[1]) * 0.3, pos[2] + (look[2] - pos[2]) * 0.3];
+      const dir = [look[0] - start[0], look[1] - start[1], look[2] - start[2]];
+      const h = Math.hypot(dir[0]!, dir[2]!);
+      fs = initialFlight(start, Math.atan2(dir[0]!, dir[2]!), Math.atan2(dir[1]!, Math.max(h, 1e-6)));
+      chaseCamRef.current = { pos, target: look };
+    }
+    flightRef.current = startFlight(fs, { center: place.center, radius: place.radius });
+    flightTargetRef.current = place;
+    setFlightTargetId(place.id);
+    setFlightCaption(`Aligning to ${place.label}`);
+  };
+  const backToOverview = () => {
+    flightRef.current = null;
+    flightTargetRef.current = null;
+    chaseCamRef.current = null;
+    setFlightTargetId(null);
+    setFlightCaption(null);
+  };
 
   // First time in a world: say that it can be moved. Shown once per browser, gone on the first
   // gesture or after a few seconds — a world that silently ignored touch was the complaint.
@@ -1300,6 +1349,12 @@ export default function WorldsSurface({
           ? applyWorldLighting(scene, renderer, entry.light)
           : null;
     sceneHandleRef.current = world;
+    // The traveller's ship inside a world that has places to fly to (hidden until the first flight).
+    const avatar: ShipAvatar | null = mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside ? createShipAvatar() : null;
+    if (avatar) {
+      avatar.group.visible = false;
+      scene.add(avatar.group);
+    }
     const eternityCtl = currentWorld === "eternity" ? built?.eternity : undefined;
     if (gardenScene) {
       gardenSceneRef.current = gardenScene;
@@ -1409,6 +1464,8 @@ export default function WorldsSurface({
     let raf = 0;
     const startedAt = performance.now();
     let lastFrameAt = startedAt;
+    let lastPlacesAt = 0;
+    let flightPhaseShown = "";
     const BASE_ANGLE = 0.6;
     const frame = () => {
       const elapsed = performance.now() - startedAt;
@@ -1422,6 +1479,22 @@ export default function WorldsSurface({
       lastFrameAt = now;
       // The worlds' orbit distances were tuned on a landscape screen; back off on a phone (graph/worldCamera.ts).
       const fit = portraitFit(camera.aspect);
+      // Places to fly to are read from the scene's own named holders once a second (a model that loads late
+      // simply appears); the avatar shows only while a flight is under way or parked.
+      if (mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside) {
+        if (now - lastPlacesAt > 1000) {
+          lastPlacesAt = now;
+          world.group.updateMatrixWorld(true);
+          const found = findPlaces(currentWorld, world.group);
+          const sig = found.map((pl) => `${pl.id}:${Math.round(pl.radius)}`).join("|");
+          if (sig !== placesSigRef.current) {
+            placesSigRef.current = sig;
+            placesRef.current = found;
+            setPlaces(found);
+          }
+        }
+        if (avatar) avatar.group.visible = !!flightRef.current;
+      }
       if (mode === "transit") {
         // The flight's clock is the server's: createdAt while arming, departedAt once under way — so a
         // reload resumes mid-sequence, and poll lag never lets the scene run ahead of the server's flip
@@ -1498,6 +1571,38 @@ export default function WorldsSurface({
             );
             camera.lookAt(cam.center[0], cam.lookAtY, cam.center[2]);
           }
+        } else if (flightRef.current && currentWorld && PLACE_RULES[currentWorld] && avatar) {
+          // Flight to a place (docs/specs/worlds-flight-2026-10-29.md): her ship aligns, spools, burns and
+          // stops; the camera chases behind and above her. Drag/pinch still turn and zoom around her.
+          const r = stepFlight(flightRef.current, dt, { reducedMotion });
+          flightRef.current = r.state;
+          const fs = r.state;
+          const tgt = flightTargetRef.current;
+          const phaseNow = r.arrived ? "arrived" : fs.phase;
+          if (phaseNow !== flightPhaseShown && tgt) {
+            flightPhaseShown = phaseNow;
+            setFlightCaption(
+              phaseNow === "arrived" || phaseNow === "idle"
+                ? `${tgt.label} — ${scaleNote(tgt.radius)}`
+                : phaseNow === "burn"
+                  ? `Burning to ${tgt.label}`
+                  : phaseNow === "spool"
+                    ? `Engines spooling — ${tgt.label}`
+                    : `Aligning to ${tgt.label}`,
+            );
+          }
+          avatar.setPose(fs.pos, fs.yaw, fs.pitch);
+          avatar.setHeat(fs.engine);
+          const pose = chasePose(fs);
+          const prev = chaseCamRef.current ?? { pos: pose.position, target: pose.target };
+          const k = reducedMotion ? 1 : 1 - Math.exp(-dt / 240);
+          const mix = (a: V3, b: V3): V3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+          const cam = { pos: mix(prev.pos, pose.position), target: mix(prev.target, pose.target) };
+          chaseCamRef.current = cam;
+          camera.position.set(cam.pos[0], cam.pos[1], cam.pos[2]);
+          camera.lookAt(cam.target[0], cam.target[1], cam.target[2]);
+          pivot = [fs.pos[0], fs.pos[1], fs.pos[2]];
+          if (travelBlurRef.current) travelBlurRef.current.style.opacity = String(reducedMotion ? 0 : fs.speed * 0.55);
         } else if (currentWorld === "deep-past") {
           // Guided descent (A21, follow-only): the camera follows the thread
           // down; leaving parks the view at the last progress, and re-entering
@@ -1607,6 +1712,11 @@ export default function WorldsSurface({
           camera.position.set(p[0], p[1], p[2]);
           camera.lookAt(pivot[0], pivot[1], pivot[2]);
         }
+        // The overview camera's pose, so the first flight carries on from where you were looking.
+        if (!flightRef.current) {
+          overviewCamRef.current = { pos: [camera.position.x, camera.position.y, camera.position.z], look: [pivot[0], pivot[1], pivot[2]] };
+          if (mode === "world" && travelBlurRef.current) travelBlurRef.current.style.opacity = "0";
+        }
         host.dataset.look = isLooked(lookRef.current)
           ? `${lookRef.current.yaw.toFixed(3)},${lookRef.current.pitch.toFixed(3)},${lookRef.current.zoom.toFixed(3)}`
           : "";
@@ -1651,6 +1761,7 @@ export default function WorldsSurface({
       gardenSceneRef.current = null;
       engine?.dispose();
       lighting?.dispose();
+      avatar?.dispose();
       world.dispose();
       sceneHandleRef.current = null;
       renderer.dispose();
@@ -1739,6 +1850,25 @@ export default function WorldsSurface({
       }
       dockGroups.push({ id: "station", tiles });
     }
+    if (mode === "world" && places.length > 0 && !inside) {
+      dockGroups.push({
+        id: "places",
+        label: "Fly to",
+        tiles: [
+          ...(flightTargetId
+            ? [{ id: "overview", icon: "🔭", label: "Overview", name: "Back to the overview", onClick: backToOverview }]
+            : []),
+          ...places.map((pl) => ({
+            id: `place-${pl.id}`,
+            icon: pl.icon,
+            label: pl.label.split(" ").slice(0, 2).join(" "),
+            name: `Fly to ${pl.label}`,
+            active: flightTargetId === pl.id,
+            onClick: () => flyTo(pl),
+          })),
+        ],
+      });
+    }
     if (atDeepPast && thread) {
       dockGroups.push({
         id: "deep-past",
@@ -1787,10 +1917,20 @@ export default function WorldsSurface({
       <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
       {/* EVE-style travel (docs/specs/eve-travel-2026-10-29.md): the edge blur and the jump flash are
           driven per frame by the flight scene (refs, no re-render); the HUD reads the phase. */}
-      {mode === "transit" && (
+      {(mode === "transit" || mode === "world") && (
         <>
           <div className="travel-blur" ref={travelBlurRef} aria-hidden="true" />
           <div className="travel-flash" ref={travelFlashRef} aria-hidden="true" />
+        </>
+      )}
+      {/* Flight inside a world: what the ship is doing, and — on arrival — how big the place is next to her. */}
+      {mode === "world" && flightCaption && (
+        <div className="travel-hud" role="status">
+          <span className="travel-hud-phase">{flightCaption}</span>
+        </div>
+      )}
+      {mode === "transit" && (
+        <>
           {travelHud && journey && (
             <div className="travel-hud" role="status">
               <span className="travel-hud-phase">
