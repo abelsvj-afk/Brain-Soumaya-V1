@@ -605,6 +605,8 @@ export default function WorldsSurface({
   const [recallPod, setRecallPod] = useState<number | null>(null);
   const [podsAside, setPodsAside] = useState<Set<number>>(new Set());
   const [harvest, setHarvest] = useState(0);
+  // A pod caught but whose sheet is still open: already counted, no longer waiting.
+  const [justCaught, setJustCaught] = useState<number | null>(null);
   const carryingRef = useRef<number | null>(null);
   carryingRef.current = carrying;
   // The mounted scene handle — the Eternity gesture/tool buttons below
@@ -1778,19 +1780,20 @@ export default function WorldsSurface({
       )}
       {mode === "world" && atGarden && layout && (layout.pods.length > 0 || harvest > 0) && (() => {
         // Today's harvest: caught pods + those still ripening, at most five.
-        const total = Math.min(GARDEN_POD_MAX, harvest + layout.pods.length);
+        const waiting = layout.pods.filter((p) => p.nodeId !== justCaught);
+        const total = Math.min(GARDEN_POD_MAX, harvest + waiting.length);
         const caught = Math.min(harvest, total);
         return (
           <button
             type="button"
             className="garden-harvest"
-            aria-label={`Seed pods: ${caught} of ${total} caught today${layout.pods.length > 0 ? " — go to the nearest" : ""}`}
-            disabled={layout.pods.length === 0}
+            aria-label={`Seed pods: ${caught} of ${total} caught today${waiting.length > 0 ? " — go to the nearest" : ""}`}
+            disabled={waiting.length === 0}
             onClick={() => {
               // Pods ripen wherever their memory rests, often out of view:
               // this walks her to the nearest one still waiting.
               const here = walkRef.current.pos;
-              const next = [...layout.pods].sort(
+              const next = [...waiting].sort(
                 (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
               )[0];
               if (!next) return;
@@ -1804,7 +1807,7 @@ export default function WorldsSurface({
               {"✨".repeat(Math.max(0, total - caught))}
             </span>
             <span>
-              {caught} of {total} caught{layout.pods.length > 0 ? " · find one ›" : ""}
+              {caught} of {total} caught{waiting.length > 0 ? " · find one ›" : ""}
             </span>
           </button>
         );
@@ -1824,6 +1827,7 @@ export default function WorldsSurface({
               scene?.celebrate("bloom", { x: pod.x, y: pod.y, z: pod.z });
               const left = layout.pods.filter((p) => p.nodeId !== pod.nodeId).length;
               if (left === 0) scene?.celebrate("harvest");
+              setJustCaught(pod.nodeId);
               const stored = bumpHarvest(getSpaceId());
               setHarvest((h) => Math.max(h + 1, stored));
             }}
@@ -1834,6 +1838,7 @@ export default function WorldsSurface({
             onClose={() => {
               // Caught: it's no longer due — the pod is gone from the garden.
               setDueReviews((prev) => prev?.filter((d) => d.id !== pod.nodeId) ?? prev);
+              setJustCaught(null);
               setRecallPod(null);
             }}
           />
