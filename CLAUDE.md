@@ -469,6 +469,20 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   position from `--worlds-bar-h`. Replaces the "wait for Muse's v3.4 mock-up" blocker for the controls
   (the mock-up can still refine them). Look at: tile size/spacing on a real thumb, whether Eternity's tools
   (off-screen to the right until you scroll the row) are discoverable enough, icon legibility.
+- **Worlds lighting + portrait framing — MEASURED headless, needs on-device confirmation (2026-10-29,
+  owner: "the lighting for every space is bad … only the Growing Place is bright enough")**
+  (graph/worldLighting.ts, graph/worldCamera.ts, WorldsSurface.tsx): root cause — the home galaxy lights its
+  glTF models with an environment map (Graph3D's RoomEnvironment PMREM) but the worlds never got one, so every
+  metallic/PBR model (Station, planets, ships) rendered near-black whatever lights were added. Each world
+  now declares a `light` rig (env map + hemisphere fill + key light) applied by the host. Mean brightness of
+  the 412×915 view, 0–255, before → after: Station 12 → 35, Deep Past 19 → 53, People 11 → 48,
+  Quiet/Archive 15 → 27, Growing Place 54 → 55 (unchanged), Eternity 247 (white void, unchanged), Scale
+  3 → 4 (mostly empty space + missing ISS/probe files, needs content, not light). Second cause of "the Deep
+  Past looks wrong": orbit distances were tuned on a landscape screen, so on a phone the camera showed a
+  quarter of the width (a wall of rim rock); the camera now backs off by sqrt(1.6/aspect) (≤2.2×) — Deep
+  Past now shows the whole rim, stair, ledges and basin. Look at: lighting strength/colour per world on a
+  real screen (rigs are one-line tunables in WORLD_SCENES), and Deep Past's grey rock vs the mock-up's
+  violet mood.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
