@@ -69,7 +69,9 @@ describe("WealthPanel — Galaxy entity detail focus (Phase O)", () => {
     // The bucket the goal lives in ("House") should auto-expand without a click —
     // the goal card becomes visible on its own.
     await screen.findByText("House down payment");
-    expect(scrollIntoView).toHaveBeenCalled();
+    // The scroll runs in a later effect than the card's first paint, so wait
+    // for it — asserting right after the text appears raced under load.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
   });
 
   it("re-fires on a repeat click on the same goal (nonce bump), even with the bucket already open", async () => {
@@ -80,7 +82,7 @@ describe("WealthPanel — Galaxy entity detail focus (Phase O)", () => {
 
     const { rerender } = render(<WealthPanel focusGoal={{ id: 7, nonce: 1 }} />);
     await screen.findByText("First Truck");
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
 
     rerender(<WealthPanel focusGoal={{ id: 7, nonce: 2 }} />);
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
