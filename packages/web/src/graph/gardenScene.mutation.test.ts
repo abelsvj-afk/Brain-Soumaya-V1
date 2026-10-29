@@ -19,6 +19,9 @@ const layout = buildGardenLayout(
   } as GraphData,
   [{ id: 7, title: "Done chapter", description: "", status: "done", progress: 1 } as Journey],
   NOW,
+  // v2: the older memory (id 2) rests in the done Journey's grove; the
+  // recent ones grow wild in the meadow.
+  { links: new Map([[7, [{ kind: "node" as const, refId: 2, label: "b" }]]]) },
 );
 
 const plotPos = (nodeId: number) => {

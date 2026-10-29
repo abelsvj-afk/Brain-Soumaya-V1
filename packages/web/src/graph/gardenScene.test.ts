@@ -49,6 +49,9 @@ const layout = buildGardenLayout(
   } as GraphData,
   [{ id: 7, title: "Done chapter", description: "", status: "done", progress: 1 } as Journey],
   NOW,
+  // v2: the older memory (id 2) rests in the done Journey's grove; the
+  // recent ones grow wild in the meadow.
+  { links: new Map([[7, [{ kind: "node" as const, refId: 2, label: "b" }]]]) },
 );
 
 describe("garden scene (P3-1)", () => {
@@ -83,11 +86,14 @@ describe("garden scene (P3-1)", () => {
     const stars = scene.group.children.find((o) => o instanceof THREE.Points);
     expect(stars).toBeTruthy();
     expect((stars!.material as THREE.PointsMaterial).opacity).toBe(0.35);
-    // Plot counts reconcile with the layout by form.
+    // Plot counts reconcile with the layout by form (v2): node 2 rests as a
+    // stone in Journey 7's grove; recent loose nodes 1 and 3 grow wild.
     const stones = scene.group.getObjectByName("plots-stone") as THREE.InstancedMesh;
-    expect(stones.count).toBe(2); // nodes 1, 2 are memory stones
-    const sprouts = scene.group.getObjectByName("plots-sprout") as THREE.InstancedMesh;
-    expect(sprouts.count).toBe(1); // node 3 is an action sprout
+    expect(stones.count).toBe(1);
+    const wild = scene.group.getObjectByName("plots-wild") as THREE.InstancedMesh;
+    expect(wild.count).toBe(2);
+    expect(scene.group.getObjectByName("plots-sprout")).toBeUndefined(); // no grove missions here
+    expect(names.has("grove-trees")).toBe(true);
     scene.dispose();
   });
 

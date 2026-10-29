@@ -129,3 +129,117 @@ describe("garden layout (P3-1, C1/C2)", () => {
     expect(clampToGardenFloor(300)).toBe(300);
   });
 });
+
+describe("garden layout v2 — Journeys as groves (docs/specs/growing-place-v2-2026-10-29.md)", () => {
+  const link = (refId: number, kind: "node" | "task" = "node") => ({ kind, refId, label: `n${refId}` });
+  const OLD = "2024-03-01T00:00:00.000Z"; // well outside the meadow's 30 days
+
+  it("every Journey is a grove; its open missions are sprouts and its memories stones, inside the grove", () => {
+    const g = graph([
+      node({ id: 1, kind: "action", createdAt: OLD }),
+      node({ id: 2, createdAt: OLD }),
+      node({ id: 3, kind: "action", createdAt: OLD }),
+    ]);
+    const layout = buildGardenLayout(g, [journey({ id: 5, missionsCompleted: 3 })], NOW, {
+      links: new Map([[5, [link(1, "task"), link(2), link(3)]]]),
+    });
+    expect(layout.groves).toHaveLength(1);
+    const grove = layout.groves[0]!;
+    expect(grove).toMatchObject({ journeyId: 5, status: "active", missionsCompleted: 3, unshown: 0 });
+    expect(grove.terrace).toBeGreaterThanOrEqual(1);
+    expect(grove.terrace).toBeLessThanOrEqual(4);
+    const roles = Object.fromEntries(layout.plots.map((p) => [p.nodeId, p.role]));
+    expect(roles).toEqual({ 1: "mission", 2: "memory", 3: "mission" });
+    for (const p of layout.plots) {
+      expect(p.journeyId).toBe(5);
+      expect(Math.hypot(p.x - grove.x, p.z - grove.z)).toBeLessThan(grove.radius);
+      expect(p.y).toBe(grove.y);
+    }
+  });
+
+  it("the meadow holds only loose memories from the last 30 days; older loose ones are not in the garden", () => {
+    const g = graph([
+      node({ id: 1, createdAt: "2026-10-20T00:00:00.000Z" }),
+      node({ id: 2, createdAt: "2026-09-10T00:00:00.000Z" }), // 44 days before NOW
+      node({ id: 3, createdAt: OLD }),
+    ]);
+    const layout = buildGardenLayout(g, [journey({ id: 5 })], NOW, { links: new Map([[5, [link(3)]]]) });
+    expect(layout.plots.filter((p) => p.role === "wild").map((p) => p.nodeId)).toEqual([1]);
+    expect(layout.plots.find((p) => p.nodeId === 3)?.role).toBe("memory"); // old, but it has a home
+    expect(layout.plots.some((p) => p.nodeId === 2)).toBe(false);
+    const wild = layout.plots.find((p) => p.nodeId === 1)!;
+    expect(wild.terrace).toBe(0);
+    expect(wild.journeyId).toBeNull();
+  });
+
+  it("a node shared by Journeys rests in the lowest-id grove, and the sharing is a trail between groves", () => {
+    const g = graph([node({ id: 1, createdAt: OLD }), node({ id: 2, createdAt: OLD })]);
+    const layout = buildGardenLayout(g, [journey({ id: 9 }), journey({ id: 4 })], NOW, {
+      links: new Map([
+        [4, [link(1)]],
+        [9, [link(1), link(2)]],
+      ]),
+    });
+    expect(layout.plots.find((p) => p.nodeId === 1)?.journeyId).toBe(4);
+    expect(layout.plots.find((p) => p.nodeId === 2)?.journeyId).toBe(9);
+    expect(layout.grovePaths).toEqual([{ fromJourneyId: 4, toJourneyId: 9, shared: 1 }]);
+  });
+
+  it("dangling or archived links are skipped, never drawn", () => {
+    const g = graph([node({ id: 1, status: "archived", createdAt: OLD })]);
+    const layout = buildGardenLayout(g, [journey({ id: 5 })], NOW, { links: new Map([[5, [link(1), link(99)]]]) });
+    expect(layout.plots).toHaveLength(0);
+    expect(layout.groves[0]!.unshown).toBe(0);
+  });
+
+  it("done groves stand on the crown at their landmark spot; paused groves keep their status (they rest under mist)", () => {
+    const layout = buildGardenLayout(graph([]), [journey({ id: 2, status: "done" }), journey({ id: 3, status: "paused" })], NOW);
+    const done = layout.groves.find((g) => g.journeyId === 2)!;
+    const lm = layout.landmarks.find((l) => l.journeyId === 2)!;
+    expect(done.terrace).toBe(GARDEN_TERRACE_COUNT - 1);
+    expect({ x: done.x, z: done.z }).toEqual({ x: lm.x, z: lm.z });
+    expect(layout.groves.find((g) => g.journeyId === 3)?.status).toBe("paused");
+    expect(layout.landmarks.map((l) => l.journeyId)).toEqual([2]);
+  });
+
+  it("open groves never overlap, and adding a Journey never moves an existing grove", () => {
+    const js = Array.from({ length: 14 }, (_, i) => journey({ id: i + 1 }));
+    const a = buildGardenLayout(graph([]), js, NOW).groves;
+    for (let i = 0; i < a.length; i++) {
+      for (let k = i + 1; k < a.length; k++) {
+        expect(Math.hypot(a[i]!.x - a[k]!.x, a[i]!.z - a[k]!.z)).toBeGreaterThanOrEqual(a[i]!.radius + a[k]!.radius);
+      }
+    }
+    const b = buildGardenLayout(graph([]), [...js, journey({ id: 40 })], NOW).groves;
+    expect(b.slice(0, 14)).toEqual(a);
+  });
+
+  it("a crowded grove counts what didn't fit instead of hiding it silently", () => {
+    const nodes = Array.from({ length: 30 }, (_, i) => node({ id: i + 1, createdAt: OLD }));
+    const layout = buildGardenLayout(graph(nodes), [journey({ id: 5 })], NOW, {
+      links: new Map([[5, nodes.map((n) => link(n.id))]]),
+    });
+    expect(layout.plots).toHaveLength(18);
+    expect(layout.groves[0]!.unshown).toBe(12);
+  });
+
+  it("seed pods: at most 5, over where the memory rests, and only for real nodes", () => {
+    const nodes = Array.from({ length: 8 }, (_, i) => node({ id: i + 1 }));
+    const layout = buildGardenLayout(graph(nodes), [], NOW, {
+      due: [{ id: 99 }, ...nodes.map((n) => ({ id: n.id }))],
+    });
+    expect(layout.pods.map((p) => p.nodeId)).toEqual([1, 2, 3, 4, 5]);
+    const plot = layout.plots.find((p) => p.nodeId === 1)!;
+    expect(layout.pods[0]).toMatchObject({ x: plot.x, y: plot.y, z: plot.z, label: "node 1" });
+  });
+
+  it("nothing is placed by importance, strength, or degree — the same nodes with different weights lay out identically", () => {
+    const base = [node({ id: 1, createdAt: OLD }), node({ id: 2 })];
+    const heavy = base.map((n) => ({ ...n, importance: 1, reviewStrength: 0.1, degree: 40 }) as GraphNode);
+    const links = new Map([[5, [link(1)]]]);
+    const a = buildGardenLayout(graph(base), [journey({ id: 5 })], NOW, { links });
+    const b = buildGardenLayout(graph(heavy), [journey({ id: 5 })], NOW, { links });
+    expect(b.plots).toEqual(a.plots);
+    expect(b.groves).toEqual(a.groves);
+  });
+});

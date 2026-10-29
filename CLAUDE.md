@@ -418,6 +418,17 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   owner asked for the current space/star backdrop. Draw calls stay far under the 95 ceiling (pinned by a
   test). Plots/paths/landmarks/tend/mutation untouched. Look at: forest density vs. plot legibility on a real
   phone, and whether the canopy halo reads against the dark sky.
+- **Growing Place v2, step 1 — Journeys as groves (2026-10-29) — MEASURED headless, needs on-device
+  confirmation** (gardenLayout.ts, gardenScene.ts, WorldsSurface.tsx; spec
+  `docs/specs/growing-place-v2-2026-10-29.md`, owner-approved): the garden no longer re-shows every memory
+  by age (the redundancy the owner called out). Each Journey is a grove (lawn, a taller blossom-green tree
+  that grows with completed missions, a gold flower per completed mission, a name sign); its open missions
+  are sprouts and its linked memories stones inside the grove; paused Journeys rest under mist with
+  "· resting" on the sign (never colour alone); groves sharing a memory get a gold trail; loose memories from
+  the last 30 days grow as wildflowers in the meadow; up to 5 memories due for recall float as seed pods.
+  Fetches each Journey's links + `/api/review/due` on garden entry (a failed fetch renders that part empty,
+  never guessed). Look at: whether groves read clearly among the forest from the orbit camera (step 2's
+  walking camera is the real view).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

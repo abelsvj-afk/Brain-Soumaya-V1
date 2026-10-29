@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
+import { getDueReviews, type DueReview } from "../api/features.js";
 import { getArchivedNodesStrict, getIncidentEdges, getSpaceId } from "../api/client.js";
 import type { GraphData, GraphEdge, GraphNode, Journey, JourneyLinkSummary } from "@brain/shared";
 import {
@@ -343,6 +344,10 @@ const EMPTY_GARDEN_LAYOUT: GardenLayout = {
   plots: [],
   paths: [],
   landmarks: [],
+  groves: [],
+  grovePaths: [],
+  pods: [],
+  meadowUnshown: 0,
   eligibleCount: 0,
   excludedCount: 0,
   omittedEdgeCount: 0,
@@ -498,6 +503,7 @@ export default function WorldsSurface({
   const [graphicsFailed, setGraphicsFailed] = useState(false);
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
+  const [dueReviews, setDueReviews] = useState<DueReview[] | null>(null);
   const [journeyLinksMap, setJourneyLinksMap] = useState<Map<number, JourneyLinkSummary[]> | null>(null);
   const [archivedGraph, setArchivedGraph] = useState<GraphData | null>(null);
   const [archivedFailed, setArchivedFailed] = useState(false);
@@ -723,15 +729,16 @@ export default function WorldsSurface({
     };
   }, [atGarden]);
 
-  // Chronicle routes: a done Journey's linked memories, fetched per Journey
-  // on Deep Past entry. A single Journey's links failing omits only that
-  // Journey's route — the world still renders, honestly, without it.
+  // Chronicle routes (Deep Past: done Journeys) and garden groves (every
+  // Journey): each Journey's linked items, fetched per Journey on entry. A
+  // single Journey's links failing omits only that Journey's route/grove
+  // contents — the world still renders, honestly, without them.
   useEffect(() => {
-    if (!atDeepPast || !journeys) return;
+    if ((!atDeepPast && !atGarden) || !journeys) return;
     let cancelled = false;
-    const done = journeys.filter((j) => j.status === "done");
+    const wanted = atGarden ? journeys : journeys.filter((j) => j.status === "done");
     void Promise.all(
-      done.map(async (j): Promise<[number, JourneyLinkSummary[]]> => {
+      wanted.map(async (j): Promise<[number, JourneyLinkSummary[]]> => {
         try {
           const detail = await journeyLinks(j.id);
           return [j.id, detail?.links ?? []];
@@ -745,7 +752,24 @@ export default function WorldsSurface({
     return () => {
       cancelled = true;
     };
-  }, [atDeepPast, journeys]);
+  }, [atDeepPast, atGarden, journeys]);
+
+  // Seed pods (garden v2): memories due for recall ripen in the garden. A
+  // failed fetch simply grows no pods — the garden never waits on it.
+  useEffect(() => {
+    if (!atGarden) return;
+    let cancelled = false;
+    getDueReviews()
+      .then((due) => {
+        if (!cancelled) setDueReviews(due);
+      })
+      .catch(() => {
+        if (!cancelled) setDueReviews([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [atGarden]);
 
   // The Archive's own input (Wave 2): the graph prop never carries
   // archived rows, so the archived nodes plus their incident edges are
@@ -841,8 +865,11 @@ export default function WorldsSurface({
   // the world re-reads the brain; it stores nothing of its own.
   const layout = useMemo<GardenLayout | undefined>(() => {
     if (!atGarden || !graph) return undefined;
-    return buildGardenLayout(graph, journeys ?? []);
-  }, [atGarden, graph, journeys]);
+    return buildGardenLayout(graph, journeys ?? [], new Date(), {
+      links: journeyLinksMap ?? undefined,
+      due: dueReviews ?? undefined,
+    });
+  }, [atGarden, graph, journeys, journeyLinksMap, dueReviews]);
 
   useEffect(() => {
     layoutRef.current = layout;

@@ -26,6 +26,9 @@ const layout = buildGardenLayout(
   } as GraphData,
   [{ id: 7, title: "Done chapter", description: "", status: "done", progress: 1 } as Journey],
   NOW,
+  // v2: the older memory (id 2) rests in the done Journey's grove; the
+  // recent ones grow wild in the meadow.
+  { links: new Map([[7, [{ kind: "node" as const, refId: 2, label: "b" }]]]) },
 );
 
 /** The garden's resting orbit camera, as WorldsSurface poses it. */
@@ -41,7 +44,7 @@ function orbitCamera(): THREE.PerspectiveCamera {
 /** NDC for the centre of a plot's mesh (form lift included). */
 function plotNdc(nodeId: number, camera: THREE.PerspectiveCamera): { x: number; y: number } {
   const plot = layout.plots.find((p) => p.nodeId === nodeId)!;
-  const lift = plot.kind === "action" ? 4.5 : 3;
+  const lift = plot.role === "wild" ? 5 : plot.kind === "action" ? 7 : 3;
   const v = new THREE.Vector3(plot.x, plot.y + lift, plot.z).project(camera);
   return { x: v.x, y: v.y };
 }

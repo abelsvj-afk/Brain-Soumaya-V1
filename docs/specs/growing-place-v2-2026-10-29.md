@@ -1,6 +1,6 @@
 # Growing Place v2: a garden you walk, built from your Journeys
 
-**Status:** DRAFT spec, awaiting the owner's approval. Nothing is built until it is approved (CLAUDE.md Rule #1).
+**Status:** APPROVED by the owner 2026-10-29 ("Yes to Seed Pods, paused under mist, last 30 days"). Building in the steps below.
 **Written:** 2026-10-29 · **Owner decisions captured:** 2026-10-29 (listed under "Settled by the owner").
 **Supersedes, for content and movement only:** P3-1's "plots for every eligible node, by age". The recipe's identity and
 constitution still hold: dawn light, the witness tree, terraces, the kindness rule, and changes only through the rail.
@@ -47,7 +47,7 @@ milestones, and the memories linked to them*. v1 never delivered it.
 - **Paths between groves** = Journeys that share at least one linked memory. These are confirmed links only. Nothing is
   inferred.
 - **The meadow** is the arrival terrace. It holds memories that link to no Journey, as low wildflowers. To keep the frame
-  rate on a phone it shows at most 60 of them: the most recent, the rest summarised. This is the one place where the
+  rate on a phone it shows only those from the last 30 days (owner, 2026-10-29), with a 120 safety ceiling. This is the one place where the
   galaxy's content appears, and it appears for a purpose, which is to be given a home.
 
 Rule kept from v1: nothing is placed, sized or lit by importance, strength or degree, except that a tree's height counts
@@ -120,7 +120,7 @@ not have.
 
 1. **Layout v2** (pure, tested): `buildGardenLayoutV2(graph, journeys, links, due)` → groves, sprouts, stones, meadow, pods
    and paths. Deterministic and seeded. Tests pin: no Journey ⇒ meadow only; done Journeys stay; nothing driven by
-   importance; meadow cap 60; pods ≤ 5.
+   importance; meadow = last 30 days (≤ 120); pods ≤ 5.
 2. **Walk:** walkable rings + ramps, tap-to-walk glide, camera follow, grove list chip, and object sheets. Tests cover route
    math (never off-world, never through the tree) and tap-vs-drag.
 3. **Grove actions:** tend, plant, carry/place, and ask here, wired to the existing routes. Each has a component test
@@ -131,11 +131,9 @@ not have.
 
 Each step adds a CLAUDE.md Pending Validation line for on-device confirmation.
 
-## Open questions for the owner (answer at approval time)
+## Answered by the owner (2026-10-29)
 
-1. **Seed Pods**: approve as the world's game? Or would you rather have a different one? Alternatives considered:
-   - Grove races: plant N steps this week.
-   - A watering-can mini-game.
-   - Firefly constellations you draw between memories.
-2. **Paused Journeys**: show their groves at full life, or "resting under mist" (still never wilted)?
-3. **Meadow cap 60**: right number for your brain size, or should it show only memories from the last 30 days?
+1. **Seed Pods**: approved as the world's game.
+2. **Paused Journeys**: their groves rest **under mist**. They stay soft, quiet and alive, and never wilt.
+3. **Meadow**: shows loose memories from the **last 30 days** (replaces the cap of 60; a hard ceiling of 120 stays only as a
+   frame-rate safety net, with the rest summarised).

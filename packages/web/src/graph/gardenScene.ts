@@ -239,6 +239,200 @@ function fitToSize(root: THREE.Object3D, size: number): void {
   root.position.sub(center);
 }
 
+/** Height a seed pod floats above the ground it ripened over. */
+export const POD_FLOAT = 16;
+
+/** A grove tree's growth factor: one tier per completed mission, up to ten — it only grows. */
+export function groveGrowth(missionsCompleted: number): number {
+  // Base 1.7: a grove tree stands well above the forest so a grove reads
+  // as a place, not one more tree.
+  return 1.7 * (1 + 0.12 * Math.min(Math.max(missionsCompleted, 0), 10));
+}
+
+/**
+ * Garden v2 groves: one per Journey — a cleared lawn, a grove tree whose
+ * height counts completed missions, a flower per completed mission, a soft
+ * mist over paused Journeys (resting, never wilted; owner 2026-10-29), gold
+ * trails between groves that share memories, the grove's name on a sign,
+ * and the day's seed pods. Every kind is one instanced mesh whatever the
+ * count, so draw calls don't grow with Journeys (signs aside, capped).
+ */
+function buildGroves(
+  group: THREE.Group,
+  layout: GardenLayout,
+  dummy: THREE.Object3D,
+  pods: { mesh: THREE.InstancedMesh | null; base: { x: number; y: number; z: number }[] },
+): void {
+  const groves = layout.groves ?? [];
+  if (groves.length > 0) {
+    const lawns = new THREE.InstancedMesh(
+      new THREE.CircleGeometry(1, 40),
+      new THREE.MeshLambertMaterial({ color: 0x7aa85a }),
+      groves.length,
+    );
+    const trunks = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(3.2, 5, 30, 7),
+      new THREE.MeshLambertMaterial({ color: 0x5a4030 }),
+      groves.length,
+    );
+    const crowns = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(17, 1),
+      // A lighter, blossom-warm green than the forest's, so groves pop.
+      new THREE.MeshLambertMaterial({ color: 0xa8c96a, emissive: 0x3a3a12 }),
+      groves.length,
+    );
+    groves.forEach((g, i) => {
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.position.set(g.x, g.y + 0.6, g.z);
+      dummy.scale.setScalar(g.radius);
+      dummy.updateMatrix();
+      lawns.setMatrixAt(i, dummy.matrix);
+      const grow = groveGrowth(g.missionsCompleted);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(grow);
+      dummy.position.set(g.x, g.y + 15 * grow, g.z);
+      dummy.updateMatrix();
+      trunks.setMatrixAt(i, dummy.matrix);
+      dummy.scale.set(grow, grow * 0.8, grow);
+      dummy.position.set(g.x, g.y + 34 * grow, g.z);
+      dummy.updateMatrix();
+      crowns.setMatrixAt(i, dummy.matrix);
+    });
+    dummy.scale.setScalar(1);
+    dummy.rotation.set(0, 0, 0);
+    lawns.name = "grove-lawns";
+    trunks.name = "grove-trunks";
+    crowns.name = "grove-trees";
+    group.add(lawns, trunks, crowns);
+
+    // Flowers for completed missions, ringed around each grove tree.
+    const flowerSpots: { x: number; y: number; z: number }[] = [];
+    for (const g of groves) {
+      const n = Math.min(g.missionsCompleted, 24);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + g.journeyId;
+        const r = g.radius * 0.28 + (k % 2) * 4;
+        flowerSpots.push({ x: g.x + Math.cos(a) * r, y: g.y + 3, z: g.z + Math.sin(a) * r });
+      }
+    }
+    if (flowerSpots.length > 0) {
+      const flowers = new THREE.InstancedMesh(
+        new THREE.IcosahedronGeometry(2.6, 0),
+        new THREE.MeshLambertMaterial({ color: DAWN_GOLD, emissive: 0x4a3410 }),
+        flowerSpots.length,
+      );
+      flowerSpots.forEach((f, i) => {
+        dummy.position.set(f.x, f.y, f.z);
+        dummy.updateMatrix();
+        flowers.setMatrixAt(i, dummy.matrix);
+      });
+      flowers.name = "grove-flowers";
+      group.add(flowers);
+    }
+
+    // Paused Journeys rest under mist: soft, quiet, never wilted.
+    const resting = groves.filter((g) => g.status === "paused");
+    if (resting.length > 0) {
+      const mist = new THREE.InstancedMesh(
+        new THREE.SphereGeometry(1, 20, 12),
+        new THREE.MeshBasicMaterial({ color: 0xe8efe0, transparent: true, opacity: 0.22, depthWrite: false }),
+        resting.length,
+      );
+      resting.forEach((g, i) => {
+        dummy.position.set(g.x, g.y + 18, g.z);
+        dummy.scale.set(g.radius * 1.05, 26, g.radius * 1.05);
+        dummy.updateMatrix();
+        mist.setMatrixAt(i, dummy.matrix);
+      });
+      dummy.scale.setScalar(1);
+      mist.name = "grove-mist";
+      mist.raycast = () => {}; // mist never blocks a tap on what rests under it
+      group.add(mist);
+    }
+
+    // Grove signs: the Journey's icon + name (+ "resting" in words, never
+    // mist alone), readable from walking distance. Capped so a brain with
+    // many Journeys can't blow the draw-call budget.
+    if (typeof document !== "undefined") {
+      for (const g of groves.slice(0, GROVE_SIGN_MAX)) {
+        const label = `${g.icon ? `${g.icon} ` : ""}${g.title}${g.status === "paused" ? " · resting" : ""}`;
+        const sign = groveSign(label);
+        if (!sign) continue;
+        sign.position.set(g.x, g.y + 62 * groveGrowth(g.missionsCompleted), g.z);
+        sign.name = `grove-sign-${g.journeyId}`;
+        group.add(sign);
+      }
+    }
+  }
+
+  // Trails between groves that share memories — confirmed links only.
+  const byJourney = new Map(groves.map((g) => [g.journeyId, g]));
+  const trail: number[] = [];
+  for (const p of layout.grovePaths ?? []) {
+    const a = byJourney.get(p.fromJourneyId);
+    const b = byJourney.get(p.toJourneyId);
+    if (!a || !b) continue;
+    const y = Math.max(a.y, b.y) + 4;
+    trail.push(a.x, y, a.z, b.x, y, b.z);
+  }
+  if (trail.length > 0) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(trail), 3));
+    const line = new THREE.LineSegments(
+      geo,
+      new THREE.LineBasicMaterial({ color: DAWN_GOLD, transparent: true, opacity: 0.85 }),
+    );
+    line.name = "grove-trails";
+    group.add(line);
+  }
+
+  // Seed pods: memories due for recall, glowing above where they rest.
+  const due = layout.pods ?? [];
+  if (due.length > 0) {
+    const mesh = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(5, 1),
+      new THREE.MeshBasicMaterial({ color: 0xffe9a8 }),
+      due.length,
+    );
+    pods.base = due.map((p) => ({ x: p.x, y: p.y + POD_FLOAT, z: p.z }));
+    pods.base.forEach((b, i) => {
+      dummy.position.set(b.x, b.y, b.z);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.name = "seed-pods";
+    pods.mesh = mesh;
+    group.add(mesh);
+  }
+}
+
+/** At most this many grove signs (one draw call each). */
+const GROVE_SIGN_MAX = 20;
+
+/** A text sign as a sprite (canvas-drawn; skipped where there is no DOM or 2D context). */
+function groveSign(text: string): THREE.Sprite | null {
+  const c = document.createElement("canvas");
+  const g = c.getContext("2d");
+  if (!g) return null;
+  const font = "600 34px system-ui, sans-serif";
+  g.font = font;
+  const w = Math.min(560, Math.ceil(g.measureText(text).width) + 40);
+  c.width = w;
+  c.height = 60;
+  g.font = font; // resizing the canvas resets its state
+  g.fillStyle = "rgba(12,28,20,0.72)";
+  g.fillRect(0, 0, w, 60);
+  g.fillStyle = "#fff4d6";
+  g.textBaseline = "middle";
+  g.fillText(text, 20, 31, w - 40);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sprite.scale.set((w / 60) * 22, 22, 1);
+  sprite.raycast = () => {}; // signs are reached through the Groves list, not tapped in the scene
+  return sprite;
+}
+
 /**
  * Soft radial gold glow for the crown halo — computed into a DataTexture
  * (no canvas, so it also builds where there is no DOM) and no asset to load.
@@ -280,6 +474,8 @@ export function createGardenScene(
   group.name = "growing-place";
   let disposed = false;
   const swaying: THREE.Object3D[] = [];
+  // Seed pods bob gently; kept so update() can move them (still under reduced motion).
+  const pods: { mesh: THREE.InstancedMesh | null; base: { x: number; y: number; z: number }[] } = { mesh: null, base: [] };
   // Verb 1: the plot meshes, kept for tap-to-tend raycasting.
   const plotMeshes: { mesh: THREE.InstancedMesh; plots: readonly { nodeId: number }[] }[] = [];
 
@@ -400,6 +596,7 @@ export function createGardenScene(
   const vegRand = mulberry32(hashSeeded("growing-place / first-light-1:vegetation"));
   const vegCount = 300;
   const vegBlocked = [...layout.plots, ...layout.landmarks];
+  const groves = layout.groves ?? [];
   const trunks = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(2.5, 3.9, 22, 5),
     new THREE.MeshLambertMaterial({ color: 0x54402e }),
@@ -423,7 +620,12 @@ export function createGardenScene(
       const radius = GARDEN_TERRACE_RADIUS[terrace]! * (0.55 + vegRand() * 0.4);
       x = Math.cos(angle) * radius;
       z = Math.sin(angle) * radius;
-      if (!vegBlocked.some((o) => Math.hypot(o.x - x, o.z - z) < 40)) break;
+      if (
+        !vegBlocked.some((o) => Math.hypot(o.x - x, o.z - z) < 40) &&
+        !groves.some((g) => Math.hypot(g.x - x, g.z - z) < g.radius + 14)
+      ) {
+        break;
+      }
     }
     const sc = 0.7 + vegRand() * 0.9;
     dummy.position.set(x, GARDEN_TERRACE_HEIGHT[terrace]! + 11 * sc, z);
@@ -440,23 +642,30 @@ export function createGardenScene(
   veg.name = "vegetation";
   group.add(veg);
 
-  // Plots: one instanced mesh per form. Form says what kind of thing it is;
-  // size, brightness, and color are the same across kinds (non-ranking rule).
-  const stoneGeo = new THREE.DodecahedronGeometry(3.2);
-  const sproutGeo = new THREE.ConeGeometry(2.6, 9, 5);
-  const ringGeo = new THREE.TorusGeometry(5, 1.1, 8, 24);
+  // Plots: one instanced mesh per form. Form says what kind of thing it is —
+  // a grove's open mission is a sprout, a grove's memory a stone, a loose
+  // meadow memory a wildflower; size, brightness, and color are the same
+  // within a form (non-ranking rule). Sized to read from walking height.
+  const stoneGeo = new THREE.DodecahedronGeometry(5);
+  const sproutGeo = new THREE.ConeGeometry(3.6, 14, 6);
+  const ringGeo = new THREE.TorusGeometry(6, 1.4, 8, 24);
+  const wildGeo = new THREE.OctahedronGeometry(3.4);
+  const wildMat = new THREE.MeshLambertMaterial({ color: 0xf3e6c4, emissive: 0x3a2c10 });
   const stoneMat = new THREE.MeshStandardMaterial({ color: STONE, roughness: 0.8, metalness: 0.05 });
   const sproutMat = new THREE.MeshStandardMaterial({ color: 0x6fa055, roughness: 0.85, metalness: 0 });
   const ringMat = new THREE.MeshStandardMaterial({ color: DAWN_GOLD, roughness: 0.6, metalness: 0.2 });
+  const wild = (p: GardenLayout["plots"][number]) => p.role === "wild";
   const byForm = {
-    stone: layout.plots.filter((p) => p.kind !== "action" && !p.gathering),
-    sprout: layout.plots.filter((p) => p.kind === "action"),
-    ring: layout.plots.filter((p) => p.gathering),
+    stone: layout.plots.filter((p) => !wild(p) && p.kind !== "action" && !p.gathering),
+    sprout: layout.plots.filter((p) => !wild(p) && p.kind === "action"),
+    ring: layout.plots.filter((p) => !wild(p) && p.gathering),
+    wild: layout.plots.filter(wild),
   } as const;
   const forms = [
     { plots: byForm.stone, geo: stoneGeo, mat: stoneMat, name: "plots-stone", lift: 3 },
-    { plots: byForm.sprout, geo: sproutGeo, mat: sproutMat, name: "plots-sprout", lift: 4.5 },
+    { plots: byForm.sprout, geo: sproutGeo, mat: sproutMat, name: "plots-sprout", lift: 7 },
     { plots: byForm.ring, geo: ringGeo, mat: ringMat, name: "plots-gathering", lift: 2 },
+    { plots: byForm.wild, geo: wildGeo, mat: wildMat, name: "plots-wild", lift: 5 },
   ] as const;
   for (const form of forms) {
     if (form.plots.length === 0) continue;
@@ -545,6 +754,8 @@ export function createGardenScene(
     group.add(paths);
   }
 
+  buildGroves(group, layout, dummy, pods);
+
   // Landmarks: presence-only arches for completed Journeys — pale stone and
   // living branch weaving upward. No rising animation here (A6, Phase 4).
   for (const landmark of layout.landmarks) {
@@ -611,6 +822,7 @@ export function createGardenScene(
   }
 
   const raycaster = new THREE.Raycaster();
+  const podMatrix = new THREE.Matrix4();
   // --- Phase 4 mutation presentation (A6/A7/A8/A23/A24/A25) ---
   // The scene renders exactly what setMutation is given — never a
   // position it was not given, never a change the rail did not approve.
@@ -1057,6 +1269,15 @@ export function createGardenScene(
           } else {
             obj.rotation.z = sway;
           }
+        }
+        // Seed pods drift up and down, each on its own phase (still under reduced motion).
+        const podMesh = pods.mesh;
+        if (podMesh) {
+          pods.base.forEach((b, i) => {
+            podMatrix.makeTranslation(b.x, b.y + Math.sin(elapsedMs * 0.0012 + i * 1.7) * 3, b.z);
+            podMesh.setMatrixAt(i, podMatrix);
+          });
+          podMesh.instanceMatrix.needsUpdate = true;
         }
       }
 
