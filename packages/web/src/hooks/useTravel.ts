@@ -10,6 +10,7 @@ import {
   type TravelBonus,
   type TravelState,
 } from "../api/travel.js";
+import { prefetchWorld } from "../graph/worldPrefetch.js";
 
 /**
  * Travel state binding (Phase 2, P2-3). Owns the client side of the
@@ -144,6 +145,11 @@ export function useTravel(enabled: boolean = true): UseTravel {
     if (s) {
       setState(s);
       reconcile(s);
+      // The journey's dead time (free-cancel window + flight) is when the destination's models
+      // are fetched, so the world isn't bare when you arrive. Covers a departure made here AND a
+      // reload mid-flight; idempotent, so the arming poll calling it every 2 s is free.
+      const j = s.activeJourney;
+      if (j && (j.state === "arming" || j.state === "in_transit")) void prefetchWorld(j.destination);
       setError(null);
     } else {
       setError("Can't reach the brain right now — travel state may be out of date.");

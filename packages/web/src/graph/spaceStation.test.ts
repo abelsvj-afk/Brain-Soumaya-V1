@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { shouldHideStationModel, STATION_LOD_FAR, STATION_LOD_HYST } from "./spaceStation.js";
+import {
+  shouldHideStationModel,
+  shouldStartStationLoad,
+  STATION_LOD_FAR,
+  STATION_LOD_HYST,
+  STATION_LOAD_MIN_MS,
+  STATION_LOAD_MAX_MS,
+} from "./spaceStation.js";
 
 /**
  * Distance-gated fidelity for the station's heavy glTF (perf experiment targeting the
@@ -39,5 +46,40 @@ describe("shouldHideStationModel", () => {
   it("transitions from hidden to visible only once crossing back inside the far-hyst edge", () => {
     expect(shouldHideStationModel(STATION_LOD_FAR - STATION_LOD_HYST + 1, true)).toBe(true);
     expect(shouldHideStationModel(STATION_LOD_FAR - STATION_LOD_HYST - 1, true)).toBe(false);
+  });
+});
+
+
+/**
+ * WHEN the 14 MB model starts downloading. It used to start the instant the galaxy was built,
+ * competing with the models the first screen needs. The stand-in is already on screen, so
+ * starting later costs nothing visible.
+ */
+describe("shouldStartStationLoad", () => {
+  const NEAR = STATION_LOD_FAR - 100; // where the model would actually be shown
+  const FAR = STATION_LOD_FAR * 3;
+
+  it("never starts during the startup window — even with the camera right on top of it", () => {
+    expect(shouldStartStationLoad(0, 0)).toBe(false);
+    expect(shouldStartStationLoad(NEAR, STATION_LOAD_MIN_MS - 1)).toBe(false);
+  });
+  it("after the startup window, starts as soon as the camera is where the model would be shown", () => {
+    expect(shouldStartStationLoad(NEAR, STATION_LOAD_MIN_MS)).toBe(true);
+    expect(shouldStartStationLoad(STATION_LOD_FAR + STATION_LOD_HYST, STATION_LOAD_MIN_MS + 1)).toBe(true);
+  });
+  it("waits while the camera is far away and the idle deadline has not passed", () => {
+    expect(shouldStartStationLoad(FAR, STATION_LOAD_MIN_MS)).toBe(false);
+    expect(shouldStartStationLoad(FAR, STATION_LOAD_MAX_MS - 1)).toBe(false);
+  });
+  it("an idle galaxy still warms it by the deadline, wherever the camera is", () => {
+    expect(shouldStartStationLoad(FAR, STATION_LOAD_MAX_MS)).toBe(true);
+    expect(shouldStartStationLoad(null, STATION_LOAD_MAX_MS)).toBe(true);
+  });
+  it("with no camera info it waits for the deadline rather than guessing", () => {
+    expect(shouldStartStationLoad(null, STATION_LOAD_MIN_MS)).toBe(false);
+    expect(shouldStartStationLoad(null, STATION_LOAD_MAX_MS - 1)).toBe(false);
+  });
+  it("the deadline is later than the startup window (the gate can ever open)", () => {
+    expect(STATION_LOAD_MAX_MS).toBeGreaterThan(STATION_LOAD_MIN_MS);
   });
 });

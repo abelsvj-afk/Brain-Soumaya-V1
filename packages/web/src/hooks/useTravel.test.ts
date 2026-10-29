@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { TravelJourney } from "@brain/shared";
 import { useTravel } from "./useTravel.js";
+import { prefetchWorld } from "../graph/worldPrefetch.js";
 import {
   arriveJourney,
   cancelJourney,
@@ -22,6 +23,8 @@ vi.mock("../api/travel.js", async (importOriginal) => {
     arriveJourney: vi.fn(),
   };
 });
+
+vi.mock("../graph/worldPrefetch.js", () => ({ prefetchWorld: vi.fn(async () => {}) }));
 
 const mockState = vi.mocked(getTravelState);
 const mockDepart = vi.mocked(departJourney);
@@ -199,5 +202,38 @@ describe("useTravel — copies stay in sync", () => {
     });
     await new Promise((r) => setTimeout(r, 30));
     expect(mockState).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Prefetch trigger (see graph/worldPrefetch.ts): the journey's dead time is when the destination's
+// models are fetched, so the world isn't bare when you arrive.
+describe("useTravel — warms the destination while travelling", () => {
+  it("starts warming the destination as soon as the server reports a journey arming", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "arming", destination: "deep-past" })));
+    renderHook(() => useTravel());
+    await waitFor(() => expect(prefetchWorld).toHaveBeenCalledWith("deep-past"));
+  });
+  it("…and while in transit (covers a reload mid-flight)", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "in_transit", destination: "scale" })));
+    renderHook(() => useTravel());
+    await waitFor(() => expect(prefetchWorld).toHaveBeenCalledWith("scale"));
+  });
+  it("does nothing when no journey is active", async () => {
+    mockState.mockResolvedValue(state(null));
+    const { result } = renderHook(() => useTravel());
+    await waitFor(() => expect(result.current.state).not.toBeNull());
+    expect(prefetchWorld).not.toHaveBeenCalled();
+  });
+  it("does not prefetch the way HOME on a turn-back (already seen) — returning is not arming/in_transit", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "returning", destination: "home" })));
+    const { result } = renderHook(() => useTravel());
+    await waitFor(() => expect(result.current.state).not.toBeNull());
+    expect(prefetchWorld).not.toHaveBeenCalled();
+  });
+  it("does not prefetch while disabled (worlds flag off)", async () => {
+    mockState.mockResolvedValue(state(journey({ state: "arming" })));
+    renderHook(() => useTravel(false));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(prefetchWorld).not.toHaveBeenCalled();
   });
 });

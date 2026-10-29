@@ -118,12 +118,20 @@ Draco/WebP | names identical? | clips identical? | real-not-placeholder? | notes
 `worlds-check` tables. Label **confirmed / inferred / unknown** as usual — and say so plainly for any file you
 could not slim without visible loss, and stop there rather than pushing past it.
 
-## Out of scope (Claude does these — don't touch)
+## Out of scope (Claude's side — DONE 2026-10-29, don't touch)
 
-- Server caching headers for `.glb` (currently `max-age=0` — re-validated every launch).
-- Pre-fetching the destination world's models during the 10-second cancel window.
-- Deferring the 14 MB station off the startup path.
+These landed on `main` while you work, so your "before" numbers on `main` already include them:
+- **Persistent model cache + background validation** in the service worker, and the fixed
+  immutable rule for hashed bundles. A *returning* visitor now downloads ~0 MB (was 24.5 MB).
+  This does **not** shrink first-visit weight — that is your job.
+- **Station model deferred** off the startup path (starts no earlier than 6 s after load).
+- **Destination-world prefetch** during the 10 s cancel window and flight (all of a world's models
+  are now ready on arrival). Smaller files make this finish sooner, especially on a phone connection.
 - Any app code, CSS, or `CREDITS.md`.
+
+**One consequence for you:** because models are now kept in a persistent cache and re-validated by
+ETag, a file you replace *in place* is picked up on the **next launch after** a user's first visit
+post-deploy (they see the old model once, then the new one). That is expected, not a bug.
 
 ## Not guaranteed
 

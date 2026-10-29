@@ -376,6 +376,31 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   (space_station_3 14 MB, sf-lava-planet 11, sf-ice-planet-procedural 10.5, sf-anchor-spire 8.2) and
   served `max-age=0`. This is the "very slow" — slimming them is Muse-sized binary work (the verified
   web-slim recipe). Needs on-device confirmation of the whole flight on the owner's phone.
+- **Load weight: caching, station deferral, destination prefetch (2026-10-29) — MEASURED headless,
+  FIXED** (server.ts, public/sw.js, spaceStation.ts, worldPrefetch.ts, useTravel.ts): the owner said the
+  app is "very slow". Measured: home galaxy alone 21.6 MB at startup; each world +6–20 MB; and a RETURNING
+  visitor re-downloaded 24.5 MB (the 14 MB `space_station_3.glb` + 10.5 MB `sf-ice-planet-procedural.glb`)
+  on every visit — the browser's HTTP cache would not keep files that large. Fixed: (1) `isHashedBuildAsset`
+  — the old "immutable" rule looked for a DOT before the hash but Vite writes a HYPHEN, so the 2 MB bundle
+  was never cached hard; now every `assets/name-<hash>.ext` is immutable (un-hashed public files stay
+  revalidatable); (2) the service worker keeps `.glb` + `/draco/` + `/basis/` in a persistent
+  `soumaya-assets-v1` cache (survives deploys; code/pages/API stay network-first), serves from it at once,
+  re-validates in the background with a conditional request, coalesces concurrent downloads of one file,
+  and never caches an HTML page served for a missing model; (3) the station model starts downloading no
+  earlier than 6 s (earlier: at 0.4 s) and no later than 20 s, sooner if the camera is where it would be
+  shown (`shouldStartStationLoad`); (4) `worldPrefetch.ts` warms the destination world's models during the
+  10 s cancel window + flight, read from each world's own asset module so a new model is included
+  automatically; respects Data Saver / 2G. **Measured (real browser, same test before/after):** returning
+  visitor 38.2 → 0.0 MB downloaded (every model a tiny 304 check); with prefetch Growing Place's models
+  all finished 13.1 s BEFORE arrival (control: last one 11.2 s AFTER), Deep Past all 11 ready 2.4 s before
+  arrival (control: 6.9 s after). **A trap worth remembering:** a script `fetch` with `cache: "no-store"` —
+  and any `fetch` that sets `If-None-Match` — makes the browser add `Cache-Control: no-cache`, which
+  Express's static files treat as a forced reload: the "cheap" validation silently re-downloaded 14 MB until
+  the worker sent its own `Cache-Control: max-age=0` (pinned by `staticCaching.test.ts`). Still not fixed:
+  FIRST-visit weight (slimming the models — Muse task `docs/specs/muse-glb-slimming-2026-10-29.md`), and the
+  Deep Past scene appears to rebuild (re-loading its models) after mount — not investigated. **Scale is
+  missing files:** 5 URLs its asset module names are not in `public/` (incl. the hero `ISS-A.glb` and probe
+  models) — awaiting the owner's upload; the world renders without them. Needs on-device confirmation.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
