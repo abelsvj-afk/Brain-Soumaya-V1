@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel, readTraversedRoutes } from "../hooks/useTravel.js";
+import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import {
   chainTo,
   deriveMapData,
@@ -59,6 +60,14 @@ export default function WorldMap({
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<ViewTransform>(HOME_VIEW);
   const dragRef = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null);
+  // The map is a dialog, so it gets the app's standard dialog behaviour —
+  // Escape closes it, Tab stays inside it, focus returns to the opener.
+  // It was the one full-screen overlay without it: the only way out was
+  // the bar's Back button, which the canvas (later in the DOM, same
+  // stacking tier) painted over and swallowed the tap for — see the
+  // .world-map-bar z-index pin in index.css. Escape is the second door.
+  const rootRef = useRef<HTMLElement | null>(null);
+  useDialogA11y(rootRef, onClose, enabled);
 
   // The map derives from the server's travel state plus the client's
   // traversed-routes record — the same record the skip rule reads. It
@@ -99,7 +108,7 @@ export default function WorldMap({
   };
 
   return (
-    <section className="world-map" role="dialog" aria-label="World map">
+    <section className="world-map" role="dialog" aria-label="World map" ref={rootRef}>
       <header className="world-map-bar">
         <h3>World map</h3>
         {fuel && (

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { announceTravelChanged, requestEnterWorld } from "../lib/travelEvents.js";
-import WorldsSurface, { WORLD_DATA_GRACE_MS } from "./WorldsSurface.js";
+import WorldsSurface, { WORLD_DATA_GRACE_MS, type WorldControlsHandle } from "./WorldsSurface.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
 import { useHarborController, type UseHarborController } from "../hooks/useHarborController.js";
@@ -863,5 +863,44 @@ describe("free look — the first-time hint", () => {
     );
     mountEngaged(<WorldsSurface enabled />);
     expect(screen.queryByText(/drag to look around/i)).toBeNull();
+  });
+});
+
+describe("WorldsSurface — persistent galaxy chrome (owner direction 2026-10-29)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+    mockUseHarborController.mockReset();
+    mockUseHarborController.mockReturnValue(fakeController());
+  });
+
+  it("reports the world on screen (and that it carries a dock) so the host keeps its controls up", () => {
+    mockUseTravel.mockReturnValue(atStation());
+    const onChrome = vi.fn();
+    mountEngaged(<WorldsSurface enabled onChrome={onChrome} />);
+    expect(onChrome).toHaveBeenCalledWith({ world: "great-station", docked: true });
+    // Dismissing the view (Back to your galaxy) reports home again — the
+    // host drops its world layering and its camera buttons go back to
+    // the galaxy they name.
+    fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
+    expect(onChrome).toHaveBeenLastCalledWith(null);
+  });
+
+  it("at home it reports nothing — the surface is not on screen", () => {
+    mockUseTravel.mockReturnValue(fakeTravel());
+    const onChrome = vi.fn();
+    mountEngaged(<WorldsSurface enabled onChrome={onChrome} />);
+    expect(onChrome).toHaveBeenCalledWith(null);
+    expect(onChrome).not.toHaveBeenCalledWith(expect.objectContaining({ world: "great-station" }));
+  });
+
+  it("hands the host a world-camera handle while mounted, and takes it back on unmount", () => {
+    mockUseTravel.mockReturnValue(atStation());
+    const controlsRef: { current: WorldControlsHandle | null } = { current: null };
+    const { unmount } = mountEngaged(<WorldsSurface enabled controlsRef={controlsRef} />);
+    expect(controlsRef.current).not.toBeNull();
+    expect(() => controlsRef.current?.resetView()).not.toThrow();
+    expect(() => controlsRef.current?.zoomBy(1.25)).not.toThrow();
+    unmount();
+    expect(controlsRef.current).toBeNull();
   });
 });

@@ -43,7 +43,7 @@ import TravelPanel from "./components/TravelPanel.js";
 import ToursPanel from "./components/ToursPanel.js";
 import ApprovalsInbox from "./components/ApprovalsInbox.js";
 import WorldChangesView from "./components/WorldChangesView.js";
-import WorldsSurface from "./components/WorldsSurface.js";
+import WorldsSurface, { type WorldControlsHandle } from "./components/WorldsSurface.js";
 import WorldMap from "./components/WorldMap.js";
 import TravelSheet from "./components/TravelSheet.js";
 import { getMoneySky } from "./api/finance.js";
@@ -214,6 +214,20 @@ export default function App() {
   // The world map overlay (Rev 116) and the world it should focus the
   // travel panel on when the map hands the traveller over.
   const [showWorldMap, setShowWorldMap] = useState(false);
+  // Persistent galaxy chrome (owner direction 2026-10-29): while a world
+  // is on screen the home controls stay on screen with it. WorldsSurface
+  // reports what it is showing (null = home galaxy / layer dismissed);
+  // the camera buttons then drive the WORLD camera through its handle
+  // instead of the hidden galaxy's, and the galaxy-only chrome (views,
+  // focus fan, ship stack) steps aside — see docs/specs/
+  // worlds-controls-persistence-2026-10-29.md for the audit.
+  const [worldView, setWorldView] = useState<{ world: string | null; docked: boolean } | null>(null);
+  const worldControlsRef = useRef<WorldControlsHandle | null>(null);
+  const handleWorldChrome = useCallback((info: { world: string | null; docked: boolean } | null) => {
+    setWorldView((prev) =>
+      prev?.world === info?.world && prev?.docked === info?.docked && (prev === null) === (info === null) ? prev : info,
+    );
+  }, []);
   const [travelFocus, setTravelFocus] = useState<string | null>(null);
   // The travel sheet: the worlds panels' one positioned home. Every way in
   // (Tools → Travel, the map's handoff, a Try-It "travel" action) goes
@@ -2101,7 +2115,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${focusMode ? " focus-mode" : ""}${focusMenuOpen ? " focus-menu-open" : ""}`}>
+    <div className={`app${focusMode ? " focus-mode" : ""}${focusMenuOpen ? " focus-menu-open" : ""}${worldView ? " worlds-open" : ""}${worldView?.docked ? " worlds-docked" : ""}`}>
       <Toasts />
       {/* Performance readout (Stage 0 instrument). Renders nothing unless enabled via
           Settings or ?perf=1, and polls at 2Hz rather than reading anything per frame. */}
@@ -2495,7 +2509,7 @@ export default function App() {
           onOpen={openLens}
           onLayer={openLayer}
           onExit={exitLens}
-          hidden={panel !== null || showChat || showObs}
+          hidden={panel !== null || showChat || showObs || !!worldView}
         />
       )}
 
@@ -2561,6 +2575,8 @@ export default function App() {
             onFocus={focus}
             onHangarEquipChanged={() => void handleChanged(-1)}
             onGardenChanged={(ids) => void refresh(ids)}
+            onChrome={handleWorldChrome}
+            controlsRef={worldControlsRef}
           />
         </ErrorBoundary>
       )}
@@ -2638,7 +2654,7 @@ export default function App() {
           stack docks in its low slot (§6.5.5). Batch I (REG-068 / GH-15):
           the stack hides under the same shared rule as the Fuel/Streak
           block — it used to stay up over chat/settings/connections. */}
-      {!hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
+      {!worldView && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <ShipStatusStack
           belowNoticing={noticingOpen}
           collapsed={!shipStatusOpen}
@@ -2671,13 +2687,13 @@ export default function App() {
           galaxy itself once you're standing in it. Batch I (REG-068 /
           GH-15): same shared hide rule — the cue used to stay up over
           Connections and the Timeline. */}
-      {loaded && data.nodes.length === 0 && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
+      {loaded && data.nodes.length === 0 && !worldView && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <EmptyGalaxyCue onAdd={() => toggle("ingest")} />
       )}
 
       {/* Right-side-up: a clearly-visible pill (not a buried FAB) whenever you're following
           the ship, since banking + free orbit can leave you looking at her sideways. */}
-      {followShip && panel === null && (
+      {followShip && panel === null && !worldView && (
         <button
           className="level-pill"
           onClick={() => graphRef.current?.levelShipView()}
@@ -2688,7 +2704,7 @@ export default function App() {
         </button>
       )}
 
-      {clustered && (
+      {clustered && !worldView && (
         <button
           className="exit-cluster"
           onClick={() => {
@@ -2723,6 +2739,13 @@ export default function App() {
           <NavRail
             onDock={() => toggle("dock")}
             onRecenter={() => {
+              // In a world, Recenter puts the WORLD's view back where
+              // the world had it (the free-look reset) — the galaxy
+              // camera it names at home is behind the surface.
+              if (worldView) {
+                worldControlsRef.current?.resetView();
+                return;
+              }
               graphRef.current?.recenter();
               setFollowShip(false);
               setFollowStation(false);
@@ -2735,8 +2758,8 @@ export default function App() {
               setClustered(false);
               setActiveLens(null);
             }}
-            onZoomIn={() => graphRef.current?.zoomBy(0.8)}
-            onZoomOut={() => graphRef.current?.zoomBy(1.25)}
+            onZoomIn={() => (worldView ? worldControlsRef.current?.zoomBy(1.25) : graphRef.current?.zoomBy(0.8))}
+            onZoomOut={() => (worldView ? worldControlsRef.current?.zoomBy(1 / 1.25) : graphRef.current?.zoomBy(1.25))}
           />
           {/* Package B (finding #6, §6.4): the deep-space focus-mode toggle
               is a real button again, in the camera cluster's bottom slot
@@ -2747,18 +2770,23 @@ export default function App() {
               visible in both states (the fan travels UP from the 🎯; this
               slot is below it) and toggles the same focusMode state as the
               Tools menu entry — two doors to the same room, neither hidden. */}
-          <button
-            className={`fab fab-focus-toggle ${focusMode ? "on" : ""}`}
-            onClick={() => setFocusMode((v) => !v)}
-            aria-label={focusMode ? "Exit calm" : "Calm mode"}
-            aria-pressed={focusMode}
-            title={focusMode ? "Exit deep-space calm mode" : "Deep-space calm mode — dim the chrome for a calm read"}
-          >
-            {focusMode ? "🌐" : "🌌"}
-            <span className="fab-cap">Calm</span>
-          </button>
-          {/* Game-style focus cluster: one button that pops up the camera targets. */}
-          {(() => {
+          {!worldView && (
+            <button
+              className={`fab fab-focus-toggle ${focusMode ? "on" : ""}`}
+              onClick={() => setFocusMode((v) => !v)}
+              aria-label={focusMode ? "Exit calm" : "Calm mode"}
+              aria-pressed={focusMode}
+              title={focusMode ? "Exit deep-space calm mode" : "Deep-space calm mode — dim the chrome for a calm read"}
+            >
+              {focusMode ? "🌐" : "🌌"}
+              <span className="fab-cap">Calm</span>
+            </button>
+          )}
+          {/* Game-style focus cluster: one button that pops up the camera targets.
+              Galaxy-only: its targets are galaxy objects, so in a world it
+              steps aside (persistent-chrome audit) instead of pointing at
+              a galaxy that is not on screen. */}
+          {!worldView && (() => {
             // Mobile HUD pass (round 2, S3): the fan's targets are a list
             // now so the fan can FOLD on short phone-portrait screens —
             // fanLayout compresses the step and, when all targets still
