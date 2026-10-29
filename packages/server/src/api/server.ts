@@ -37,6 +37,7 @@ import { financeRoutes } from "./routes/finance.js";
 import { journeysRoutes } from "./routes/journeys.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { investigateRoutes } from "./routes/investigate.js";
+import { forgetRequestsRoutes, sourceForgetRequestRoutes } from "./routes/forgetRequests.js";
 import { spaceRoutes } from "./routes/space.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { pushRoutes } from "./routes/push.js";
@@ -152,6 +153,8 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/investigate", guard, investigateRoutes(ctx));
   app.use("/api/push", guard, pushRoutes(ctx));
   app.use("/api/notifications", guard, notificationRoutes(ctx));
+  app.use("/api/sources", guard, sourceForgetRequestRoutes(ctx));
+  app.use("/api/forget-requests", guard, forgetRequestsRoutes(ctx));
 
   // In production, serve the built web app (set WEB_DIR to packages/web/dist)
   // and fall back to index.html for client-side routes (non-API GETs).

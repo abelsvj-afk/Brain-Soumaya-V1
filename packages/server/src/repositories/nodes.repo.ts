@@ -97,6 +97,31 @@ export class NodesRepo {
     private readonly spaceId: string = DEFAULT_SPACE,
   ) {}
 
+  /**
+   * Verbatim V1 provenance plumbing: stamp hasOriginSource on read
+   * results — true iff the node carries an ACTIVE origin link in
+   * node_sources. One batched query per read call. A pre-V1 volume
+   * (no node_sources table) degrades to all-false rather than failing
+   * the read.
+   */
+  private withOriginFlags(list: GraphNode[]): GraphNode[] {
+    if (list.length === 0) return list;
+    try {
+      const ph = list.map(() => "?").join(",");
+      const rows = this.h.sqlite
+        .prepare(
+          `SELECT DISTINCT node_id AS id FROM node_sources
+           WHERE space_id = ? AND role = 'origin' AND active = 1 AND node_id IN (${ph})`,
+        )
+        .all(this.spaceId, ...list.map((n) => n.id)) as { id: number }[];
+      const set = new Set(rows.map((r) => r.id));
+      for (const n of list) n.hasOriginSource = set.has(n.id);
+    } catch {
+      for (const n of list) n.hasOriginSource = false;
+    }
+    return list;
+  }
+
   /** Insert a node and (atomically) store its embedding. */
   create(input: NewNode, embedding: Float32Array): GraphNode {
     // W1: canonical timestamps set explicitly in application code (never rely on
@@ -146,7 +171,7 @@ export class NodesRepo {
       .from(nodes)
       .where(and(eq(nodes.id, id), eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)))
       .get();
-    return row ? toGraphNode(row) : undefined;
+    return row ? this.withOriginFlags([toGraphNode(row)])[0] : undefined;
   }
 
   /**
@@ -167,7 +192,7 @@ export class NodesRepo {
         ),
       )
       .get();
-    return row ? toGraphNode(row) : undefined;
+    return row ? this.withOriginFlags([toGraphNode(row)])[0] : undefined;
   }
 
   /** Soft-delete: flag a redundant memory as merged into another (recoverable). */
@@ -180,6 +205,29 @@ export class NodesRepo {
       .run(new Date().toISOString(), mergedIntoId, id, this.spaceId);
     deleteEmbedding(this.h.sqlite, id); // drop from KNN/redundancy index
     ftsDelete(this.h.sqlite, id);
+    if (info.changes > 0) {
+      // Verbatim V1 section 12D merge rule: the surviving node inherits
+      // the union of both nodes' provenance links; the dropped node's
+      // links are deactivated (never erased). Sources are untouched.
+      try {
+        const nowIso = new Date().toISOString();
+        this.h.sqlite
+          .prepare(
+            `INSERT OR IGNORE INTO node_sources (space_id, node_id, source_id, chunk_id, role, active)
+             SELECT space_id, ?, source_id, chunk_id, role, 1
+             FROM node_sources WHERE space_id = ? AND node_id = ? AND active = 1`,
+          )
+          .run(mergedIntoId, this.spaceId, id);
+        this.h.sqlite
+          .prepare(
+            `UPDATE node_sources SET active = 0, superseded_at = ?
+             WHERE space_id = ? AND node_id = ? AND active = 1`,
+          )
+          .run(nowIso, this.spaceId, id);
+      } catch {
+        /* pre-V1 volume without node_sources: merge proceeds as before */
+      }
+    }
     return info.changes > 0;
   }
 
@@ -230,6 +278,18 @@ export class NodesRepo {
       this.h.sqlite.prepare(`DELETE FROM attachments WHERE node_id = ?`).run(id);
       deleteEmbedding(this.h.sqlite, id);
       ftsDelete(this.h.sqlite, id);
+      // Verbatim V1 section 12D: node deletion deactivates its provenance
+      // links; sources are NEVER deleted by node events.
+      try {
+        this.h.sqlite
+          .prepare(
+            `UPDATE node_sources SET active = 0, superseded_at = ?
+             WHERE space_id = ? AND node_id = ? AND active = 1`,
+          )
+          .run(new Date().toISOString(), this.spaceId, id);
+      } catch {
+        /* pre-V1 volume without node_sources */
+      }
       const info = this.h.sqlite.prepare(`DELETE FROM nodes WHERE id = ?`).run(id);
       return info.changes > 0;
     });
@@ -318,7 +378,7 @@ export class NodesRepo {
   recent(limit = 20, opts: { includeSuperseded?: boolean } = {}): GraphNode[] {
     const conditions = [eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)];
     if (!opts.includeSuperseded) conditions.push(currentOnly);
-    return this.h.db
+    const rows = this.h.db
       .select()
       .from(nodes)
       .where(and(...conditions))
@@ -326,6 +386,7 @@ export class NodesRepo {
       .limit(limit)
       .all()
       .map(toGraphNode);
+    return this.withOriginFlags(rows);
   }
 
   /** Live memories for the galaxy — excludes archived (they rest out of view).
@@ -337,12 +398,13 @@ export class NodesRepo {
       ne(nodes.status, "archived"),
     ];
     if (!opts.includeSuperseded) conditions.push(currentOnly);
-    return this.h.db
+    const rows = this.h.db
       .select()
       .from(nodes)
       .where(and(...conditions))
       .all()
       .map(toGraphNode);
+    return this.withOriginFlags(rows);
   }
 
   /**
@@ -355,12 +417,13 @@ export class NodesRepo {
    * `superseded_at IS NULL` themselves.
    */
   archived(): GraphNode[] {
-    return this.h.db
+    const rows = this.h.db
       .select()
       .from(nodes)
       .where(and(eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt), eq(nodes.status, "archived")))
       .all()
       .map(toGraphNode);
+    return this.withOriginFlags(rows);
   }
 
   /** Archive / restore a memory (kept, not deleted). Returns true if it changed. */
@@ -375,12 +438,13 @@ export class NodesRepo {
     if (ids.length === 0) return [];
     const conditions = [inArray(nodes.id, ids), eq(nodes.spaceId, this.spaceId), isNull(nodes.deletedAt)];
     if (!opts.includeSuperseded) conditions.push(currentOnly);
-    return this.h.db
+    const rows = this.h.db
       .select()
       .from(nodes)
       .where(and(...conditions))
       .all()
       .map(toGraphNode);
+    return this.withOriginFlags(rows);
   }
 
   /**

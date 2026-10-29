@@ -143,6 +143,22 @@ describe("InboxPanel — merged rendering, honest copy, dock chrome (IM-74/76)",
     expect(await screen.findByText(/Couldn't reach the server inbox/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
+
+  it("fix round 2: a 'system' source item renders its plain-language System badge, not the raw value", async () => {
+    listServerNotifications.mockResolvedValue([
+      serverNote({
+        id: 9,
+        source: "system",
+        text: "A note was saved but couldn't be processed — it's preserved and searchable exactly as you wrote it. You can retry it or leave it as it is.",
+        icon: "📝",
+      }),
+    ]);
+    render(<InboxPanel spaceId={SPACE} />);
+    expect(
+      await screen.findByText("A note was saved but couldn't be processed — it's preserved and searchable exactly as you wrote it. You can retry it or leave it as it is."),
+    ).toBeTruthy();
+    expect(await screen.findByText("⚙️ System")).toBeTruthy();
+  });
 });
 
 describe("InboxPanel — search, grouping, priority filter (IM-75)", () => {

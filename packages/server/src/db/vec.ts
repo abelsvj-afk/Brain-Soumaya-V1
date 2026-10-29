@@ -73,6 +73,41 @@ export function bootstrapVec(db: RawDb): void {
       embedding float[${EMBED_DIM}] distance_metric=cosine
     );`,
   );
+  // Verbatim-Recall V1: source-chunk embeddings, mirroring vec_episodes.
+  // Keyed by source_chunks.id; space isolation is enforced by joining
+  // chunk -> source and asserting source.space_id (design section 12B).
+  db.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_source_chunks USING vec0(
+      chunk_id INTEGER PRIMARY KEY,
+      embedding float[${EMBED_DIM}] distance_metric=cosine
+    );`,
+  );
+}
+
+/** Insert or replace a source chunk's embedding (vec0: delete-then-insert). */
+export function upsertSourceChunkEmbedding(db: RawDb, chunkId: number, vec: Float32Array): void {
+  if (!isVectorEnabled(db)) return;
+  if (vec.length !== EMBED_DIM) {
+    throw new Error(
+      `Embedding dim mismatch: got ${vec.length}, expected ${EMBED_DIM}.`,
+    );
+  }
+  const id = BigInt(chunkId);
+  const blob = vecToBlob(vec);
+  db.transaction(() => {
+    db.prepare(`DELETE FROM vec_source_chunks WHERE chunk_id = ?`).run(id);
+    db.prepare(`INSERT INTO vec_source_chunks(chunk_id, embedding) VALUES (?, ?)`).run(id, blob);
+  })();
+}
+
+/** Remove a source chunk's stored embedding. */
+export function deleteSourceChunkEmbedding(db: RawDb, chunkId: number): void {
+  if (!isVectorEnabled(db)) return;
+  try {
+    db.prepare(`DELETE FROM vec_source_chunks WHERE chunk_id = ?`).run(BigInt(chunkId));
+  } catch {
+    /* table may not exist on a volume where vec never bootstrapped */
+  }
 }
 
 /** Serialize a Float32Array as the raw little-endian byte BLOB sqlite-vec expects. */
