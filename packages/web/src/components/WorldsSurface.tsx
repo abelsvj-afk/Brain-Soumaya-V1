@@ -102,7 +102,7 @@ import { portraitFit } from "../graph/worldCamera.js";
 import type { TransitScene } from "../graph/transitScene.js";
 import { createShipAvatar, type ShipAvatar } from "../graph/shipAvatar.js";
 import { findPlaces, PLACE_RULES, type Place } from "../graph/worldPlaces.js";
-import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, noseDirection, type FlightState, type V3 } from "../graph/worldFlight.js";
+import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, type FlightState, type V3 } from "../graph/worldFlight.js";
 import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -1595,7 +1595,8 @@ export default function WorldsSurface({
           avatar.setHeat(fs.engine);
           const pose = chasePose(fs);
           const prev = chaseCamRef.current ?? { pos: pose.position, target: pose.target };
-          const k = reducedMotion ? 1 : 1 - Math.exp(-dt / 240);
+          // Tighter during the burn, so she stays in frame while she takes off.
+          const k = reducedMotion ? 1 : 1 - Math.exp(-dt / (fs.phase === "burn" ? 110 : 240));
           const mix = (a: V3, b: V3): V3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
           const cam = { pos: mix(prev.pos, pose.position), target: mix(prev.target, pose.target) };
           chaseCamRef.current = cam;
