@@ -42,7 +42,6 @@ export function ToolsMenu(p: ToolsMenuProps) {
   // three, only a scrim click to dismiss.
   useDialogA11y(menuRef, () => setOpen(false), open);
   const items: { icon: string; label: string; on: () => void; badge?: number | null }[] = [
-    { icon: "🔍", label: "Search", on: p.onSearch },
     { icon: "⧉", label: "Lenses", on: p.onLenses },
     { icon: "🔗", label: "Connections", on: p.onConnections, badge: p.candCount },
     { icon: "🧠", label: "Recall", on: p.onReview, badge: p.dueCount },

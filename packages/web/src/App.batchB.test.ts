@@ -56,11 +56,9 @@ describe("CH-11 / OB-06 — App wiring", () => {
   });
 });
 
-describe("GH-06 — one 'Focus' only: the 🎯 fan; the 🌌 toggle is 'Calm'", () => {
-  it("the fab-focus-toggle window carries the Calm caption, not Focus", () => {
-    const w = window_(appSrc, "fab-focus-toggle", 1100);
-    expect(w).toContain('fab-cap">Calm');
-    expect(w).not.toContain('fab-cap">Focus');
+describe("GH-06 — one 'Focus' only: the 🎯 fan (Calm is a Tools-menu entry, not a rail button)", () => {
+  it("no rail button carries a Calm caption any more", () => {
+    expect(appSrc).not.toContain('fab-cap">Calm');
   });
 
   it("the 🎯 focus-main button keeps the Focus caption", () => {

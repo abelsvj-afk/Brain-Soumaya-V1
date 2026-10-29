@@ -22,14 +22,14 @@
      camera cluster — every left-edge control takes its bottom from these
      variables instead of a private fixed constant:
        dock 18 · recenter 74 · music 130 (corner FABs, unchanged)
-       focus-mode toggle 186 · Views circle 242 · 🎯 focus cluster 298
+       Search 186 (was the Calm button — Calm lives in the Tools menu) · Views circle 242 · 🎯 focus cluster 298
      The camera cluster sits directly ABOVE the corner-FAB column: the
      originally-sketched Views slot (≈132) lands exactly on the music FAB
      (bottom 130, same left/width) and a toggle below it (≈78) lands
      exactly on the recenter FAB (bottom 74) — verified at 390×780. */
   --hud-dock-left: 14px;
   --hud-status-left: 62px; /* just right of the 46px camera column (14+46=60) */
-  --hud-cam-toggle-bottom: 186px;
+  --hud-cam-toggle-bottom: 186px; /* the Search button's slot (the old Calm toggle's) */
   --hud-cam-views-bottom: 242px;
   --hud-cam-focus-bottom: 298px;
   /* Ship-status stack: one anchored object directly above the 🎯's slot
@@ -1050,9 +1050,11 @@ body,
   background: rgba(122, 249, 255, 0.22);
   border-color: var(--accent);
 }
+/* Search: the rail slot the Calm button used to hold (persistent-HUD spec). */
 .fab-search {
-  top: 12px;
-  right: 14px;
+  left: var(--hud-dock-left);
+  bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--hud-z-camera);
 }
 .fab-legend {
   top: 68px;
@@ -1354,12 +1356,6 @@ body,
    toggle now sits BELOW the 🎯 and the fan only travels UP, so the two
    never share space and the toggle stays visible and tappable while the
    fan is open. */
-.fab-focus-toggle {
-  bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
-  left: var(--hud-dock-left);
-  font-size: 20px;
-  z-index: var(--hud-z-camera);
-}
 
 /* Deep-space focus mode (#2): a distraction-free reading session. Everything but the
    galaxy + the way-out recedes; hover brings a control back if you reach for it. The
@@ -1379,11 +1375,6 @@ body,
   opacity: 1;
 }
 .focus-mode .fab-badge { display: none; }
-.fab-focus-toggle.on {
-  background: rgba(122, 249, 255, 0.22);
-  border-color: var(--accent);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 16px 2px rgba(122, 249, 255, 0.4);
-}
 @media (prefers-reduced-motion: reduce) {
   .focus-mode .fab:not(.fab-tools),
   .focus-mode .fuel-gauge,
@@ -7659,3 +7650,40 @@ button.mindspace-more { cursor: pointer; }
 .toast.actionable { min-height: 44px; }
 .perf-suggest button { min-height: 44px; min-width: 44px; }
 .gv-chip { min-height: 44px; }
+
+/* ======== Persistent HUD (docs/specs/persistent-hud-2026-10-30.md) ========
+   The HUD is one shell above every scene. The worlds layer now sits BELOW the HUD tiers (30–57) and every panel/dialog (≥ 45),
+   so Tools, Panels, Settings, Chat, Add, the Observatory, Music, notices, fuel and the account chip stay on screen and work
+   inside a world exactly as at home. Controls that steer the GALAXY camera belong to the galaxy and are absent in worlds. */
+:root {
+  --hud-top: 66px;   /* the top HUD row: account chip (left), Tools (right) */
+  --hud-rail: 62px;  /* the width the bottom rails take at each edge */
+  --hud-z-world: 25;
+}
+.worlds-surface { z-index: var(--hud-z-world); --worlds-bar-h: calc(3.5rem + var(--hud-top)); }
+.worlds-surface-docked { --worlds-bar-h: calc(8.25rem + var(--hud-top)); }
+/* The world's context bar (title + ← Galaxy) and its dock sit UNDER the HUD's top row. */
+.worlds-surface-bar { top: var(--hud-top); }
+.worlds-dock { top: calc(var(--hud-top) + 3.5rem); }
+/* World overlays stay clear of the rail buttons at the screen edges. */
+.worlds-surface-room, .harbor-controller { left: var(--hud-rail); max-width: min(30rem, calc(100% - 2 * var(--hud-rail))); }
+.garden-sheet { width: min(480px, calc(100% - 2 * var(--hud-rail))); }
+.worlds-look-hint, .garden-carrying { max-width: calc(100% - 2 * var(--hud-rail)); }
+/* Galaxy-camera controls: home only. */
+body.in-world .focus-cluster,
+body.in-world .gv-wrap,
+body.in-world .fab-recenter,
+body.in-world .fab-zoom-in,
+body.in-world .fab-zoom-out,
+body.in-world .ship-status-stack,
+body.in-world .ship-status-mini,
+body.in-world .lens-banner,
+body.in-world .object-lore { display: none; }
+/* In the warp the HUD stays but steps back, so the cinematic leads. */
+body.in-transit .fab, body.in-transit .brand, body.in-transit .fuel-gauge, body.in-transit .streak-ember,
+body.in-transit .tools-btn { opacity: 0.55; }
+/* Found by looking at real screenshots (not by the control-presence script): the streak ember sat on the world's ← Galaxy
+   button and the notification banner covered its dock. Both are home-only; their content is in Notices / the Inbox. */
+body.in-world .streak-ember,
+body.in-world .notifications-bar { display: none; }
+.garden-groves { left: var(--hud-rail); width: min(300px, calc(100% - 2 * var(--hud-rail))); }

@@ -60,7 +60,6 @@ describe("HUD dock — z-ladder is consolidated and ordered", () => {
   it("every dock element takes its layer from the ladder, not a private constant", () => {
     expect(ruleBody(".streak-ember")).toContain("z-index: var(--hud-z-passive)");
     expect(ruleBody(".focus-cluster")).toContain("z-index: var(--hud-z-camera)");
-    expect(ruleBody(".fab-focus-toggle")).toContain("z-index: var(--hud-z-camera)");
     expect(ruleBody(".gv-wrap")).toContain("z-index: var(--hud-z-views)");
     expect(ruleBody(".ship-status-stack")).toContain("z-index: var(--hud-z-status)");
     expect(ruleBody(".noticing-card")).toContain("z-index: var(--hud-z-noticed)");
@@ -73,7 +72,7 @@ describe("HUD dock — left column slots at 390×780", () => {
     dock: { bottom: bottomPx(".fab-dock"), h: CIRCLE },
     recenter: { bottom: bottomPx(".fab-recenter"), h: CIRCLE },
     music: { bottom: bottomPx(".fab-music"), h: CIRCLE },
-    focusToggle: { bottom: hudVar("hud-cam-toggle-bottom"), h: CIRCLE },
+    search: { bottom: hudVar("hud-cam-toggle-bottom"), h: CIRCLE },
     views: { bottom: hudVar("hud-cam-views-bottom"), h: CIRCLE },
     focus: { bottom: hudVar("hud-cam-focus-bottom"), h: 44 },
   });
@@ -87,17 +86,18 @@ describe("HUD dock — left column slots at 390×780", () => {
     }
   });
 
-  it("camera cluster order top→bottom is 🎯 → Views circle → focus toggle, above the corner FABs", () => {
+  it("camera cluster order top→bottom is 🎯 → Views circle → Search (the old Calm slot), above the corner FABs", () => {
     const s = slots();
     expect(s.focus.bottom).toBeGreaterThan(s.views.bottom);
-    expect(s.views.bottom).toBeGreaterThan(s.focusToggle.bottom);
-    expect(s.focusToggle.bottom).toBeGreaterThan(s.music.bottom + s.music.h);
+    expect(s.views.bottom).toBeGreaterThan(s.search.bottom);
+    expect(s.search.bottom).toBeGreaterThan(s.music.bottom + s.music.h);
   });
 
   it("every camera-cluster element anchors to the shared slot variables", () => {
     expect(ruleBody(".focus-cluster")).toContain("var(--hud-cam-focus-bottom)");
     expect(ruleBody(".gv-wrap")).toContain("var(--hud-cam-views-bottom)");
-    expect(ruleBody(".fab-focus-toggle")).toContain("var(--hud-cam-toggle-bottom)");
+    expect(ruleBody(".fab-search")).toContain("var(--hud-cam-toggle-bottom)");
+    expect(ruleBody(".fab-search")).toContain("z-index: var(--hud-z-camera)");
     expect(ruleBody(".gv-wrap")).toContain("left: var(--hud-dock-left)");
     expect(ruleBody(".gv-toggle")).toContain("border-radius: 50%");
     expect(ruleBody(".gv-toggle")).toContain("width: 46px");
@@ -114,14 +114,12 @@ describe("HUD dock — left column slots at 390×780", () => {
     // While the fan is open the passive readouts in its path step aside…
     expect(css).toMatch(/\.focus-menu-open \.streak-ember/);
     expect(css).toMatch(/\.focus-menu-open \.fuel-gauge/);
-    // …but the focus-mode toggle (below the 🎯, outside the fan's path) has
-    // NO fade-out rule — the old burial must not come back.
-    expect(css).not.toMatch(/\.focus-menu-open \.fab-focus-toggle\s*\{[^}]*opacity:\s*0/);
+
   });
 
-  it("the focus-mode toggle is a real App element wired to focusMode (not orphan CSS)", () => {
-    expect(appSrc).toContain("fab-focus-toggle");
-    expect(appSrc).toMatch(/fab-focus-toggle[\s\S]{0,400}setFocusMode/);
+  it("Calm is NOT a rail button any more — one door, in the Tools menu (persistent-HUD spec, redundancy rulings)", () => {
+    expect(appSrc).not.toContain("fab-focus-toggle");
+    expect(css).not.toContain("fab-focus-toggle");
   });
 });
 
@@ -672,9 +670,7 @@ describe("HUD round 3 — captions live inside the footprint (source gate)", () 
       expect(a, `anchor ${from}`).toBeGreaterThan(-1);
       return appSrc.slice(a, a + len);
     };
-    // GH-06 (Batch B): the 🌌 toggle's caption is "Calm" — "Focus" belongs
-    // to the 🎯 fan alone (asserted separately below).
-    expect(win("fab-focus-toggle", 1000)).toContain('fab-cap">Calm');
+    // "Focus" belongs to the 🎯 fan alone (asserted below); Calm is a Tools-menu entry, not a rail button.
     expect(win("className={t.className}", 400)).toContain("{t.caption}");
     expect(win("fan-more", 700)).toContain("fab-cap");
     // The 🎯's caption is "Focus" (OC-1) — asserted by its exact text so

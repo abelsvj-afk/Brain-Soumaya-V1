@@ -105,7 +105,8 @@ describe("Batch I — App wiring pins (REG-060…REG-072, REG-110, REG-111)", ()
 
   it("REG-063 (H-1 restore, verified not rebuilt): the Calm rename is still intact", () => {
     expect(appSrc).toMatch(/Calm mode on/);
-    expect(appSrc).toMatch(/>\s*Calm\s*</);
+    // Calm is a Tools-menu entry now (persistent-HUD spec) — its label is pinned in batchQFollowups.test.tsx.
+    expect(appSrc).not.toContain("fab-focus-toggle");
   });
 
   it("REG-066: the song-menu hint and locked-notes lines have styles", () => {

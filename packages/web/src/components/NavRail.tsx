@@ -6,6 +6,8 @@
  * and calls back.
  */
 export interface NavRailProps {
+  /** Search is a rail button, not a Tools-menu entry (persistent-HUD spec: one door per action). */
+  onSearch: () => void;
   onDock: () => void;
   onRecenter: () => void;
   onZoomIn: () => void;
@@ -15,6 +17,10 @@ export interface NavRailProps {
 export function NavRail(p: NavRailProps) {
   return (
     <>
+      <button className="fab fab-search" onClick={p.onSearch} aria-label="Search your memories" title="Search your memories (⌘K opens the command palette)">
+        🔍
+        <span className="fab-cap">Search</span>
+      </button>
       <button className="fab fab-dock" onClick={p.onDock} aria-label="Panels">
         ☰
         <span className="fab-cap">Panels</span>

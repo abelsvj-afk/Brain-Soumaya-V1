@@ -6,8 +6,10 @@ afterEach(cleanup);
 
 describe("NavRail (frequent nav controls)", () => {
   it("routes each control to its callback", () => {
-    const p = { onDock: vi.fn(), onRecenter: vi.fn(), onZoomIn: vi.fn(), onZoomOut: vi.fn() };
+    const p = { onSearch: vi.fn(), onDock: vi.fn(), onRecenter: vi.fn(), onZoomIn: vi.fn(), onZoomOut: vi.fn() };
     render(<NavRail {...p} />);
+    fireEvent.click(screen.getByLabelText("Search your memories"));
+    expect(p.onSearch).toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText("Panels"));
     fireEvent.click(screen.getByLabelText("Recenter galaxy"));
     fireEvent.click(screen.getByLabelText("Zoom in"));

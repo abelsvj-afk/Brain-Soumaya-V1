@@ -616,6 +616,20 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the first time that craft is shown. Look at: that the first tap on the music button starts playing without an audible delay on a
   slow network (the file now starts downloading at that tap). S4 (level of detail) was deliberately NOT built: measured scenes are
   already inside budget — see `docs/AUDIT_SPEED_UI_UX_2026-10-29.md` §8.
+- **Persistent HUD — your buttons stay in every world (2026-10-30, owner: "like EVE … the buttons … stay on screen regardless") —
+  MEASURED in a real browser at 412×915 across home + all 7 worlds (`scripts/hud-check.cjs`: 8/8 PASS), needs on-device
+  confirmation** (index.css tail block, WorldsSurface.tsx body classes, App.tsx, NavRail.tsx, ToolsMenu.tsx; spec
+  `docs/specs/persistent-hud-2026-10-30.md`; tests `persistentHud.test.ts`): before, home had 23 controls and a world had 5 — Tools,
+  Panels, Settings, Chat, Add, the Observatory, Music, Search and the account chip all vanished because the worlds layer (z 70) covered
+  the HUD (z 30–57). Now the worlds layer is z 25, BELOW the HUD and every panel; the world's title + ← Galaxy and its dock sit under
+  the top HUD row (`--hud-top`); world overlays are inset past the rails (`--hud-rail`); galaxy-camera controls (Focus, Views,
+  Recenter, Zoom ±) and home-only readouts (streak ember, notification banner, ship-status stack) are hidden in worlds via
+  `body.in-world`; in the warp the HUD dims to 55 %. **One door per action:** the rail "Calm" button is gone (Calm lives in Tools +
+  the palette); **Search** is now a rail button in the freed slot and no longer a Tools entry. Found by LOOKING at screenshots, not by
+  the script: the streak ember sat on the ← Galaxy button, the notification banner covered the world dock, the fuel gauge collided with
+  the garden suggestions card — all fixed. Still open: SVG icons instead of emoji (next), the other redundancies in the spec
+  (Travel vs World map, "Level camera" vs Recenter), Eternity's white void makes the HUD text faint. Look at: the 62 px rails against
+  the worlds' sheets on a real phone, and whether you miss the rail Calm button.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

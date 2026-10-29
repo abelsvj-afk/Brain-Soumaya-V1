@@ -2743,6 +2743,7 @@ export default function App() {
             onHelp={() => setHelp(true)}
           />
           <NavRail
+            onSearch={() => toggle("search")}
             onDock={() => toggle("dock")}
             onRecenter={() => {
               graphRef.current?.recenter();
@@ -2760,25 +2761,8 @@ export default function App() {
             onZoomIn={() => graphRef.current?.zoomBy(0.8)}
             onZoomOut={() => graphRef.current?.zoomBy(1.25)}
           />
-          {/* Package B (finding #6, §6.4): the deep-space focus-mode toggle
-              is a real button again, in the camera cluster's bottom slot
-              (🎯 → Views circle → this toggle). Its CSS class survived in
-              index.css after the button itself was folded into the Tools
-              menu, and the orphan slot sat buried under the Views pill and
-              faded out whenever the target fan opened. Here it stays
-              visible in both states (the fan travels UP from the 🎯; this
-              slot is below it) and toggles the same focusMode state as the
-              Tools menu entry — two doors to the same room, neither hidden. */}
-          <button
-            className={`fab fab-focus-toggle ${focusMode ? "on" : ""}`}
-            onClick={() => setFocusMode((v) => !v)}
-            aria-label={focusMode ? "Exit calm" : "Calm mode"}
-            aria-pressed={focusMode}
-            title={focusMode ? "Exit deep-space calm mode" : "Deep-space calm mode — dim the chrome for a calm read"}
-          >
-            {focusMode ? "🌐" : "🌌"}
-            <span className="fab-cap">Calm</span>
-          </button>
+          {/* Calm mode lives in the Tools menu (and the command palette) only — the rail button was a second door to the same
+              room (docs/specs/persistent-hud-2026-10-30.md, redundancy rulings). */}
           {/* Game-style focus cluster: one button that pops up the camera targets. */}
           {(() => {
             // Mobile HUD pass (round 2, S3): the fan's targets are a list

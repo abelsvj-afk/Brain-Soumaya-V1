@@ -722,6 +722,14 @@ export default function WorldsSurface({
     if (p.kind === "gesture") e.setGesture(p.gesture);
     else e.useTool(p.tool);
   });
+  // The HUD stays on screen in every scene (docs/specs/persistent-hud-2026-10-30.md): the body class lets the stylesheet
+  // keep the core buttons above the world, hide the galaxy-camera controls, and calm the HUD during the warp.
+  useEffect(() => {
+    const b = document.body;
+    b.classList.toggle("in-world", visible);
+    b.classList.toggle("in-transit", visible && mode === "transit");
+    return () => b.classList.remove("in-world", "in-transit");
+  }, [visible, mode]);
   // Tell the home galaxy it is covered, so it stops rendering (Graph3D listens).
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("worlds:surface-visible", { detail: { visible } }));
@@ -2114,8 +2122,8 @@ export default function WorldsSurface({
             position: "absolute",
             // Below the header + dock (a constant height), so neither is covered.
             top: "calc(var(--worlds-bar-h) + 0.5rem)",
-            left: "12px",
-            width: "min(320px, 82vw)",
+            left: "var(--hud-rail)",
+            width: "min(320px, calc(100vw - 2 * var(--hud-rail)))",
             background: "rgba(10, 16, 12, 0.92)",
             border: "1px solid rgba(255, 210, 122, 0.4)",
             borderRadius: "12px",

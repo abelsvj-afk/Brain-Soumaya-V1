@@ -41,16 +41,14 @@ const helpSource = () =>
   readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "./HelpPanel.tsx"), "utf8");
 
 describe("REG-218 — the calm control is named Calm everywhere it is named", () => {
-  it("the fab aria-label says Calm mode / Exit calm, never Focus", () => {
-    const src = appSource();
-    expect(src).toContain('aria-label={focusMode ? "Exit calm" : "Calm mode"}');
-    expect(src).not.toContain('aria-label={focusMode ? "Exit focus mode" : "Focus mode"}');
+  it("the Tools-menu entry says Calm mode / Exit calm, never Focus", () => {
+    const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "./ToolsMenu.tsx"), "utf8");
+    expect(src).toContain('label: p.focusMode ? "Exit calm" : "Calm mode"');
+    expect(src).not.toContain('"Focus mode"');
   });
 
-  it("the fab title says Deep-space calm mode, never Deep-space focus mode", () => {
-    const src = appSource();
-    expect(src).toContain('title={focusMode ? "Exit deep-space calm mode" : "Deep-space calm mode — dim the chrome for a calm read"}');
-    expect(src).not.toContain("Deep-space focus mode");
+  it("nothing in the app says Deep-space focus mode", () => {
+    expect(appSource()).not.toContain("Deep-space focus mode");
   });
 
   it("the Legend's modes entry says Calm mode, never Focus mode", () => {
