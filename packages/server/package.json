@@ -21,7 +21,7 @@
     "express": "^5.2.1",
     "sqlite-vec": "0.1.9",
     "web-push": "^3.6.7",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",
