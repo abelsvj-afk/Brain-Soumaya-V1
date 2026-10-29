@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createDb, type DbHandle } from "../../db/client.js";
 import { HashEmbeddingProvider } from "../../embeddings/hash.js";
 import { HeuristicProvider } from "../../llm/heuristic.js";
@@ -415,6 +415,9 @@ describe("telegram chunking", () => {
 // Telegram handler: one question per tab → a grounded tool path answers
 // ---------------------------------------------------------------------------
 
+/** A fixed instant: noon in America/New_York, when the UTC and New York calendar days agree. */
+const PINNED_NOON_NY = new Date("2026-10-29T16:00:00.000Z");
+
 describe("telegram handler — one grounded tool path per tab", () => {
   let outbox: { chatId: number; text: string }[];
   const send = async (chatId: number, text: string) => {
@@ -491,7 +494,18 @@ describe("telegram handler — one grounded tool path per tab", () => {
   beforeEach(() => {
     outbox = [];
     clearTelegramHistory();
+    // This block seeds its money data from Date.now() and the Telegram handler reads the real
+    // clock, but the budget engine counts days in the SPACE's zone (America/New_York) while the
+    // fixture builds them from the UTC calendar day. For the four hours each day when the two
+    // calendars disagree (00:00-04:00 UTC = 20:00-24:00 in New York) "income today" was dated
+    // tomorrow, no bill was reserved, and this failed — every evening, not on any one date
+    // (verified by pinning the clock: 03:59Z fails, 04:30Z and 16:00Z pass). Pinning the wall
+    // clock to noon in New York makes the run the same at any hour. Only Date is faked: timers
+    // stay real, since the handler awaits real async work.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(PINNED_NOON_NY);
   });
+  afterEach(() => vi.useRealTimers());
 
   it("answers one question per tab through its grounded tool", async () => {
     await linkAndSeed(7);
