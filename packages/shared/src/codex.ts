@@ -1,5 +1,6 @@
 import { EXTRACTABLE_NODE_TYPES } from "./types.js";
 import { CELESTIAL_CLASSES } from "./celestial.js";
+import { RELICS, relicCodexKey } from "./relics.js";
 
 /**
  * The Codex catalog — the SINGLE SOURCE OF TRUTH for which Codex entry ids exist
@@ -49,6 +50,9 @@ export type CodexPhenomenon = (typeof CODEX_PHENOMENA)[number];
 /** Fleet unit ids, one Codex entry each (`fleet-<unit>`). Mirrors fleetEntries in the web codex. */
 export const CODEX_FLEET_UNITS = ["soumaya", "station", "beacon"] as const;
 
+/** Relic slugs, one Codex entry each (`relic-<slug>`). Mirrors relicEntries in the web codex. */
+export const CODEX_RELICS: readonly string[] = RELICS.map((r) => r.id);
+
 /** Every static (enumerable) rewardable Codex entry id, exactly as the client generates them. */
 export const CODEX_STATIC_KEYS: ReadonlySet<string> = new Set<string>([
   ...EXTRACTABLE_NODE_TYPES.map((t) => `sector-${t}`),
@@ -57,4 +61,5 @@ export const CODEX_STATIC_KEYS: ReadonlySet<string> = new Set<string>([
   ...CODEX_FLEET_UNITS.map((u) => `fleet-${u}`),
   ...CODEX_MIND_KINDS.map((k) => `mind-${k}`),
   ...CODEX_PHENOMENA.map((p) => `phenom-${p}`),
+  ...CODEX_RELICS.map((id) => relicCodexKey(id)),
 ]);

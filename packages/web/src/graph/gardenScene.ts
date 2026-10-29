@@ -4,6 +4,7 @@ import { GARDEN_BACKDROP_PLANETS, loadGardenAsset } from "./gardenAssets.js";
 import { buildHygStarfield } from "./hygStars.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
 import { buildProceduralShip } from "./transitScene.js";
+import { placeWorldRelics } from "./relicAssets.js";
 import {
   GARDEN_TERRACE_COUNT,
   GARDEN_TERRACE_RADIUS,
@@ -489,6 +490,9 @@ export function createGardenScene(
   layout: GardenLayout,
   glowOrMutation?: GardenGlow | GardenMutationInput,
   initialMutationArg?: GardenMutationInput,
+  // Relics (rebase): the relic-visible callback rides as a trailing option
+  // so the tend glow / initial mutation call forms keep working unchanged.
+  relicOpts: { onRelicVisible?: (slug: string) => void } = {},
 ): GardenScene {
   // Rebase union (Verb 1 + Phase 4): the second argument is the tend
   // glow or an initial mutation — told apart by shape, never by
@@ -506,6 +510,11 @@ export function createGardenScene(
   const pods: { mesh: THREE.InstancedMesh | null; base: { x: number; y: number; z: number }[] } = { mesh: null, base: [] };
   // Verb 1: the plot meshes, kept for tap-to-tend raycasting.
   const plotMeshes: { mesh: THREE.InstancedMesh; plots: readonly { nodeId: number; x: number; z: number }[] }[] = [];
+
+  // Relics (relics increment): the garden's two relics rest at the witness
+  // tree. A relic whose GLB has not landed is simply absent — no stand-in,
+  // and its find is never offered (the host learns of it via onRelicVisible).
+  const cancelRelics = placeWorldRelics(group, "growing-place", relicOpts.onRelicVisible);
 
   // Terraces: every band is built, whether or not a plot sits on it yet —
   // the garden is always a complete, layered hillside (as in the mock-up),
@@ -1511,6 +1520,7 @@ export function createGardenScene(
     dispose() {
       if (disposed) return;
       disposed = true;
+      cancelRelics();
       disposeObject3D(group);
     },
   };

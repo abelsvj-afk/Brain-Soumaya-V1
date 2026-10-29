@@ -1,5 +1,5 @@
 import type { GraphNode, CelestialClass, CodexMindKind, CodexPhenomenon } from "@brain/shared";
-import { CELESTIAL_CLASSES, CELESTIAL_ICON, CELESTIAL_LABEL, NODE_TYPE_LABEL } from "@brain/shared";
+import { CELESTIAL_CLASSES, CELESTIAL_ICON, CELESTIAL_LABEL, NODE_TYPE_LABEL, RELICS, relicCodexKey } from "@brain/shared";
 import { statsSpaceId } from "./achievements.js";
 
 /**
@@ -9,7 +9,7 @@ import { statsSpaceId } from "./achievements.js";
  * mirroring the achievements pattern — no server round-trip to render it.
  */
 
-export type CodexCategory = "sectors" | "bodies" | "constellations" | "mind" | "fleet" | "phenomena" | "fieldnotes";
+export type CodexCategory = "sectors" | "bodies" | "constellations" | "mind" | "fleet" | "phenomena" | "relics" | "fieldnotes";
 
 export const CODEX_CATEGORIES: { id: CodexCategory; title: string; icon: string; blurb: string }[] = [
   { id: "sectors", title: "Sectors", icon: "🗺️", blurb: "The named regions of your inner cosmos — one per kind of memory." },
@@ -18,6 +18,7 @@ export const CODEX_CATEGORIES: { id: CodexCategory; title: string; icon: string;
   { id: "bodies", title: "Celestial Bodies", icon: "✸", blurb: "The classes of body a memory can grow into, from asteroid to supergiant." },
   { id: "fleet", title: "The Fleet", icon: "🛸", blurb: "Soumaya and the machines that tend your galaxy." },
   { id: "phenomena", title: "Phenomena", icon: "✦", blurb: "Rare events and milestones discovered as your galaxy comes alive." },
+  { id: "relics", title: "Relics", icon: "🏺", blurb: "Old things found in the worlds — each one keeps a piece of how the worlds were made." },
   { id: "fieldnotes", title: "Soumaya's Field Notes", icon: "✒️", blurb: "Discoveries Soumaya charted on her own, as your galaxy revealed them." },
 ];
 
@@ -74,6 +75,8 @@ export interface CodexCtx {
   constellations: GraphNode[];
   /** Total edge count. */
   links: number;
+  /** Codex keys (`relic-<slug>`) of relics already found in their worlds. */
+  foundRelics?: ReadonlySet<string>;
 }
 
 const stat = (key: string): number => {
@@ -358,7 +361,36 @@ export function buildCodex(ctx: CodexCtx): CodexEntry[] {
     ...bodyEntries(ctx),
     ...fleetEntries(ctx),
     ...phenomenaEntries(ctx),
+    ...relicEntries(ctx.foundRelics ?? new Set()),
   ];
+}
+
+// ---- Relics: old things found in the worlds, one entry each ----
+// `id` is the shared catalog key (`relic-<slug>`): the same set the server
+// validates claims against (CODEX_RELICS in @brain/shared), and the sync
+// test (codex.catalog.test.ts) proves the sets are exactly equal. An entry
+// is discovered when its relic has been found in its world — the find is
+// stored per space (see relicsFound.ts); the existing claim hook then
+// inscribes it server-side and grants the one-time fuel reward.
+function relicEntries(found: ReadonlySet<string>): CodexEntry[] {
+  return RELICS.map((r) => {
+    const id = relicCodexKey(r.id);
+    const discovered = found.has(id);
+    return {
+      id,
+      category: "relics" as const,
+      icon: r.icon,
+      title: r.name,
+      lockedHint: r.discoverable
+        ? `Something old rests ${r.place} in ${r.worldName} — travel there and look for its glimmer.`
+        : `${r.worldName} hasn't opened yet — this one waits there.`,
+      lore: r.lore,
+      discovered,
+      level: discovered ? 1 : 0,
+      maxLevel: 1,
+      levelLabel: discovered ? `Found in ${r.worldName}` : "Undiscovered",
+    };
+  });
 }
 
 export interface CodexProgress {

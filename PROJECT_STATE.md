@@ -3,6 +3,38 @@
 > Living status snapshot, per [docs/AI_ENGINEERING_WORKFLOW.md](./docs/AI_ENGINEERING_WORKFLOW.md).
 > Update whenever project status changes.
 
+## 2026-10-29 — Relics landed in the codebase (PR #127, merge `f158e05a`); deployment PENDING
+
+**Status:** MERGED to the deploy branch — **NOT deployed.** `f158e05a` is the
+integration point; the merge itself deploys nothing. Relics become live in the
+app only at the next deployment, which remains the owner's separate action.
+
+- **What landed:** all 15 relics — registry + discovery + Codex wiring
+  (19 code files) plus the 15 slim GLBs at `packages/web/public/relics/`.
+  The merge commit's tree is byte-for-byte the gated, independently reviewed
+  tree (`27e53645`); the GLBs are byte-identical through the merge.
+- **Gate key:** the Witness Without a Name carries the gate key. The owner's
+  settled B-01 rule stands — the Witness **plus any two other relics** opens
+  the Eternity gate, once, permanently; after that the journey is fuel-only.
+  Full gate-set enforcement is travel-layer state and is reconciled in the
+  Buffs design pass (below).
+- **Placement:** Hearth Ember and Thread of Many are discoverable in People.
+  The Witness is anchored in the Deep Past basin. The Unnumbered Fragment is
+  registered to Scale, not discoverable, with no anchor — **no Eternity
+  placement was invented.**
+- **Gate results:** typecheck clean; web 2458/2458 in America/New_York and
+  Pacific/Kiritimati; vite build clean. Server failures are exactly the four
+  pristine-baseline failures (longitudinalIntegration Scenario A,
+  batchAAutomationSafety RE-01 digest, notifications daily digest, telegram
+  proactive digest sweep), each re-proven on a pristine `d6a921c8` worktree —
+  no new failures.
+- **Carried follow-ups:** B-03 server-side find verification is deliberately
+  deferred to the scarcity increment. Next Worlds work is the **Buffs design
+  pass** (design-first — it touches the data model): reconcile the buffs
+  design against this merged relic implementation, including scarcity/copy
+  counts and the gate set above. Defense interplay is unblocked now that
+  relics exist in the application model.
+
 ## 2026-10-22 — ADR-019 bill lifecycle (design settled; gate CLOSED 2026-10-22)
 
 **Status:** DESIGN — owner settled the four product decisions for design on
