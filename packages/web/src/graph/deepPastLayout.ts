@@ -38,8 +38,17 @@ import type { GraphData, GraphNode, Journey, JourneyLinkSummary } from "@brain/s
 
 export const DEEP_PAST_SEED = "deep-past / first-descent-1";
 
-/** Recipe budget (R-D4 allocation): planned ceilings, asserted statically. */
-export const DEEP_PAST_BUDGET = { maxDrawCalls: 90, maxTris: 440_000 } as const;
+/**
+ * Recipe budget (R-D4 allocation): planned ceilings, asserted statically.
+ * Raised by the 2026-10-29 Deep Past fix (docs/worlds/deep-past-fix-design-note.md
+ * §1/§9): the dressing the owner specced on 2026-10-25 — three terrace
+ * slices and three lanterns per stratum, a full helix staircase, the route
+ * bead — costs more than the original one-of-each estimate, and the caps
+ * moved to the note's measured envelope rather than cutting any of it.
+ * Points get their own cap because the supernova's star cloud is points,
+ * not triangles.
+ */
+export const DEEP_PAST_BUDGET = { maxDrawCalls: 110, maxTris: 620_000, maxPoints: 220_000 } as const;
 
 /** Strata: 0 = rim (members kept 1–2 years) … 8 = basin (9+ years). */
 export const DEEP_PAST_STRATA_COUNT = 9;

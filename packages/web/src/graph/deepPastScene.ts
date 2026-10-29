@@ -4,7 +4,8 @@ import { fadeSwapIn } from "./gltf.js";
 import {
   DEEP_PAST_BASIN_GLB_Y,
   DEEP_PAST_BASIN_SPAN,
-  DEEP_PAST_CRYSTAL,
+  DEEP_PAST_BEAD,
+  DEEP_PAST_CRYSTALS,
   DEEP_PAST_LANTERN,
   DEEP_PAST_LANTERN_GLOW_SPAN,
   DEEP_PAST_LANTERN_LIGHT,
@@ -14,14 +15,18 @@ import {
   DEEP_PAST_SPIRE,
   DEEP_PAST_SPIRE_GLOW_SPAN,
   DEEP_PAST_SPIRE_LIGHT,
-  DEEP_PAST_STAIR,
   DEEP_PAST_SUPERNOVA,
   DEEP_PAST_TERRACE,
-  fitDeepPastAsset,
+  deepPastDressingLanterns,
+  deepPastStairFlights,
+  deepPastTerraceSlices,
+  fitDeepPastAssetToHeight,
   fitDeepPastAssetToSize,
   fitDeepPastAssetToSpan,
+  instantiateDeepPastRoot,
   loadAnimatedDeepPastAsset,
   loadDeepPastAsset,
+  type DeepPastInstancePlacement,
 } from "./deepPastAssets.js";
 import {
   DEEP_PAST_STRATA_COUNT,
@@ -43,32 +48,36 @@ import {
  *
  * The recipe's grammar: violet dusk lit by the memories' own lanterns, warming
  * with depth toward the First Light basin; the helix encloses, there is no sky
- * (only the faintest HYG points far above the rim, where the present day lives).
+ * of its own (the host's shared home sky shows above the rim, where the
+ * present day lives).
  * Baked glow only — no bloom, no post-processing. The basin is the finished
  * bottom: a warm floor of light and stone over solid rock (C9) — never a pit,
  * never a void. The rim is a boundary: finished darkness above, the camera
  * cannot fly out past it.
  *
- * Draw-call sketch (recipe ceiling 90): strata walls 9 · rim bands 9 · plinths 1
- * · alcoves ≤3 (one instanced mesh per form) · lanterns 1 · thread ≤1 · anchors ≤1
- * · particulate 1 · HYG sky 1 · basin 4 (floor + rim ring + glow + rock) · rise
- * shelf 1 + shelf glow 1 · ships 1 = ~34. The GLB layer adds 42 more calls once
- * loaded (five meshes + the crystal's two materials + the supernova's
- * 34 point meshes + the lantern's glow sprite) and 88,220 measured
- * tris — the budget still holds with the layer in
- * (see deepPastAssets.test.ts). Runtime measurement belongs to the device
- * check (C4's measured half); these constants are the static half.
+ * Draw-call sketch (recipe ceiling 110, the 2026-10-29 fix's budget):
+ * procedural ~33 (strata walls 9 · rim bands 9 · plinths 1 · alcoves ≤3
+ * · memory lanterns 1 · thread ≤1 · anchors ≤1 · particulate 1 · basin 4
+ * (floor + rim ring + glow + rock) · rise shelf 1 + shelf glow 1 ·
+ * ships 1). The GLB layer adds 71 more calls once loaded (the manifest's
+ * measured count in deepPastAssets.ts: the supernova's 34 point meshes,
+ * the bead's 24 at the 12-stop route budget, and every repeat instanced
+ * to one call per material — 24 terrace slices cost 1 call, 9 stair
+ * flights 1, 25 lanterns 2 + their glow points) and 467,558 tris —
+ * the budget holds with the layer in (see deepPastAssets.test.ts).
+ * Runtime measurement belongs to the device check (C4's measured
+ * half); these constants are the static half.
  *
- * The seven real pieces (basin, terrace, rim, stair, lantern, stratum crystal, supernova remnant) load async
- * from the manifest in deepPastAssets.ts and swap into the holders named
- * `glb-*` below. Until a piece lands, the procedural form stays — the
- * basin's floor and rim ring are the load fallback, hidden only once the
- * real dish fades in; the other four have no procedural form in this
- * scene, so a failed load simply leaves that holder empty and the
- * failure is noted for diagnostics. Three positions are still waiting
- * on the owner's pieces (orb, spire, bead) and keep their procedural
- * forms as explicitly-marked interim — see the TODOs at the basin light,
- * the anchors, and the thread.
+ * The ten real pieces (basin, terrace, rim, stair, lantern, stratum
+ * crystal, supernova remnant, anchor spire, First Light orb, route
+ * bead) load async from the manifest in deepPastAssets.ts and swap
+ * into the holders named `glb-*` below. Until a piece lands, the
+ * procedural form stays — the basin's floor and rim ring are the load
+ * fallback, hidden only once the real dish fades in; the other pieces
+ * have no procedural form in this scene, so a failed load simply
+ * leaves that holder empty and the failure is noted for diagnostics.
+ * Every piece is fitted from its own measured file (span / longest
+ * side / height) — no bare scale factor survives in the load path.
  *
  * Kindness is structural here: the scene has no state for decline. Every member
  * carries the same light at every depth; an empty layout renders the helix, the
@@ -86,16 +95,101 @@ export interface DeepPastScene {
 export const DEEP_PAST_DESCENT = {
   /** Full descent time; the user can leave or resume at any moment. */
   durationMs: 90_000,
-  /** The descent flies inside the arrival orbit, close to the thread. */
-  radius: 600,
-  startY: 150,
-  endY: -650,
+  /** The opening heading; the path then turns with the helix itself —
+   * one stratum arc twist per floor it passes. */
   baseAngle: 0.6,
-  /** Three-quarters of a turn, following the helix's winding direction. */
-  angleTurns: 0.75,
-  /** The look target never goes below this (the basin floor is at −830). */
-  lookAtFloor: -800,
 } as const;
+
+export interface DeepPastDescentKey {
+  progress: number;
+  angle: number;
+  radius: number;
+  y: number;
+}
+
+/** The descent's opening height above stratum 0 (the rim arrival vista). */
+const DESCENT_START_Y = 150;
+/** The arrival orbit's clearance outside the rim ring: the descent opens
+ * this far beyond stratum 0's radius, close enough that the helix fills
+ * the frame. Derived from the rim radius (never a free-standing literal),
+ * so the opening follows the layout if the rim ever moves. */
+const DESCENT_ARRIVAL_CLEARANCE = 160;
+/** The descent ends hovering this far above the basin floor, facing the orb. */
+const DESCENT_BASIN_HOVER = 60;
+/** The end pose rides this far inside the basin's radius. (A separate
+ * constant from the hover height — the two 60s are a coincidence of the
+ * framing, not the same decision.) */
+const DESCENT_END_INSET = 60;
+/** Total virtual drop, opening vista to basin hover: 150 + 720 + 50 = 920.
+ * Progress is proportional to drop, so each stratum floor is reached at
+ * the fraction of the descent its depth represents. */
+const DESCENT_TOTAL_DROP = DESCENT_START_Y - (DEEP_PAST_BASIN_Y + DESCENT_BASIN_HOVER);
+
+/**
+ * The descent path, derived from the layout constants (the 2026-10-29
+ * fix): a keyframe at every stratum floor — angle = base + i × the
+ * helix twist (1.08 turns over the nine floors, the levels' own
+ * winding, not a chosen fraction of a circle), radius = the stratum's
+ * radius − 25 (inside the rings, over the alcoves), height = the
+ * floor itself — opening from the arrival orbit (stratum 0's radius
+ * + the arrival clearance, +150) and settling at the basin hover
+ * (radius = basin radius − the end inset, 60 above the basin floor).
+ * No literal in this path is free-standing: change a layout constant
+ * and the path follows.
+ */
+export const DEEP_PAST_DESCENT_KEYS: readonly DeepPastDescentKey[] = (() => {
+  const keys: DeepPastDescentKey[] = [
+    {
+      progress: 0,
+      angle: DEEP_PAST_DESCENT.baseAngle,
+      radius: DEEP_PAST_STRATUM_RADIUS[0]! + DESCENT_ARRIVAL_CLEARANCE,
+      y: DESCENT_START_Y,
+    },
+  ];
+  for (let i = 0; i < DEEP_PAST_STRATA_COUNT; i++) {
+    keys.push({
+      progress: (DESCENT_START_Y - DEEP_PAST_STRATUM_Y[i]!) / DESCENT_TOTAL_DROP,
+      angle: DEEP_PAST_DESCENT.baseAngle + i * DEEP_PAST_STRATUM_ARC_START,
+      radius: DEEP_PAST_STRATUM_RADIUS[i]! - 25,
+      y: DEEP_PAST_STRATUM_Y[i]!,
+    });
+  }
+  keys.push({
+    progress: 1,
+    angle: DEEP_PAST_DESCENT.baseAngle + DEEP_PAST_STRATA_COUNT * DEEP_PAST_STRATUM_ARC_START,
+    radius: DEEP_PAST_BASIN_RADIUS - DESCENT_END_INSET,
+    y: DEEP_PAST_BASIN_Y + DESCENT_BASIN_HOVER,
+  });
+  return keys;
+})();
+
+/** A point on the derived path: angle / radius / height lerped between
+ * the two keyframes the progress sits between. Pure, testable. */
+function descentPoint(progress: number): { angle: number; radius: number; y: number } {
+  const p = Math.min(Math.max(progress, 0), 1);
+  const keys = DEEP_PAST_DESCENT_KEYS;
+  let a = keys[0]!;
+  let b = keys[keys.length - 1]!;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (p >= keys[i]!.progress && p <= keys[i + 1]!.progress) {
+      a = keys[i]!;
+      b = keys[i + 1]!;
+      break;
+    }
+  }
+  const span = b.progress - a.progress;
+  const t = span > 0 ? (p - a.progress) / span : 0;
+  return {
+    angle: a.angle + (b.angle - a.angle) * t,
+    radius: a.radius + (b.radius - a.radius) * t,
+    y: a.y + (b.y - a.y) * t,
+  };
+}
+
+function descentPosition(progress: number): [number, number, number] {
+  const pt = descentPoint(progress);
+  return [Math.sin(pt.angle) * pt.radius, pt.y, Math.cos(pt.angle) * pt.radius];
+}
 
 /** Camera pose for a descent progress p ∈ [0, 1] (rim → basin). Pure, testable. */
 export function deepPastDescentCamera(progress: number): {
@@ -103,16 +197,35 @@ export function deepPastDescentCamera(progress: number): {
   lookAt: [number, number, number];
 } {
   const p = Math.min(Math.max(progress, 0), 1);
-  const y = DEEP_PAST_DESCENT.startY + p * (DEEP_PAST_DESCENT.endY - DEEP_PAST_DESCENT.startY);
-  const angle = DEEP_PAST_DESCENT.baseAngle + p * Math.PI * 2 * DEEP_PAST_DESCENT.angleTurns;
-  return {
-    position: [
-      Math.sin(angle) * DEEP_PAST_DESCENT.radius,
-      y,
-      Math.cos(angle) * DEEP_PAST_DESCENT.radius,
-    ],
-    lookAt: [0, Math.max(y - 350, DEEP_PAST_DESCENT.lookAtFloor), 0],
-  };
+  const position = descentPosition(p);
+  // The look target rides the same path one stratum-drop ahead — you
+  // look where you are about to be, at the flight you are about to
+  // pass — and across the final segment it settles from the path to
+  // the orb, the basin's light, where the descent ends facing.
+  const dropAhead = 90 / DESCENT_TOTAL_DROP;
+  let lookAt = descentPosition(Math.min(p + dropAhead, 1));
+  const lastFloor = DEEP_PAST_DESCENT_KEYS[DEEP_PAST_DESCENT_KEYS.length - 2]!;
+  if (p >= lastFloor.progress) {
+    const t = (p - lastFloor.progress) / (1 - lastFloor.progress);
+    const orb: [number, number, number] = [0, DEEP_PAST_ORB.y, 0];
+    lookAt = [
+      lookAt[0] + (orb[0] - lookAt[0]) * t,
+      lookAt[1] + (orb[1] - lookAt[1]) * t,
+      lookAt[2] + (orb[2] - lookAt[2]) * t,
+    ];
+  }
+  return { position, lookAt };
+}
+
+/**
+ * Where the route beads float: one above each thread stop, its centre
+ * DEEP_PAST_BEAD.floatAbove above the stop (the thread itself rides 8
+ * above). Pure, testable — the beads follow the layout exactly.
+ */
+export function deepPastBeadPositions(
+  stops: readonly { x: number; y: number; z: number }[],
+): [number, number, number][] {
+  return stops.map((s) => [s.x, s.y + DEEP_PAST_BEAD.floatAbove, s.z]);
 }
 
 /**
@@ -229,8 +342,9 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   // `glb-basin` and fades in, hiding the procedural floor + rim ring.
   // Until it lands, that procedural pair IS the basin — the load fallback,
   // never the primary. The solid rock, the glow, and the basin light stay
-  // in both cases: the rock is the finished bottom, and the glow + light
-  // are the basin's light until the First Light orb arrives (TODO below).
+  // in both cases: the rock is the finished bottom, and the glow is the
+  // First Light orb's halo with the basin light as its source (the orb
+  // itself loads into `glb-orb` below).
   const basinFallback = new THREE.Group();
   basinFallback.name = "basin-fallback";
   const basinFloor = new THREE.Mesh(
@@ -273,14 +387,12 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   basinHolder.name = "glb-basin";
   basinHolder.position.y = DEEP_PAST_BASIN_GLB_Y;
   group.add(basinHolder);
+  // The terrace slices, the stair flights, and the dressing lanterns
+  // are instanced layers: their holders sit at the origin and the
+  // per-instance placements (derived in deepPastAssets) carry every
+  // position — one holder per piece, empty until its GLB lands.
   const terraceHolder = new THREE.Group();
   terraceHolder.name = "glb-terrace";
-  terraceHolder.position.set(
-    Math.cos(DEEP_PAST_TERRACE.angle) * DEEP_PAST_TERRACE.radius,
-    DEEP_PAST_TERRACE.y,
-    Math.sin(DEEP_PAST_TERRACE.angle) * DEEP_PAST_TERRACE.radius,
-  );
-  terraceHolder.rotation.y = -DEEP_PAST_TERRACE.angle - Math.PI / 2;
   group.add(terraceHolder);
   const rimHolder = new THREE.Group();
   rimHolder.name = "glb-rim";
@@ -288,12 +400,6 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
   group.add(rimHolder);
   const stairHolder = new THREE.Group();
   stairHolder.name = "glb-stair";
-  stairHolder.position.set(
-    DEEP_PAST_STAIR.position.x,
-    DEEP_PAST_STAIR.position.y,
-    DEEP_PAST_STAIR.position.z,
-  );
-  stairHolder.rotation.y = -Math.PI / 2;
   group.add(stairHolder);
   const lanternHolder = new THREE.Group();
   lanternHolder.name = "glb-lantern";
@@ -303,16 +409,15 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
     Math.sin(DEEP_PAST_LANTERN.angle) * DEEP_PAST_LANTERN.radius,
   );
   group.add(lanternHolder);
-  // The stratum crystal (population increment): a crystal in the deep
-  // strata, loaded as-is — both materials, 2 calls; its purple is its
-  // identity. The holder stays empty until its GLB lands.
+  const lanternsHolder = new THREE.Group();
+  lanternsHolder.name = "glb-lanterns";
+  group.add(lanternsHolder);
+  // The stratum crystals (population increment + the 2026-10-29
+  // dressing pass): three crystals down the deep strata, instanced
+  // from the one shipped file — both materials, 2 calls; their purple
+  // is their identity. The holder stays empty until the GLB lands.
   const crystalHolder = new THREE.Group();
   crystalHolder.name = "glb-crystal";
-  crystalHolder.position.set(
-    Math.cos(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius,
-    DEEP_PAST_CRYSTAL.y,
-    Math.sin(DEEP_PAST_CRYSTAL.angle) * DEEP_PAST_CRYSTAL.radius,
-  );
   group.add(crystalHolder);
   // The dead star (Sketchfab long game): a slimmed supernova remnant
   // in the deep strata, loaded as-is — a point cloud, 34 meshes, 34
@@ -368,6 +473,43 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
       onLanded?.(loaded);
     });
   };
+  // A placement on a stratum ring, in the scene's (cos, sin)
+  // convention; tangential pieces (terrace, stair) face along the
+  // arc — rotation.y = −angle − π/2, the original placements' pattern.
+  const ringPlacement = (
+    angle: number,
+    radius: number,
+    y: number,
+    scale: number,
+    tangential = true,
+  ): DeepPastInstancePlacement => ({
+    x: Math.cos(angle) * radius,
+    y,
+    z: Math.sin(angle) * radius,
+    rotationY: tangential ? -angle - Math.PI / 2 : 0,
+    scale,
+  });
+  // An instanced layer: fit the loaded root to its unit target
+  // dimension, then instance it at the derived placements. A failed
+  // load leaves the holder empty and noted, exactly like loadInto.
+  const loadInstanced = (
+    model: (typeof DEEP_PAST_MODELS)[number],
+    holder: THREE.Group,
+    fitUnit: (root: THREE.Object3D) => void,
+    placements: readonly DeepPastInstancePlacement[],
+    name: string,
+    onLanded?: () => void,
+  ) => {
+    void loadDeepPastAsset(model.url).then((loaded) => {
+      if (!loaded || disposed) {
+        if (loaded) disposeObject3D(loaded);
+        return;
+      }
+      fitUnit(loaded);
+      holder.add(instantiateDeepPastRoot(loaded, placements, name));
+      onLanded?.();
+    });
+  };
   // The dish fades in over the procedural floor; the fallback is hidden
   // only once the real dish is mostly visible (a crossfade, not a cut).
   loadInto(
@@ -376,19 +518,27 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
     (root) => fitDeepPastAssetToSpan(root, DEEP_PAST_BASIN_SPAN),
     (root) => fadeSwapIn(root, hideBasinFallback),
   );
-  loadInto(DEEP_PAST_MODELS[1]!, terraceHolder, (root) =>
-    fitDeepPastAsset(root, DEEP_PAST_TERRACE.scale),
+  loadInstanced(
+    DEEP_PAST_MODELS[1]!,
+    terraceHolder,
+    (root) => fitDeepPastAssetToSize(root, 1),
+    deepPastTerraceSlices().map((s) => ringPlacement(s.angle, s.radius, s.y, DEEP_PAST_TERRACE.size)),
+    "terrace-slices",
   );
   loadInto(DEEP_PAST_MODELS[2]!, rimHolder, (root) =>
-    fitDeepPastAsset(root, DEEP_PAST_RIM.scale),
+    fitDeepPastAssetToSpan(root, DEEP_PAST_RIM.span),
   );
-  loadInto(DEEP_PAST_MODELS[3]!, stairHolder, (root) =>
-    fitDeepPastAsset(root, DEEP_PAST_STAIR.scale),
+  loadInstanced(
+    DEEP_PAST_MODELS[3]!,
+    stairHolder,
+    (root) => fitDeepPastAssetToHeight(root, 1),
+    deepPastStairFlights().map((f) => ringPlacement(f.angle, f.radius, f.y, f.drop)),
+    "stair-flights",
   );
   loadInto(
     DEEP_PAST_MODELS[4]!,
     lanternHolder,
-    (root) => fitDeepPastAsset(root, DEEP_PAST_LANTERN.scale),
+    (root) => fitDeepPastAssetToSize(root, DEEP_PAST_LANTERN.size),
     () => {
       // The lantern's glow is painted into its texture (no emissive in
       // the file), so it gets a real warm light + glow sprite on load —
@@ -407,8 +557,48 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
       lanternHolder.add(glow);
     },
   );
-  loadInto(DEEP_PAST_MODELS[5]!, crystalHolder, (root) =>
-    fitDeepPastAssetToSize(root, DEEP_PAST_CRYSTAL.size),
+  // The dressing lanterns: the same file, instanced at the far end of
+  // every terrace slice. Their glows ride as ONE points cloud (the
+  // memory-lantern pattern — a sprite per lantern would cost 24 calls
+  // for light the texture already paints); the cloud appears only
+  // when the lanterns themselves land.
+  const dressingLanterns = deepPastDressingLanterns();
+  loadInstanced(
+    DEEP_PAST_MODELS[4]!,
+    lanternsHolder,
+    (root) => fitDeepPastAssetToSize(root, 1),
+    dressingLanterns.map((l) => ringPlacement(l.angle, l.radius, l.y, DEEP_PAST_LANTERN.size, false)),
+    "lanterns-dressing",
+    () => {
+      const positions = new Float32Array(dressingLanterns.length * 3);
+      dressingLanterns.forEach((l, i) => {
+        positions[i * 3] = Math.cos(l.angle) * l.radius;
+        positions[i * 3 + 1] = l.y;
+        positions[i * 3 + 2] = Math.sin(l.angle) * l.radius;
+      });
+      const glowGeo = new THREE.BufferGeometry();
+      glowGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const glows = new THREE.Points(
+        glowGeo,
+        new THREE.PointsMaterial({
+          size: 90,
+          sizeAttenuation: true,
+          map: glowTex,
+          transparent: true,
+          opacity: 0.85,
+          depthWrite: false,
+        }),
+      );
+      glows.name = "glb-lantern-glows";
+      lanternsHolder.add(glows);
+    },
+  );
+  loadInstanced(
+    DEEP_PAST_MODELS[5]!,
+    crystalHolder,
+    (root) => fitDeepPastAssetToSize(root, 1),
+    DEEP_PAST_CRYSTALS.map((c) => ringPlacement(c.angle, c.radius, c.y, c.size, false)),
+    "crystals",
   );
   loadInto(DEEP_PAST_MODELS[6]!, supernovaHolder, (root) =>
     fitDeepPastAssetToSize(root, DEEP_PAST_SUPERNOVA.size),
@@ -439,11 +629,11 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
       spireHolder.add(glow);
     },
   );
-  // The orb loads through the animated loader (its 'FirstLight' clip is
-  // the Deep Past's only animation so far): the clip ticks on the
-  // scene's mixer in update(), the Scale pattern — delta clamped,
-  // reduced motion holds it still.
-  const orbMixers: THREE.AnimationMixer[] = [];
+  // Animated pieces (the orb's 'FirstLight' clip, the route beads'
+  // 'Flow') load through the animated loader: their clips tick on the
+  // scene's mixers in update(), the Scale pattern — delta clamped,
+  // reduced motion holds them still.
+  const clipMixers: THREE.AnimationMixer[] = [];
   void loadAnimatedDeepPastAsset(DEEP_PAST_MODELS[8]!.url).then((loaded) => {
     if (!loaded || disposed) {
       if (loaded) disposeObject3D(loaded.scene);
@@ -453,7 +643,7 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
     orbHolder.add(loaded.scene);
     const mixer = new THREE.AnimationMixer(loaded.scene);
     for (const clip of loaded.animations) mixer.clipAction(clip).play();
-    orbMixers.push(mixer);
+    clipMixers.push(mixer);
   });
 
   // The rim-side resting place for risen members: a finished stone platform
@@ -547,10 +737,14 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
 
   // Anchors (D-8): a fine line of light rising from a member's alcove toward
   // the rim — a visit-path to its other appearance, never a relocation.
-  // TODO (missing GLB — anchor-spire, needed from the owner): each anchor
-  // line rises from its alcove with no physical foot yet — the INTERIM
-  // form. When the spire lands, one stands at each anchor's foot and the
-  // line rises from its tip. Do not invent a substitute spire.
+  // The anchor spire stands at stratum 1 only (glb-spire above). An
+  // earlier plan put a spire at each anchor's foot, but that plan
+  // predated the owner's actual spire file: what arrived is a
+  // 120-unit landmark, not the small terrace marker the plan imagined
+  // (settlement D2, 2026-10-29 — the spire-at-each-anchor idea is
+  // dropped, not deferred). Landmarks stay singular, the route bead
+  // marks the journey stops, and the anchor line keeps its light-only
+  // form: it is a visit-path, not a structure.
   if (layout.anchors.length > 0) {
     const byId = new Map(members.map((m) => [m.nodeId, m]));
     const positions: number[] = [];
@@ -571,10 +765,14 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
 
   // The Chronicle thread (A21): a lit ribbon through the active route's stops,
   // in chronological order — the route, made visible before it is traveled.
-  // TODO (missing GLB — route-bead, needed from the owner): the thread line
-  // marks the route but its stops have no markers yet — the INTERIM form.
-  // When the bead lands, one floats above each stop. Do not invent a
-  // substitute bead.
+  // One route bead (the owner's file, deepPastAssets) floats above each
+  // stop, its 'Flow' clip playing on the orb's mixer pattern; the line
+  // stays the route, the beads mark the stops. No thread → no beads:
+  // the beads follow the layout exactly — routes longer than the
+  // manifest's 12-stop budget envelope still mark every stop (each
+  // extra stop adds 2 calls / 1,597 tris beyond the envelope). A
+  // failed bead load leaves the bare thread and notes the failure —
+  // never a substitute marker.
   if (layout.thread && layout.thread.stops.length >= 2) {
     const points = layout.thread.stops.map((s) => new THREE.Vector3(s.x, s.y + 8, s.z));
     const curve = new THREE.CatmullRomCurve3(points);
@@ -585,6 +783,32 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
     );
     thread.name = `thread-${layout.thread.routeId}`;
     group.add(thread);
+    const beadPositions = deepPastBeadPositions(layout.thread.stops);
+    const beadGroup = new THREE.Group();
+    beadGroup.name = "route-beads";
+    group.add(beadGroup);
+    void loadAnimatedDeepPastAsset(DEEP_PAST_MODELS[9]!.url).then((loaded) => {
+      if (!loaded || disposed) {
+        if (loaded) disposeObject3D(loaded.scene);
+        return;
+      }
+      beadPositions.forEach((pos, i) => {
+        // Each bead rides in its own holder at the stop: the fitted
+        // clone keeps the fit's centring offset as its local position
+        // (overwriting it would silently misplace any future re-slim
+        // whose pivot sits off-origin).
+        const holder = new THREE.Group();
+        holder.name = `route-bead-${i}`;
+        holder.position.set(pos[0], pos[1], pos[2]);
+        const bead = loaded.scene.clone();
+        fitDeepPastAssetToSize(bead, DEEP_PAST_BEAD.size);
+        holder.add(bead);
+        beadGroup.add(holder);
+        const mixer = new THREE.AnimationMixer(bead);
+        for (const clip of loaded.animations) mixer.clipAction(clip).play();
+        clipMixers.push(mixer);
+      });
+    });
   }
 
   // Marine snow: slow particulate drift, the depth's own atmosphere — never
@@ -682,12 +906,12 @@ export function createDeepPastScene(layout: DeepPastLayout): DeepPastScene {
       const breath = Math.sin(elapsedMs * 0.0005);
       basinGlow.scale.setScalar(190 + breath * 10);
       basinLight.intensity = 2.2 + breath * 0.15;
-      // The orb's FirstLight clip ticks on the same clock: delta clamped
-      // so a tab-switch can never jump it forward by minutes. Reduced
-      // motion holds it still with the rest of the space (see the early
-      // return above).
+      // The animated clips (the orb's FirstLight, the beads' Flow) tick
+      // on the same clock: delta clamped so a tab-switch can never jump
+      // them forward by minutes. Reduced motion holds them still with
+      // the rest of the space (see the early return above).
       const deltaS = Math.min(0.1, dt / 1000);
-      for (const mixer of orbMixers) mixer.update(deltaS);
+      for (const mixer of clipMixers) mixer.update(deltaS);
     },
     dispose() {
       if (disposed) return;
