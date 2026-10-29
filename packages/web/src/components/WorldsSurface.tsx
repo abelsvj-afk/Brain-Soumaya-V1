@@ -98,6 +98,7 @@ import {
   type WalkPoint,
   type WalkState,
 } from "../graph/gardenWalk.js";
+import { portraitFit } from "../graph/worldCamera.js";
 import { applyWorldLighting, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -1390,6 +1391,8 @@ export default function WorldsSurface({
       const now = performance.now();
       const dt = Math.min(250, now - lastFrameAt); // a backgrounded tab must not teleport her
       lastFrameAt = now;
+      // The worlds' orbit distances were tuned on a landscape screen; back off on a phone (graph/worldCamera.ts).
+      const fit = portraitFit(camera.aspect);
       world.update(elapsed, { reducedMotion });
       if (mode === "world" && currentWorld === "growing-place") {
         // A8: the fog takes the warmer tint of the warmth now rendered.
@@ -1450,9 +1453,9 @@ export default function WorldsSurface({
             // Parked orbit: the same slow orbit, at the parked depth.
             const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
             camera.position.set(
-              Math.sin(angle) * orbit.orbitRadius,
+              Math.sin(angle) * orbit.orbitRadius * fit,
               pose.position[1],
-              Math.cos(angle) * orbit.orbitRadius,
+              Math.cos(angle) * orbit.orbitRadius * fit,
             );
             camera.lookAt(0, pose.lookAt[1], 0);
           }
@@ -1478,8 +1481,8 @@ export default function WorldsSurface({
             camera.lookAt(0, 0, 0);
           } else {
             const s = smoothstep(Math.min(1, (elapsed - STATION_ARRIVAL_MS) / 3000));
-            const radius = arrival.distance + (orbit.orbitRadius - arrival.distance) * s;
-            const height = arrivalHeight + (orbit.orbitHeight - arrivalHeight) * s;
+            const radius = arrival.distance + (orbit.orbitRadius * fit - arrival.distance) * s;
+            const height = arrivalHeight + (orbit.orbitHeight * fit - arrivalHeight) * s;
             const az = arrival.azimuth + (orbitAngle - arrival.azimuth) * s;
             camera.position.set(Math.sin(az) * radius, height, Math.cos(az) * radius);
             camera.lookAt(0, orbit.lookAtY, 0);
@@ -1519,9 +1522,9 @@ export default function WorldsSurface({
         } else {
           const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
           camera.position.set(
-            Math.sin(angle) * orbit.orbitRadius,
-            orbit.orbitHeight,
-            Math.cos(angle) * orbit.orbitRadius,
+            Math.sin(angle) * orbit.orbitRadius * fit,
+            orbit.orbitHeight * fit,
+            Math.cos(angle) * orbit.orbitRadius * fit,
           );
           camera.lookAt(0, orbit.lookAtY, 0);
         }
