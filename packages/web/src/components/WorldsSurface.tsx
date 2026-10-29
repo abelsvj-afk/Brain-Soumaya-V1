@@ -105,6 +105,7 @@ import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, type Flig
 import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
+import { useEternityAutonomy } from "../hooks/useEternityAutonomy.js";
 import { installHomeSky } from "../graph/homeSky.js";
 import { loadSoumayaShip } from "../graph/soumayaShip.js";
 import { loadWarpGate } from "../graph/gateScene.js";
@@ -694,6 +695,13 @@ export default function WorldsSurface({
   const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
   const mode = inFlightScene ? "transit" : atWorld ? "world" : null;
   const visible = !!mode && !dismissed && engaged;
+  // Eternity acts on his own (the server decides and logs; this only plays a fresh act once, while you are there).
+  useEternityAutonomy(visible && mode === "world" && currentWorld === "eternity", (p) => {
+    const e = sceneHandleRef.current?.eternity;
+    if (!e) return;
+    if (p.kind === "gesture") e.setGesture(p.gesture);
+    else e.useTool(p.tool);
+  });
   // Tell the home galaxy it is covered, so it stops rendering (Graph3D listens).
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("worlds:surface-visible", { detail: { visible } }));

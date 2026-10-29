@@ -22,15 +22,15 @@
 /** The roster ships one NPC at a time, in this order (note §4). This
  *  increment is roster #1 only — the Station harbor controller. The
  *  keeper, the guide, and Eternity are later increments. */
-export const NPC_ROSTER_ORDER: readonly string[] = ["harbor-controller"] as const;
+export const NPC_ROSTER_ORDER: readonly string[] = ["harbor-controller", "eternity"] as const;
 
 /** NPC identity. One NPC per id, ever — the id is the stable key in
  *  the log, the state row, and the holdings table. */
-export type NpcId = "harbor-controller";
+export type NpcId = "harbor-controller" | "eternity";
 
 /** The world an NPC belongs to. An NPC never acts outside its own
  *  world (note §3) — the executor checks this on every act. */
-export type NpcWorld = "great-station";
+export type NpcWorld = "great-station" | "eternity";
 
 /**
  * Allow-listed act kinds. These are the ONLY things an NPC can do:
@@ -90,6 +90,11 @@ export interface NpcDefinition {
   /** The GLB model key of the NPC's ship (a real fleet asset, never a
    *  procedural placeholder). */
   shipModelKey: string;
+  /** Owner-set overrides of the default budgets (never model-set). An NPC
+   *  that speaks rarely sets these lower than the harbor controller's. */
+  tickIntervalMs?: number;
+  maxActsPerDay?: number;
+  maxSpeaksPerDay?: number;
 }
 
 /** The harbor controller (roster #1): one job — help you arrive.
@@ -104,7 +109,30 @@ export const HARBOR_CONTROLLER: NpcDefinition = {
   shipModelKey: "dispatcher",
 } as const;
 
-export const NPC_DEFINITIONS: readonly NpcDefinition[] = [HARBOR_CONTROLLER] as const;
+/**
+ * Eternity (roster #4, "the flagship" — eternity-autonomy spec, phase 1): the one NPC that initiates, rarely,
+ * on cosmic alignment (D-72). Allow-list: gestures (stillness / regard / blessing / joy only — sorrow and
+ * warning presume knowledge of the visitor and stay the visitor's own tools), "reorder the heavens", and
+ * waiting. No `speak`: his words are the existing in-world gesture lines, never free text.
+ */
+export const ETERNITY_FIGURE: NpcDefinition = {
+  id: "eternity",
+  name: "Eternity",
+  job: "His own — blessing, comfort, wonder. He acts rarely and never asks.",
+  world: "eternity",
+  allowList: ["gesture", "reorder-light", "wait"],
+  answersOnly: false,
+  shipModelKey: "man-god-halo",
+  tickIntervalMs: 6 * 60 * 60 * 1000,
+  maxActsPerDay: 3,
+  maxSpeaksPerDay: 0,
+} as const;
+
+/** The gestures he may make on his own (the rest are the visitor's tools). */
+export const ETERNITY_AUTONOMOUS_GESTURES = ["stillness", "regard", "blessing", "joy"] as const;
+export type EternityAutonomousGesture = (typeof ETERNITY_AUTONOMOUS_GESTURES)[number];
+
+export const NPC_DEFINITIONS: readonly NpcDefinition[] = [HARBOR_CONTROLLER, ETERNITY_FIGURE] as const;
 
 export function npcDefinition(id: string): NpcDefinition | undefined {
   return NPC_DEFINITIONS.find((d) => d.id === id);

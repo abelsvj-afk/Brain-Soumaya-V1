@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import OwnerAccess from "./OwnerAccess.js";
+import EternityAutonomyPanel from "./EternityAutonomyPanel.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { currentSpace, updateProfile } from "../api/client.js";
 import { AccountSettings } from "./AccountSettings.js";
@@ -567,6 +568,7 @@ export function SettingsPanel({
             contained in AccountSettings; it confirms against the gamer tag
             loaded above (the same value the server checks). */}
         <OwnerAccess />
+        <EternityAutonomyPanel />
         <AccountSettings gamerTag={gamerTag} onBrainDeleted={onBrainDeleted} />
 
         <section className="settings-section" id="settings-audio">

@@ -137,9 +137,14 @@ export class NpcRepo {
 
   /** Whether the daily budgets still have room for one more act (and,
    *  for a speak, one more speak). */
-  budgetAllows(npcId: NpcId, kind: NpcActKind, nowMs: number = Date.now()): boolean {
-    if (this.actsToday(npcId, nowMs) >= NPC_MAX_ACTS_PER_DAY) return false;
-    if (kind === "speak" && this.speaksToday(npcId, nowMs) >= NPC_MAX_SPEAKS_PER_DAY) return false;
+  budgetAllows(
+    npcId: NpcId,
+    kind: NpcActKind,
+    nowMs: number = Date.now(),
+    limits: { maxActsPerDay?: number; maxSpeaksPerDay?: number } = {},
+  ): boolean {
+    if (this.actsToday(npcId, nowMs) >= (limits.maxActsPerDay ?? NPC_MAX_ACTS_PER_DAY)) return false;
+    if (kind === "speak" && this.speaksToday(npcId, nowMs) >= (limits.maxSpeaksPerDay ?? NPC_MAX_SPEAKS_PER_DAY)) return false;
     return true;
   }
 

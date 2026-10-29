@@ -533,6 +533,20 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   home; the world's own frame budget rose ~4×). The Observatory's 🔍/× buttons overlapped the greeting at 412 px — the header now
   reserves their width. Look at: that returning to the galaxy from a world resumes instantly and nothing animates oddly after a
   long stay, and that the greeting wraps cleanly on a real phone.
+- **Eternity autonomy, phase 1 (2026-10-29, owner: "Eternity. Build his autonomy") — MEASURED end to end locally (server tick →
+  logged act → played once in the world), needs on-device confirmation** (shared/npcs.ts `ETERNITY_FIGURE`,
+  server/npcs/eternity.ts + loop.ts, web graph/eternityAutonomy.ts, hooks/useEternityAutonomy.ts,
+  components/EternityAutonomyPanel.tsx; spec `docs/specs/eternity-autonomy-2026-10-29.md`): he is roster NPC #2 (built ahead of the
+  note's order at the owner's request) and runs the same Perceive→Decide→Act→Log loop with his own policy. He acts ON HIS OWN,
+  rarely: ≥ 6 h between ticks, ≤ 3 acts per local day, only when the galaxy's recent activity + emotional charge (aggregates only —
+  counts and average weight, never memory text, never shown, never a number) pass a threshold; otherwise a logged wait with a
+  kind cause. Allow-list is gesture (stillness / regard / blessing / joy ONLY — sorrow and warning presume knowledge of the
+  visitor and stay the visitor's tools), reorder-the-heavens, wait; NO speak/free text. He cannot be asked (`NPC_FENCE_REFUSED`).
+  While you are in Eternity the web reads his state every 5 min (that read runs the lazy tick) and plays a fresh (< 15 min),
+  unseen act once. Settings → "Eternity (autonomous)" lists his log with causes and has Stop/Resume (the kill switch; it reads the
+  roster list, which never ticks). **Not built (needs the owner):** words drawn from the visitor's memories (consent + cloud-model
+  decision + his own key), memory between visits, shared presence, projection into the home galaxy — see the spec's Phase 2.
+  Look at: whether a played gesture's tablet line + shake feel right when it comes unprompted, and the rarity.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

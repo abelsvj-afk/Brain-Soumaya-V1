@@ -13,6 +13,7 @@ import {
 import { NpcRepo, localDateKey } from "./repo.js";
 import { checkNpcEternityGate } from "./gate.js";
 import { decide, exploreOutcome, perceive } from "./harbor.js";
+import { decideEternity, perceiveEternity } from "./eternity.js";
 import { spaceTimezone } from "../agent/notify/policy.js";
 
 /**
@@ -139,13 +140,39 @@ export function runNpcTick(
 
   // The throttle binds autonomous ticks only: a question always gets
   // an answer attempt, a tick that only watches the world waits its turn.
-  if (!question && st.lastTickAt && nowMs - Date.parse(st.lastTickAt) < NPC_TICK_MIN_INTERVAL_MS) {
+  if (!question && st.lastTickAt && nowMs - Date.parse(st.lastTickAt) < (def.tickIntervalMs ?? NPC_TICK_MIN_INTERVAL_MS)) {
     return {
       acted: false,
       entry: null,
       reason: `${def.name} already looked in on things recently — it waits its turn.`,
       reasonCode: "throttled",
     };
+  }
+
+  // Eternity (roster #4) runs the same loop with his own policy: aggregates only, no questions, own budgets.
+  if (def.id === "eternity") {
+    const runEternity = h.sqlite.transaction((): TickResult => {
+      const p = perceiveEternity(h, spaceId, nowMs, repo.actsToday(def.id, nowMs));
+      const d = decideEternity(p);
+      checkFence(def, d.act, def.world);
+      if (!repo.budgetAllows(def.id, d.act, nowMs, def)) {
+        return {
+          acted: false,
+          entry: null,
+          reason: `${def.name} has acted enough for today — he waits until tomorrow.`,
+          reasonCode: "budget",
+        };
+      }
+      const entry =
+        d.act === "gesture"
+          ? repo.appendLog(def.id, "gesture", d.gesture, d.cause, nowMs)
+          : d.act === "reorder-light"
+            ? repo.appendLog(def.id, "reorder-light", "reorder-the-heavens", d.cause, nowMs)
+            : repo.appendLog(def.id, "wait", "Waited.", d.cause, nowMs);
+      repo.markTick(def.id, nowMs);
+      return { acted: true, entry, reason: null, reasonCode: null };
+    });
+    return runEternity.immediate();
   }
 
   const run = h.sqlite.transaction((): TickResult => {
@@ -162,7 +189,7 @@ export function runNpcTick(
     // Budgets are owner-set, not model-set: an NPC that would exceed
     // one waits — and when the day's budget is spent, the tick writes
     // nothing more (the state still reports the spent budget).
-    if (!repo.budgetAllows(def.id, kind, nowMs)) {
+    if (!repo.budgetAllows(def.id, kind, nowMs, def)) {
       return {
         acted: false,
         entry: null,
@@ -197,6 +224,10 @@ export function askNpc(
   nowMs: number = Date.now(),
 ): TickResult {
   const def = requireDefinition(npcId);
+  if (def.id === "eternity") {
+    // He is not asked or summoned (eternity-world-design-note §8): he acts when he acts.
+    throw new NpcError("NPC_FENCE_REFUSED", "He is not asked — Eternity acts only when he chooses to.");
+  }
   if (new NpcRepo(h, spaceId).state(def.id).stopped) {
     throw new NpcError("NPC_STOPPED", `${def.name} is stopped — it answers nothing while stopped.`);
   }

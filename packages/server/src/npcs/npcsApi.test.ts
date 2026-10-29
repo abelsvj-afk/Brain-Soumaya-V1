@@ -60,7 +60,7 @@ describe("NPC routes", () => {
     const list = await call("GET", "/api/npcs", spaceId);
     expect(list.status).toBe(200);
     const npcs = list.body.npcs as { id: string; name: string; world: string }[];
-    expect(npcs.map((n) => n.id)).toEqual(["harbor-controller"]);
+    expect(npcs.map((n) => n.id)).toEqual(["harbor-controller", "eternity"]);
     expect(npcs[0]?.name).toBe("Harbor controller");
     expect(npcs[0]?.world).toBe("great-station");
 
