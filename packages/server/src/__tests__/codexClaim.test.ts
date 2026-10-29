@@ -81,6 +81,25 @@ describe("codex-claim covers the real Codex catalog (IM-93)", () => {
     }
   });
 
+  it("awards a relic entry once it is found in its world", async () => {
+    const r = await claim("relic-harbor-nail");
+    expect(r.status).toBe(200);
+    expect(r.body.awarded).toBe(true);
+  });
+
+  // Trust shape (relics increment): the server validates a claim by key
+  // membership alone, the same as every other static Codex entry — the
+  // client gates the find on the relic's GLB actually loading in its
+  // world. A crafted client CAN claim a relic whose world has not opened
+  // yet (e.g. relic-star-hanger, whose world is Scale); verifying the find
+  // server-side belongs with scarcity (B-03), not this increment. The
+  // acceptance below is recorded deliberately, not an oversight.
+  it("accepts a deferred relic's key (find verification is a later increment)", async () => {
+    const r = await claim("relic-star-hanger");
+    expect(r.status).toBe(200);
+    expect(r.body.awarded).toBe(true);
+  });
+
   it("awards a fieldnote-* entry Soumaya actually charted for this space", async () => {
     new CodexDiscoveriesRepo(ctx.handle, spaceId).add({
       key: "sector:daily:25",

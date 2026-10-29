@@ -208,14 +208,20 @@ describe("RE-01 boundary records with the real sender", () => {
 // ---------------------------------------------------------------------------
 
 describe("RE-01 digest marking", () => {
-  // The digest sends only once the space's local digest time (06:00 by
-  // default) has passed; pin the clock to mid-afternoon so this tests
-  // delivery, not the hour the suite happens to run at.
+  // V1 follow-up item 4c — pin the clock (Date only; real timers
+  // keep flowing) for the whole describe. sendDailyDigests reads
+  // the real clock and skips before the space's 06:00
+  // America/New_York digest time: pre-06:00 the "delivered" test
+  // failed outright and the two refusal tests passed vacuously
+  // (the digest was never even attempted). 15:00Z is 11:00 in
+  // New York — the sweep really runs, at any real hour.
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("a refused digest is not marked sent and does not count as sent", async () => {
     await linkChat(21);

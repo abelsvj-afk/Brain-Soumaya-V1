@@ -1499,16 +1499,15 @@ export function reviewUnresolvedFlag(
  *  in this space; a target already gone is a `target_missing`
  *  refusal (the UI then offers dismiss instead).
  *  user_model: inbound `replaced_by` is nulled first (the span
- *  pass's own pattern). instruction_profiles: its `vec_profiles`
- *  rows go too. The deletion is recorded in `agent_logs` as
- *  `forget_flag_row_deleted`, ids only — never content — but that
- *  audit entry is written AFTER the transaction commits, NOT as
- *  part of it: if the log insert fails, the deletion stands while
- *  the route reports an error, with no successful-delete audit
- *  entry. Follow-up (tracked, not a merge blocker): move the audit
- *  insert into the transaction, or explicitly accept + test this
- *  failure gap — do not treat the audit record as atomic with the
- *  deletion. */
+ *  pass's own pattern, space-scoped — V1 follow-up item 1).
+ *  instruction_profiles: its `vec_profiles` rows go too. The
+ *  deletion is recorded in `agent_logs` as
+ *  `forget_flag_row_deleted`, ids only — never content — and the
+ *  audit insert runs INSIDE the same transaction (V1 follow-up
+ *  item 2, the `forget_source_applied` pattern): if the insert
+ *  fails, the whole deletion rolls back, so a reported error can
+ *  never mean "deleted but un-audited". T-FU2 proves it by
+ *  failure injection. */
 export function deleteUnresolvedFlagRow(
   h: DbHandle,
   spaceId: string,
@@ -1535,9 +1534,16 @@ export function deleteUnresolvedFlagRow(
   const now = new Date().toISOString();
   sqlite.transaction(() => {
     if (flag.table_name === "user_model") {
+      // Space-scoped (V1 follow-up item 1): without the predicate
+      // this update would also null a `replaced_by` reference held
+      // by a row in ANOTHER space pointing at this row id — a state
+      // reachable only at the DB level, but tenant isolation must
+      // not depend on app flows never creating it. T-FU1 proves it.
       sqlite
-        .prepare(`UPDATE user_model SET replaced_by = NULL WHERE replaced_by = ?`)
-        .run(flag.row_id);
+        .prepare(
+          `UPDATE user_model SET replaced_by = NULL WHERE replaced_by = ? AND space_id = ?`,
+        )
+        .run(flag.row_id, spaceId);
       sqlite
         .prepare(`DELETE FROM user_model WHERE id = ? AND space_id = ?`)
         .run(flag.row_id, spaceId);
@@ -1552,22 +1558,28 @@ export function deleteUnresolvedFlagRow(
         `UPDATE forget_unresolved_flags SET status = 'resolved_deleted', reviewed_at = ? WHERE id = ?`,
       )
       .run(now, flagId);
+    // Audit inside the transaction (V1 follow-up item 2): the
+    // append-only trigger on agent_logs guards DELETEs only, and
+    // the source-forget path already inserts its
+    // `forget_source_applied` event inside its erasure
+    // transaction — same pattern here, so the deletion and its
+    // audit record commit or roll back together.
+    sqlite
+      .prepare(
+        `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
+         VALUES (?, 'soumaya', 'forget_flag_row_deleted', ?, ?, 'ok')`,
+      )
+      .run(
+        spaceId,
+        `forget_flag_row_deleted flag_id=${flagId} table=${flag.table_name} row_id=${flag.row_id} request_id=${flag.request_id}`,
+        JSON.stringify({
+          flag_id: flagId,
+          table: flag.table_name,
+          row_id: flag.row_id,
+          request_id: flag.request_id,
+        }),
+      );
   })();
-  sqlite
-    .prepare(
-      `INSERT INTO agent_logs (space_id, agent, action, description, targets, result)
-       VALUES (?, 'soumaya', 'forget_flag_row_deleted', ?, ?, 'ok')`,
-    )
-    .run(
-      spaceId,
-      `forget_flag_row_deleted flag_id=${flagId} table=${flag.table_name} row_id=${flag.row_id} request_id=${flag.request_id}`,
-      JSON.stringify({
-        flag_id: flagId,
-        table: flag.table_name,
-        row_id: flag.row_id,
-        request_id: flag.request_id,
-      }),
-    );
   return flagViewOf(h, spaceId, { ...flag, status: "resolved_deleted", reviewed_at: now });
 }
 

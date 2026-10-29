@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { PEOPLE_BACKDROP_PLANETS, PEOPLE_FORMS, PEOPLE_HEARTH, PEOPLE_PALETTE, loadPeopleAsset } from "./peopleAssets.js";
+import { placeWorldRelics } from "./relicAssets.js";
 import {
   PEOPLE_FIELD_RADIUS,
   PEOPLE_SEED,
@@ -130,13 +131,23 @@ const FORM_GEOMETRY: Record<PeopleLightForm, () => THREE.BufferGeometry> = {
   gathering: () => new THREE.TorusGeometry(PEOPLE_FORMS.gathering.radius, 1, 6, 12),
 };
 
-export function createPeopleScene(layout: PeopleLayout): PeopleScene {
+export function createPeopleScene(
+  layout: PeopleLayout,
+  opts: { onRelicVisible?: (slug: string) => void } = {},
+): PeopleScene {
   const group = new THREE.Group();
   group.name = "people";
   let disposed = false;
   const dummy = new THREE.Object3D();
   const glowTex = makeGlowTexture();
   const clusters = layout.clusters;
+
+  // Relics (relics increment): the Hearth Ember rests at the field's
+  // heart, the Thread of Many at its edge — fixed spots, never tied to
+  // one person's cluster (the non-ranking rule). A relic whose GLB has
+  // not landed is simply absent — no stand-in, and its find is never
+  // offered (the host learns of it via onRelicVisible).
+  const cancelRelics = placeWorldRelics(group, "people", opts.onRelicVisible);
 
   // The ground: warm dark, finished in every direction the camera can
   // reach — a neighborhood at dusk, not a void with lights pasted on it.
@@ -418,6 +429,7 @@ export function createPeopleScene(layout: PeopleLayout): PeopleScene {
     dispose() {
       if (disposed) return;
       disposed = true;
+      cancelRelics();
       disposeObject3D(group);
     },
   };
