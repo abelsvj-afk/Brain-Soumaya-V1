@@ -1,7 +1,7 @@
 # EVE-style travel: align → spool → warp → arrive, in place
 
-**Status:** owner direction 2026-10-29 (verbatim intent below). DRAFT for build; the owner reviews screenshots of each stage
-as it lands.
+**Status:** BUILT 2026-10-29 (steps 1–3 below), measured at 412×915; the owner confirms the feel on the phone. Deviation from
+the sketch: the SKY turns round the holding ship (not the ship against a fixed sky), so the gate is visible on a portrait screen.
 
 > "When you walk somewhere, it should be just like on EVE Online, where you see the ship turn towards the direction slowly
 > that it's about to warp to, and it just counts down, the engines get real red, and then boom, it takes off real fast,

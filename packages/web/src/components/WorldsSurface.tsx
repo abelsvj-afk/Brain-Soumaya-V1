@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
+import { TRAVEL_CANCEL_WINDOW_SECONDS, WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { getDueReviews, type DueReview } from "../api/features.js";
@@ -99,7 +99,8 @@ import {
   type WalkState,
 } from "../graph/gardenWalk.js";
 import { portraitFit } from "../graph/worldCamera.js";
-import { applyWorldLighting, type WorldLightRig } from "../graph/worldLighting.js";
+import type { TransitScene } from "../graph/transitScene.js";
+import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
@@ -602,6 +603,14 @@ export default function WorldsSurface({
   // A drag that ends on the canvas is followed by a click; it must not count as a tap on the garden.
   const suppressClickRef = useRef(false);
   const [lookHint, setLookHint] = useState(false);
+  // EVE-style travel HUD: the latest journey (read by the frame loop), the readout it shows, and the
+  // overlays the frame loop drives directly (no re-render per frame).
+  const journeyRef = useRef<typeof journey>(null);
+  const [travelHud, setTravelHud] = useState<{ phase: string; countdown: number | null } | null>(null);
+  const travelFlashRef = useRef<HTMLDivElement | null>(null);
+  const travelBlurRef = useRef<HTMLDivElement | null>(null);
+  const prevModeRef = useRef<string | null>(null);
+  const [arrivalFadeKey, setArrivalFadeKey] = useState(0);
   const lookedRef = useRef<() => void>(() => {});
   // Garden v2 walk (graph/gardenWalk.ts): where her ship is and where it's
   // going, the follow camera's own (smoothed) pose, and what to open when
@@ -663,10 +672,23 @@ export default function WorldsSurface({
     enabled &&
     !!journey &&
     (journey.state === "in_transit" || journey.state === "returning");
-  const transitKind = inTransit ? journey.kind : null;
+  // The departure cinematic (align → spool) plays through the server's cancel window, so the
+  // flight scene is up from the moment the traveller departs (docs/specs/eve-travel-2026-10-29.md).
+  const arming = enabled && !!journey && journey.state === "arming";
+  const inFlightScene = inTransit || arming;
+  const transitKind = inFlightScene ? journey.kind : null;
   const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
-  const mode = inTransit ? "transit" : atWorld ? "world" : null;
+  const mode = inFlightScene ? "transit" : atWorld ? "world" : null;
   const visible = !!mode && !dismissed && engaged;
+  journeyRef.current = journey;
+  const refreshTravelRef = useRef<() => Promise<void>>(async () => {});
+  refreshTravelRef.current = travel.refresh;
+  const lastDepartPollRef = useRef(0);
+  // Arriving: the flight hands over to the world with a fade, not a cut (the world's models were prefetched).
+  useEffect(() => {
+    if (prevModeRef.current === "transit" && mode === "world") setArrivalFadeKey((k) => k + 1);
+    prevModeRef.current = mode;
+  }, [mode]);
 
   // First time in a world: say that it can be moved. Shown once per browser, gone on the first
   // gesture or after a few seconds — a world that silently ignored touch was the complaint.
@@ -707,7 +729,7 @@ export default function WorldsSurface({
   const atEternity = atWorld && currentWorld === "eternity";
   const worldName = (key: string) =>
     WORLD_CHART.find((w) => w.key === key)?.name ?? key;
-  const transitTitle = inTransit ? `Travelling to ${worldName(journey.destination)}` : "";
+  const transitTitle = inFlightScene ? `${arming ? "Departing for" : "Travelling to"} ${worldName(journey.destination)}` : "";
   const transitFallback =
     "The journey view needs graphics support on this device — your journey is unaffected.";
 
@@ -1264,12 +1286,19 @@ export default function WorldsSurface({
             totalMs: transitTotalMs,
             origin: journey?.origin ?? "home",
             destination: journey?.destination ?? "home",
+            // A turn-back has no departure to draw; every other flight begins with the cancel window.
+            armMs: journey?.state === "returning" ? 0 : TRAVEL_CANCEL_WINDOW_SECONDS * 1000,
           })
         : built;
     if (!world) return;
     scene.add(world.group);
-    // Shared lighting rig for this world (not the transit corridor, which lights itself).
-    const lighting = mode === "world" && entry?.light ? applyWorldLighting(scene, renderer, entry.light) : null;
+    // Shared lighting for this world (the corridor only takes the environment map — it lights itself otherwise).
+    const lighting =
+      mode === "transit"
+        ? applyWorldLighting(scene, renderer, TRANSIT_LIGHT_RIG)
+        : mode === "world" && entry?.light
+          ? applyWorldLighting(scene, renderer, entry.light)
+          : null;
     sceneHandleRef.current = world;
     const eternityCtl = currentWorld === "eternity" ? built?.eternity : undefined;
     if (gardenScene) {
@@ -1393,7 +1422,43 @@ export default function WorldsSurface({
       lastFrameAt = now;
       // The worlds' orbit distances were tuned on a landscape screen; back off on a phone (graph/worldCamera.ts).
       const fit = portraitFit(camera.aspect);
-      world.update(elapsed, { reducedMotion });
+      if (mode === "transit") {
+        // The flight's clock is the server's: createdAt while arming, departedAt once under way — so a
+        // reload resumes mid-sequence, and poll lag never lets the scene run ahead of the server's flip
+        // (it holds on the last spool second until the journey actually departs).
+        const j = journeyRef.current;
+        const armMs = j?.state === "returning" ? 0 : TRAVEL_CANCEL_WINDOW_SECONDS * 1000;
+        let t = elapsed;
+        if (j) {
+          const departed = j.departedAt ? Date.parse(j.departedAt) : NaN;
+          const created = Date.parse(j.createdAt);
+          if (j.state === "arming") {
+            t = Math.min(armMs - 1, Math.max(0, Date.now() - (Number.isFinite(created) ? created : Date.now())));
+            // The window has closed: ask the server now, instead of holding on "1" until the next poll.
+            const deadline = Date.parse(j.cancelDeadline);
+            if (Number.isFinite(deadline) && Date.now() >= deadline && Date.now() - lastDepartPollRef.current > 600) {
+              lastDepartPollRef.current = Date.now();
+              void refreshTravelRef.current();
+            }
+          }
+          else t = armMs + Math.max(0, Date.now() - (Number.isFinite(departed) ? departed : Date.now()));
+        }
+        world.update(t, { reducedMotion });
+        const tv = (world as TransitScene).view;
+        if (tv) {
+          if (Math.abs(camera.fov - tv.fov) > 0.01) {
+            camera.fov = tv.fov;
+            camera.updateProjectionMatrix();
+          }
+          if (travelFlashRef.current) travelFlashRef.current.style.opacity = String(tv.flash);
+          if (travelBlurRef.current) travelBlurRef.current.style.opacity = String(tv.blur);
+          setTravelHud((prev) =>
+            prev && prev.phase === tv.phase && prev.countdown === tv.countdown ? prev : { phase: tv.phase, countdown: tv.countdown },
+          );
+        }
+      } else {
+        world.update(elapsed, { reducedMotion });
+      }
       if (mode === "world" && currentWorld === "growing-place") {
         // A8: the fog takes the warmer tint of the warmth now rendered.
         const fogColor = gardenSceneRef.current?.getWarmthFogColor?.();
@@ -1404,7 +1469,9 @@ export default function WorldsSurface({
       if (mode === "transit") {
         // Chase view: behind and above the ship, looking down the corridor
         // at the arrival gate. The scene moves the gates; the camera holds.
-        camera.position.set(0, 8, 26);
+        // The scene's `shake` is the engine's gathering shudder before the jump and the rush after it.
+        const sk = (world as TransitScene).view?.shake ?? 0;
+        camera.position.set(Math.sin(elapsed * 0.09) * sk, 8 + Math.cos(elapsed * 0.11) * sk, 26);
         camera.lookAt(0, 0, -60);
         engine?.setLevel(1, transitKind === "warp" ? 1 : 0.35);
       } else if (orbit) {
@@ -1718,6 +1785,40 @@ export default function WorldsSurface({
   return (
     <section className={`worlds-surface${atEternity && mode === "world" ? " worlds-surface-light" : ""}${dockGroups.length > 0 ? " worlds-surface-docked" : ""}`} role="dialog" aria-label={title}>
       <div className="worlds-surface-canvas" ref={hostRef} onClick={handleCanvasClick} />
+      {/* EVE-style travel (docs/specs/eve-travel-2026-10-29.md): the edge blur and the jump flash are
+          driven per frame by the flight scene (refs, no re-render); the HUD reads the phase. */}
+      {mode === "transit" && (
+        <>
+          <div className="travel-blur" ref={travelBlurRef} aria-hidden="true" />
+          <div className="travel-flash" ref={travelFlashRef} aria-hidden="true" />
+          {travelHud && journey && (
+            <div className="travel-hud" role="status">
+              <span className="travel-hud-phase">
+                {travelHud.phase === "align"
+                  ? `Aligning to ${worldName(journey.destination)}`
+                  : travelHud.phase === "spool"
+                    ? "Engines spooling"
+                    : travelHud.phase === "arrive"
+                      ? "Slowing for arrival"
+                      : journey.kind === "warp"
+                        ? "Warp"
+                        : `Drifting to ${worldName(journey.destination)}`}
+              </span>
+              {travelHud.countdown !== null && (
+                <span className="travel-hud-count" aria-label={`${travelHud.countdown} seconds to jump`}>
+                  {travelHud.countdown}
+                </span>
+              )}
+              {journey.state === "arming" && (
+                <button type="button" className="travel-hud-cancel" onClick={() => void travel.cancel()}>
+                  Cancel departure
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {arrivalFadeKey > 0 && mode === "world" && <div key={arrivalFadeKey} className="travel-arrive-fade" aria-hidden="true" />}
       {lookHint && visible && mode === "world" && (
         <p className="worlds-look-hint" role="status">
           {atGarden

@@ -41,9 +41,17 @@ afterEach(cleanup);
 // The sheet must hand the screen to the flight: while it stays open (z above
 // the worlds layer) the transit scene plays unseen behind a scrim.
 describe("TravelPanel — hands the screen to the flight", () => {
-  it("does NOT fire while the journey is still in the cancel window (cancelling needs the sheet)", () => {
+  it("fires as soon as the traveller departs (arming): the departure cinematic plays through the cancel window, and cancelling is a button on that screen", () => {
     const onTransit = vi.fn();
     mockUseTravel.mockReturnValue(travel(journey("arming")));
+    const { rerender } = render(<TravelPanel enabled onTransit={onTransit} />);
+    rerender(<TravelPanel enabled onTransit={onTransit} />);
+    expect(onTransit).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT fire for a journey that is already over", () => {
+    const onTransit = vi.fn();
+    mockUseTravel.mockReturnValue(travel(journey("arrived")));
     render(<TravelPanel enabled onTransit={onTransit} />);
     expect(onTransit).not.toHaveBeenCalled();
   });

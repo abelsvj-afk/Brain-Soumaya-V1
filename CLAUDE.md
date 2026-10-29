@@ -483,6 +483,23 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   Past now shows the whole rim, stair, ledges and basin. Look at: lighting strength/colour per world on a
   real screen (rigs are one-line tunables in WORLD_SCENES), and Deep Past's grey rock vs the mock-up's
   violet mood.
+- **EVE-style travel: align → spool → warp → arrive, in place (2026-10-29, owner-directed; spec
+  `docs/specs/eve-travel-2026-10-29.md`) — MEASURED in a real browser with a simulated journey clock
+  (every phase captured at 412×915), needs on-device confirmation** (transitScene.ts, WorldsSurface.tsx,
+  TravelPanel.tsx, index.css): the server's 10 s cancel window is now the cinematic, so the flight scene is up the
+  moment you depart (the travel sheet hands over immediately; **Cancel departure** is a button on the HUD).
+  ALIGN (6 s): the home gate is dead ahead, then the SKY swings round the holding ship (works on a narrow phone)
+  until the destination beacon is centred; SPOOL (4 s): countdown 4…1, engines glow white → amber → deep red,
+  FOV narrows and the camera shudders; JUMP: white flash, FOV kick, streaks accelerate from standstill; CRUISE:
+  stretched streaks + edge blur (CSS overlays, no post-processing); ARRIVE: the destination gate decelerates with
+  the ship and sweeps over her, engines cool back to white, then a fade hands over to the world (its models were
+  prefetched; the Station keeps its approach glide) — no loading screen. The clock is the server's (`createdAt`
+  / `departedAt`), so a reload resumes mid-sequence; when the window closes the app asks the server at once instead
+  of holding on "1" until the next poll. Reduced motion: same sequence and timing, no sweep/shake/FOV/flash/blur
+  (engine ramp + countdown stay). Drift keeps the align/spool and stays calm. Her hull is now lit (the travel
+  scene takes the shared environment map). **Test harness:** `warp-sim` style captures need a simulated journey
+  clock because software rendering shows the scene only after the align phase has played. Still open: drift and
+  turn-back were exercised by unit tests only; the origin gate is only seen at the very start.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

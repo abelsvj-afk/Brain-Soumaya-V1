@@ -66,7 +66,8 @@ export default function TravelPanel({
 
   // Once per journey: hand the screen to the flight.
   const transitNotified = useRef<string | null>(null);
-  const underWay = activeJourney && (activeJourney.state === "in_transit" || activeJourney.state === "returning");
+  // The departure cinematic plays through the cancel window, so the sheet hands over as soon as the traveller departs.
+  const underWay = activeJourney && (activeJourney.state === "arming" || activeJourney.state === "in_transit" || activeJourney.state === "returning");
   useEffect(() => {
     if (!underWay || !activeJourney || transitNotified.current === activeJourney.id) return;
     transitNotified.current = activeJourney.id;

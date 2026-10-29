@@ -304,7 +304,7 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     expect(screen.getByRole("dialog", { name: "Travelling to Home" })).toBeTruthy();
   });
 
-  it("arming renders nothing — the user is still at the origin and the panel owns the countdown (P2-5)", () => {
+  it("arming plays the departure: the flight scene is up from the moment of departure, with the cancel button on it (EVE-style travel)", () => {
     mockUseTravel.mockReturnValue(
       atStation({
         state: {
@@ -324,8 +324,8 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
         },
       }),
     );
-    const { container } = mountEngaged(<WorldsSurface enabled />);
-    expect(container.firstChild).toBeNull();
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.getByRole("dialog", { name: "Departing for The Great Station" })).toBeTruthy();
   });
 
   it("at the Station the surface mounts; without WebGL it degrades honestly, and Close is view-only", async () => {

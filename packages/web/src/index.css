@@ -6798,6 +6798,81 @@ button.mindspace-more { cursor: pointer; }
   color: #f3ecd6;
   font-size: 0.82rem;
 }
+/* EVE-style travel overlays (docs/specs/eve-travel-2026-10-29.md). */
+.travel-blur,
+.travel-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.travel-blur {
+  /* Edge blur / vignette: rushing space at the rim, a clear tunnel ahead. No post-processing pass. */
+  background: radial-gradient(ellipse at 50% 45%, transparent 28%, rgba(6, 10, 26, 0.55) 62%, rgba(2, 4, 14, 0.92) 100%);
+  box-shadow: inset 0 0 90px 30px rgba(130, 180, 255, 0.28);
+}
+.travel-flash {
+  background: radial-gradient(circle at 50% 45%, #ffffff 0%, rgba(210, 230, 255, 0.9) 40%, rgba(150, 190, 255, 0.5) 100%);
+}
+.travel-hud {
+  position: absolute;
+  top: calc(var(--worlds-bar-h) + 0.5rem);
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  pointer-events: none;
+  text-shadow: 0 0 10px rgba(5, 8, 24, 0.95), 0 0 2px #000;
+  color: #f2f0ff;
+}
+.travel-hud-phase {
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.travel-hud-count {
+  font-size: 3.6rem;
+  line-height: 1;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: #ffd9a0;
+}
+.travel-hud-cancel {
+  pointer-events: auto;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 190, 140, 0.55);
+  background: rgba(24, 14, 14, 0.82);
+  color: #ffe2cc;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.travel-arrive-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, #ffffff 0%, rgba(200, 220, 255, 0.85) 55%, rgba(120, 160, 255, 0.4) 100%);
+  animation: travel-arrive-fade 1100ms ease-out forwards;
+}
+@keyframes travel-arrive-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The same hand-over, without the flash: a short plain fade. */
+  .travel-arrive-fade {
+    animation-duration: 300ms;
+    background: #05070f;
+  }
+}
 .worlds-surface-canvas canvas {
   display: block;
 }

@@ -83,3 +83,9 @@ export function applyWorldLighting(
     },
   };
 }
+
+/**
+ * The travel corridor lights itself (ambient + key) but, like the worlds, had no environment map: her
+ * metallic hull rendered near-black. The environment alone brightens it without changing the corridor's mood.
+ */
+export const TRANSIT_LIGHT_RIG: WorldLightRig = { env: 1.0 };
