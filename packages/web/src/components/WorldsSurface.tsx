@@ -255,6 +255,9 @@ export function bumpHarvest(spaceId: string | null): number {
   return next;
 }
 
+/** The most a world waits for its Journeys / links / reviews / tends before building (see sceneLayout). */
+export const WORLD_DATA_GRACE_MS = 8000;
+
 /** What the garden opens when her ship arrives (garden v2 walk). */
 type GardenArrival = { kind: "plot" | "pod"; nodeId: number } | { kind: "grove"; journeyId: number };
 
@@ -551,6 +554,9 @@ export default function WorldsSurface({
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
   const [dueReviews, setDueReviews] = useState<DueReview[] | null>(null);
+  const [tendsLoaded, setTendsLoaded] = useState(false);
+  // Longest a world waits for its data before building with what it has.
+  const [dataGraceOver, setDataGraceOver] = useState(false);
   const [journeyLinksMap, setJourneyLinksMap] = useState<Map<number, JourneyLinkSummary[]> | null>(null);
   const [archivedGraph, setArchivedGraph] = useState<GraphData | null>(null);
   const [archivedFailed, setArchivedFailed] = useState(false);
@@ -730,6 +736,20 @@ export default function WorldsSurface({
     return () => window.clearTimeout(timer);
   }, [enabled, inTransit, journeyId, departedAtMs, transitTotalMs, travel.arrive]);
 
+  // Entering the garden or the Deep Past starts a fresh wait for its data:
+  // the previous stay's links / due reviews / tends must not count as ready.
+  useEffect(() => {
+    setDataGraceOver(false);
+    if (!atGarden && !atDeepPast) return;
+    setJourneys(null);
+    setJourneysFailed(false);
+    setJourneyLinksMap(null);
+    setDueReviews(null);
+    setTendsLoaded(false);
+    const t = window.setTimeout(() => setDataGraceOver(true), WORLD_DATA_GRACE_MS);
+    return () => window.clearTimeout(t);
+  }, [atGarden, atDeepPast]);
+
   // Landmarks (garden) and Chronicle routes (Deep Past) need the user's
   // Journeys; the graph prop already carries the memories. A failed fetch
   // omits that layer and says so — it never blocks the world, and it never
@@ -790,10 +810,14 @@ export default function WorldsSurface({
       });
     getRecentGardenTends()
       .then((tends) => {
-        if (!cancelled) setRecentTends(tends);
+        if (cancelled) return;
+        setRecentTends(tends);
+        setTendsLoaded(true);
       })
       .catch(() => {
-        if (!cancelled) setRecentTends([]);
+        if (cancelled) return;
+        setRecentTends([]);
+        setTendsLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -1023,11 +1047,27 @@ export default function WorldsSurface({
     setInteriorRoom(id);
   };
 
+  // The garden and the Deep Past build from several things that arrive one
+  // after another (Journeys, their links, due reviews, recent tends). Each
+  // late arrival changes the layout, and a changed layout rebuilds the whole
+  // 3D view and re-requests its models — measured: 3 mounts and every model
+  // loaded twice. Wait for them (bounded, so a slow request can't hold the
+  // world back) and build once.
+  const journeysSettled = journeys !== null || journeysFailed;
+  const linksSettled = journeysFailed || (journeys !== null && journeyLinksMap !== null);
+  const gardenDataReady =
+    dataGraceOver || (journeysSettled && linksSettled && dueReviews !== null && tendsLoaded);
+  const deepPastDataReady = dataGraceOver || (journeysSettled && linksSettled);
+
   const sceneLayout =
     currentWorld === "growing-place"
-      ? layout
+      ? gardenDataReady
+        ? layout
+        : undefined
       : currentWorld === "deep-past"
-        ? deepPastLayout
+        ? deepPastDataReady
+          ? deepPastLayout
+          : undefined
         : currentWorld === "people"
           ? peopleLayout
           : currentWorld === "quiet-archive"
@@ -1639,10 +1679,10 @@ export default function WorldsSurface({
           {eternityGesture ? ` He is holding ${eternityGesture}.` : ""}
         </p>
       )}
-      {mode === "world" && currentWorld === "growing-place" && !layout && (
+      {mode === "world" && currentWorld === "growing-place" && !sceneLayout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}
-      {mode === "world" && currentWorld === "deep-past" && !deepPastLayout && (
+      {mode === "world" && currentWorld === "deep-past" && !sceneLayout && (
         <p className="worlds-surface-fallback">Your past is loading — your memories are unaffected.</p>
       )}
       {mode === "world" && currentWorld === "people" && !peopleLayout && (

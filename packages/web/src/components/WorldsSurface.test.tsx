@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { announceTravelChanged, requestEnterWorld } from "../lib/travelEvents.js";
-import WorldsSurface from "./WorldsSurface.js";
+import WorldsSurface, { WORLD_DATA_GRACE_MS } from "./WorldsSurface.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
 import { useHarborController, type UseHarborController } from "../hooks/useHarborController.js";
@@ -363,6 +363,25 @@ describe("WorldsSurface — the Growing Place (P3-1)", () => {
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.getByText(/your memories are unaffected/)).toBeTruthy();
+  });
+
+  it("the garden waits for its Journeys before building (one build, not one per late arrival) — but never longer than the grace", async () => {
+    // Measured: every late arrival (Journeys → links → due reviews → tends)
+    // changed the layout and rebuilt the whole 3D view, re-requesting every
+    // model (3 mounts). The world now builds once, when its data has settled.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      mockGetJourneys.mockImplementationOnce(() => new Promise(() => {})); // never settles
+      mockUseTravel.mockReturnValue(atGarden());
+      mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
+      expect(screen.getByText(/Your garden is loading/)).toBeTruthy();
+      act(() => void vi.advanceTimersByTime(WORLD_DATA_GRACE_MS - 500));
+      expect(screen.getByText(/Your garden is loading/)).toBeTruthy(); // still waiting
+      act(() => void vi.advanceTimersByTime(600));
+      expect(screen.queryByText(/Your garden is loading/)).toBeNull(); // grace over: it builds with what it has
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("outside the Station there is no Harbor controller button", () => {

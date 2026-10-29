@@ -451,6 +451,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   at 80–140px (on top of the header buttons) and the room card's top sat at 128px, covering "Back to your
   galaxy" (145–183px). The caption now sits inside the bottom room card and the card is capped at 55% of
   the viewport (top measured at 371px). Needs on-device confirmation on a shorter phone.
+- **Worlds rebuilt 2–3× after opening (Deep Past, and now the garden) — MEASURED, FIXED (2026-10-29)**
+  (WorldsSurface.tsx `sceneLayout`, `WORLD_DATA_GRACE_MS`): with Journeys / their links / due reviews /
+  recent tends arriving one after another, each arrival changed the layout and rebuilt the whole 3D view
+  (3 canvas mounts; every model requested twice). The garden and Deep Past now show "loading" until that
+  data has settled and build once (measured: 1 mount, each model once), bounded by an 8 s grace so a slow
+  request can't hold the world back — past it the world builds with what it has and may rebuild once more
+  when the rest lands. A grove action (done / plant / place) still rebuilds, by design. Pinned by
+  `WorldsSurface.test.tsx` (falsified: removing the wait fails it). Needs on-device confirmation that the
+  wait is invisible on a real network.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
