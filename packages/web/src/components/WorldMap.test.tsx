@@ -165,6 +165,13 @@ describe("WorldMap — selecting and travelling (C3/C4/C8)", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("Escape closes the map too — the standard dialog door every other overlay has", () => {
+    mockUseTravel.mockReturnValue(fakeTravel());
+    const { onClose } = renderMap();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("zoom controls work and Reset view restores the chart", () => {
     mockUseTravel.mockReturnValue(fakeTravel());
     const { container } = renderMap();

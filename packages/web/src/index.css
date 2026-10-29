@@ -7506,8 +7506,9 @@ button.mindspace-more { cursor: pointer; }
   margin-top: 0.75rem;
 }
 
-/* World map (Rev 116) — a full-screen star map on the worlds-surface
-   layer (z-index 70). The live galaxy shows through a dimming scrim and
+/* World map (Rev 116) — a full-screen star map above the worlds
+   surface and the travel sheet (z-index 74), so it can be opened from
+   inside a world and still be the top layer. The live galaxy shows through a dimming scrim and
    the map is drawn over it — fully transparent let the galaxy HUD (title,
    dock, rails, cards) show through at full strength, colliding with the
    map's own bar and controls (seen in a 412×915 headless render). No
@@ -7516,7 +7517,7 @@ button.mindspace-more { cursor: pointer; }
 .world-map {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 74;
   background: rgba(4, 6, 18, 0.82);
   color: #e8ecff;
   overflow: hidden;
@@ -7526,6 +7527,13 @@ button.mindspace-more { cursor: pointer; }
   top: 0;
   left: 0;
   right: 0;
+  /* Above the canvas: the canvas is later in the DOM at the same
+     stacking tier, so without this it painted over the bar and took
+     every tap meant for "Back to your galaxy" — the map had no exit
+     once it was actually drawn (owner report 2026-10-29). The unit
+     tests click the button directly and cannot see hit-testing, so
+     this layering is pinned textually in indexCss.worldsChrome. */
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7547,6 +7555,7 @@ button.mindspace-more { cursor: pointer; }
 .world-map-canvas {
   position: absolute;
   inset: 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
   touch-action: none;
@@ -7607,6 +7616,7 @@ button.mindspace-more { cursor: pointer; }
   position: absolute;
   right: 1rem;
   bottom: 1rem;
+  z-index: 2;
   display: flex;
   gap: 0.5rem;
 }
@@ -7615,6 +7625,7 @@ button.mindspace-more { cursor: pointer; }
   left: 1rem;
   right: 1rem;
   bottom: 1rem;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -7638,6 +7649,44 @@ button.mindspace-more { cursor: pointer; }
   top: 4rem;
   left: 1rem;
   right: 1rem;
+  z-index: 2;
   text-align: center;
   opacity: 0.85;
+}
+
+/* Persistent galaxy chrome in the worlds (owner direction 2026-10-29:
+   "our controls in home galaxy should be on screen anywhere we
+   travel"). The worlds surface is an opaque z-70 layer and every home
+   control lives at z 30–57, so travelling used to bury the whole
+   control set — you had to leave the world view to reach Tools, the
+   world map, chat, or add. While a world is on screen (.worlds-open on
+   the app root, reported by WorldsSurface) the persistent controls
+   rise above the surface (71, under the Tools menu's own 72 and the
+   dialogs' 90+), panels they open rise with them (75), and the Tools
+   button + menu shift below the world's own header/dock so they never
+   cover its Back button or tiles. At home none of these rules apply
+   and the layering is exactly what it was. The galaxy-only controls
+   (views, focus fan, ship stack) do not rise — App does not render
+   them in a world at all; the camera buttons that stay (Recenter,
+   Zoom) are re-pointed at the world camera in App, not here. */
+.app.worlds-open .fab {
+  z-index: 71;
+}
+.app.worlds-open .fuel-gauge {
+  z-index: 71;
+}
+.app.worlds-open .panel {
+  z-index: 75;
+}
+.app.worlds-open .fab-tools {
+  top: calc(4.5rem + env(safe-area-inset-top, 0px));
+}
+.app.worlds-open.worlds-docked .fab-tools {
+  top: calc(9.25rem + env(safe-area-inset-top, 0px));
+}
+.app.worlds-open .tools-menu {
+  top: calc(7.75rem + env(safe-area-inset-top, 0px));
+}
+.app.worlds-open.worlds-docked .tools-menu {
+  top: calc(12.5rem + env(safe-area-inset-top, 0px));
 }

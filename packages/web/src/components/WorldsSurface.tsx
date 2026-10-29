@@ -515,6 +515,24 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
 };
 
+/**
+ * The world camera controls the host's persistent chrome drives while a
+ * world is on screen (see the `controlsRef` prop). One rig for every
+ * world: WorldsSurface owns every world's camera and layers the
+ * traveller's free-look offset (graph/worldLook.ts) on top of each
+ * world's own pose, so resetting and zooming that offset IS resetting
+ * and zooming the world camera — the same thing a double-tap and a
+ * pinch do. While a world runs a scripted camera move (the Station
+ * arrival, the guided descent, the interior) the offset is not applied
+ * and zoom politely does nothing, exactly like the wheel does.
+ */
+export interface WorldControlsHandle {
+  /** Put the view back where the world had it (the double-tap reset). */
+  resetView: () => void;
+  /** Zoom the world view: factor > 1 closer, < 1 further (zoomLook's own words). */
+  zoomBy: (factor: number) => void;
+}
+
 export default function WorldsSurface({
   enabled = WORLDS_TRAVEL_ENABLED,
   graph = null,
@@ -523,6 +541,8 @@ export default function WorldsSurface({
   onFocus,
   onHangarEquipChanged,
   onGardenChanged,
+  onChrome,
+  controlsRef,
 }: {
   enabled?: boolean;
   graph?: GraphData | null;
@@ -541,6 +561,23 @@ export default function WorldsSurface({
   onHangarEquipChanged?: () => void;
   /** Garden v2: a grove action changed the brain (mission done, step planted, memory placed). */
   onGardenChanged?: (newNodeIds?: number[]) => void;
+  /**
+   * Persistent galaxy chrome (owner direction 2026-10-29): the home
+   * galaxy's controls stay on screen in every world. The surface is the
+   * only one who knows when it is actually on screen, so it reports it:
+   * `null` while the traveller is in the home galaxy (or the layer is
+   * dismissed), otherwise which world is showing and whether that world
+   * carries a controls dock (the host shifts its own chrome below it).
+   */
+  onChrome?: (info: { world: string | null; docked: boolean } | null) => void;
+  /**
+   * The world camera's door for the host's persistent camera buttons
+   * (Recenter / Zoom), so in a world they move THIS camera instead of
+   * the hidden galaxy's. Assigned while the surface is mounted; the
+   * methods drive the same free-look offset the traveller's own drag,
+   * pinch, wheel and double-tap drive — no second camera system.
+   */
+  controlsRef?: { current: WorldControlsHandle | null };
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -710,6 +747,34 @@ export default function WorldsSurface({
     };
   }, [visible]);
   journeyRef.current = journey;
+  // Persistent chrome: hand the host the world camera (see controlsRef)
+  // for as long as the surface is mounted. The closures read the refs at
+  // call time, so one assignment serves every world and every scene
+  // rebuild — the free-look rig itself is what changes underneath.
+  useEffect(() => {
+    if (!controlsRef) return;
+    controlsRef.current = {
+      resetView: () => {
+        lookRef.current = NO_LOOK;
+      },
+      zoomBy: (factor: number) => {
+        if (lookAllowedRef.current) lookRef.current = zoomLook(lookRef.current, factor);
+      },
+    };
+    return () => {
+      if (controlsRef) controlsRef.current = null;
+    };
+  }, [controlsRef]);
+  // …and keep the latest onChrome in a ref so the unmount report below
+  // never has to chase a changing callback identity.
+  const onChromeRef = useRef(onChrome);
+  onChromeRef.current = onChrome;
+  useEffect(
+    () => () => {
+      onChromeRef.current?.(null);
+    },
+    [],
+  );
   const refreshTravelRef = useRef<() => Promise<void>>(async () => {});
   refreshTravelRef.current = travel.refresh;
   const lastDepartPollRef = useRef(0);
@@ -1185,10 +1250,23 @@ export default function WorldsSurface({
     };
   }, [atGarden, graph, recentTends]);
 
+  // Persistent chrome: report what is actually on screen (see onChrome).
+  // This must live with the other hooks, above the not-visible early
+  // return — a hook below that return changes count when the layer
+  // wakes and React tears the tree down. `docked` mirrors the dock
+  // groups the render builds below (same conditions, from the same
+  // values): the garden in world mode, the Station, Eternity, and the
+  // Deep Past once its Chronicle thread has loaded — that late arrival
+  // is why docked is an effect dependency, not a render-time extra.
+  const chromeDocked =
+    (atGarden && mode === "world") || atStation || atEternity || (atDeepPast && !!deepPastLayout?.thread);
+  useEffect(() => {
+    onChrome?.(visible ? { world: currentWorld ?? null, docked: chromeDocked } : null);
+  }, [onChrome, visible, currentWorld, chromeDocked]);
+
   // Verb 1: opening the tend sheet for a plot. From a suggestion, the
   // pick is recorded so that suggestion is never counted as ignored.
-  const openTendFor = (node: GraphNode, fromSuggestion = false) => {
-    if (fromSuggestion) pickedSuggestionRef.current = node.id;
+  const openTendFor = (node: GraphNode, fromSuggestion = false) => {    if (fromSuggestion) pickedSuggestionRef.current = node.id;
     setTendNode(node);
   };
 
