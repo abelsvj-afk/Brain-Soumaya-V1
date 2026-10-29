@@ -2,6 +2,7 @@ import { COGNITIVE_META, IDEA_PROMOTE_SUPPORT } from "@brain/shared";
 import type { AppContext } from "../context.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
+import { SourcesRepo } from "../repositories/sources.repo.js";
 import { knn, getEmbedding, upsertEmbedding } from "../db/vec.js";
 import { ftsUpsert } from "../db/fts.js";
 import { cleanAliases } from "./cognitiveTokens.js";
@@ -25,6 +26,25 @@ import { cleanAliases } from "./cognitiveTokens.js";
  * celestial system — ideas aren't entropy-exempt, so lowering importance is all it
  * takes for them to visibly cool and shrink.
  */
+
+/**
+ * Verbatim-Recall V1 section 12D split rule: each child of a split
+ * inherits the parent's active provenance (node_sources) links; the
+ * parent's links are unchanged. The analysis layer CAN reach the repo
+ * (it already constructs NodesRepo/EdgesRepo), so the existing
+ * SourcesRepo.inheritLinksOnSplit helper is used directly — it was
+ * previously dead code, called nowhere, which is why split children
+ * silently lost provenance. A volume without node_sources (pre-V1)
+ * has no links to inherit, so that case degrades to a no-op, mirroring
+ * NodesRepo.softDelete's pre-V1 guard.
+ */
+function inheritSourceLinksOnSplit(handle: AppContext["handle"], spaceId: string, parentId: number, childId: number): void {
+  try {
+    new SourcesRepo(handle, spaceId).inheritLinksOnSplit(parentId, [childId]);
+  } catch {
+    /* pre-V1 volume without node_sources: nothing to inherit */
+  }
+}
 
 const IDEA = COGNITIVE_META.idea;
 const GOAL = COGNITIVE_META.goal;
@@ -255,6 +275,8 @@ export async function splitRipeIdea(ctx: AppContext, spaceId: string): Promise<n
       { label: nameB || `${idea.label} (branch)`, type: "concept", kind: "idea", content: nameB || idea.label, importance: meta.importance, color: meta.color, origin: "agent" },
       emb,
     );
+    // 12D split rule: the new branch inherits the parent's provenance links.
+    inheritSourceLinksOnSplit(ctx.handle, spaceId, idea.id, branch.id);
     const edges = new EdgesRepo(ctx.handle, spaceId);
     for (const b of groupB) {
       s.prepare(`DELETE FROM edges WHERE space_id = ? AND source = ? AND target = ? AND relationship = 'supports'`).run(spaceId, b.id, idea.id);
@@ -325,6 +347,8 @@ export async function splitIdeaManual(
     { label: newLabel, type: "concept", kind: "idea", content: newContent || newLabel, importance: meta.importance, color: meta.color, origin: "user" },
     embB,
   );
+  // 12D split rule: the new branch inherits the parent's provenance links.
+  inheritSourceLinksOnSplit(ctx.handle, spaceId, id, branch.id);
 
   // Partition the supporting memories by nearness to each branch's embedding.
   const embA = getEmbedding(s, id);

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createHash } from "node:crypto";
 import { createDb, type DbHandle } from "../../db/client.js";
 import { HashEmbeddingProvider } from "../../embeddings/hash.js";
 import { HeuristicProvider } from "../../llm/heuristic.js";
@@ -12,6 +13,7 @@ import { dreamPlaybackTool } from "../tools/dreamPlayback.js";
 import { LoreRepo } from "../../lore/engine.js";
 import { captureEpisode } from "../episodic.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
+import { SourcesRepo } from "../../repositories/sources.repo.js";
 import { AGENT_TOOLS, TOOLS } from "../tools/registry.js";
 import { getAgentTool } from "../loop.js";
 
@@ -273,5 +275,40 @@ describe("dream_playback", () => {
     expect(r.ok).toBe(true);
     expect(r.message).toContain("no belief with id 424242");
     expect(new NodesRepo(handle, SPACE).all()).toHaveLength(0);
+  });
+
+  it("records a correction VERBATIM: trailing spaces survive into the persisted source (fix round 4, re-audit P1)", async () => {
+    seedRun();
+    const beliefId = seedBelief({ content: "works the night shift", confidence: 0.44 });
+    const correction = "that's wrong — I work the day shift, not nights   ";
+    const expected = `Correction: ${correction}`;
+
+    const r = await dreamPlaybackTool.run(tc, { beliefId, correction });
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("Recorded as your stated correction");
+
+    // The stated record exists; the SOURCE behind it is byte-exact (§18.2).
+    const nodes = new NodesRepo(handle, SPACE).all();
+    const correctionNode = nodes.find((n) => n.content.includes("Correction:"));
+    expect(correctionNode).toBeDefined();
+    const repo = new SourcesRepo(handle, SPACE);
+    const links = repo.activeLinksForNode(correctionNode!.id);
+    expect(links.length).toBeGreaterThan(0);
+    const source = repo.getById(links[0]!.sourceId);
+    expect(source).toBeDefined();
+    expect(source!.rawText).toBe(expected);
+    expect(source!.rawBytes.equals(Buffer.from(expected, "utf8"))).toBe(true);
+    expect(source!.contentHash).toBe(createHash("sha256").update(Buffer.from(expected, "utf8")).digest("hex"));
+  });
+
+  it("refuses a whitespace-only correction (empty check on the trimmed copy)", async () => {
+    seedRun();
+    const beliefId = seedBelief({ content: "works the night shift", confidence: 0.44 });
+    // No beliefId match would short-circuit first; a whitespace-only
+    // correction with no beliefId falls through to playback (no record).
+    const r = await dreamPlaybackTool.run(tc, { correction: "   " });
+    expect(r.ok).toBe(true);
+    expect(new NodesRepo(handle, SPACE).all()).toHaveLength(0);
+    void beliefId;
   });
 });

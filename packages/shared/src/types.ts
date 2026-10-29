@@ -165,6 +165,15 @@ export interface GraphNode {
   researchQuestions?: string[];
   researchAnswers?: Record<string, string>;
   createdAt: string;
+  /**
+   * Verbatim-Recall V1 provenance plumbing (design section 12D): true
+   * when this node carries at least one ACTIVE `origin` link to a
+   * preserved source in node_sources — i.e. it was extracted from the
+   * owner's own captured words. Absent/false for machine-made nodes
+   * (research expansions, dream output) and all pre-V1 legacy nodes.
+   * Enriched on read by the server; never stored on the node row.
+   */
+  hasOriginSource?: boolean;
 }
 
 /** Curated starter tags offered in the dump UI: a blend of life-areas + moods. */
@@ -326,8 +335,9 @@ export interface Insight {
 /** Where a server-backed Inbox notification came from (IM-74). Each value is a
  *  real server-side event that produced the notification while the user may
  *  have been away: a delivered daily digest, a synthesized insight, a charted
- *  Codex discovery, or a bill-risk warning. */
-export type NotificationSource = "digest" | "insight" | "discovery" | "bill-risk";
+ *  Codex discovery, a bill-risk warning, or a system notice (fix round 2:
+ *  a saved note that could not be processed — the permanent-failure item). */
+export type NotificationSource = "digest" | "insight" | "discovery" | "bill-risk" | "system";
 
 /** A notification in the server-backed Inbox store (IM-74). Unlike the local
  *  toast log (device-only, capped at 100), these persist server-side per space

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createHash } from "node:crypto";
 import { createDb, type DbHandle } from "../db/client.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
 import { HeuristicProvider } from "../llm/heuristic.js";
@@ -9,6 +10,9 @@ import type { LlmProvider, LlmToolCallInput, LlmToolResult } from "../llm/adapte
 import { handleTelegramUpdate, clearTelegramHistory, type TelegramUpdate } from "../telegram/bot.js";
 import { TelegramLinksRepo } from "../telegram/links.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
+import { SourcesRepo } from "../repositories/sources.repo.js";
+import { captureMemoryTool } from "../agent/tools/captureMemory.js";
+import type { ToolContext } from "../agent/tools/types.js";
 
 /**
  * Parity Phase 2 — conversational capture at the Telegram handler level.
@@ -152,5 +156,44 @@ describe("telegram conversational capture — cross-space isolation", () => {
     expect(aNodes).toHaveLength(1);
     expect(aNodes[0]!.content).toBe(CAPTURE_TEXT);
     expect(new NodesRepo(handle, spaceB).all()).toHaveLength(0);
+  });
+});
+
+describe("chat capture — verbatim whitespace (fix round 4, re-audit P1)", () => {
+  const sha = (t: string) => createHash("sha256").update(Buffer.from(t, "utf8")).digest("hex");
+
+  /** The persisted source behind a node: rawBytes are the contract (§18.2). */
+  function sourceOf(spaceId: string, nodeId: number) {
+    const repo = new SourcesRepo(handle, spaceId);
+    const links = repo.activeLinksForNode(nodeId);
+    expect(links.length).toBeGreaterThan(0);
+    const source = repo.getById(links[0]!.sourceId);
+    expect(source).toBeDefined();
+    return source!;
+  }
+
+  it("capture_memory persists the submitted text byte-for-byte, leading AND trailing spaces", async () => {
+    const spaceId = await linkChat(7);
+    const text = "  padded memory with leading and trailing spaces  ";
+    const tc: ToolContext = { ctx, spaceId, now: Date.now(), notify: async () => {} };
+
+    const r = await captureMemoryTool.run(tc, { text });
+    expect(r.ok).toBe(true);
+
+    const nodes = new NodesRepo(handle, spaceId).all();
+    expect(nodes).toHaveLength(1);
+    const source = sourceOf(spaceId, nodes[0]!.id);
+    expect(source.rawText).toBe(text);
+    expect(source.rawBytes.equals(Buffer.from(text, "utf8"))).toBe(true);
+    expect(source.contentHash).toBe(sha(text));
+    expect(source.byteLength).toBe(Buffer.from(text, "utf8").length);
+  });
+
+  it("capture_memory still rejects whitespace-only text", async () => {
+    const spaceId = await linkChat(7);
+    const tc: ToolContext = { ctx, spaceId, now: Date.now(), notify: async () => {} };
+    const r = await captureMemoryTool.run(tc, { text: "   \n  " });
+    expect(r.ok).toBe(false);
+    expect(new NodesRepo(handle, spaceId).all()).toHaveLength(0);
   });
 });

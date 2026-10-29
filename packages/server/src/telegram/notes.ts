@@ -1,9 +1,12 @@
 import type { GraphNode } from "@brain/shared";
 import type { AppContext } from "../context.js";
 import type { DbHandle } from "../db/client.js";
+import type { EmbeddingProvider } from "../embeddings/adapter.js";
+import type { IngestResult } from "../ingestion/pipeline.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
 import { TelegramNoteDraftsRepo, type TelegramNoteDraft } from "../repositories/telegramNoteDrafts.repo.js";
+import { SourcesRepo, extractionHashOf } from "../repositories/sources.repo.js";
 import { linkCognitiveAnchor } from "../analysis/cognitive.js";
 
 /**
@@ -153,41 +156,129 @@ function linkMentionedPeople(handle: DbHandle, spaceId: string, node: GraphNode)
  * only names "user"|"agent", so the provenance is stamped at the SQL layer
  * after the typed create — the row is the record).
  *
- * Cognitive linking is best-effort and edge-only: it may ATTACH the note to
- * people/goals, it can never rewrite its content.
+ * Capture-first (fix round 2, audit P1): the source is persisted BEFORE
+ * any fallible work — the old code embedded first, so a failing embedder
+ * lost the capture before any source row existed. The source row carries
+ * capture_intent='telegram_note', so a crash after persist still recovers
+ * through this direct-note path (processTelegramNoteCapture), never
+ * through generic LLM extraction. Cognitive linking is best-effort and
+ * edge-only: it may ATTACH the note to people/goals, it can never
+ * rewrite its content.
  */
 export async function saveTelegramNote(
   ctx: AppContext,
   spaceId: string,
   rawText: string,
 ): Promise<GraphNode> {
-  const label = noteLabel(rawText);
-  const embedding = await ctx.embeddings.embed(rawText);
-  const nodesRepo = new NodesRepo(ctx.handle, spaceId);
-  const node = nodesRepo.create(
-    {
-      label,
-      type: "daily",
-      content: rawText,
-      tags: ["note", "telegram"],
-      origin: "user",
-    },
-    embedding,
-  );
-  ctx.handle.sqlite
-    .prepare(`UPDATE nodes SET origin = 'telegram' WHERE id = ? AND space_id = ?`)
-    .run(node.id, spaceId);
-  try {
-    linkMentionedPeople(ctx.handle, spaceId, node);
-  } catch {
-    /* best-effort: linking must never fail the save */
+  const sourcesRepo = new SourcesRepo(ctx.handle, spaceId);
+  const { source } = sourcesRepo.persistText({
+    kind: "telegram",
+    citationClass: "verbatim_typed",
+    text: rawText,
+    title: noteLabel(rawText),
+    captureIntent: "telegram_note",
+  });
+  const result = await processTelegramNoteCapture(ctx.handle, ctx.embeddings, source.id, spaceId, ctx);
+  const node = result.nodes[0];
+  if (!node) throw new Error("telegram note capture produced no node");
+  return node;
+}
+
+/**
+ * Fix round 2 (audit P1): complete a DIRECT Telegram-note capture for
+ * an already-persisted source — the shared completion path for
+ * saveTelegramNote AND boot recovery. The node is built from the
+ * source row itself (verbatim content, first-line label, note/telegram
+ * tags, origin 'telegram'), with no LLM extraction anywhere on the
+ * path; people-mention + cognitive linking stay best-effort and
+ * edge-only, after the commit.
+ *
+ * Exactly-once mirrors processSourceExtraction: an extracted source
+ * returns its linked node; a lost claim returns whatever is linked;
+ * a node already linked by a crashed attempt is reused (completion
+ * recorded, nothing recreated); node creation + origin links +
+ * completion run in ONE transaction (Fix B atomicity). The embedding
+ * call stays outside the transaction. `ctx` is optional: recovery
+ * without a full AppContext still completes the note (cognitive
+ * linking is skipped, it is best-effort).
+ */
+export async function processTelegramNoteCapture(
+  h: DbHandle,
+  embeddings: EmbeddingProvider,
+  sourceId: number,
+  spaceId: string,
+  ctx?: AppContext,
+): Promise<IngestResult> {
+  const sourcesRepo = new SourcesRepo(h, spaceId);
+  const nodesRepo = new NodesRepo(h, spaceId);
+  const source = sourcesRepo.getById(sourceId);
+  if (!source) throw new Error(`processTelegramNoteCapture: source ${sourceId} not found`);
+  const rawText = source.rawText ?? "";
+  const existingNodes = (): GraphNode[] =>
+    nodesRepo.byIds(sourcesRepo.nodeIdsWithOriginFrom(sourceId), { includeSuperseded: true });
+
+  if (source.processingStatus === "extracted") {
+    return { nodes: existingNodes(), extractedEdges: [], associativeEdges: [] };
+  }
+  const owner = `telegram-note:${process.pid}:${Date.now()}`;
+  const claimed = sourcesRepo.claim(sourceId, owner);
+  if (!claimed) {
+    // Another worker holds the lease (or the source went terminal):
+    // create nothing; surface whatever is already linked.
+    return { nodes: existingNodes(), extractedEdges: [], associativeEdges: [] };
   }
   try {
-    linkCognitiveAnchor(ctx, spaceId, node.id, node.label, embedding);
-  } catch {
-    /* best-effort, same contract as the ingest pipeline */
+    // Crash-after-node-creation (pre-fix-2 shape): node already linked
+    // but completion never recorded — reuse it, create nothing.
+    const prior = existingNodes();
+    if (prior.length > 0) {
+      sourcesRepo.completeExtraction(sourceId, owner, extractionHashOf(prior));
+      for (const n of prior) n.hasOriginSource = true;
+      return { nodes: prior, extractedEdges: [], associativeEdges: [] };
+    }
+    const label = noteLabel(rawText);
+    const embedding = await embeddings.embed(rawText);
+    let node: GraphNode | undefined;
+    const writeTx = h.sqlite.transaction(() => {
+      const created = nodesRepo.create(
+        {
+          label,
+          type: "daily",
+          content: rawText,
+          tags: ["note", "telegram"],
+          origin: "user",
+        },
+        embedding,
+      );
+      sourcesRepo.linkNodeToAllChunks(created.id, sourceId);
+      if (!sourcesRepo.completeExtraction(sourceId, owner, extractionHashOf([created]))) {
+        throw new Error(`processTelegramNoteCapture: completion lost the lease for source ${sourceId}`);
+      }
+      h.sqlite
+        .prepare(`UPDATE nodes SET origin = 'telegram' WHERE id = ? AND space_id = ?`)
+        .run(created.id, spaceId);
+      created.hasOriginSource = true;
+      node = created;
+    });
+    writeTx();
+    const done = nodesRepo.getById(node!.id) ?? node!;
+    try {
+      linkMentionedPeople(h, spaceId, done);
+    } catch {
+      /* best-effort: linking must never fail the save */
+    }
+    if (ctx) {
+      try {
+        linkCognitiveAnchor(ctx, spaceId, done.id, done.label, embedding);
+      } catch {
+        /* best-effort, same contract as the ingest pipeline */
+      }
+    }
+    return { nodes: [done], extractedEdges: [], associativeEdges: [] };
+  } catch (err) {
+    sourcesRepo.failExtraction(sourceId, owner);
+    throw err;
   }
-  return nodesRepo.getById(node.id) ?? node;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +295,21 @@ export function isNoteCommand(trimmedText: string): boolean {
   );
 }
 
+/**
+ * Fix round 4 (§18.2 byte-exact contract): strip a command token from the
+ * RAW message text — the token plus exactly ONE following whitespace
+ * delimiter character (if present) — and preserve everything else
+ * byte-for-byte (leading spaces beyond the delimiter, trailing spaces).
+ * Command DETECTION still runs on the trimmed copy; only the persisted
+ * payload is derived here. When the raw text does not start with the
+ * token (a direct caller with no raw input), there is no body to keep.
+ */
+export function stripCommandBody(rawText: string, command: "/log" | "/note"): string {
+  const m = new RegExp(`^(\\s*)${command}(\\s|$)`).exec(rawText);
+  if (!m) return "";
+  return rawText.slice(m[0].length);
+}
+
 function statusText(draft: TelegramNoteDraft): string {
   return (
     `${draft.partCount} part${draft.partCount === 1 ? "" : "s"}, ` +
@@ -215,6 +321,11 @@ function statusText(draft: TelegramNoteDraft): string {
  * Handle /note, /done and /cancel. Returns the reply to send, or null when
  * the message is not a note command (the caller then continues its normal
  * dispatch — this is what keeps commands and chat untouched by note code).
+ *
+ * `trimmedText` drives command detection; `rawText` (the message exactly
+ * as received, when the caller has it) supplies the /note initial part
+ * verbatim — see stripCommandBody. Without it, the initial part falls
+ * back to the trimmed text (the pre-fix-round-4 behavior).
  */
 export async function handleNoteCommand(
   ctx: AppContext,
@@ -222,6 +333,7 @@ export async function handleNoteCommand(
   chatId: number,
   trimmedText: string,
   nowMs: number,
+  rawText?: string,
 ): Promise<string | null> {
   if (!isNoteCommand(trimmedText)) return null;
   const repo = new TelegramNoteDraftsRepo(ctx.handle);
@@ -267,15 +379,19 @@ export async function handleNoteCommand(
       `If you leave it untouched for 24 hours, the draft is discarded.`
     );
   }
-  const initial = trimmedText.slice("/note".length).trim();
-  if (initial.length > NOTE_MAX_CHARS) {
+  // Fix round 4 (§18.2): the initial part is the RAW text after the token
+  // (one delimiter consumed, the rest byte-for-byte); length/empty checks
+  // use the trimmed copy.
+  const initial = stripCommandBody(rawText ?? trimmedText, "/note");
+  const trimmedInitial = initial.trim();
+  if (trimmedInitial.length > NOTE_MAX_CHARS) {
     return (
-      `That first part alone is ${initial.length} characters — a note can hold at most ` +
+      `That first part alone is ${trimmedInitial.length} characters — a note can hold at most ` +
       `${NOTE_MAX_CHARS}. Note not started; try a shorter opening or split it up after /note.`
     );
   }
-  const started = repo.insert(spaceId, chatId, initial, initial ? 1 : 0, iso(nowMs));
-  return initial
+  const started = repo.insert(spaceId, chatId, initial, trimmedInitial ? 1 : 0, iso(nowMs));
+  return trimmedInitial
     ? `📝 Note started — part 1 saved (${statusText(started)}). Keep sending, /done to save, /cancel to discard. Typed messages only — voice notes can't join a note yet. If you leave the draft untouched for 24 hours, it's discarded.`
     : "📝 Note started — send your note in as many messages as you like; I'll keep every word exactly as sent. Typed messages only — voice notes can't join a note yet. /done saves it, /cancel discards it. If you leave the draft untouched for 24 hours, it's discarded.";
 }

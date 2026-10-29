@@ -8,7 +8,8 @@ import { UsageTracker } from "../usage.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
 import { createCognitive, listCognitive } from "../analysis/cognitive.js";
-import { splitIdeaManual, mergeIdeasManual } from "../analysis/ideas.js";
+import { splitIdeaManual, mergeIdeasManual, splitRipeIdea } from "../analysis/ideas.js";
+import { SourcesRepo } from "../repositories/sources.repo.js";
 
 /**
  * IM-136 — user-triggered idea split / merge (docs/COGNITIVE_LAYER.md Phase 3).
@@ -152,5 +153,53 @@ describe("IM-136 — manual idea split", () => {
     expect(await splitIdeaManual(ctx, "legacy", goal, { newLabel: "Nope" })).toBeNull();
     expect(await splitIdeaManual(ctx, "legacy", 999_999, { newLabel: "Nope" })).toBeNull();
     expect(listCognitive(ctx, "legacy", "idea")).toEqual([]);
+  });
+});
+
+describe("Fix D regression: 12D split link inheritance", () => {
+  function linkIdeaToSource(ideaId: number) {
+    const repo = new SourcesRepo(handle, "legacy");
+    const { source } = repo.persistText({
+      kind: "note",
+      citationClass: "verbatim_typed",
+      text: "the exact words behind this idea, kept verbatim",
+    });
+    repo.linkNodeToAllChunks(ideaId, source.id);
+    return { repo, source };
+  }
+
+  it("manual split: child inherits the parent's active origin links; parent's links unchanged", async () => {
+    const idea = await createCognitive(ctx, "legacy", "idea", "Weekend projects", "the weekend pile");
+    const { repo, source } = linkIdeaToSource(idea);
+    const parentBefore = repo.activeLinksForNode(idea);
+    expect(parentBefore.length).toBeGreaterThan(0);
+    expect(parentBefore.every((l) => l.sourceId === source.id)).toBe(true);
+
+    const out = await splitIdeaManual(ctx, "legacy", idea, { newLabel: "Cooking projects" });
+    expect(out).not.toBeNull();
+    expect(repo.activeLinksForNode(out!.newId)).toEqual(parentBefore);
+    expect(repo.activeLinksForNode(idea)).toEqual(parentBefore);
+    expect(repo.hasActiveOriginLink(out!.newId)).toBe(true);
+  });
+
+  it("autonomous split (splitRipeIdea): the new branch inherits the parent's origin links; parent's links unchanged", async () => {
+    const id = await createCognitive(ctx, "legacy", "idea", "A creative project", "");
+    const { repo } = linkIdeaToSource(id);
+    const parentBefore = repo.activeLinksForNode(id);
+    expect(parentBefore.length).toBeGreaterThan(0);
+    const nodes = new NodesRepo(handle, "legacy");
+    const edges = new EdgesRepo(handle, "legacy");
+    for (let i = 0; i < 3; i++) {
+      const m = nodes.create({ label: `music ${i}`, type: "daily", content: "recording guitar songs in the studio" } as never, await embeddings.embed("recording guitar songs in the studio"));
+      edges.create({ source: m.id, target: id, relationship: "supports", weight: 0.7 });
+    }
+    for (let i = 0; i < 3; i++) {
+      const m = nodes.create({ label: `garden ${i}`, type: "daily", content: "planting tomatoes in the vegetable garden" } as never, await embeddings.embed("planting tomatoes in the vegetable garden"));
+      edges.create({ source: m.id, target: id, relationship: "supports", weight: 0.7 });
+    }
+    const branchId = await splitRipeIdea(ctx, "legacy");
+    expect(branchId).not.toBeNull();
+    expect(repo.activeLinksForNode(branchId!)).toEqual(parentBefore);
+    expect(repo.activeLinksForNode(id)).toEqual(parentBefore);
   });
 });

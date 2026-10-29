@@ -111,7 +111,11 @@ export const dreamPlaybackTool: Tool = {
 
   async run(tc: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
     const s = tc.ctx.handle.sqlite;
-    const correction = String(args.correction ?? "").trim();
+    // Fix round 4 (§18.2 byte-exact contract): the correction is recorded
+    // verbatim — the persisted text carries the UNTRIMMED correction; only
+    // the empty check uses the trimmed copy.
+    const correctionRaw = String(args.correction ?? "");
+    const correction = correctionRaw.trim();
     const beliefId = typeof args.beliefId === "number" && Number.isInteger(args.beliefId) ? args.beliefId : null;
 
     // ----- Correction path: stated input via the capture/ingest intake. -----
@@ -129,7 +133,7 @@ export const dreamPlaybackTool: Tool = {
           };
         }
       }
-      const text = `Correction: ${correction}`;
+      const text = `Correction: ${correctionRaw}`;
 
       // Idempotency (captureMemory precedent): the approval id stamps the
       // first ingested node; a crash-retry dedups instead of re-ingesting.
