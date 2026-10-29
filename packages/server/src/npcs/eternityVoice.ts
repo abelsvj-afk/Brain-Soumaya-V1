@@ -1,5 +1,5 @@
 import type { DbHandle } from "../db/client.js";
-import type { LlmProvider } from "../llm/adapter.js";
+import type { EternalVoice } from "./eternityVoiceProvider.js";
 
 /**
  * Eternity's voice (docs/specs/eternity-autonomy-2026-10-29.md §2b). The owner allowed his words to be drawn from the
@@ -103,21 +103,27 @@ export function cleanLine(raw: string): string | null {
   return s;
 }
 
-/** His words for an occasion: the model when it can, his own lines otherwise. Never throws. */
+/**
+ * His words for an occasion. With a voice: the model's line, or — when it fails (rate limit, timeout, no answer) —
+ * `null` if the caller will try again later, or his own lines if `fallback` is set. Without a voice: his own lines.
+ * Never throws.
+ */
 export async function speakAsEternity(
-  llm: LlmProvider | undefined,
+  voice: Pick<EternalVoice, "eternalVoice"> | null | undefined,
   occasion: EternityOccasion,
   memories: readonly EternityMemory[],
   localTime: string,
   seed: string,
-): Promise<{ line: string; source: "voice" | "template" }> {
-  if (llm?.eternalVoice && llm.available !== false) {
+  opts: { fallback?: boolean } = { fallback: true },
+): Promise<{ line: string; source: "voice" | "template" } | null> {
+  if (voice) {
     try {
-      const line = cleanLine(await llm.eternalVoice(occasion, eternityBrief(occasion, memories, localTime)));
+      const line = cleanLine(await voice.eternalVoice(occasion, eternityBrief(occasion, memories, localTime)));
       if (line) return { line, source: "voice" };
     } catch {
-      /* no key, quota, timeout — his own lines carry the moment */
+      /* rate limit, timeout, no answer — the caller decides: try again later, or his own lines now */
     }
+    if (!opts.fallback) return null;
   }
   return { line: templateLine(occasion, memories, seed), source: "template" };
 }

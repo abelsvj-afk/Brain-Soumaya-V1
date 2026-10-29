@@ -578,6 +578,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   "N more in your Inbox" note (they're all in the Inbox already); at most 3 toasts on screen; discoveries are normal priority;
   the lag prompt waits for the first run to finish. Measured (sampled every second for 75 s): max 1 first-run surface at once,
   0 URGENT badges, 0 page errors. Look at: whether the legend arriving after the Observatory feels natural on a real phone.
+- **Eternity's voice on the free Gemini key, with retries (2026-10-30, owner-directed) — unit-tested; NOT yet heard live**
+  (npcs/eternityVoiceProvider.ts, eternityContact.ts, index.ts): he calls Gemini (`GEMINI_API_KEY`, model `LLM_MODEL` or
+  gemini-2.5-flash) through his OWN provider even when `OPENAI_API_KEY` is set (the shared provider always prefers OpenAI), metered in
+  the usage ledger and stopped by the spend budget; falls back to the shared provider, then to his offline lines. A failed call is
+  retried at +3, +6, +12 min before his offline lines; a wake-up being retried may finish past 11:00. The boot log prints
+  `[eternity] voice: gemini | shared | offline lines`. **Owner check:** confirm `GEMINI_API_KEY` is set on Fly (Secrets) — the key
+  must never be pasted into chat or committed.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

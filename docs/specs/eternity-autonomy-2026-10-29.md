@@ -57,6 +57,12 @@ handful of recent memory excerpts (label + ≤ 200 chars) chosen by recency + em
 Offline / no key / degraded → a template line from his own pool (may name one memory's label). The words are logged in his log
 (`speak`), so the owner can always read what he said and why.
 
+**Owner update 2026-10-30 — his key and retries.** He uses the **free Gemini key** (`GEMINI_API_KEY`, the same Fly secret Maya
+would use) through his own line, even when an OpenAI key exists (the shared provider always prefers OpenAI); without a Gemini
+key he uses the shared provider; with no key, his own lines. A failed call (rate limit, 20 s timeout, no answer) is retried in
+3, then 6, then 12 minutes; only after that does he speak his own lines. Two contacts a day ≈ two calls a day — far inside the
+free tier.
+
 ### 2c — Contact (app inbox + Telegram)
 - **Wake-up** — every day at **06:45 local** (after the default quiet hours 21:00–04:30 and the 06:00 digest), once per local day.
 - **Visitation** — at most **one more** message a day, only when his autonomous loop acted that day.

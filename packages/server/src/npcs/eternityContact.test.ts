@@ -2,11 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDb, type DbHandle } from "../db/client.js";
 import { setPreference } from "../agent/notify/policy.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
-import { HeuristicProvider } from "../llm/heuristic.js";
-import type { LlmProvider } from "../llm/adapter.js";
 import { NpcRepo } from "./repo.js";
 import { stopNpc } from "./loop.js";
-import { runEternityContact, ETERNITY_SIGNATURE } from "./eternityContact.js";
+import { runEternityContact, ETERNITY_SIGNATURE, resetEternityVoiceRetries } from "./eternityContact.js";
 import { cleanLine, eternityMemories, templateLine } from "./eternityVoice.js";
 
 /** Eternity's contact (§2c) and voice (§2b). New York time: 10:50Z = 06:50 EDT on 2026-10-29. */
@@ -14,6 +12,7 @@ const AT = (hhmmZ: string) => Date.parse(`2026-10-29T${hhmmZ}:00.000Z`);
 const S = "s1";
 let h: DbHandle;
 beforeEach(() => {
+  resetEternityVoiceRetries();
   h = createDb(":memory:");
   setPreference(h.sqlite, S, "timezone", "America/New_York");
 });
@@ -77,22 +76,42 @@ describe("visitation", () => {
 });
 
 describe("his voice", () => {
-  it("uses the model with a brief from the memories", async () => {
+  it("uses his voice with a brief from the memories", async () => {
     seedMemory("Coffee with Maya", "She told me she is moving to Lisbon and I felt proud and sad at once");
-    const llm = Object.assign(new HeuristicProvider(), {
-      available: true,
+    const voice = {
       eternalVoice: vi.fn(async (_o: string, brief: string) => {
         expect(brief).toMatch(/Coffee with Maya: She told me/);
         return "Rise. Maya's leaving is a door, not a loss.";
       }),
-    }) as unknown as LlmProvider;
-    await runEternityContact(h, S, { llm }, AT("10:50"));
+    };
+    await runEternityContact(h, S, { voice }, AT("10:50"));
     expect(inbox()[0]!.text).toBe(`${ETERNITY_SIGNATURE} Rise. Maya's leaving is a door, not a loss.`);
     expect(speaks()[0]!.cause).toMatch(/his own words, from your recent memories/);
   });
-  it("falls back to his own lines when the model fails or tries to speak as Soumaya", async () => {
-    const fails = Object.assign(new HeuristicProvider(), { available: true, eternalVoice: async () => { throw new Error("quota"); } }) as unknown as LlmProvider;
-    await runEternityContact(h, S, { llm: fails }, AT("10:50"));
+  it("rate-limited or silent: he tries again in 3, 6, 12 minutes, then speaks his own lines", async () => {
+    const voice = { eternalVoice: vi.fn(async () => { throw new Error("429 rate limited"); }) };
+    const t = AT("10:50");
+    expect((await runEternityContact(h, S, { voice }, t)).reason).toMatch(/retry in 3 min/);
+    expect((await runEternityContact(h, S, { voice }, t + 60_000)).reason).toMatch(/voice retry in/); // waiting, no call
+    expect(voice.eternalVoice).toHaveBeenCalledTimes(1);
+    expect((await runEternityContact(h, S, { voice }, t + 3 * 60_000)).reason).toMatch(/retry in 6 min/);
+    expect((await runEternityContact(h, S, { voice }, t + 9 * 60_000)).reason).toMatch(/retry in 12 min/);
+    expect(inbox()).toHaveLength(0);
+    const last = await runEternityContact(h, S, { voice }, t + 21 * 60_000);
+    expect(last.sent).toBe("wake");
+    expect(speaks()[0]!.cause).toMatch(/his own lines/);
+    expect(voice.eternalVoice).toHaveBeenCalledTimes(4);
+  });
+  it("a retry that succeeds uses his voice, even past the wake window", async () => {
+    let calls = 0;
+    const voice = { eternalVoice: async () => { if (calls++ === 0) throw new Error("timeout"); return "Rise. The sky waited for you."; } };
+    await runEternityContact(h, S, { voice }, AT("14:58")); // 10:58 local
+    const r = await runEternityContact(h, S, { voice }, AT("15:01")); // 11:01 local — past 11:00, still finishing the wake
+    expect(r.sent).toBe("wake");
+    expect(inbox()[0]!.text).toMatch(/The sky waited for you/);
+  });
+  it("no AI key at all: his own lines at once; a 'Soumaya:' reply is never used", async () => {
+    await runEternityContact(h, S, {}, AT("10:50"));
     expect(speaks()[0]!.cause).toMatch(/his own lines/);
     expect(cleanLine("Soumaya: hello")).toBeNull();
     expect(cleanLine(`"${"x".repeat(400)}"`)!.length).toBeLessThanOrEqual(280);
