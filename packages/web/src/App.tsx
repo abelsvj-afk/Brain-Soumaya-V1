@@ -612,6 +612,8 @@ export default function App() {
   // The visual legend (🗺️) — auto-shows ONCE per brain so new users learn the
   // galaxy's language, then it's a tap away whenever they forget.
   const [showLegend, setShowLegend] = useState(false);
+  // First-run calm: true until this brain's one-time legend has been shown and closed (toasts wait for it too).
+  const [legendPending, setLegendPending] = useState(false);
   const [showLenses, setShowLenses] = useState(false);
   // True while the "Soumaya noticed" card is open — the object-lore card (same slot)
   // hides so the two never stack on top of each other.
@@ -1471,8 +1473,17 @@ export default function App() {
   // Buffer celebratory toasts until the Observatory gate resolves (so they don't
   // pop behind the cards). Signed-out never gates. Flushes on settle.
   useEffect(() => {
-    setToastsPaused(!!space && (showObs || !obsSettled));
-  }, [space, showObs, obsSettled]);
+    // First-run calm: toasts also wait for the Welcome card and the legend (docs/specs/first-run-calm-2026-10-30.md).
+    setToastsPaused(!!space && (showObs || !obsSettled || showIntro || showLegend || legendPending));
+  }, [space, showObs, obsSettled, showIntro, showLegend, legendPending]);
+  useEffect(() => {
+    if (!space) return;
+    try {
+      setLegendPending(!localStorage.getItem(`brain.legendSeen.${space.id}`));
+    } catch {
+      setLegendPending(false); // private mode: never hold toasts on a legend we can't remember showing
+    }
+  }, [space?.id]);
 
   // Autonomous hail: once per app open, if Soumaya has surfaced something worth
   // seeing (a latent insight), she flies into view with a message and the 💬 FAB
@@ -1516,20 +1527,21 @@ export default function App() {
   // First-run: show the visual legend ONCE per brain (after data loads) so a new
   // user learns the galaxy's language up front; thereafter it's the 🗺️ FAB. Also waits
   // out the first-launch framing card (same reasoning as the Observatory effect above).
+  // First-run calm: one surface at a time — the legend waits until the Observatory has been closed and no panel is open.
   useEffect(() => {
-    if (!space || !loaded || showIntro) return;
+    if (!space || !loaded || showIntro || showObs || !obsSettled || panel !== null) return;
     const key = `brain.legendSeen.${space.id}`;
     try {
       if (localStorage.getItem(key)) return;
       const t = window.setTimeout(() => {
         setShowLegend(true);
         localStorage.setItem(key, "1");
-      }, 5200); // after the fly-in + Observatory have settled
+      }, 1500);
       return () => window.clearTimeout(t);
     } catch {
       /* private mode */
     }
-  }, [space?.id, loaded, showIntro]);
+  }, [space?.id, loaded, showIntro, showObs, obsSettled, panel]);
 
   // Close the Observatory and release any buffered toasts. The 🔭 FAB reopens it.
   const dismissObs = useCallback(() => {
@@ -2350,7 +2362,7 @@ export default function App() {
         </div>
       )}
 
-      {perfSuggest && (
+      {perfSuggest && !showIntro && !showObs && !showLegend && !legendPending && (obsSettled || !space) && (
         <div className="perf-suggest">
           <span>Soumaya noticed some lag — switch to Performance Mode?</span>
           <button
@@ -2460,7 +2472,14 @@ export default function App() {
         />
       )}
 
-      {showLegend && <Legend onClose={() => setShowLegend(false)} />}
+      {showLegend && (
+        <Legend
+          onClose={() => {
+            setShowLegend(false);
+            setLegendPending(false);
+          }}
+        />
+      )}
       {showIntro && space && (
         <WelcomeIntro
           companionName={space.name || "Soumaya"}

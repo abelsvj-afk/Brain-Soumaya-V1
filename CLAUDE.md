@@ -569,6 +569,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   (never on top of first-run screens) he leaves ONE toast a day: the broadcast line, a crown for a Journey finished this week,
   and "parted the veil" on your top memory due for recall — tapping flies you to that star (he only offers; you recall). The kill
   switch silences all of it. Look at: whether the halo is visible but not distracting on a real phone, and the toast's wording.
+- **First-run calm — one thing at a time (2026-10-30, owner: "fix the first-run overlay pile-up") — MEASURED in a real browser on
+  a fresh first run, needs on-device confirmation** (App.tsx, Toasts.tsx, useCodexDiscoveryClaims.ts; spec
+  `docs/specs/first-run-calm-2026-10-30.md`): before, the legend opened on its own 5.2 s timer over the Observatory, every held
+  toast flushed at once on top of it, routine Codex discoveries wore "URGENT", and the lag prompt could cover all of it. Now:
+  Welcome → Observatory → legend (only after the Observatory is closed and no panel is open) → then toasts; toasts are held while
+  any of those is up OR the one-time legend is still due; a held queue releases at most 2 (most important, then newest) plus one
+  "N more in your Inbox" note (they're all in the Inbox already); at most 3 toasts on screen; discoveries are normal priority;
+  the lag prompt waits for the first run to finish. Measured (sampled every second for 75 s): max 1 first-run surface at once,
+  0 URGENT badges, 0 page errors. Look at: whether the legend arriving after the Observatory feels natural on a real phone.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

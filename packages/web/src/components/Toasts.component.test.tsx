@@ -65,14 +65,14 @@ describe("maybeFlush — unpausing must not bypass a still-active quiet mode", (
   });
 });
 
-describe("Toasts — overflow beyond the 4 visible slots is surfaced, not silently dropped", () => {
-  it("shows a '+N more' note when more than 4 toasts land at once", async () => {
+describe("Toasts — overflow beyond the 3 visible slots is surfaced, not silently dropped", () => {
+  it("shows a '+N more' note when more than 3 toasts land at once", async () => {
     const { Toasts, pushToast } = await freshToasts();
     render(<Toasts />);
     act(() => {
       for (let i = 0; i < 6; i++) pushToast(`Toast ${i}`, "✨", 8000);
     });
-    expect(screen.getByText("2 more notifications — see Inbox")).toBeTruthy();
+    expect(screen.getByText("3 more notifications — see Inbox")).toBeTruthy();
   });
 
   it("clears the overflow note on its own after a few seconds", async () => {
@@ -126,7 +126,7 @@ describe("Toasts — the overflow chip opens the Inbox (REG-072 / GH-21)", () =>
       act(() => {
         for (let i = 0; i < 6; i++) pushToast(`Toast ${i}`, "✨", 8000);
       });
-      const chip = screen.getByText("2 more notifications — see Inbox");
+      const chip = screen.getByText("3 more notifications — see Inbox");
       fireEvent.click(chip);
       expect(onAction).toHaveBeenCalledWith(
         expect.objectContaining({ detail: { kind: "tab", value: "inbox" } }),
@@ -134,5 +134,28 @@ describe("Toasts — the overflow chip opens the Inbox (REG-072 / GH-21)", () =>
     } finally {
       window.removeEventListener("brain-toast-action", onAction);
     }
+  });
+});
+
+
+describe("Toasts — first-run calm (docs/specs/first-run-calm-2026-10-30.md)", () => {
+  it("a held queue releases at most 2, the most important first, and points to the Inbox for the rest", async () => {
+    const { Toasts, pushToast, setToastsPaused } = await freshToasts();
+    render(<Toasts />);
+    act(() => {
+      setToastsPaused(true);
+      pushToast("Routine A", "✨", 8000, "low");
+      pushToast("Routine B", "✨", 8000, "normal");
+      pushToast("Important", "✨", 8000, "high");
+      pushToast("Routine C", "✨", 8000, "normal");
+      pushToast("Routine D", "✨", 8000, "low");
+    });
+    expect(screen.queryByText("Important")).toBeNull(); // held
+    act(() => setToastsPaused(false));
+    expect(screen.getByText("Important")).toBeTruthy();
+    expect(screen.getByText("Routine C")).toBeTruthy(); // newest normal
+    expect(screen.queryByText("Routine A")).toBeNull();
+    expect(screen.queryByText("Routine D")).toBeNull();
+    expect(screen.getByText("3 more in your Inbox")).toBeTruthy();
   });
 });

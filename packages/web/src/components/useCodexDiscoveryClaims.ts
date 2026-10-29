@@ -52,7 +52,7 @@ export function useCodexDiscoveryClaims(
       claimingKeys.add(`${spaceId}:${e.id}`);
     }
     for (const e of fresh.slice(0, 4)) {
-      pushToast(`Codex: discovered “${e.title}”`, "📖", 6000, "high");
+      pushToast(`Codex: discovered “${e.title}”`, "📖", 6000, "normal"); // routine news, not urgent (first-run calm, rule 4)
     }
     let cancelled = false;
     void (async () => {

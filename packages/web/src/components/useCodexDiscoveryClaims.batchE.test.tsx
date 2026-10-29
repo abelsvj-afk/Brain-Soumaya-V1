@@ -72,7 +72,7 @@ describe("REG-047 — Codex claims fire at App level, not only on panel open", (
     await waitFor(() => expect(claimCodexReward).toHaveBeenCalled());
     const claimed = claimCodexReward.mock.calls.map((c) => c[0] as string);
     expect(claimed.length).toBeGreaterThan(0);
-    expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Codex: discovered"), "📖", 6000, "high");
+    expect(pushToast).toHaveBeenCalledWith(expect.stringContaining("Codex: discovered"), "📖", 6000, "normal");
     expect(playSfx).toHaveBeenCalledWith("achievement");
     const seen = JSON.parse(localStorage.getItem("codex.seen.s1") || "[]") as string[];
     for (const id of claimed) expect(seen).toContain(id);

@@ -60,6 +60,11 @@ const buffer: Toast[] = [];
 // up an ever-growing queue that all landed at once on flush. Cap it and drop the
 // oldest non-high entries first — a high-priority toast is rare and worth keeping.
 const MAX_BUFFER = 30;
+/** First-run calm (docs/specs/first-run-calm-2026-10-30.md): a held queue releases at most this many at once; the rest
+ *  are already in the Inbox and are summarised by one note that opens it. */
+export const FLUSH_MAX = 2;
+/** At most this many toasts on screen at once. */
+export const VISIBLE_MAX = 3;
 function maybeFlush(): void {
   if (paused || buffer.length === 0) return;
   // The buffer can hold a mix of "paused-buffered" (any priority) and
@@ -74,9 +79,27 @@ function maybeFlush(): void {
     const entry = buffer[i];
     if (entry && releasedIds.has(entry.id)) buffer.splice(i, 1);
   }
-  for (const t of releasable) {
+  // Show the most important, then the newest — never a wall of them. Every one is already in the Inbox.
+  const rank = (t: Toast) => (t.priority === "high" ? 2 : t.priority === "normal" ? 1 : 0);
+  // Ids grow with every push, so they order "newest" even when several land in the same millisecond.
+  const shown = [...releasable].sort((a, b) => rank(b) - rank(a) || b.id - a.id).slice(0, FLUSH_MAX);
+  shown.sort((a, b) => a.id - b.id);
+  const rest = releasable.length - shown.length;
+  for (const t of shown) {
     for (const l of listeners) l(t);
     playSfx(t.priority === "high" ? "achievement" : "notify"); // flushed toasts used to play no sound at all
+  }
+  if (rest > 0) {
+    const note: Toast = {
+      id: nextId++,
+      text: `${rest} more in your Inbox`,
+      icon: "📥",
+      ttl: 6000,
+      priority: "low",
+      action: { kind: "tab", value: "inbox" },
+      createdAt: Date.now(),
+    };
+    for (const l of listeners) l(note);
   }
 }
 export function setToastsPaused(p: boolean): void {
@@ -226,15 +249,15 @@ export function Toasts() {
         // once) left no trace anything happened at all. Note it instead — each
         // dropped id counted exactly once even if this updater re-runs (e.g.
         // React StrictMode's double-invoke in dev).
-        if (merged.length > 4) {
-          for (const dropped of merged.slice(0, merged.length - 4)) {
+        if (merged.length > VISIBLE_MAX) {
+          for (const dropped of merged.slice(0, merged.length - VISIBLE_MAX)) {
             if (!droppedIdsRef.current.has(dropped.id)) {
               droppedIdsRef.current.add(dropped.id);
               setOverflowCount((c) => c + 1);
             }
           }
         }
-        return merged.slice(-4); // limit to max 4 visible toasts
+        return merged.slice(-VISIBLE_MAX);
       });
     };
     listeners.add(add);
