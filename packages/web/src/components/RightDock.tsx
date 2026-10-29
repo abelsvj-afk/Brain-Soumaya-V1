@@ -171,18 +171,19 @@ export function dockAmbientDetail(
   return `${counts}${viewing} · ${timeStr}`;
 }
 
+import { renderIcon } from "./icons/Icon.js";
 const TABS: { id: DockTab; label: string; name: string }[] = [
-  { id: "details", label: "ⓘ", name: "Details" },
-  { id: "list", label: "📚", name: "Browse" },
-  { id: "mind", label: "🧠", name: "Mind" },
-  { id: "actions", label: "✅", name: "Agenda" },
-  { id: "insights", label: "✨", name: "Insights" },
-  { id: "soumaya", label: "🛰️", name: "Soumaya" },
-  { id: "inbox", label: "🔔", name: "Inbox" },
-  { id: "awards", label: "🏆", name: "Progress" },
-  { id: "journeys", label: "🧭", name: "Journeys" },
-  { id: "money", label: "💵", name: "Money" },
-  { id: "hangar", label: "🛠️", name: "Hangar" },
+  { id: "details", label: "i:details", name: "Details" },
+  { id: "list", label: "i:browse", name: "Browse" },
+  { id: "mind", label: "i:mind", name: "Mind" },
+  { id: "actions", label: "i:agenda", name: "Agenda" },
+  { id: "insights", label: "i:insights", name: "Insights" },
+  { id: "soumaya", label: "i:soumaya", name: "Soumaya" },
+  { id: "inbox", label: "i:inbox", name: "Inbox" },
+  { id: "awards", label: "i:progress", name: "Progress" },
+  { id: "journeys", label: "i:journeys", name: "Journeys" },
+  { id: "money", label: "i:money", name: "Money" },
+  { id: "hangar", label: "i:hangar", name: "Hangar" },
 ];
 
 /** Browse = one place to read your memories, three lenses over the same data. */
@@ -312,7 +313,7 @@ export function RightDock({
             style={{ position: "relative" }}
           >
             <span className="tab-ic" style={{ position: "relative" }}>
-              {t.label}
+              {renderIcon(t.label, 20)}
               {t.badge > 0 && (
                 <span
                   style={{

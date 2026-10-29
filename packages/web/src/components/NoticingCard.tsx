@@ -14,6 +14,8 @@ import { inquiryKindLabel, inquiryAgeText } from "./cl1a.helpers.js";
  *
  * Hidden entirely while a panel/Observatory is up (via `hidden`).
  */
+import { Icon } from "./icons/Icon.js";
+
 export function NoticingCard({
   onFocus,
   onAnswered,
@@ -192,7 +194,7 @@ export function NoticingCard({
         aria-label={`Soumaya noticed ${inquiries.length}`}
         title={glow ? "Soumaya noticed something new" : "Soumaya's noticings"}
       >
-        💭
+        <Icon name="notices" />
         <span className="fab-cap">Notices</span>
         <span className="fab-badge noticing-count">{inquiries.length > 9 ? "9+" : inquiries.length}</span>
       </button>

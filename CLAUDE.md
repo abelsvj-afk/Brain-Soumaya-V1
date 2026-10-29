@@ -630,6 +630,16 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the garden suggestions card — all fixed. Still open: SVG icons instead of emoji (next), the other redundancies in the spec
   (Travel vs World map, "Level camera" vs Recenter), Eternity's white void makes the HUD text faint. Look at: the 62 px rails against
   the worlds' sheets on a real phone, and whether you miss the rail Calm button.
+- **HUD icon set + naming (2026-10-30, owner: "not just emoji'd up", "no redundancy") — MEASURED in a real browser (screenshots of
+  the rails, Tools menu, Panels tabs, a world dock), needs on-device confirmation** (components/icons/Icon.tsx, NavRail, ActionRail,
+  ToolsMenu, RightDock, WorldsDock, WorldsSurface, worldPlaces.ts, NoticingCard, GalaxyViews, App.tsx): 53 icons drawn in code in one
+  stroke style (24×24, `currentColor`, aria-hidden; the visible word / accessible name is unchanged) replace the emoji on the rail
+  buttons, the Tools menu, the Panels tabs and the worlds' dock/places/gestures; data may say `i:<name>` and `renderIcon` draws it
+  (an emoji or unknown name still renders as text). Redrawn after review: Settings is a gear (read as a sun), Briefing a telescope
+  (read as a paper plane). The 🔭 button's caption "Home" is now "Briefing" ("Home" read as "back to the galaxy"); the Legend's Calm
+  glyph is no longer the 🎯 Focus glyph. Painted/rendered art for 16 hero buttons is an optional Muse task
+  (`docs/specs/muse-button-art-2026-10-30.md`, waits on a style pick). Look at: icon legibility at phone size, and the Views chips +
+  Focus fan items, which are still emoji.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

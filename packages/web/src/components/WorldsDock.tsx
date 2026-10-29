@@ -4,6 +4,8 @@
  * header. Pure presentation — each world decides its own tiles.
  */
 
+import { renderIcon } from "./icons/Icon.js";
+
 export interface DockTile {
   id: string;
   /** Decorative glyph; the word below it carries the meaning (never icon-only). */
@@ -47,7 +49,7 @@ export default function WorldsDock({ groups, label }: { groups: DockGroup[]; lab
               onClick={t.onClick}
             >
               <span className="worlds-dock-icon" aria-hidden="true">
-                {t.icon}
+                {renderIcon(t.icon, 22)}
               </span>
               <span className="worlds-dock-word">{t.label}</span>
               {(t.active || t.expanded !== undefined) && (

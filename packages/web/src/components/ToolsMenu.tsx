@@ -11,6 +11,8 @@ import { useDialogA11y } from "../hooks/useDialogA11y.js";
  * reachable in one tap on any screen, and declutters the galaxy. The FEW frequent controls
  * (add, panels, recenter, zoom, chat) stay as their own buttons.
  */
+import { Icon, renderIcon } from "./icons/Icon.js";
+
 export interface ToolsMenuProps {
   onSearch: () => void;
   onLenses: () => void;
@@ -42,16 +44,16 @@ export function ToolsMenu(p: ToolsMenuProps) {
   // three, only a scrim click to dismiss.
   useDialogA11y(menuRef, () => setOpen(false), open);
   const items: { icon: string; label: string; on: () => void; badge?: number | null }[] = [
-    { icon: "⧉", label: "Lenses", on: p.onLenses },
-    { icon: "🔗", label: "Connections", on: p.onConnections, badge: p.candCount },
-    { icon: "🧠", label: "Recall", on: p.onReview, badge: p.dueCount },
-    { icon: "🕰️", label: "Timeline", on: p.onTimeline },
-    { icon: "🗺️", label: "Legend", on: p.onLegend },
-    { icon: "🪐", label: "World map", on: p.onWorldMap },
-    ...(p.onTravel ? [{ icon: "🚀", label: "Travel", on: p.onTravel }] : []),
-    { icon: "☄️", label: "Flashback", on: p.onFlashback },
-    { icon: p.focusMode ? "🌐" : "🌌", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
-    { icon: "❓", label: "Help", on: p.onHelp },
+    { icon: "i:lenses", label: "Lenses", on: p.onLenses },
+    { icon: "i:connections", label: "Connections", on: p.onConnections, badge: p.candCount },
+    { icon: "i:recall", label: "Recall", on: p.onReview, badge: p.dueCount },
+    { icon: "i:timeline", label: "Timeline", on: p.onTimeline },
+    { icon: "i:legend", label: "Legend", on: p.onLegend },
+    { icon: "i:planet", label: "World map", on: p.onWorldMap },
+    ...(p.onTravel ? [{ icon: "i:rocket", label: "Travel", on: p.onTravel }] : []),
+    { icon: "i:comet", label: "Flashback", on: p.onFlashback },
+    { icon: p.focusMode ? "i:sun" : "i:calm", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
+    { icon: "i:help", label: "Help", on: p.onHelp },
   ];
   const alerts = (p.candCount ?? 0) + (p.dueCount ?? 0);
   // Batch H (REG-201 / CN-02, F1 from the Batch G review): the closed FAB's
@@ -88,7 +90,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
         aria-expanded={open}
         title={alertsTitle}
       >
-        🧰
+        <Icon name="tools" />
         <span className="fab-cap">Tools</span>
         {((anyUnknown || alerts > 0) && !open) && (
           <span className="fab-badge" title={anyUnknown ? "Couldn't check — count unknown" : undefined}>
@@ -102,7 +104,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
           <div className="tools-menu" role="menu" aria-label="Tools" ref={menuRef}>
             {items.map((it) => (
               <button key={it.label} className="tools-item" role="menuitem" onClick={() => tap(it.on)}>
-                <span className="tools-ic">{it.icon}</span>
+                <span className="tools-ic">{renderIcon(it.icon, 20)}</span>
                 <span className="tools-lbl">{it.label}</span>
                 {it.badge !== undefined && (it.badge === null || it.badge > 0) && (
                   <span className="tools-badge" title={it.badge === null ? "Couldn't check — count unknown" : undefined}>

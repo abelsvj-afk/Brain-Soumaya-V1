@@ -22,17 +22,18 @@ import { LensChips } from "./LensChips.js";
  * between them: the same relationship "recent files" has to "saved searches" elsewhere.
  */
 
-interface ViewDef { key: string; label: string; icon: string; pred: (n: GraphNode) => boolean; kinds: string[] }
+import { Icon, type IconName } from "./icons/Icon.js";
+interface ViewDef { key: string; label: string; icon: string; /** what is DRAWN (the emoji stays as the lens's identity string) */ svg: IconName; pred: (n: GraphNode) => boolean; kinds: string[] }
 
 const VIEWS: ViewDef[] = [
-  { key: "people", label: "People", icon: "👤", pred: (n) => n.type === "person", kinds: ["person"] },
-  { key: "projects", label: "Projects", icon: "🚀", pred: (n) => n.type === "project" || n.type === "company", kinds: ["project", "company"] },
-  { key: "goals", label: "Goals", icon: "🎯", pred: (n) => n.kind === "goal", kinds: ["goal"] },
-  { key: "ideas", label: "Ideas", icon: "💡", pred: (n) => n.kind === "idea", kinds: ["idea"] },
-  { key: "beliefs", label: "Beliefs", icon: "🌟", pred: (n) => n.kind === "belief", kinds: ["belief"] },
-  { key: "knowledge", label: "Knowledge", icon: "📚", pred: (n) => n.type === "knowledge" || n.type === "concept", kinds: ["knowledge", "concept"] },
-  { key: "meetings", label: "Meetings", icon: "🗓️", pred: (n) => n.type === "meeting", kinds: ["meeting"] },
-  { key: "notes", label: "Notes", icon: "📝", pred: (n) => n.type === "daily", kinds: ["daily"] },
+  { key: "people", label: "People", icon: "👤", svg: "people", pred: (n) => n.type === "person", kinds: ["person"] },
+  { key: "projects", label: "Projects", icon: "🚀", svg: "rocket", pred: (n) => n.type === "project" || n.type === "company", kinds: ["project", "company"] },
+  { key: "goals", label: "Goals", icon: "🎯", svg: "focus", pred: (n) => n.kind === "goal", kinds: ["goal"] },
+  { key: "ideas", label: "Ideas", icon: "💡", svg: "insights", pred: (n) => n.kind === "idea", kinds: ["idea"] },
+  { key: "beliefs", label: "Beliefs", icon: "🌟", svg: "sun", pred: (n) => n.kind === "belief", kinds: ["belief"] },
+  { key: "knowledge", label: "Knowledge", icon: "📚", svg: "browse", pred: (n) => n.type === "knowledge" || n.type === "concept", kinds: ["knowledge", "concept"] },
+  { key: "meetings", label: "Meetings", icon: "🗓️", svg: "timeline", pred: (n) => n.type === "meeting", kinds: ["meeting"] },
+  { key: "notes", label: "Notes", icon: "📝", svg: "notes", pred: (n) => n.type === "daily", kinds: ["daily"] },
 ];
 
 export function GalaxyViews({
@@ -194,7 +195,7 @@ export function GalaxyViews({
       <button className={`gv-toggle ${open ? "open" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}
         aria-label="Galaxy views"
         title="Views — view one category at a time (lighter on your phone)">
-        <span aria-hidden="true">🌌</span>
+        <Icon name="views" />
         <span className="gv-toggle-text fab-cap">Views</span>
         <span className="gv-toggle-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
@@ -207,7 +208,7 @@ export function GalaxyViews({
             return (
               <button key={v.key} className={`gv-chip ${on ? "on" : ""}`} onClick={() => void tap(v)} aria-pressed={on}
                 title={on ? `Show everything again` : `View only ${v.label} (renders fewer bodies)`}>
-                <span>{v.icon} {v.label}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name={v.svg} size={16} /> {v.label}</span>
                 {/* Batch H (REG-207): the count is the full-set total, not the
                     payload's intersection — a category never understates itself. */}
                 <span className="gv-count">{on ? "✕" : v.shown}</span>
@@ -223,7 +224,7 @@ export function GalaxyViews({
           {onLayer && journeyCount > 0 && (() => {
             const name = "🧭 Journeys"; const on = activeView === name;
             return <button className={`gv-chip ${on ? "on" : ""}`} onClick={() => (on ? onExit() : onLayer("journeys", name))} aria-pressed={on} title="View only your journey hubs">
-              <span>🧭 Journeys</span><span className="gv-count">{on ? "✕" : journeyCount}</span></button>;
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="journeys" size={16} /> Journeys</span><span className="gv-count">{on ? "✕" : journeyCount}</span></button>;
           })()}
           {activeCat && (
             <button

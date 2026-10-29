@@ -111,6 +111,7 @@ import {
   type ProactiveContextSource,
 } from "./api/client.js";
 import { lazyPanel } from "./lib/lazyPanel.js";
+import { Icon } from "./components/icons/Icon.js";
 
 // Loaded on demand (speed audit S2): rarely opened panels and the whole worlds layer stay out of the entry bundle.
 const SettingsPanel = lazyPanel(() => import("./components/SettingsPanel.js").then((m) => m.SettingsPanel));
@@ -2967,7 +2968,7 @@ export default function App() {
                   aria-label="Camera focus targets"
                   title="Focus targets (ship · station · beacons · figurines)"
                 >
-                  {focusMenuOpen ? "✕" : "🎯"}
+                  {focusMenuOpen ? <Icon name="close" /> : <Icon name="focus" />}
                   <span className="fab-cap">Focus</span>
                 </button>
               </div>
@@ -2982,7 +2983,7 @@ export default function App() {
             aria-label="Ambient music: click to play/pause, double-click to skip, hold for the song list"
             title="Click = play/pause · double-click = next · hold = song list"
           >
-            {music ? "🔊" : "🔈"}
+            {music ? <Icon name="music" /> : <Icon name="music-off" />}
             <span className="fab-cap">Music</span>
           </button>
           {/* Radial song menu — dots circling the music button (press-and-hold to open).

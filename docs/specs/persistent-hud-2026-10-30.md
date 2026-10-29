@@ -54,3 +54,12 @@ pass is optional and goes to Muse with a written spec (`specs/muse-button-art-20
 A script visits home, each of the 7 worlds and a warp at 412×915 and asserts: every **core** control is visible, hit-testable
 (`elementFromPoint`) and ≥ 44 px; no core control overlaps a world control (bounding boxes); the camera-only controls are absent
 in worlds; Panels/Settings/Chat open above a world; reduced motion unaffected; the earlier worlds-check still PASSes.
+
+## Status — 2026-10-30
+- ✅ Persistent HUD in home + all 7 worlds + the warp (`scripts/hud-check.cjs`: 8/8 PASS; screenshots reviewed).
+- ✅ Redundancy rulings applied: Calm off the rail (Tools only), Search onto the rail (not in Tools), "Home" → "Briefing", Legend
+  Calm glyph; Travel/World map and Level view judged NOT duplicates.
+- ✅ SVG icon set (53 icons) on the rails, Tools menu, Panels tabs, the worlds' dock tiles, places and gestures.
+- ✅ The Views chips are SVG too (their emoji stays only as each lens's saved identity string).
+- ⏳ Still emoji: the Focus fan's figurine items, toasts, the fuel/streak readouts.
+- ⏳ Painted art for the 16 hero buttons: optional, `specs/muse-button-art-2026-10-30.md` (waits on the owner's style pick).

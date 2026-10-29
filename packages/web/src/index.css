@@ -7689,3 +7689,13 @@ body.in-world .notifications-bar { display: none; }
 .garden-groves { left: var(--hud-rail); width: min(300px, calc(100% - 2 * var(--hud-rail))); }
 /* The "switch to Performance Mode?" offer never covers the warp cinematic (it comes back after). */
 body.in-transit .perf-suggest { display: none; }
+
+/* ---- HUD icons (components/icons/Icon.tsx): one stroke style, tinted by the button's state ---- */
+.hud-icon { display: block; flex: none; }
+.fab .hud-icon { width: 22px; height: 22px; }
+.fab.on .hud-icon, .fab:hover .hud-icon { filter: drop-shadow(0 0 4px currentColor); }
+.tools-ic { display: inline-flex; align-items: center; justify-content: center; width: 24px; }
+.worlds-dock-icon .hud-icon { width: 24px; height: 24px; }
+.tab-ic .hud-icon { width: 20px; height: 20px; }
+.gv-toggle .hud-icon { width: 20px; height: 20px; }
+@media (prefers-reduced-motion: reduce) { .fab:hover .hud-icon { filter: none; } }

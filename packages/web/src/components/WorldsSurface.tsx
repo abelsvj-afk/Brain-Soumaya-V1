@@ -1858,24 +1858,24 @@ export default function WorldsSurface({
   // The dock (docs/specs/worlds-controls-2026-10-29.md): each world's controls
   // as icon-over-word tiles. Accessible names keep the full phrases.
   const ROOM_TILE: Record<string, { icon: string; label: string }> = {
-    "hangar-bay": { icon: "🛠", label: "Hangar" },
-    "commission-board": { icon: "📋", label: "Board" },
-    "fleet-deck": { icon: "🚀", label: "Fleet" },
-    "observation-deck": { icon: "🔭", label: "Deck" },
+    "hangar-bay": { icon: "i:hangar", label: "Hangar" },
+    "commission-board": { icon: "i:notes", label: "Board" },
+    "fleet-deck": { icon: "i:rocket", label: "Fleet" },
+    "observation-deck": { icon: "i:observatory", label: "Deck" },
   };
   const GESTURE_ICON: Record<string, string> = {
-    stillness: "🕊",
-    regard: "👁",
-    blessing: "✨",
-    sorrow: "💧",
-    joy: "☀️",
-    warning: "✋",
+    stillness: "i:stillness",
+    regard: "i:regard",
+    blessing: "i:insights",
+    sorrow: "i:drop",
+    joy: "i:sun",
+    warning: "i:warning",
   };
   const TOOL_TILE: Record<string, { icon: string; label: string; name: string }> = {
-    reorder: { icon: "🌀", label: "Reorder", name: "Reorder the heavens" },
-    "part-veil": { icon: "🌫", label: "Veil", name: "Part the veil" },
-    shield: { icon: "🛡", label: "Shield", name: "Raise the shield" },
-    comet: { icon: "☄️", label: "Comet", name: "Send a comet" },
+    reorder: { icon: "i:reorder", label: "Reorder", name: "Reorder the heavens" },
+    "part-veil": { icon: "i:veil", label: "Veil", name: "Part the veil" },
+    shield: { icon: "i:shield", label: "Shield", name: "Raise the shield" },
+    comet: { icon: "i:comet", label: "Comet", name: "Send a comet" },
   };
   const dockGroups: DockGroup[] = [];
   {
@@ -1883,10 +1883,10 @@ export default function WorldsSurface({
       dockGroups.push({
         id: "garden",
         tiles: [
-          { id: "groves", icon: "🌳", label: "Groves", name: "Groves", expanded: grovesOpen, onClick: () => setGrovesOpen((v) => !v) },
+          { id: "groves", icon: "i:groves", label: "Groves", name: "Groves", expanded: grovesOpen, onClick: () => setGrovesOpen((v) => !v) },
           {
             id: "meadow",
-            icon: "🌾",
+            icon: "i:meadow",
             label: "Meadow",
             name: "Walk to the meadow",
             onClick: () => {
@@ -1901,19 +1901,19 @@ export default function WorldsSurface({
       const tiles: DockGroup["tiles"] = [
         {
           id: "harbor",
-          icon: "🛰",
+          icon: "i:harbor",
           label: "Harbor",
           name: showController ? "Hide the harbor controller" : "Harbor controller",
           active: showController,
           onClick: () => setShowController((v) => !v),
         },
         inside
-          ? { id: "outside", icon: "🌌", label: "Back outside", name: "Step back outside", onClick: () => setInside(false) }
-          : { id: "inside", icon: "🚪", label: "Step inside", name: "Step inside the Station", onClick: () => setInside(true) },
+          ? { id: "outside", icon: "i:calm", label: "Back outside", name: "Step back outside", onClick: () => setInside(false) }
+          : { id: "inside", icon: "i:door", label: "Step inside", name: "Step inside the Station", onClick: () => setInside(true) },
       ];
       if (inside) {
         for (const room of interiorLayout?.spaces.filter((sp) => sp.id !== interiorRoom) ?? []) {
-          const t = ROOM_TILE[room.id] ?? { icon: "🚪", label: room.title.replace(/^The /, "") };
+          const t = ROOM_TILE[room.id] ?? { icon: "i:door", label: room.title.replace(/^The /, "") };
           tiles.push({
             id: `room-${room.id}`,
             icon: t.icon,
@@ -1931,7 +1931,7 @@ export default function WorldsSurface({
         label: "Fly to",
         tiles: [
           ...(flightTargetId
-            ? [{ id: "overview", icon: "🔭", label: "Overview", name: "Back to the overview", onClick: backToOverview }]
+            ? [{ id: "overview", icon: "i:observatory", label: "Overview", name: "Back to the overview", onClick: backToOverview }]
             : []),
           ...places.map((pl) => ({
             id: `place-${pl.id}`,
@@ -1949,8 +1949,8 @@ export default function WorldsSurface({
         id: "deep-past",
         tiles: [
           guided
-            ? { id: "rim", icon: "⬆", label: "Rim", name: "Back to the rim", onClick: toggleGuided }
-            : { id: "descend", icon: "⬇", label: "Descend", name: "Descend the Chronicle", onClick: toggleGuided },
+            ? { id: "rim", icon: "i:rise", label: "Rim", name: "Back to the rim", onClick: toggleGuided }
+            : { id: "descend", icon: "i:descend", label: "Descend", name: "Descend the Chronicle", onClick: toggleGuided },
         ],
       });
     }
@@ -1961,7 +1961,7 @@ export default function WorldsSurface({
           label: "His gestures",
           tiles: ETERNITY_GESTURE_NAMES.map((name) => ({
             id: `gesture-${name}`,
-            icon: GESTURE_ICON[name] ?? "✦",
+            icon: GESTURE_ICON[name] ?? "i:insights",
             label: name[0]!.toUpperCase() + name.slice(1),
             name: name[0]!.toUpperCase() + name.slice(1),
             active: eternityGesture === name,

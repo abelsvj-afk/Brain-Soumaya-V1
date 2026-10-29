@@ -3,6 +3,8 @@
  * from App.tsx (Post-MVP D4) as a pure presentational component. Behaviour + classNames
  * unchanged (the music FAB + song menu and the focus-cluster stay in App).
  */
+import { Icon } from "./icons/Icon.js";
+
 export interface ActionRailProps {
   onIngest: () => void;
   onObservatory: () => void;
@@ -17,11 +19,11 @@ export function ActionRail(p: ActionRailProps) {
   return (
     <>
       <button className="fab fab-ingest" onClick={p.onIngest} aria-label="Add a memory" title="Add a memory (or press C anywhere — ⌘K opens the command palette)">
-        📝
+        <Icon name="add" />
         <span className="fab-cap">Add</span>
       </button>
       <button className="fab fab-observatory" onClick={p.onObservatory} aria-label="Open the Observatory home" title="Observatory — your daily briefing">
-        🔭
+        <Icon name="observatory" />
         {/* "Home" read as "go back to the galaxy" — which is exactly what it does NOT do inside a world (audit: naming). */}
         <span className="fab-cap">Briefing</span>
       </button>
@@ -31,11 +33,11 @@ export function ActionRail(p: ActionRailProps) {
         aria-label="Talk to Soumaya"
         title={`Talk to ${p.spaceName || "Soumaya"}`}
       >
-        💬
+        <Icon name="chat" />
         <span className="fab-cap">Chat</span>
       </button>
       <button className="fab fab-settings" onClick={p.onSettings} aria-label="Settings" title="Settings">
-        ⚙️
+        <Icon name="settings" />
         <span className="fab-cap">Settings</span>
       </button>
     </>
