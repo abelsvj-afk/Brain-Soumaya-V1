@@ -1899,9 +1899,13 @@ export function migrateSchema(sqlite: RawDb): void {
   // ATTEMPT for existing volumes. New table only — CREATE TABLE IF NOT
   // EXISTS with DDL identical to BOOTSTRAP_SQL in db/schemaSql.ts
   // (fresh DBs already have it; this is a no-op there). State is plain
-  // TEXT so B2+ lifecycle states need no migration. No columns are added
-  // to existing tables, so the bootstrap-references-migration-column
-  // crash pattern cannot arise.
+  // TEXT so B2+ lifecycle states need no migration.
+  // Increment B2: three bookkeeping columns (tier / pinned /
+  // promoted_at) for the off-volume lifecycle + retention. Fresh DBs
+  // get them from the CREATE above; existing volumes get them from the
+  // PRAGMA-guarded ALTERs below (the established additive pattern —
+  // nothing in BOOTSTRAP_SQL references these columns, so the
+  // bootstrap-references-migration-column crash pattern cannot arise).
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS backup_attempts (
       id TEXT PRIMARY KEY,
@@ -1913,9 +1917,24 @@ export function migrateSchema(sqlite: RawDb): void {
       snapshot_sha256 TEXT,
       snapshot_bytes INTEGER,
       manifest_json TEXT,
-      finished_at TEXT
+      finished_at TEXT,
+      tier TEXT NOT NULL DEFAULT 'daily',
+      pinned INTEGER NOT NULL DEFAULT 0,
+      promoted_at TEXT
     );
   `);
+  const backupAttemptCols = sqlite
+    .prepare(`PRAGMA table_info(backup_attempts)`)
+    .all() as { name: string }[];
+  if (!backupAttemptCols.some((c) => c.name === "tier")) {
+    sqlite.exec(`ALTER TABLE backup_attempts ADD COLUMN tier TEXT NOT NULL DEFAULT 'daily'`);
+  }
+  if (!backupAttemptCols.some((c) => c.name === "pinned")) {
+    sqlite.exec(`ALTER TABLE backup_attempts ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!backupAttemptCols.some((c) => c.name === "promoted_at")) {
+    sqlite.exec(`ALTER TABLE backup_attempts ADD COLUMN promoted_at TEXT`);
+  }
 
   // daily_quests reconciliation (G0 inventory v4, 2026-10-30):
   // production carries this table (3 rows) from the streaks-and-quests

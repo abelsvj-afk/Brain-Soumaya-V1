@@ -1,12 +1,16 @@
 /**
- * G0 backup — lifecycle service, increment B1 scope: CREATED →
- * VERIFIED-LOCAL (G0 spec §5; UPLOADED and beyond are B2).
+ * G0 backup — lifecycle service. Increment B1 built CREATED →
+ * VERIFIED-LOCAL; increment B2 continues the same rows through
+ * UPLOADED → VERIFIED-STORED → PROMOTED in `offvolume.ts` (G0 spec §5).
  *
  * One attempt = one row in `backup_attempts`. A failed attempt is
- * recorded with its failure stage (`snapshot` | `manifest` | `verify`)
- * and is NEVER listed as a backup: `listVerifiedBackups` returns only
- * rows that reached VERIFIED-LOCAL (later increments extend the state
- * set — states are plain TEXT by design, no migration needed).
+ * recorded with its failure stage (`snapshot` | `manifest` | `verify`
+ * in B1; `encrypt` | `upload` | `verify_stored` | `promote` added by
+ * B2) and is NEVER listed as a backup: `listVerifiedBackups` returns
+ * only rows that reached VERIFIED-LOCAL (states are plain TEXT by
+ * design, so the B2 states needed no migration — only the three
+ * bookkeeping columns tier/pinned/promoted_at were added, in BOTH
+ * schema locations).
  *
  * Snapshots are taken with VACUUM INTO (spec §1 / G0-AC-01): a
  * consistent, standalone database file — never a raw copy of a live WAL
@@ -28,8 +32,22 @@ import {
   type BackupManifest,
 } from "./manifest.js";
 
-export type BackupAttemptState = "created" | "verified_local" | "failed";
-export type BackupFailureStage = "snapshot" | "manifest" | "verify";
+export type BackupAttemptState =
+  | "created"
+  | "verified_local"
+  | "uploaded"
+  | "verified_stored"
+  | "promoted"
+  | "pruned"
+  | "failed";
+export type BackupFailureStage =
+  | "snapshot"
+  | "manifest"
+  | "verify"
+  | "encrypt"
+  | "upload"
+  | "verify_stored"
+  | "promote";
 
 export interface BackupAttemptRow {
   id: string;
@@ -42,6 +60,12 @@ export interface BackupAttemptRow {
   snapshotBytes: number | null;
   manifest: BackupManifest | null;
   finishedAt: string | null;
+  /** Retention tier recorded by the off-volume run (B2); 'daily' by column default, B1-era rows included. */
+  tier: string | null;
+  /** Golden pin: a pinned backup is never auto-deleted (B2). */
+  pinned: boolean;
+  /** When this attempt became latest-good (B2); null until PROMOTED. */
+  promotedAt: string | null;
 }
 
 interface AttemptDbRow {
@@ -55,6 +79,9 @@ interface AttemptDbRow {
   snapshot_bytes: number | null;
   manifest_json: string | null;
   finished_at: string | null;
+  tier: string | null;
+  pinned: number;
+  promoted_at: string | null;
 }
 
 function mapRow(r: AttemptDbRow): BackupAttemptRow {
@@ -69,6 +96,9 @@ function mapRow(r: AttemptDbRow): BackupAttemptRow {
     snapshotBytes: r.snapshot_bytes,
     manifest: r.manifest_json ? (JSON.parse(r.manifest_json) as BackupManifest) : null,
     finishedAt: r.finished_at,
+    tier: r.tier,
+    pinned: r.pinned === 1,
+    promotedAt: r.promoted_at,
   };
 }
 
