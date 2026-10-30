@@ -98,6 +98,8 @@ import {
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
 import { useStoryNotice } from "../hooks/useStoryNotice.js";
+import { locateLandmarks, makeReach } from "../graph/storySpots.js";
+import { STORY_TRIGGERS } from "@brain/shared";
 import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -857,6 +859,19 @@ export default function WorldsSurface({
     active: !!mode && mode === "world" && !dismissed && engaged,
     world: currentWorld,
     notify: (t) => pushToast(t, "✦", 6500, "normal"),
+    // The viewer for the lore's physical spots: her ship once she is out and parked (the flight worlds), or her walking in the garden. Null = no one is out there to be still.
+    reach: () => {
+      if (!currentWorld) return null;
+      if (currentWorld === "growing-place") {
+        const w = walkRef.current;
+        return w.route.length === 0 ? makeReach(currentWorld, null, [w.pos.x, 0, w.pos.z]) : null;
+      }
+      const fl = flightRef.current;
+      const root = sceneHandleRef.current?.group;
+      if (!fl || !root || fl.phase !== "idle") return null;
+      root.updateMatrixWorld(true);
+      return makeReach(currentWorld, root, fl.pos);
+    },
   });
   const storyRef = useRef(story);
   storyRef.current = story;
@@ -1003,6 +1018,9 @@ export default function WorldsSurface({
     setFlightTargetId(place.id);
     setFlightCaption(`Aligning to ${place.label}`);
   };
+  // Tap to fly (docs/specs/lore-physical-spots-2026-10-31.md): a tap on the scene sends the ship to that point — the way to traverse a world and reach the places the lore lives.
+  const flyToPointRef = useRef<(p: V3) => void>(() => {});
+  flyToPointRef.current = (p: V3) => flyTo({ id: "tap", label: "that spot", icon: "i:rocket", center: p, radius: 14 });
   const backToOverview = () => {
     flightRef.current = null;
     flightTargetRef.current = null;
@@ -1720,6 +1738,33 @@ export default function WorldsSurface({
           ? applyWorldLighting(scene, renderer, entry.light)
           : null;
     sceneHandleRef.current = world;
+    // A measuring probe for scripts/spots-check.mjs ONLY: it exists when the page was opened with localStorage "soumaya.probe" = "1". It reports where each of this world's lore spots
+    // resolves in the built scene, so spot placement can be MEASURED rather than assumed. Read-only; nothing in the product uses it.
+    try {
+      if (currentWorld && localStorage.getItem("soumaya.probe") === "1") {
+        (window as unknown as { __loreProbe?: unknown }).__loreProbe = {
+          world: currentWorld,
+          // The names of the scene's holders (two levels deep), so a spot that does not resolve can be debugged against what IS there.
+          names: () => {
+            const out: string[] = [];
+            world.group.traverse((o) => {
+              if (o.name && out.length < 400 && (o.parent === world.group || o.parent?.parent === world.group)) out.push(o.name);
+            });
+            return out;
+          },
+          report: () => {
+            world.group.updateMatrixWorld(true);
+            return STORY_TRIGGERS.filter((t) => t.world === currentWorld && t.spot).map((t) => ({
+              entryId: t.entryId,
+              spot: t.spot,
+              marks: t.spot!.place ? locateLandmarks(world.group, t.spot!.place) : [{ name: "origin", center: [0, 0, 0], radius: 1 }],
+            }));
+          },
+        };
+      }
+    } catch {
+      /* no storage: no probe */
+    }
     // The traveller's ship inside a world that has places to fly to (hidden until the first flight).
     const avatar: ShipAvatar | null = mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside ? createShipAvatar(trailRef.current) : null;
     if (avatar) {
@@ -1811,6 +1856,32 @@ export default function WorldsSurface({
         markLooked();
       }
     };
+    let tapFlyTimer: number | null = null;
+    const tapRay = new THREE.Raycaster();
+    const tapFly = (cx: number, cy: number) => {
+      const rect = host.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+      tapRay.setFromCamera(ndc, camera);
+      const meshes: THREE.Object3D[] = [];
+      world.group.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && o.visible) meshes.push(o);
+      });
+      const hit = tapRay.intersectObjects(meshes, false)[0];
+      let p: V3 | null = null;
+      if (hit) {
+        // Stop a little short of the surface that was tapped, on the camera's side of it.
+        const back = hit.point.clone().addScaledVector(tapRay.ray.direction, -Math.max(24, hit.distance * 0.03));
+        p = [back.x, back.y, back.z];
+      } else {
+        // Nothing there: the point on the ship's own altitude plane under the tap.
+        const y = flightRef.current?.pos[1] ?? overviewCamRef.current.look[1];
+        const d = tapRay.ray.direction;
+        const t = Math.abs(d.y) > 1e-4 ? (y - tapRay.ray.origin.y) / d.y : -1;
+        if (t > 0 && t < 20000) p = [tapRay.ray.origin.x + d.x * t, y, tapRay.ray.origin.z + d.z * t];
+      }
+      if (p) flyToPointRef.current(p);
+    };
     const onLookUp = (e: PointerEvent) => {
       if (!pointers.delete(e.pointerId)) return;
       if (pointers.size < 2) lastPinch = 0;
@@ -1821,7 +1892,19 @@ export default function WorldsSurface({
       } else if (pointers.size === 0 && lookAllowedRef.current) {
         // A real tap: two quick ones put the view back where the world had it.
         const now = performance.now();
-        if (now - lastTapAt < 320) lookRef.current = NO_LOOK;
+        if (now - lastTapAt < 320) {
+          lookRef.current = NO_LOOK;
+          if (tapFlyTimer !== null) window.clearTimeout(tapFlyTimer);
+          tapFlyTimer = null;
+        } else if (mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside) {
+          // A single tap flies there — after the double-tap window, so a double tap (reset view) never launches her.
+          const cx = e.clientX;
+          const cy = e.clientY;
+          tapFlyTimer = window.setTimeout(() => {
+            tapFlyTimer = null;
+            tapFly(cx, cy);
+          }, 330);
+        }
         lastTapAt = now;
       }
     };
@@ -2239,6 +2322,7 @@ export default function WorldsSurface({
       host.removeEventListener("pointerdown", skipArrival);
       host.removeEventListener("pointerdown", onLookDown);
       host.removeEventListener("pointermove", onLookMove);
+      if (tapFlyTimer !== null) window.clearTimeout(tapFlyTimer);
       host.removeEventListener("pointerup", onLookUp);
       host.removeEventListener("pointercancel", onLookUp);
       host.removeEventListener("wheel", onWheel);

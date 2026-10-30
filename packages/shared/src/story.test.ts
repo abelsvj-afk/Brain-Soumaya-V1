@@ -179,3 +179,35 @@ describe("Item Reactions", () => {
     expect(reactionBetween("keeper", "relic.harbor-nail")).toBeNull(); // the server refuses a pairing that does not exist
   });
 });
+
+import { eligibleHere, spotReach } from "./storyTriggers.js";
+
+describe("physical spots", () => {
+  it("every regard/listen in a world the viewer can move through has a spot; only Eternity has none (documented)", () => {
+    for (const t of STORY_TRIGGERS.filter((x) => x.how === "regard" || x.how === "listen")) {
+      if (t.world === "eternity") expect(t.spot, t.entryId).toBeUndefined();
+      else expect(t.spot, `${t.entryId} needs a physical spot`).toBeTruthy();
+    }
+  });
+  it("reach is a plain distance: inside the spot's radius, not outside it", () => {
+    const rim = { place: "x", at: [0, -0.5, 0], near: 0.5 } as const;
+    // landmark at (100,0,0), radius 200 → the point is (100,-100,0); reach 100
+    expect(spotReach(rim, [100, 0, 0], 200, [100, -100, 90])).toBe(true);
+    expect(spotReach(rim, [100, 0, 0], 200, [100, -100, 110])).toBe(false);
+    expect(spotReach({ origin: true, near: 160 }, [0, 0, 0], 1, [150, 0, 0])).toBe(true);
+    expect(spotReach({ origin: true, near: 160 }, [0, 0, 0], 1, [170, 0, 0])).toBe(false);
+  });
+  it("a small landmark still has a sensible minimum reach", () => {
+    expect(spotReach({ place: "x", near: 0.1 }, [0, 0, 0], 10, [50, 0, 0])).toBe(true); // min 60 units
+    expect(spotReach({ place: "x", near: 0.1 }, [0, 0, 0], 10, [70, 0, 0])).toBe(false);
+  });
+  it("away from every spot, nothing is eligible in a world that has spots; Eternity stays open", () => {
+    expect(eligibleHere("great-station", "regard", () => false)).toEqual([]);
+    expect(eligibleHere("eternity", "regard", () => false).length).toBeGreaterThan(0);
+  });
+  it("a stillness picks only among what the viewer is at", () => {
+    const here = (t: { entryId: string }) => t.entryId === "obj.faded-ticket";
+    expect(pickNoticed("great-station", "regard", "hearths", new Set(), here)).toBe("obj.faded-ticket");
+    expect(pickNoticed("great-station", "regard", "hearths", new Set(), () => false)).toBeNull();
+  });
+});

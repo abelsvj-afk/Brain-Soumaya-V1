@@ -793,6 +793,16 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   /narration/voice`, `POST /narration/test` — all owner-only via OWNER_SPACE_IDS; web components/VoiceConsole.tsx inside the Book; plain steps in
   `docs/specs/lore-voices-howto-2026-10-30.md`): the owner sees every voice on the ElevenLabs account (with a sample), gives one to the Narrator or to a character, tests it, and
   clears it — a voice chosen in the app beats a Fly secret, and a role without a voice is read by the Narrator, so one choice makes everything work. The only secret needed is the API key.
+- **The lore lives in physical places — spots + tap-to-fly (2026-10-31, owner: "everything is tied to physical spots and locations … you need to be able to traverse around the
+  area") — spot landmarks MEASURED in a real headless browser (Station, Scale, People, Quiet; Deep Past once), tap-to-fly NOT exercised in a real browser, needs on-device
+  confirmation** (shared/storyTriggers.ts `StorySpot`/`spotReach`/`pickNoticed(reaches)`, web graph/storySpots.ts, hooks/useStoryNotice.ts `reach`, WorldsSurface.tsx tap-to-fly +
+  probe, scripts/spots-check.mjs; spec `docs/specs/lore-physical-spots-2026-10-31.md`): a Regard/Listen answers only where the viewer PHYSICALLY is — her ship once deployed and parked
+  (flight worlds), her walking (garden, round the witness tree) — at a spot anchored to a named landmark of the scene (the same holders as the Fly-to places). No marker, no glow, not
+  in the Fly-to tiles. In the flight worlds a single tap on the scene now FLIES her there (align → spool → burn, stand-off 19 units; a double tap still resets the view). Out of the ship
+  or away from every spot: "Take your ship out into the world…" / "Nothing stirs". The server still enforces world, Hour/good day and once per day, but cannot verify position (client
+  report — a game rule, not a security boundary). Eternity has no spots yet (no travel model there). `localStorage "soumaya.probe"="1"` exposes a read-only `window.__loreProbe` for the
+  script. Look at: whether tapping the scene to fly feels right and never fights drag/pinch/double-tap, whether the small landmarks (drydock r=7, annexes r=30, 60-unit reach) are findable
+  but not trivial, and the Station lower-rim spot (173 reach on a 384-radius body).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

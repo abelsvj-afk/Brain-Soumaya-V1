@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import * as api from "../api/story.js";
 import { NOTICE_MS, useStoryNotice } from "./useStoryNotice.js";
 
+const anywhere = () => () => true; // a viewer standing at every spot (the lore's physical placement has its own tests)
 const book = (ids: string[] = []) => ({ finds: ids.map((entryId) => ({ entryId, foundAt: "2026-10-30T00:00:00Z", source: "regard", lastRecalledAt: null, recallCount: 0 })), links: [], notes: [] });
 
 beforeEach(() => {
@@ -18,7 +19,7 @@ describe("noticing", () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
     const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
     const notify = vi.fn();
-    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify }));
+    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify, reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 30, 7)); // First Light: the Deep Past shows its missing stratum first
@@ -33,10 +34,45 @@ describe("noticing", () => {
     expect(result.current.noticing).toBeNull();
   });
 
+  it("the lore is in places: out of the ship, or away from every spot, the world does not answer", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
+    const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
+    // 1. not deployed: a plain instruction, and no stillness is even begun
+    const a = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: () => null }));
+    await waitFor(() => expect(a.result.current.loaded).toBe(true));
+    vi.useFakeTimers();
+    act(() => a.result.current.begin("regard"));
+    expect(a.result.current.noticing).toBeNull();
+    expect(a.result.current.caption).toMatch(/Take your ship out/);
+    // 2. deployed but away from every spot: the full stillness passes and nothing stirs
+    vi.useRealTimers();
+    const b = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: () => () => false }));
+    await waitFor(() => expect(b.result.current.loaded).toBe(true));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 30, 7));
+    act(() => b.result.current.begin("regard"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_MS + 50);
+    });
+    expect(post).not.toHaveBeenCalled();
+    expect(b.result.current.caption).toMatch(/as it was/);
+    // 3. at the ribbon's spot only: the ribbon, not the stratum
+    vi.useRealTimers();
+    const c = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: () => (t) => t.entryId === "obj.follower-ribbon" }));
+    await waitFor(() => expect(c.result.current.loaded).toBe(true));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 30, 7)); // First Light prefers the stratum — but she is not at its spot
+    act(() => c.result.current.begin("regard"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_MS + 50);
+    });
+    expect(post).toHaveBeenCalledWith("obj.follower-ribbon", "regard");
+  });
+
   it("a touch, key or scroll breaks the stillness: nothing is reported (the world answers someone who is there, not someone tapping)", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
     const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
-    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn() }));
+    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     vi.useFakeTimers();
     act(() => result.current.begin("regard"));
@@ -57,7 +93,7 @@ describe("noticing", () => {
   it("pressing again lets the stillness go: nothing is reported", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
     const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
-    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn() }));
+    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     vi.useFakeTimers();
     act(() => result.current.begin("regard"));
@@ -72,7 +108,7 @@ describe("noticing", () => {
   it("when everything here is already found, the world is simply as it was (no report, no failure)", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue(book(["sight.missing-stratum", "obj.follower-ribbon"]));
     const post = vi.spyOn(api, "postStoryFind");
-    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn() }));
+    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     vi.useFakeTimers();
     act(() => result.current.begin("regard"));
@@ -86,7 +122,7 @@ describe("noticing", () => {
   it("listen turns up echoes, not sights", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
     const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
-    const { result } = renderHook(() => useStoryNotice({ active: true, world: "quiet-archive", notify: vi.fn() }));
+    const { result } = renderHook(() => useStoryNotice({ active: true, world: "quiet-archive", notify: vi.fn(), reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     vi.useFakeTimers();
     act(() => result.current.begin("listen"));

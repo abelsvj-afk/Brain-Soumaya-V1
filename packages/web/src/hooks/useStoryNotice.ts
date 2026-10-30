@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { castMember, hourBand, npcGifts, pickNoticed, reactionFor } from "@brain/shared";
+import { castMember, hourBand, npcGifts, pickNoticed, reactionFor, type StoryTrigger } from "@brain/shared";
+import { worldHasSpots } from "../graph/storySpots.js";
 import { useStoryBook } from "./useStoryBook.js";
 import { emitReveal } from "../lib/narrationBus.js";
 import { getNarrationMode, playNarration } from "../lib/narration.js";
@@ -22,17 +23,25 @@ export function useStoryNotice({
   active,
   world,
   notify,
+  reach,
 }: {
   /** The worlds layer is showing a world (not the warp, not home). */
   active: boolean;
   world: string | null | undefined;
   notify: (text: string) => void;
+  /**
+   * Where the viewer is, as a predicate "is the viewer at this trigger's physical spot?" — or null when the viewer is not out in the world and still (the ship is not deployed,
+   * or is moving). The lore lives at physical places (docs/specs/lore-physical-spots-2026-10-31.md); in a world with spots, nothing answers without it.
+   */
+  reach?: () => ((t: StoryTrigger) => boolean) | null;
 }) {
   const sb = useStoryBook(active);
   const foundRef = useRef<Set<string>>(new Set());
   foundRef.current = new Set(sb.book.finds.map((f) => f.entryId));
   const findRef = useRef(sb.find);
   findRef.current = sb.find;
+  const reachRef = useRef(reach);
+  reachRef.current = reach;
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   const [noticing, setNoticing] = useState<"regard" | "listen" | null>(null);
@@ -55,6 +64,12 @@ export function useStoryNotice({
   const begin = useCallback(
     (how: "regard" | "listen") => {
       if (!world) return;
+      // The lore is in places. Out of the ship, or on the move, there is nothing to be still AT.
+      if (worldHasSpots(world) && timer.current === null && !reachRef.current?.()) {
+        setCaption("Take your ship out into the world and bring her to rest — the world answers where it is, not everywhere.");
+        window.setTimeout(() => setCaption(""), 6000);
+        return;
+      }
       if (timer.current !== null) {
         // Pressed again: the stillness is let go.
         clearTimer();
@@ -84,7 +99,9 @@ export function useStoryNotice({
         timer.current = null;
         stillnessOff.current?.();
         setNoticing(null);
-        const id = pickNoticed(world, how, hourBand(new Date()), foundRef.current);
+        // Where she is NOW (she must still be parked), and only what is at that spot can answer.
+        const reaches = worldHasSpots(world) ? reachRef.current?.() : undefined;
+        const id = worldHasSpots(world) && !reaches ? null : pickNoticed(world, how, hourBand(new Date()), foundRef.current, reaches ?? undefined);
         if (!id) {
           setCaption("Nothing stirs. The world is as it was.");
           window.setTimeout(() => setCaption(""), 4500);
