@@ -289,3 +289,13 @@ Files: `56-iselles-one-dawn-v1.png` … `v4.png`. Iselle is established consiste
 - In v2 and v4 the bed sits on a floating terrace of earth; in v1 and v3 it is a grounded raised bed.
 
 Verdict: a clean set; only the v2 orientation to note. Your pick.
+
+## §57 — The Forty-Second (Sheet 2)
+
+Files: `57-the-forty-second-v1.png` … `v4.png`. The composition lands in all four: the long column of travellers in plain clothes walking into the tall luminous doorway, the single glowing gold thread running hand to hand the whole length of the line, the village of lit windows behind them in the deep blue night — and at the back, the woman who stayed, stopped with her hand still half-extended to the thread, looking back toward the village. The choice-to-stay mood is strongest in v2 and v3, where her backward look is closest and clearest.
+
+- **Count, honestly:** the columns read as a few dozen figures — the exact forty-one is carried by the column's length rather than a countable head-count at this size; v4's line is the longest and most single-file, v1's the shortest.
+- **Ratio note:** v2 came out portrait (1280×1920) against the sheet's 16:9; the others are landscape. A crop is available if v2 is picked.
+- v1 has a few extra standing figures near the houses right of the doorway; they read as villagers watching, not part of the column.
+
+Verdict: a strong set; the count and the v2 orientation are the only notes. Your pick.
