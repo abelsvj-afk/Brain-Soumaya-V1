@@ -66,3 +66,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §27 filed (129 keepers)
 
 §27 The Sixteenth Doorway: clean set, no flags. All four: stone-blue hall of smaller sealed doors, ONE tall open doorway with pure soft white beyond, the hooded player from behind (face and gender never shown, per the Bible) holding out all three objects — nail, pale smooth stone, folded letter — readable in every variant. v1 most balanced (objects split across both hands); v4 closest framing and PORTRAIT despite the 16:9 ask.
+
+## Update — §29 filed (133 keepers)
+
+§29 Calend's Second Door: clean, no flags. Calend is recognisably the same man as §§8/10/15 in all four — patchwork coat of many faded colours, palm flat on the harbour wall beside the seam, head bowed, not pushing. The seam is open exactly a hand's-breadth in every variant: one thin vertical slit of pale white light spilling across the floor, dust motes in the beam. v2 is PORTRAIT despite the 16:9 ask (standing ratio note).
