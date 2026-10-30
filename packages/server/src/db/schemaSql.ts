@@ -318,6 +318,8 @@ export const BOOTSTRAP_SQL = `
       held INTEGER NOT NULL DEFAULT 0,
       held_at TEXT,
       anchor_key TEXT NOT NULL DEFAULT '',
+      copy_id TEXT,
+      location TEXT NOT NULL DEFAULT 'carried' CHECK (location IN ('carried','station')),
       PRIMARY KEY (space_id, relic_id)
     );
     CREATE TABLE IF NOT EXISTS relic_returns (
@@ -329,6 +331,36 @@ export const BOOTSTRAP_SQL = `
       to_anchor TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- Relics I-2: physical copies + their append-only event chains. One
+    -- chain per copy is both its provenance and its placement history
+    -- (approved design §2.1/R3-4). Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_copies (
+      copy_id TEXT PRIMARY KEY,
+      relic_id TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('placed','held','return-pool','consumed')),
+      world TEXT,
+      anchor_key TEXT,
+      holder_kind TEXT CHECK (holder_kind IN ('space','npc')),
+      holder_id TEXT,
+      holder_space_id TEXT,
+      scope_space_id TEXT,
+      test_only INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS relic_copies_relic_state_idx ON relic_copies(relic_id, state);
+    CREATE INDEX IF NOT EXISTS relic_copies_holder_idx ON relic_copies(holder_space_id, holder_kind);
+    CREATE TABLE IF NOT EXISTS relic_copy_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      copy_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('genesis','placed','claimed','exchanged','returned','consumed','brain-deleted')),
+      space_id TEXT,
+      world TEXT,
+      anchor_key TEXT,
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS relic_copy_events_copy_idx ON relic_copy_events(copy_id, id);
     -- REG-197 (RC-04): one receipt per grade attempt, so a retry of the same
     -- attempt replays the committed outcome instead of re-grading, re-paying,
     -- and re-running SM-2. Same DDL runs in db/client.ts migrateSchema().

@@ -113,7 +113,7 @@ describe("verified find (A1–A3, A6)", () => {
 });
 
 describe("release and returns (A7–A9)", () => {
-  it("A7: releasing returns exactly one copy, writes one returns row naming both anchors, anchors differ", () => {
+  it("A7: releasing returns exactly one copy, records one return naming both anchors, anchors differ", () => {
     for (let i = 0; i < 7; i++) give(`other-${i}`, "harbor-nail");
     expect(store().claimFind("late", "harbor-nail", "great-station").ok).toBe(false);
     give("holder", "mooring-ring", { anchor: "mooring-ring:resting-place-one" });
@@ -121,18 +121,29 @@ describe("release and returns (A7–A9)", () => {
     expect(ev?.fromAnchor).toBe("mooring-ring:resting-place-one");
     expect(ev?.toAnchor).toBeTruthy();
     expect(ev?.toAnchor).not.toBe(ev?.fromAnchor);
-    const rows = handle.sqlite.prepare(`SELECT * FROM relic_returns WHERE space_id = 'holder'`).all() as unknown[];
-    expect(rows).toHaveLength(1);
-    // The freed harbor copy: remove one holder, then a new find succeeds.
-    handle.sqlite.prepare(`DELETE FROM relic_holdings WHERE space_id = 'other-0' AND relic_id = 'harbor-nail'`).run();
+    // I-2: the return is recorded on the copy's event chain, not in
+    // relic_returns (which receives no new rows from this increment on).
+    const copy = handle.sqlite.prepare(`SELECT copy_id FROM relic_copies WHERE relic_id = 'mooring-ring'`).get() as { copy_id: string };
+    const returned = handle.sqlite.prepare(`SELECT anchor_key, detail FROM relic_copy_events WHERE copy_id = ? AND kind = 'returned'`).all(copy.copy_id) as { anchor_key: string; detail: string }[];
+    expect(returned).toHaveLength(1);
+    expect(returned[0]!.anchor_key).toBe(ev?.fromAnchor);
+    expect((JSON.parse(returned[0]!.detail) as { toAnchor: string }).toAnchor).toBe(ev?.toAnchor);
+    expect(handle.sqlite.prepare(`SELECT * FROM relic_returns WHERE space_id = 'holder'`).all()).toHaveLength(0);
+    // The freed harbor copy: release one holder properly, then a new find succeeds.
+    store().release("other-0", "harbor-nail");
     expect(store().claimFind("late", "harbor-nail", "great-station").ok).toBe(true);
   });
-  it("A7b: a released counted relic's copy can be found by another space (pool +1 exactly)", () => {
+  it("A7b: a released counted relic's copy can be found by another space (the same copy changes hands)", () => {
     for (let i = 0; i < 7; i++) give(`other-${i}`, "harbor-nail");
     expect(store().poolAvailable("harbor-nail")).toBe(0);
     store().release("other-3", "harbor-nail");
-    expect(store().poolAvailable("harbor-nail")).toBe(1);
+    // I-2 copy truth: the released copy still EXISTS (it rests, placed),
+    // so the copy count never drops — what frees is the copy itself.
+    expect(store().poolCount("harbor-nail")).toBe(7);
+    const resting = handle.sqlite.prepare(`SELECT copy_id FROM relic_copies WHERE relic_id = 'harbor-nail' AND state = 'placed'`).get() as { copy_id: string };
     expect(store().claimFind("newcomer", "harbor-nail", "great-station").ok).toBe(true);
+    const held = handle.sqlite.prepare(`SELECT copy_id FROM relic_copies WHERE relic_id = 'harbor-nail' AND holder_space_id = 'newcomer'`).get() as { copy_id: string };
+    expect(held.copy_id).toBe(resting.copy_id);
     expect(store().poolAvailable("harbor-nail")).toBe(0);
   });
   it("A8: a long-idle holding is untouched by reads and state computation", () => {
@@ -152,9 +163,15 @@ describe("release and returns (A7–A9)", () => {
     expect(out.returnedCounted).toBe(1);
     expect(out.removedTotal).toBe(3);
     expect(holdingsCount("s1")).toBe(0);
-    expect(store().poolCount("harbor-nail")).toBe(before - 1);
-    const rows = handle.sqlite.prepare(`SELECT relic_id, reason FROM relic_returns WHERE space_id = 's1'`).all() as { relic_id: string; reason: string }[];
-    expect(rows).toEqual([{ relic_id: "harbor-nail", reason: "brain-deleted" }]);
+    // I-2 copy truth: the counted copy RETURNED to the world — it still
+    // exists (placed), so the copy count is unchanged; what changed is
+    // that it rests free again. The return is recorded on its chain.
+    expect(store().poolCount("harbor-nail")).toBe(before);
+    const harborCopy = handle.sqlite.prepare(`SELECT copy_id, state FROM relic_copies WHERE relic_id = 'harbor-nail'`).get() as { copy_id: string; state: string };
+    expect(harborCopy.state).toBe("placed");
+    const bd = handle.sqlite.prepare(`SELECT kind FROM relic_copy_events WHERE copy_id = ? AND kind = 'brain-deleted'`).all(harborCopy.copy_id);
+    expect(bd).toHaveLength(1);
+    expect(handle.sqlite.prepare(`SELECT relic_id, reason FROM relic_returns WHERE space_id = 's1'`).all()).toEqual([]);
   });
 });
 
