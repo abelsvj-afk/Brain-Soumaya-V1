@@ -126,3 +126,12 @@ As asked, the rest were re-checked; nothing outside the four reviewed images is 
 - §5 set — open pick from earlier notes: v5 (most literal swan) vs v8 (most ship-like) as the Lullaby reference.
 
 **Standing deviations (whole-run, not per-file):** no aspect-ratio control at generation (several portrait results against wide asks — crop plan); Eternity's white void renders as indigo space in most images. Nothing in this update needs a code change, and no story rulings were invented — the open items above are flagged, not settled.
+
+## Owner rulings — 2026-10-30 (both flagged items cleared)
+
+The owner reviewed the images directly and ruled both open items FINE as they stand:
+
+1. **Crescent embroidery — ALLOWED.** The star-and-crescent embroidery on `21-ysmerel-the-last-choirmaster-v1.png` (robe) and `24-dorrow-quint-and-the-great-book-v3.png` (coat and desk) is fine as decoration; it does not breach the no-crescents line. Both files stand as usable keepers, no marking.
+2. **The Keeper's white — ALLOWED.** The eighth keeper in `35-the-eighth-bell-v2.png` and `35-the-eighth-bell-v4.png` may wear the white hood / faceless read. Both files stand as usable keepers alongside v1/v3, no marking.
+
+Remaining open items after these rulings: §20 canonical triptych pick; §5 Lullaby reference pick (v5 vs v8); §22 — v3 is the only flameless-lantern variant (standing recommendation: canon pick); §19 source prompt text still says "oval" (lore side's call).
