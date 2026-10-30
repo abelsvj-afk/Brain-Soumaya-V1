@@ -794,7 +794,7 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   `docs/specs/lore-voices-howto-2026-10-30.md`): the owner sees every voice on the ElevenLabs account (with a sample), gives one to the Narrator or to a character, tests it, and
   clears it — a voice chosen in the app beats a Fly secret, and a role without a voice is read by the Narrator, so one choice makes everything work. The only secret needed is the API key.
 - **The lore lives in physical places — spots + tap-to-fly (2026-10-31, owner: "everything is tied to physical spots and locations … you need to be able to traverse around the
-  area") — spot landmarks MEASURED in a real headless browser (Station, Scale, People, Quiet; Deep Past once), tap-to-fly NOT exercised in a real browser, needs on-device
+  area") — spot landmarks MEASURED in a real headless browser (Station, Scale, People, Quiet; Deep Past once), tap-to-fly MEASURED in a real browser 2026-10-31 (see spec §11), needs on-device
   confirmation** (shared/storyTriggers.ts `StorySpot`/`spotReach`/`pickNoticed(reaches)`, web graph/storySpots.ts, hooks/useStoryNotice.ts `reach`, WorldsSurface.tsx tap-to-fly +
   probe, scripts/spots-check.mjs; spec `docs/specs/lore-physical-spots-2026-10-31.md`): a Regard/Listen answers only where the viewer PHYSICALLY is — her ship once deployed and parked
   (flight worlds), her walking (garden, round the witness tree) — at a spot anchored to a named landmark of the scene (the same holders as the Fly-to places). No marker, no glow, not

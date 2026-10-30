@@ -1753,6 +1753,8 @@ export default function WorldsSurface({
             });
             return out;
           },
+          // Where her ship is and what it is doing (null until she is out), so a script can check a tap really flew her somewhere.
+          flight: () => (flightRef.current ? { phase: flightRef.current.phase, pos: [flightRef.current.pos[0], flightRef.current.pos[1], flightRef.current.pos[2]] } : null),
           report: () => {
             world.group.updateMatrixWorld(true);
             return STORY_TRIGGERS.filter((t) => t.world === currentWorld && t.spot).map((t) => ({
