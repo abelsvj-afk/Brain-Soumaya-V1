@@ -415,3 +415,13 @@ Files: `41-ysmerel-at-the-hushs-edge-v1.png` … `v4.png`. All four wide. Ysmere
 - The single pale gold glint is kept to one in every variant (a lone star in v1/v3, a distant point of light on the line in v2/v4).
 
 Verdict: a clean, consistent set; no new flags. Your pick.
+
+## §42 — Hesk's Room and Tamsin's Ward (Round 1 leftover, Draft 5 — the last of the sheet)
+
+Files: `42-hesks-room-and-tamsins-ward-v1.png` … `v4.png`. All four wide, all four true diptychs: two rooms, one thin wall down the middle. Left, the storeroom in lamp-gold and wood — shelves of small ordinary belongings, every one with its careful tag: the tin toy (a soldier in v1, a doll-figure in v4, a tin robot in v3), the ribbon, the boot and the spoon all present across the set. Hesk stands in the doorway with his back to us in every variant, big in the Warden's coat, the ring of keys in his hand (fullest in v2 and v4). Right, the ward in ember amber and green: cots of pale, half-transparent patients, resting — the Faded exactly as canon draws them, no gore, no fear — and Tamsin among them in her green apron, the same face as §23 and §47.
+
+- **The keyhole window** — the set's signature — is in the dividing wall and glowing in all four: a round window with a keyhole at its heart in v1 and v2, a tall glowing keyhole in v3 (the largest and most dramatic), a lit keyhole plate in v4. Same wall, same place, both sides, every time.
+- **The counting** reads clearly only in v1, where Tamsin's raised finger is mid-count; in v2–v4 she holds a small count-slip and looks down the row — the count implied rather than shown.
+- One near-miss for Claude's eye: v4's shelf tags carry the closest-to-legible pseudo-writing of the round — still no readable word at full size, but the nearest the generator came.
+
+Verdict: two halves of one grief, delivered as written. The sheet is complete. Your pick.
