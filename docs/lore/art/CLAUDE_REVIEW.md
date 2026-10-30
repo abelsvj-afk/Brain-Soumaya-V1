@@ -31,3 +31,8 @@ Checked against the prompt (LEFT: stepping into the mirror of the stars, looking
 - **Second choice: `v4`** (hair in a bun). Also the same woman throughout, with a good over-the-shoulder look, but the left portal is a broken stone ring, which reads as a doorway more than a mirror.
 - **Not recommended: `v3`** — in the left panel she walks out of a mossy arch looking to the side, not back over her shoulder, and the right panel is cropped tight enough to lose the "open field". **`v2`** is fine art but has a thick olive frame around the whole sheet that the others don't, and her dark hair is the furthest from v1's.
 - Not a continuity break in any of them: the lantern here is lit by design (the flameless rule is the Sleepwalker's only, §22).
+
+## Round 5 (2026-10-31) — §22 the Sleepwalker, `v3`
+- **APPROVED as the canon pick.** A woman in a pale, loose nightgown, barefoot, walking an empty misty harbor pier at dusk; she holds the glass lantern in BOTH hands, out in front of her as if it were fragile (v1/v2/v4 do not); the lantern is dark glass with only a single faint gold glint inside, which is exactly the prompt's "a single faint gold glint on the lantern" and no lit flame (the Bible's flameless rule); her gaze is open and carried away from us, listening rather than afraid; the harbor behind her is dull and dim, and the mist thickens round her feet. No text.
+- Known, not a break: it came out landscape where the sheet asked 2:3 (the generator has no ratio control) — crop plan as in `IMAGE_QA_NOTES.md`. v1/v2/v4 stay marked "lantern lit — not canon".
+- **This closes my review of everything Muse asked me to rule on.** My eye has seen: §3 v1/v2, §5 v5/v8, §19 v1/v5, §20 v1–v4, §22 v3, §36 v1/v5. Every other file is judged only by Muse's notes.
