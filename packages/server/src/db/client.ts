@@ -1895,6 +1895,55 @@ export function migrateSchema(sqlite: RawDb): void {
     CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(text);
   `);
 
+  // G0 backup lifecycle records (increment B1): one row per backup
+  // ATTEMPT for existing volumes. New table only — CREATE TABLE IF NOT
+  // EXISTS with DDL identical to BOOTSTRAP_SQL in db/schemaSql.ts
+  // (fresh DBs already have it; this is a no-op there). State is plain
+  // TEXT so B2+ lifecycle states need no migration. No columns are added
+  // to existing tables, so the bootstrap-references-migration-column
+  // crash pattern cannot arise.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS backup_attempts (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      state TEXT NOT NULL DEFAULT 'created',
+      failure_stage TEXT,
+      failure_detail TEXT,
+      snapshot_path TEXT,
+      snapshot_sha256 TEXT,
+      snapshot_bytes INTEGER,
+      manifest_json TEXT,
+      finished_at TEXT
+    );
+  `);
+
+  // daily_quests reconciliation (G0 inventory v4, 2026-10-30):
+  // production carries this table (3 rows) from the streaks-and-quests
+  // era, but main's schema never created it. New table only — CREATE
+  // TABLE IF NOT EXISTS with DDL identical to BOOTSTRAP_SQL in
+  // db/schemaSql.ts, mirroring production's actual definition
+  // (extracted read-only from sqlite_master, 2026-10-30; the plan doc
+  // plans/streaks-and-quests-spec.md disagrees with production — FK
+  // parent, NOT NULL flags, index name — and production wins). No-op
+  // on production, where the table already exists; no columns are
+  // added to existing tables, so the bootstrap-references-migration-
+  // column crash pattern cannot arise.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS daily_quests (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      quest_type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      current_progress INTEGER NOT NULL DEFAULT 0,
+      target_count INTEGER NOT NULL,
+      fuel_reward REAL NOT NULL,
+      completed INTEGER NOT NULL DEFAULT 0,
+      reward_claimed INTEGER NOT NULL DEFAULT 0,
+      created_date TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS daily_quests_space_date_idx ON daily_quests(space_id, created_date);
+  `);
+
   // Fix round 2 (audit P1: direct-capture recovery): volumes created
   // by the V1 build (PR #104, pre-fix-2) already have a `sources`
   // table WITHOUT capture_intent/capture_params — the CREATE TABLE
