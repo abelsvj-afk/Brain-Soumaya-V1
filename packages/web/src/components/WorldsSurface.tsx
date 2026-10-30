@@ -102,7 +102,7 @@ import {
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
 import { useStoryNotice } from "../hooks/useStoryNotice.js";
-import { locateLandmarks, makeReach } from "../graph/storySpots.js";
+import { inspectablesHere, locateLandmarks, makeReach } from "../graph/storySpots.js";
 import { STORY_TRIGGERS } from "@brain/shared";
 import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
@@ -113,6 +113,7 @@ import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
 import { encounterLine, encounterStep, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
 import { anchorFromBounds, createNpcBodies, type NpcBodies } from "../graph/npcBodies.js";
+import type { PlaceLore } from "@brain/shared";
 import { canTalkTo, castIn, castMember, faithLabel, hash01, worldLife, type SocietyDay } from "@brain/shared";
 import { useSociety } from "../hooks/useSociety.js";
 import { patrolLabel } from "../graph/npcPresence.js";
@@ -974,6 +975,38 @@ export default function WorldsSurface({
   });
   const storyRef = useRef(story);
   storyRef.current = story;
+  // Places with a past (S4, shared/placeLore.ts): when she is parked beside a landmark that has something to say, offer to look closely. Scenery only — nothing is found or scored here.
+  const [inspect, setInspect] = useState<PlaceLore | null>(null);
+  const [reading, setReading] = useState<PlaceLore | null>(null);
+  useEffect(() => {
+    if (!visible || mode !== "world" || !currentWorld) {
+      setInspect(null);
+      setReading(null);
+      return;
+    }
+    const tick = () => {
+      let here: PlaceLore | null = null;
+      if (currentWorld === "growing-place") {
+        const w = walkRef.current;
+        if (w.route.length === 0) here = inspectablesHere(currentWorld, null, [w.pos.x, 0, w.pos.z])[0] ?? null;
+      } else {
+        const fl = flightRef.current;
+        const root = sceneHandleRef.current?.group;
+        if (fl && root && fl.phase === "idle") {
+          root.updateMatrixWorld(true);
+          here = inspectablesHere(currentWorld, root, fl.pos)[0] ?? null;
+        }
+      }
+      setInspect((cur) => (cur?.id === here?.id ? cur : here));
+    };
+    tick();
+    const id = window.setInterval(tick, 800);
+    return () => window.clearInterval(id);
+  }, [visible, mode, currentWorld]);
+  // Walk or fly away and the passage closes with the place.
+  useEffect(() => {
+    if (reading && inspect?.id !== reading.id) setReading(null);
+  }, [inspect, reading]);
   // Eternity acts on his own (the server decides and logs; this only plays a fresh act once, while you are there).
   useEternityAutonomy(visible && mode === "world" && currentWorld === "eternity", (p) => {
     const e = sceneHandleRef.current?.eternity;
@@ -3333,6 +3366,20 @@ export default function WorldsSurface({
         );
       })()}
       {talkNpc && mode === "world" && <NpcTalk npc={talkNpc} world={currentWorld ?? null} meetings={readMet(getSpaceId())[talkNpc]?.count ?? 1} onClose={() => setTalkNpc(null)} />}
+      {inspect && !reading && mode === "world" && (
+        <button type="button" className="place-inspect" onClick={() => setReading(inspect)}>
+          Look closely: {inspect.title}
+        </button>
+      )}
+      {reading && mode === "world" && (
+        <div className="place-card" role="dialog" aria-label={reading.title}>
+          <strong>{reading.title}</strong>
+          <p>{reading.text}</p>
+          <button type="button" className="mini" onClick={() => setReading(null)}>
+            Close
+          </button>
+        </div>
+      )}
       {story.caption && mode === "world" && (
         <p className="story-notice" role="status">
           {story.caption}

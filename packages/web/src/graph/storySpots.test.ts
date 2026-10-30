@@ -73,3 +73,19 @@ describe("Eternity views", () => {
     expect(makeReach("eternity", null, [0, 60, 620])(byId("echo.eighth-bell"))).toBe(false);
   });
 });
+
+describe("places with a past", () => {
+  it("offers a passage only while standing beside its landmark (and fails closed without the model)", async () => {
+    const { inspectablesHere } = await import("./storySpots.js");
+    const root = new THREE.Group();
+    const drydock = new THREE.Mesh(new THREE.BoxGeometry(14, 14, 14), new THREE.MeshBasicMaterial());
+    drydock.name = "witness-drydock-gantry";
+    drydock.position.set(1000, 0, 0);
+    root.add(drydock);
+    expect(inspectablesHere("great-station", root, [1000, 0, 60]).map((p) => p.id)).toEqual(["station.gantry"]);
+    expect(inspectablesHere("great-station", root, [0, 0, 0])).toEqual([]);
+    expect(inspectablesHere("great-station", new THREE.Group(), [1000, 0, 60])).toEqual([]);
+    expect(inspectablesHere("growing-place", null, [100, 0, 0]).map((p) => p.id)).toEqual(["garden.tree"]);
+    expect(inspectablesHere("growing-place", null, [900, 0, 0])).toEqual([]);
+  });
+});

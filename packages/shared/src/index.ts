@@ -13,6 +13,7 @@ export * from "./intelligence.js";
 export * from "./worlds.js";
 export * from "./npcs.js";
 export * from "./npcDialogue.js";
+export * from "./placeLore.js";
 export * from "./society.js";
 export * from "./societyLife.js";
 export * from "./tours.js";

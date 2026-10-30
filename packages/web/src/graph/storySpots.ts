@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { spotReach, viewReach, STORY_TRIGGERS, type StoryTrigger } from "@brain/shared";
+import { spotReach, viewReach, PLACE_LORE_FOR, STORY_TRIGGERS, type PlaceLore, type StoryTrigger } from "@brain/shared";
 import type { V3 } from "./worldFlight.js";
 
 /**
@@ -58,3 +58,17 @@ export function makeReach(world: string, root: THREE.Object3D | null, viewer: V3
 
 /** Does this world's lore live at physical spots (so a viewer must be deployed to find any of it)? */
 export const worldHasSpots = (world: string): boolean => STORY_TRIGGERS.some((t) => t.world === world && (t.how === "regard" || t.how === "listen") && !!t.spot);
+
+/** Places with a past (shared/placeLore.ts): the ones whose landmark the viewer is standing beside right now. Same fail-closed rule as the spots — no landmark, no passage. */
+export function inspectablesHere(world: string, root: THREE.Object3D | null, viewer: V3): PlaceLore[] {
+  const out: PlaceLore[] = [];
+  for (const p of PLACE_LORE_FOR(world)) {
+    if (p.origin) {
+      if (spotReach({ near: p.near, origin: true }, [0, 0, 0], 1, viewer)) out.push(p);
+      continue;
+    }
+    if (!p.place || !root) continue;
+    if (locateLandmarks(root, p.place).some((m) => spotReach({ near: p.near, min: p.min }, m.center, m.radius, viewer))) out.push(p);
+  }
+  return out;
+}
