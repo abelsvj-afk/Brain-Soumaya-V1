@@ -78,3 +78,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §35 filed (141 keepers) — ALL 36 PROMPTS NOW GENERATED
 
 §35 The Eighth Bell: the full line reads left to right in every variant — lamp, measure, gate, leaf, hearth, lock, stillness (stacked stones; v3's stillness is a smooth round stone figure with closed eyes), each tender carrying its own small bell, and at the end the eighth keeper, plain-coated, closed fist raised to ring empty air, concentric rings of light spreading from where the bell should be. v3 alone gives a true white void (left half of frame); the rest sit in indigo (standing white-void note). Minor observation: in v2/v4 the keeper is white-hooded and faceless, which borrows Eternity's palette; v1 (bald man, pale coat, profile) and v3 (hooded but earth-toned, seen from behind) read as ordinary people. Your call whether the keeper may share that palette.
+
+## Update — §4 REDO filed (145 keepers) — supersedes v1–v4
+
+§4 Vesh regenerated as v5–v8 with an explicit androgynous direction line added to the verbatim prompt. The fix worked: all four now read as genuinely ungendered — one consistent gaunt, ageless, tired face that settles as neither man nor woman — hooded dusk-violet robes, the hollow a clean perfectly circular gap with the archive visible through it, no gore, one empty open palm, the other hand raised as if letting go. **v5–v8 are the canonical Vesh; the female-reading v1–v4 still in this folder are SUPERSEDED — do not use them.** This set can serve as the Vesh face reference for future art.
