@@ -458,9 +458,14 @@ export class RelicHoldingsStore {
    * exactly as the award core rules it (I-4, P1-B). Relics I-5: the
    * last-copy courtesy and stirring quiet-resolution both read THIS
    * number, so the two rules can never disagree about what "the
-   * last copy" means.
+   * last copy" means. Like poolCount above, the read converts first
+   * (P2-1, I-5 review): on a pre-I-2 volume whose holdings were
+   * never converted, an unconverted held copy is invisible to the
+   * copy reads below — supply would read high and the last-copy
+   * courtesy would never engage.
    */
   claimableSupply(relicId: string, scopeSpaceId: string | null): number {
+    try { this.backfillCopies(); } catch { /* bare handle without the I-2 tables: the reads below fail exactly as poolCount's did */ }
     const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
     const resting = this.copiesInScope(relicId, scopeSpaceId, false, ["placed"]);
     if (limit !== null) {
@@ -480,9 +485,14 @@ export class RelicHoldingsStore {
    * not holding a placed sibling in scope, while the pool allows;
    * else null — the pool could not furnish a copy, and no stirring
    * may be issued against it. Writes genesis + placed events;
-   * binds nothing. The caller owns the transaction.
+   * binds nothing. The caller owns the transaction. The pool read
+   * converts first (P2-1, I-5 review — the same backfill-first
+   * discipline as poolCount): on a dormant pre-I-2 volume the live
+   * count below would otherwise miss every unconverted holding,
+   * and issuance could mint a copy over the pool's limit.
    */
   ensurePlacedCopyInScope(relicId: string, scopeSpaceId: string | null, actorSpaceId: string): { copyId: string; anchorKey: string } | null {
+    try { this.backfillCopies(); } catch { /* bare handle without the I-2 tables: the reads below fail exactly as poolCount's did */ }
     const resting = this.h.sqlite.prepare(
       `SELECT * FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND test_only = 0 AND scope_space_id IS ? ORDER BY created_at ASC, copy_id ASC LIMIT 1`,
     ).get(relicId, scopeSpaceId) as CopyRow | undefined;

@@ -377,6 +377,63 @@ describe("brain deletion: NPC-held copies leave with the brain (the exit I-2 def
   });
 });
 
+describe("P2-1 regression (I-5 review): courtesy supply reads backfill first — the dormant-volume edge", () => {
+  /** A holding row exactly as pre-I-2 code wrote it (no copy bound): the
+   *  dormant volume's truth — holdings exist, relic_copies does not know
+   *  them yet, and NO relic read may have touched the volume since I-2. */
+  function giveUnconverted(space: string, relicId: string): void {
+    handle.sqlite.prepare(
+      `INSERT OR IGNORE INTO relic_holdings (space_id, relic_id, found_at, test_only, held, held_at, anchor_key) VALUES (?, ?, '2026-10-01T00:00:00.000Z', 0, 0, NULL, ?)`,
+    ).run(space, relicId, `${relicId}:resting-place-one`);
+  }
+  const copiesOf = (relicId: string): number =>
+    (handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_copies WHERE relic_id = ?`).get(relicId) as { n: number }).n;
+
+  it("claimableSupply reports the converted truth on a dormant volume (the poolCount pattern)", () => {
+    // Six of harbor-nail's seven copies are held on a pre-I-2 volume that
+    // no relic read has touched since I-2: holdings exist, copies do not.
+    for (let i = 0; i < 6; i++) giveUnconverted(`dormant-${i}`, "harbor-nail");
+    expect(copiesOf("harbor-nail")).toBe(0);
+    // The FIRST supply read must convert before it counts: six live
+    // copies, none resting placed → supply = 0 resting + 1 room = 1.
+    // (Pre-fix this read copies only and reported 7.)
+    expect(store().claimableSupply("harbor-nail", null)).toBe(1);
+    expect(copiesOf("harbor-nail")).toBe(6);
+  });
+
+  it("the last-copy courtesy engages on a dormant volume: the NPC is refused the true last copy under a live player stirring", () => {
+    for (let i = 0; i < 6; i++) giveUnconverted(`dormant-${i}`, "harbor-nail");
+    expect(copiesOf("harbor-nail")).toBe(0);
+    // sP's stirring issuance furnishes the seventh copy placed — against
+    // the CONVERTED pool (pre-fix it materialized against an empty read).
+    const s = stir().issue("sP", "harbor-nail", "ambient")!;
+    expect(s.state).toBe("open");
+    // Isolate the NPC's candidate set to harbor-nail, as in the courtesy suite.
+    new NpcRepo(handle, "npc-space").addHolding("harbor-controller", "mooring-ring", "great-station");
+    // claimForNpc's courtesy read is the first supply read after issuance:
+    // supply is truly 1 and the stirring is live → the NPC defers.
+    // (Pre-fix the read saw 1 placed + 0 live and reported 7 — the NPC
+    // took the copy the stirring had promised sP.)
+    const deferred = svc().claimForNpc("npc-space", "harbor-controller", "great-station", "harbor-nail");
+    expect(deferred.status).toBe("deferred");
+    expect(new NpcRepo(handle, "npc-space").holdings("harbor-controller")).toEqual(["mooring-ring"]);
+    expect(store().poolCount("harbor-nail")).toBe(7);
+    expect(stirringById(s.id).state).toBe("open");
+    // …and the player the stirring promised still takes that very copy.
+    const claim = sampledClaim("sP", "harbor-nail", "great-station", NAIL_POS);
+    expect(claim.ok).toBe(true);
+    if (claim.ok) expect(claim.copyId).toBe(s.copy_id);
+    expect(stirringById(s.id).state).toBe("claimed");
+  });
+
+  it("ensurePlacedCopyInScope converts first too: issuance on a fully-held dormant volume promises nothing", () => {
+    // All seven copies held, unconverted — there is nothing to promise.
+    for (let i = 0; i < 7; i++) giveUnconverted(`dormant-${i}`, "harbor-nail");
+    expect(store().ensurePlacedCopyInScope("harbor-nail", null, "sP")).toBeNull();
+    expect(copiesOf("harbor-nail")).toBe(7); // the converted truth — and no eighth copy minted over the limit
+  });
+});
+
 describe("RACE — the unified core under two processes (§8.1 #1, both claimer kinds)", () => {
   function runRaceChild(dbPath: string, mode: string, spaceId: string, goFile: string, readyFile: string): Promise<{ ok: boolean; status?: string; copyId?: string }> {
     return new Promise((resolve, reject) => {
