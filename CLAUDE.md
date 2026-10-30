@@ -640,6 +640,14 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   glyph is no longer the 🎯 Focus glyph. Painted/rendered art for 16 hero buttons is an optional Muse task
   (`docs/specs/muse-button-art-2026-10-30.md`, waits on a style pick). Look at: icon legibility at phone size, and the Views chips +
   Focus fan items, which are still emoji.
+- **Exits — the world map and Soumaya chat can always be closed (2026-10-30, owner: "soumaya chat has no x", the map "doesn't work") —
+  MEASURED in a real browser (412×915 home, 360×640 in a world; Escape, ✕ button, outside tap), needs on-device confirmation**
+  (ChatDock.tsx, WorldMap.tsx, index.css tail; spec `docs/specs/owner-feedback-2026-10-30-travel-exits-garden.md` §1): the chat's
+  "Close" was a small header-tool lookalike — now a bordered 44 px "✕ Close" pill, Escape closes it, and tapping the dimmed outside
+  closes it (new `.chatdock-scrim`). The map was see-through (a world's own header and gestures showed underneath = two "back"
+  buttons), its only exit read "Back to your galaxy" though it just closes the map, and Escape did nothing — now opaque, "✕ Close map",
+  Escape via `useDialogA11y`, and an honest empty line ("Worlds appear here as you reach them") because the map shows only discovered
+  worlds, which is why an early brain saw two dots. Look at: the chat header's width on very small phones (title/tools are tight at 360 px).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

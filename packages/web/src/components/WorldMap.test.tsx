@@ -158,10 +158,19 @@ describe("WorldMap — selecting and travelling (C3/C4/C8)", () => {
     expect(screen.queryByRole("button", { name: /^Travel to The Great Station$/ })).toBeNull();
   });
 
+  it("Escape closes the map too, and a map with only a couple of worlds says why it is sparse (owner: 'no way to exit', 'doesn't work')", async () => {
+    const onClose = vi.fn();
+    mockUseTravel.mockReturnValue(fakeTravel());
+    render(<WorldMap enabled onClose={onClose} onTravelTo={() => {}} />);
+    expect(screen.getByText(/Worlds appear here as you reach them/)).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("closing returns to the galaxy — the map never strands you", () => {
     mockUseTravel.mockReturnValue(fakeTravel());
     const { onClose } = renderMap();
-    fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close map" }));
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -198,7 +207,7 @@ describe("WorldMap — reduced motion (C6)", () => {
       expect(screen.getByRole("button", { name: "The Great Station" })).toBeTruthy();
       expect(screen.getByText("10 fuel")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Zoom in" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Back to your galaxy" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Close map" })).toBeTruthy();
     } finally {
       window.matchMedia = realMatchMedia;
     }

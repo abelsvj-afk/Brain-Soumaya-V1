@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatDegradedReason, ChatMood, NodeRef, NavigationIntent } from "@brain/shared";
+import { Icon } from "./icons/Icon.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { askChat, getSpaceId, ingestText, distillChat, type ProactiveContext } from "../api/client.js";
 import { CHAT_QUESTION_MAX } from "../api/chatSend.js";
@@ -836,6 +837,8 @@ export function ChatDock({
     elapsedMs < 2500 ? "Reading your galaxy…" : elapsedMs < 9000 ? "Thinking it through…" : "Still working on it — the deep ones take a moment…";
 
   return (
+    <>
+    <div className="chatdock-scrim" onClick={() => void handleClose()} aria-hidden="true" />
     <div className="chatdock" role="dialog" aria-label={`Chat with ${spaceName}`} ref={dockRef}>
       <header className="chatdock-head">
         <span className="chatdock-title">
@@ -902,14 +905,16 @@ export function ChatDock({
               <span className="chatdock-tool-label">Clear</span>
             </button>
           )}
+          {/* The one way out is a real, prominent ✕ Close (owner: "soumaya chat has no x"): a bordered 44 px button, not a
+              header tool lookalike. Escape and a tap on the dimmed outside close it too. */}
           <button
-            className="chatdock-tool"
+            className="chatdock-close"
             onClick={() => void handleClose()}
-            title="Close"
+            title="Close chat"
             aria-label="Close"
           >
-            <span aria-hidden="true">×</span>
-            <span className="chatdock-tool-label">Close</span>
+            <Icon name="close" size={20} />
+            <span className="chatdock-close-label">Close</span>
           </button>
         </div>
       </header>
@@ -1259,5 +1264,6 @@ export function ChatDock({
         />
       )}
     </div>
+    </>
   );
 }

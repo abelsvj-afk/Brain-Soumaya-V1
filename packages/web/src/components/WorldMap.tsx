@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { Icon } from "./icons/Icon.js";
+import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import { useTravel, readTraversedRoutes } from "../hooks/useTravel.js";
 import {
@@ -59,6 +61,9 @@ export default function WorldMap({
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<ViewTransform>(HOME_VIEW);
   const dragRef = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null);
+  // Escape closes, Tab stays inside, focus returns to where it was (owner: the map had no way out but one oddly-worded button).
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useDialogA11y(dialogRef, onClose);
 
   // The map derives from the server's travel state plus the client's
   // traversed-routes record — the same record the skip rule reads. It
@@ -99,7 +104,7 @@ export default function WorldMap({
   };
 
   return (
-    <section className="world-map" role="dialog" aria-label="World map">
+    <section className="world-map" role="dialog" aria-label="World map" ref={dialogRef}>
       <header className="world-map-bar">
         <h3>World map</h3>
         {fuel && (
@@ -107,8 +112,9 @@ export default function WorldMap({
             Fuel {Math.floor(fuel.fuel)} / {fuel.capacity}
           </span>
         )}
-        <button type="button" onClick={onClose}>
-          Back to your galaxy
+        {/* It only closes the map — it never leaves a world — so it says so (it used to read "Back to your galaxy"). */}
+        <button type="button" className="world-map-close" onClick={onClose} aria-label="Close map">
+          <Icon name="close" size={18} /> Close map
         </button>
       </header>
 
@@ -119,6 +125,9 @@ export default function WorldMap({
       )}
       {!state && !travel.error && (
         <p className="world-map-fallback">Checking the chart…</p>
+      )}
+      {state && data && data.nodes.length <= 2 && (
+        <p className="world-map-empty">Worlds appear here as you reach them. Open Travel from the Tools menu to set out.</p>
       )}
 
       {state && data && (

@@ -77,7 +77,7 @@ describe("ChatDock — close button must not get stuck", () => {
     distillChat.mockRejectedValue(new Error("network down"));
     const onClose = vi.fn();
     render(<ChatDock onClose={onClose} onFocus={() => {}} />);
-    const closeBtn = await screen.findByTitle("Close");
+    const closeBtn = await screen.findByTitle("Close chat");
     await act(async () => { closeBtn.click(); });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(pushToast).toHaveBeenCalledWith(expect.any(String), "⚠️", expect.any(Number));
