@@ -415,26 +415,41 @@ export interface RelicAnchorDef {
 export const RELIC_ANCHOR_RADIUS = 30;
 
 /**
- * Server-known anchor points, one per placed relic — the relic's ONE
- * existing resting place (anchor SETS are I-2's work, §3.2). Positions
- * are lifted verbatim (evaluated) from the web record
- * (`packages/web/src/graph/relicAssets.ts` RELIC_ANCHORS), which derives
- * them from the world layout constants: Station wheel radius 210,
+ * Server-known anchor SETS (I-2 expanded the I-1 single anchors per
+ * implementation design §3.2). Each placed relic's FIRST entry is its
+ * original resting place, lifted verbatim (evaluated) from the web
+ * record (`packages/web/src/graph/relicAssets.ts` RELIC_ANCHORS), which
+ * derives it from the world layout constants: Station wheel radius 210,
  * Garden top terrace 90 (+12 clearance), Deep Past basin floor −830
  * (+12), People field radius 560 (+10 at the edge). The web keeps
  * deriving its scene placement from those constants; the parity test in
- * `packages/web/src/graph/relicAssets.test.ts` asserts the two records
- * agree per anchor, so scene and server can never silently drift.
+ * `packages/web/src/graph/relicAssets.test.ts` asserts the scene anchor
+ * and this record's first entry agree, so scene and server can never
+ * silently drift.
+ *
+ * The additional entries are real resting places in the same worlds,
+ * computed from the same layout constants (derivations noted per set),
+ * spread across each world's named places, at least a claim diameter
+ * (2 × RELIC_ANCHOR_RADIUS) apart within a set — copies are physical
+ * (§4.2): several can rest at once, and a returning copy may never go
+ * back to a place IT has already been (approved design §1), so a set
+ * must hold at least the definition's copy limit (7 public, 3
+ * Eternity-class) or at least 3 for private-class relics.
  *
  * An EMPTY array means unplaced (approved design §3.3): no stirrings,
  * no references, no claims until an O-R6 placement session gives the
- * relic a real resting place. No position is invented here — the five
- * relics whose worlds are unbuilt keep empty sets, exactly as they
- * keep `discoverable: false`.
+ * relic a real resting place. No position is invented for the five
+ * relics whose worlds are unbuilt — they keep empty sets, exactly as
+ * they keep `discoverable: false`.
  */
 export const RELIC_ANCHOR_POINTS: Readonly<
   Record<string, readonly RelicAnchorDef[]>
 > = {
+  // Great Station: the wheel rim (radius 210, top y = 38 — the first
+  // anchor's convention), further seams ~0.9 rad apart (≈188 units of
+  // arc). The mooring road: radius 220 at y = 14 (the first anchor
+  // rests at radius ≈228), angles clear of the hero's mooring (0), the
+  // docking arm (π/2) and the harbor controller's berth (3π/4).
   "harbor-nail": [
     {
       anchorKey: "harbor-nail:lower-rim",
@@ -442,6 +457,48 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [210, 38, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "the lower rim of the harbor, set into an ancient seam",
+    },
+    {
+      anchorKey: "harbor-nail:rim-seam-2",
+      world: "great-station",
+      position: [130.5, 38, 164.5],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the harbor's rim, set into an ancient seam",
+    },
+    {
+      anchorKey: "harbor-nail:rim-seam-3",
+      world: "great-station",
+      position: [-47.7, 38, 204.5],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the harbor's rim, set into an ancient seam",
+    },
+    {
+      anchorKey: "harbor-nail:rim-seam-4",
+      world: "great-station",
+      position: [-189.9, 38, 89.7],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the harbor's rim, set into an ancient seam",
+    },
+    {
+      anchorKey: "harbor-nail:rim-seam-5",
+      world: "great-station",
+      position: [-188.3, 38, -92.9],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the harbor's rim, set into an ancient seam",
+    },
+    {
+      anchorKey: "harbor-nail:rim-seam-6",
+      world: "great-station",
+      position: [-44.3, 38, -205.3],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the harbor's rim, set into an ancient seam",
+    },
+    {
+      anchorKey: "harbor-nail:rim-seam-7",
+      world: "great-station",
+      position: [133.3, 38, -162.3],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the harbor's rim, set into an ancient seam",
     },
   ],
   "mooring-ring": [
@@ -452,7 +509,53 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "where the harbor's stone meets the open road",
     },
+    {
+      anchorKey: "mooring-ring:road-2",
+      world: "great-station",
+      position: [89.9, 14, 200.8],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
+    {
+      anchorKey: "mooring-ring:road-3",
+      world: "great-station",
+      position: [-81.4, 14, 204.4],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
+    {
+      anchorKey: "mooring-ring:road-4",
+      world: "great-station",
+      position: [-216, 14, 41.9],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
+    {
+      anchorKey: "mooring-ring:road-5",
+      world: "great-station",
+      position: [-167.1, 14, -143.1],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
+    {
+      anchorKey: "mooring-ring:road-6",
+      world: "great-station",
+      position: [-13.7, 14, -219.6],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
+    {
+      anchorKey: "mooring-ring:road-7",
+      world: "great-station",
+      position: [148, 14, -162.8],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
   ],
+  // The Growing Place: the terraces (gardenLayout: radii
+  // 900/780/660/540/400/250, heights 0/18/36/54/72/90; anchors rest at
+  // terrace height + 12, the first anchors' convention). Extra rests
+  // sit on the crown terrace (radius 250) and the terraces below.
   "dawn-leaf": [
     {
       anchorKey: "dawn-leaf:witness-roots",
@@ -460,6 +563,20 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [-34, 102, 22],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "near the roots of the witness tree",
+    },
+    {
+      anchorKey: "dawn-leaf:terrace-five",
+      world: "growing-place",
+      position: [150, 102, -140],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the top terrace of the Growing Place",
+    },
+    {
+      anchorKey: "dawn-leaf:terrace-four",
+      world: "growing-place",
+      position: [-260, 84, 180],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "a lower terrace of the Growing Place",
     },
   ],
   "witness-seed": [
@@ -470,12 +587,43 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "beneath the witness tree, at the trunk's base",
     },
+    {
+      anchorKey: "witness-seed:terrace-five",
+      world: "growing-place",
+      position: [-170, 102, -110],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the top terrace of the Growing Place",
+    },
+    {
+      anchorKey: "witness-seed:terrace-three",
+      world: "growing-place",
+      position: [300, 66, 260],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "a lower terrace of the Growing Place",
+    },
   ],
+  // The Deep Past: the basin floor (−830 + 12) inside the basin radius
+  // (320); the lantern's alcove band at the lowest stratum (y = −712,
+  // radius ~270–285, inside the strata arc 0.85–5.25 rad).
   "first-light-shard": [
     {
       anchorKey: "first-light-shard:basin-floor",
       world: "deep-past",
       position: [120, -818, 80],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "near the First Light basin",
+    },
+    {
+      anchorKey: "first-light-shard:basin-west",
+      world: "deep-past",
+      position: [-60, -818, 210],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "near the First Light basin",
+    },
+    {
+      anchorKey: "first-light-shard:basin-south",
+      world: "deep-past",
+      position: [40, -818, -230],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "near the First Light basin",
     },
@@ -488,12 +636,40 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "on the floor of the basin",
     },
+    {
+      anchorKey: "basin-stone:basin-east",
+      world: "deep-past",
+      position: [210, -818, 150],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "on the floor of the basin",
+    },
+    {
+      anchorKey: "basin-stone:basin-south",
+      world: "deep-past",
+      position: [-20, -818, -215],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "on the floor of the basin",
+    },
   ],
   "lantern-of-keeping": [
     {
       anchorKey: "lantern-of-keeping:lowest-alcove",
       world: "deep-past",
       position: [150, -712, 242],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "in a lowest-stratum alcove above the basin",
+    },
+    {
+      anchorKey: "lantern-of-keeping:alcove-2",
+      world: "deep-past",
+      position: [-231.4, -712, 139.2],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "in a lowest-stratum alcove above the basin",
+    },
+    {
+      anchorKey: "lantern-of-keeping:alcove-3",
+      world: "deep-past",
+      position: [-81.8, -712, -253.1],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "in a lowest-stratum alcove above the basin",
     },
@@ -506,7 +682,25 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "the lowest stratum, at the First Light basin",
     },
+    {
+      anchorKey: "witness-without-a-name:basin-east",
+      world: "deep-past",
+      position: [180, -818, -120],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the lowest stratum, at the First Light basin",
+    },
+    {
+      anchorKey: "witness-without-a-name:basin-west",
+      world: "deep-past",
+      position: [-190, -818, -140],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the lowest stratum, at the First Light basin",
+    },
   ],
+  // People: the field's heart (the first Ember anchor) and its rim —
+  // radius 570 (field radius 560 + 10, the first Thread anchor's
+  // convention), clear of the farthest orbiting light (540) and the
+  // dressing ships (620+), on ground that runs to radius 600.
   "hearth-ember": [
     {
       anchorKey: "hearth-ember:first-hearths",
@@ -514,6 +708,20 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [0, 12, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "near the first hearths",
+    },
+    {
+      anchorKey: "hearth-ember:field-rim-2",
+      world: "people",
+      position: [-287.8, 12, 492],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "at the rim of the field of hearths",
+    },
+    {
+      anchorKey: "hearth-ember:field-rim-3",
+      world: "people",
+      position: [-279.4, 12, -496.8],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "at the rim of the field of hearths",
     },
   ],
   "thread-of-many": [
@@ -523,6 +731,20 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [570, 12, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "between the stones of the hearths",
+    },
+    {
+      anchorKey: "thread-of-many:field-rim-2",
+      world: "people",
+      position: [283.6, 12, 494.4],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "at the field's rim, where the paths meet the dark",
+    },
+    {
+      anchorKey: "thread-of-many:field-rim-3",
+      world: "people",
+      position: [287, 12, -492.5],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "at the field's rim, where the paths meet the dark",
     },
   ],
   "star-hanger": [],
@@ -622,14 +844,12 @@ export const RELIC_BLESSINGS: Readonly<Record<string, RelicBlessing>> = {
   "unnumbered-fragment": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — there is no Alignment measure in the app for it to speed up." },
 };
 
-/** Anchor pools: at least two resting places per relic in its world (note §6/§10 of the task). A released copy rests at the NEXT anchor in this list, never the one it was just found at. */
-export const RELIC_ANCHORS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(RELICS.map((r) => [r.id, [`${r.id}:resting-place-one`, `${r.id}:resting-place-two`, `${r.id}:resting-place-three`]]));
-export function nextRelicAnchor(relicId: string, fromAnchor: string | null | undefined): string {
-  const pool = RELIC_ANCHORS[relicId] ?? [`${relicId}:resting-place-one`, `${relicId}:resting-place-two`];
-  const idx = fromAnchor ? pool.indexOf(fromAnchor) : -1;
-  return pool[(idx + 1 + pool.length) % pool.length]!;
-}
-export function firstRelicAnchor(relicId: string): string { return (RELIC_ANCHORS[relicId] ?? [`${relicId}:resting-place-one`])[0]!; }
+/** RETIRED (Relics I-2): the synthetic anchor pools (`RELIC_ANCHORS`,
+ * `nextRelicAnchor`, `firstRelicAnchor`) are gone. Placement is per
+ * physical copy now: real anchor sets live in RELIC_ANCHOR_POINTS
+ * above, and a returning copy's next resting place is chosen from its
+ * own placement history (the relic_copy_events chain), never by
+ * per-definition rotation (implementation design §6, fix (c)). */
 
 export interface EffectiveRelicBuffs {
   fuelCap: number; fuelRegenPerHour: number; reviewEarn: number; linkEarn: number; discoveryEarn: number;

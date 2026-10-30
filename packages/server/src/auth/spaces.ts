@@ -184,6 +184,12 @@ export const SPACE_SCOPED_TABLES = [
   "travel_journeys",
   "relic_holdings",
   "relic_returns",
+  // Relics I-2: a copy's event rows that name this space are the space's
+  // data and die with it (D-05 census). relic_copies itself is NOT
+  // listed: copies are world objects with no space_id column — a
+  // returned copy outlives the brain that held it, and test/private
+  // copies are removed by releaseAllForSpace before the census runs.
+  "relic_copy_events",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.
@@ -430,11 +436,16 @@ export class SpacesRepo {
       `SELECT 1 AS x FROM sqlite_master WHERE name = ?`,
     );
     const tx = sqlite.transaction(() => {
-      // Relic Buffs v2 §6: a deleted brain's COUNTED relic copies return to
-      // their pools first — releaseAllForSpace writes their relic_returns
-      // rows before any space rows are deleted below. (The returns rows are
-      // themselves space-scoped, so the census then removes them with the
-      // brain; the pool counts stay true because the holdings are gone.)
+      // Relic Buffs v2 §6 / Relics I-2: a deleted brain's COUNTED relic
+      // copies return to their pools first — releaseAllForSpace returns
+      // them through their event chains before any space rows are deleted
+      // below. The census then removes this space's event rows like any
+      // other space data (D-05): a returned copy keeps its post-return
+      // 'placed' events (they name no space), so its placement history
+      // continues from its return placement; the deleted brain's own
+      // events are erased with the brain. relic_copies is not a census
+      // table — copies are world objects, and releaseAllForSpace has
+      // already removed this brain's test/private copies above.
       new RelicHoldingsStore(this.h).releaseAllForSpace(id);
       // Derived indexes first, while the entity rows still exist to select
       // the space's ids from.

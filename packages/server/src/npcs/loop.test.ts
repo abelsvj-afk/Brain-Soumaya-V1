@@ -158,8 +158,14 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     // invariant itself — an NPC holding lives ONLY in the NPC pool and
     // consumes no player/scarcity copy — is unchanged, and is asserted
     // directly below instead.
+    // Relics I-2 adds `relic_copies` + `relic_copy_events` (the physical
+    // copy pool and its chains) via the same dual DDL. addHolding itself
+    // still writes ONLY npc_relic_holdings; conversion of NPC holdings
+    // into unified-pool copies happens in the holdings store's backfill
+    // (holder_kind='npc'), which this test never invokes — the direct
+    // assertions below (no player-pool rows) are the invariant.
     expect(new Set(tables.map((t) => t.name))).toEqual(
-      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns"]),
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events"]),
     );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
     // No row for this space (or any space) appeared in the player pool:

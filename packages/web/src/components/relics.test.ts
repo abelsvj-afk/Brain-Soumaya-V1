@@ -163,9 +163,14 @@ describe("relic vocabulary (I-1)", () => {
     }
   });
 
-  it("gives every placed relic exactly one server-known anchor; the unplaced get empty sets", () => {
-    // The anchor keys are stable ids — I-2's provenance records will
-    // cite them, so they are pinned exactly, not just by prefix.
+  it("gives every placed relic a server-known anchor SET (I-2); the unplaced get empty sets", () => {
+    // The FIRST anchor key per relic is a stable id — provenance records
+    // cite anchor keys, so the first entries are pinned exactly, not just
+    // by prefix. Set sizes follow the design's §3.2 minimums: a set must
+    // hold at least the definition's copy limit (7 public, 3
+    // Eternity-class) or at least 3 for private-class relics, and every
+    // pair of anchors in a set sits at least a claim diameter apart
+    // (2 × RELIC_ANCHOR_RADIUS) so two copies never overlap.
     const expectedKeys: Record<string, string> = {
       "harbor-nail": "harbor-nail:lower-rim",
       "mooring-ring": "mooring-ring:harbor-road",
@@ -178,6 +183,10 @@ describe("relic vocabulary (I-1)", () => {
       "hearth-ember": "hearth-ember:first-hearths",
       "thread-of-many": "thread-of-many:field-edge",
     };
+    const minSizes: Record<string, number> = {
+      "harbor-nail": 7, "mooring-ring": 7,
+      "witness-without-a-name": 3, "unnumbered-fragment": 3,
+    };
     for (const r of RELICS) {
       const points = RELIC_ANCHOR_POINTS[r.id];
       expect(points, r.id).toBeDefined();
@@ -185,16 +194,30 @@ describe("relic vocabulary (I-1)", () => {
         expect(points, r.id).toEqual([]);
         continue;
       }
-      expect(points, r.id).toHaveLength(1);
+      expect(points!.length, r.id).toBeGreaterThanOrEqual(minSizes[r.id] ?? 3);
+      const keys = points!.map((p) => p.anchorKey);
+      expect(new Set(keys).size, r.id).toBe(keys.length);
       const a = points![0]!;
       expect(a.anchorKey).toBe(expectedKeys[r.id]);
       expect(a.world).toBe(r.world);
-      // placeName is the registry's own place words — no new text.
+      // The first anchor's placeName is the registry's own place words.
       expect(a.placeName).toBe(r.place);
-      expect(a.radius).toBe(RELIC_ANCHOR_RADIUS);
-      for (const v of a.position) expect(Number.isFinite(v)).toBe(true);
-      // L1 place text is unwritten until the content pipeline fills it.
-      expect(a.placeText).toBeUndefined();
+      for (const p of points!) {
+        expect(p.world, r.id).toBe(r.world);
+        expect(p.radius, r.id).toBe(RELIC_ANCHOR_RADIUS);
+        expect(p.placeText, r.id).toBeUndefined();
+        for (const v of p.position) expect(Number.isFinite(v)).toBe(true);
+      }
+      for (let i = 0; i < points!.length; i++) {
+        for (let j = i + 1; j < points!.length; j++) {
+          const d = Math.hypot(
+            points![i]!.position[0] - points![j]!.position[0],
+            points![i]!.position[1] - points![j]!.position[1],
+            points![i]!.position[2] - points![j]!.position[2],
+          );
+          expect(d, `${r.id} anchors ${i}/${j}`).toBeGreaterThanOrEqual(2 * RELIC_ANCHOR_RADIUS);
+        }
+      }
     }
   });
 
