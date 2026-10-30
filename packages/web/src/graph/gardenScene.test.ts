@@ -187,3 +187,16 @@ describe("garden scene (P3-1)", () => {
     scene.dispose();
   });
 });
+
+describe("grove pulse (carry guidance)", () => {
+  it("rings the groves only while asked, and the rings never take a tap", () => {
+    const scene = createGardenScene(layout);
+    const rings = scene.group.getObjectByName("grove-pulse")!;
+    expect(rings.visible).toBe(false);
+    scene.setGrovePulse(true);
+    expect(rings.visible).toBe(rings.children.length > 0);
+    scene.setGrovePulse(false);
+    expect(rings.visible).toBe(false);
+    scene.dispose();
+  });
+});

@@ -667,6 +667,17 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   warp to home through the server's own journey with a 3 s align/cancel window (other journeys keep 10 s); arrival fades the galaxy in
   with "Arrived · Home". If the departure call fails the old instant return remains, so you are never stuck. Look at: whether 3 s
   feels right (one constant, `HOME_CANCEL_WINDOW_SECONDS`) and that the galaxy resumes cleanly after the fade.
+- **Growing Place to 100 % — it tells you what to do, what you hold, what is happening (2026-10-30, owner: "75 % make it 100 %")
+  — MEASURED in a real browser at 412×915 (strip, walking line + Stop, guide ticking, no overlaps), carry → place unit-tested and NOT yet
+  seen on screen, needs on-device confirmation** (graph/gardenGuide.ts, components/GardenObjective.tsx, gardenScene.ts `setGrovePulse`,
+  WorldsSurface.tsx, index.css `.garden-objective`; spec `docs/specs/owner-feedback-2026-10-30-travel-exits-garden.md` §4): a bottom
+  strip always names the next useful thing (carrying → pods due → plots to tend → "the garden is tended"); while carrying it shows the
+  memory's name with **Drop** and every grove lawn gets a pulsing gold ring ("place it here", steady under reduced motion); while walking
+  it says "Walking to <place> …" with **Stop**; every action leaves a one-line result ("Placed “x” in <grove> — it shows as a stone
+  there", cleared after 9 s). A first-visit checklist (Walk · Tend a plot · Carry to a grove, remembered per brain, ✕ to hide) and a
+  **garden day** (tend 3 · place 1 · recall 1, counted per local day) close with a bloom + harvest once, never replayed on reload; **no fuel
+  reward** by design. Look at: the strip's height (~180 px) over the scene on a short phone, and whether the lag prompt / toasts stack
+  awkwardly above it.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

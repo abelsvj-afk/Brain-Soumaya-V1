@@ -161,6 +161,8 @@ export interface GardenScene {
   setAvatar: (x: number, y: number, z: number, heading: number) => void;
   /** Show the memory she's carrying to a grove — a warm glow riding above her ship. */
   setCarrying: (on: boolean) => void;
+  /** Ring every grove's lawn in pulsing gold while she carries a memory ("place it here"). */
+  setGrovePulse: (on: boolean) => void;
   /**
    * Seed Pods: "bloom" bursts gold petals outward where a pod was caught;
    * "harvest" (the day's last pod) showers gold motes from the witness
@@ -819,6 +821,19 @@ export function createGardenScene(
   carried.visible = false;
   avatar.add(carried);
   group.add(avatar);
+  // "Place it here": a gold ring on each grove's lawn, shown only while she carries a memory.
+  const pulseRings = new THREE.Group();
+  pulseRings.name = "grove-pulse";
+  pulseRings.visible = false;
+  const pulseMat = new THREE.MeshBasicMaterial({ color: DAWN_GOLD, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+  for (const g of layout.groves ?? []) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(g.radius * 0.92, g.radius * 1.04, 48), pulseMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(g.x, g.y + 2.5, g.z);
+    ring.raycast = () => {};
+    pulseRings.add(ring);
+  }
+  group.add(pulseRings);
   void loadSoumayaShip().then((hero) => {
     if (!hero || disposed) {
       if (hero) disposeObject3D(hero);
@@ -1344,6 +1359,14 @@ export function createGardenScene(
         mistMat.color.setHex(colors.mist);
       }
 
+      // The carry rings breathe; under reduced motion they stay steady (the ring itself carries the meaning).
+      if (pulseRings.visible) {
+        const k = rm ? 1 : 0.5 + 0.5 * Math.sin(clockMs / 320);
+        pulseMat.opacity = 0.45 + 0.45 * k;
+        const sc = rm ? 1 : 1 + 0.03 * k;
+        pulseRings.children.forEach((c) => c.scale.setScalar(sc));
+      }
+
       // Seed Pods celebrations. Reduced motion: each holds its settled
       // shape and simply fades — the news is kept, the motion is not.
       for (let ci = celebrations.length - 1; ci >= 0; ci--) {
@@ -1481,6 +1504,9 @@ export function createGardenScene(
     },
     setCarrying(on: boolean) {
       carried.visible = on;
+    },
+    setGrovePulse(on: boolean) {
+      pulseRings.visible = on && pulseRings.children.length > 0;
     },
     celebrate(kind: "bloom" | "harvest", at?: { x: number; y: number; z: number }) {
       if (disposed) return;

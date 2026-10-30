@@ -7720,3 +7720,34 @@ body.in-transit .perf-suggest { display: none; }
 .travel-home-arrival { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
 .travel-home-arrival .travel-arrive-fade { position: absolute; inset: 0; }
 .travel-home-arrival .travel-arrived { position: absolute; top: calc(var(--hud-top) + 0.75rem); left: 0; right: 0; }
+
+/* Growing Place guidance (gardenGuide.ts): next step, what she holds, what is happening, the day's three beats. */
+.garden-objective {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  z-index: 26;
+  width: min(440px, calc(100% - 2 * var(--hud-rail, 62px)));
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(10, 22, 16, 0.92);
+  border: 1px solid rgba(243, 230, 196, 0.45);
+  color: #f3ecd6;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.garden-objective p { margin: 0; }
+.garden-objective-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.garden-objective-btn { min-height: 44px; min-width: 44px; border: 1px solid rgba(243, 230, 196, 0.6); }
+.garden-objective-result { color: #ffd27a; font-weight: 600; }
+.garden-guide { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.7rem; font-size: 0.75rem; opacity: 0.95; }
+.garden-guide-hide { margin-left: auto; }
+.garden-guide li.done { opacity: 0.6; text-decoration: line-through; }
+.garden-day { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; opacity: 0.9; }
+.garden-day-ring { display: inline-flex; gap: 3px; }
+.garden-day-ring i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #f3e6c4; display: inline-block; }
+.garden-day-ring i.on { background: #ffd27a; border-color: #ffd27a; }

@@ -19,6 +19,19 @@ import { warmPlotNodeIds, litPathEdgeIds } from "../graph/gardenTend.js";
 import { GardenTendSheet } from "./GardenTendSheet.js";
 import { GardenGroveSheet } from "./GardenGroveSheet.js";
 import { GardenRecallSheet } from "./GardenRecallSheet.js";
+import { GardenObjective } from "./GardenObjective.js";
+import {
+  EMPTY_DAY,
+  EMPTY_GUIDE,
+  dayComplete,
+  gardenObjective,
+  readDay,
+  readGuide,
+  writeDay,
+  writeGuide,
+  type DayState,
+  type GuideProgress,
+} from "../graph/gardenGuide.js";
 import WorldsDock, { type DockGroup } from "./WorldsDock.js";
 import { createStationScene } from "../graph/stationScene.js";
 import {
@@ -674,6 +687,12 @@ export default function WorldsSurface({
   const [groveSheet, setGroveSheet] = useState<number | null>(null);
   const [carrying, setCarrying] = useState<number | null>(null);
   const [gardenVersion, setGardenVersion] = useState(0);
+  // Growing Place guidance (graph/gardenGuide.ts): where she is walking, the last
+  // result line, the first-visit steps (per brain) and the garden day's beats.
+  const [walkingTo, setWalkingTo] = useState<string | null>(null);
+  const [gardenResult, setGardenResult] = useState<string | null>(null);
+  const [guide, setGuide] = useState<GuideProgress>(EMPTY_GUIDE);
+  const [gardenDay, setGardenDay] = useState<DayState>({ ...EMPTY_DAY, bloomed: false });
   // Garden v2 step 4 (Seed Pods): the pod being recalled, pods set aside
   // ("Not today") or caught this stay, and today's harvest count.
   const [recallPod, setRecallPod] = useState<number | null>(null);
@@ -972,6 +991,10 @@ export default function WorldsSurface({
     setGrovesOpen(false);
     setGroveSheet(null);
     setCarrying(null);
+    setWalkingTo(null);
+    setGardenResult(null);
+    setGuide(readGuide(getSpaceId()));
+    setGardenDay(readDay(getSpaceId()));
     setRecallPod(null);
     setPodsAside(new Set());
     setHarvest(readHarvest(getSpaceId()));
@@ -1164,6 +1187,27 @@ export default function WorldsSurface({
     layoutRef.current = layout;
   }, [layout]);
 
+  // A result line ("Placed … ✓") is news, not furniture: it clears itself.
+  useEffect(() => {
+    if (!gardenResult) return;
+    const t = window.setTimeout(() => setGardenResult(null), 9000);
+    return () => window.clearTimeout(t);
+  }, [gardenResult]);
+
+  // The garden day closes with a bloom: all three beats done, once per local day (a reload never replays it).
+  useEffect(() => {
+    if (!atGarden || gardenDay.bloomed || !dayComplete(gardenDay)) return;
+    const scene = gardenSceneRef.current;
+    scene?.celebrate("bloom", { x: 0, y: 40, z: 0 });
+    scene?.celebrate("harvest");
+    setGardenResult("A full garden day — something bloomed. Nothing to claim; it is simply done.");
+    setGardenDay((d) => {
+      const next = { ...d, bloomed: true };
+      writeDay(getSpaceId(), next);
+      return next;
+    });
+  }, [atGarden, gardenDay]);
+
   // Push the garden's mutation input into the live scene (previews
   // reconcile by proposal id; landings/undos are drained once, so a
   // landing never replays because the warmth moved).
@@ -1282,6 +1326,9 @@ export default function WorldsSurface({
   // Verb 1: after a tend lands, its path lights now; the graph refresh
   // (onChanged) warms the plot itself on the next scene build.
   const handleTended = (result: TendResult) => {
+    bumpGuide({ tended: true });
+    bumpDay("tends");
+    setGardenResult(tendNode?.label ? `Tended “${tendNode.label}”.` : "Tended.");
     setRecentTends((prev) => [result.tend, ...prev]);
     onChanged?.(result);
   };
@@ -1315,16 +1362,48 @@ export default function WorldsSurface({
       pick.kind === "ground"
         ? layoutRef.current?.groves.find((g) => Math.hypot(g.x - pick.x, g.z - pick.z) <= g.radius)
         : undefined;
-    if (grove) walkTo(approachPoint(walkRef.current.pos, grove, grove.radius * 0.6), { kind: "grove", journeyId: grove.journeyId });
+    if (grove) walkTo(approachPoint(walkRef.current.pos, grove, grove.radius * 0.6), { kind: "grove", journeyId: grove.journeyId }, grove.title);
     else if (pick.kind === "ground") walkTo({ x: pick.x, z: pick.z }, null);
-    else walkTo(approachPoint(walkRef.current.pos, pick, pick.kind === "pod" ? 22 : 28), { kind: pick.kind, nodeId: pick.nodeId });
+    else {
+      const label = graph?.nodes.find((n) => n.id === pick.nodeId)?.label;
+      walkTo(
+        approachPoint(walkRef.current.pos, pick, pick.kind === "pod" ? 22 : 28),
+        { kind: pick.kind, nodeId: pick.nodeId },
+        label ? `“${label}”` : pick.kind === "pod" ? "a seed pod" : "a plot",
+      );
+    }
   };
 
   // Send her ship somewhere; `arrival` is what opens when she gets there.
-  const walkTo = (target: WalkPoint, arrival: GardenArrival | null) => {
+  const walkTo = (target: WalkPoint, arrival: GardenArrival | null, label = "there") => {
     const w = walkRef.current;
     walkRef.current = { ...w, route: walkRoute(w.pos, target) };
     arrivalRef.current = arrival;
+    setWalkingTo(label);
+    setGardenResult(null);
+    bumpGuide({ walked: true });
+  };
+  const stopWalking = () => {
+    walkRef.current = { ...walkRef.current, route: [] };
+    arrivalRef.current = null;
+    setWalkingTo(null);
+  };
+
+  // Guidance bookkeeping: first-visit steps stick per brain; the day's beats count per local day.
+  const bumpGuide = (patch: Partial<GuideProgress>) => {
+    setGuide((g) => {
+      const next = { ...g, ...patch };
+      if (next.walked === g.walked && next.tended === g.tended && next.carried === g.carried && next.dismissed === g.dismissed) return g;
+      writeGuide(getSpaceId(), next);
+      return next;
+    });
+  };
+  const bumpDay = (beat: "tends" | "places" | "recalls") => {
+    setGardenDay((d) => {
+      const next = { ...d, [beat]: d[beat] + 1 };
+      writeDay(getSpaceId(), next);
+      return next;
+    });
   };
 
   // Arrival: the frame loop calls this through a ref (it is set every render).
@@ -1811,6 +1890,7 @@ export default function WorldsSurface({
           const step = stepWalk(walkRef.current, dt, { reducedMotion });
           walkRef.current = step.state;
           const moving = step.state.route.length > 0 || step.arrived;
+          if (step.arrived) setWalkingTo(null);
           if (step.arrived && arrivalRef.current) {
             const a = arrivalRef.current;
             arrivalRef.current = null;
@@ -1825,6 +1905,7 @@ export default function WorldsSurface({
           if (moving) f.yaw = easeAngle(f.yaw, step.state.heading, ease(450));
           gardenSceneRef.current.setAvatar(pos.x, f.y, pos.z, step.state.heading);
           gardenSceneRef.current.setCarrying(carryingRef.current !== null);
+          gardenSceneRef.current.setGrovePulse(carryingRef.current !== null);
           const pose = followPose(pos, f.y, f.yaw);
           const k = ease(260);
           const prev = f.cam ?? pose.position;
@@ -2261,7 +2342,7 @@ export default function WorldsSurface({
             role="menuitem"
             onClick={() => {
               setGrovesOpen(false);
-              walkTo(initialWalk().pos, null);
+              walkTo(initialWalk().pos, null, "the meadow");
             }}
           >
             🌾 The meadow <span>{layout.plots.filter((p) => p.role === "wild").length} loose memories</span>
@@ -2275,7 +2356,7 @@ export default function WorldsSurface({
               onClick={() => {
                 setGrovesOpen(false);
                 setSuggestionsHidden(true);
-                walkTo(approachPoint(walkRef.current.pos, g, g.radius + 14), { kind: "grove", journeyId: g.journeyId });
+                walkTo(approachPoint(walkRef.current.pos, g, g.radius + 14), { kind: "grove", journeyId: g.journeyId }, g.title);
               }}
             >
               {g.icon ?? "🌳"} {g.title}
@@ -2323,7 +2404,7 @@ export default function WorldsSurface({
               if (!next) return;
               setSuggestionsHidden(true);
               setGrovesOpen(false);
-              walkTo(approachPoint(here, next, 22), { kind: "pod", nodeId: next.nodeId });
+              walkTo(approachPoint(here, next, 22), { kind: "pod", nodeId: next.nodeId }, `“${next.label}”`);
             }}
           >
             <span aria-hidden="true">
@@ -2352,6 +2433,8 @@ export default function WorldsSurface({
               const left = layout.pods.filter((p) => p.nodeId !== pod.nodeId).length;
               if (left === 0) scene?.celebrate("harvest");
               setJustCaught(pod.nodeId);
+              bumpDay("recalls");
+              setGardenResult(`Recalled “${pod.label}”.`);
               const stored = bumpHarvest(getSpaceId());
               setHarvest((h) => Math.max(h + 1, stored));
             }}
@@ -2368,13 +2451,27 @@ export default function WorldsSurface({
           />
         );
       })()}
-      {mode === "world" && atGarden && carrying !== null && groveSheet === null && (
-        <div className="garden-carrying" role="status">
-          🧺 Carrying “{graph?.nodes.find((n) => n.id === carrying)?.label ?? "a memory"}” — walk to a grove to place it
-          <button type="button" className="mini" onClick={() => setCarrying(null)} aria-label="Put it down">
-            ✕
-          </button>
-        </div>
+      {mode === "world" && atGarden && layout && (
+        <GardenObjective
+          objective={gardenObjective({
+            carryingLabel: carrying !== null ? (graph?.nodes.find((n) => n.id === carrying)?.label ?? "a memory") : null,
+            podsWaiting: layout.pods.filter((p) => p.nodeId !== justCaught).length,
+            coldPlots: suggestions?.length ?? 0,
+            groves: layout.groves.length,
+          })}
+          carrying={carrying !== null}
+          onDrop={() => {
+            setCarrying(null);
+            setGrovesOpen(false);
+            setGardenResult("Put it back.");
+          }}
+          walkingTo={walkingTo}
+          onStop={stopWalking}
+          result={gardenResult}
+          guide={guide}
+          onDismissGuide={() => bumpGuide({ dismissed: true })}
+          day={gardenDay}
+        />
       )}
       {mode === "world" && atGarden && groveSheet !== null && layout && graph && (() => {
         const grove = layout.groves.find((g) => g.journeyId === groveSheet);
@@ -2392,7 +2489,13 @@ export default function WorldsSurface({
             carrying={carrying !== null ? (nodeOf(carrying) ?? null) : null}
             onClose={() => setGroveSheet(null)}
             onChanged={gardenChanged}
-            onPlaced={() => setCarrying(null)}
+            onPlaced={() => {
+              const what = carrying !== null ? nodeOf(carrying)?.label : undefined;
+              bumpGuide({ carried: true });
+              bumpDay("places");
+              setGardenResult(`Placed ${what ? `“${what}”` : "the memory"} in ${grove.title} — it shows as a stone there.`);
+              setCarrying(null);
+            }}
           />
         );
       })()}
