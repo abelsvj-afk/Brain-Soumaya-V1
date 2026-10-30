@@ -94,3 +94,5 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 - §62 **v3** — the child's chalk lines and the peeling page read; Dig-Warden dark-haired in a chalk apron. The page is literal, which I accept as the sheet's own metaphor. → `sight.missing-stratum`.
 
 - §63 **v2** — the Sleepwalker, dark wavy hair, pale nightgown, quietly content; the pier lantern is tended (not §22's flameless hand lantern) and the second cup is empty beside it. New entry `obj.sleepwalkers-cup` (Draft 7 dock lamp / Companion cup echo).
+- §64 **v4** — Oru old, calm, white-haired (consistent with §14); pearl-sized bead; the younger student's outline reaches as it dissolves, the clearest and most affecting; the witness from behind. → `obj.orus-bead`. (v1 is a large orb and portrait.)
+- §37 (Seven Kept from the Night) — reviewed, NOT placed: there is no single Book entry for the set of seven. One real flag: the iron nail has a flat round head in all four (the sheet says headless); accept or ask Muse for a redo only if the headless detail matters to the lore.
