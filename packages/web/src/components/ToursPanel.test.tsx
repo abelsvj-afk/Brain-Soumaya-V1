@@ -132,7 +132,8 @@ describe("ToursPanel", () => {
     });
     mockUseTours.mockReturnValue(fakeTours({ session: playingSession({ tour: t }), tours: [t] }));
     render(<ToursPanel enabled />);
-    expect(screen.getByText("Warp to the next stop · 10 fuel")).toBeTruthy();
+    // deep-past → people by distance (shared warpCost), not a flat 10.
+    expect(screen.getByText(/^Warp to the next stop · \d+ fuel$/)).toBeTruthy();
   });
 
   it("while a leg is pending, the tour waits and the travel panel owns the journey", () => {

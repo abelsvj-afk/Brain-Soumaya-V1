@@ -131,13 +131,13 @@ export class EconomyRepo {
    * only when the server closes a departure's cancel window — a cancelled
    * departure is never charged.
    */
-  spendWarp(): boolean {
-    return this.spend(WARP_COST);
+  spendWarp(cost: number = WARP_COST): boolean {
+    return cost <= 0 ? true : this.spend(cost);
   }
 
-  /** True if the balance covers one warp. */
-  canWarp(): boolean {
-    return this.get() >= WARP_COST;
+  /** True if the balance covers one warp of this price (default: the old flat price). */
+  canWarp(cost: number = WARP_COST): boolean {
+    return this.get() >= cost;
   }
 
   toFuel(): Fuel {

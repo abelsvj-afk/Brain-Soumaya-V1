@@ -8,6 +8,7 @@ import {
   PEOPLE_GATE_MIN_PEOPLE,
   PEOPLE_GATE_MIN_SHARED_MEMORIES,
   WARP_COST,
+  warpCost,
   type NpcQuestionKind,
 } from "@brain/shared";
 import { NpcRepo, localDateKey } from "./repo.js";
@@ -148,7 +149,8 @@ export function answerQuestion(kind: NpcQuestionKind, p: HarborPerception): stri
         (w) => w !== "people" || p.peopleGateOpen,
       );
       const lines = open.map((w) => {
-        const cost = w === "home" ? "free" : `a warp costs ${WARP_COST} fuel, a drift is free`;
+        const price = warpCost(p.currentWorld, w);
+        const cost = w === "home" ? "free" : `a warp costs ${price} fuel from here, a drift is free`;
         return `— ${worldName(w)}: ${cost}.`;
       });
       const peopleLine = p.peopleGateOpen
@@ -187,8 +189,12 @@ export function answerQuestion(kind: NpcQuestionKind, p: HarborPerception): stri
       return `${arrivals} ${inbound}`;
     }
     case "fuel": {
-      const warp = p.fuel >= WARP_COST ? "enough for a warp" : "short of a warp";
-      return `You hold ${Math.floor(p.fuel)} fuel of ${p.fuelCap} — ${warp}. A warp costs ${WARP_COST} fuel; drifting home is always free, and fuel comes back at ${FUEL_REGEN_PER_HOUR} an hour.`;
+      // The nearest worlds cost the least; say what the cheapest warp from here costs, not a flat number.
+      const prices = TRAVEL_WORLD_KEYS.filter((w) => w !== p.currentWorld && w !== "home" && (w !== "people" || p.peopleGateOpen))
+        .map((w) => warpCost(p.currentWorld, w));
+      const cheapest = prices.length ? Math.min(...prices) : WARP_COST;
+      const warp = p.fuel >= cheapest ? "enough for a warp" : "short of a warp";
+      return `You hold ${Math.floor(p.fuel)} fuel of ${p.fuelCap} — ${warp}. A warp costs fuel by distance — from here the nearest is ${cheapest}; going home and drifting are always free, and fuel comes back at ${FUEL_REGEN_PER_HOUR} an hour.`;
     }
     case "gate":
       return p.gate.missingPlain;

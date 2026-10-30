@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createDb, type DbHandle } from "../db/client.js";
-import { EconomyRepo, WARP_COST } from "../economy.js";
+import { EconomyRepo } from "../economy.js";
+import { warpCost } from "@brain/shared";
 import { JourneysRepo } from "../repositories/journeys.repo.js";
 import { ToursRepo, TourError } from "../repositories/tours.repo.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
@@ -382,11 +383,14 @@ describe("C5 — playback: flown, not clicked through; leaving is free", () => {
     expect(adv.leg!.kind).toBe("warp");
     const settled = travel().getJourney(adv.leg!.id, past(adv.leg!.cancelDeadline))!;
     expect(settled.state).toBe("in_transit");
-    expect(settled.fuelCharged).toBe(WARP_COST);
-    expect(econ().get()).toBeCloseTo(before - WARP_COST, 1);
+    // deep-past → people: priced by the leg's distance, not a flat 10.
+    const price = warpCost("deep-past", "people");
+    expect(price).toBeGreaterThan(10);
+    expect(settled.fuelCharged).toBe(price);
+    expect(econ().get()).toBeCloseTo(before - price, 1);
     // A retried read charges nothing more.
     travel().getJourney(adv.leg!.id, past(adv.leg!.cancelDeadline) + 5000);
-    expect(econ().get()).toBeCloseTo(before - WARP_COST, 1);
+    expect(econ().get()).toBeCloseTo(before - price, 1);
   });
 
   it("starting another tour leaves the first, free", () => {

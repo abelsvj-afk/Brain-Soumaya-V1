@@ -89,7 +89,7 @@ describe("C2 — the loop is provable", () => {
     expect(r.acted).toBe(true);
     expect(r.entry?.kind).toBe("speak");
     expect(r.entry?.act).toContain("25 fuel");
-    expect(r.entry?.act).toContain("A warp costs 10 fuel");
+    expect(r.entry?.act).toContain("A warp costs fuel by distance");
     expect(r.entry?.cause).toContain("asked about fuel");
   });
 
@@ -249,7 +249,7 @@ describe("answers from live state", () => {
     const r = askNpc(handle, "spaceA", "harbor-controller", "routes", T0);
     expect(r.entry?.act).toContain("From Home");
     expect(r.entry?.act).toContain("the Great Station");
-    expect(r.entry?.act).toContain("a warp costs 10 fuel");
+    expect(r.entry?.act).toContain("a warp costs 8 fuel from here");
     expect(r.entry?.act).toContain("The People isn't open yet");
   });
 

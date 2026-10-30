@@ -1,4 +1,4 @@
-import { ETERNITY_WORLD_KEY, WARP_COST, type TravelKind } from "@brain/shared";
+import { ETERNITY_WORLD_KEY, warpCost, type TravelKind } from "@brain/shared";
 import type { TravelState } from "../api/travel.js";
 
 /**
@@ -80,16 +80,15 @@ export interface RouteEntry {
   options: RouteOption[];
 }
 
-/** Fuel the server charges for one leg of this kind to this destination —
- *  the server's own price (WARP_COST), displayed only; the server
- *  settles. Warp home and drift are always free. The world map reads the
- *  same price, so the board and the map can never disagree. */
-export function routeLegCost(kind: TravelKind, destination: string): number {
-  return destination === "home" || kind === "drift" ? 0 : WARP_COST;
+/** Fuel the server charges for one leg of this kind from `origin` to `destination` — the shared `warpCost` (it follows
+ *  distance), displayed only; the server settles with the same function. Warp home and drift are always free. The board, the
+ *  world map and the tours all read this, so they can never disagree. */
+export function routeLegCost(kind: TravelKind, origin: string, destination: string): number {
+  return kind === "drift" ? 0 : warpCost(origin, destination);
 }
 
-function option(kind: TravelKind, world: string, balance: number): RouteOption {
-  const cost = routeLegCost(kind, world);
+function option(kind: TravelKind, origin: string, world: string, balance: number): RouteOption {
+  const cost = routeLegCost(kind, origin, world);
   return {
     kind,
     label: kind === "warp" ? "Warp" : "Drift",
@@ -120,7 +119,7 @@ export function buildRouteBoard(state: TravelState): RouteEntry[] {
       name: w.name,
       blurb: w.blurb,
       isCurrent,
-      options: isCurrent ? [] : [option("warp", w.key, state.fuel.fuel), option("drift", w.key, state.fuel.fuel)],
+      options: isCurrent ? [] : [option("warp", state.currentWorld, w.key, state.fuel.fuel), option("drift", state.currentWorld, w.key, state.fuel.fuel)],
     };
   });
 }

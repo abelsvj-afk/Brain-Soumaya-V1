@@ -253,7 +253,7 @@ export default function WorldMap({
                       at departure. The button focuses the travel panel;
                       the panel and the server enforce the rest. */}
                   <span className="world-map-chain">
-                    Warp there · 10 fuel a leg — the way runs through two other worlds first, so travel step by step.
+                    Warp there · fuel by distance for each leg — the way runs through two other worlds first, so travel step by step.
                   </span>
                   {activeJourney ? (
                     <span className="world-map-note">

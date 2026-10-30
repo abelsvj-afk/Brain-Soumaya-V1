@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { WARP_COST, WORLDS_TRAVEL_ENABLED } from "@brain/shared";
+import { warpCost, WORLDS_TRAVEL_ENABLED } from "@brain/shared";
 import type { Tour, TourStop } from "@brain/shared";
 import { useTours } from "../hooks/useTours.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
@@ -107,7 +107,7 @@ export default function ToursPanel({ enabled = WORLDS_TRAVEL_ENABLED }: { enable
             )}
             {!legPending && !atLastStop && nextNeedsLeg && (
               <button type="button" onClick={() => void tours.advance(playing.tour.id, "warp")}>
-                Warp to the next stop · {WARP_COST} fuel
+                Warp to the next stop · {warpCost(session!.currentWorld, nextStop!.world)} fuel
               </button>
             )}
             {!legPending && atLastStop && (

@@ -1,3 +1,4 @@
+import { WORLD_COORDS } from "@brain/shared";
 import type { TravelJourney } from "@brain/shared";
 import { WORLD_CHART, routeLegCost } from "./routeBoard.js";
 
@@ -53,18 +54,8 @@ export const WORLD_MAP_SHIMMER = { x: 920, y: 80 } as const;
  *  at (130, 620), so Scale moved from (180, 620) — 50 units apart would
  *  crowd the node labels — to the empty bottom-right corner (850, 620);
  *  nearest neighbour is People at 285, every other node farther.) */
-export const WORLD_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
-  home: { x: 500, y: 380 },
-  "great-station": { x: 760, y: 250 },
-  "growing-place": { x: 250, y: 480 },
-  "deep-past": { x: 300, y: 180 },
-  people: { x: 845, y: 335 },
-  "quiet-archive": { x: 130, y: 620 },
-  scale: { x: 850, y: 620 },
-  // Eternity's world sits furthest out, alone — the node appears only
-  // once the traveller has discovered it (see deriveMapData).
-  eternity: { x: 905, y: 505 },
-};
+export const WORLD_NODE_POSITIONS: Record<string, { x: number; y: number }> = { ...WORLD_COORDS }; // one copy, shared with the fuel price
+
 
 /** Node colours follow the settled world palettes (station amber, garden
  *  green, deep-past violet, people warm amber, quiet-archive dim slate blue,
@@ -100,7 +91,7 @@ export interface MapEdge {
   bright: boolean;
   /** The fuel this edge costs, in plain words, from the traveller's
    *  current world when the edge touches it — "free" for a homebound
-   *  leg, "10 fuel" for a warp leg, "10 fuel · free home" when the edge
+   *  leg, "8 fuel" for a warp leg (by distance), "8 fuel · free home" when the edge
    *  touches home but not the current world (its two directions differ).
    *  The price is the server's own (WARP_COST); the map displays it, the
    *  server settles it. */
@@ -248,11 +239,10 @@ export function deriveMapData(input: {
       if (!a || !b) continue;
       const from = a.key;
       const to = b.key;
-      // A warp leg costs 10 except homebound (free), so an edge touching
-      // home has two different prices. The label shows the price from
-      // the current world when the edge touches it, else both prices.
-      const outCost = routeLegCost("warp", to);
-      const backCost = routeLegCost("warp", from);
+      // A warp leg costs by DISTANCE (shared warpCost) and a homebound one is free, so an edge touching home has two
+      // different prices. The label shows the price from the current world when the edge touches it, else both prices.
+      const outCost = routeLegCost("warp", from, to);
+      const backCost = routeLegCost("warp", to, from);
       let costLabel: string;
       if (from === input.currentWorld) {
         costLabel = outCost === 0 ? "free" : `${outCost} fuel`;
@@ -329,7 +319,7 @@ export function chainTo(destination: string, data: MapData): MapChain | null {
     const from = keys[i];
     const to = keys[i + 1];
     if (from === undefined || to === undefined) return null;
-    legs.push({ from, to, costWarp: routeLegCost("warp", to), costDrift: 0 });
+    legs.push({ from, to, costWarp: routeLegCost("warp", from, to), costDrift: 0 });
   }
   return {
     legs,

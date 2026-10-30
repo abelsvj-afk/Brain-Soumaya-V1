@@ -82,7 +82,7 @@ describe("WorldMap — the map itself (C1/C2)", () => {
   it("every edge carries its fuel cost, always — and the travelled leg draws bright", () => {
     mockUseTravel.mockReturnValue(fakeTravel());
     const { container } = renderMap({}, [{ origin: "home", destination: "great-station" }]);
-    expect(screen.getByText("10 fuel")).toBeTruthy();
+    expect(screen.getByText("8 fuel")).toBeTruthy();
     expect(container.querySelector(".world-map-edge.bright")).toBeTruthy();
     expect(container.querySelector(".world-map-edge.traveled")).toBeTruthy();
   });
@@ -114,7 +114,7 @@ describe("WorldMap — selecting and travelling (C3/C4/C8)", () => {
     mockUseTravel.mockReturnValue(fakeTravel());
     const { onTravelTo } = renderMap({}, [{ origin: "home", destination: "great-station" }]);
     fireEvent.click(screen.getByRole("button", { name: "The Great Station" }));
-    expect(screen.getByText(/Warp there · 10 fuel for the whole trip/)).toBeTruthy();
+    expect(screen.getByText(/Warp there · 8 fuel for the whole trip/)).toBeTruthy();
     expect(screen.getByText(/Drift there · free/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Travel to The Great Station" }));
     expect(onTravelTo).toHaveBeenCalledWith("great-station");
@@ -205,7 +205,7 @@ describe("WorldMap — reduced motion (C6)", () => {
       renderMap({}, [{ origin: "home", destination: "great-station" }]);
       expect(screen.getByRole("button", { name: "Home — you are here" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "The Great Station" })).toBeTruthy();
-      expect(screen.getByText("10 fuel")).toBeTruthy();
+      expect(screen.getByText("8 fuel")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Zoom in" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Close map" })).toBeTruthy();
     } finally {

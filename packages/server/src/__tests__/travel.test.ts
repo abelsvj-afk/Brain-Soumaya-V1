@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
 import { createDb, type DbHandle } from "../db/client.js";
 import { EconomyRepo, FUEL_START, WARP_COST } from "../economy.js";
+import { warpCost } from "@brain/shared";
 import { TravelRepo, TravelError } from "../repositories/travel.repo.js";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -67,8 +68,10 @@ describe("C1 — the server owns the cancel window", () => {
     const after = t.cancel(j.id, past(j.cancelDeadline));
     expect(after?.state).toBe("in_transit");
     expect(after?.cancellable).toBe(false);
-    expect(after?.fuelCharged).toBe(WARP_COST);
-    expect(econ().get()).toBeCloseTo(before - WARP_COST, 1);
+    // Fuel follows distance: Home → the Station is 8, not a flat 10.
+    expect(warpCost("home", "great-station")).toBe(8);
+    expect(after?.fuelCharged).toBe(8);
+    expect(econ().get()).toBeCloseTo(before - 8, 1);
     expect(eventTypes(t, j.id)).toEqual(["departure_armed", "departed"]);
   });
 });
@@ -215,7 +218,7 @@ describe("machine legality, drift, and current-world derivation", () => {
     const j3 = t.depart({ clientKey: "w3", kind: "warp", destination: "home" }, T0);
     const turned = t.turnBack(j3.id, past(j3.cancelDeadline));
     expect(turned?.state).toBe("returning");
-    expect(turned?.fuelCharged).toBe(WARP_COST); // no refund
+    expect(turned?.fuelCharged).toBe(0); // a warp HOME is always free (it used to charge 10 though the board said "free")
     expect(t.currentWorld(T0)).toBe("great-station"); // still out — home is the origin on return
     const back = t.arrive(j3.id, past(j3.cancelDeadline) + 30_000);
     expect(back?.state).toBe("returned");
@@ -736,7 +739,11 @@ describe("C9 — the People gate (P3-3, Q1, server-enforced)", () => {
 
 describe("Eternity's gate (B-01): key + two relics, then a three-leg chain", () => {
   const HOLDINGS = () => ({ witnessWithoutName: true, otherRelicCount: 2 });
-  const travelWithHoldings = (space = "spaceA") => new TravelRepo(handle, space, HOLDINGS);
+  // The three-leg chain now costs by distance (8 + 14 + 16 = 38 fuel) — more than a brain starts with, so the tests top up.
+  const travelWithHoldings = (space = "spaceA") => {
+    new EconomyRepo(handle, space).add(150);
+    return new TravelRepo(handle, space, HOLDINGS);
+  };
   const codeOf = (fn: () => unknown): string => {
     try {
       fn();

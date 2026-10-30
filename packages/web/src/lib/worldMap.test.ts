@@ -115,14 +115,15 @@ describe("worldMap — routes (Q4/Q5)", () => {
     // when the edge touches it ("free" homebound), both prices when the
     // edge touches home but not the current world.
     expect(byPair.get("home>great-station")?.costLabel).toBe("free");
-    expect(byPair.get("great-station>growing-place")?.costLabel).toBe("10 fuel");
-    expect(byPair.get("home>growing-place")?.costLabel).toBe("10 fuel · free home");
+    // Station ↔ Growing Place is a long way (559 units) — 14 fuel; Home ↔ Growing Place is 7, and home-bound is free.
+    expect(byPair.get("great-station>growing-place")?.costLabel).toBe("14 fuel");
+    expect(byPair.get("home>growing-place")?.costLabel).toBe("7 fuel · free home");
   });
 
-  it("from home the station edge reads 10 fuel — the price of leaving, not returning", () => {
+  it("from home the station edge reads 8 fuel — the price of leaving (by distance), not returning", () => {
     const data = atHome([{ origin: "home", destination: "great-station" }]);
     expect(data.edges).toHaveLength(1);
-    expect(data.edges[0]?.costLabel).toBe("10 fuel");
+    expect(data.edges[0]?.costLabel).toBe("8 fuel");
   });
 
   it("the bright leg is the most recent travelled leg when no journey is active", () => {
@@ -162,12 +163,12 @@ describe("worldMap — routes (Q4/Q5)", () => {
     expect(bright[0]?.to).toBe("great-station");
   });
 
-  it("the chain to a discovered world is one direct leg: warp 10, drift free", () => {
+  it("the chain to a discovered world is one direct leg: warp 8 (by distance), drift free", () => {
     const data = atHome([{ origin: "home", destination: "great-station" }]);
     const chain = chainTo("great-station", data);
     expect(chain).toEqual({
-      legs: [{ from: "home", to: "great-station", costWarp: 10, costDrift: 0 }],
-      totalWarp: 10,
+      legs: [{ from: "home", to: "great-station", costWarp: 8, costDrift: 0 }],
+      totalWarp: 8,
       totalDrift: 0,
     });
   });

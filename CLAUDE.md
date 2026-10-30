@@ -648,6 +648,18 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   buttons), its only exit read "Back to your galaxy" though it just closes the map, and Escape did nothing — now opaque, "✕ Close map",
   Escape via `useDialogA11y`, and an honest empty line ("Worlds appear here as you reach them") because the map shows only discovered
   worlds, which is why an early brain saw two dots. Look at: the chat header's width on very small phones (title/tools are tight at 360 px).
+- **Fuel follows distance (2026-10-30, owner: "10 fuel to everywhere, no — it needs to correspond to distance") — MEASURED over
+  real HTTP on the running server + unit tests (shared 5, server 2,486, web 2,675), needs on-device confirmation of how the prices
+  read** (shared/worlds.ts `WORLD_COORDS` + `warpCost`, server/economy.ts `spendWarp(cost)`, repositories/travel.repo.ts `settle`,
+  npcs/harbor.ts, web lib/routeBoard.ts `routeLegCost(kind, origin, dest)`, lib/worldMap.ts, ToursPanel, WorldMap; spec
+  `docs/specs/owner-feedback-2026-10-30-travel-exits-garden.md` §3): a warp leg costs ⌈distance/45⌉ + 1 fuel (min 2) by the chart
+  positions the world map already draws (now ONE shared copy), per leg; a warp HOME is free. Measured: Home→Quiet 11, Quiet→Scale 17,
+  Home→Growing Place 7, every warp home 0 (the server used to charge a flat 10 for a warp home while the board said "free" — a bug,
+  fixed). Board, map edge labels + chain totals, Tours "Warp to the next stop", and the harbor controller's answers all read the same
+  function; Eternity's 3-leg chain from Home is 8 + 14 + 16 = 38 (a new brain starts with 25 — you must earn or wait for it).
+  **Balance note:** capacity 200, regen 3.5/h, +5 per completed warp, +15 per memory; the worst leg (19) is < 10 % of the tank.
+  Look at: whether the prices feel right, and whether the 38-fuel Eternity chain is the cost you want (one constant:
+  `WARP_UNITS_PER_FUEL`).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

@@ -15,7 +15,7 @@ import {
   PEOPLE_GATE_MIN_PEOPLE,
   PEOPLE_GATE_MIN_SHARED_MEMORIES,
   TRAVEL_CANCEL_WINDOW_SECONDS,
-  WARP_COST,
+  warpCost,
   eternityGateOpens,
   type EternityGateHoldings,
   type TravelJourney,
@@ -325,9 +325,11 @@ export class TravelRepo implements JourneyBonusCreditor {
       if (!r) return null;
       if (r.state !== "arming" || nowMs < Date.parse(r.cancel_deadline)) return this.map(r, nowMs);
       const nowIso = new Date(nowMs).toISOString();
+      // Fuel follows distance (owner 2026-10-30): the price of THIS leg, origin → destination; a warp home is free.
+      const price = r.kind === "warp" ? warpCost(r.origin, r.destination) : 0;
       if (r.kind === "warp") {
         // Same connection: the debit joins this transaction.
-        const paid = new EconomyRepo(this.h, this.spaceId).spendWarp();
+        const paid = new EconomyRepo(this.h, this.spaceId).spendWarp(price);
         if (!paid) {
           this.h.sqlite
             .prepare(`UPDATE travel_journeys SET state = 'cancelled', ended_at = ? WHERE id = ?`)
@@ -338,8 +340,8 @@ export class TravelRepo implements JourneyBonusCreditor {
       }
       this.h.sqlite
         .prepare(`UPDATE travel_journeys SET state = 'in_transit', fuel_charged = ?, departed_at = ? WHERE id = ?`)
-        .run(r.kind === "warp" ? WARP_COST : 0, nowIso, r.id);
-      this.addEvent(r.id, "departed", { fuelCharged: r.kind === "warp" ? WARP_COST : 0 }, nowMs);
+        .run(price, nowIso, r.id);
+      this.addEvent(r.id, "departed", { fuelCharged: price }, nowMs);
       return this.map(this.rowById(r.id)!, nowMs);
     });
     return run.immediate();

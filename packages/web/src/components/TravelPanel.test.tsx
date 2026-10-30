@@ -67,9 +67,11 @@ describe("TravelPanel", () => {
     // behind a single-element query.
     const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
     expect(entries).toHaveLength(6);
-    for (const entry of entries.slice(1)) {
+    // Fuel follows distance from Home: Station 8, Growing Place 7, Deep Past 8, Quiet/Archive 11, Scale 11.
+    const homePrices = [8, 7, 8, 11, 11];
+    for (const [i, entry] of entries.slice(1).entries()) {
       const scoped = within(entry as HTMLElement);
-      expect(scoped.getByRole("button", { name: /Warp · 10 fuel/ })).toBeTruthy();
+      expect(scoped.getByRole("button", { name: new RegExp(`Warp · ${homePrices[i]} fuel`) })).toBeTruthy();
       expect(scoped.getByRole("button", { name: /Drift · free/ })).toBeTruthy();
     }
   });
@@ -97,19 +99,19 @@ describe("TravelPanel", () => {
     render(<TravelPanel enabled />);
     const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
     const station = within(entries[1] as HTMLElement);
-    fireEvent.click(station.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(station.getByRole("button", { name: /Warp · 8 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "great-station");
     const garden = within(entries[2] as HTMLElement);
-    fireEvent.click(garden.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(garden.getByRole("button", { name: /Warp · 7 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "growing-place");
     const past = within(entries[3] as HTMLElement);
-    fireEvent.click(past.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(past.getByRole("button", { name: /Warp · 8 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "deep-past");
     const archive = within(entries[4] as HTMLElement);
-    fireEvent.click(archive.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(archive.getByRole("button", { name: /Warp · 11 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "quiet-archive");
     const scale = within(entries[5] as HTMLElement);
-    fireEvent.click(scale.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(scale.getByRole("button", { name: /Warp · 11 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "scale");
   });
 
@@ -133,10 +135,10 @@ describe("TravelPanel", () => {
     const entries = screen.getAllByRole("listitem").filter((li) => li.className.includes("route-entry"));
     expect(entries).toHaveLength(7);
     const people = within(entries[4] as HTMLElement);
-    fireEvent.click(people.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(people.getByRole("button", { name: /Warp · 9 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "people");
     const scale = within(entries[6] as HTMLElement);
-    fireEvent.click(scale.getByRole("button", { name: /Warp · 10 fuel/ }));
+    fireEvent.click(scale.getByRole("button", { name: /Warp · 11 fuel/ }));
     expect(t.depart).toHaveBeenCalledWith("warp", "scale");
   });
 

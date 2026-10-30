@@ -22,7 +22,7 @@ describe("buildRouteBoard", () => {
     const garden = board[2]!;
     expect(garden.name).toBe("The Growing Place");
     expect(garden.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 7, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });
@@ -32,7 +32,7 @@ describe("buildRouteBoard", () => {
     const past = board[3]!;
     expect(past.name).toBe("The Deep Past");
     expect(past.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 8, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });
@@ -50,7 +50,7 @@ describe("buildRouteBoard", () => {
     const people = board[4]!;
     expect(people.name).toBe("The People");
     expect(people.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 9, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });
@@ -61,7 +61,7 @@ describe("buildRouteBoard", () => {
     const archive = board.find((e) => e.world === "quiet-archive")!;
     expect(archive.name).toBe("Quiet/Archive");
     expect(archive.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 11, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });
@@ -72,7 +72,7 @@ describe("buildRouteBoard", () => {
     expect(scale.name).toBe("Scale");
     expect(scale.blurb).toMatch(/actual station, actual size/);
     expect(scale.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 11, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });
@@ -85,11 +85,11 @@ describe("buildRouteBoard", () => {
     expect(people.options).toEqual([]);
   });
 
-  it("prices warp at the shared cost and drift free, by the server's rules", () => {
+  it("prices warp by distance (shared warpCost) and drift free, by the server's rules", () => {
     const board = buildRouteBoard(state("home", 25));
     const station = board[1]!;
     expect(station.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 8, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });
@@ -119,7 +119,7 @@ describe("buildRouteBoard", () => {
     const eternity = board.find((e) => e.world === "eternity")!;
     expect(eternity.name).toBe("Eternity's World");
     expect(eternity.options).toEqual([
-      { kind: "warp", label: "Warp", cost: 10, affordable: true },
+      { kind: "warp", label: "Warp", cost: 11, affordable: true },
       { kind: "drift", label: "Drift", cost: 0, affordable: true },
     ]);
   });

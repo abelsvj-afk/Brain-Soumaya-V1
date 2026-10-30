@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createDb, type DbHandle } from "../db/client.js";
 import { TravelRepo, TravelError } from "../repositories/travel.repo.js";
 import { isOwnerSpace } from "../auth/owner.js";
-import { EconomyRepo, WARP_COST } from "../economy.js";
+import { EconomyRepo } from "../economy.js";
+import { warpCost } from "@brain/shared";
 import { ETERNITY_WORLD_KEY } from "@brain/shared";
 
 /**
@@ -108,7 +109,7 @@ describe("owner access — worlds gates", () => {
     const j = t.depart({ clientKey: "w", kind: "warp", destination: "people" }, T0);
     t.getJourney(j.id, Date.parse(j.cancelDeadline!) + 1000); // past the free-cancel window: settles and charges
     // EconomyRepo regen accrues on real elapsed time — a few thousandths, hence the tolerance.
-    expect(before - econ.get()).toBeGreaterThan(WARP_COST - 0.5);
+    expect(before - econ.get()).toBeGreaterThan(warpCost("home", "people") - 0.5);
   });
 });
 

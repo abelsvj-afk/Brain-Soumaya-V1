@@ -81,3 +81,39 @@ export const NO_ETERNITY_HOLDINGS: EternityGateHoldings = {
 export function eternityGateOpens(holdings: EternityGateHoldings): boolean {
   return holdings.witnessWithoutName && holdings.otherRelicCount >= ETERNITY_GATE_OTHER_RELICS;
 }
+
+/**
+ * Where each world sits on the chart (the world map's layout, 1000×700). Distance between two worlds prices a warp
+ * (owner 2026-10-30: "10 fuel to everywhere, no — it needs to correspond to distance"). One copy, shared: the map draws these
+ * positions and the server prices with them, so the picture and the price can never disagree.
+ */
+export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = {
+  home: { x: 500, y: 380 },
+  "great-station": { x: 760, y: 250 },
+  "growing-place": { x: 250, y: 480 },
+  "deep-past": { x: 300, y: 180 },
+  people: { x: 845, y: 335 },
+  "quiet-archive": { x: 130, y: 620 },
+  scale: { x: 850, y: 620 },
+  eternity: { x: 905, y: 505 },
+};
+
+/** Chart units one fuel flies, and the cheapest warp. */
+export const WARP_UNITS_PER_FUEL = 45;
+export const WARP_COST_MIN = 2;
+/** Price when either end is not on the chart (never happens for a known world) — the old flat warp price. */
+const WARP_COST_UNKNOWN = 10;
+
+/**
+ * Fuel for ONE warp leg: ⌈distance / 45⌉ + 1, at least 2. Going home is always free (D-1: home is always free) and so is
+ * staying put; a drift is always free and never asks for this. Examples: Home → Station 8, → Growing Place 7, → Quiet 11,
+ * Station → Quiet 18, Quiet ↔ Eternity 19. The worst leg is under a tenth of the 200 tank.
+ */
+export function warpCost(from: string, to: string): number {
+  if (to === "home" || from === to) return 0;
+  const a = WORLD_COORDS[from];
+  const b = WORLD_COORDS[to];
+  if (!a || !b) return WARP_COST_UNKNOWN;
+  const distance = Math.hypot(a.x - b.x, a.y - b.y);
+  return Math.max(WARP_COST_MIN, Math.ceil(distance / WARP_UNITS_PER_FUEL) + 1);
+}
