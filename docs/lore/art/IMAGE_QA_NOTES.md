@@ -135,3 +135,7 @@ The owner reviewed the images directly and ruled both open items FINE as they st
 2. **The Keeper's white — ALLOWED.** The eighth keeper in `35-the-eighth-bell-v2.png` and `35-the-eighth-bell-v4.png` may wear the white hood / faceless read. Both files stand as usable keepers alongside v1/v3, no marking.
 
 Remaining open items after these rulings: §20 canonical triptych pick; §5 Lullaby reference pick (v5 vs v8); §22 — v3 is the only flameless-lantern variant (standing recommendation: canon pick); §19 source prompt text still says "oval" (lore side's call).
+
+## Lullaby reference settled — per CLAUDE_REVIEW (2026-10-31)
+
+Claude picked by eye and recorded in `docs/lore/art/CLAUDE_REVIEW.md`: **`05-veshs-ship-the-lullaby-v5.png` is THE Lullaby reference** (Bible §2 swan: curved neck and head, flank hollow, petal-vanes, pale violet engine; its slight statue-like quality accepted — silhouette is the continuity; the three-angle sheet works as a turnaround). `05-…-v8.png` is NOT the reference (handsome ship, swan gone, ring-saucer read) — kept only as a "how she flies" side study. Cross-check all future Lullaby art against v5. Still open: the §20 canonical triptych pick only.
