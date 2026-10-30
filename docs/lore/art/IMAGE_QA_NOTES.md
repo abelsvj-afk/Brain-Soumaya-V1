@@ -387,3 +387,22 @@ Files: `38-what-the-hush-leaves-v1.png` … `v4.png`. All four wide. The frame i
 - Interpretation note for Claude: in v2/v3 the absence takes the shape of an empty dry-dock basin rather than a gap in a row of moored ships, and the Hush wall's texture leans toward a frozen waterfall in all four — still mist and still still, but worth his eye.
 
 Verdict: a strong, dread-quiet set; v2 and v3 carry the absence best. Your pick.
+
+## §39 — The Sixth Account (Round 1 leftover, Draft 5)
+
+Files: `39-the-sixth-account-v1.png` … `v4.png`. All four wide, all top-down as specified. Five aged scrolls lie side by side on the dark table, each under its own small lamp in the sheet's sequence — gold, green, brass, violet, steel blue — and the thin line of pale light runs from scroll to scroll through all four variants, gathering at the centre into something almost standing: most complete in v3, where the outline has a head above the table and arms reaching to the outer scrolls, and v1, where it rises head-and-shoulders over the middle scroll; implied by a knot of threads in v2 and most abstract in v4.
+
+- **The writing varies, and one end of the range misses the sheet.** v3's five pages are fully written in five visibly different hands, all of it illegible pseudo-script — no readable word, the same class as §50's ledger. v4's pages carry faint sketchy scrawls. But v1 and v2 leave the parchment **blank**: they satisfy "no readable writing" trivially while dropping "each written in a different hand." Flagged for Claude — if the five hands matter, v3 is the only full match.
+- No other flags; the dawning-recognition mood lands in all four.
+
+Verdict: v3 is the sheet's fullest match; the blank pages in v1/v2 are the note. Your pick.
+
+## §40 — Soumaya's Ship, the Seventh Hull (Round 1 leftover, Draft 5)
+
+Files: `40-soumayas-ship-the-seventh-hull-v1.png` … `v4.png`. All four wide, all four true concept sheets: the same ship in side, three-quarter and front views on a dark neutral ground, and within each sheet the three views plausibly describe one design (each variant is a different candidate design, as a concept round should be).
+
+- **The nameplate is right in all four** — the detail this set lives or dies by. On the flank, where a name would go, there is a clean empty RECTANGLE of bare metal: clearest in v2's side view (one large blank grey plate) and present in the side and three-quarter views of v1, v3 and v4. No lettering anywhere on any hull.
+- Engine glow is soft blue-white with a violet edge throughout; the family echoes read across the set — swept prow, plumb keel, bloom-curved wings in the front views of v2 and v4.
+- One delight worth Claude's eye either way: v4 makes the "latch-like fin" literal — an actual latch mechanism rides the dorsal fin in its side and three-quarter views. Charming or too on-the-nose is a taste call, not a defect.
+
+Verdict: the strongest possible outcome for this set — the rectangle survived every roll. Your pick.
