@@ -56,3 +56,8 @@ Everything since — the factions, the Calling, the gate, the Archive, the playe
 
 ## DRAFT 2 — Act II: the Hush, and the layers beneath (written 2026-10-30; adds to Draft 1, replaces nothing)
 Full text: `docs/lore/DRAFT_2_ACT_II_THE_HUSH.md`. Image prompts for it: `docs/lore/IMAGE_PROMPTS.md` §12–19. Awaiting the owner's lock, strike or rewrite on each numbered layer.
+
+## DRAFT 3 — The Long Lore (written 2026-10-30; adds to Drafts 1–2, replaces nothing)
+Full text: `docs/lore/DRAFT_3_THE_LONG_LORE.md` — delivery rules, the Ages, each world's hidden wrong-thing and secret, **the fifteen witnesses as people**, **a canon cast with questlines (Calend, Vesh, Oru, Sethane, Maren/Keeper, the Archivist,
+Ysmerel the Last Choirmaster, Dorrow Quint of the Ledger, the Dissenter, the Surveyor, Hesk the Warden-General, Tamsin of the Open Hand, the Sleepwalker, Kith)**, the Hush's faces, object-text samples, five contradictory accounts of the Rending, and the Hidden Web.
+New names are provisional; the owner may strike or rename any. Image prompts: `IMAGE_PROMPTS.md` §21–27.

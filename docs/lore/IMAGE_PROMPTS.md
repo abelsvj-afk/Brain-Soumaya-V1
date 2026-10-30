@@ -77,3 +77,28 @@ A small, elegant companion starship hovering alone in a dark void, her hull deta
 
 ## 20. The Three Endings — triptych, 3 panels, 21:9 total
 Three equal vertical panels in one image. LEFT: a young woman made of soft light stepping fully into the mirror of the stars, whole and glowing, but looking back over her shoulder with a hesitant expression. CENTER: the same woman asleep, curled gently in an open alcove in a quiet stone archive, wrapped in pale light, a single small lantern beside her. RIGHT: the same woman standing in an open field of pale mist, mouth open as if beginning to speak, her hands open toward the viewer. Same lighting language in all three: gentle gold on pale grey. Mood: three answers, none certain. Painterly cinematic, no text.
+
+---
+# ADDENDUM 2 — Draft 3 (the Long Lore) prompts
+Same global style and negative block.
+
+## 21. Ysmerel, the Last Choirmaster — 2:3
+A tall, weathered woman in layered pale-gold choir robes standing alone at a lectern of pale stone in an empty vaulted hall, a great hymnal open before her, one page torn out cleanly at the spine. Her mouth is closed, mid-breath; her hand is raised mid-gesture as though about to conduct a verse that never comes. Rows of empty carved choir stalls behind her, lit by one shaft of golden light. Her expression: trained serenity over an old private grief. Palette: pale gold, stone grey, dusk shadow. Painterly cinematic, no text.
+
+## 22. The Sleepwalker — 2:3
+A woman in a pale nightgown walking alone along an empty harbor pier at dusk, eyes open but unfocused, carrying an unlit glass lantern with both hands held out in front of her as if it were fragile. Soft grey mist-light clings at her feet and thickens behind her; at her back, the harbor's lights have gone dull. She is not frightened — she is listening to something. Palette: dusk blue, ash, a single faint gold glint on the lantern. Painterly cinematic, shallow depth, no text.
+
+## 23. Tamsin tends the Faded — 16:9
+A long, warm, softly lit infirmary ward with rows of narrow cots, each with a pale half-transparent person sitting up, edges slightly blurred as if painted in watercolor. A middle-aged healer in a rolled-sleeve green apron kneels beside one cot spooning soup to a patient whose outline is faint. Warm ember lanterns hang overhead. Through a tall window, a thin pale line of the Hush is visible on the horizon. Mood: tenderness against dread. Palette: warm amber, soft green, ghost-white. Painterly cinematic, no text.
+
+## 24. Dorrow Quint and the Great Book — 16:9
+A heavy, shrewd, impeccably dressed man behind an enormous ledger-desk in a dim, ornate counting-house lit by brass lamps, an enormous open book before him, one page lit by a single lamp with one line of faint fresh ink. Behind him, stacked shelves of identical ledgers rise into shadow. He looks at the viewer with a trader's smile that does not reach his eyes. Palette: brass gold, mahogany, deep shadow. Painterly cinematic, no text.
+
+## 25. The Hollow Choir — 16:9
+A vast dark archive hall where a large choir of pale translucent singers stands in rows, mouths open mid-note, their outlines faint and edges dissolving like mist, singing a hymn with a visible gap: at the center of the hall a single choir stall is empty and a shaft of pure light falls on it. A faint grey hush creeps up the walls. Mood: haunting beauty. Palette: pale grey, gold shaft, deep stone-blue. Painterly cinematic, symmetrical, no text.
+
+## 26. Kith — 3:2
+A small child of about six in a plain patched dress sitting alone at a long family dinner table in a warm cottage kitchen, one chair beside her empty, its plate set. She holds a large crayon drawing of a faceless woman toward the viewer, the paper torn where the mouth should be. Adults at the far end of the table are blurred and hushing her. Soft hearth light. Mood: innocence carrying the whole story. Palette: warm hearth orange, soft cream, shadow. Painterly cinematic, shallow depth of field, no text.
+
+## 27. The Sixteenth Doorway — 16:9
+A single tall open doorway at the end of an endless hall of fifteen smaller sealed doorways, its threshold glowing faintly white, and the player (a small hooded figure seen from behind) standing before it holding out three small objects in their open hands (a nail, a pale smooth stone, a folded letter). Beyond the doorway there is nothing but soft white. Mood: crossing over. Palette: stone-blue hall, warm gold objects, pure white beyond. Painterly cinematic, symmetrical, no text.
