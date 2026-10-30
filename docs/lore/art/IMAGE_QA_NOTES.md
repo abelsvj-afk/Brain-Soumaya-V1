@@ -54,3 +54,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §23 filed (117 keepers)
 
 §23 Tamsin tends the Faded: one of the strongest sets. Tamsin is the same middle-aged woman in all four (greying brown hair in a bun, rolled-sleeve green apron) kneeling with bowl and spoon; the Faded are half-transparent with watercolour-soft edges, no gore, per the Bible. Ember lanterns overhead in all; the Hush's thin pale line on the horizon is most literal in v1/v3 (v4 renders a horizon glow with a falling arc instead — still reads correctly). PROPOSED detail "buttons in pockets" not visible at this scale in any variant.
+
+## Update — §24 filed (121 keepers)
+
+§24 Dorrow Quint: consistent man and wardrobe across all four (heavy, burgundy velvet coat, gold trim), Great Book enormous and open, ledger shelves rising into shadow, brass lamps. The smile-that-doesn't-reach-his-eyes is strongest in v1/v4; v2's smile is warmer (least canon), v3 sterner than smiling. Fresh-ink line: v2 most literal (one dark line on the lit page); v4's lit page carries several lines of pseudo-script (not legible words). NOTE for your eye: v3's coat and desk are embroidered with stars and a CRESCENT MOON — decorative astronomy, but it echoes the negative prompt's no-crescents line the way §21 v1's robe embroidery did; ruling welcome.
