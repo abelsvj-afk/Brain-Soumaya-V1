@@ -80,7 +80,9 @@ import {
 import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
-import { markRelicFound, useFoundRelics } from "./relicsFound.js";
+import { markRelicFound, replaceFoundRelics, useFoundRelics } from "./relicsFound.js";
+import { findRelic } from "../api/relics.js";
+import { useRelicBuffs } from "../hooks/useRelicBuffs.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
@@ -490,6 +492,10 @@ export default function WorldsSurface({
   spaceId?: string;
 }) {
   const travel = useTravel(enabled);
+  const { state: relicBuffs } = useRelicBuffs(enabled);
+  const stickyRisenRef = useRef<Set<number>>(new Set());
+  const [stickyRisenTick, setStickyRisenTick] = useState(0);
+  const [findError, setFindError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
@@ -816,8 +822,21 @@ export default function WorldsSurface({
   // the helix still renders, honestly, without it.
   const deepPastLayout = useMemo<DeepPastLayout | undefined>(() => {
     if (!atDeepPast || !graph) return undefined;
-    return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map());
-  }, [atDeepPast, graph, journeys, journeyLinksMap]);
+    return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map(), new Date(), {
+      warmDays: relicBuffs?.buffs.riseWindowDays ?? 30,
+      stickyRisenIds: relicBuffs?.buffs.risenHold ? stickyRisenRef.current : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atDeepPast, graph, journeys, journeyLinksMap, relicBuffs, stickyRisenTick]);
+
+  // Lantern of Keeping: risen members stay risen for the visit; leaving clears the set.
+  useEffect(() => {
+    if (!atDeepPast) { stickyRisenRef.current.clear(); return; }
+    if (!relicBuffs?.buffs.risenHold || !deepPastLayout) return;
+    let grew = false;
+    for (const mm of deepPastLayout.members) if (mm.risen && !stickyRisenRef.current.has(mm.nodeId)) { stickyRisenRef.current.add(mm.nodeId); grew = true; }
+    if (grew) setStickyRisenTick((n) => n + 1);
+  }, [atDeepPast, deepPastLayout, relicBuffs?.buffs.risenHold]);
 
   // The People layout derives the same way, from the graph alone — one
   // warm cluster per person with linked memories, bridges where memories
@@ -936,9 +955,18 @@ export default function WorldsSurface({
     );
   }, [atWorld, currentWorld, visibleRelics, foundRelics]);
 
-  const onFindRelic = (relic: RelicDef) => {
+  // A5: a find is recorded locally ONLY on server success. A failure leaves
+  // the glimmer in place with a plain retry line and no celebration.
+  const onFindRelic = async (relic: RelicDef) => {
     if (!spaceId) return;
-    markRelicFound(spaceId, relicCodexKey(relic.id));
+    const out = await findRelic(relic.id);
+    if (!out.ok) {
+      setFindError(out.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready.");
+      return;
+    }
+    setFindError(null);
+    if (out.state) replaceFoundRelics(spaceId, out.state.found.map((id) => relicCodexKey(id)));
+    else markRelicFound(spaceId, relicCodexKey(relic.id));
     pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
   };
 
@@ -1316,6 +1344,9 @@ export default function WorldsSurface({
             </button>
           </p>
         ))}
+      {mode === "world" && findError && (
+        <p className="worlds-surface-fallback" role="alert">{findError}</p>
+      )}
       {mode === "world" && currentWorld === "growing-place" && !layout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}

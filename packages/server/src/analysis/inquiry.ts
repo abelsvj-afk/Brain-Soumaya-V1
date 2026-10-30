@@ -4,7 +4,8 @@ import { ingest, ingestWithContext } from "../ingestion/pipeline.js";
 import { NodesRepo } from "../repositories/nodes.repo.js";
 import { EdgesRepo } from "../repositories/edges.repo.js";
 import { LensesRepo } from "../repositories/lenses.repo.js";
-import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../economy.js";
+import { EconomyRepo, EARN_MEMORY } from "../economy.js";
+import { buffsForSpace } from "../relics/buffs.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../streak.js";
 import { knn, getEmbedding } from "../db/vec.js";
 import { isRejected, recordRejection } from "./rejections.js";
@@ -622,7 +623,7 @@ export async function answerInquiry(
 
   const { advanced } = new StreakRepo(ctx.handle, spaceId).touch();
   const fuelEarned =
-    EARN_MEMORY + EARN_LINK * result.associativeEdges.length + (advanced ? STREAK_DAY_BONUS : 0);
+    EARN_MEMORY + buffsForSpace(ctx.handle, spaceId).linkEarn * result.associativeEdges.length + (advanced ? STREAK_DAY_BONUS : 0);
   new EconomyRepo(ctx.handle, spaceId).add(fuelEarned);
 
   s.prepare(`UPDATE inquiries SET status = 'answered' WHERE id = ? AND space_id = ?`).run(id, spaceId);

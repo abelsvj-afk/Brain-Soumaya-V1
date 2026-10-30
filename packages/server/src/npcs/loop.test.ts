@@ -149,8 +149,30 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     const tables = handle.sqlite
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE '%relic%'`)
       .all() as { name: string }[];
-    expect(tables.map((t) => t.name)).toEqual(["npc_relic_holdings"]);
+    // Relic Buffs v2 (design note v2 §5, lines 195–210): the PLAYER pool
+    // now exists by design — `relic_holdings` (one row per found copy)
+    // and its `relic_returns` audit table are created by the established
+    // bootstrap + migration dual DDL and join SPACE_SCOPED_TABLES. So
+    // the pre-v2 proxy for this test's invariant ("the only relic table
+    // is the NPC one") is obsolete: all three tables are expected. The
+    // invariant itself — an NPC holding lives ONLY in the NPC pool and
+    // consumes no player/scarcity copy — is unchanged, and is asserted
+    // directly below instead.
+    expect(new Set(tables.map((t) => t.name))).toEqual(
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns"]),
+    );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
+    // No row for this space (or any space) appeared in the player pool:
+    // the NPC's Witness copy does not count against the player's
+    // 3-copy Eternity scarcity pool.
+    const playerRows = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS n FROM relic_holdings`)
+      .get() as { n: number };
+    expect(playerRows.n).toBe(0);
+    const playerWitness = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE space_id = ? AND relic_id = ?`)
+      .get("spaceA", "witness-without-a-name") as { n: number };
+    expect(playerWitness.n).toBe(0);
   });
 });
 

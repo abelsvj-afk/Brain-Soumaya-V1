@@ -3,6 +3,7 @@ import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { EconomyRepo, type JourneyBonusCreditor, type JourneyBonusResult } from "../economy.js";
 import { spaceTimezone } from "../agent/notify/policy.js";
+import { buffsForSpace } from "../relics/buffs.js";
 import {
   EARN_JOURNEY_COMPLETE,
   EARN_JOURNEY_DRIFT,
@@ -560,9 +561,10 @@ export class TravelRepo implements JourneyBonusCreditor {
     const departedMs = r.departed_at ? Date.parse(r.departed_at) : Number.NaN;
     if (!Number.isFinite(departedMs) || nowMs - departedMs < DRIFT_BONUS_MIN_ELAPSED_MS)
       return { amount: 0, reason: BONUS_REASON_TOO_SHORT };
-    if (this.driftBonusesToday(nowMs) >= DRIFT_BONUS_DAILY_CAP)
+    const buffs = buffsForSpace(this.h, this.spaceId);
+    if (this.driftBonusesToday(nowMs) >= buffs.driftDailyCap)
       return { amount: 0, reason: BONUS_REASON_DAILY_CAP };
-    return { amount: EARN_JOURNEY_DRIFT, reason: null };
+    return { amount: buffs.driftBonus, reason: null };
   }
 
   /** Drift bonuses already credited on the space-local day of nowMs. */

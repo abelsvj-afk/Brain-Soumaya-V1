@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE, spaces, type SpaceRow } from "../db/schema.js";
+import { RelicHoldingsStore } from "../relics/holdings.js";
 
 /**
  * Lightweight per-brain auth: a space is opened by name + passcode and works
@@ -181,6 +182,8 @@ export const SPACE_SCOPED_TABLES = [
   "notification_outbox",
   "travel_journey_events",
   "travel_journeys",
+  "relic_holdings",
+  "relic_returns",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.
@@ -326,8 +329,12 @@ export class SpacesRepo {
         // fallback exists for pre-migration brains; without this row, a fresh
         // space would inherit whatever the legacy owner set (fail-open to paid
         // autonomous work if that was "true").
+        // Relic Buffs v2 (P1 fix): a space created after the relics ship
+        // migration is born already legacy-synced (relic_legacy_synced = 1)
+        // and carries no legacy-eligibility marker (column default 0), so
+        // the one-time pre-ship legacy sync refuses it from its first call.
         this.h.sqlite
-          .prepare(`INSERT OR IGNORE INTO space_meta (space_id, research_enabled) VALUES (?, 'false')`)
+          .prepare(`INSERT OR IGNORE INTO space_meta (space_id, research_enabled, relic_legacy_synced) VALUES (?, 'false', 1)`)
           .run(id);
       }
     });
@@ -423,6 +430,12 @@ export class SpacesRepo {
       `SELECT 1 AS x FROM sqlite_master WHERE name = ?`,
     );
     const tx = sqlite.transaction(() => {
+      // Relic Buffs v2 §6: a deleted brain's COUNTED relic copies return to
+      // their pools first — releaseAllForSpace writes their relic_returns
+      // rows before any space rows are deleted below. (The returns rows are
+      // themselves space-scoped, so the census then removes them with the
+      // brain; the pool counts stay true because the holdings are gone.)
+      new RelicHoldingsStore(this.h).releaseAllForSpace(id);
       // Derived indexes first, while the entity rows still exist to select
       // the space's ids from.
       for (const [indexTable, keyColumn, entityTable] of DERIVED_INDEXES) {
