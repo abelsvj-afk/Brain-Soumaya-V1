@@ -755,8 +755,11 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   shapes (● held · ◆ told · ◎ noticed · ○ heard · ✦ walked beside — shape, not colour); NO counts, percentages or "locked" anywhere (a test asserts the Book has no
   digit); fading is only a cue to recall; lay two lights beside each other and a thread of light appears only if the story joins them; Second Readings add one
   sentence when a partner is held; private per-entry notes; "Listen" uses the browser voice until the ElevenLabs narration endpoint lands. The server is the only
-  authority (canon-checked ids, travel-ledger-checked world finds, idempotent). **Nothing yet lets a player FIND an entry** — the regard/echo triggers are the next
-  slice, so the Book is shapes only until they ship. Look at: the 360×440 sky on a real phone (point spacing ≥ 24 units; tap size 44 px), whether the legend line
+  authority (canon-checked ids, travel-ledger-checked world finds, idempotent). **Finding things (2026-10-30, same slice):** a "Notice" dock group in every world (Regard · Listen —
+  stay still 4 s; the Hour only picks what comes FIRST, never a lock), the shipped relics mirror into the Book, met people give things after enough meetings
+  (Calend→the Doorkeeper's Nail, the Choirmaster→the held Breath, the Broker→the Page), and a stranger shares a cup at the Station on a later day. The server
+  validates every find against `shared/storyTriggers.ts` and the travel ledger; only entries whose words are written are released (≈ 30 of ~46 so far).
+  Look at: the 360×440 sky on a real phone (point spacing ≥ 24 units; tap size 44 px), whether the legend line
   reads, and the fading cue.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On

@@ -97,6 +97,7 @@ import {
 } from "../graph/scaleScene.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
+import { useStoryNotice } from "../hooks/useStoryNotice.js";
 import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -851,6 +852,14 @@ export default function WorldsSurface({
   const transitTotalMs = transitKind ? TRANSIT_MS[transitKind] : 0;
   const mode = inFlightScene ? "transit" : atWorld ? "world" : null;
   const visible = !!mode && !dismissed && engaged;
+  // Noticing things: stay still to regard or listen; met people and found relics are reported to the Book (the server validates every find).
+  const story = useStoryNotice({
+    active: !!mode && mode === "world" && !dismissed && engaged,
+    world: currentWorld,
+    notify: (t) => pushToast(t, "✦", 6500, "normal"),
+  });
+  const storyRef = useRef(story);
+  storyRef.current = story;
   // Eternity acts on his own (the server decides and logs; this only plays a fresh act once, while you are there).
   useEternityAutonomy(visible && mode === "world" && currentWorld === "eternity", (p) => {
     const e = sceneHandleRef.current?.eternity;
@@ -912,7 +921,10 @@ export default function WorldsSurface({
         if (cancelled) return;
         metThisVisitRef.current.add(e.id);
         const m = recordMeeting(getSpaceId(), e.id);
-        if (m.recorded) pushToast(encounterLine(e, "eternity", null, m.first, npcScriptRef.current, m.count), "✦", 7000, "normal");
+        if (m.recorded) {
+          pushToast(encounterLine(e, "eternity", null, m.first, npcScriptRef.current, m.count), "✦", 7000, "normal");
+          void storyRef.current.onMeeting(e.id, m.count);
+        }
       }, 4000);
     }
     return () => {
@@ -1584,6 +1596,7 @@ export default function WorldsSurface({
     if (!spaceId) return;
     markRelicFound(spaceId, relicCodexKey(relic.id));
     pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
+    void storyRef.current.onRelic(relic.id);
   };
 
   const toggleGuided = () => {
@@ -1897,7 +1910,10 @@ export default function WorldsSurface({
           if (enc.entered && !metThisVisitRef.current.has(f.id)) {
             metThisVisitRef.current.add(f.id);
             const m = recordMeeting(getSpaceId(), f.id);
-            if (m.recorded) pushToast(encounterLine(member, currentWorld, f.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal");
+            if (m.recorded) {
+              pushToast(encounterLine(member, currentWorld, f.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal");
+              void storyRef.current.onMeeting(f.id, m.count);
+            }
           }
           // The tag rides them on screen (a ref write, no re-render).
           const tag = npcTagEls.current.get(f.id);
@@ -2414,6 +2430,17 @@ export default function WorldsSurface({
         },
       );
     }
+    if (mode === "world" && currentWorld) {
+      // Noticing: the way the story is found. Stay still; the world may answer. (Never a timer you can miss — only a stillness.)
+      dockGroups.push({
+        id: "notice",
+        label: "Notice",
+        tiles: [
+          { id: "regard", icon: "i:regard", label: "Regard", name: "Stay still and regard this place", active: story.noticing === "regard", onClick: () => story.begin("regard") },
+          { id: "listen", icon: "i:music", label: "Listen", name: "Stay still and listen", active: story.noticing === "listen", onClick: () => story.begin("listen") },
+        ],
+      });
+    }
   }
 
   return (
@@ -2533,6 +2560,11 @@ export default function WorldsSurface({
           </div>
         );
       })()}
+      {story.caption && mode === "world" && (
+        <p className="story-notice" role="status">
+          {story.caption}
+        </p>
+      )}
       {npcNote && mode === "world" && (
         <p className="npc-note" role="status">
           {npcNote}

@@ -14,10 +14,12 @@ import { EMBED_DIM } from "../db/vec.js";
 
 /** docs/specs/lore-storage-2026-10-30.md — progress is private, id-only, idempotent, server-authoritative and never a number. */
 const T0 = Date.parse("2026-10-30T12:00:00.000Z");
-const ANYWHERE = "obj.follower-ribbon"; // world: anywhere
-const ANOTHER = "sight.blank-nameplate"; // world: anywhere
-const PEOPLE = "obj.kiths-drawing"; // world: people
-const DEEP = "sight.missing-stratum"; // world: deep-past
+const DEEP = "sight.missing-stratum"; // regard · deep-past
+const SEAM = "sight.second-seam"; // regard · great-station
+const NAIL = "obj.doorkeepers-nail"; // npc wayfarer · great-station
+const HARBOR_NAIL = "relic.harbor-nail"; // relic · great-station
+const ANYWHERE = "obj.follower-ribbon"; // not released yet; used where only the Book matters
+const ANOTHER = "sight.blank-nameplate";
 
 let handle: DbHandle;
 beforeEach(() => {
@@ -25,55 +27,75 @@ beforeEach(() => {
 });
 afterEach(() => handle.sqlite.close());
 const repo = (space = "spaceA") => new StoryRepo(handle, space);
+/** Put the ship in a world for real, through the ledger (never a client claim). Returns a time safely after arrival. */
+function goTo(world: string, key = world, space = "spaceA"): number {
+  const t = new TravelRepo(handle, space);
+  const j = t.depart({ clientKey: key, kind: "drift", destination: world }, T0);
+  t.arrive(j.id, Date.parse(j.cancelDeadline) + 1000);
+  return Date.parse(j.cancelDeadline) + 5000;
+}
+/** Give a brain a find directly (tests of links/notes/recall care about those, not about how it was found). */
+function grant(id: string, space = "spaceA"): void {
+  handle.sqlite.prepare(`INSERT OR IGNORE INTO story_finds (space_id, entry_id, source) VALUES (?, ?, 'regard')`).run(space, id);
+}
 
 describe("finds", () => {
   it("records a find once; replays are harmless and keep the first time", () => {
-    const first = repo().find(ANYWHERE, "regard", T0);
+    const at = goTo("deep-past");
+    const first = repo().find(DEEP, "regard", at);
     expect(first.isNew).toBe(true);
-    const again = repo().find(ANYWHERE, "regard", T0 + 60_000);
+    const again = repo().find(DEEP, "regard", at + 60_000);
     expect(again.isNew).toBe(false);
     expect(again.foundAt).toBe(first.foundAt);
     expect(repo().book().finds).toHaveLength(1);
   });
 
   it("rejects an id that is not canon — a client can never invent a find", () => {
-    expect(() => repo().find("obj.made-up", "regard", T0)).toThrow(StoryError);
+    const at = goTo("deep-past");
+    expect(() => repo().find("obj.made-up", "regard", at)).toThrow(StoryError);
     expect(repo().book().finds).toEqual([]);
   });
 
-  it("rejects an unknown source, and a companion source on a non-companion", () => {
-    expect(() => repo().find(ANYWHERE, "telepathy", T0)).toThrow(/source/);
-    expect(() => repo().find(ANYWHERE, "companion", T0)).toThrow(/companion/);
-    expect(repo().find("companion.dock-1", "companion", T0).isNew).toBe(true);
+  it("rejects an unknown source, and a way the canon does not allow for that entry", () => {
+    const at = goTo("deep-past");
+    expect(() => repo().find(DEEP, "telepathy", at)).toThrow(/source/);
+    expect(() => repo().find(DEEP, "listen", at)).toThrow(/cannot be found that way/); // it is regarded, not heard
+    expect(() => repo().find(DEEP, "npc:wayfarer", at)).toThrow(/cannot be found that way/);
+    expect(() => repo().find("obj.follower-ribbon", "regard", at)).toThrow(/cannot be found that way/); // not released yet
   });
 
-  it("checks a world find against where the travel ledger says the ship is", () => {
-    // Home by default: the People world's entry cannot be found there, nor claimed from another world.
-    expect(() => repo().find(PEOPLE, "world:people", T0)).toThrow(/not there/);
-    expect(() => repo().find(PEOPLE, "world:great-station", T0)).toThrow(/not found there/);
-    // An "anywhere" entry is found wherever the ship truly is.
-    expect(repo().find(ANYWHERE, "world:home", T0).isNew).toBe(true);
-    // Put the ship in the Deep Past for real, then the find is accepted.
-    const t = new TravelRepo(handle, "spaceA");
-    const j = t.depart({ clientKey: "k", kind: "drift", destination: "deep-past" }, T0);
-    t.arrive(j.id, Date.parse(j.cancelDeadline) + 1000);
-    const later = Date.parse(j.cancelDeadline) + 5000;
-    expect(t.currentWorld(later)).toBe("deep-past");
-    expect(repo().find(DEEP, "world:deep-past", later).isNew).toBe(true);
-    expect(() => repo().find(PEOPLE, "world:deep-past", later)).toThrow(/not found there/); // right place, wrong world for that entry
+  it("checks a find against where the travel ledger says the ship is", () => {
+    // At home, nothing in a world can be found.
+    expect(() => repo().find(DEEP, "regard", T0)).toThrow(/not there/);
+    const deep = goTo("deep-past");
+    expect(() => repo().find(SEAM, "regard", deep)).toThrow(/not there/); // right way, wrong world
+    expect(repo().find(DEEP, "regard", deep).isNew).toBe(true);
+  });
+
+  it("releases a witness relic only in the world it rests in", () => {
+    const deep = goTo("deep-past");
+    expect(() => repo().find(HARBOR_NAIL, "relic", deep)).toThrow(/not there/);
+    const station = goTo("great-station", "to-station");
+    expect(repo().find(HARBOR_NAIL, "relic", station).isNew).toBe(true);
+  });
+
+  it("takes a met person's gift on their word (the meeting is only known to the client), but only the pairing the canon names", () => {
+    expect(repo().find(NAIL, "npc:wayfarer", T0).isNew).toBe(true);
+    expect(() => repo().find(NAIL, "npc:broker", T0)).toThrow(/cannot be found that way/);
   });
 
   it("is private to a brain", () => {
-    repo("spaceA").find(ANYWHERE, "regard", T0);
+    const at = goTo("deep-past");
+    repo("spaceA").find(DEEP, "regard", at);
     expect(repo("spaceB").book().finds).toEqual([]);
   });
 });
 
 describe("Concordance links", () => {
   it("need both ends found; store one sorted row for either direction; light only when canon joins them", () => {
-    repo().find(ANYWHERE, "regard", T0);
+    grant(ANYWHERE);
     expect(() => repo().link(ANYWHERE, ANOTHER)).toThrow(/not found/);
-    repo().find(ANOTHER, "regard", T0);
+    grant(ANOTHER);
     const lit = repo().link(ANOTHER, ANYWHERE); // reversed on purpose
     expect(repo().link(ANYWHERE, ANOTHER).linkedAt).toBe(lit.linkedAt);
     expect(repo().book().links).toHaveLength(1);
@@ -84,8 +106,8 @@ describe("Concordance links", () => {
   });
 
   it("lights a pair the story itself joins (derived at read, not stored)", () => {
-    repo().find("obj.vesh-paper-boat", "regard", T0);
-    repo().find("sight.lullaby-hollow", "regard", T0);
+    grant("obj.vesh-paper-boat");
+    grant("sight.lullaby-hollow");
     expect(repo().link("obj.vesh-paper-boat", "sight.lullaby-hollow").lit).toBe(true);
     expect(() => repo().link(ANYWHERE, ANYWHERE)).toThrow(/itself/);
   });
@@ -94,7 +116,7 @@ describe("Concordance links", () => {
 describe("notes and recall", () => {
   it("keeps a note per found entry, caps its length, and an empty note removes it", () => {
     expect(() => repo().setNote(ANYWHERE, "hi")).toThrow(/not found/);
-    repo().find(ANYWHERE, "regard", T0);
+    grant(ANYWHERE);
     repo().setNote(ANYWHERE, "  mine  ", T0);
     expect(repo().book().notes).toEqual([{ entryId: ANYWHERE, note: "mine", updatedAt: new Date(T0).toISOString() }]);
     repo().setNote(ANYWHERE, "revised", T0 + 1);
@@ -106,7 +128,7 @@ describe("notes and recall", () => {
 
   it("recall bumps the entry and needs it to be found", () => {
     expect(() => repo().recall(ANYWHERE, T0)).toThrow(StoryError);
-    repo().find(ANYWHERE, "regard", T0);
+    grant(ANYWHERE);
     repo().recall(ANYWHERE, T0 + 5000);
     repo().recall(ANYWHERE, T0 + 9000);
     const f = repo().book().finds[0]!;
@@ -174,13 +196,15 @@ describe("/api/story over HTTP", () => {
 
   it("finds, links, notes and recalls end to end — and never returns a number", async () => {
     expect((await (await call("/book")).json()) as object).toEqual({ finds: [], links: [], notes: [] });
-    for (const id of [ANYWHERE, ANOTHER]) {
-      const r = await call("/find", { method: "POST", body: { entryId: id, source: "regard" } });
+    const gifts: [string, string][] = [["obj.doorkeepers-nail", "npc:wayfarer"], ["obj.choirmasters-breath", "npc:cantor"]];
+    for (const [id, source] of gifts) {
+      const r = await call("/find", { method: "POST", body: { entryId: id, source } });
       expect(r.status).toBe(200);
     }
-    expect((await call("/link", { method: "PUT", body: { a: ANYWHERE, b: ANOTHER } })).status).toBe(200);
-    expect((await call("/note", { method: "PUT", body: { entryId: ANYWHERE, note: "a thought" } })).status).toBe(200);
-    expect((await call("/recall", { method: "POST", body: { entryId: ANYWHERE } })).status).toBe(200);
+    const [A, B] = [gifts[0]![0], gifts[1]![0]];
+    expect((await call("/link", { method: "PUT", body: { a: A, b: B } })).status).toBe(200);
+    expect((await call("/note", { method: "PUT", body: { entryId: A, note: "a thought" } })).status).toBe(200);
+    expect((await call("/recall", { method: "POST", body: { entryId: A } })).status).toBe(200);
     const book = (await (await call("/book")).json()) as { finds: unknown[]; links: unknown[]; notes: unknown[] };
     expect(book.finds).toHaveLength(2);
     expect(book.links).toHaveLength(1);
@@ -188,14 +212,15 @@ describe("/api/story over HTTP", () => {
     // The Book is lists only: no total, count, ratio or percentage key anywhere in the payload.
     expect(Object.keys(book).sort()).toEqual(["finds", "links", "notes"]);
     expect(JSON.stringify(book)).not.toMatch(/"(total|count|percent|progress|remaining|of)"/i);
-    expect((await call("/link", { method: "DELETE", body: { a: ANOTHER, b: ANYWHERE } })).status).toBe(200);
+    expect((await call("/link", { method: "DELETE", body: { a: B, b: A } })).status).toBe(200);
   });
 
   it("refuses forged and malformed input with 4xx, and keeps brains apart", async () => {
     expect((await call("/find", { method: "POST", body: { entryId: "obj.nope", source: "regard" } })).status).toBe(404);
-    expect((await call("/find", { method: "POST", body: { entryId: PEOPLE, source: "world:people" } })).status).toBe(403);
+    expect((await call("/find", { method: "POST", body: { entryId: "sight.missing-stratum", source: "regard" } })).status).toBe(403); // at home, not there
+    expect((await call("/find", { method: "POST", body: { entryId: "obj.follower-ribbon", source: "regard" } })).status).toBe(403); // no trigger
     expect((await call("/find", { method: "POST", body: { nonsense: 1 } })).status).toBe(400);
-    expect((await call("/note", { method: "PUT", body: { entryId: PEOPLE, note: "x" } })).status).toBe(403);
+    expect((await call("/note", { method: "PUT", body: { entryId: "obj.kiths-drawing", note: "x" } })).status).toBe(403);
     expect(((await (await call("/book", { space: otherId })).json()) as { finds: unknown[] }).finds).toEqual([]);
   });
 });

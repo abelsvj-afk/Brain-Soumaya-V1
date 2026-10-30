@@ -1,5 +1,5 @@
 import type { DbHandle } from "../db/client.js";
-import { STORY_ENTRY_BY_ID, storyPairIsLit } from "@brain/shared";
+import { STORY_ENTRY_BY_ID, storyPairIsLit, triggerFor, type TriggerHow } from "@brain/shared";
 import { TravelRepo } from "../repositories/travel.repo.js";
 
 /**
@@ -8,8 +8,8 @@ import { TravelRepo } from "../repositories/travel.repo.js";
  */
 
 export const NOTE_MAX_CHARS = 2000;
-/** Where a find may come from. `world:<id>` is checked against the travel ledger; the rest are events the client reports from things only it can see. */
-const SOURCE_RE = /^(world:[a-z-]{1,40}|npc:[a-z-]{1,40}|regard|recall|companion)$/;
+/** How a find may be reported. Each is matched against the canon's trigger table (shared/storyTriggers.ts); all but `npc` must also match where the travel ledger puts the ship. */
+const SOURCE_RE = /^(regard|listen|relic|companion|npc:[a-z-]{1,40})$/;
 
 export class StoryError extends Error {
   constructor(
@@ -83,19 +83,17 @@ export class StoryRepo {
   }
 
   /**
-   * Record a find. Idempotent (a replayed event changes nothing). The server is the only authority: the id must be real canon, and a `world:` find must match
-   * where the travel ledger says the ship actually is, in the entry's own world.
+   * Record a find. Idempotent (a replayed event changes nothing). The server is the only authority: the id must be real canon; the way it is being found must be one the
+   * canon allows for that entry (a trigger); and, except for a met person's gift, the travel ledger must put the ship in the world the trigger names.
    */
   find(entryId: string, source: string, nowMs: number = Date.now()): { entryId: string; foundAt: string; isNew: boolean } {
-    const entry = this.requireEntry(entryId);
+    this.requireEntry(entryId);
     if (!SOURCE_RE.test(source)) throw new StoryError("Unknown source for a find.", 400);
-    if (source === "companion" && entry.kind !== "companion") throw new StoryError("That is not a companion.", 400);
-    if (source.startsWith("world:")) {
-      const world = source.slice("world:".length);
-      if (entry.world !== "anywhere" && entry.world !== world) throw new StoryError("That is not found there.", 403);
-      const at = new TravelRepo(this.h, this.spaceId).currentWorld(nowMs);
-      if (at !== world) throw new StoryError("You are not there.", 403);
-    }
+    const npc = source.startsWith("npc:") ? source.slice(4) : undefined;
+    const how: TriggerHow = (npc ? "npc" : source) as TriggerHow;
+    const trigger = triggerFor(entryId, how, npc);
+    if (!trigger) throw new StoryError("That cannot be found that way.", 403);
+    if (how !== "npc" && new TravelRepo(this.h, this.spaceId).currentWorld(nowMs) !== trigger.world) throw new StoryError("You are not there.", 403);
     const db = this.h.sqlite;
     const iso = new Date(nowMs).toISOString();
     const res = db.prepare(`INSERT OR IGNORE INTO story_finds (space_id, entry_id, found_at, source) VALUES (?, ?, ?, ?)`).run(this.spaceId, entryId, iso, source);

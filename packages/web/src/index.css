@@ -7849,3 +7849,6 @@ body.in-transit .perf-suggest { display: none; }
 .book-note { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; color: #b8c6e4; font-size: 0.8rem; }
 .book-note textarea { width: 100%; box-sizing: border-box; background: rgba(255, 255, 255, 0.06); color: #e6eefc; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 8px; font: inherit; }
 .book-save { margin-top: 6px; }
+
+/* Noticing (docs/lore/DRAFT_5_THE_WEB.md): the caption while you stay still. Below the dock; never covers the HUD rails. */
+.story-notice { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--worlds-bar-h, 127px) + 0.5rem); z-index: 31; max-width: calc(100% - 140px); margin: 0; padding: 8px 14px; border-radius: 999px; background: rgba(8, 12, 28, 0.88); border: 1px solid rgba(255, 233, 168, 0.45); color: #ffe9a8; font-size: 0.84rem; font-style: italic; text-align: center; pointer-events: none; }

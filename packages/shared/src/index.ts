@@ -20,3 +20,4 @@ export * from "./fleetDefenseEngine.js";
 export * from "./missions.js";
 export * from "./story.js";
 export * from "./storyCanon.js";
+export * from "./storyTriggers.js";

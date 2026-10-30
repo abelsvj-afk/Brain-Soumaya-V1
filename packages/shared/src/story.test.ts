@@ -93,3 +93,57 @@ describe("the web checker catches a broken web (falsified)", () => {
     expect(checkStoryGraph(bad).join("\n")).toMatch(/banned/);
   });
 });
+
+import { STORY_TRIGGERS, hourBand, npcGifts, pickNoticed, triggerFor } from "./storyTriggers.js";
+
+describe("how things are found", () => {
+  const byId = new Map(STORY.entries.map((e) => [e.id, e]));
+  it("only releases entries that exist, have words, and sit in the world the trigger names", () => {
+    for (const t of STORY_TRIGGERS) {
+      const e = byId.get(t.entryId);
+      expect(e, t.entryId).toBeTruthy();
+      if (t.how !== "relic") expect(e!.text?.plain, `${t.entryId} needs words before it can be found`).toBeTruthy();
+      expect(e!.world === t.world || e!.world === "anywhere", `${t.entryId}: ${e!.world} vs ${t.world}`).toBe(true);
+      expect(t.world in WORLD_COORDS).toBe(true);
+    }
+  });
+  it("releases every witness relic through the shipped relic system, in its own world", () => {
+    for (const r of RELICS) {
+      const t = triggerFor(`relic.${r.id}`, "relic");
+      expect(t?.world, r.id).toBe(r.world);
+    }
+  });
+  it("the Hour only decides what comes FIRST — everything in a world is reachable at any hour", () => {
+    const hours = ["first-light", "measure", "threshold", "growing", "hearths", "rest", "standing"] as const;
+    for (const world of ["great-station", "quiet-archive", "eternity"]) {
+      for (const how of ["regard", "listen"] as const) {
+        const seen = new Set<string>();
+        for (const h of hours) {
+          const found = new Set<string>();
+          for (let i = 0; i < 20; i++) {
+            const id = pickNoticed(world, how, h, found);
+            if (!id) break;
+            found.add(id);
+            seen.add(id);
+          }
+        }
+        const all = STORY_TRIGGERS.filter((t) => t.how === how && t.world === world).map((t) => t.entryId);
+        expect([...seen].sort()).toEqual(all.sort());
+      }
+    }
+    expect(pickNoticed("great-station", "regard", "threshold", new Set())).toBe("sight.second-seam");
+    expect(pickNoticed("great-station", "regard", "rest", new Set())).toBe("sight.missing-berth");
+    expect(pickNoticed("people", "regard", "rest", new Set(["sight.empty-chair"]))).toBeNull();
+  });
+  it("bands the local day into the seven Hours with no gap", () => {
+    const seen = new Set<string>();
+    for (let h = 0; h < 24; h++) seen.add(hourBand(new Date(2026, 9, 30, h)));
+    expect(seen.size).toBe(7);
+  });
+  it("people give things only after enough meetings, once", () => {
+    expect(npcGifts("wayfarer", 0, new Set())).toEqual([]);
+    expect(npcGifts("wayfarer", 1, new Set())).toEqual(["obj.doorkeepers-nail"]);
+    expect(npcGifts("wayfarer", 5, new Set(["obj.doorkeepers-nail"]))).toEqual([]);
+    expect(npcGifts("broker", 1, new Set())).toEqual([]);
+  });
+});
