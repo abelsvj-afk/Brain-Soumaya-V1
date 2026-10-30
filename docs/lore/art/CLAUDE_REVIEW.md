@@ -18,3 +18,8 @@
 - **`19-soumayas-gap-v5` — APPROVED as the canon pick.** One clean RECTANGULAR blank nameplate, sleek blue-white hull with violet edge lines, the dawn fan at the prow, bloom fan, latch clasp and plumb keel — it finally reads as the seventh hull in the family. Muse reports v6 has TWO blank plates (the Bible implies one): do not use v6. v7 and v8 I have not viewed.
 - **Prompt text fixed:** the §19 source prompt (`docs/lore/IMAGE_PROMPTS.md`, `docs/lore/art/PROMPT_SHEET.md`) said "blank oval patch"; it now says a RECTANGULAR nameplate patch, so a future regeneration cannot repeat the defect.
 - Muse's re-check list of other breaks (Sleepwalker's lit lantern in v1/v2/v4; Ysmerel v2's ragged hole; crescent embroidery on §21 v1 and §24 v3; §35 v2/v4's keeper in Eternity's white) is accepted as the open to-do list. None needs code; the crescent question and the Keeper's palette are story rulings for the owner.
+
+## Round 3 (2026-10-31) — §5 the Lullaby reference
+- **Pick `05-veshs-ship-the-lullaby-v5.png` as the reference.** It is unmistakably the Bible §2 swan: a curved neck and head, a hollow in the flank, petal-vanes, a pale violet engine. Muse is right that it reads a little like a statue; that is the better fault, because the silhouette is the continuity.
+- **`…-v8` is not the reference.** It is a handsome ship sheet, but the swan is gone (it reads as a ring-saucer with petal fins), which is the same drift the first pass had. Fine as a "how she flies" side study.
+- Owner rulings on the crescent embroidery and the Keeper's white are recorded in `IMAGE_QA_NOTES.md` (`59baef9`); I accept them and have removed them from my open list. §20's canonical triptych: not reviewed by me yet.
