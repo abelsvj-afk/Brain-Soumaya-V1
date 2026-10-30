@@ -269,3 +269,13 @@ Files: `54-ilsabets-lane-v1.png` … `v4.png`. All four wide. Ilsabet is establi
 - She draws with a pencil in v2 and v4, a pen in v1 and v3.
 
 Verdict: a good set; the seam-and-continuation moment is quietest in v1–v3 and clearest in v4. Your pick.
+
+## §55 — Maren's Winter (Sheet 2)
+
+Files: `55-marens-winter-v1.png` … `v4.png`. All four wide. The hard rule holds in every variant: Maren is **asleep, not dead** — she rests in the cradle of the great tree's roots, eyes closed, peaceful, with nothing funereal anywhere. Everything asked for is present in all four: the green-gold robes, the watering can beside her, frost across the ground, the single bare branch at the lowest bough pointing at the sky, faint new green shoots at the frame's edge, and the Keeper small and far at the terrace edge, seen from behind.
+
+- **The stopper** on the can is clearest in v3 (a cork in the can's mouth); the can is a plain brass watering can in the others.
+- **The Keeper's colour varies:** dark-cloaked in v1, v2 and v4; pale/white in v3 (consistent with the white the owner allowed the Keeper in §35 — the sheet doesn't specify here, noted for the record).
+- Maren's hair drifts a little (grey braid in v2 and v4, darker in v1), within a weathered woman's range.
+
+Verdict: a clean, strong set with no rule breaks. Your pick.
