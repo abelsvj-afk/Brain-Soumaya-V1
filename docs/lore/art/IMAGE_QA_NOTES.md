@@ -58,3 +58,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §24 filed (121 keepers)
 
 §24 Dorrow Quint: consistent man and wardrobe across all four (heavy, burgundy velvet coat, gold trim), Great Book enormous and open, ledger shelves rising into shadow, brass lamps. The smile-that-doesn't-reach-his-eyes is strongest in v1/v4; v2's smile is warmer (least canon), v3 sterner than smiling. Fresh-ink line: v2 most literal (one dark line on the lit page); v4's lit page carries several lines of pseudo-script (not legible words). NOTE for your eye: v3's coat and desk are embroidered with stars and a CRESCENT MOON — decorative astronomy, but it echoes the negative prompt's no-crescents line the way §21 v1's robe embroidery did; ruling welcome.
+
+## Update — §25 filed (125 keepers)
+
+§25 The Hollow Choir: all four faithful — archive hall (shelves line the walls in v2–v4), rows of pale translucent singers mid-note with mist-dissolving edges, grey hush creeping at the walls, and the centre beat exact: ONE empty choir stall under a shaft of pure gold light (v1/v2 most literal — a single empty bench dead centre; v4's empty place is a whole stall-block and v4 came out PORTRAIT despite the 16:9 ask, see the standing ratio note). Observation, not a flagged break: the singers read predominantly as women in all four variants; the Bible does not gender the Choir, noting it only in case it matters to you.
