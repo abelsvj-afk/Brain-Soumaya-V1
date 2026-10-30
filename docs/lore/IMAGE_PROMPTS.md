@@ -102,3 +102,34 @@ A small child of about six in a plain patched dress sitting alone at a long fami
 
 ## 27. The Sixteenth Doorway — 16:9
 A single tall open doorway at the end of an endless hall of fifteen smaller sealed doorways, its threshold glowing faintly white, and the player (a small hooded figure seen from behind) standing before it holding out three small objects in their open hands (a nail, a pale smooth stone, a folded letter). Beyond the doorway there is nothing but soft white. Mood: crossing over. Palette: stone-blue hall, warm gold objects, pure white beyond. Painterly cinematic, symmetrical, no text.
+
+---
+# Draft 4 prompts (§28–36)
+Same global style and negative block.
+
+## 28. The Night of Seven Doors — 21:9 (panoramic, one image)
+Seven tall doorways in a row across a dark cosmic horizon, each lit by a different Hour's light: (1) a basin of pale gold-white morning, (2) a field of vast floating planets, (3) a harbor gate with one small nail-shaped beacon, (4) a green terrace with a single seedling, (5) a warm hearth with an empty chair, (6) a dusk-violet archive door with a clean hand reaching from it, (7) a plain white doorway no one has approached. Six doors are softly closing; the third stands open by exactly one hand's-breadth and a thin line of light spills through. A tiny figure (her) walks away down the row, back to camera, unhurried. Mood: farewell and quiet resolve. Palette: gold, green, ember, dusk violet, white. Painterly cinematic, symmetrical, no text.
+
+## 29. Calend's Second Door — 16:9
+The lower rim of a vast space harbor, steel and old stone, with a seam in the wall sealed for centuries but open exactly one hand's-breadth — a thin vertical slit of pale white light spilling across the floor. Before it, a tall layered-coated traveller (Calend; coat of every world's colours) rests one palm flat on the wall beside the gap, head bowed, not pushing, simply holding. Dust motes in the light. Mood: patience, long fidelity. Palette: harbor grey-blue, one pale slit of white, a patchwork of warm coat colours. Painterly cinematic, shallow depth, no text.
+
+## 30. The Sitters — 16:9
+At night on an open plain, a thin pale wall of silent mist (the Hush) stands on the horizon; a few ordinary people sit on chairs, stools and blankets in a loose line at its very edge, simply sitting, one holding a thermos-sized lantern, one with a blanket round another's shoulders. A single empty chair beside them. A tall warden figure stands a little back with a folded chair under one arm, pretending not to look. Mood: tenderness, company in the face of the unknown. Palette: ash blue, mist white, small warm lantern gold. Painterly cinematic, wide shot, no text.
+
+## 31. The Long Room — 16:9
+An endless, softly lit corridor of fifteen open doorways, each opening on a small warm room with one thing in it (a candle; two chairs, one drawn back; a table with forty-one chairs; a window facing a wall; an unopened letter on the floor), each lit by a single hand-tended lamp. At the corridor's far end a sixteenth doorway, lit brightest, with a small hooded figure (the player) paused before it, one object missing from the room beyond that you can see only as a faint outline on a shelf. Mood: awe and heartbreak. Palette: warm gold lamplight, stone blue corridor, pure white beyond. Painterly cinematic, symmetrical, one-point perspective, no text.
+
+## 32. Ossian Reed and the Tall Tale — 3:2
+A wiry, grinning storyteller in a patched many-pocketed coat leaning on the rail of a crooked patchwork bark-ship with a mismatched sail-fin, mid-gesture as though about to begin a tale, a small crowd of dock workers and children around him, each leaning in. His eyes hold something truthful under the grin. Warm dock lanterns. Mood: charm with a hidden tenderness. Palette: warm amber, rust, teal accents, indigo sky. Painterly cinematic, shallow depth of field, no text.
+
+## 33. The Follower's Afterglow — 16:9
+A small, fast, unlit skiff drifting dark just outside a harbor gate, its pilot a slight figure seen from behind in a hooded jacket, one hand lifted as she places a small folded note on a mooring post. The post already holds a coin and a ribbon, evidence of a trail. The gate behind is lit; her skiff is not. Mood: companionship at a distance. Palette: deep blue, one warm pinprick of gold from the note, silver skiff edge. Painterly cinematic, no text.
+
+## 34. The Lamplighters' Necklace — 16:9
+A long curve of small floating riding-lamps strung across empty space like a loose necklace, each lamp in its own small bubble of warm gold light, with no hulls attached; a single large ship crosses beneath them, its running lights answered by one lamp that dims as it passes. A few lamps further back have gone out, replaced by faint small ring-shaped glows. Mood: quiet vigil. Palette: black-indigo, warm gold lamps, a soft cyan ship. Painterly cinematic, no text.
+
+## 35. The Eighth Bell — 16:9
+A quay at the edge of a white void: seven small bell-tenders in a row, each shaped like a different object (a lamp, a measure, a gate, a leaf, a hearth, a lock, a stillness), each with its own bell. At the end of the line an eighth keeper, a plain-coated figure with a closed fist raised to ring empty air; faint concentric rings of light spread from where the bell should be. Mood: wonder and anticipation. Palette: pearl white, pale gold, a hint of green. Painterly cinematic, no text.
+
+## 36. The Companion at the Dock — 3:2
+A late-evening harbor dock, a lone traveller (the player, seen from behind) sitting on a crate with a small lantern, and beside them a quiet, plainly-dressed stranger whose face is simply not drawn — only warm hands holding out a flask. Two cups on the planks, one steaming. The dock is nearly empty; a single ship's lights far off. Mood: a kindness that will be remembered later. Palette: dusk blue, ember orange, soft cream. Painterly cinematic, shallow depth of field, no text.
