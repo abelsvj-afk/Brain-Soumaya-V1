@@ -1,6 +1,6 @@
 # DRAFT 4 — The Deep Reading (more layers, more cinema, and how it is all collected)
 
-*Status: PROPOSED by Claude, 2026-10-30, at the owner's request ("keep every last detail … add a few more layers … more juicy, more cinematic … how it's collected … the scale of the world").*
+*LOCKED by the owner 2026-10-30. Original status:  PROPOSED by Claude, 2026-10-30, at the owner's request ("keep every last detail … add a few more layers … more juicy, more cinematic … how it's collected … the scale of the world").*
 *Everything in `LORE_CANON.md` (LOCKED) and Drafts 1–3 stands **exactly**. This draft only ADDS. Every number, name and claim is provisional until the owner locks, strikes or renames it. The same delivery rules (Draft 3 §1) bind this draft: nothing here is ever said plainly in one place, nothing can be failed, and the Hush never takes anything of the player's.*
 
 Where an addition touches an existing line it **re-colours** it (a second reading), it never contradicts it. The re-colourings are listed in §13 so the owner can check that nothing was overwritten.

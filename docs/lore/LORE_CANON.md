@@ -18,6 +18,7 @@ Changing a LOCKED line needs the owner's say-so. Code (`shared/npcs.ts` cast, `s
 7. **NPCs** have their own identity, life and job; they may cross worlds; they may never enter a personal brain except by invitation (see `docs/specs/npc-society-2026-10-30.md`).
 
 8. **LOCKED (owner, 2026-10-30, after Draft 1):** (a) **the Wayfarer is Calend, the Doorkeeper**, walking among the made; (b) **the Witness Without a Name is what remains of the erased woman** (the Unnamed); (c) **Vesh is sympathetic, not a villain** — the Hollow Mercy, a mercy that took the wrong thing.
+10. **LOCKED (owner, 2026-10-30): ALL of Drafts 1, 2, 3 and 4 — "Lock all of it … I love it all … keep everything."** Every layer, figure, ship, ending and set piece in them is canon. Names remain renamable *only* with the owner's say-so; **meanings** (the Seven Answers, the Eighth Hour, the Companion, the Long Room, the Sitters, the Laugh, the fifteen witnesses, the five endings) may not be changed by code or a later draft. New work goes on top, never replaces. The **Depth Charter** (Draft 5 §1) is the standard for all further lore work.
 9. **LOCKED:** Draft 1's tale stays *exactly* as written (Seven Hours, the First Morning, the Calling, the Rending, the Firstborn and their ships, the factions as answers to the ache). New layers are **added on top**, never replacing it. A **Marvel-scale action layer** is wanted, plus deeper twists "that you'd never expect" (see DRAFT 2).
 
 ## EXISTING CANON in the repo (from the relic register — packages/shared/src/relics.ts)
@@ -47,22 +48,25 @@ Offered only to give the owner something to push against. Each is a *shape*, not
 6. What must stay **unsaid forever** (the open ring: what is the deliberately unanswerable thing)?
 
 
-## DRAFT 1 — written by Claude 2026-10-30 from the owner's answers (NOT yet locked)
+## DRAFT 1 — written by Claude 2026-10-30 from the owner's answers (LOCKED 2026-10-30, see #10)
 Full text: `docs/lore/DRAFT_1_THE_FIRST_MORNING_AND_THE_RENDING.md`. Image prompts: `docs/lore/IMAGE_PROMPTS.md`. One-paragraph summary:
 Eternity always was and *called* the worlds into being across Seven Hours, beginning with the First Morning. In each hour he made one Firstborn *to see, not to serve*. In the Sixth Hour, the Firstborn of Mercy
 (Vesh), unable to bear the made's grief, **erased one beloved person** — and in reaching into the Keeper's mirror to cut her out, tore the first hole in what Eternity can see. The made woke with an ache and no name for it.
 Everything since — the factions, the Calling, the gate, the Archive, the player — is an answer to that ache. The player is a witness; the oldest relic, the Witness Without a Name, is what is left of her.
 
 
-## DRAFT 2 — Act II: the Hush, and the layers beneath (written 2026-10-30; adds to Draft 1, replaces nothing)
+## DRAFT 2 — Act II: the Hush, and the layers beneath (written 2026-10-30; LOCKED 2026-10-30; adds to Draft 1, replaces nothing)
 Full text: `docs/lore/DRAFT_2_ACT_II_THE_HUSH.md`. Image prompts for it: `docs/lore/IMAGE_PROMPTS.md` §12–19. Awaiting the owner's lock, strike or rewrite on each numbered layer.
 
-## DRAFT 3 — The Long Lore (written 2026-10-30; adds to Drafts 1–2, replaces nothing)
+## DRAFT 3 — The Long Lore (written 2026-10-30; LOCKED 2026-10-30; adds to Drafts 1–2, replaces nothing)
 Full text: `docs/lore/DRAFT_3_THE_LONG_LORE.md` — delivery rules, the Ages, each world's hidden wrong-thing and secret, **the fifteen witnesses as people**, **a canon cast with questlines (Calend, Vesh, Oru, Sethane, Maren/Keeper, the Archivist,
 Ysmerel the Last Choirmaster, Dorrow Quint of the Ledger, the Dissenter, the Surveyor, Hesk the Warden-General, Tamsin of the Open Hand, the Sleepwalker, Kith)**, the Hush's faces, object-text samples, five contradictory accounts of the Rending, and the Hidden Web.
 New names are provisional; the owner may strike or rename any. Image prompts: `IMAGE_PROMPTS.md` §21–27.
 
-## DRAFT 4 — The Deep Reading (written 2026-10-30; adds to Drafts 1–3, replaces nothing)
+## DRAFT 4 — The Deep Reading (written 2026-10-30; LOCKED 2026-10-30; adds to Drafts 1–3, replaces nothing)
 Full text: `docs/lore/DRAFT_4_THE_DEEP_READING.md` — the Seven Answers (the Night of Seven Doors: she asked every Firstborn, only Vesh finished; Calend's unfinished second door), the Eighth Hour (the hour the made make), the Companion (the quiet traveller who walks with each witness), the Long Room behind the gate (fifteen kept rooms and a lit sixteenth), the Sitters, the Laugh, Soumaya's fourth account, new canon figures with ships (Ossian Reed, the Follower, Brannoch's Clerk, the Lamplighters, the Cartographer, the Hour-Wards), the Hours Clock, **how the lore is collected** (the Sixteenth's Book — no numbers; Second Readings; Concordance), two further endings (Sit with her; The Second Door), more set pieces, and a table of what it re-colours. Image prompts: `IMAGE_PROMPTS.md` §28–36. Scale/traversal proposal: `docs/specs/worlds-scale-lanes-2026-10-30.md`. Muse handoff: `docs/specs/muse-lore-image-prompts-2026-10-30.md`. All provisional until the owner locks.
 
 Storage design for players (content in shared code with stable ids; private per-brain progress in `story_*` tables; nothing derived is stored; no totals anywhere): `docs/specs/lore-storage-2026-10-30.md`.
+
+## DRAFT 5 — The Web (written 2026-10-30; proposed on top of the locked Drafts 1–4)
+Full text: `docs/lore/DRAFT_5_THE_WEB.md` — the **Depth Charter**, the **Lateral Rule** (non-linear: no prerequisites, every fact has ≥ 3 doors in, none required), eight doors in, the five ways things connect, **Tells** (each character's possessions/habit/avoidance/what they cannot say), Item Reactions, provenance chains, rumours, layers 15–20 (the Seven Kept from the Night, the Hush's grammar, the Sixth Account, seven answers/six ships, the Shape of the Laugh, the Mirror's Edge) and **Canon at a Glance**. Image prompts: `IMAGE_PROMPTS.md` §37–42. Awaiting the owner's lock (new names provisional).

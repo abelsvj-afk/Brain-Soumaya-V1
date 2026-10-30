@@ -1,6 +1,6 @@
 # DRAFT 3 — The Long Lore (scale and depth of an Elden Ring)
 
-*Status: PROPOSED by Claude, 2026-10-30. Everything in LOCKED (`LORE_CANON.md`) and Drafts 1–2 stands exactly. This draft only ADDS: the ages, the places, the fifteen witnesses as people, a full canon cast with questlines, the Hush's faces, the object-text of the world, five contradictory accounts, and the hidden web that joins them.*
+*LOCKED by the owner 2026-10-30. Original status:  PROPOSED by Claude, 2026-10-30. Everything in LOCKED (`LORE_CANON.md`) and Drafts 1–2 stands exactly. This draft only ADDS: the ages, the places, the fifteen witnesses as people, a full canon cast with questlines, the Hush's faces, the object-text of the world, five contradictory accounts, and the hidden web that joins them.*
 *Nothing here may ever be said plainly in one place. Delivery rules in §1 are as binding as the story.*
 
 ---

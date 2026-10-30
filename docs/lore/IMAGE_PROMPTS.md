@@ -133,3 +133,25 @@ A quay at the edge of a white void: seven small bell-tenders in a row, each shap
 
 ## 36. The Companion at the Dock — 3:2
 A late-evening harbor dock, a lone traveller (the player, seen from behind) sitting on a crate with a small lantern, and beside them a quiet, plainly-dressed stranger whose face is simply not drawn — only warm hands holding out a flask. Two cups on the planks, one steaming. The dock is nearly empty; a single ship's lights far off. Mood: a kindness that will be remembered later. Palette: dusk blue, ember orange, soft cream. Painterly cinematic, shallow depth of field, no text.
+
+---
+# Draft 5 prompts (§37–42)
+Same global style and negative block.
+
+## 37. The Seven Kept from the Night — 3:2 (still life)
+Seven small objects laid in a slow arc on dark stone, each lit by a different soft light: a bead of pale gold light with a hair-thin chip, a knotted cord with one knot tied backwards, a headless iron nail faintly warm, a seed with a tiny two-handed label, a cushion pressed into the shape of a seated person still glowing warm, a sheet of folded paper with a single ink stroke on it, and — at the arc's end — an empty patch of stone lit as if something belonged there. No hands, no people. Mood: reverent, intimate, unresolved. Palette: gold, green, ember, dusk violet, white. Studio-quality painterly macro, shallow depth of field, no text.
+
+## 38. What the Hush leaves — 16:9
+A great harbor ring at dusk, ships moored in ordered rows, and one berth in the row simply absent: a clean empty gap in the dock with no mark, while the dockworkers step around it without looking. Beyond the harbor a pale grey wall of mist stands still on the horizon. A faint warm light sits in one window where someone is still watching. Mood: quiet dread, tenderness. Palette: ash blue, mist white, one gold window. Painterly cinematic, no text.
+
+## 39. The Sixth Account — 3:2
+Five aged parchment scrolls laid side by side on a dark table, each written in a different hand and lit by a different small lamp (gold, green, brass, violet, steel blue); between them, at the table's centre, one thin line of pale light runs from scroll to scroll, joining them into a single shape that is almost a standing figure. No readable writing. Mood: dawning recognition. Palette: lamp colours, parchment, deep brown. Painterly cinematic, top-down, no text.
+
+## 40. Soumaya's ship, the seventh hull — ship concept sheet — 16:9
+A beautiful sleek ship in three views (side, three-quarter, front) on a dark neutral background, like a concept-art turnaround. It shares design echoes with six sister ships (a swept dawn-prow, a plumb-straight keel, a latch-like fin, a bloom-curved wing, an ember-warm engine, a lullaby-smooth flank) as if it were the seventh of a family — and on the hull's flank, where a nameplate would be, there is a clean empty rectangle of bare metal. Engine glow: soft blue-white with a faint violet edge. Painterly concept art, orthographic-style views, soft rim light, no text.
+
+## 41. Ysmerel at the Hush's edge — 16:9
+Night on an open plain. The pale Hush stands as a still grey wall on the horizon. A tall weathered woman in plain dark clothes, a choir-robe visible folded under her arm, sits alone on a low stool at the very edge, her mouth closed, eyes open, with a thin hand resting on the ground as though counting a breath. A few other quiet sitters are far off down the line. Mood: private faith, loneliness, chosen company. Palette: ash blue, mist white, a single pale gold glint. Painterly cinematic, wide shot, no text.
+
+## 42. Hesk's room and Tamsin's ward (diptych) — 16:9, two halves
+Left half: a locked storeroom lit by one lamp, shelves of small ordinary belongings (a tin toy, a ribbon, a boot, a spoon), each labelled with a careful tag, and a big stern man in a Warden's coat standing in the doorway with his back to us, holding a ring of keys. Right half: a warm ward with cots, pale half-transparent patients, and a green-aproned healer counting aloud. The two halves are separated by a thin wall; in the dividing wall, in the same place on both sides, is a small round window shaped like a keyhole, glowing faintly. Mood: two halves of one grief. Palette: left lamp-gold and wood; right ember amber and green. Painterly cinematic, no text.

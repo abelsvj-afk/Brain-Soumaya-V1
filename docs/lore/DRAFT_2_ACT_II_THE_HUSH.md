@@ -1,6 +1,6 @@
 # DRAFT 2 — Act II: The Hush (and the layers beneath it)
 
-*Status: PROPOSED by Claude, 2026-10-30. It sits ON TOP of Draft 1, which is locked exactly as written (the Seven Hours, the First Morning, the Calling, the Rending, the Firstborn and their ships, the factions as answers to the ache; and, locked later: the Wayfarer is Calend, the Witness Without a Name is what remains of the erased woman, Vesh is sympathetic).*
+*LOCKED by the owner 2026-10-30. Original status:  PROPOSED by Claude, 2026-10-30. It sits ON TOP of Draft 1, which is locked exactly as written (the Seven Hours, the First Morning, the Calling, the Rending, the Firstborn and their ships, the factions as answers to the ache; and, locked later: the Wayfarer is Calend, the Witness Without a Name is what remains of the erased woman, Vesh is sympathetic).*
 *Same rule as before: this is the DEEP layer. In-world text only ever gives accounts, and the accounts disagree. Nothing here may ever be said plainly in one place.*
 
 ---

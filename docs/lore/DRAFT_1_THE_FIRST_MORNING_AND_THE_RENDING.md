@@ -1,6 +1,6 @@
 # DRAFT 1 — The First Morning and the Rending
 
-*Status: PROPOSED by Claude, from the owner's answers of 2026-10-30. Nothing here is canon until the owner locks it. Written to be rewritten.*
+*LOCKED by the owner 2026-10-30. Original status:  PROPOSED by Claude, from the owner's answers of 2026-10-30. Nothing here is canon until the owner locks it. Written to be rewritten.*
 *Method: surface a little, bury a lot, never explain. Every "fact" below is the DEEP layer — the in-world text should only ever give accounts, and the accounts should disagree.*
 
 ---
