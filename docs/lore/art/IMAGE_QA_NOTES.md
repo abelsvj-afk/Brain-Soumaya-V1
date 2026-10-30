@@ -279,3 +279,13 @@ Files: `55-marens-winter-v1.png` … `v4.png`. All four wide. The hard rule hold
 - Maren's hair drifts a little (grey braid in v2 and v4, darker in v1), within a weathered woman's range.
 
 Verdict: a clean, strong set with no rule breaks. Your pick.
+
+## §56 — Iselle's One Dawn (Sheet 2)
+
+Files: `56-iselles-one-dawn-v1.png` … `v4.png`. Iselle is established consistently: a young gardener with brown hair tied back, in green work clothes and an apron, kneeling in the bed. The set's heart is present in every variant — the empty patch of soil in the middle of the bed that she has left unplanted, her hand reaching gently toward it, every leaf and petal around it glowing in dawn colours, and the sky behind her still half-dark with stars: a dawn that never finishes becoming day. The mood (tender, tragic, unfinished) lands, most sorrowfully in v1 and v3.
+
+- **Ratio note:** v2 came out portrait (1280×1920) against the sheet's 16:9; v1, v3 and v4 are landscape (1920×1280). A 16:9 crop of v2 is available if it is picked.
+- The half-dawn split is most literal in v4 (rose dawn on one side, indigo starfield on the other).
+- In v2 and v4 the bed sits on a floating terrace of earth; in v1 and v3 it is a grounded raised bed.
+
+Verdict: a clean set; only the v2 orientation to note. Your pick.
