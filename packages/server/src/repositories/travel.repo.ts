@@ -194,11 +194,24 @@ export class TravelRepo implements JourneyBonusCreditor {
 
   /**
    * B-01, persistence half: once the gate has opened for a traveller
-   * it stays open to them. "Opened" is derivable — an arrived journey
-   * to Eternity's world — so no new table and no migration carries it:
-   * the ledger itself remembers the first crossing.
+   * it stays open to them. Relics I-3 (fix (a)): permanence is
+   * RECORDED at set completion in `relic_gate_opened` — written by
+   * the holdings store inside its claim/hold/release transactions the
+   * moment the found set completes B-01 — and read here first, so a
+   * traveller who completed the set is admitted even if every set
+   * member has since been released and they have never travelled.
+   * The arrived-journey derivation below remains as the legacy
+   * fallback for volumes whose backfill has not run yet; the two
+   * describe the same fact and can never disagree about a space
+   * that has crossed.
    */
   eternityGateOpened(): boolean {
+    try {
+      const rec = this.h.sqlite
+        .prepare(`SELECT 1 AS x FROM relic_gate_opened WHERE space_id = ?`)
+        .get(this.spaceId) as { x: number } | undefined;
+      if (rec) return true;
+    } catch { /* a volume without the I-3 table: the ledger derivation below still answers */ }
     const row = this.h.sqlite
       .prepare(
         `SELECT COUNT(*) AS n FROM travel_journeys WHERE space_id = ? AND destination = ? AND state = 'arrived'`,

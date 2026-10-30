@@ -77,9 +77,13 @@ export function relicsRoutes(ctx: AppContext): Router {
     // whether this relic is part of the space's still-uncrossed gate set.
     const gateBefore = s.gateView(spaceId);
     const wasGatePiece = !gateBefore.open && (relicId === "witness-without-a-name" || s.gateHoldings(spaceId).otherRelicCount <= 2) && s.foundIds(spaceId).includes(relicId);
-    const event = s.release(spaceId, relicId);
-    if (!event) { res.status(404).json({ error: "You do not hold a copy of that relic.", state: s.state(spaceId) }); return; }
-    res.json({ ok: true, comet: event, wasGatePiece, gate: s.gateView(spaceId), state: s.state(spaceId) });
+    const out = s.release(spaceId, relicId);
+    if (!out) { res.status(404).json({ error: "You do not hold a copy of that relic.", state: s.state(spaceId) }); return; }
+    // I-3 fix (b): a Keystone release is refused cleanly — 400 with the
+    // plain reason, and the holding is untouched (the store changed
+    // nothing but, where due, the gate-permanence record).
+    if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
+    res.json({ ok: true, comet: out.event, wasGatePiece, gate: s.gateView(spaceId), state: s.state(spaceId) });
   });
 
   r.get("/scarcity", (_req, res) => {

@@ -741,6 +741,14 @@ export function migrateSchema(sqlite: RawDb): void {
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE INDEX IF NOT EXISTS relic_copy_events_copy_idx ON relic_copy_events(copy_id, id);
+    -- Relics I-3 (fix (a)): gate permanence recorded at SET COMPLETION —
+    -- the moment a space's found set completes B-01 — mirroring npc_gate
+    -- one subsystem over. TravelRepo reads this record first; the
+    -- arrived-journey derivation remains as the legacy fallback.
+    CREATE TABLE IF NOT EXISTS relic_gate_opened (
+      space_id TEXT PRIMARY KEY,
+      opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
   `);
   // Relics I-2: relic_holdings gains copy_id + location on volumes whose
   // relic_holdings table predates them (guarded, the space_meta pattern).

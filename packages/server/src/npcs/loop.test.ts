@@ -164,8 +164,11 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     // into unified-pool copies happens in the holdings store's backfill
     // (holder_kind='npc'), which this test never invokes — the direct
     // assertions below (no player-pool rows) are the invariant.
+    // Relics I-3 adds `relic_gate_opened` (the player's gate-permanence
+    // record, mirroring npc_gate) via the same dual DDL. It is a player
+    // record; the NPC invariant below is untouched.
     expect(new Set(tables.map((t) => t.name))).toEqual(
-      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events"]),
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened"]),
     );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
     // No row for this space (or any space) appeared in the player pool:
