@@ -7788,3 +7788,29 @@ body.in-transit .perf-suggest { display: none; }
 .npc-card-line { display: block; font-size: 0.74rem; color: #aebbd6; margin-top: 2px; }
 /* A tapped NPC's card / a "has left" note: under the dock, above the garden's guidance strip. */
 .npc-note { top: calc(var(--worlds-bar-h, 127px) + 0.5rem); bottom: auto; z-index: 30; }
+
+/* The Society panel (docs/specs/npc-hive-society-2026-10-30.md). */
+.society-scrim { position: fixed; inset: 0; z-index: 74; background: rgba(2, 4, 14, 0.72); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: calc(var(--hud-top, 66px) + 8px) 10px 90px; }
+.society-panel { width: min(520px, 100%); background: rgba(10, 16, 34, 0.98); border: 1px solid rgba(122, 200, 255, 0.4); border-radius: 14px; padding: 14px 16px 18px; color: #e6eefc; font-size: 0.86rem; line-height: 1.4; }
+.society-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.society-head h2 { margin: 0; font-size: 1.05rem; }
+.society-close { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid rgba(122, 200, 255, 0.55); border-radius: 999px; background: rgba(122, 200, 255, 0.14); color: #eaf6ff; font: inherit; font-weight: 600; cursor: pointer; }
+.society-panel h3 { margin: 16px 0 6px; font-size: 0.92rem; color: #cfe0ff; }
+.society-lede, .society-note { margin: 8px 0; color: #b8c6e4; }
+.society-swatch-row { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
+.society-swatch { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.55); }
+.society-currents, .society-factions, .society-ordinances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.society-currents li { display: grid; grid-template-columns: 8.5rem 1fr 3.6rem; gap: 8px; align-items: center; }
+.society-current-name i, .society-faction-name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+.society-bar { height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; }
+.society-bar b { display: block; height: 100%; }
+.society-word { color: #b8c6e4; font-size: 0.78rem; text-align: right; }
+.society-factions li { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; }
+.society-faction-name { font-weight: 700; }
+.society-faction-members, .society-faith { color: #93a3c6; font-size: 0.76rem; }
+.society-world { margin: 6px 0; }
+.society-world ul { margin: 2px 0 0; padding-left: 1.1rem; }
+.society-why { margin: 14px 0 0; color: #b8c6e4; }
+.society-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.society-reflect { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; min-height: 44px; }
+.society-reflect input { width: 24px; height: 24px; flex: 0 0 auto; margin-top: 2px; }

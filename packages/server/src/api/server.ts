@@ -13,6 +13,7 @@ import { travelRoutes } from "./routes/travel.js";
 import { worldChangesRoutes } from "./routes/worldChanges.js";
 import { toursRoutes } from "./routes/tours.js";
 import { npcsRoutes } from "./routes/npcs.js";
+import { societyRoutes } from "./routes/society.js";
 import { fleetDefenseRoutes } from "./routes/fleetDefense.js";
 import { missionsRoutes } from "./routes/missions.js";
 import { usageRoutes } from "./routes/usage.js";
@@ -129,6 +130,7 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/world-changes", guard, worldChangesRoutes(ctx));
   app.use("/api/tours", guard, toursRoutes(ctx));
   app.use("/api/npcs", guard, npcsRoutes(ctx));
+  app.use("/api/society", guard, societyRoutes(ctx));
   app.use("/api/fleet-defense", guard, fleetDefenseRoutes(ctx));
   app.use("/api/missions", guard, missionsRoutes(ctx));
   app.use("/api/constellations", guard, constellationRoutes(ctx));

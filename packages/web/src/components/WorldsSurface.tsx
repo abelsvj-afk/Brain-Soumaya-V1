@@ -104,9 +104,11 @@ import { renderIcon } from "./icons/Icon.js";
 import { getNpcScript } from "../api/npcs.js";
 import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
-import { encounterLine, encounterStep, npcActivity, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
+import { encounterLine, encounterStep, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
 import { anchorFromBounds, createNpcBodies, type NpcBodies } from "../graph/npcBodies.js";
-import { castIn, castMember, type CastMember } from "@brain/shared";
+import { castIn, castMember, faithLabel, hash01, worldLife, type SocietyDay } from "@brain/shared";
+import { useSociety } from "../hooks/useSociety.js";
+import { patrolLabel } from "../graph/npcPresence.js";
 import { HARBOR_CONTROLLER_BERTH } from "../graph/stationLayout.js";
 import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelChangedDetail } from "../lib/travelEvents.js";
 import {
@@ -566,6 +568,31 @@ function isSceneRelicWorld(key: string): key is RelicWorld {
   );
 }
 
+/** One person in the world you are in, with what they are doing right now (shared/societyLife.ts — the same answer the server would give). */
+interface PresentNpc {
+  id: string;
+  activity: string;
+  /** True when what they are doing is their own (not a trade/debate with someone), so the Station controller's patrol phase may name it instead. */
+  solo: boolean;
+  faction: string | null;
+  faith: string;
+  calling: string | null;
+  topic: string | null;
+}
+
+function buildPresent(world: string | null, society: SocietyDay, nowMs: number): PresentNpc[] {
+  if (!world) return [];
+  return worldLife(world, nowMs, society).map((l) => ({
+    id: l.member.id,
+    activity: l.doing.caption,
+    solo: !l.doing.partnerId,
+    faction: l.factionName,
+    faith: faithLabel(l.faith),
+    calling: l.calling,
+    topic: l.doing.topic,
+  }));
+}
+
 export default function WorldsSurface({
   enabled = WORLDS_TRAVEL_ENABLED,
   graph = null,
@@ -660,7 +687,11 @@ export default function WorldsSurface({
   const npcNearRef = useRef(new Map<string, boolean>());
   const npcPhasesRef = useRef(new Map<string, string>());
   // Who is in this world right now (cast locations are clock-driven and shared with the server: shared/npcs.ts npcLocation).
-  const [presentNpcs, setPresentNpcs] = useState<{ id: string; activity: string }[]>([]);
+  const [presentNpcs, setPresentNpcs] = useState<PresentNpc[]>([]);
+  // Today's society (graph of factions, callings, ordinances): from the server, neutral until it lands or if reflection is off.
+  const { society } = useSociety(enabled);
+  const societyRef = useRef<SocietyDay>(society);
+  societyRef.current = society;
   const metThisVisitRef = useRef<Set<NpcKey>>(new Set());
   // Today's batched NPC lines (one model call per brain per day, cached server-side) — fetched when you enter a world that has NPCs.
   const npcScriptRef = useRef<NpcDayScript | null>(null);
@@ -853,8 +884,8 @@ export default function WorldsSurface({
     const active = visible && mode === "world" && !!currentWorld;
     const compute = () => castIn(active ? currentWorld : null, Date.now());
     let before = new Set<string>(compute().map((m) => m.id));
-    const toList = (members: CastMember[]) => members.map((m) => ({ id: m.id, activity: npcActivity(m, currentWorld ?? "", npcPhasesRef.current.get(m.id) as never ?? null) }));
-    setPresentNpcs(toList(compute()));
+    const toList = () => buildPresent(active ? currentWorld : null, societyRef.current, Date.now());
+    setPresentNpcs(toList());
     // The day's script is one cached read (the first of the day makes the single model call); offline lines if it never arrives.
     let scriptReady: Promise<unknown> = Promise.resolve();
     if (active && before.size > 0) {
@@ -870,7 +901,7 @@ export default function WorldsSurface({
       for (const m of now) if (!before.has(m.id)) setNpcNote(`${m.name} has arrived.`);
       for (const id of before) if (!ids.has(id)) setNpcNote(`${castMember(id)?.name ?? "Someone"} has gone elsewhere.`);
       before = ids;
-      setPresentNpcs(toList(now));
+      setPresentNpcs(toList());
     }, 30_000);
     let t = 0;
     if (active && currentWorld === "eternity") {
@@ -890,6 +921,11 @@ export default function WorldsSurface({
       window.clearTimeout(t);
     };
   }, [visible, mode, currentWorld]);
+  // The society changed (it loaded, or reflection was toggled): re-read what everyone is doing.
+  useEffect(() => {
+    if (!(visible && mode === "world" && currentWorld)) return;
+    setPresentNpcs(buildPresent(currentWorld, society, Date.now()));
+  }, [society, visible, mode, currentWorld]);
   const goHomeRef = useRef<() => void>(() => {});
   useEffect(() => {
     const on = () => goHomeRef.current();
@@ -1844,7 +1880,11 @@ export default function WorldsSurface({
           npcPosRef.current.set(f.id, [f.pos.x, f.pos.y, f.pos.z]);
           if (npcPhasesRef.current.get(f.id) !== f.phase) {
             npcPhasesRef.current.set(f.id, f.phase);
-            setPresentNpcs((list) => list.map((n) => (n.id === f.id ? { ...n, activity: npcActivity(member, currentWorld, f.phase) } : n)));
+            // On her own station lap the Station controller names the phase of the patrol (docked / casting off / patrolling) when she is not in company.
+            if (f.id === "harbor-controller" && member.home === currentWorld && f.phase !== "roaming") {
+              const label = patrolLabel(f.phase);
+              setPresentNpcs((list) => list.map((n) => (n.id === f.id && n.solo ? { ...n, activity: label } : n)));
+            }
           }
           // Nearest of the camera and (while flying) the ship.
           const fl = flightRef.current;
@@ -2469,13 +2509,21 @@ export default function WorldsSurface({
       {npcCard && mode === "world" && (() => {
         const m = castMember(npcCard);
         if (!m) return null;
-        const act = presentNpcs.find((n) => n.id === m.id)?.activity ?? "";
+        const pn = presentNpcs.find((n) => n.id === m.id);
         const met = readMet(getSpaceId())[m.id];
+        // What they want this season, and a line they might be overheard saying (the day's script, or their own goals offline).
+        const goal = m.goals.length > 0 ? m.goals[Math.floor(hash01(`${m.id}|${society.dayKey}|goal`) * m.goals.length)] : null;
+        const chat = npcScriptRef.current?.lines[m.id]?.chatter;
+        const overheard = chat && chat.length > 0 ? chat[Math.floor(hash01(`${m.id}|${Math.floor(Date.now() / 1_800_000)}|chat`) * chat.length)] : null;
         return (
           <div className="npc-note npc-card" role="dialog" aria-label={m.name}>
             <div>
               <strong>{m.name}</strong> — {m.job}
-              <span className="npc-card-line">{act}{m.home !== currentWorld ? " · far from home" : ""}</span>
+              <span className="npc-card-line">{pn?.activity ?? ""}{m.home !== currentWorld ? " · far from home" : ""}</span>
+              {pn?.faction && <span className="npc-card-line">{pn.faction} · {pn.faith}{pn.calling ? ` · called today to ${pn.calling.toLowerCase()}` : ""}</span>}
+              {!pn?.faction && <span className="npc-card-line">Answers to no faction · {pn?.faith ?? ""}</span>}
+              {goal && <span className="npc-card-line">Wants: {goal}</span>}
+              {overheard && <span className="npc-card-line">Overheard: “{overheard.replace(/^["“]|["”]$/g, "")}”</span>}
               <span className="npc-card-line">{m.lore.tagline}</span>
               {met && <span className="npc-card-line">You have met {met.count} time{met.count === 1 ? "" : "s"}.</span>}
             </div>

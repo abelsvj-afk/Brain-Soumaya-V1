@@ -27,6 +27,8 @@ export interface ToolsMenuProps {
   onTimeline: () => void;
   onLegend: () => void;
   onWorldMap: () => void;
+  /** Opens the Society (the worlds' people, factions and ordinances — a mirror of your galaxy, never a verdict). */
+  onSociety?: () => void;
   /** Opens the travel sheet (route board, tours, world changes). Omitted
    *  while the worlds flag is off — the item then doesn't render at all,
    *  rather than opening an empty sheet. */
@@ -51,6 +53,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
     { icon: "i:legend", label: "Legend", on: p.onLegend },
     { icon: "i:planet", label: "World map", on: p.onWorldMap },
     ...(p.onTravel ? [{ icon: "i:rocket", label: "Travel", on: p.onTravel }] : []),
+    ...(p.onSociety ? [{ icon: "i:people", label: "Society", on: p.onSociety }] : []),
     { icon: "i:comet", label: "Flashback", on: p.onFlashback },
     { icon: p.focusMode ? "i:sun" : "i:calm", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
     { icon: "i:help", label: "Help", on: p.onHelp },

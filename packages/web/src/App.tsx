@@ -127,6 +127,7 @@ const LensesPanel = lazyPanel(() => import("./components/LensesPanel.js").then((
 const IngestPanel = lazyPanel(() => import("./components/IngestPanel.js").then((m) => m.IngestPanel));
 const WorldsSurface = lazyPanel(() => import("./components/WorldsSurface.js").then((m) => m.default));
 const WorldMap = lazyPanel(() => import("./components/WorldMap.js").then((m) => m.default));
+const SocietyPanel = lazyPanel(() => import("./components/SocietyPanel.js").then((m) => m.default));
 const TravelSheet = lazyPanel(() => import("./components/TravelSheet.js").then((m) => m.default));
 
 type Panel = "search" | "ingest" | "dock" | null;
@@ -220,6 +221,7 @@ export default function App() {
   // The world map overlay (Rev 116) and the world it should focus the
   // travel panel on when the map hands the traveller over.
   const [showWorldMap, setShowWorldMap] = useState(false);
+  const [showSociety, setShowSociety] = useState(false);
   const [travelFocus, setTravelFocus] = useState<string | null>(null);
   // The travel sheet: the worlds panels' one positioned home. Every way in
   // (Tools → Travel, the map's handoff, a Try-It "travel" action) goes
@@ -2565,6 +2567,7 @@ export default function App() {
       {/* World map (Rev 116) — the full-screen star map from the Tools
           popup menu. Travelling still happens in the travel panel: the
           map hands over with a focus world, closes, and opens the sheet. */}
+      {space && showSociety && <SocietyPanel onClose={() => setShowSociety(false)} />}
       {space && showWorldMap && (
         <ErrorBoundary label="world-map" fallback={null}>
           <WorldMap
@@ -2749,6 +2752,7 @@ export default function App() {
             onTimeline={() => setShowTimeline(true)}
             onLegend={() => setShowLegend(true)}
             onWorldMap={() => setShowWorldMap(true)}
+            onSociety={WORLDS_TRAVEL_ENABLED ? () => setShowSociety(true) : undefined}
             onTravel={WORLDS_TRAVEL_ENABLED ? () => openTravel() : undefined}
             onFlashback={triggerFlashback}
             onFocusMode={() => setFocusMode((v) => !v)}

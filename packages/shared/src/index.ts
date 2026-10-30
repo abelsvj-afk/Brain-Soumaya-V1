@@ -12,6 +12,8 @@ export * from "./temporal.js";
 export * from "./intelligence.js";
 export * from "./worlds.js";
 export * from "./npcs.js";
+export * from "./society.js";
+export * from "./societyLife.js";
 export * from "./tours.js";
 export * from "./fleetDefense.js";
 export * from "./fleetDefenseEngine.js";

@@ -732,6 +732,21 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the Keeper (Growing Place), the Archivist (Quiet), the Surveyor (Scale), the Wayfarer (roams everywhere) — all `canon: "provisional"` placeholders with **no lore
   invented** (`lore.layers` empty): the story is the owner's, to be written in a dedicated lore session. Look at: whether 2-hour slots feel alive (people appear/leave
   with a quiet note), tag/card density when 4+ are in one world, ring radius (capped 560) vs. sight lines in each world, and the provisional names/jobs.
+- **The hive society — factions, faith, callings, ordinances and NPC lives that mirror the brain (2026-10-30, owner: "jobs, making money, trading, travelling,
+  discussing … a mind hive … believers in Eternity and some who aren't, fluctuating with my faith and memories … governance, factions … you never see the same thing twice,
+  tied to the colour of my brain") — MEASURED in a real browser against a brain seeded with faith/giving memories (reverence/giving "present", Choir standing high, Undertow low;
+  activities change every half hour; trades/debates show from both ships; the Wayfarer and the Dissenter "debating Eternity"; the Society panel) — needs on-device confirmation**
+  (shared/society.ts, societyLife.ts, npcs.ts cast; server society/society.ts + `GET /api/society` + `PUT /api/society/reflect` + table `society_prefs` + the daily script's society
+  brief and `chatter`; web hooks/useSociety.ts, components/SocietyPanel.tsx (Tools → Society), WorldsSurface.tsx cards/tags; spec `docs/specs/npc-hive-society-2026-10-30.md`):
+  seven **currents** (reverence, giving, ambition, appetite, friction, weight, peace) are read from the brain's own last-90-days memories by plain word-and-weight counting
+  on the server (text never leaves; only numbers/words do), thin evidence blended toward a neutral world (`confidence`); they set the **faith tide**, a **brain colour**, five
+  **factions'** standing (Choir, Open Hand, Ledger, Undertow, Wardens — provisional names), each faction's daily **calling** (the hive guidance), and each world's governing
+  faction's **ordinance**. Each of 9 cast members has a faction, a faith temper the tide only nudges, goals, and a routine; what they do each half hour (work/trade/refuel/travel/
+  discuss/worship/rest/patrol/wander) is a pure clock function with mutual pairs, so tags/cards/Society show it identically for everyone. **A mirror, not a verdict:** nothing scores
+  or labels the user (a deliberate departure from "good/bad person scale" — memories are not deeds, and the product forbids shame); it is **opt-out** (Society panel switch,
+  default on; off = a neutral, still-living society and nothing is read). **Not built:** faction consequences beyond behaviour/words, a real NPC economy (money/fuel is captions),
+  lore content (provisional names, no canon), per-faction visuals. **Owner questions:** default on or opt-in for other people's brains? Faction names/lore? Look at: whether the
+  seven currents' word lists catch your real language (they are plain stems — easy to tune in `CURRENT_LEXICON`), and how crowded a world feels with 5+ NPCs.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

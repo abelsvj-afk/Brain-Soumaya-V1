@@ -56,6 +56,6 @@ describe("the cast's data", () => {
   });
   it("every member has script situations, so a bigger cast is still one call's worth of rows", () => {
     for (const c of NPC_CAST) expect(scriptSpecsFor(c).length).toBeGreaterThan(0);
-    expect(scriptSpecsFor(castMember("keeper")!).map((s) => s.situation)).toEqual(["encounter_near", "encounter_visiting", "encounter_first"]);
+    expect(scriptSpecsFor(castMember("keeper")!).map((s) => s.situation)).toEqual(["encounter_near", "encounter_visiting", "encounter_first", "chatter"]);
   });
 });

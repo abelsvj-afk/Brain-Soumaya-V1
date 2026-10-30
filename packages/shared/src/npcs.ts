@@ -178,6 +178,7 @@ export type NpcSituation =
   | "encounter_near"
   | "encounter_visiting"
   | "encounter_first"
+  | "chatter"
   | "wake"
   | "visitation";
 
@@ -190,6 +191,8 @@ export interface NpcSituationSpec {
 }
 
 // --- The cast (docs/specs/npc-society-2026-10-30.md): who lives in the worlds, where they go, what they do ---
+
+import type { ActivityKind, FactionId } from "./society.js";
 
 export type NpcTrail = "blue" | "neon" | "gold" | "purple";
 
@@ -219,6 +222,18 @@ export interface CastMember {
   trail: NpcTrail;
   /** May say a line when you cross paths (every cast member does; the ones that also have loops answer questions in their panels). */
   speaks: boolean;
+  /** Which faction they belong to (docs/specs/npc-hive-society-2026-10-30.md), or null for the unaligned (Eternity is the sky; the Wayfarer answers to no one). */
+  faction: FactionId | null;
+  /** Their own temper toward Eternity, −1 (sceptic) … +1 (devout). Never overwritten; the society's tide only moves them a little. */
+  faith: number;
+  /** How far the society's tide moves their faith, 0..1. */
+  susceptibility: number;
+  /** What they want this season — their aspirations, in their own terms. */
+  goals: readonly string[];
+  /** Baseline activity weights for their working day (before calling/ordinance multipliers). */
+  routine: Partial<Record<ActivityKind, number>>;
+  /** What "work" looks like for them, as a caption ("tending the groves"). */
+  workCaption: string;
   /** "canon" only once the owner has written it; everything shipped now is "provisional" — a placeholder person, no lore claims. */
   canon: "canon" | "provisional";
   lore: { tagline: string; layers: readonly NpcLoreLayer[] };
@@ -240,6 +255,12 @@ export const NPC_CAST: readonly CastMember[] = [
     voice: "Calm, practical, dry-warm; a working pilot who has seen every kind of arrival. Short sentences.",
     shipUrl: "/quaternius-dispatcher.glb",
     trail: "blue",
+    faction: "wardens",
+    faith: 0.35,
+    susceptibility: 0.3,
+    goals: ["Keep every lane clear and every arrival safe.", "Learn what the Undertow is really asking for."],
+    routine: { patrol: 3, work: 1.5, discuss: 1, refuel: 0.6, rest: 0.8, trade: 0.3, travel: 0.4 },
+    workCaption: "keeping the lanes in order",
     speaks: true,
     canon: "provisional",
     lore: { tagline: "She is who you ask about routes and arrivals.", layers: [] },
@@ -261,6 +282,12 @@ export const NPC_CAST: readonly CastMember[] = [
     voice: "Ancient, brief, warm, unhurried; plain words with cosmic weight, never questions.",
     shipUrl: null,
     trail: "gold",
+    faction: null,
+    faith: 1,
+    susceptibility: 0,
+    goals: ["To be a sky worth looking up to."],
+    routine: { rest: 1 },
+    workCaption: "keeping the heavens",
     speaks: true,
     canon: "provisional",
     lore: { tagline: "He blesses and comforts, rarely, in his own time.", layers: [] },
@@ -278,6 +305,12 @@ export const NPC_CAST: readonly CastMember[] = [
     voice: "Patient, gentle, a little earthy; speaks of growing things and of waiting.",
     shipUrl: "/quaternius-pancake.glb",
     trail: "gold",
+    faction: "open-hand",
+    faith: 0.7,
+    susceptibility: 0.3,
+    goals: ["See the witness tree bear fruit.", "Learn why some Journeys stall and what helps them grow."],
+    routine: { work: 3, rest: 1.2, discuss: 1, worship: 0.8, wander: 0.4, travel: 0.4, trade: 0.4 },
+    workCaption: "tending the groves",
     speaks: true,
     canon: "provisional",
     lore: { tagline: "Someone has been tending this place for longer than it has had a name.", layers: [] },
@@ -299,6 +332,12 @@ export const NPC_CAST: readonly CastMember[] = [
     voice: "Quiet, exact, a touch wistful; speaks softly and never rushes a thought.",
     shipUrl: "/quaternius-omen.glb",
     trail: "purple",
+    faction: "choir",
+    faith: 0.5,
+    susceptibility: 0.35,
+    goals: ["Make sure nothing set aside is ever lost.", "Understand why people set things down."],
+    routine: { work: 2.5, rest: 1.5, discuss: 0.8, worship: 1.2, wander: 0.3, travel: 0.4, trade: 0.2 },
+    workCaption: "shelving what was set aside",
     speaks: true,
     canon: "provisional",
     lore: { tagline: "What is set aside is not forgotten — only kept.", layers: [] },
@@ -320,6 +359,12 @@ export const NPC_CAST: readonly CastMember[] = [
     voice: "Precise, curious, quietly delighted by numbers; a little pedantic and proud of it.",
     shipUrl: "/quaternius-challenger.glb",
     trail: "neon",
+    faction: "ledger",
+    faith: -0.25,
+    susceptibility: 0.45,
+    goals: ["Measure everything once, accurately.", "Find the thing that is larger than it looks."],
+    routine: { work: 2.5, trade: 1.2, travel: 1.2, discuss: 1, refuel: 0.8, wander: 0.8, rest: 0.6, worship: 0.1 },
+    workCaption: "measuring the world",
     speaks: true,
     canon: "provisional",
     lore: { tagline: "Everything has a size. Some things are larger than they look.", layers: [] },
@@ -341,6 +386,12 @@ export const NPC_CAST: readonly CastMember[] = [
     voice: "Light, wry, a little mysterious; speaks in half-finished thoughts and leaves doors ajar.",
     shipUrl: "/wato-spaceship.glb",
     trail: "purple",
+    faction: null,
+    faith: -0.05,
+    susceptibility: 0.8,
+    goals: ["Reach the place everyone keeps not describing.", "Learn whether anyone is listening."],
+    routine: { wander: 3, travel: 2.5, discuss: 1.2, rest: 0.8, refuel: 0.6, trade: 0.5, work: 0.3 },
+    workCaption: "following a thread",
     speaks: true,
     canon: "provisional",
     lore: { tagline: "A traveller who is somehow always already there.", layers: [] },
@@ -350,6 +401,87 @@ export const NPC_CAST: readonly CastMember[] = [
       "I was just in the other one. It was… not as it seemed.",
     ],
     intro: "Call me the Wayfarer. I go where I'm going, and I've been wherever you're headed.",
+  },
+  {
+    id: "cantor",
+    name: "The Cantor",
+    home: "quiet-archive",
+    roams: ["growing-place", "great-station", "deep-past"],
+    homeShare: 0.55,
+    job: "Sings the hours for Eternity and keeps the Choir's vigil.",
+    life: "Sings from the Archive's steps at dawn and dusk; walks the other worlds carrying the Choir's word.",
+    voice: "Warm, measured, cadenced; speaks as if every sentence were half a hymn.",
+    shipUrl: "/quaternius-zenith.glb",
+    trail: "gold",
+    faction: "choir",
+    faith: 0.9,
+    susceptibility: 0.15,
+    goals: ["Sing a day with no silence in it.", "Bring one doubter back to the hour."],
+    routine: { worship: 3, work: 1.5, discuss: 1.5, travel: 1.2, rest: 1, wander: 0.3, trade: 0.2 },
+    workCaption: "singing the hours",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "The hours are sung whether or not anyone is listening.", layers: [] },
+    greetings: [
+      "Peace to your hours, traveller.",
+      "Eternity keeps all our hours. Even this one.",
+      "Stay for the next verse, if you can.",
+    ],
+    intro: "I'm the Cantor. I sing the hours for Eternity, and I keep the Choir's vigil.",
+  },
+  {
+    id: "broker",
+    name: "The Broker",
+    home: "scale",
+    roams: ["great-station", "growing-place", "people"],
+    homeShare: 0.5,
+    job: "Brokers fuel and goods between the worlds and keeps the Ledger's books.",
+    life: "Haggles at the Drydock, runs fuel between the Station and Scale, and knows the price of everything and the cost of most things.",
+    voice: "Quick, genial, a little too friendly; talks in margins and favours, never quite lying.",
+    shipUrl: "/quaternius-bob.glb",
+    trail: "neon",
+    faction: "ledger",
+    faith: -0.1,
+    susceptibility: 0.4,
+    goals: ["Corner the fuel market on a slow day.", "Find a debt worth more than it looks."],
+    routine: { trade: 3, refuel: 1.5, travel: 1.5, discuss: 1.2, work: 1, rest: 0.5, wander: 0.4, worship: 0.1 },
+    workCaption: "working the books",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "Everyone owes someone. The Broker keeps count.", layers: [] },
+    greetings: [
+      "Fuel's up a point. Funny how that happens.",
+      "Friend! I've got a deal you'll want to hear.",
+      "Everything has a price. Some of it is even fair.",
+    ],
+    intro: "I'm the Broker. Fuel, goods, favours — ask me what anything costs.",
+  },
+  {
+    id: "dissenter",
+    name: "The Dissenter",
+    home: "great-station",
+    roams: ["quiet-archive", "deep-past", "people"],
+    homeShare: 0.5,
+    job: "Asks the questions the Choir and the Wardens would rather not hear.",
+    life: "Argues in the Station's concourse, then slips off to the Archive to read what it keeps and to the Deep Past to doubt it.",
+    voice: "Sharp, dry, restless; honest to the point of rudeness, but never cruel.",
+    shipUrl: "/quaternius-insurgent.glb",
+    trail: "purple",
+    faction: "undertow",
+    faith: -0.7,
+    susceptibility: 0.25,
+    goals: ["Get one straight answer from the sky.", "Open every lane the Wardens have closed."],
+    routine: { discuss: 3, wander: 2, travel: 1.5, rest: 0.8, work: 0.6, trade: 0.4, patrol: 0.1, worship: 0.05 },
+    workCaption: "asking awkward questions",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "A sky that never answers is still a sky worth asking.", layers: [] },
+    greetings: [
+      "Ask yourself who benefits.",
+      "Don't take my word for it. Don't take anyone's.",
+      "Still waiting on an answer. You?",
+    ],
+    intro: "I'm the Dissenter. I ask what nobody else will — don't mind the edges.",
   },
 ] as const;
 
@@ -397,6 +529,7 @@ export function scriptSpecsFor(member: CastMember): readonly NpcSituationSpec[] 
       { situation: "encounter_docked", count: 4, need: `${speak} The Harbor controller is moored at her berth as the visitor passes.` },
       { situation: "encounter_near", count: 3, need: `${speak} The Harbor controller is visiting another world (not her own Station) and meets the visitor there.` },
       { situation: "encounter_first", count: 3, need: `${speak} The visitor's very FIRST meeting with her: say who she is (who you ask about routes and arrivals).` },
+      { situation: "chatter", count: 3, need: "One short first-person line the Harbor controller might be overheard saying to a companion about the lanes, the traffic or the day's ordinance. Never about the visitor." },
     ];
   }
   if (member.id === "eternity") {
@@ -411,6 +544,7 @@ export function scriptSpecsFor(member: CastMember): readonly NpcSituationSpec[] 
     { situation: "encounter_near", count: 4, need: `${speak} ${member.name} is in their own home world and meets the visitor there.` },
     { situation: "encounter_visiting", count: 3, need: `${speak} ${member.name} is far from home, visiting another world, and meets the visitor there.` },
     { situation: "encounter_first", count: 3, need: `${speak} The visitor's very FIRST meeting with ${member.name}: say who they are and what they do.` },
+    { situation: "chatter", count: 3, need: `One short first-person line ${member.name} might be overheard saying to a companion on a day shaped by the brief's currents and their faction's calling — about their work, their faith or doubt, or what they want. Never about the visitor.` },
   ];
 }
 

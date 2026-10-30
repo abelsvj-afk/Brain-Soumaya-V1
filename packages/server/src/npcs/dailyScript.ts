@@ -1,9 +1,10 @@
 import type { DbHandle } from "../db/client.js";
-import { NPC_CAST, scriptSpecsFor, type CastMember, type NpcDayScript, type NpcSituation } from "@brain/shared";
+import { NPC_CAST, faction, scriptSpecsFor, type CastMember, type NpcDayScript, type NpcSituation } from "@brain/shared";
 import { localTime, spaceTimezone } from "../agent/notify/policy.js";
 import { EconomyRepo } from "../economy.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
 import { localDateKey } from "./repo.js";
+import { computeSociety, societyBrief } from "../society/society.js";
 import { cleanLine, eternityBrief, eternityMemories } from "./eternityVoice.js";
 import type { EternalVoice } from "./eternityVoiceProvider.js";
 
@@ -33,8 +34,14 @@ type Voice = Pick<EternalVoice, "npcDayScript"> | null | undefined;
 function offlineFor(member: CastMember): Partial<Record<NpcSituation, string[]>> {
   const g = [...member.greetings];
   const out: Partial<Record<NpcSituation, string[]>> = {};
+  const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+  const chatter = member.goals.map((x) => `Lately I just want to ${lowerFirst(x.replace(/^To /, "").replace(/\.$/, ""))}.`);
   for (const spec of scriptSpecsFor(member)) {
     if (spec.situation === "wake" || spec.situation === "visitation") continue;
+    if (spec.situation === "chatter") {
+      out.chatter = chatter;
+      continue;
+    }
     out[spec.situation] =
       spec.situation === "encounter_first" ? [member.intro] : g;
   }
@@ -71,12 +78,15 @@ export function buildScriptPrompt(h: DbHandle, spaceId: string, dayKey: string, 
       `Job: ${d.job}`,
       `Life: ${d.life}`,
       `Voice: ${d.voice}`,
+      `Faction: ${d.faction ? (faction(d.faction)?.name ?? d.faction) : "none (unaligned)"}. Faith: ${d.faith >= 0.55 ? "devout" : d.faith >= 0.2 ? "a believer" : d.faith > -0.2 ? "wavering" : "a doubter"}. Wants: ${d.goals.join(" ")}`,
       brief,
       "Situations (give exactly the number of variants asked):",
       ...specs.map((s) => `- situation "${s.situation}" — ${s.count} variants. ${s.need}`),
     ].join("\n");
   }).filter((b): b is string => !!b);
-  return `Local day: ${dayKey}. Write today's lines for the whole cast in ONE response.\n\n${blocks.join("\n\n")}\n\nReturn {"entries":[{"npc":"<id>","situation":"<situation>","lines":["…"]}, …]} covering every NPC and situation above.`;
+  // The society's mood in words (docs/specs/npc-hive-society-2026-10-30.md) — currents and callings only, never memory text.
+  const brief = societyBrief(computeSociety(h, spaceId, nowMs).society);
+  return `Local day: ${dayKey}. Write today's lines for the whole cast in ONE response. Let each character's lines reflect their faction, their faith or doubt, their goals and the day's mood below — as colour, never as commentary about the visitor.\n${brief}\n\n${blocks.join("\n\n")}\n\nReturn {"entries":[{"npc":"<id>","situation":"<situation>","lines":["…"]}, …]} covering every NPC and situation above.`;
 }
 
 // --- Assemble: validate, clean, cap, top up from the offline lines ---
@@ -201,11 +211,11 @@ export function scriptedLine(script: NpcDayScript | null, npc: string, situation
   return lines[pick(seed, lines.length)]!;
 }
 
-/** What the web may see: the encounter lines only (wake/visitation are Eternity's contact copy, delivered by him, not read ahead). */
+/** What the web may see: encounter and chatter lines (wake/visitation are Eternity's contact copy, delivered by him, not read ahead). */
 export function publicScript(script: NpcDayScript): NpcDayScript {
   const lines: NpcDayScript["lines"] = {};
   for (const [npc, sits] of Object.entries(script.lines) as [string, Record<string, string[]>][]) {
-    const keep = Object.fromEntries(Object.entries(sits).filter(([s]) => s.startsWith("encounter_")));
+    const keep = Object.fromEntries(Object.entries(sits).filter(([s]) => s.startsWith("encounter_") || s === "chatter"));
     if (Object.keys(keep).length > 0) lines[npc] = keep;
   }
   return { ...script, lines };
