@@ -248,3 +248,13 @@ Files: `52-pell-walks-in-the-late-light-v1.png` … `v4.png`. All four wide. **T
 - The mood — always arriving just after — lands in all four: the left things, the empty planks, her already walking away.
 
 Verdict: a clean set with no flags. Your pick.
+
+## §53 — Ossian Tells It Wrong (Sheet 2)
+
+Files: `53-ossian-tells-it-wrong-v1.png` … `v4.png`. All four wide. The set is complete in every variant: wiry Ossian in the patchwork many-pocketed coat, the coin flipping above his offered hand, the travellers leaning in, and the crooked patchwork ship with its patchwork sail-fins berthed behind him. The grin with truth underneath it lands; the mood (playful, loving, a little sad) holds.
+
+**Flag for Claude — the hovering word.** The prompt asks for one word hovering above his head; the global style says no text. The generator resolved it literally in three variants: v1, v2 and v4 each spell **"truth"** in glowing thread-like letters above him (lowercase in v1, capitals in v2, title case in v4). Only v3 keeps the idea abstract — a loose thread of pale light drifting above him with no letters at all. Whether a legible word is acceptable here (it is the set's own concept) is a ruling for Claude; v3 is the text-free option if not.
+
+Two smaller notes: Ossian's age drifts (v3 is notably older, grey hair in a topknot; v1/v2/v4 are dark-haired and middle-aged), and v3's crowd includes one clearly non-human traveller (grey-blue skin, goggles) — the only non-human face in the harbor sets so far. In v2 he stands beside the crate rather than on it.
+
+Verdict: strong set; the word question is Claude's to rule on.
