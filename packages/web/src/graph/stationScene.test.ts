@@ -1,3 +1,4 @@
+import { TOY_REPLACEMENTS } from "./proceduralPlanet.js";
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
 import {
@@ -115,13 +116,14 @@ describe("createStationScene", () => {
     scene.dispose();
   });
 
-  it("the EVE-style backdrop planets hang 4,000 out — holders exist, empty until their GLBs land", () => {
+  it("the EVE-style backdrop planets hang 4,000 out — holders exist; a toy-model planet is a shader planet at once, the rest are empty until their GLBs land", () => {
     const scene = createStationScene();
     for (const planet of STATION_BACKDROP_PLANETS) {
       const holder = find(scene.group, `backdrop-${planet.key}`);
       expect(holder).toBeTruthy();
-      expect(holder!.children.length).toBe(0);
-      expect(find(scene.group, `backdrop-${planet.key}-model`)).toBeUndefined();
+      const replaced = planet.key in TOY_REPLACEMENTS;
+      expect(holder!.children.length).toBe(replaced ? 1 : 0);
+      if (!replaced) expect(find(scene.group, `backdrop-${planet.key}-model`)).toBeUndefined();
       expect(Math.hypot(holder!.position.x, holder!.position.z)).toBeCloseTo(4000, 5);
       expect(holder!.position.y).toBe(500);
     }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { createProceduralPlanet, TOY_REPLACEMENTS, type ProceduralPlanet } from "./proceduralPlanet.js";
 import { gltfLoader, noteModelFallback } from "./gltf.js";
 import { buildSurveyFrame } from "./gateScene.js";
 import { mergeByMaterial, mergeToSingleMaterial, recenterGeometry, scaleGeometryToSize } from "./stationAssets.js";
@@ -98,6 +99,21 @@ import {
  * offered, nothing glimmers unexplained. This module duplicates nothing
  * from the registry.
  */
+
+/** Where each replaced body hangs: distance from the world's centre and diameter, both in scene units (camera far plane is 9,000). Directions come from the layout. */
+const FAR_BODY: Record<string, { dist: number; diameter: number }> = {
+  sun: { dist: 7600, diameter: 1500 },
+  planet_jupiter: { dist: 6000, diameter: 2000 },
+  planet_saturn: { dist: 7000, diameter: 1500 },
+  planet_earth: { dist: 5000, diameter: 1100 },
+  planet_mars: { dist: 4400, diameter: 650 },
+  "quaternius-planet-1": { dist: 6600, diameter: 950 },
+  "quaternius-planet-2": { dist: 6200, diameter: 800 },
+  "quaternius-planet-3": { dist: 5600, diameter: 750 },
+  "planets-set": { dist: 6800, diameter: 900 },
+  "earth-and-moon": { dist: 5800, diameter: 800 },
+  "pixel-brown-dwarf": { dist: 7400, diameter: 1000 },
+};
 
 export interface ScaleScene {
   group: THREE.Group;
@@ -291,7 +307,33 @@ export function createScaleScene(
   // Planets as floating bodies (population increment): loaded as-is,
   // colors kept — a planet's look IS its materials. A missing planet
   // is absent — never a stand-in.
+  // EVE-style (owner 2026-10-31): the toy-looking low-poly / pixel planets are replaced by shader planets (proceduralPlanet.ts) hung FAR out and BIG — thousands of units away, so they
+  // fill a good part of the sky and grow as you fly toward them, but the body shell (bodyShell.ts) never lets a ship reach one. Holder names are unchanged (the lore passages and the
+  // Fly-to tiles find them by name). The layout data stays as it was; only the scene places them out here.
+  const procedural: ProceduralPlanet[] = [];
+  const unit = (x: number, y: number, z: number): [number, number, number] => {
+    const l = Math.hypot(x, y, z) || 1;
+    return [x / l, y / l, z / l];
+  };
+  const sunBody = layout.planets.find((p) => p.key === "sun");
+  const sunFar = sunBody ? unit(sunBody.x, sunBody.y, sunBody.z).map((v) => v * (FAR_BODY.sun?.dist ?? 7600)) : [0, 0, -7600];
   for (const planet of layout.planets) {
+    const toy = TOY_REPLACEMENTS[planet.key];
+    if (toy) {
+      const far = FAR_BODY[planet.key] ?? { dist: 6000, diameter: 900 };
+      const d = unit(planet.x, planet.y, planet.z);
+      const pos: [number, number, number] = [d[0] * far.dist, d[1] * far.dist, d[2] * far.dist];
+      const holder = new THREE.Group();
+      holder.name = `planet-${planet.key}`;
+      holder.position.set(pos[0], pos[1], pos[2]);
+      const toSun: [number, number, number] = [sunFar[0]! - pos[0], sunFar[1]! - pos[1], sunFar[2]! - pos[2]];
+      const pp = createProceduralPlanet({ ...toy, diameter: far.diameter, sunDir: planet.key === "sun" ? [0, 0, 1] : toSun });
+      pp.group.name = `planet-model-${planet.key}`;
+      holder.add(pp.group);
+      procedural.push(pp);
+      group.add(holder);
+      continue;
+    }
     const asset =
       SCALE_PLANET_ASSETS.find((a) => a.key === planet.key) ??
       SCALE_HUNT2_PLANET_ASSETS.find((a) => a.key === planet.key);
@@ -669,6 +711,7 @@ export function createScaleScene(
       lastElapsedMs = elapsedMs;
       const deltaS = Math.min(0.1, Math.max(0, deltaMs / 1000));
       for (const mixer of mixers) mixer.update(deltaS);
+      for (const pp of procedural) pp.update(deltaS * 1000);
       // Drifters sway slowly on their own vectors — a gentle oscillation
       // around their anchor, so they never leave their station.
       for (const d of drifts) {

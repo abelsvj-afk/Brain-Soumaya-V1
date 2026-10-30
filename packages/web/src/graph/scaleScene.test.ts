@@ -108,10 +108,10 @@ describe("createScaleScene", () => {
     const scene = createScaleScene(buildScaleLayout());
     expect(countDrawCalls(scene.group)).toBeLessThanOrEqual(SCALE_BUDGET.maxDrawCalls);
     expect(estimateTris(scene.group)).toBeLessThanOrEqual(SCALE_BUDGET.maxTris);
-    // The static half is small on purpose: the real models (ISS 6,642 +
-    // probes 79,238 tris) still leave ~400k of headroom.
-    expect(estimateTris(scene.group)).toBeLessThan(10_000);
-    expect(countDrawCalls(scene.group)).toBeLessThanOrEqual(20);
+    // The static half now holds the shader planets (proceduralPlanet.ts, drawn from noise — 11 bodies × a sphere + an atmosphere shell, Saturn's ring): ~75k tris, ~25 calls.
+    // The real models (ISS 6,642 + probes 79,238 tris) still fit under the recipe ceiling beside them.
+    expect(estimateTris(scene.group)).toBeLessThan(110_000);
+    expect(countDrawCalls(scene.group)).toBeLessThanOrEqual(40);
     scene.dispose();
   });
 

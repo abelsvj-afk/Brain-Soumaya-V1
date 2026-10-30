@@ -106,7 +106,7 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   // (scene object "place-rim", PLACE_RULES deep-past), not the removed rim GLB ("glb-rim").
   { entryId: "sight.missing-stratum", how: "regard", world: "deep-past", hour: "first-light", spot: { place: "^place-rim$", at: [0, -0.6, 0], near: 0.7 } },
   { entryId: "sight.dead-bough", how: "regard", world: "growing-place", hour: "growing", spot: { origin: true, near: 160 } },
-  { entryId: "sight.hung-star", how: "regard", world: "scale", hour: "measure", spot: { place: "^planet-(?!model)", near: 1.6 } },
+  { entryId: "sight.hung-star", how: "regard", world: "scale", hour: "measure", spot: { place: "^planet-(?!model)", near: 2.4 } },
   { entryId: "sight.open-alcove", how: "regard", world: "quiet-archive", hour: "rest", spot: { place: "^still-threshold$", near: 1.5 } },
   { entryId: "sight.empty-chair", how: "regard", world: "people", hour: "hearths", spot: { place: "^field-ground$", near: 0.35 } },
   { entryId: "sight.unlooked-direction", how: "regard", world: "eternity", hour: "standing", spot: { near: 0, view: { behind: true } } },

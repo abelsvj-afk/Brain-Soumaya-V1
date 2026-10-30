@@ -136,6 +136,7 @@ import type { TransitScene } from "../graph/transitScene.js";
 import { createShipAvatar, type ShipAvatar } from "../graph/shipAvatar.js";
 import { createEnginePlume } from "../graph/enginePlume.js";
 import { findPlaces, PLACE_RULES, type Place } from "../graph/worldPlaces.js";
+import { pushOutOfShells, type Shell } from "../graph/bodyShell.js";
 import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, type FlightState, type V3 } from "../graph/worldFlight.js";
 import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
@@ -840,6 +841,8 @@ export default function WorldsSurface({
   const [homeArrivalKey, setHomeArrivalKey] = useState(0);
   // Flight inside a world (docs/specs/worlds-flight-2026-10-29.md): null = the overview orbit camera.
   const flightRef = useRef<FlightState | null>(null);
+  // The big bodies you can approach but never reach (graph/bodyShell.ts): refreshed once a second from the scene's own planet holders.
+  const shellsRef = useRef<Shell[]>([]);
   const flightTargetRef = useRef<Place | null>(null);
   const overviewCamRef = useRef<{ pos: V3; look: V3 }>({ pos: [0, 100, 600], look: [0, 0, 0] });
   const chaseCamRef = useRef<{ pos: V3; target: V3 } | null>(null);
@@ -1146,7 +1149,10 @@ export default function WorldsSurface({
       fs = initialFlight(start, Math.atan2(dir[0]!, dir[2]!), Math.atan2(dir[1]!, Math.max(h, 1e-6)));
       chaseCamRef.current = { pos, target: look };
     }
-    flightRef.current = startFlight(fs, { center: place.center, radius: place.radius });
+    const started = startFlight(fs, { center: place.center, radius: place.radius });
+    // A planet is approached, never reached: the stop point is pushed out to the body's shell (EVE-style).
+    const stop = pushOutOfShells(started.to, shellsRef.current);
+    flightRef.current = stop === started.to ? started : { ...started, to: stop };
     flightTargetRef.current = place;
     setFlightTargetId(place.id);
     setFlightCaption(`Aligning to ${place.label}`);
@@ -2453,6 +2459,8 @@ export default function WorldsSurface({
         if (now - lastPlacesAt > 1000) {
           lastPlacesAt = now;
           world.group.updateMatrixWorld(true);
+          const bodyRe = currentWorld === "scale" ? "^planet-(?!model)" : currentWorld === "great-station" || currentWorld === "people" ? "^backdrop-(?!.*-model$)" : null;
+          shellsRef.current = bodyRe ? locateLandmarks(world.group, bodyRe).map((m) => ({ center: m.center, radius: m.radius })) : [];
           const found = findPlaces(currentWorld, world.group);
           const sig = found.map((pl) => `${pl.id}:${Math.round(pl.radius)}`).join("|");
           if (sig !== placesSigRef.current) {
@@ -2552,14 +2560,15 @@ export default function WorldsSurface({
           // Flight to a place (docs/specs/worlds-flight-2026-10-29.md): her ship aligns, spools, burns and
           // stops; the camera chases behind and above her. Drag/pinch still turn and zoom around her.
           const r = stepFlight(flightRef.current, dt, { reducedMotion });
-          flightRef.current = r.state;
+          const held = pushOutOfShells(r.state.pos, shellsRef.current);
+          flightRef.current = held === r.state.pos ? r.state : { ...r.state, pos: held };
           // A glimmer "Look closer" that flew to the basin completes its find on arrival.
           if (r.arrived && glimmerFindRef.current) {
             const relic = glimmerFindRef.current;
             glimmerFindRef.current = null;
             findRelicRef.current(relic);
           }
-          const fs = r.state;
+          const fs = flightRef.current ?? r.state;
           const tgt = flightTargetRef.current;
           const phaseNow = r.arrived ? "arrived" : fs.phase;
           if (phaseNow !== flightPhaseShown && tgt) {

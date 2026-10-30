@@ -1,3 +1,4 @@
+import { createProceduralPlanet, TOY_REPLACEMENTS } from "./proceduralPlanet.js";
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { noteModelFallback } from "./gltf.js";
@@ -349,6 +350,15 @@ export function createStationScene(opts: { hull?: THREE.Object3D; onRelicVisible
       Math.sin(planet.angle) * planet.distance,
     );
     group.add(holder);
+    // A toy-looking model is replaced by a shader planet (proceduralPlanet.ts): realistic at any distance, no download. The holder name is unchanged.
+    const toy = TOY_REPLACEMENTS[planet.key];
+    if (toy) {
+      const hp = holder.position;
+      const pp = createProceduralPlanet({ ...toy, diameter: planet.size, sunDir: [-hp.x, -hp.y + 600, -hp.z] });
+      pp.group.name = `backdrop-${planet.key}-model`;
+      holder.add(pp.group);
+      continue;
+    }
     void loadStationAsset(planet.url).then((loaded) => {
       if (!loaded || disposed) {
         if (loaded) disposeObject3D(loaded);

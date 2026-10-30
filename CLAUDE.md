@@ -861,6 +861,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the Remnant — each read in item-description voice when she is parked beside it, each tied in the doc to a Draft 7/8 person by an echo. **Not built (Draft 9 §6):** constellations as sky decals, in-scene clues (the
   pencil outlines, the dark sixteenth star, the one-lamp-short Earth), environment props per world, Item Reactions to bodies, paintings. Look at: reach on distant bodies (big bodies need flying to — use the Fly-to
   tiles), and whether passages read as the sky's own voice.
+- **Real planets, EVE-style scale — shader planets replace the toy models; you can approach but never reach (2026-10-31, owner: "replace all the toy looking ones … you can look like you're approaching it, but
+  you'll just endlessly fly towards it") — MEASURED in a real browser (contact sheet of all 11 looks; in Scale: Fly-to Jupiter parks at ~3.2 bounding radii, planet fills the screen with crisp banding, 0 errors); unit-tested
+  (bodyShell, scene tests), NOT seen on a phone** (graph/proceduralPlanet.ts, graph/bodyShell.ts, scaleScene.ts `FAR_BODY`, stationScene.ts/peopleScene.ts replacements, WorldsSurface.tsx `shellsRef`; spec
+  `docs/specs/procedural-planets-eve-scale-2026-10-31.md`): the `lowpoly-*` and `pp-*` planet models (Earth, Mars, Jupiter, Saturn, three Quaternius planets, the set, Earth-and-Moon, the pixel brown dwarf, the sun)
+  are drawn by a noise shader instead — continents and cloud, banded gas with a storm, rings, ice, cooled lava, a dark dwarf, a star — sharp at any distance, no download; Scale's planets now hang 4,400–7,600 units out and
+  650–2,000 across; every big body has a shell at 1.6 radii that a flight cannot enter. Look at: GPU cost of 11 shader bodies on a real phone, whether the stop distance feels right, the Moon/outposts (unchanged, still
+  low-poly and approachable), and that the Station's Sketchfab lava/ice planets still read as real beside them.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
