@@ -587,7 +587,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     fogDensity: 0.00035,
     orbitRadius: WARD_ORBIT_RADIUS,
     orbitHeight: WARD_ORBIT_HEIGHT,
-    lookAtY: 30,
+    lookAtY: 42, // eye level, looking along the rows rather than down at the floor
     fallback: "The ward view needs graphics support on this device — your memories are unaffected.",
     build: () => createWardScene(),
   },

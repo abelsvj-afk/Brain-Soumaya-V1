@@ -8,7 +8,7 @@ export const WARD_HALL = { halfWidth: 150, zStart: -160, zEnd: 2200, height: 150
 export const WARD_VIEW_Z = 380;
 /** The orbit must stay inside the walls even at the widest portrait back-off (worldCamera MAX_PORTRAIT_FIT = 2.2). */
 export const WARD_ORBIT_RADIUS = 60;
-export const WARD_ORBIT_HEIGHT = 55;
+export const WARD_ORBIT_HEIGHT = 18;
 
 /** Distance between cots along the wall. */
 export const WARD_COT_SPACING = 44;
