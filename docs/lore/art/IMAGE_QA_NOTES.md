@@ -359,3 +359,13 @@ Files: `63-the-sleepwalkers-cup-v1.png` … `v4.png`. All four wide, and one of 
 - Dawn is held exactly as specified: rose and pale gold on the horizon under a still-starry sky, harbor mist, soft blue water.
 
 Verdict: a clean set with no flags. Your pick.
+
+## §64 — Oru's Bead (Sheet 2)
+
+Files: `64-orus-bead-v1.png` … `v4.png`. Oru is the same man in all four — old, calm and slight, white-haired in pale robes, consistent with §14 — and the set's two gestures survive every roll: one hand holding out the bead, the other at his forehead, trying to remember. The small hooded witness is seen only from behind in all four; no face is ever shown. Around the bead, the light carries the faint, half-erased outline of the younger student in every variant — clearest and most affecting in v4, where the outline reaches as it dissolves, and v2, where it is drawn in a few golden lines; faintest in v3, where it is barely more than a swirl.
+
+- **Bead size:** pearl-sized as specified in v2, v3 and v4. In v1 it swells into a large glowing orb with a tiny figure inside it — beautiful, but not the pearl the sheet describes.
+- **Ratio note:** v1 also came out portrait (1280×1920) against the sheet's 16:9; the others are landscape.
+- The bead's light leans brighter toward the witness in v2–v4, as the sheet asks.
+
+Verdict: a strong closing set for the sheet; v1's orb and orientation are the only notes. Your pick.
