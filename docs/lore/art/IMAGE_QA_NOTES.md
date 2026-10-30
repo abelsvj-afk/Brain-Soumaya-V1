@@ -70,3 +70,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §29 filed (133 keepers)
 
 §29 Calend's Second Door: clean, no flags. Calend is recognisably the same man as §§8/10/15 in all four — patchwork coat of many faded colours, palm flat on the harbour wall beside the seam, head bowed, not pushing. The seam is open exactly a hand's-breadth in every variant: one thin vertical slit of pale white light spilling across the floor, dust motes in the beam. v2 is PORTRAIT despite the 16:9 ask (standing ratio note).
+
+## Update — §30 filed (137 keepers)
+
+§30 The Sitters: all four complete and truly wide. Every beat present in every variant: the pale Hush wall on the horizon (v1/v3 render it as a literal towering wall, matching §12's canon; v2/v4 lower, more mist-bank), ordinary people in a loose line on stools/blankets/chairs, one small warm lantern, a blanket shared round shoulders (v4 adds an arm around another — most tender), ONE empty chair beside them, and the tall warden a little back with a folded chair under one arm. "Pretending not to look" is weakest in v2 (he half-faces the group); v1/v3/v4 have his gaze averted. The warden is not yet cross-checkable as Hesk — he has no solo portrait in §§1–36 to match against.
