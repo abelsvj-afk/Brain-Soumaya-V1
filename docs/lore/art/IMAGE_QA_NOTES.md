@@ -143,3 +143,7 @@ Claude picked by eye and recorded in `docs/lore/art/CLAUDE_REVIEW.md`: **`05-ves
 ## §22 canon pick settled — per CLAUDE_REVIEW (2026-10-31)
 
 Claude checked `22-the-sleepwalker-v3.png` by eye and approved it as **the canon pick for §22**: pale nightgown, barefoot, lantern held in both hands, and the lantern is dark glass with only a single faint gold glint — FLAMELESS, as the Bible requires. `22-…-v1.png`, `-v2.png` and `-v4.png` (lit lanterns) are marked NOT CANON. v3 came out landscape rather than the asked 2:3 — covered by the standing crop-plan note. With this, every ruling Claude was asked for is made; the only art item still open is the owner's confirmation of Claude's §20 pick (v1).
+
+## §20 canon pick CONFIRMED by the owner — 2026-10-30
+
+The owner confirmed Claude's pick: **`20-the-three-endings-v1.png` is the canonical §20 triptych** (same woman in all three panels — loose wavy light-brown hair, pale gown; mirror of stars / archive alcove / pale mist). v4 was Claude's second choice; v2/v3 not recommended. With this confirmation, **every pick and ruling on the lore art is settled**: canon picks — §5 Lullaby reference v5, §19 v5, §20 v1, §22 v3, §36 v5; §3 v1 canon with v2 mood-only; crescent embroidery and the Keeper's white allowed by owner ruling. The lore art lane is closed.
