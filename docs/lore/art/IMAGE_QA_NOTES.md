@@ -147,3 +147,8 @@ Claude checked `22-the-sleepwalker-v3.png` by eye and approved it as **the canon
 ## §20 canon pick CONFIRMED by the owner — 2026-10-30
 
 The owner confirmed Claude's pick: **`20-the-three-endings-v1.png` is the canonical §20 triptych** (same woman in all three panels — loose wavy light-brown hair, pale gown; mirror of stars / archive alcove / pale mist). v4 was Claude's second choice; v2/v3 not recommended. With this confirmation, **every pick and ruling on the lore art is settled**: canon picks — §5 Lullaby reference v5, §19 v5, §20 v1, §22 v3, §36 v5; §3 v1 canon with v2 mood-only; crescent embroidery and the Keeper's white allowed by owner ruling. The lore art lane is closed.
+
+# PROMPT SHEET 2 (Drafts 7 & 8) — §§43–64, then §§37–42
+
+## §43 The Lamp Nobody Pays For (162 keepers)
+Mara Halvane established: the SAME weathered old woman in all four (grey hair, deep-lined face, long dark-green scarf) — this set is her face reference. All beats present in every variant: iron gate-post (clearest as a gate in v2/v4; v1's post reads more as a mooring post), oil poured into the lantern with care, lantern warm and steady, no ship moored near, harbor lights and vast dark sky beyond, rope coil and a stack of empty oil tins at her feet, eyes never raised. Palette exact (dusk blue, lantern gold, deep green). All four came out wide 16:9 as asked. No text. Nothing flagged.
