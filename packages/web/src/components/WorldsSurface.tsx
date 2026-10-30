@@ -88,6 +88,7 @@ import {
   type QuietArchiveLayout,
 } from "../graph/quietArchiveLayout.js";
 import { createWardScene } from "../graph/wardScene.js";
+import { attachWorldProps } from "../graph/worldProps.js";
 import {
   createQuietArchiveScene,
   EMPTY_QUIET_ARCHIVE_LAYOUT,
@@ -2082,6 +2083,10 @@ export default function WorldsSurface({
         : built;
     if (!world) return;
     scene.add(world.group);
+    // Story props (Draft 9 §5): small wordless things beside the holders, placed once each holder's model has loaded.
+    const props = mode === "world" && !inside ? attachWorldProps(currentWorld, world.group) : null;
+    let propsDone = props?.place() ?? true;
+    let propsTriedAt = 0;
     // Her hull is shown only once it is ready (never a placeholder), so warm it before anything needs it.
     void loadSoumayaShip();
     void loadWarpGate(); // null (and the generated ring stays) until public/warp-gate.glb exists
@@ -2525,6 +2530,10 @@ export default function WorldsSurface({
         }
       } else {
         world.update(elapsed, { reducedMotion });
+        if (!propsDone && props && elapsed - propsTriedAt > 1000 && elapsed < 60_000) {
+          propsTriedAt = elapsed;
+          propsDone = props.place();
+        }
       }
       if (mode === "world" && currentWorld === "growing-place") {
         // A8: the fog takes the warmer tint of the warmth now rendered.
@@ -2994,6 +3003,7 @@ export default function WorldsSurface({
 
     return () => {
       cancelAnimationFrame(raf);
+      props?.dispose();
       window.removeEventListener("resize", onResize);
       host.removeEventListener("pointerdown", skipArrival);
       host.removeEventListener("pointerdown", onLookDown);

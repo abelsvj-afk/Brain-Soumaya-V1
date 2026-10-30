@@ -3,6 +3,7 @@ import { makeStarfield, makeMilkyWay } from "./starfield.js";
 import { makeBackdropBakeSources } from "./deepSpace.js";
 import { bakeBackdrop, disposeBakedBackdrop, type BakedBackdrop } from "./backdropBake.js";
 import { buildEternityHalo } from "./eternityHalo.js";
+import { buildSkyClues } from "./skyClues.js";
 
 /**
  * The one sky (docs/specs/warp-consistency-2026-10-29.md). The home galaxy builds its stars, Milky Way and
@@ -70,6 +71,9 @@ export function installHomeSky(renderer: THREE.WebGLRenderer, scene: THREE.Scene
   // Eternity's presence in every world's sky (spec §2d): a faint arc of his halo at the edge of the heavens.
   const halo = buildEternityHalo(2200, 7000);
   group.add(halo.group);
+  // The sixteen (Draft 9 sky clue): fifteen lit, one dark, joined by unfinished pencil lines — in every world's sky.
+  const clues = buildSkyClues(6800);
+  group.add(clues.group);
   const cached = bakeCache.get(renderer);
   if (cached) {
     scene.background = cached.target.texture;
@@ -96,6 +100,7 @@ export function installHomeSky(renderer: THREE.WebGLRenderer, scene: THREE.Scene
       if (disposed) return;
       disposed = true;
       halo.dispose();
+      clues.dispose();
       group.traverse((o) => {
         const m = o as THREE.Points;
         m.geometry?.dispose?.();
