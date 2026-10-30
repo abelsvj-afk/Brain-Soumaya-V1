@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkStoryGraph, storyNeighbours, type StoryGraph } from "./story.js";
 import { STORY } from "./storyCanon.js";
 import { RELICS } from "./relics.js";
+import { WORLD_COORDS } from "./worlds.js";
 
 describe("the story web", () => {
   it("holds: no structural problems and no single load-bearing entry", () => {
@@ -16,6 +17,10 @@ describe("the story web", () => {
   it("covers all fifteen witnesses' kept things, matching the shipped relic ids", () => {
     const ids = new Set(STORY.entries.map((e) => e.id));
     for (const r of RELICS) expect(ids.has(`relic.${r.id}`), `relic.${r.id}`).toBe(true);
+  });
+
+  it("places every entry in a real world of the travel ledger (or 'anywhere')", () => {
+    for (const e of STORY.entries) expect(e.world === "anywhere" || e.world in WORLD_COORDS, `${e.id}: ${e.world}`).toBe(true);
   });
 
   it("has no prerequisite: nothing in the schema expresses 'requires'", () => {

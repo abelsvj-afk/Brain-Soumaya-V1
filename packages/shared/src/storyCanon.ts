@@ -37,54 +37,54 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
     door: true,
     text: { plain: "A woman with no face, sitting at a table set for one more than the family counts. The crayon has been pressed so hard it has torn the paper at the mouth." },
   }),
-  E("obj.sleepwalkers-lantern", "object", "station", "The Sleepwalker's Lantern", ["A4"], ["c.sleepwalker.carries-a-flameless-lantern"], {
+  E("obj.sleepwalkers-lantern", "object", "great-station", "The Sleepwalker's Lantern", ["A4"], ["c.sleepwalker.carries-a-flameless-lantern"], {
     door: true,
     text: { plain: "She carries it at night. It has no flame. She cannot say why she carries it, and she will not put it down." },
   }),
-  E("obj.dorrows-page", "object", "station", "Dorrow's Page", ["A4"], ["c.ledger.owes-one-unrecorded"], {
+  E("obj.dorrows-page", "object", "great-station", "Dorrow's Page", ["A4"], ["c.ledger.owes-one-unrecorded"], {
     door: true,
     text: { plain: "A ledger page with a single line: owed to one unrecorded. The ink is the freshest in the Book. It is renewed every year, and no clerk will admit to renewing it." },
   }),
   E("sight.missing-stratum", "sight", "deep-past", "The Missing Stratum", ["A3"], ["c.deep-past.no-sixth-hour-layer"], { door: true }),
   E("sight.dead-bough", "sight", "growing-place", "The Dead Bough", ["A5"], ["c.tree.bough-points-at-the-hole"], { door: true }),
   E("sight.hung-star", "sight", "scale", "The Star Hung for Someone", ["A8"], ["c.scale.uncatalogued-star-late-light"], { door: true }),
-  E("sight.open-alcove", "sight", "quiet", "The Open Alcove", ["A2"], ["c.archive.alcove-open-and-empty"], { door: true }),
+  E("sight.open-alcove", "sight", "quiet-archive", "The Open Alcove", ["A2"], ["c.archive.alcove-open-and-empty"], { door: true }),
   E("companion.dock-1", "companion", "anywhere", "The Stranger at the Dock", ["A8"], ["c.companion.shared-a-cup-once"], { door: true }),
 
   // --- The fifteen witnesses' kept things (relics.ts ids) ---
   E("relic.witness-without-a-name", "object", "eternity", "The Witness Without a Name", ["A1", "A10"], ["c.relic.what-she-held-when-she-asked"]),
-  E("relic.harbor-nail", "object", "station", "Harbor Nail", ["A3"], ["c.teru.walked-toward-the-sealed-seam"]),
-  E("relic.mooring-ring", "object", "station", "Mooring Ring", ["A8"], ["c.brannoch.tied-to-nothing"]),
+  E("relic.harbor-nail", "object", "great-station", "Harbor Nail", ["A3"], ["c.teru.walked-toward-the-sealed-seam"]),
+  E("relic.mooring-ring", "object", "great-station", "Mooring Ring", ["A8"], ["c.brannoch.tied-to-nothing"]),
   E("relic.dawn-leaf", "object", "growing-place", "Dawn Leaf", ["A5"], ["c.iselle.tried-to-grow-her-back"]),
   E("relic.witness-seed", "object", "growing-place", "Witness Seed", ["A5", "A2"], ["c.wend.planted-themself"]),
   E("relic.first-light-shard", "object", "deep-past", "First Light Shard", ["A11"], ["c.orsolya.first-record-in-matter"]),
   E("relic.basin-stone", "object", "deep-past", "Basin Stone", ["A4"], ["c.cael.tears-counted"]),
-  E("relic.lantern-of-keeping", "object", "quiet", "Lantern of Keeping", ["A9"], ["c.perrin.kept-a-candle-for-the-unremembered"]),
+  E("relic.lantern-of-keeping", "object", "quiet-archive", "Lantern of Keeping", ["A9"], ["c.perrin.kept-a-candle-for-the-unremembered"]),
   E("relic.hearth-ember", "object", "people", "Hearth Ember", ["A9", "A10"], ["c.maud-edric.went-in-together"]),
   E("relic.thread-of-many", "object", "people", "Thread of Many", ["A6", "A8"], ["c.many-handed.forty-one-became-forty-two"]),
   E("relic.star-hanger", "object", "scale", "Star Hanger", ["A8"], ["c.sahl.hung-a-star-for-someone-walking"]),
   E("relic.sunward-compass", "object", "scale", "Sunward Compass", ["A8"], ["c.odessa.compass-points-where-she-could-not-look"]),
-  E("relic.stillness-seal", "object", "quiet", "Stillness Seal", ["A1"], ["c.noor.asked-vesh-what-rest-was"]),
-  E("relic.unopened-fold", "object", "quiet", "Unopened Fold", ["A1", "A9"], ["c.folded-one.letter-never-sent"]),
+  E("relic.stillness-seal", "object", "quiet-archive", "Stillness Seal", ["A1"], ["c.noor.asked-vesh-what-rest-was"]),
+  E("relic.unopened-fold", "object", "quiet-archive", "Unopened Fold", ["A1", "A9"], ["c.folded-one.letter-never-sent"]),
   E("relic.unnumbered-fragment", "object", "eternity", "Unnumbered Fragment", ["A11", "A8"], ["c.uncounted.knew-her-before-the-hole"]),
 
   // --- The wrong things, objects of the cast, and the places that carry the web ---
-  E("obj.tin-soldier", "object", "station", "Hesk's Tin Soldier", ["A4"], ["c.hesk.polishes-what-he-does-not-recognise"], {
+  E("obj.tin-soldier", "object", "great-station", "Hesk's Tin Soldier", ["A4"], ["c.hesk.polishes-what-he-does-not-recognise"], {
     text: { plain: "A small tin soldier, one arm missing. It was found in the coat of a person no one remembers, and has been polished every day since by a man who says he has never seen it before." },
   }),
-  E("sight.locked-room", "sight", "station", "Hesk's Locked Room", ["A4"], ["c.hesk.keeps-the-faded-belongings"]),
-  E("sight.second-seam", "sight", "station", "The Second Seam", ["A3", "A2"], ["c.station.sealed-seam-hums"]),
-  E("echo.hymnal-gap", "echo", "quiet", "The Hymn's Missing Breath", ["A6", "A7", "A10"], ["c.choir.hymn-cut-on-purpose"]),
-  E("obj.choirmasters-breath", "object", "quiet", "The Choirmaster's Breath", ["A6", "A7"], ["c.choir.holds-a-breath-the-length-of-a-name"], {
+  E("sight.locked-room", "sight", "great-station", "Hesk's Locked Room", ["A4"], ["c.hesk.keeps-the-faded-belongings"]),
+  E("sight.second-seam", "sight", "great-station", "The Second Seam", ["A3", "A2"], ["c.station.sealed-seam-hums"]),
+  E("echo.hymnal-gap", "echo", "quiet-archive", "The Hymn's Missing Breath", ["A6", "A7", "A10"], ["c.choir.hymn-cut-on-purpose"]),
+  E("obj.choirmasters-breath", "object", "quiet-archive", "The Choirmaster's Breath", ["A6", "A7"], ["c.choir.holds-a-breath-the-length-of-a-name"], {
     text: { plain: "A held breath, kept in a glass no bigger than a thumb. The Choir holds it at the end of every hymn for exactly the length of a name, and no one will say whose. Those who have counted it say it is eleven beats. Those who have listened say it is longer." },
   }),
-  E("obj.faded-ticket", "object", "station", "Faded Ticket", ["A4"], ["c.faded.voyage-wanted-then-forgotten"], {
+  E("obj.faded-ticket", "object", "great-station", "Faded Ticket", ["A4"], ["c.faded.voyage-wanted-then-forgotten"], {
     text: { plain: "Valid for a voyage the holder cannot recall buying. The date is smudged by the thumb of someone who kept turning it over. On the back, in a careful hand: do not let me forget I wanted to go." },
   }),
-  E("obj.vesh-paper-boat", "object", "quiet", "Vesh's Paper Boat", ["A1", "A2", "A12"], ["c.vesh.folds-a-page-that-had-to-be-set-down"], {
+  E("obj.vesh-paper-boat", "object", "quiet-archive", "Vesh's Paper Boat", ["A1", "A2", "A12"], ["c.vesh.folds-a-page-that-had-to-be-set-down"], {
     text: { plain: "A little boat folded from an Archive page. The page was one that had to be set down, and was. If you hold it to the light you can see that someone has tried to write a name on the inside and stopped after the first stroke." },
   }),
-  E("obj.doorkeepers-nail", "object", "station", "The Doorkeeper's Nail", ["A3"], ["c.calend.nail-always-warm"], {
+  E("obj.doorkeepers-nail", "object", "great-station", "The Doorkeeper's Nail", ["A3"], ["c.calend.nail-always-warm"], {
     text: { plain: "Not a nail; the shape of one. It is warm. It is always warm. It opens nothing, but those who carry it find the next door is a little easier to push." },
   }),
   E("obj.measurers-cord", "object", "scale", "The Measurer's Cord", ["A7", "A2"], ["c.sethane.last-knot-untied"], {
@@ -93,7 +93,7 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   E("sight.tamsins-ward", "sight", "people", "Tamsin's Ward", ["A4"], ["c.tamsin.counts-one-more"]),
   E("sight.empty-chair", "sight", "people", "The Empty Chair", ["A2", "A10"], ["c.hearths.one-place-too-many"]),
   E("obj.follower-ribbon", "object", "anywhere", "The Follower's Ribbon", ["A8"], ["c.follower.is-always-one-day-behind"]),
-  E("obj.anonymous-payments", "object", "station", "The Mooring Payments", ["A8", "A4"], ["c.clerk.berth-paid-by-an-unknown-hand"]),
+  E("obj.anonymous-payments", "object", "great-station", "The Mooring Payments", ["A8", "A4"], ["c.clerk.berth-paid-by-an-unknown-hand"]),
   E("sight.lane-to-nowhere", "sight", "anywhere", "The Lane That Goes Nowhere", ["A3"], ["c.cartographer.lane-ends-at-the-second-seam"]),
   E("sight.ysmerel-at-the-edge", "sight", "anywhere", "The Choirmaster at the Edge", ["A4", "A6"], ["c.ysmerel.sits-at-the-hush-by-night"]),
   E("sight.long-room", "sight", "eternity", "The Long Room", ["A9", "A11", "A8"], ["c.eternity.tends-fifteen-lamps"]),
@@ -101,8 +101,8 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   E("obj.dissenters-chart", "object", "anywhere", "The Dissenter's Chart", ["A5"], ["c.dissenter.hole-has-a-clean-edge"]),
   E("sight.unlooked-direction", "sight", "eternity", "The Direction He Does Not Look", ["A11", "A5"], ["c.eternity.never-looks-one-way"]),
   E("sight.blank-nameplate", "sight", "anywhere", "The Blank Nameplate", ["A12"], ["c.soumaya.hull-has-no-nameplate"]),
-  E("sight.lullaby-hollow", "sight", "quiet", "The Lullaby's Hollow", ["A12", "A1"], ["c.vesh.ship-has-a-hull-length-gap"]),
-  E("sight.missing-berth", "sight", "station", "The Berth Too Few", ["A4"], ["c.hush.takes-the-unclaimed-first"]),
+  E("sight.lullaby-hollow", "sight", "quiet-archive", "The Lullaby's Hollow", ["A12", "A1"], ["c.vesh.ship-has-a-hull-length-gap"]),
+  E("sight.missing-berth", "sight", "great-station", "The Berth Too Few", ["A4"], ["c.hush.takes-the-unclaimed-first"]),
 ];
 
 const T = (a: string, b: string, type: EdgeType, evidence: string): StoryEdge => ({ a, b, type, evidence });
@@ -176,3 +176,11 @@ export const STORY_EDGES: readonly StoryEdge[] = [
 ];
 
 export const STORY: StoryGraph = { anchors: STORY_ANCHORS, entries: STORY_ENTRIES, edges: STORY_EDGES };
+
+/** Entries by id — the server validates every find against this, so a client can never invent one. */
+export const STORY_ENTRY_BY_ID: ReadonlyMap<string, StoryEntry> = new Map(STORY_ENTRIES.map((e) => [e.id, e]));
+
+/** True when the canon itself joins two entries (a Concordance link is "lit" only then; derived at read time, never stored). */
+export function storyPairIsLit(a: string, b: string): boolean {
+  return STORY_EDGES.some((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+}

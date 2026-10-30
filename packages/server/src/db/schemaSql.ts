@@ -1376,6 +1376,29 @@ export const BOOTSTRAP_SQL = `
       space_id TEXT PRIMARY KEY,
       reflect INTEGER NOT NULL DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS story_finds (
+      space_id TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      source TEXT NOT NULL,
+      last_recalled_at TEXT,
+      recall_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, entry_id)
+    );
+    CREATE TABLE IF NOT EXISTS story_links (
+      space_id TEXT NOT NULL,
+      a TEXT NOT NULL,
+      b TEXT NOT NULL,
+      linked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, a, b)
+    );
+    CREATE TABLE IF NOT EXISTS story_notes (
+      space_id TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      note TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, entry_id)
+    );
     CREATE TABLE IF NOT EXISTS npc_day_script (
       space_id TEXT NOT NULL,
       day_key TEXT NOT NULL,
