@@ -15,7 +15,7 @@
 | **Eternity** | **he/him** | ageless; tall, broad, radiant, vast | white-on-white, pearl, faint gold; ring of own light behind head (not a halo from any religion) | female, ship, a clear face |
 | **Oru, the Dawnkeeper** | **he/him** (Draft 2: "he alone remembers") | old, calm, slight | pale robes; a small cup of morning light | young, armoured |
 | **Sethane, the Measurer** | **she/her** ("her apprentice" — the Surveyor) | tall, slim, dark-clad; tired from wonder | ring of measuring arms; a knotted cord with the LAST KNOT UNTIED | a weapon |
-| **Calend, the Doorkeeper** (the Wayfarer) | **he/him** | wiry, travel-worn, wry, ancient eyes | long layered coat of many faded colours (one patch unfinished); an always-warm iron nail; a door-frame | a home; a uniform |
+| **Calend, the Doorkeeper** (the Wayfarer) | **he/him** | **older and grey (fixed — owner 2026-10-31, "like §44 v4"): lined face, grey untidy hair; never young or dark-haired**; wiry, travel-worn, wry, ancient eyes | long layered coat of many faded colours (one patch unfinished); an always-warm iron nail; a door-frame | a home; a uniform |
 | **Maren, the Gardener** | **she/her** | patient, middle-aged, weathered hands | green-gold robes; a seedling; a watering can with a stoppered spout | blades, machinery |
 | **Nuaré, the Hearthkeeper** | **she/her** | warm, broad, ageless mother-presence | ember-orange; a cushion carried between hearths; a lantern-like glow | cold colours |
 | **Vesh, the Hollow Mercy** | **they/them** | androgynous, tall, tired | chest hollow; hooded dusk robes; folded paper boats | cruelty — Vesh is sympathetic |
