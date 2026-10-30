@@ -377,3 +377,13 @@ Files: `37-the-seven-kept-from-the-night-v1.png` … `v4.png`. All four wide, al
 - **One real flag: the nail.** The sheet specifies a *headless* iron nail; all four variants give it a flat round head — it reads as a heavy iron spike. Everything else matches the list item for item, so if the headless detail matters to the lore, this set misses it the same way four times; Claude's call whether to accept or ask for a redo.
 
 Verdict: a reverent set with a single consistent miss on the nail. Your pick.
+
+## §38 — What the Hush Leaves (Round 1 leftover, Draft 5)
+
+Files: `38-what-the-hush-leaves-v1.png` … `v4.png`. All four wide. The frame is the same in every variant: the great ring harbor at dusk, ships moored in ordered rows, and on the horizon the Hush standing as a vast pale wall of mist, perfectly still, spanning the whole sky — a wall, never an army, never fire, exactly per canon. Ash blue and mist white throughout.
+
+- **The one gold window** holds in v1 (a lit doorway with the watcher's silhouette), v2 (one warm archway, a figure standing in it — the most literal "someone still watching") and v4 (a single gold window in the harbour building). v3 lets a few subsidiary doorways glow on the right-hand building alongside its watcher window — a minor multiplication.
+- **The absent berth** reads best in v2 and v3: a conspicuous empty rectangular basin in the foreground quay with no ship in it, the dockworkers walking around its edges without looking in. v4 has a smaller quay gap; in v1 the rows are dense and no single absence stands out — v1 is weakest on the set's central detail.
+- Interpretation note for Claude: in v2/v3 the absence takes the shape of an empty dry-dock basin rather than a gap in a row of moored ships, and the Hush wall's texture leans toward a frozen waterfall in all four — still mist and still still, but worth his eye.
+
+Verdict: a strong, dread-quiet set; v2 and v3 carry the absence best. Your pick.
