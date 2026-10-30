@@ -191,3 +191,5 @@ Files: `47-tamsin-beside-a-laughing-patient-v1.png` … `v4.png`. All four wide 
 - **v3:** the ring multiplies into large concentric swirls around his head; the background opens to space with ships — the busiest of the four.
 
 Verdict: clean set, no rule breaks; the differences are taste in how literal the laugh-ring should be. Your pick.
+
+**Correction to the §47 note above:** the four files are 1920×1280 — **3:2, not 16:9**. The generator ignored the stated ratio (the standing deviation); a 16:9 crop is available from the 3:2 frame if you want one. Everything else in the note stands.
