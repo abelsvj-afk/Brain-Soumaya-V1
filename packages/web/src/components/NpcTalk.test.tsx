@@ -7,6 +7,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
   vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [] });
+  vi.spyOn(api, "getStoryRoads").mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -66,5 +67,34 @@ describe("Talking to a person", () => {
   it("nobody who cannot be talked to gets a panel (Eternity cannot be asked)", () => {
     const { container } = render(<NpcTalk npc="eternity" world="eternity" meetings={1} onClose={() => {}} />);
     expect(container.querySelector(".npc-talk")).toBeNull();
+  });
+});
+
+describe("Side roads from a person", () => {
+  it("offers a road, takes it, and says where it waits in words — never a count", async () => {
+    vi.spyOn(api, "getStoryRoads").mockResolvedValue([]);
+    const put = vi.spyOn(api, "putStoryRoad").mockResolvedValue({ road: { roadId: "road.open-alcove", state: "taken", updatedAt: "" } });
+    const { container } = render(<NpcTalk npc="archivist" world="quiet-archive" meetings={1} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Is there something I can do for you?"));
+    expect(screen.getByText(/Do not fill the alcove/)).toBeTruthy();
+    fireEvent.click(screen.getByText("I will"));
+    await waitFor(() => expect(put).toHaveBeenCalledWith("road.open-alcove", "taken"));
+    expect(container.textContent ?? "").not.toMatch(/\d/);
+  });
+
+  it("a road whose finds are all in the Book is recorded finished once and gives its gift", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({
+      finds: ["sight.open-alcove", "sight.aldous-at-rest"].map((entryId) => ({ entryId, foundAt: "", source: "regard", lastRecalledAt: null, recallCount: 0 })),
+      links: [],
+      notes: [],
+    });
+    vi.spyOn(api, "getStoryRoads").mockResolvedValue([{ roadId: "road.open-alcove", state: "taken", updatedAt: "" }]);
+    const put = vi.spyOn(api, "putStoryRoad").mockResolvedValue({ road: { roadId: "road.open-alcove", state: "done", updatedAt: "" } });
+    render(<NpcTalk npc="archivist" world="quiet-archive" meetings={1} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText("Is there something I can do for you?")).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 30)); // let the Book and roads load
+    fireEvent.click(screen.getByText("Is there something I can do for you?"));
+    expect(screen.getByText(/thanks you for leaving it open/i)).toBeTruthy();
+    await waitFor(() => expect(put).toHaveBeenCalledWith("road.open-alcove", "done"));
   });
 });

@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { castMember, NPC_TALK_BY_ID, openSteps, pointerFor } from "@brain/shared";
+import { castMember, NPC_TALK_BY_ID, openSteps, pointerFor, STORY_ROADS, roadView } from "@brain/shared";
 import { getSpaceId } from "../api/http.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { useStoryBook } from "../hooks/useStoryBook.js";
+import { useStoryRoads } from "../hooks/useStoryRoads.js";
 import { markHeard, readHeard } from "../graph/npcTalk.js";
 
 /**
@@ -21,6 +22,9 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
   // They open with a line of their own: the introduction at a first meeting, otherwise one of their greetings.
   const [said, setSaid] = useState(() => (member ? (meetings <= 1 ? member.intro : member.greetings[Math.floor(Date.now() / 60_000) % member.greetings.length]!) : ""));
   const [bye, setBye] = useState(false);
+  const { states: roadStates, set: setRoad } = useStoryRoads(true);
+  /** The road being spoken of, if any: offered, or already taken and waiting at a line. */
+  const [roadId, setRoadId] = useState<string | null>(null);
   if (!member || !talk) return null;
 
   const atHome = world === member.home;
@@ -29,6 +33,21 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
   const say = (text: string) => {
     setSaid(text);
     setBye(false);
+  };
+  // A road this person can give, walked by what the Book and meetings already show — never a counter. A finished road is recorded once and just keeps its gift.
+  const roadCtx = { found, meetings: { [npc]: meetings } };
+  const roads = STORY_ROADS.filter((r) => r.giver === npc);
+  const road = roads.find((r) => roadStates[r.id] !== "done") ?? roads[0];
+  const view = road ? roadView(road, roadCtx) : null;
+  const roadState = road ? roadStates[road.id] : undefined;
+  const talkRoad = () => {
+    if (!road || !view) return;
+    setRoadId(road.id);
+    if (roadState === "done" || (view.done && roadState === "taken")) {
+      if (roadState !== "done") void setRoad(road.id, "done");
+      say(road.gift);
+    } else if (roadState === "taken") say(view.current ? `You said you would. ${view.current}` : road.offer);
+    else say(road.offer);
   };
   const choices: { id: string; label: string; run: () => void }[] = [
     { id: "who", label: "Who are you?", run: () => say(talk.who) },
@@ -42,6 +61,7 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
         setHeard(markHeard(getSpaceId(), npc, s.id));
       },
     })),
+    ...(road ? [{ id: "road", label: "Is there something I can do for you?", run: talkRoad }] : []),
     { id: "look", label: "Is there something I should look for?", run: () => say(point ? point.say : talk.allFound) },
   ];
 
@@ -54,6 +74,27 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
       <p className="npc-talk-say" aria-live="polite">
         {bye ? talk.farewell : `“${said}”`}
       </p>
+      {!bye && road && roadId === road.id && roadState !== "done" && !(view?.done && roadState === "taken") && (
+        <div className="npc-talk-road" role="group" aria-label={road.title}>
+          <strong>{road.title}</strong>
+          {roadState === "taken" ? (
+            <button type="button" onClick={() => void setRoad(road.id, "rested").then(() => say("Then let it rest. It will keep."))}>
+              Let it rest for now
+            </button>
+          ) : (
+            <>
+              <button type="button" onClick={() => void setRoad(road.id, "taken").then(() => say(view?.current ?? road.offer))}>
+                {roadState === "rested" ? "Take it up again" : "I will"}
+              </button>
+              {roadState !== "rested" && (
+                <button type="button" onClick={() => say("Of course. Another day.")}>
+                  Not now
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {!bye && (
         <ul className="npc-talk-choices">
           {choices.map((c) => (

@@ -94,3 +94,15 @@ export async function testVoice(role: string): Promise<{ url: string } | { error
     return { error: "Could not reach the server." };
   }
 }
+
+export type RoadState = "taken" | "rested" | "done";
+export interface StoryRoadRow {
+  roadId: string;
+  state: RoadState;
+  updatedAt: string;
+}
+export async function getStoryRoads(): Promise<StoryRoadRow[] | null> {
+  const d = await send<{ roads: StoryRoadRow[] }>("/roads", "GET");
+  return d && Array.isArray(d.roads) ? d.roads : null;
+}
+export const putStoryRoad = (roadId: string, state: RoadState) => send<{ road: StoryRoadRow }>(`/roads/${encodeURIComponent(roadId)}`, "PUT", { state });

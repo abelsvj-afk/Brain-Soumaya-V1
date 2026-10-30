@@ -20,7 +20,7 @@
  * v3 (owner-authorized 2026-10-30): 8 tables that landed on main AFTER
  * the B1 anchor — post-anchor schema drift, also present in production —
  * added, all MAY-BE-EMPTY: `society_prefs`, `story_finds`, `story_links`,
- * `story_notes`, `lore_voices`, `story_prefs`, `story_flavor_day`,
+ * `story_notes`, `story_roads`, `lore_voices`, `story_prefs`, `story_flavor_day`,
  * `npc_day_script`. Totals at v3: 117 named tables, 116 included,
  * 29 MUST-BE-NONEMPTY, 1 excluded.
  *
@@ -165,6 +165,7 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   story_finds: "may-be-empty", // v3
   story_links: "may-be-empty", // v3
   story_notes: "may-be-empty", // v3
+  story_roads: "may-be-empty",
   lore_voices: "may-be-empty", // v3
   story_prefs: "may-be-empty", // v3
   story_flavor_day: "may-be-empty", // v3

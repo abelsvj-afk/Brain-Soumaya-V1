@@ -23,5 +23,6 @@ export * from "./missions.js";
 export * from "./story.js";
 export * from "./storyCanon.js";
 export * from "./storyTriggers.js";
+export * from "./storyRoads.js";
 export * from "./storyFlavor.js";
 export * from "./storyReactions.js";

@@ -53,10 +53,10 @@ afterEach(() => {
 });
 
 describe("G0 B1 inventory", () => {
-  it("pins 114 named tables: 113 included + tts_audio_cache excluded", () => {
+  it("pins 115 named tables: 114 included + tts_audio_cache excluded", () => {
     const names = Object.keys(BACKUP_TABLE_INVENTORY);
-    expect(names.length).toBe(114);
-    expect(INCLUDED_TABLES.length).toBe(113);
+    expect(names.length).toBe(115);
+    expect(INCLUDED_TABLES.length).toBe(114);
     expect(INCLUDED_TABLES).not.toContain("tts_audio_cache");
     expect(BACKUP_TABLE_INVENTORY["tts_audio_cache"]).toBe("excluded");
     expect(MUST_BE_NONEMPTY_TABLES.length).toBe(29);
@@ -111,7 +111,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     expect(res.manifest.snapshotSha256).toBe(sha);
     expect(res.manifest.snapshotBytes).toBe(fileBytes.length);
     // Per-table counts for every included table; excluded table absent.
-    expect(Object.keys(res.manifest.tableCounts).length).toBe(113);
+    expect(Object.keys(res.manifest.tableCounts).length).toBe(114);
     expect(res.manifest.tableCounts["spaces"]).toBe(1);
     expect(res.manifest.tableCounts["nodes"]).toBe(1);
     expect(res.manifest.tableCounts["travel_journeys"]).toBe(0);
@@ -130,7 +130,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     expect(v.ok).toBe(true);
     expect(v.integrity).toBe("ok");
     expect(v.foreignKeyViolations).toBe(0);
-    expect(v.countsChecked).toBe(113);
+    expect(v.countsChecked).toBe(114);
   });
 
   it("G0-AC-04 wiped-DB guard: an empty brain fails verification at the verify stage when enforcement is on", () => {

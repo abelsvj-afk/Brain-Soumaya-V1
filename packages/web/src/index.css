@@ -7954,6 +7954,10 @@ body.in-transit .perf-suggest { display: none; }
   cursor: pointer;
 }
 .npc-talk-bye { text-align: center; border-style: dashed; }
+.npc-talk-road { display: grid; gap: 6px; margin: 0 0 8px; padding: 8px 10px; border: 1px dashed rgba(255, 233, 168, 0.35); border-radius: 8px; }
+.npc-talk-road button { min-height: 44px; padding: 8px 12px; text-align: left; background: rgba(255, 233, 168, 0.12); color: inherit; border: 1px solid rgba(255, 233, 168, 0.5); border-radius: 8px; font: inherit; cursor: pointer; }
+.npc-talk-road button:focus-visible { outline: 2px solid #ffe9a8; outline-offset: 2px; }
+
 .npc-talk-choices button:focus-visible, .npc-talk-bye:focus-visible { outline: 2px solid #ffe9a8; outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) { .npc-talk { transition: opacity 0.2s; } }
 

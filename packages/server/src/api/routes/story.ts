@@ -5,6 +5,7 @@ import { spaceOf } from "../middleware.js";
 import { VOICE_ROLES, reactionBetween } from "@brain/shared";
 import { isOwnerSpace } from "../../auth/owner.js";
 import { StoryError, StoryRepo } from "../../story/story.js";
+import { RoadsRepo } from "../../story/roads.js";
 import { computeFlavor, setFlavorOn } from "../../story/flavor.js";
 import { createNarrator, isTide, narrationText, type Narrator } from "../../story/narration.js";
 import { dirname, join } from "node:path";
@@ -88,6 +89,20 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
   });
 
   const recallBody = z.object({ entryId: id });
+  r.get("/roads", (_req, res) => {
+    res.json({ roads: new RoadsRepo(ctx.handle, spaceOf(res)).list() });
+  });
+
+  r.put("/roads/:id", (req, res) => {
+    const parsed = z.object({ state: z.enum(["taken", "rested", "done"]) }).safeParse(req.body);
+    if (!parsed.success) return void res.status(400).json({ error: "Invalid road state." });
+    try {
+      res.json({ road: new RoadsRepo(ctx.handle, spaceOf(res)).set(id.parse(req.params.id), parsed.data.state) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
   r.post("/recall", (req, res) => {
     const p = recallBody.safeParse(req.body);
     if (!p.success) return bad(res, "Expected { entryId }.");

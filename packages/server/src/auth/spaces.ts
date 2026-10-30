@@ -192,6 +192,7 @@ export const SPACE_SCOPED_TABLES = [
   "story_finds",
   "story_links",
   "story_notes",
+  "story_roads",
   "story_prefs",
   "story_flavor_day",
   "npc_relic_holdings",
