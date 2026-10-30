@@ -10,7 +10,11 @@
  * only rows that reached VERIFIED-LOCAL (states are plain TEXT by
  * design, so the B2 states needed no migration — only the three
  * bookkeeping columns tier/pinned/promoted_at were added, in BOTH
- * schema locations).
+ * schema locations). Increment B3 adds two more bookkeeping columns
+ * the same way: `trigger` (how the attempt was started) and
+ * `offvolume_outcome` (why the pipeline stopped after local
+ * verification, when it did), and writes trigger/tier/pinned at
+ * creation when the caller supplies them.
  *
  * Snapshots are taken with VACUUM INTO (spec §1 / G0-AC-01): a
  * consistent, standalone database file — never a raw copy of a live WAL
@@ -40,6 +44,22 @@ export type BackupAttemptState =
   | "promoted"
   | "pruned"
   | "failed";
+/**
+ * How an attempt was started (increment B3). Every trigger — the daily
+ * schedule, a missed-run catch-up, the manual "back up now", a manual
+ * golden — runs the SAME pipeline (runner.ts); the trigger is recorded
+ * on the row at creation so status can say what started an attempt.
+ */
+export type BackupTrigger = "schedule" | "catch_up" | "manual" | "golden";
+/**
+ * Recorded outcome of the off-volume leg when it deliberately did not
+ * run (increment B3): the local stages completed and the attempt is a
+ * verified LOCAL backup, but no off-volume store is configured, so
+ * nothing was encrypted, uploaded, or promoted. Distinct from both a
+ * failure (state stays 'verified_local', failure fields stay null) and
+ * a promotion (state 'promoted').
+ */
+export type BackupOffVolumeOutcome = "not_configured";
 export type BackupFailureStage =
   | "snapshot"
   | "manifest"
@@ -66,6 +86,10 @@ export interface BackupAttemptRow {
   pinned: boolean;
   /** When this attempt became latest-good (B2); null until PROMOTED. */
   promotedAt: string | null;
+  /** How this attempt was started (B3); rows from before B3 read 'manual' (the column default). */
+  trigger: BackupTrigger;
+  /** B3: 'not_configured' when the pipeline stopped after local verification (see the type). */
+  offvolumeOutcome: BackupOffVolumeOutcome | null;
 }
 
 interface AttemptDbRow {
@@ -82,6 +106,8 @@ interface AttemptDbRow {
   tier: string | null;
   pinned: number;
   promoted_at: string | null;
+  trigger: string;
+  offvolume_outcome: string | null;
 }
 
 function mapRow(r: AttemptDbRow): BackupAttemptRow {
@@ -99,6 +125,8 @@ function mapRow(r: AttemptDbRow): BackupAttemptRow {
     tier: r.tier,
     pinned: r.pinned === 1,
     promotedAt: r.promoted_at,
+    trigger: (r.trigger as BackupTrigger) ?? "manual",
+    offvolumeOutcome: (r.offvolume_outcome as BackupOffVolumeOutcome | null) ?? null,
   };
 }
 
@@ -109,9 +137,45 @@ export function listBackupAttempts(handle: DbHandle): BackupAttemptRow[] {
   return rows.map(mapRow);
 }
 
+/**
+ * The newest attempt's creation instant (epoch ms), or null when no
+ * attempt exists — one MAX query over an indexed-order column, for
+ * hot paths (the scheduler's per-minute evaluation) that must not
+ * re-read and re-parse the whole attempt history (review P2-5).
+ * created_at values are ISO-Z strings, which sort chronologically.
+ */
+export function latestBackupAttemptCreatedMs(handle: DbHandle): number | null {
+  const row = handle.sqlite
+    .prepare(`SELECT MAX(created_at) AS newest FROM backup_attempts`)
+    .get() as { newest: string | null };
+  return row.newest === null ? null : Date.parse(row.newest);
+}
+
 /** Backups = attempts that passed local verification. Failures never appear here. */
 export function listVerifiedBackups(handle: DbHandle): BackupAttemptRow[] {
   return listBackupAttempts(handle).filter((a) => a.state === "verified_local");
+}
+
+/**
+ * Record the off-volume outcome on an attempt (increment B3) and
+ * return the refreshed row. Used by the pipeline when no off-volume
+ * store is configured: the attempt remains a verified local backup —
+ * this marks WHY it stopped there, so status never has to guess from
+ * the current configuration (which may change later).
+ */
+export function recordOffVolumeOutcome(
+  handle: DbHandle,
+  attemptId: string,
+  outcome: BackupOffVolumeOutcome,
+): BackupAttemptRow {
+  handle.sqlite
+    .prepare(`UPDATE backup_attempts SET offvolume_outcome = ? WHERE id = ?`)
+    .run(outcome, attemptId);
+  const row = handle.sqlite
+    .prepare(`SELECT * FROM backup_attempts WHERE id = ?`)
+    .get(attemptId) as AttemptDbRow | undefined;
+  if (!row) throw new Error(`backup attempt row vanished: ${attemptId}`);
+  return mapRow(row);
 }
 
 export interface RunBackupOptions {
@@ -121,6 +185,16 @@ export interface RunBackupOptions {
   appCommit?: string;
   /** MUST-BE-NONEMPTY guard enforcement (see manifest.ts VerifyOptions). */
   enforceMustNonempty?: boolean;
+  /** How this attempt was started (B3); recorded at creation. Default 'manual'. */
+  trigger?: BackupTrigger;
+  /**
+   * Retention tier written at creation (B3). B2's off-volume run also
+   * passes its tier/pinned here so a golden is pinned from the row's
+   * first moment, not only when the off-volume bookkeeping lands.
+   * Default: the column defaults ('daily', unpinned).
+   */
+  tier?: string;
+  pinned?: boolean;
 }
 
 export type RunBackupResult =
@@ -148,8 +222,11 @@ export function runBackupAttempt(handle: DbHandle, opts: RunBackupOptions): RunB
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   sqlite
-    .prepare(`INSERT INTO backup_attempts (id, created_at, state) VALUES (?, ?, 'created')`)
-    .run(id, createdAt);
+    .prepare(
+      `INSERT INTO backup_attempts (id, created_at, state, trigger, tier, pinned)
+       VALUES (?, ?, 'created', ?, ?, ?)`,
+    )
+    .run(id, createdAt, opts.trigger ?? "manual", opts.tier ?? "daily", opts.pinned ? 1 : 0);
 
   const fail = (stage: BackupFailureStage, detail: string): RunBackupResult => {
     const finishedAt = new Date().toISOString();

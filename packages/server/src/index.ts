@@ -34,6 +34,8 @@ import { rollPastEvents } from "./analysis/future.js";
 import { stepDrives } from "./analysis/drives.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
 import { EconomyRepo } from "./economy.js";
+import { startBackupScheduler } from "./backup/scheduler.js";
+import { resolveBackupDir } from "./backup/runner.js";
 import { spaceTimezone, localDay } from "./agent/notify/policy.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -596,6 +598,24 @@ if (process.env.AUTONOMY !== "off") {
     }
   }, AUTONOMY_MS);
   console.log(`[autonomy] server-side loop ON (every ${AUTONOMY_MS}ms)`);
+}
+
+// G0 backup scheduler (increment B3): one automatic backup attempt
+// daily at 03:30 America/New_York, plus missed-run catch-up evaluated
+// at boot and on every tick (schedule.ts holds the pure decision; the
+// attempt record in the database is what dedupes slots, so restarts
+// neither lose nor duplicate a run). Set BACKUP_SCHEDULER=off to
+// disable. Attempts run the shared pipeline (runner.ts): local
+// snapshot + verification always; encrypt → upload → promote only
+// when the off-volume store is configured.
+if (process.env.BACKUP_SCHEDULER !== "off") {
+  const backupScheduler = startBackupScheduler({
+    handle: ctx.handle,
+    dir: resolveBackupDir(),
+  });
+  if (backupScheduler) {
+    console.log("[backup] scheduler ON (daily 03:30 America/New_York + catch-up)");
+  }
 }
 
 // Proactive nudges (Phase B): once per UTC day, push each linked chat its brain's
