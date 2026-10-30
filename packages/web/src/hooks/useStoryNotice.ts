@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hourBand, npcGifts, pickNoticed } from "@brain/shared";
+import { castMember, hourBand, npcGifts, pickNoticed, reactionFor } from "@brain/shared";
 import { useStoryBook } from "./useStoryBook.js";
 import { emitReveal } from "../lib/narrationBus.js";
-import { getNarrationMode } from "../lib/narration.js";
+import { getNarrationMode, playNarration } from "../lib/narration.js";
 
 /** How long a player has to stay still for the world to answer. One constant; same under reduced motion (it is time, not animation). */
 export const NOTICE_MS = 4000;
@@ -104,6 +104,12 @@ export function useStoryNotice({
     async (npcId: string, meetings: number) => {
       for (const id of npcGifts(npcId, meetings, foundRef.current)) {
         if (await report(id, `npc:${npcId}`)) notifyRef.current("They gave you something to keep. It is in the Book.");
+      }
+      // They notice what you are holding (Draft 5 §4): one line, sideways. Holding is enough — nothing is spent or required.
+      const reaction = reactionFor(npcId, foundRef.current);
+      if (reaction) {
+        notifyRef.current(`${castMember(npcId)?.name ?? "Someone"}: “${reaction.line}”`);
+        if (getNarrationMode() === "on") void playNarration({ entryId: reaction.holds, register: "plain", text: reaction.line, reaction: { npc: npcId, holds: reaction.holds } });
       }
     },
     [report],

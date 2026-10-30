@@ -758,7 +758,7 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   authority (canon-checked ids, travel-ledger-checked world finds, idempotent). **Finding things (2026-10-30, same slice):** a "Notice" dock group in every world (Regard · Listen —
   stay still 4 s; the Hour only picks what comes FIRST, never a lock), the shipped relics mirror into the Book, met people give things after enough meetings
   (Calend→the Doorkeeper's Nail, the Choirmaster→the held Breath, the Broker→the Page), and a stranger shares a cup at the Station on a later day. The server
-  validates every find against `shared/storyTriggers.ts` and the travel ledger; only entries whose words are written are released (≈ 30 of ~46 so far).
+  validates every find against `shared/storyTriggers.ts` and the travel ledger; every entry is released by some trigger.
   Look at: the 360×440 sky on a real phone (point spacing ≥ 24 units; tap size 44 px), whether the legend line
   reads, and the fading cue.
 - **Story Flavour + ElevenLabs narration (2026-10-30) — unit/route-tested (shared 63, server story 26, web), NO live ElevenLabs call has been made, needs the
@@ -772,8 +772,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   Setting "Read the lore to me": when I ask (default) / whenever I find something (new finds open in the Book and begin) / never. **Owner steps:** set
   `LORE_TTS_VOICE_NARRATOR` (an ElevenLabs voice id; `LORE_TTS_API_KEY` falls back to `TELEGRAM_TTS_API_KEY`) as Fly secrets, then optionally pre-voice all 60 lines
   (~10.8k characters) with `npx tsx scripts/lore-narrate.ts --yes`. Look at: the narrator voice choice and the three delivery presets (`NARRATION_SETTINGS`, tuned by ear),
-  whether a find opening itself in the Book feels right with "whenever I find something", and the duck depth. Not built yet: lore music beds, per-character voices,
-  sentence-synced captions, service-worker caching of clips.
+  whether a find opening itself in the Book feels right with "whenever I find something", and the duck depth. **Added 2026-10-30 (later):** every canon entry now has words AND a trigger
+  (a test pins it; the 15 relics take their words from the shipped relic registry); **Item Reactions** (11 lines, `shared/storyReactions.ts`) — a met person remarks sideways
+  on what you HOLD (nothing spent, nothing gated), voiced in their own role voice (`LORE_TTS_VOICE_CALEND|YSMEREL|DORROW|DISSENTER|SURVEYOR|ARCHIVIST|KEEPER|ETERNITY`; any role
+  without its own voice is read by the narrator, so only `LORE_TTS_VOICE_NARRATOR` is required); **sentence-level captions** follow the voice (exact for a clip, an estimate
+  for the browser voice; the sentence being read is underlined + heavier, never colour alone); **clips are kept on the device** by the service worker (per brain, keyed by a hash of
+  the exact words, only real audio). `scripts/lore-narrate.ts` now counts ~146 lines / ~29k characters (three registers × each entry + reactions). Not built yet: lore music beds
+  (Muse task `docs/specs/muse-lore-music-beds-2026-10-30.md`), a sting for new finds, Item Reactions for people not yet in the cast.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

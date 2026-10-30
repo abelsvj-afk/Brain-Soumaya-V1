@@ -29,8 +29,9 @@ describe("The Sixteenth's Book", () => {
     const { container } = render(<StoryBook onClose={() => {}} />);
     await waitFor(() => expect(container.querySelectorAll(".book-point.is-found").length).toBe(2));
     fireEvent.click(screen.getByLabelText(/The Doorkeeper's Nail/));
-    expect(screen.getByText(/It is warm\. It is always warm/)).toBeTruthy();
-    expect(screen.getByText(/another, given to a man who walked toward a seam/)).toBeTruthy();
+    const card = container.querySelector(".book-card")!.textContent ?? "";
+    expect(card).toMatch(/It is warm\. It is always warm/);
+    expect(card).toMatch(/another, given to a man who walked toward a seam/);
   });
 
   it("without the partner there is no second reading", async () => {
@@ -38,7 +39,7 @@ describe("The Sixteenth's Book", () => {
     const { container } = render(<StoryBook onClose={() => {}} />);
     await waitFor(() => expect(container.querySelectorAll(".book-point.is-found").length).toBe(1));
     fireEvent.click(screen.getByLabelText(/The Doorkeeper's Nail/));
-    expect(screen.queryByText(/walked toward a seam/)).toBeNull();
+    expect(container.querySelector(".book-card")!.textContent).not.toMatch(/walked toward a seam/);
   });
 
   it("lays one light beside another; a lit pair says so, an unlit pair says nothing", async () => {

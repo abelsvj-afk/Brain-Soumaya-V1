@@ -36,7 +36,7 @@ export interface StoryTrigger {
 const relic = (id: string, world: string): StoryTrigger => ({ entryId: `relic.${id}`, how: "relic", world });
 
 /**
- * Only entries whose words are written are released (a test enforces it). The rest of the canon is in the web and awaits its prose; adding a trigger here is how it goes live.
+ * Every entry in the canon is now released by some trigger (a test enforces it, and that each has words). A new entry needs its words AND a trigger before it exists for a player.
  */
 export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   // The fifteen witnesses' kept things — found where the shipped relic system already hides them (the client mirrors its discovery here).
@@ -65,6 +65,19 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "sight.open-alcove", how: "regard", world: "quiet-archive", hour: "rest" },
   { entryId: "sight.empty-chair", how: "regard", world: "people", hour: "hearths" },
   { entryId: "sight.unlooked-direction", how: "regard", world: "eternity", hour: "standing" },
+  { entryId: "sight.locked-room", how: "regard", world: "great-station", hour: "first-light" },
+  { entryId: "sight.lane-to-nowhere", how: "regard", world: "great-station", hour: "measure" },
+  { entryId: "sight.blank-nameplate", how: "regard", world: "great-station", hour: "growing" },
+  { entryId: "sight.tamsins-ward", how: "regard", world: "people", hour: "first-light" },
+  { entryId: "obj.follower-ribbon", how: "regard", world: "deep-past", hour: "threshold" },
+  { entryId: "sight.lullaby-hollow", how: "regard", world: "quiet-archive", hour: "first-light" },
+  { entryId: "sight.ysmerel-at-the-edge", how: "regard", world: "quiet-archive", hour: "standing" },
+  { entryId: "sight.long-room", how: "regard", world: "eternity", hour: "rest" },
+  { entryId: "obj.kiths-drawing", how: "regard", world: "people", hour: "growing" },
+  { entryId: "obj.sleepwalkers-lantern", how: "regard", world: "great-station", hour: "hearths" },
+  { entryId: "obj.tin-soldier", how: "regard", world: "great-station", hour: "rest" },
+  { entryId: "obj.vesh-paper-boat", how: "regard", world: "quiet-archive", hour: "rest" },
+  { entryId: "obj.measurers-cord", how: "regard", world: "scale", hour: "measure" },
   // Listen: stay still and hear (echoes).
   { entryId: "echo.hymnal-gap", how: "listen", world: "quiet-archive", hour: "hearths" },
   { entryId: "echo.eighth-bell", how: "listen", world: "eternity", hour: "standing" },
@@ -72,6 +85,8 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "obj.doorkeepers-nail", how: "npc", world: "great-station", npc: "wayfarer", minMeetings: 1 },
   { entryId: "obj.choirmasters-breath", how: "npc", world: "quiet-archive", npc: "cantor", minMeetings: 2 },
   { entryId: "obj.dorrows-page", how: "npc", world: "great-station", npc: "broker", minMeetings: 2 },
+  { entryId: "obj.anonymous-payments", how: "npc", world: "great-station", npc: "broker", minMeetings: 3 },
+  { entryId: "obj.dissenters-chart", how: "npc", world: "great-station", npc: "dissenter", minMeetings: 2 },
   // The stranger at the dock: once, on a harbor, on a later day than the first.
   { entryId: "companion.dock-1", how: "companion", world: "great-station" },
 ];

@@ -32,12 +32,12 @@ describe("narration gate", () => {
 });
 
 describe("what is spoken is canon, never the client's words", () => {
-  it("uses the entry's words in the register, adds a held Second Reading, and nothing for an entry with no words", () => {
+  it("uses the entry's words in the register, adds a held Second Reading, and nothing for something that is not canon", () => {
     expect(narrationText("obj.doorkeepers-nail", "plain", new Set())).toMatch(/always warm/);
     expect(narrationText("obj.doorkeepers-nail", "plain", new Set())).not.toMatch(/another, given to a man/);
     expect(narrationText("obj.doorkeepers-nail", "plain", new Set(["relic.harbor-nail"]))).toMatch(/another, given to a man/);
     expect(narrationText("obj.kiths-drawing", "grave", new Set())).toMatch(/gone through the paper/);
-    expect(narrationText("obj.follower-ribbon", "plain", new Set())).toBeNull();
+    expect(narrationText("obj.not-in-canon", "plain", new Set())).toBeNull();
     expect(narrationText("companion.dock-1", "warm", new Set(), "weight")).toMatch(/^A child with a flask sat with you/);
   });
 });
@@ -90,5 +90,22 @@ describe("it never breaks the Book", () => {
     expect(await n.narrate("b".repeat(20), "plain")).toBeNull(); // 20 + 20 > 30
     expect(capped.calls).toHaveLength(1);
     expect(await n.narrate("a".repeat(20), "plain")).not.toBeNull(); // but a cached replay is always free
+  });
+});
+
+describe("each speaking role has its own voice, falling back to the narrator's", () => {
+  it("uses LORE_TTS_VOICE_<ROLE> when set and the narrator otherwise; a different voice is a different clip", async () => {
+    const env = { ...ENV, LORE_TTS_VOICE_CALEND: "voice-calend" };
+    const cfg = narrationConfig(env)!;
+    expect(cfg.voiceFor("calend")).toBe("voice-calend");
+    expect(cfg.voiceFor("dorrow")).toBe("voice-n"); // no voice set for Dorrow: the narrator reads her... his lines
+    expect(cfg.voiceFor("narrator")).toBe("voice-n");
+    const f = fakeFetch();
+    const n = createNarrator({ env, fetchImpl: f.impl, dir });
+    await n.narrate("It's warm.", "plain", "calend");
+    await n.narrate("It's warm.", "plain", "narrator");
+    expect(f.calls).toHaveLength(2);
+    expect(f.calls[0]!.url).toContain("voice-calend");
+    expect(f.calls[1]!.url).toContain("voice-n");
   });
 });

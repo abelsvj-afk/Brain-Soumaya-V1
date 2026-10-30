@@ -107,6 +107,13 @@ describe("how things are found", () => {
       expect(t.world in WORLD_COORDS).toBe(true);
     }
   });
+  it("every entry has words AND a way to be found (nothing is dead content)", () => {
+    const released = new Set(STORY_TRIGGERS.map((t) => t.entryId));
+    for (const e of STORY.entries) {
+      expect(e.text?.plain, `${e.id} needs words`).toBeTruthy();
+      expect(released.has(e.id), `${e.id} needs a trigger`).toBe(true);
+    }
+  });
   it("releases every witness relic through the shipped relic system, in its own world", () => {
     for (const r of RELICS) {
       const t = triggerFor(`relic.${r.id}`, "relic");
@@ -133,7 +140,8 @@ describe("how things are found", () => {
     }
     expect(pickNoticed("great-station", "regard", "threshold", new Set())).toBe("sight.second-seam");
     expect(pickNoticed("great-station", "regard", "rest", new Set())).toBe("sight.missing-berth");
-    expect(pickNoticed("people", "regard", "rest", new Set(["sight.empty-chair"]))).toBeNull();
+    const everythingInPeople = new Set(STORY_TRIGGERS.filter((t) => t.how === "regard" && t.world === "people").map((t) => t.entryId));
+    expect(pickNoticed("people", "regard", "rest", everythingInPeople)).toBeNull();
   });
   it("bands the local day into the seven Hours with no gap", () => {
     const seen = new Set<string>();
@@ -145,5 +153,26 @@ describe("how things are found", () => {
     expect(npcGifts("wayfarer", 1, new Set())).toEqual(["obj.doorkeepers-nail"]);
     expect(npcGifts("wayfarer", 5, new Set(["obj.doorkeepers-nail"]))).toEqual([]);
     expect(npcGifts("broker", 1, new Set())).toEqual([]);
+  });
+});
+
+import { STORY_REACTIONS, reactionBetween, reactionFor } from "./storyReactions.js";
+import { NPC_CAST } from "./npcs.js";
+
+describe("Item Reactions", () => {
+  it("belong to people who exist, about things that exist, in one short sideways line", () => {
+    const ids = new Set(STORY.entries.map((e) => e.id));
+    const cast = new Set(NPC_CAST.map((c) => c.id));
+    for (const r of STORY_REACTIONS) {
+      expect(cast.has(r.npc), r.npc).toBe(true);
+      expect(ids.has(r.holds), r.holds).toBe(true);
+      expect(r.line.split(/\s+/).length).toBeLessThanOrEqual(30);
+      expect(r.line).not.toMatch(/\d/);
+    }
+  });
+  it("only fire for what you hold, and never require giving anything up", () => {
+    expect(reactionFor("keeper", new Set())).toBeNull();
+    expect(reactionFor("keeper", new Set(["relic.witness-seed"]))?.line).toMatch(/water/);
+    expect(reactionBetween("keeper", "relic.harbor-nail")).toBeNull(); // the server refuses a pairing that does not exist
   });
 });

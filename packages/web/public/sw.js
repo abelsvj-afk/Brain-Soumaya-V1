@@ -41,6 +41,11 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // let cross-origin pass through
+  // Lore narration clips: public canon audio the server has already voiced once. Kept on the device so a line you have heard plays again with no network.
+  if (isNarrationClip(url) && !req.headers.has("range")) {
+    e.respondWith(narrationClip(e, req, url));
+    return;
+  }
   if (url.pathname.startsWith("/api/")) return; // never cache live brain data
 
   // App navigations: network-first so deploys show up; cached shell when offline.
@@ -85,6 +90,39 @@ self.addEventListener("fetch", (e) => {
       .catch(() => caches.match(req)),
   );
 });
+
+function isNarrationClip(url) {
+  return url.pathname.startsWith("/api/story/narration/");
+}
+
+/** A short stable hash — the cache key carries WHICH BRAIN asked, so a shared device never plays one brain's unfound lore to another. */
+function tag(str) {
+  let x = 2166136261;
+  for (let i = 0; i < str.length; i++) x = Math.imul(x ^ str.charCodeAt(i), 16777619);
+  return (x >>> 0).toString(36);
+}
+
+/**
+ * Cache-first for narration (docs/specs/lore-narration-2026-10-30.md §5). The page puts a hash of the exact words in the URL (`t=`), so changed words are a different key and
+ * a stale clip can never be spoken over new text. Only a real 200 audio clip is kept — the server's 204 ("read it yourself") and every error pass straight through. Offline, a
+ * clip already heard keeps playing; a request for one never heard simply fails, and the page falls back to its own voice.
+ */
+async function narrationClip(e, req, url) {
+  let cache;
+  try {
+    cache = await caches.open(ASSET_CACHE);
+  } catch {
+    return fetch(req);
+  }
+  const key = new Request(url.origin + "/__lore-clip/" + tag(req.headers.get("x-space-id") || "") + url.pathname + url.search);
+  const hit = await cache.match(key).catch(() => undefined);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.status === 200 && /audio\//i.test(res.headers.get("content-type") || "")) {
+    e.waitUntil(cache.put(key, res.clone()).catch(() => {}));
+  }
+  return res;
+}
 
 function isHeavyAsset(url) {
   return url.pathname.endsWith(".glb") || url.pathname.startsWith("/draco/") || url.pathname.startsWith("/basis/");

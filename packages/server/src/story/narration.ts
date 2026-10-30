@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COMPANION_FORM, CURRENT_KEYS, STORY_ENTRY_BY_ID, pickText, storySecondReading, type CurrentKey, type Register } from "@brain/shared";
+import { COMPANION_FORM, CURRENT_KEYS, STORY_ENTRY_BY_ID, pickText, storySecondReading, type CurrentKey, type Register, type VoiceRole } from "@brain/shared";
 
 /**
  * Lore narration (docs/specs/lore-narration-2026-10-30.md). The lore is PUBLIC canon, identical for every player, so each line is voiced ONCE per (voice, model, register, text) and
@@ -13,7 +13,10 @@ const API = "https://api.elevenlabs.io/v1";
 
 export interface NarrationConfig {
   apiKey: string;
+  /** The narrator's voice — every role without a voice of its own is read in this one. */
   voiceId: string;
+  /** The voice for a speaking role (`LORE_TTS_VOICE_<ROLE>`), else the narrator's. */
+  voiceFor: (role: VoiceRole) => string;
   modelId: string;
   /** Characters of NEW synthesis allowed per calendar month (cached replays are free). */
   monthlyChars: number;
@@ -32,6 +35,7 @@ export function narrationConfig(env: Env = process.env): NarrationConfig | null 
   return {
     apiKey,
     voiceId,
+    voiceFor: (role) => (role !== "narrator" ? env[`LORE_TTS_VOICE_${role.toUpperCase()}`]?.trim() : undefined) || voiceId,
     // Narration is cached forever, so quality beats the Telegram replies' latency-tuned model.
     modelId: env.LORE_TTS_MODEL_ID?.trim() || "eleven_multilingual_v2",
     monthlyChars: Number.isFinite(cap) && cap > 0 ? cap : 200_000,
@@ -98,11 +102,12 @@ export function createNarrator(deps: NarratorDeps) {
 
   return {
     /** The clip for these words in this register, from the shared cache or (once) from ElevenLabs. Null = no audio; the client speaks it itself. */
-    async narrate(text: string, register: Register): Promise<Narrated | null> {
+    async narrate(text: string, register: Register, role: VoiceRole = "narrator"): Promise<Narrated | null> {
       const cfg = narrationConfig(env);
       if (!cfg) return null;
       const settings = NARRATION_SETTINGS[register];
-      const key = createHash("sha256").update([cfg.voiceId, cfg.modelId, register, JSON.stringify(settings), text].join("\n")).digest("hex");
+      const voiceId = cfg.voiceFor(role);
+      const key = createHash("sha256").update([voiceId, cfg.modelId, register, JSON.stringify(settings), text].join("\n")).digest("hex");
       try {
         if (existsSync(clipPath(key))) return { audio: readFileSync(clipPath(key)), contentType: "audio/mpeg", key };
       } catch {
@@ -116,7 +121,7 @@ export function createNarrator(deps: NarratorDeps) {
           return null;
         }
         try {
-          const res = await fetchImpl(`${API}/text-to-speech/${encodeURIComponent(cfg.voiceId)}?output_format=mp3_44100_64`, {
+          const res = await fetchImpl(`${API}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_64`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "audio/mpeg", "xi-api-key": cfg.apiKey },
             body: JSON.stringify({ text, model_id: cfg.modelId, voice_settings: settings }),

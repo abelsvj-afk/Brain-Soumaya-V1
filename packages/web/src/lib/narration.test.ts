@@ -32,8 +32,8 @@ describe("reading the lore aloud", () => {
     off();
     expect(how).toBe("voice");
     const url = (afetch as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
-    expect(url).toBe("/api/story/narration/obj.kiths-drawing?register=grave&tide=weight");
-    expect(url).not.toContain("words");
+    expect(url).toMatch(/^\/api\/story\/narration\/obj\.kiths-drawing\?register=grave&tide=weight&t=[0-9a-z]+$/);
+    expect(url).not.toContain("words"); // a hash of the words, never the words
     expect(speak).toHaveBeenCalledWith("The words.", undefined, expect.any(Object));
     expect(events).toEqual([true, false]); // the bed ducks while it reads, and comes back
   });

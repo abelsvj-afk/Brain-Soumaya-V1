@@ -7,6 +7,7 @@ import { useStoryFlavor } from "../hooks/useStoryFlavor.js";
 import { BOOK_H, BOOK_W, KIND_WORD, brightness, entryWords, skyLayout } from "../lib/storyBook.js";
 import { getNarrationMode, playNarration, setNarrationMode, stopNarration, type NarrationMode } from "../lib/narration.js";
 import { useEffect } from "react";
+import { sentenceAt, splitCaptionSentences } from "../lib/captions.js";
 
 const BY_ID = new Map(STORY.entries.map((e) => [e.id, e]));
 const worldWord = (w: string) => (w === "anywhere" ? "anywhere" : (WORLD_NAMES[w] ?? w));
@@ -50,6 +51,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
   const [laying, setLaying] = useState<string | null>(null);
   const [said, setSaid] = useState("");
   const [speaking, setSpeaking] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const now = Date.now();
 
@@ -90,11 +92,12 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
     if (speaking) {
       stopNarration();
       setSpeaking(false);
+      setProgress(null);
       return;
     }
     setSpeaking(true);
-    void playNarration({ entryId: entry.id, register: flavor.register, tide: flavor.tide.first, text, onEnd: () => setSpeaking(false) }).then((how) => {
-      if (how === "none") setSpeaking(false);
+    void playNarration({ entryId: entry.id, register: flavor.register, tide: flavor.tide.first, text, onProgress: setProgress, onEnd: () => { setSpeaking(false); setProgress(null); } }).then((how) => {
+      if (how === "none") { setSpeaking(false); setProgress(null); }
     });
   };
   // A find that opened the Book (narration "on") begins reading as soon as its words are ready. Leaving the Book stops it.
@@ -179,6 +182,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
                 note={draft?.id === sel.id ? draft.text : noteOf(sel.id)}
                 laid={book.links.filter((l) => l.a === sel.id || l.b === sel.id).map((l) => (l.a === sel.id ? l.b : l.a))}
                 speaking={speaking}
+                progress={progress}
                 canListen={mode !== "off"}
                 laying={laying === sel.id}
                 onListen={() => listen(sel, [entryWords(sel, foundSet, flavor).text, entryWords(sel, foundSet, flavor).second].filter(Boolean).join(" "))}
@@ -231,6 +235,7 @@ function FoundCard(p: {
   note: string;
   laid: string[];
   speaking: boolean;
+  progress: number | null;
   canListen: boolean;
   laying: boolean;
   onListen: () => void;
@@ -247,8 +252,7 @@ function FoundCard(p: {
       <p className="book-meta">
         {KIND_WORD[entry.kind]} · {worldWord(entry.world)}
       </p>
-      <p className="book-text">{words.text ?? "It is here. The words for it have not come yet."}</p>
-      {words.second && <p className="book-text book-second">{words.second}</p>}
+      <Caption text={words.text ?? "It is here. The words for it have not come yet."} second={words.second} progress={p.speaking ? p.progress : null} />
       <div className="book-actions">
         {p.canListen && words.text && (
           <button type="button" onClick={p.onListen}>
@@ -281,6 +285,25 @@ function FoundCard(p: {
       <button type="button" className="book-save" onClick={p.onSaveNote}>
         Keep the note
       </button>
+    </>
+  );
+}
+
+/** The words, with the sentence being read marked (underlined and heavier — never colour alone). With no voice playing it is just the text. */
+function Caption({ text, second, progress }: { text: string; second: string | null; progress: number | null }) {
+  const a = splitCaptionSentences(text);
+  const b = second ? splitCaptionSentences(second) : [];
+  const now = sentenceAt([...a, ...b], progress);
+  const render = (list: string[], offset: number) =>
+    list.map((s, i) => (
+      <span key={i} className={now === offset + i ? "book-now" : undefined} aria-current={now === offset + i ? "true" : undefined}>
+        {s}{" "}
+      </span>
+    ));
+  return (
+    <>
+      <p className="book-text">{render(a, 0)}</p>
+      {b.length > 0 && <p className="book-text book-second">{render(b, a.length)}</p>}
     </>
   );
 }

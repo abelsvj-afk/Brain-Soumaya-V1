@@ -18,7 +18,7 @@ const DEEP = "sight.missing-stratum"; // regard · deep-past
 const SEAM = "sight.second-seam"; // regard · great-station
 const NAIL = "obj.doorkeepers-nail"; // npc wayfarer · great-station
 const HARBOR_NAIL = "relic.harbor-nail"; // relic · great-station
-const ANYWHERE = "obj.follower-ribbon"; // not released yet; used where only the Book matters
+const ANYWHERE = "obj.follower-ribbon"; // used where only the Book matters (granted directly)
 const ANOTHER = "sight.blank-nameplate";
 
 let handle: DbHandle;
@@ -61,7 +61,7 @@ describe("finds", () => {
     expect(() => repo().find(DEEP, "telepathy", at)).toThrow(/source/);
     expect(() => repo().find(DEEP, "listen", at)).toThrow(/cannot be found that way/); // it is regarded, not heard
     expect(() => repo().find(DEEP, "npc:wayfarer", at)).toThrow(/cannot be found that way/);
-    expect(() => repo().find("obj.follower-ribbon", "regard", at)).toThrow(/cannot be found that way/); // not released yet
+    expect(() => repo().find("obj.follower-ribbon", "listen", at)).toThrow(/cannot be found that way/); // a ribbon is regarded, not heard
   });
 
   it("checks a find against where the travel ledger says the ship is", () => {
@@ -218,7 +218,7 @@ describe("/api/story over HTTP", () => {
   it("refuses forged and malformed input with 4xx, and keeps brains apart", async () => {
     expect((await call("/find", { method: "POST", body: { entryId: "obj.nope", source: "regard" } })).status).toBe(404);
     expect((await call("/find", { method: "POST", body: { entryId: "sight.missing-stratum", source: "regard" } })).status).toBe(403); // at home, not there
-    expect((await call("/find", { method: "POST", body: { entryId: "obj.follower-ribbon", source: "regard" } })).status).toBe(403); // no trigger
+    expect((await call("/find", { method: "POST", body: { entryId: "obj.follower-ribbon", source: "listen" } })).status).toBe(403); // wrong way to find it
     expect((await call("/find", { method: "POST", body: { nonsense: 1 } })).status).toBe(400);
     expect((await call("/note", { method: "PUT", body: { entryId: "obj.kiths-drawing", note: "x" } })).status).toBe(403);
     expect(((await (await call("/book", { space: otherId })).json()) as { finds: unknown[] }).finds).toEqual([]);
@@ -256,6 +256,12 @@ describe("/api/story/narration over HTTP", () => {
     await fetch(`${base}/api/story/find`, { method: "POST", headers: { "Content-Type": "application/json", "x-space-id": spaceId }, body: JSON.stringify({ entryId: "obj.doorkeepers-nail", source: "npc:wayfarer" }) });
     const res = await get("/narration/obj.doorkeepers-nail?register=grave&tide=weight");
     expect(res.status).toBe(204);
+  });
+  it("a reaction clip: only a pairing the canon has, and only if you hold the thing", async () => {
+    expect((await get("/narration/react/keeper?holds=relic.harbor-nail")).status).toBe(404); // the Keeper has nothing to say about that
+    expect((await get("/narration/react/wayfarer?holds=relic.harbor-nail")).status).toBe(403); // real pairing, but not held
+    await fetch(`${base}/api/story/find`, { method: "POST", headers: { "Content-Type": "application/json", "x-space-id": spaceId }, body: JSON.stringify({ entryId: "obj.dorrows-page", source: "npc:broker" }) });
+    expect((await get("/narration/react/broker?holds=obj.dorrows-page")).status).toBe(204); // held, but no key in tests: read it yourself
   });
   it("serves the flavour key as words and labels only", async () => {
     const j = (await (await get("/flavor")).json()) as { on: boolean; key: { register: string; tide: { first: string }; lean: string[]; hour: string } };

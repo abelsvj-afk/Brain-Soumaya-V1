@@ -7,19 +7,21 @@
  *
  * The key is read from the environment only (a Fly secret) and never written anywhere.
  */
-import { STORY_ENTRIES } from "../packages/shared/src/index.js";
+import { STORY_ENTRIES, STORY_REACTIONS } from "../packages/shared/src/index.js";
 import { createNarrator, narrationConfig } from "../packages/server/src/story/narration.js";
-import type { Register } from "../packages/shared/src/index.js";
+import type { Register, VoiceRole } from "../packages/shared/src/index.js";
 
 const REGISTERS: Register[] = ["plain", "warm", "grave"];
-const lines = new Map<string, { id: string; register: Register; text: string }>();
+const lines = new Map<string, { id: string; register: Register; text: string; role: VoiceRole }>();
 for (const e of STORY_ENTRIES) {
   if (!e.text || e.retired) continue;
   for (const register of REGISTERS) {
     const text = e.text[register] ?? e.text.plain;
-    lines.set(`${register}|${text}`, { id: e.id, register, text }); // identical wording voiced once
+    lines.set(`narrator|${register}|${text}`, { id: e.id, register, text, role: "narrator" }); // identical wording voiced once
   }
 }
+// What people say about what you hold, each in their own voice.
+for (const r of STORY_REACTIONS) lines.set(`${r.role}|plain|${r.line}`, { id: `${r.npc} on ${r.holds}`, register: "plain", text: r.line, role: r.role });
 const chars = [...lines.values()].reduce((n, l) => n + l.text.length, 0);
 console.log(`${lines.size} lines, ${chars.toLocaleString()} characters to voice at most (cached lines cost nothing).`);
 
@@ -36,7 +38,7 @@ async function main(): Promise<void> {
   const narrator = createNarrator({ dir: process.env.LORE_AUDIO_DIR ?? "./lore-audio" });
   let ok = 0;
   for (const l of lines.values()) {
-    const clip = await narrator.narrate(l.text, l.register);
+    const clip = await narrator.narrate(l.text, l.register, l.role);
     if (clip) ok++;
     else console.error(`  not voiced: ${l.id} (${l.register})`);
   }

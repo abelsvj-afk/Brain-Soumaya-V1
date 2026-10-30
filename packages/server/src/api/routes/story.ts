@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { spaceOf } from "../middleware.js";
+import { reactionBetween } from "@brain/shared";
 import { StoryError, StoryRepo } from "../../story/story.js";
 import { computeFlavor, setFlavorOn } from "../../story/flavor.js";
 import { createNarrator, isTide, narrationText, type Narrator } from "../../story/narration.js";
@@ -88,6 +89,29 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
 
   // Narration: the clip for an entry the brain has FOUND. The server speaks canon text only — the request names an entry, never words. 204 = no audio (the client reads it
   // with captions and the browser's own voice).
+  // A person's reaction to something you hold, in THEIR voice. Names the person and the held thing, never words; only a pairing the canon has, and only if you hold it.
+  r.get("/narration/react/:npc", async (req, res) => {
+    const reaction = reactionBetween(String(req.params.npc), String(req.query.holds ?? ""));
+    if (!reaction) {
+      res.status(404).json({ error: "They have nothing to say about that." });
+      return;
+    }
+    const found = new Set(repo(res).book().finds.map((f) => f.entryId));
+    if (!found.has(reaction.holds)) {
+      res.status(403).json({ error: "You are not holding that." });
+      return;
+    }
+    const clip = await narrator.narrate(reaction.line, "plain", reaction.role);
+    if (!clip) {
+      res.status(204).end();
+      return;
+    }
+    res.setHeader("Content-Type", clip.contentType);
+    res.setHeader("ETag", `"${clip.key}"`);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(clip.audio);
+  });
+
   r.get("/narration/:entryId", async (req, res) => {
     const entryId = String(req.params.entryId);
     const register = req.query.register === "warm" || req.query.register === "grave" ? req.query.register : "plain";

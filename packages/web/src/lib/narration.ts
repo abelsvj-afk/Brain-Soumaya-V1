@@ -2,6 +2,7 @@ import type { CurrentKey, Register } from "@brain/shared";
 import { API, afetch } from "../api/http.js";
 import { speak, stopSpeaking } from "../voice.js";
 import { emitNarration } from "./narrationBus.js";
+import { FALLBACK_CHARS_PER_SECOND } from "./captions.js";
 
 /**
  * Reading the lore aloud (docs/specs/lore-narration-2026-10-30.md). The server voices canon text ONCE through ElevenLabs and shares the clip; here we ask for it by ENTRY (never
@@ -39,11 +40,21 @@ export function stopNarration(): void {
 }
 
 /** Resolve a clip URL for an entry, or null when the server has none (204) or anything fails. */
-async function clipFor(entryId: string, register: Register, tide: CurrentKey | undefined): Promise<string | null> {
+/** A short hash of the exact words, put in the URL so the device cache can never replay a clip over changed text (the server ignores it). */
+export function textTag(text: string): string {
+  let x = 2166136261;
+  for (let i = 0; i < text.length; i++) x = Math.imul(x ^ text.charCodeAt(i), 16777619);
+  return (x >>> 0).toString(36);
+}
+
+async function clipFor(entryId: string, register: Register, tide: CurrentKey | undefined, text: string, reaction?: { npc: string; holds: string }): Promise<string | null> {
   try {
     const q = new URLSearchParams({ register });
     if (tide) q.set("tide", tide);
-    const res = await afetch(`${API}/story/narration/${encodeURIComponent(entryId)}?${q.toString()}`);
+    q.set("t", textTag(text));
+    if (reaction) q.set("holds", reaction.holds);
+    const path = reaction ? `react/${encodeURIComponent(reaction.npc)}` : encodeURIComponent(entryId);
+    const res = await afetch(`${API}/story/narration/${path}?${q.toString()}`);
     if (res.status !== 200) return null;
     const blob = await res.blob();
     return blob.size > 0 ? URL.createObjectURL(blob) : null;
@@ -59,6 +70,10 @@ export interface NarrationOpts {
   /** The same words as on screen — spoken by the browser if no clip exists. */
   text: string;
   onEnd?: () => void;
+  /** A person's reaction to a held thing: voiced in THEIR voice (the server names the pairing; the words never leave the client). */
+  reaction?: { npc: string; holds: string };
+  /** 0..1 progress through the words, for captions that follow the voice. Exact for a clip; an estimate for the browser voice, which cannot report it. */
+  onProgress?: (fraction: number) => void;
 }
 
 /** Start reading. Returns which voice is used. Starting a new one stops the old. */
@@ -66,16 +81,22 @@ export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" 
   if (getNarrationMode() === "off") return "none";
   stopNarration();
   let finished = false;
+  let tick: number | null = null;
   const done = () => {
     if (finished) return;
     finished = true;
+    if (tick !== null) window.clearInterval(tick);
+    o.onProgress?.(1);
     emitNarration(false);
     current = null;
     o.onEnd?.();
   };
-  const url = await clipFor(o.entryId, o.register, o.tide);
+  const url = await clipFor(o.entryId, o.register, o.tide, o.text, o.reaction);
   if (url) {
     const audio = new Audio(url);
+    audio.ontimeupdate = () => {
+      if (audio.duration > 0) o.onProgress?.(audio.currentTime / audio.duration);
+    };
     audio.onended = () => {
       URL.revokeObjectURL(url);
       done();
@@ -101,6 +122,11 @@ export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" 
   }
   emitNarration(true);
   current = { stop: () => done() };
+  // The browser voice cannot say where it is, so the captions follow a steady estimate of its pace.
+  const startedAt = Date.now();
+  const estimateMs = Math.max(1500, (o.text.length / FALLBACK_CHARS_PER_SECOND) * 1000);
+  o.onProgress?.(0);
+  tick = window.setInterval(() => o.onProgress?.(Math.min(0.97, (Date.now() - startedAt) / estimateMs)), 200);
   speak(o.text, undefined, { onEnd: done });
   return "voice";
 }
