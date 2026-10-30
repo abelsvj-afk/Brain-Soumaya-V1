@@ -36,3 +36,7 @@ One universe throughout (indigo-black, warm gold + pale cyan, painterly), no tex
 ## Update — §14 filed (101 keepers)
 
 §14 Oru and the Siege of the First Light: consistent across all four and with §10's Oru (old, pale robes, hand to forehead, passing the ball of light to the witness-from-behind; edges dissolving into the Hush). The Dawnward now has a reference look: a great pale unfolded fan of light above a slim hull — v3 is the cleanest read of the silhouette; v1/v2 carry a visible hull under the fan, v4 spreads the fan horizontally. Cross-check any future Dawnward against v3 first. v4 came out portrait against the 16:9 ask (see item 13).
+
+## Update — §15 filed (105 keepers)
+
+§15 Calend closes the last door: Calend is recognisably the same man as §8/§10 in all four (wiry, patchwork coat with the unfinished burlap patch, wry tired face), on the wrong side of the door, pulling it shut against the Hush, farewell wave toward the fleet lights. The always-warm nail reads clearest in v2/v3 (small glowing nail held upright); v1 drives it horizontally into the frame, v4 holds it glowing against the door. The Latch: v2 makes the door-frame the ship's own front (closest to the Bible's door-shaped hull), v3/v4 set the frame on a long hull with a warm light bar/seam.
