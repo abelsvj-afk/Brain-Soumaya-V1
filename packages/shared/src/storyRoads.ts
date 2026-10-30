@@ -99,6 +99,70 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "She does not look at where you put it. The letter rests with her, thanked.",
   },
+  {
+    id: "road.last-knot", world: "scale", giver: "surveyor", title: "The Last Knot",
+    offer: "Hold this end of the cord while I measure the old station. There is a knot in it that I was told never to tie.",
+    steps: [
+      S("cord", "Find the cord that measured what was lost.", find("obj.measurers-cord")),
+      S("again", "Hold the cord for her once more.", meet("surveyor", 2)),
+    ],
+    gift: "She names the untied knot, and tells you not to tie it. The knot waits.",
+  },
+  {
+    id: "road.buttons", world: "people", giver: "tamsin", title: "Buttons",
+    offer: "I found a button in the ward and cannot think whose it is. Would you ask?",
+    steps: [
+      S("ward", "Find the ward where the cots are made up.", find("sight.tamsins-ward")),
+      S("laugh", "Stay until a patient laughs.", find("sight.ruels-laugh")),
+    ],
+    gift: "Every patient says the button is not theirs. She puts it in her pocket with the others.",
+  },
+  {
+    id: "road.coat-in-a-locked-room", world: "great-station", giver: "hesk", title: "A Coat in a Locked Room",
+    offer: "There is a coat in the store-room I cannot place. Tell me if you meet anyone who describes one.",
+    steps: [
+      S("coat", "Find the coat on its hook.", find("obj.linnets-coat")),
+      S("drawing", "Find the drawing of a woman in it.", find("obj.kiths-drawing")),
+    ],
+    gift: "He listens to what the child drew, and says nothing, and sets down the soldier he was polishing.",
+  },
+  {
+    id: "road.ledger-of-the-planets", world: "great-station", giver: "broker", title: "A Blank Line",
+    offer: "Every page of the Great Book ends in one empty line. The binder calls it a printing error. Would you look at it for me?",
+    steps: [
+      S("page", "Find the page that owes one unrecorded.", find("obj.dorrows-page")),
+      S("line", "Find the line no one writes on.", find("obj.blank-line")),
+    ],
+    gift: "He does not ask what you saw. He turns the page, and his pen waits a moment longer than it needs to.",
+  },
+  {
+    id: "road.letters-late", world: "deep-past", giver: "pell", title: "Letters That Arrive Late",
+    offer: "Leave a note at the stair post. It will have been read before you wrote it.",
+    steps: [
+      S("ribbon", "Find the ribbon tied a day ahead of you.", find("obj.follower-ribbon")),
+      S("star", "Find the star whose light is late.", find("sight.hung-star")),
+    ],
+    gift: "She is, for once, not behind. She nods as though she had been waiting.",
+  },
+  {
+    id: "road.seed-without-a-name", world: "growing-place", giver: "keeper", title: "Do Not Water What You Cannot Name",
+    offer: "The seed has not sprouted. Bring me a name for it, any name, and I will tell you if it is the one.",
+    steps: [
+      S("seed", "Find the seed that was planted by a person.", find("relic.witness-seed")),
+      S("winter", "Find the corner where it is always a little winter.", find("sight.marens-winter")),
+    ],
+    gift: "It is not the name, she says, and she is glad you tried. She goes on tending it.",
+  },
+  {
+    id: "road.berth-count", world: "great-station", giver: "wim", title: "The Berth Count",
+    offer: "Three of us count the berths and get three answers. Would you carry what each of us says to the next?",
+    steps: [
+      S("ring", "Find the ring whose berth is paid every year.", find("relic.mooring-ring")),
+      S("payments", "Read the log of the berth where no ship has ever tied.", find("obj.anonymous-payments")),
+      S("page", "Find the page the Ledger keeps for the unrecorded.", find("obj.dorrows-page")),
+    ],
+    gift: "Each of the three is right about one thing. None of them is wrong.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

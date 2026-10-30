@@ -20,3 +20,4 @@ Talk panel: when the giver has a road to offer, an extra choice "Is there someth
 
 ## First roads (this slice, all signals already exist)
 2 A Door Closed (Hesk) · 3 The Seventh Berth (Wim) · 4 What the Wayfarer Left in the Coat (Calend) · 5 The Tall Tale's Second Verse (Ossian) · 6 The Cartographer's Margin (Ilsabet) · 11 The Open Alcove (Archivist) · 13 The Hymn That Rests (Ysmerel) · 14 The Penitent's Shelf (Archivist). Roads whose steps need new scene interaction (carry a patch, float a boat, count layers) wait for their own scene work.
+Added the same day: The Last Knot (Surveyor) · Buttons (Tamsin) · A Coat in a Locked Room (Hesk) · A Blank Line (Dorrow) · Letters That Arrive Late (Pell) · Do Not Water What You Cannot Name (Keeper) · The Berth Count (Wim).
