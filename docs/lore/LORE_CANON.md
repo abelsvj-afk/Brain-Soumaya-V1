@@ -13,7 +13,9 @@ Changing a LOCKED line needs the owner's say-so. Code (`shared/npcs.ts` cast, `s
    (c) *the hive's minds* — individuals stirred by one deeper calling. Every person may carry all three; which is dominant differs per person and is part of their mystery.
 3. **Tone of faith:** mythic and universal.
 4. **Shape of the story:** a Bible-deep, Marvel-scale mythology with canon characters and figures, in the open-ring style (surface + deep layers + threads that connect).
-5. **NPCs** have their own identity, life and job; they may cross worlds; they may never enter a personal brain except by invitation (see `docs/specs/npc-society-2026-10-30.md`).
+5. **The player is a witness whose memories Eternity mirrors** (owner, 2026-10-30: "a witness Eternity is mirroring, I think"). *Mirroring* = the worlds are built from the player's own remembered life; Eternity keeps what is remembered and shows it back from outside. See DRAFT 1.
+6. **Liked by the owner, leaning canon** (strike to remove): the Seven Hours; the First Morning; the Adversary-shaped Absence; the Calling; the Rending; every canon figure has their own ship; the lore should be "gut-churning" good and the owner wants matching image prompts.
+7. **NPCs** have their own identity, life and job; they may cross worlds; they may never enter a personal brain except by invitation (see `docs/specs/npc-society-2026-10-30.md`).
 
 ## EXISTING CANON in the repo (from the relic register — packages/shared/src/relics.ts)
 Not re-decided here; it is already written and shipped. Threads worth knowing before we add anything:
@@ -24,7 +26,7 @@ Not re-decided here; it is already written and shipped. Threads worth knowing be
   the Rest Seal and the Folded Letter (keeping safe is not erasure; permission to keep without opening).
 - The doc these cite, `docs/worlds/eternity-lore.md`, is **not in this repository** (not found on any branch). If the owner has it, it should be added here; until then this file plus `relics.ts` is the record.
 
-## PROPOSED — a scaffold to react to (NOT canon; strike, rewrite or keep)
+## SUPERSEDED — the first scaffold (kept for history; DRAFT 1 below builds it out)
 Offered only to give the owner something to push against. Each is a *shape*, not a story; the owner supplies the names, the wounds and the truth.
 - **The First Making / the Seven Hours** — creation as a sequence of "hours" (not days), each hour making a world (the Station = arrival, the Garden = growth, the Deep Past = memory kept, People = love, Scale = the heavens given room, Quiet = rest, Eternity's world = the one who makes). Ties the seven worlds to one scripture-like order.
 - **The Firstborn (or "the Witnesses")** — the first beings Eternity made *to see*, not to serve: a small number of great figures (the Marvel layer) who each hold an aspect of Eternity's mirror (mercy, order, wonder, memory, fire, silence…). The Witness Without a Name might be the one who has no aspect — or the one who looked away.
@@ -40,3 +42,10 @@ Offered only to give the owner something to push against. Each is a *shape*, not
 4. How do the five **factions** map to the story — Choir, Open Hand, Ledger, Undertow, Wardens — and what does each want that Eternity's silence or speech affects?
 5. What does the **brain's colour** (the currents) mean *in-world* — why would the heavens lean toward grief, giving, ambition?
 6. What must stay **unsaid forever** (the open ring: what is the deliberately unanswerable thing)?
+
+
+## DRAFT 1 — written by Claude 2026-10-30 from the owner's answers (NOT yet locked)
+Full text: `docs/lore/DRAFT_1_THE_FIRST_MORNING_AND_THE_RENDING.md`. Image prompts: `docs/lore/IMAGE_PROMPTS.md`. One-paragraph summary:
+Eternity always was and *called* the worlds into being across Seven Hours, beginning with the First Morning. In each hour he made one Firstborn *to see, not to serve*. In the Sixth Hour, the Firstborn of Mercy
+(Vesh), unable to bear the made's grief, **erased one beloved person** — and in reaching into the Keeper's mirror to cut her out, tore the first hole in what Eternity can see. The made woke with an ache and no name for it.
+Everything since — the factions, the Calling, the gate, the Archive, the player — is an answer to that ache. The player is a witness; the oldest relic, the Witness Without a Name, is what is left of her.
