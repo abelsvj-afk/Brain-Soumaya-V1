@@ -7990,3 +7990,6 @@ body.in-transit .perf-suggest { display: none; }
 }
 .place-card p { margin: 6px 0 10px; line-height: 1.5; font-style: italic; }
 .place-inspect:focus-visible { outline: 2px solid #ffe9a8; outline-offset: 2px; }
+
+/* The Book's pictures: a painting above a found entry's words; never wider than the card, never taller than a third of the screen. */
+.book-art { display: block; width: 100%; max-height: 34vh; object-fit: cover; border-radius: 8px; margin: 0 0 10px; }

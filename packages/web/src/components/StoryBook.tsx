@@ -8,6 +8,7 @@ import { BOOK_H, BOOK_W, KIND_WORD, brightness, entryWords, skyLayout } from "..
 import { getNarrationMode, playNarration, setNarrationMode, stopNarration, type NarrationMode } from "../lib/narration.js";
 import { useEffect } from "react";
 import VoiceConsole from "./VoiceConsole.js";
+import { STORY_ART } from "../lib/storyArt.js";
 import { getNarrationStatus } from "../api/story.js";
 import { sentenceAt, splitCaptionSentences } from "../lib/captions.js";
 
@@ -196,6 +197,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
 
         {sel && (
           <section className="book-card" aria-label={selFind ? sel.title : "A shape waiting"}>
+            {selFind && STORY_ART[sel.id] && <img className="book-art" src={STORY_ART[sel.id]!.src} alt={STORY_ART[sel.id]!.alt} loading="lazy" decoding="async" />}
             {selFind ? (
               <FoundCard
                 entry={sel}

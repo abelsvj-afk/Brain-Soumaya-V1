@@ -91,3 +91,22 @@ describe("The Sixteenth's Book", () => {
     expect(card.textContent).not.toMatch(/Station|Deep Past|Growing|Quiet|Scale|People|Eternity/);
   });
 });
+
+describe("The Book's pictures", () => {
+  it("shows a painting only once its entry is found, and only for entries that have an approved one", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("sight.blank-nameplate"), find("obj.doorkeepers-nail")], links: [], notes: [] });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".book-point.is-found").length).toBe(2));
+    fireEvent.click(screen.getByLabelText(/The Blank Nameplate/));
+    expect(container.querySelector(".book-art")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/The Doorkeeper's Nail/));
+    expect(container.querySelector(".book-art")).toBeNull(); // no approved picture for it: just words
+  });
+  it("never shows a picture for an entry that has not been found", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [] });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".book-point").length).toBeGreaterThan(40));
+    fireEvent.click(container.querySelector(".book-point")!);
+    expect(container.querySelector(".book-art")).toBeNull();
+  });
+});

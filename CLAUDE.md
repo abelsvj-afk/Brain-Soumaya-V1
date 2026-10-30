@@ -829,6 +829,14 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the lore forbids saying. Talking counts as a meeting (20-minute cooldown). Look at: whether the lines read as the lore's people (they are mine — rewrite freely, they are data in
   `npcDialogue.ts`), the panel's height over the scene on a short phone, and that the lag prompt can sit on top of it. Not built: voicing the lines (role voices exist; needs an endpoint
   that names a line, not text), the harbor controller as a conversation, S4 places with a past, S5 the world breathes.
+- **Living worlds S4+S5a — places with a past; pictures in the Book (2026-10-31) — S4 MEASURED in a real browser (Station: flew to the Drydock tile → "Look closely: The Ring" offered → card text
+  shown, card at 412×915 = 288×235 px bottom sheet, 0 errors); shared 83 / web tests green; the pictures are unit-tested, NOT yet seen on a real screen** (shared/placeLore.ts, web
+  graph/storySpots.ts `inspectablesHere`, WorldsSurface.tsx "Look closely" offer + card, web lib/storyArt.ts + public/lore/*.webp, StoryBook.tsx; spec
+  `docs/specs/living-worlds-dialogue-2026-10-31.md`): eleven landmark passages (Station ring/gantry/annexes · Deep Past rim/stair · Scale station/planets · Quiet threshold/field · People hearthfield ·
+  the witness tree) read in item-description voice when she is parked beside the landmark — scenery only, finds/scores nothing; every anchor is a landmark the lore spots already measured
+  (a test pins it). The Book shows a painting above a FOUND entry's words for the four canon picks approved by eye (Sleepwalker v3, Companion v5, Blank Nameplate v5, Lullaby v5) as 1024 px WebP
+  copies (~35–55 KB each) — the 270 MB originals stay out of the app. Not built: pictures for the other entries (each needs an approved pick), voicing, S5's Hours tint/rumours, Eternity passages.
+  Look at: whether "Look closely" feels discoverable (it only appears beside a landmark), the card over the scene on a short phone, picture crops (object-fit: cover, max 34 vh).
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
