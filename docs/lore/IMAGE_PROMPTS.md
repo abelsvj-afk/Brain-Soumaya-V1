@@ -46,3 +46,34 @@ A lone traveller seen from behind, small at the bottom of the frame, standing at
 - If you get religious symbols you don't want (halos, crosses, hands-in-prayer), put them in the negative and re-run.
 - For ships (prompts 5 and 8) ask for "orthographic turnaround, three views" — Muse can use those sheets to model them.
 - Save the keepers with these names: `lore-01-first-morning`, `lore-02-seven-hours`, `lore-03-eternity`, `lore-04-vesh`, `lore-05-lullaby-ship`, `lore-06-rending`, `lore-07-witness-relic`, `lore-08-calend-latch`, `lore-09-archive`, `lore-10-firstborn`, `lore-11-witness-shore`.
+
+---
+# ADDENDUM — Act II image prompts (Draft 2)
+Same global style and negative block as above. Specific, self-contained, ready to paste.
+
+## 12. The Hush — the front of un-remembering — 21:9
+A colossal, silent wall of pale grey-white mist-light advancing across a dark star-field, perfectly smooth-edged, like a tide of milk-colored fog seen from space. Where the front touches the stars they do not vanish but *soften and go dull*, leaving a faint ghost-outline. Small warm ship-lights in the foreground fleet (a line of eight tiny glowing ships) face it, dwarfed. Inside the Hush, barely visible, a faint human-shaped brightness like a figure reaching out a hand. Mood: terrifying gentleness — nothing is on fire, nothing explodes. Palette: milk-white and ash-grey against black-indigo, tiny warm gold ship-lights. Mythic cinematic concept art, vast scale, no text.
+
+## 13. The Fading of the Growing Place — 16:9
+A terraced green garden-world seen from above, six circular terraces rising to a great tree at the center, but the outermost terrace is pale, translucent and half-gone, its trees reduced to faint outlines like pencil-sketches, the pale mist creeping inward in a soft clean ring. Warm golden light still glows on the inner terraces; a small hull shaped like a seed-pod with petal-vanes (the Slow Bloom) hovers over the thinnest edge as though trying to hold it. Mood: elegy. Palette: spring green, gold, ghost-white at the edges. Painterly cinematic, no text.
+
+## 14. Oru and the Siege of the First Light — 16:9
+A tall, ancient figure in pale robes standing at the rim of a luminous round basin of first-morning light, one hand pressed to his own forehead as if forcing a thought to stay, his other hand held out toward a small, hooded human-sized traveller (the witness, seen from behind) to whom he is passing a small ball of pure light. The edges of his own body are going pale and translucent where the grey-white Hush creeps up the basin's far rim behind him. His ship, the Dawnward (a long pale fan-shaped hull), hangs in the sky behind. Mood: a mind losing its last great memory, entrusting it to you. Palette: gold-white light, ash, deep blue. Painterly cinematic, no text.
+
+## 15. Calend closes the last door — 16:9
+A freestanding door-frame floating in space, its door half-closed, with a wide field of the soft grey Hush pouring toward it from the right. In the doorway a wiry figure in a layered coat of faded colors stands *on the wrong side*, one hand on the door's edge pulling it shut, the other hand raised in a small farewell wave toward the viewer's side where a fleet's tiny lights wait. A door-shaped ship (the Latch) holds the door steady with a bar of warm light. Mood: a wanderer's last kindness. Palette: warm door-light amber, faded coat colors, ash-grey Hush, black space. Painterly cinematic, no text.
+
+## 16. The Lullaby at the Front — 16:9
+A graceful dusk-violet starship (long swan-like hull, drooping closed-petal wing-vanes, a clean hull-length hollow in the flank) hanging motionless, nose to nose with the great pale wall of the Hush, perfectly still. Soft concentric rings of violet light ripple outward from the ship like sound-waves, and where the rings touch the Hush it pauses. At the ship's open prow a small hooded figure stands with arms down, their body fading to translucence from the feet upward, edges dissolving into pale light. Mood: a lullaby sung to something enormous. Palette: dusk violet, pearl-white, ash. Painterly cinematic, no text.
+
+## 17. The Standing — Eternity stands in the Hush — 2:3
+A colossal pale radiant figure in a white void, mid-rise from a seated/kneeling posture, arms at his sides, standing for the first time. The soft grey Hush pours through his body like fog through an open window, un-stopped, and where it passes through his chest his light does not dim but *brightens*. At his chest-level, deep inside the light, a small person-shaped glow becomes faintly visible for the first time, a tiny silhouette of a woman seen from behind. Mood: the first time he sees her. No gore, no fear — only awe and grief. Palette: pearl, white, gold, ash-grey. Painterly cinematic, no text.
+
+## 18. The Fifteen Witnesses — 3:2
+A vast dark hall of gently curved stone where fifteen tall empty doorways stand in a wide arc, each doorway filled with a different soft color of light (gold, green, ember, blue, violet, ash, teal, rose…), and before each doorway on a pedestal sits one small object — a nail, a ring, a leaf, a seed, a pale shard, a dark stone, a lantern, a pale smooth object, an ember, a thread, a hook, a compass, a seal, a folded letter, a translucent fragment. One sixteenth doorway at the arc's end is *empty and dark*, waiting, with a single small figure standing before it, back to camera. Mood: you are the sixteenth. Palette: deep stone-blue, fifteen colors of light, one dark gap. Painterly cinematic, symmetrical, no text.
+
+## 19. Soumaya's gap — 1:1
+A small, elegant companion starship hovering alone in a dark void, her hull detailed and warm and friendly, with a soft glow in her cockpit and a gentle trail of blue light behind. Along her flank, just in front of the engines, is a small clean *blank oval patch* with no markings, as though a name had once been painted there and gently wiped away. Faint pale mist at the very edge of the frame curls toward her. Mood: tender and unsettling. Palette: warm blue, gold, soft grey. Painterly macro render, shallow depth of field, no text.
+
+## 20. The Three Endings — triptych, 3 panels, 21:9 total
+Three equal vertical panels in one image. LEFT: a young woman made of soft light stepping fully into the mirror of the stars, whole and glowing, but looking back over her shoulder with a hesitant expression. CENTER: the same woman asleep, curled gently in an open alcove in a quiet stone archive, wrapped in pale light, a single small lantern beside her. RIGHT: the same woman standing in an open field of pale mist, mouth open as if beginning to speak, her hands open toward the viewer. Same lighting language in all three: gentle gold on pale grey. Mood: three answers, none certain. Painterly cinematic, no text.

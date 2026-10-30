@@ -17,6 +17,9 @@ Changing a LOCKED line needs the owner's say-so. Code (`shared/npcs.ts` cast, `s
 6. **Liked by the owner, leaning canon** (strike to remove): the Seven Hours; the First Morning; the Adversary-shaped Absence; the Calling; the Rending; every canon figure has their own ship; the lore should be "gut-churning" good and the owner wants matching image prompts.
 7. **NPCs** have their own identity, life and job; they may cross worlds; they may never enter a personal brain except by invitation (see `docs/specs/npc-society-2026-10-30.md`).
 
+8. **LOCKED (owner, 2026-10-30, after Draft 1):** (a) **the Wayfarer is Calend, the Doorkeeper**, walking among the made; (b) **the Witness Without a Name is what remains of the erased woman** (the Unnamed); (c) **Vesh is sympathetic, not a villain** — the Hollow Mercy, a mercy that took the wrong thing.
+9. **LOCKED:** Draft 1's tale stays *exactly* as written (Seven Hours, the First Morning, the Calling, the Rending, the Firstborn and their ships, the factions as answers to the ache). New layers are **added on top**, never replacing it. A **Marvel-scale action layer** is wanted, plus deeper twists "that you'd never expect" (see DRAFT 2).
+
 ## EXISTING CANON in the repo (from the relic register — packages/shared/src/relics.ts)
 Not re-decided here; it is already written and shipped. Threads worth knowing before we add anything:
 - **The Witness Without a Name** — the oldest object; "marks the boundary between the one who makes and the worlds that remember him"; it is the **key to Eternity's gate** (with any two other relics).
@@ -49,3 +52,7 @@ Full text: `docs/lore/DRAFT_1_THE_FIRST_MORNING_AND_THE_RENDING.md`. Image promp
 Eternity always was and *called* the worlds into being across Seven Hours, beginning with the First Morning. In each hour he made one Firstborn *to see, not to serve*. In the Sixth Hour, the Firstborn of Mercy
 (Vesh), unable to bear the made's grief, **erased one beloved person** — and in reaching into the Keeper's mirror to cut her out, tore the first hole in what Eternity can see. The made woke with an ache and no name for it.
 Everything since — the factions, the Calling, the gate, the Archive, the player — is an answer to that ache. The player is a witness; the oldest relic, the Witness Without a Name, is what is left of her.
+
+
+## DRAFT 2 — Act II: the Hush, and the layers beneath (written 2026-10-30; adds to Draft 1, replaces nothing)
+Full text: `docs/lore/DRAFT_2_ACT_II_THE_HUSH.md`. Image prompts for it: `docs/lore/IMAGE_PROMPTS.md` §12–19. Awaiting the owner's lock, strike or rewrite on each numbered layer.
