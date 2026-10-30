@@ -25,6 +25,8 @@ export interface TravelState {
    *  Absent on an older server — the board then hides the gated
    *  world, never offers a journey the server would refuse. */
   eternityReachable?: boolean;
+  /** Whether the way to the Faded Ward stands open (the ward found in the People world) — the server's verdict; absent on an older server (read as closed). */
+  wardGateOpen?: boolean;
 }
 
 /**

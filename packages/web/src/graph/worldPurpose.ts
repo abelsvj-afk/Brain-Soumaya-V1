@@ -9,6 +9,7 @@ export const WORLD_PURPOSE: Readonly<Record<string, string>> = {
   "deep-past": "The Deep Past holds your older memories, the oldest at the bottom. Use Descend to walk down through time.",
   people: "The People world shows the people in your life as warm lights. Tap one to see what you share.",
   "quiet-archive": "Quiet is where memories you set aside rest. Nothing here asks anything of you.",
+  "faded-ward": "The Faded Ward is a long hall of resting people. Walk it slowly; nothing here asks anything of you.",
   scale: "Scale puts real objects at true size beside your ship. Fly to one to feel how big it is.",
   eternity: "This is Eternity's world. Use his gestures and tools, and he may answer in his own time.",
 };

@@ -10,6 +10,8 @@ import {
   ETERNITY_CHAIN_INTERMEDIATES,
   ETERNITY_CHAIN_LEGS,
   ETERNITY_WORLD_KEY,
+  FADED_WARD_GATE_ENTRY,
+  FADED_WARD_WORLD_KEY,
   NO_ETERNITY_HOLDINGS,
   PEOPLE_GATE_MIN_MEMORIES_EACH,
   PEOPLE_GATE_MIN_PEOPLE,
@@ -63,7 +65,7 @@ import {
  *  Eternity's world joins the list as a GATED world (B-01): it is on the
  *  chart, but depart() admits it only through the gate below — the
  *  allow-list alone never opens the way there. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", ETERNITY_WORLD_KEY];
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ETERNITY_WORLD_KEY];
 export const HOME_WORLD = "home";
 
 /** Plain-language refusals for the Eternity gate (B-01): a closed gate
@@ -79,6 +81,7 @@ export type TravelErrorCode =
   | "INVALID_KIND"
   | "UNKNOWN_DESTINATION"
   | "PEOPLE_GATE_CLOSED"
+  | "WARD_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
   | "JOURNEY_NOT_DEPARTED"
   | "ETERNITY_GATE_CLOSED"
@@ -418,6 +421,9 @@ export class TravelRepo implements JourneyBonusCreditor {
           "PEOPLE_GATE_CLOSED",
           "The People isn't open yet — it appears once your brain holds at least three people with two linked memories each, and one memory shared between two of them.",
         );
+      // The Faded Ward is a door in the story: it opens for a traveller who has found Tamsin's Ward (checked against the Book here, never by the client).
+      if (input.destination === FADED_WARD_WORLD_KEY && !this.wardGateOpen())
+        throw new TravelError("WARD_GATE_CLOSED", "The Faded Ward isn't open yet — it appears once you have found the ward in the People world.");
       // B-01 (Eternity's gate): the allow-list admits the world onto
       // the chart, but only the gate admits a traveller to it. The
       // credential first (key + two relics, or opened before), then the
@@ -681,6 +687,8 @@ export class TravelRepo implements JourneyBonusCreditor {
     /** Whether the People gate is open (Q1, P3-3) — the board offers
      *  People only when the server says so; the client never decides. */
     peopleGateOpen: boolean;
+    /** Whether the way to the Faded Ward stands open (the ward found in the People world) — the board offers it only when the server says so. */
+    wardGateOpen: boolean;
     eternityReachable: boolean;
   } {
     this.settleActive(nowMs);
@@ -689,8 +697,18 @@ export class TravelRepo implements JourneyBonusCreditor {
       currentWorld: this.deriveWorld(this.latestRow()),
       activeJourney: active ? this.map(active, nowMs) : null,
       peopleGateOpen: this.peopleGateOpen(),
+      wardGateOpen: this.wardGateOpen(),
       eternityReachable: this.eternityGateReachable(),
     };
+  }
+
+  wardGateOpen(): boolean {
+    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+    try {
+      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, FADED_WARD_GATE_ENTRY);
+    } catch {
+      return false; // a brain with no Book yet simply has not found it
+    }
   }
 
   /**

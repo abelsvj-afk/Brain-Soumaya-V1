@@ -46,6 +46,15 @@ export const PEOPLE_GATE_MIN_SHARED_MEMORIES = 1;
  */
 export const ETERNITY_WORLD_KEY = "eternity";
 
+/**
+ * The Faded Ward (docs/specs/seam-faded-ward-2026-10-31.md, owner "yes, build it" 2026-10-31): a long hall of cots that is a whole world. It is a door IN THE STORY, not a
+ * progression wall: it opens for a traveller who has found Tamsin's Ward in the People world (the server checks the Book; the deployment owner is exempt like every gate),
+ * and once opened it stays open. The usual warp cost applies; a warp home is free; drift is free.
+ */
+export const FADED_WARD_WORLD_KEY = "faded-ward";
+/** The Book entry whose finding opens the way (the ward seen from the People world). */
+export const FADED_WARD_GATE_ENTRY = "sight.tamsins-ward";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -96,6 +105,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   "quiet-archive": { x: 130, y: 620 },
   scale: { x: 850, y: 620 },
   eternity: { x: 905, y: 505 },
+  "faded-ward": { x: 900, y: 420 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

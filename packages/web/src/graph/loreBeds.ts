@@ -15,6 +15,7 @@ export function bedForWorld(world: string | null | undefined): LoreBed {
     case "deep-past":
       return "morning";
     case "quiet-archive":
+    case "faded-ward":
       return "hush";
     case "eternity":
       return "standing";

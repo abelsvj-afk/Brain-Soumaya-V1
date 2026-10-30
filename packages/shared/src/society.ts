@@ -259,6 +259,7 @@ export const WORLD_GOVERNORS: Readonly<Record<string, FactionId>> = {
   "deep-past": "choir",
   scale: "ledger",
   people: "open-hand",
+  "faded-ward": "open-hand",
   eternity: "choir",
 };
 

@@ -27,6 +27,7 @@ export const WORLD_NAMES: Readonly<Record<string, string>> = {
   people: "the People world",
   "quiet-archive": "Quiet",
   scale: "Scale",
+  "faded-ward": "the Faded Ward",
   eternity: "Eternity's world",
 };
 

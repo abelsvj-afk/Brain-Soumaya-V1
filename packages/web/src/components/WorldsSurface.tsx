@@ -87,6 +87,7 @@ import {
   buildQuietArchiveLayout,
   type QuietArchiveLayout,
 } from "../graph/quietArchiveLayout.js";
+import { createWardScene } from "../graph/wardScene.js";
 import {
   createQuietArchiveScene,
   EMPTY_QUIET_ARCHIVE_LAYOUT,
@@ -573,6 +574,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     fallback: "The Archive view needs graphics support on this device — your memories are unaffected.",
     build: (layout) =>
       createQuietArchiveScene(isQuietArchiveLayout(layout) ? layout : EMPTY_QUIET_ARCHIVE_LAYOUT),
+  },
+  // The Faded Ward (a door in the story, opened by finding Tamsin's Ward): one long hall of cots, pale green and ember gold, the far end lost in fog.
+  "faded-ward": {
+    title: "The Faded Ward",
+    light: { env: 0.6, hemi: { sky: 0xcfe8d8, ground: 0x1a2420, intensity: 1.15 }, key: { color: 0xffe6b8, intensity: 0.9, from: [200, 420, 120] } },
+    background: 0x0c1412,
+    fogDensity: 0.0006,
+    orbitRadius: 460,
+    orbitHeight: 100,
+    lookAtY: 40,
+    fallback: "The ward view needs graphics support on this device — your memories are unaffected.",
+    build: () => createWardScene(),
   },
   scale: {
     title: "Scale",

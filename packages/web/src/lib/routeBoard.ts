@@ -1,4 +1,4 @@
-import { ETERNITY_WORLD_KEY, warpCost, type TravelKind } from "@brain/shared";
+import { ETERNITY_WORLD_KEY, FADED_WARD_WORLD_KEY, warpCost, type TravelKind } from "@brain/shared";
 import type { TravelState } from "../api/travel.js";
 
 /**
@@ -44,6 +44,11 @@ export const WORLD_CHART: readonly {
     key: "people",
     name: "The People",
     blurb: "The people of your life, gathered warm — who is with you, and what do you owe each other.",
+  },
+  {
+    key: FADED_WARD_WORLD_KEY,
+    name: "The Faded Ward",
+    blurb: "A long hall of narrow cots, ember lanterns down its length, and the far end lost in fog. It opens for those who have found the ward in the People.",
   },
   {
     key: "quiet-archive",
@@ -109,6 +114,7 @@ export function buildRouteBoard(state: TravelState): RouteEntry[] {
   // never offers a journey the server would refuse.
   const chart = WORLD_CHART.filter((w) => {
     if (w.key === "people") return state.peopleGateOpen === true || state.currentWorld === "people";
+    if (w.key === FADED_WARD_WORLD_KEY) return state.wardGateOpen === true || state.currentWorld === FADED_WARD_WORLD_KEY;
     if (w.gated) return state.eternityReachable === true;
     return true;
   });

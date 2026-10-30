@@ -42,6 +42,7 @@ export const GATE_DRESSINGS: Record<string, GateDressing> = {
   // Quiet/Archive (Wave 2): the low still threshold — dim slate ring,
   // amber beads (grammar), pale cyan shimmer. Quiet, never bright.
   "quiet-archive": { ring: 0x2a3442, beads: 0xffb347, accent: 0x9fd8e0 },
+  "faded-ward": { ring: 0x3c5a4c, beads: 0xffd98a, accent: 0xbfe0cc },
   scale: { ring: 0x5a6a72, beads: 0xffb347, accent: 0xffc95e },
 };
 
