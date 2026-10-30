@@ -7715,3 +7715,8 @@ body.in-transit .perf-suggest { display: none; }
   border: 1px solid rgba(122, 200, 255, 0.55); background: rgba(122, 200, 255, 0.14); font-weight: 600;
 }
 .world-map-empty { position: absolute; left: 1rem; right: 1rem; bottom: 5.5rem; margin: 0; text-align: center; color: #aebbd6; font-size: 0.85rem; pointer-events: none; }
+
+/* Arrival at HOME: the worlds layer is gone, so the arrival fade + caption sit over the resumed galaxy (top of the HUD tiers). */
+.travel-home-arrival { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.travel-home-arrival .travel-arrive-fade { position: absolute; inset: 0; }
+.travel-home-arrival .travel-arrived { position: absolute; top: calc(var(--hud-top) + 0.75rem); left: 0; right: 0; }

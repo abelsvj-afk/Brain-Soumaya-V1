@@ -660,6 +660,13 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   **Balance note:** capacity 200, regen 3.5/h, +5 per completed warp, +15 per memory; the worst leg (19) is < 10 % of the tank.
   Look at: whether the prices feel right, and whether the 38-fuel Eternity chain is the cost you want (one constant:
   `WARP_UNITS_PER_FUEL`).
+- **Warp home — "← Galaxy" departs as a warp (2026-10-30, owner: "soumaya should warp back too, not pop up instantly") —
+  MEASURED end to end in a real browser (gate, red-engine warp, arrival, galaxy resumed; server home; 0 fuel charged), needs
+  on-device confirmation** (WorldsSurface.tsx `goHome`/`armMsOf`, shared/economy.ts `travelCancelWindowSeconds`, index.css
+  `.travel-home-arrival`; spec `docs/specs/owner-feedback-2026-10-30-travel-exits-garden.md` §2): ← Galaxy now departs a free
+  warp to home through the server's own journey with a 3 s align/cancel window (other journeys keep 10 s); arrival fades the galaxy in
+  with "Arrived · Home". If the departure call fails the old instant return remains, so you are never stuck. Look at: whether 3 s
+  feels right (one constant, `HOME_CANCEL_WINDOW_SECONDS`) and that the galaxy resumes cleanly after the fade.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

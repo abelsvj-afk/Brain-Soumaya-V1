@@ -14,7 +14,7 @@ import {
   PEOPLE_GATE_MIN_MEMORIES_EACH,
   PEOPLE_GATE_MIN_PEOPLE,
   PEOPLE_GATE_MIN_SHARED_MEMORIES,
-  TRAVEL_CANCEL_WINDOW_SECONDS,
+  travelCancelWindowSeconds,
   warpCost,
   eternityGateOpens,
   type EternityGateHoldings,
@@ -407,7 +407,7 @@ export class TravelRepo implements JourneyBonusCreditor {
       const origin = this.deriveWorld(this.latestRow());
       const id = randomUUID();
       const createdAt = new Date(nowMs).toISOString();
-      const cancelDeadline = new Date(nowMs + TRAVEL_CANCEL_WINDOW_SECONDS * 1000).toISOString();
+      const cancelDeadline = new Date(nowMs + travelCancelWindowSeconds(input.destination) * 1000).toISOString();
       this.h.sqlite
         .prepare(
           `INSERT INTO travel_journeys (id, space_id, client_key, kind, origin, destination, state, fuel_charged, created_at, cancel_deadline)

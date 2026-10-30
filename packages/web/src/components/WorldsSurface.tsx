@@ -246,6 +246,14 @@ interface GardenWorldChanges {
  * this browser (a per-viewer convenience — the real record is the review
  * log). Every access is guarded: private mode just starts from zero.
  */
+/** How long the departure's align → spool plays: the server's cancel window for THIS journey (3 s homebound, 10 s otherwise —
+ *  read from the journey itself, never a client constant), none for a turn-back. */
+function armMsOf(j: { state: string; createdAt: string; cancelDeadline: string } | null | undefined): number {
+  if (!j || j.state === "returning") return 0;
+  const ms = Date.parse(j.cancelDeadline) - Date.parse(j.createdAt);
+  return Number.isFinite(ms) && ms > 0 ? ms : TRAVEL_CANCEL_WINDOW_SECONDS * 1000;
+}
+
 function harvestKey(spaceId: string | null): string {
   const d = new Date();
   const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -639,6 +647,8 @@ export default function WorldsSurface({
   const travelBlurRef = useRef<HTMLDivElement | null>(null);
   const prevModeRef = useRef<string | null>(null);
   const [arrivalFadeKey, setArrivalFadeKey] = useState(0);
+  // Arriving HOME (owner: Soumaya warps back, no hard cut): the worlds layer is gone but the arrival still fades in over the galaxy.
+  const [homeArrivalKey, setHomeArrivalKey] = useState(0);
   // Flight inside a world (docs/specs/worlds-flight-2026-10-29.md): null = the overview orbit camera.
   const flightRef = useRef<FlightState | null>(null);
   const flightTargetRef = useRef<Place | null>(null);
@@ -769,14 +779,27 @@ export default function WorldsSurface({
     };
   }, [visible]);
   journeyRef.current = journey;
+  const goHome = async () => {
+    if (mode !== "world" || currentWorld === "home" || !travel.state) {
+      setDismissed(true);
+      return;
+    }
+    try {
+      const j = await travel.depart("warp", "home");
+      if (!j) setDismissed(true); // couldn't arm the trip — the instant return still works
+    } catch {
+      setDismissed(true);
+    }
+  };
   const refreshTravelRef = useRef<() => Promise<void>>(async () => {});
   refreshTravelRef.current = travel.refresh;
   const lastDepartPollRef = useRef(0);
   // Arriving: the flight hands over to the world with a fade, not a cut (the world's models were prefetched).
   useEffect(() => {
     if (prevModeRef.current === "transit" && mode === "world") setArrivalFadeKey((k) => k + 1);
+    if (prevModeRef.current === "transit" && mode === null && currentWorld === "home") setHomeArrivalKey((k) => k + 1);
     prevModeRef.current = mode;
-  }, [mode]);
+  }, [mode, currentWorld]);
   // A different world (or leaving) starts over from the overview, with no places until its models are in.
   useEffect(() => {
     flightRef.current = null;
@@ -1438,7 +1461,7 @@ export default function WorldsSurface({
             origin: journey?.origin ?? "home",
             destination: journey?.destination ?? "home",
             // A turn-back has no departure to draw; every other flight begins with the cancel window.
-            armMs: journey?.state === "returning" ? 0 : TRAVEL_CANCEL_WINDOW_SECONDS * 1000,
+            armMs: armMsOf(journey),
           })
         : built;
     if (!world) return;
@@ -1612,7 +1635,7 @@ export default function WorldsSurface({
         // reload resumes mid-sequence, and poll lag never lets the scene run ahead of the server's flip
         // (it holds on the last spool second until the journey actually departs).
         const j = journeyRef.current;
-        const armMs = j?.state === "returning" ? 0 : TRAVEL_CANCEL_WINDOW_SECONDS * 1000;
+        const armMs = armMsOf(j);
         let t = elapsed;
         if (j) {
           const departed = j.departedAt ? Date.parse(j.departedAt) : NaN;
@@ -1897,7 +1920,14 @@ export default function WorldsSurface({
     };
   }, [visible, mode, entry, currentWorld, sceneLayout, gardenGlow, transitKind, transitTotalMs, journey?.origin, journey?.destination, inside, interiorLayout, interiorShipSkin, handleRelicVisible]);
 
-  if (!visible || !mode) return null;
+  if (!visible || !mode) {
+    return homeArrivalKey > 0 ? (
+      <div key={`home-${homeArrivalKey}`} className="travel-home-arrival" aria-hidden={false}>
+        <div className="travel-arrive-fade" aria-hidden="true" />
+        <div className="travel-arrived" role="status">Arrived · Home</div>
+      </div>
+    ) : null;
+  }
   const title = mode === "transit" ? transitTitle : (entry?.title ?? "");
   const fallback = mode === "transit" ? transitFallback : (entry?.fallback ?? "");
   const thread = atDeepPast ? deepPastLayout?.thread ?? null : null;
@@ -2111,7 +2141,10 @@ export default function WorldsSurface({
       )}
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
-        <button type="button" className="worlds-surface-back" onClick={() => setDismissed(true)} aria-label="Back to your galaxy">
+        {/* "← Galaxy" warps HOME through the real journey (free, a 3 s align): Soumaya flies back instead of the galaxy
+            popping up. If the journey can't be armed (offline, a journey already running) it falls back to the old instant return,
+            so the way out is never lost. */}
+        <button type="button" className="worlds-surface-back" onClick={() => void goHome()} aria-label="Back to your galaxy">
           <span aria-hidden="true">←</span> Galaxy
         </button>
       </header>

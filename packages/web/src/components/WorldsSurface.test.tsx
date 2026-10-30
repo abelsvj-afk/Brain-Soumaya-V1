@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { announceTravelChanged, requestEnterWorld } from "../lib/travelEvents.js";
 import WorldsSurface, { WORLD_DATA_GRACE_MS } from "./WorldsSurface.js";
@@ -336,7 +336,22 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     // journeys unaffected.
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    // ← Galaxy now warps HOME through the real journey; this fake cannot arm one (depart → null), so the instant return
+    // is the fallback and the way out is never lost.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("← Galaxy warps home: it departs a warp to Home, and does NOT dismiss the scene while the trip is arming (owner: Soumaya warps back)", async () => {
+    const t = atStation();
+    t.depart = vi.fn(async () => ({
+      id: "j-home", kind: "warp", origin: "great-station", destination: "home", state: "arming", fuelCharged: 0, cancellable: true,
+      createdAt: "2026-10-30T12:00:00.000Z", cancelDeadline: "2026-10-30T12:00:03.000Z",
+    })) as unknown as UseTravel["depart"];
+    mockUseTravel.mockReturnValue(t);
+    mountEngaged(<WorldsSurface enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
+    await waitFor(() => expect(t.depart).toHaveBeenCalledWith("warp", "home"));
+    expect(screen.getByRole("dialog", { name: "The Great Station" })).toBeTruthy(); // still up: the flight scene takes over from here
   });
 
   it("at the Station the Harbor controller button opens its panel, and only there", async () => {
@@ -733,11 +748,11 @@ describe("opening the app lands in the home galaxy — the layer wakes only on a
     expect(container.firstChild).toBeNull();
   });
 
-  it("after it is awake, 'Back to your galaxy' still closes it, and Look around reopens it", () => {
+  it("after it is awake, 'Back to your galaxy' still closes it (when no trip can be armed), and Look around reopens it", async () => {
     mockUseTravel.mockReturnValue(savedAtGarden());
     mountEngaged(<WorldsSurface enabled />);
     fireEvent.click(screen.getByRole("button", { name: "Back to your galaxy" }));
-    expect(screen.queryByRole("dialog", { name: "The Growing Place" })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "The Growing Place" })).toBeNull());
     act(() => requestEnterWorld());
     expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
   });

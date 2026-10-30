@@ -47,6 +47,12 @@ export const EARN_JOURNEY_DRIFT = 3;
  * charged.
  */
 export const TRAVEL_CANCEL_WINDOW_SECONDS = 10;
+/** Going HOME is free and should never be a chore (owner 2026-10-30: Soumaya warps back too) — a short, still-cancellable window. */
+export const HOME_CANCEL_WINDOW_SECONDS = 3;
+/** The server's cancel window for a departure to `destination` — the align → spool cinematic plays through it. */
+export function travelCancelWindowSeconds(destination: string): number {
+  return destination === "home" ? HOME_CANCEL_WINDOW_SECONDS : TRAVEL_CANCEL_WINDOW_SECONDS;
+}
 
 export const FUEL_REGEN_PER_HOUR = 3.5;
 
