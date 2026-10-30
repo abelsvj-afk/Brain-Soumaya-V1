@@ -8,6 +8,7 @@ const find = (entryId: string) => ({ entryId, foundAt: NOW, source: "regard", la
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(api, "getStoryRoads").mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -108,5 +109,24 @@ describe("The Book's pictures", () => {
     await waitFor(() => expect(container.querySelectorAll(".book-point").length).toBeGreaterThan(40));
     fireEvent.click(container.querySelector(".book-point")!);
     expect(container.querySelector(".book-art")).toBeNull();
+  });
+});
+
+describe("Roads in the Book", () => {
+  it("shows only roads you took, in words, never a count; rest and resume are plain buttons", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("sight.open-alcove")], links: [], notes: [] });
+    vi.spyOn(api, "getStoryRoads").mockResolvedValue([
+      { roadId: "road.open-alcove", state: "taken", updatedAt: NOW },
+      { roadId: "road.door-closed", state: "rested", updatedAt: NOW },
+    ]);
+    const put = vi.spyOn(api, "putStoryRoad").mockResolvedValue({ road: { roadId: "road.open-alcove", state: "rested", updatedAt: NOW } });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText("The Open Alcove")).toBeTruthy());
+    expect(screen.getByText(/Wait until the alcove has someone resting in it/)).toBeTruthy(); // the one line it waits at
+    expect(screen.getByText(/It is resting. It will keep./)).toBeTruthy();
+    expect(screen.queryByText("The Seventh Berth")).toBeNull(); // a road never taken is simply not there
+    expect(container.querySelector(".book-roads")?.textContent ?? "").not.toMatch(/\d|%|locked/i);
+    fireEvent.click(screen.getAllByText("Let it rest for now")[0]!);
+    await waitFor(() => expect(put).toHaveBeenCalledWith("road.open-alcove", "rested"));
   });
 });
