@@ -3,7 +3,7 @@
  * a line about, they say it sideways — their relationship to the thing, never an explanation. Holding is enough: nothing is spent, given up or required, and a reaction never
  * gates anything. The lines are CANON (public), so each is voiced once in that person's own voice and shared (docs/specs/lore-narration-2026-10-30.md §3).
  *
- * Only people who exist in the cast (shared/npcs.ts) are here; the rest of Draft 5's reactions wait for their people.
+ * Only people who exist in the cast (shared/npcs.ts) are here, each with at least three (Draft 5 §4); the rest of Draft 5's reactions wait for their people.
  */
 
 /** Who is speaking — selects the ElevenLabs voice (`LORE_TTS_VOICE_<ROLE>`); any role without its own voice set is read by the narrator's. */
@@ -32,6 +32,19 @@ export const STORY_REACTIONS: readonly StoryReaction[] = [
   { npc: "archivist", holds: "relic.unopened-fold", role: "archivist", line: "Keep it a while longer. I will ask you something about it, once. Not today." },
   { npc: "keeper", holds: "relic.witness-seed", role: "keeper", line: "Do not water what you cannot name." },
   { npc: "keeper", holds: "sight.dead-bough", role: "keeper", line: "It greens a little when someone finishes. Have you finished something?" },
+  { npc: "wayfarer", holds: "obj.faded-ticket", role: "calend", line: "Someone wanted to go. I keep thinking that matters." },
+  { npc: "wayfarer", holds: "obj.doorkeepers-nail", role: "calend", line: "I carried one of those once. I set it down where it was needed." },
+  { npc: "dissenter", holds: "sight.unlooked-direction", role: "dissenter", line: "You looked the way no one looks. Did it look back?" },
+  { npc: "dissenter", holds: "obj.follower-ribbon", role: "dissenter", line: "Someone told you that story wrong on purpose. Be kind to them." },
+  { npc: "surveyor", holds: "sight.hung-star", role: "surveyor", line: "It isn’t where the charts keep it. It never was. That is the whole trouble." },
+  { npc: "surveyor", holds: "relic.sunward-compass", role: "surveyor", line: "That points at something. I have stopped asking whether it is the sun." },
+  { npc: "cantor", holds: "sight.ysmerel-at-the-edge", role: "ysmerel", line: "You saw her standing there. Thank you for not calling out." },
+  { npc: "broker", holds: "obj.tin-soldier", role: "dorrow", line: "I don’t know whose that is." },
+  { npc: "archivist", holds: "sight.open-alcove", role: "archivist", line: "Yes. It was left open on purpose. Please do not fill it." },
+  { npc: "keeper", holds: "relic.dawn-leaf", role: "keeper", line: "That is from a morning I was not awake for. Keep it dry." },
+  { npc: "eternity", holds: "sight.long-room", role: "eternity", line: "Long. It is meant to be. I have not yet reached the end of it either." },
+  { npc: "eternity", holds: "echo.eighth-bell", role: "eternity", line: "You counted. Most do not count past seven." },
+  { npc: "eternity", holds: "relic.witness-without-a-name", role: "eternity", line: "I will not say its name. It is not mine to say, and not yours to ask." },
 ];
 
 export function reactionFor(npc: string, found: ReadonlySet<string>): StoryReaction | null {

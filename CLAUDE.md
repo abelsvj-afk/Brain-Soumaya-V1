@@ -803,6 +803,11 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   report — a game rule, not a security boundary). Eternity has no spots yet (no travel model there). `localStorage "soumaya.probe"="1"` exposes a read-only `window.__loreProbe` for the
   script. Look at: whether tapping the scene to fly feels right and never fights drag/pinch/double-tap, whether the small landmarks (drydock r=7, annexes r=30, 60-unit reach) are findable
   but not trivial, and the Station lower-rim spot (173 reach on a 384-radius body).
+- **Eternity spots + more reactions + a find sting (2026-10-31, owner: "fix all issues, things not built") — unit-tested (shared 72, web 2,769, server 2,559), NOT seen on a
+  real screen/ear** (shared/storyTriggers.ts `EternityView`/`viewReach`, web graph/storySpots.ts, WorldsSurface.tsx reach provider, storyReactions.ts, graph/sfx.ts `find`,
+  hooks/useStoryNotice.ts; spec `docs/specs/lore-physical-spots-2026-10-31.md` §10): Eternity's three entries now answer by where your camera is round him (far side · pulled
+  well out · brought close); every speaking cast member has ≥ 3 Item Reactions (24 total, Eternity included); a slow low "find" sting plays when something is kept in the Book
+  (honours the sound switch). Look at: whether the far/near thresholds (330 / 1100) are findable but not trivial with drag + pinch, and the sting's loudness.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

@@ -55,9 +55,21 @@ describe("being at a spot", () => {
   it("a spot in another world is not reachable from this one", () => {
     expect(makeReach("deep-past", scene(), [1000, 0, 0])(drydock)).toBe(false);
   });
-  it("worlds with spots demand a deployed viewer; Eternity does not (yet)", () => {
+  it("worlds with spots demand a deployed viewer; Eternity too, by where the camera is", () => {
     expect(worldHasSpots("great-station")).toBe(true);
     expect(worldHasSpots("growing-place")).toBe(true);
-    expect(worldHasSpots("eternity")).toBe(false);
+    expect(worldHasSpots("eternity")).toBe(true);
+  });
+});
+
+describe("Eternity views", () => {
+  const byId = (id: string) => STORY_TRIGGERS.find((t) => t.entryId === id)!;
+  it("answers from the camera's place round him, not elsewhere", () => {
+    expect(makeReach("eternity", null, [0, 60, -620])(byId("sight.unlooked-direction"))).toBe(true);
+    expect(makeReach("eternity", null, [0, 60, 620])(byId("sight.unlooked-direction"))).toBe(false);
+    expect(makeReach("eternity", null, [0, 60, 1500])(byId("sight.long-room"))).toBe(true);
+    expect(makeReach("eternity", null, [0, 60, 620])(byId("sight.long-room"))).toBe(false);
+    expect(makeReach("eternity", null, [0, 60, 250])(byId("echo.eighth-bell"))).toBe(true);
+    expect(makeReach("eternity", null, [0, 60, 620])(byId("echo.eighth-bell"))).toBe(false);
   });
 });

@@ -22,6 +22,7 @@ export type SfxName =
   | "dock" // clamping onto the station to recharge
   | "complete" // a task/journey/agenda item finished — lighter than achievement
   | "milestone" // a bigger, tracked-number crossing (streak day, capacity, tier)
+  | "find" // something kept in the Book — slow, low, a little awed (never a fanfare)
   | "chime"; // gentle one-note confirmation for a quieter save
 
 const ENABLED_KEY = "sfx.enabled";
@@ -191,6 +192,13 @@ const RECIPES: Record<SfxName, (ac: AudioContext, dest: GainNode) => void> = {
   },
   // A quieter save confirmation — one soft note, for moments too minor for a chime
   // sequence but still worth a small audible ack.
+  // A found thing: two soft low notes a fifth apart that bloom and linger, with a breath of air — a held light, not a reward jingle.
+  find: (ac, dest) => {
+    tone(ac, dest, { freq: 294, type: "sine", dur: 0.9, gain: 0.2 });
+    tone(ac, dest, { freq: 440, type: "sine", dur: 1.1, gain: 0.18, delay: 0.22 });
+    tone(ac, dest, { freq: 880, type: "sine", dur: 0.7, gain: 0.06, delay: 0.4 });
+    noiseSweep(ac, dest, { dur: 0.9, from: 700, to: 2400, gain: 0.04, q: 0.8 });
+  },
   chime: (ac, dest) => tone(ac, dest, { freq: 1046, type: "sine", dur: 0.14, gain: 0.22 }),
 };
 

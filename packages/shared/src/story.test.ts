@@ -173,6 +173,11 @@ describe("Item Reactions", () => {
       expect(r.line).not.toMatch(/\d/);
     }
   });
+  it("every speaking cast member has at least three (the harbor controller only answers)", () => {
+    for (const c of NPC_CAST.filter((x) => x.id !== "harbor-controller")) {
+      expect(STORY_REACTIONS.filter((r) => r.npc === c.id).length, c.id).toBeGreaterThanOrEqual(3);
+    }
+  });
   it("only fire for what you hold, and never require giving anything up", () => {
     expect(reactionFor("keeper", new Set())).toBeNull();
     expect(reactionFor("keeper", new Set(["relic.witness-seed"]))?.line).toMatch(/water/);
@@ -183,9 +188,9 @@ describe("Item Reactions", () => {
 import { eligibleHere, spotReach } from "./storyTriggers.js";
 
 describe("physical spots", () => {
-  it("every regard/listen in a world the viewer can move through has a spot; only Eternity has none (documented)", () => {
+  it("every regard/listen in a world the viewer can move through has a spot; Eternity's is where the camera is (a view)", () => {
     for (const t of STORY_TRIGGERS.filter((x) => x.how === "regard" || x.how === "listen")) {
-      if (t.world === "eternity") expect(t.spot, t.entryId).toBeUndefined();
+      if (t.world === "eternity") expect(t.spot?.view, t.entryId).toBeTruthy();
       else expect(t.spot, `${t.entryId} needs a physical spot`).toBeTruthy();
     }
   });
@@ -201,9 +206,9 @@ describe("physical spots", () => {
     expect(spotReach({ place: "x", near: 0.1 }, [0, 0, 0], 10, [50, 0, 0])).toBe(true); // min 60 units
     expect(spotReach({ place: "x", near: 0.1 }, [0, 0, 0], 10, [70, 0, 0])).toBe(false);
   });
-  it("away from every spot, nothing is eligible in a world that has spots; Eternity stays open", () => {
+  it("away from every spot, nothing is eligible in a world that has spots; Eternity answers by where the camera is", () => {
     expect(eligibleHere("great-station", "regard", () => false)).toEqual([]);
-    expect(eligibleHere("eternity", "regard", () => false).length).toBeGreaterThan(0);
+    expect(eligibleHere("eternity", "regard", () => false)).toEqual([]);
   });
   it("a stillness picks only among what the viewer is at", () => {
     const here = (t: { entryId: string }) => t.entryId === "obj.faded-ticket";

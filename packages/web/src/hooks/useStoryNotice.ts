@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { castMember, hourBand, npcGifts, pickNoticed, reactionFor, type StoryTrigger } from "@brain/shared";
+import { playSfx } from "../graph/sfx.js";
 import { worldHasSpots } from "../graph/storySpots.js";
 import { useStoryBook } from "./useStoryBook.js";
 import { emitReveal } from "../lib/narrationBus.js";
@@ -44,6 +45,11 @@ export function useStoryNotice({
   reachRef.current = reach;
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
+  // A find is marked by a slow low sting (the SFX kit already honours the sound switch and reduced-motion).
+  const announceFind = (text: string) => {
+    playSfx("find");
+    notifyRef.current(text);
+  };
   const [noticing, setNoticing] = useState<"regard" | "listen" | null>(null);
   const [caption, setCaption] = useState("");
   const timer = useRef<number | null>(null);
@@ -110,7 +116,7 @@ export function useStoryNotice({
         const isNew = await report(id, how);
         if (isNew) {
           setCaption("");
-          notifyRef.current(how === "regard" ? "Something answered your stillness. It is kept in the Book." : "You heard something. It is kept in the Book.");
+          announceFind(how === "regard" ? "Something answered your stillness. It is kept in the Book." : "You heard something. It is kept in the Book.");
         } else {
           setCaption("Nothing stirs. The world is as it was.");
           window.setTimeout(() => setCaption(""), 4500);
@@ -134,7 +140,7 @@ export function useStoryNotice({
 
   const onRelic = useCallback(
     async (relicId: string) => {
-      if (await report(`relic.${relicId}`, "relic")) notifyRef.current("What you found has been added to the Book.");
+      if (await report(`relic.${relicId}`, "relic")) announceFind("What you found has been added to the Book.");
     },
     [report],
   );
@@ -142,7 +148,7 @@ export function useStoryNotice({
   const onMeeting = useCallback(
     async (npcId: string, meetings: number) => {
       for (const id of npcGifts(npcId, meetings, foundRef.current)) {
-        if (await report(id, `npc:${npcId}`)) notifyRef.current("They gave you something to keep. It is in the Book.");
+        if (await report(id, `npc:${npcId}`)) announceFind("They gave you something to keep. It is in the Book.");
       }
       // They notice what you are holding (Draft 5 §4): one line, sideways. Holding is enough — nothing is spent or required.
       const reaction = reactionFor(npcId, foundRef.current);
@@ -168,7 +174,7 @@ export function useStoryNotice({
       return;
     }
     void report("companion.dock-1", "companion").then((isNew) => {
-      if (isNew) notifyRef.current("Someone shared a cup with you on the dock. It is kept in the Book.");
+      if (isNew) announceFind("Someone shared a cup with you on the dock. It is kept in the Book.");
     });
   }, [active, world, sb.loaded, report]);
 

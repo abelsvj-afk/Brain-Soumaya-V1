@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { spotReach, STORY_TRIGGERS, type StoryTrigger } from "@brain/shared";
+import { spotReach, viewReach, STORY_TRIGGERS, type StoryTrigger } from "@brain/shared";
 import type { V3 } from "./worldFlight.js";
 
 /**
@@ -44,6 +44,7 @@ export function makeReach(world: string, root: THREE.Object3D | null, viewer: V3
   return (t) => {
     const spot = t.spot;
     if (!spot || t.world !== world) return !spot;
+    if (spot.view) return viewReach(spot.view, viewer);
     if (spot.origin) return spotReach(spot, [0, 0, 0], 1, viewer);
     if (!spot.place || !root) return false;
     let marks = cache.get(spot.place);

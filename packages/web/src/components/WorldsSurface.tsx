@@ -866,6 +866,7 @@ export default function WorldsSurface({
         const w = walkRef.current;
         return w.route.length === 0 ? makeReach(currentWorld, null, [w.pos.x, 0, w.pos.z]) : null;
       }
+      if (currentWorld === "eternity") return makeReach(currentWorld, null, overviewCamRef.current.pos);
       const fl = flightRef.current;
       const root = sceneHandleRef.current?.group;
       if (!fl || !root || fl.phase !== "idle") return null;
