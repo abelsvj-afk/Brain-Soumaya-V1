@@ -7080,11 +7080,6 @@ button.mindspace-more { cursor: pointer; }
   right: 1rem;
   text-align: center;
   opacity: 0.85;
-  /* A caption over the scene must never swallow a tap meant for the scene (tap-to-fly, look-around); its own buttons still work. */
-  pointer-events: none;
-}
-.worlds-surface-fallback button {
-  pointer-events: auto;
 }
 /* Glimmer prompt region (Deep Past rework §8): one container in the
    fallback note's position family, rows stacked in a column so they can
