@@ -162,3 +162,14 @@ Hesk established: the same big, stern, grey-bearded man in the brown Warden's co
 ## §44 — owner rejection (2026-10-30)
 
 The owner viewed `44-terus-first-door-v3.png` and rejected it ("I don't like this one"). **v3 is OWNER-REJECTED — do not pick it.** The set's live candidates are v1, v2 and v4. (File left in place, marked here, per the standing superseded-file practice.)
+
+## §46 — Three Parts of One (Sheet 2, triptych)
+
+Files: `46-three-parts-of-one-v1.png` … `v4.png`. All four are true triptychs — three equal vertical panels — and all four came out at exactly 2352×1008 (21:9 as specified; no crop needed).
+
+- **Left panel (all four):** the long coat alone on its hook under a single lamp, with Kith's pinned child's drawing beside it. The drawn woman is **faceless in every variant** (blank face, simple line figure) — the never-list holds.
+- **Center panel (all four):** Linnet asleep on the narrow cot, watercolour-soft and faintly transparent at the edges, soup bowl beside her. She reads as sleeping/resting, never dead. The green-aproned hand is at the frame's edge in v1–v3; **minor note on v4:** the hand grips the green blanket, as if tucking her in, rather than just leaving the frame.
+- **Right panel (all four):** Kith from behind in the patched dress, setting the extra place at the long table. Face never shown.
+- Same warm-gold light carries across all three panels in every variant; no text anywhere.
+
+Verdict: a complete, clean set — no flags beyond the small v4 hand note. Your pick, as usual.
