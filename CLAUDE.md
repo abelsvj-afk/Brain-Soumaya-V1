@@ -744,8 +744,9 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   faction's **ordinance**. Each of 9 cast members has a faction, a faith temper the tide only nudges, goals, and a routine; what they do each half hour (work/trade/refuel/travel/
   discuss/worship/rest/patrol/wander) is a pure clock function with mutual pairs, so tags/cards/Society show it identically for everyone. **A mirror, not a verdict:** nothing scores
   or labels the user (a deliberate departure from "good/bad person scale" — memories are not deeds, and the product forbids shame); it is **opt-out** (Society panel switch,
-  default on; off = a neutral, still-living society and nothing is read). **Not built:** faction consequences beyond behaviour/words, a real NPC economy (money/fuel is captions),
-  lore content (provisional names, no canon), per-faction visuals. **Owner questions:** default on or opt-in for other people's brains? Faction names/lore? Look at: whether the
+  default on; off = a neutral, still-living society and nothing is read). **Owner decisions (2026-10-30):** reflection stays ON by default for every brain (opt-out in the Society panel); faction names stay provisional and are renamed in the
+  lore session (data-only: `FACTIONS` + cast rows). **Not built (full ordered backlog in the spec):** lore content/layers, faction consequences and rivalries, a real NPC economy
+  (money/fuel are captions), per-faction visuals, acts beyond words for the ambient cast, invitations into personal brains, currents tuning, a Settings duplicate of the switch. Look at: whether the
   seven currents' word lists catch your real language (they are plain stems — easy to tune in `CURRENT_LEXICON`), and how crowded a world feels with 5+ NPCs.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On

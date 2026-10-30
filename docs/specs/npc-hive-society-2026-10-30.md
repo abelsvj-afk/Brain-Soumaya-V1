@@ -54,3 +54,20 @@ visible consequences beyond behaviour and words; invitation into personal brains
 Pure: currents scoring is deterministic, bounded, and responds to the right words; belief moves the right way; each NPC's activity is deterministic and varies across slots; partners are
 mutual; ordinances depend on the governing faction + currents; a neutral society when reflection is off. Server: the route returns words + numbers only, never memory text; off = neutral and
 computes nothing. Browser: tags show varied activities that change with the clock; the Society panel shows currents, factions and ordinances.
+
+
+## Owner decisions (2026-10-30)
+- **Reflection is ON by default** for every brain (including other people's), with the opt-out switch in the Society panel. Off = neutral society, nothing read. (Already how it is built.)
+- **Faction names stay provisional** (the Choir, the Open Hand, the Ledger, the Undertow, the Wardens) and are **renamed in the lore session**. Renaming is data-only: `FACTIONS` in
+  `shared/society.ts` (names, taglines, charters, callings) and the cast rows in `shared/npcs.ts`; ids are internal and need not change.
+
+## Not built yet (the backlog, in the order I would take it)
+1. **Lore content** — canon names, histories, `lore.layers` (deeper threads unlocked by meetings, keys linking NPCs), the open-ring "never explain, leave threads" content. Waits for the lore session.
+2. **Faction consequences** — standing changes only behaviour and words today. Not built: factions that gain/lose territory or ordinances that change what you can do, visible faction events, rivalries and alliances between factions.
+3. **A real NPC economy** — NPC money, fuel, prices and trades are captions, not a ledger. Not built: persistent NPC purses/fuel, prices that move with trades, anything that touches your own fuel.
+4. **Per-faction visuals** — ships, trails and tags are per NPC, not per faction (no faction colours on hulls, banners, ordinance decorations in the worlds).
+5. **NPC acts beyond words and presence** for the ambient cast (only the harbor controller and Eternity have act loops); NPC-to-NPC conversations written by the model (today: templated + one-line chatter).
+6. **Invitations into personal brains** — NPCs (and later other players) can never enter a personal brain; the invitation flow is a future feature and nothing here prepares a back door.
+7. **Currents tuning** — the lexicon is plain word stems; tune `CURRENT_LEXICON` once real brains show what it misses. No model-based reading of themes (deliberately: private, offline, free).
+8. **Settings surface** — the switch lives in the Society panel only (not duplicated in Settings).
+9. **On-device confirmation** of everything above (all measured headless only).
