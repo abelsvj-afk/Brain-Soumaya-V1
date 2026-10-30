@@ -115,6 +115,7 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   E("sight.marens-winter", "sight", "growing-place", "The Winter in the Garden", ["A5", "A8"], ["c.maren.rests-in-the-one-winter"], { text: { plain: "In one corner of the garden it is always a little winter. A long-handled spade stands upright in the snow there, a wool scarf knotted round its shaft. The snow is not drifted against it. The Keeper walks round it by habit, and says only that some things are not finished, only resting." } }),
   E("obj.orus-bead", "object", "deep-past", "A Bead of the First Morning", ["A3", "A8"], ["c.oru.keeps-the-morning-by-being-remembered-to"], { text: { plain: "A bead no larger than a thumbnail, held out by an old man who asks you, gently, what you were doing yesterday. Each time you tell him, it grows a little warmer in his palm, and he tells you a little more of a morning you did not see." } }),
   E("account.tall-tale", "account", "people", "The Tall Tale with One Thing Wrong", ["A8", "A6"], ["c.ossian.tells-it-wrong-the-same-way"], { text: { plain: "He tells the story the same way each time, with one small thing wrong in it, always the same small thing. Ask three people who were there and each will correct it differently, and no two corrections will agree, and he grins as though that were the point." } }),
+  E("obj.sleepwalkers-cup", "object", "great-station", "The Cup She Keeps", ["A8", "A4"], ["c.sleepwalker.keeps-a-shared-cup-at-dawn"], { text: { plain: "At first light a woman in a pale nightgown stands at the end of the dock holding a plain cup in both hands, content, not knowing where she is. A tended lantern burns on the rail beside a second cup, empty, set out for no one in particular. When the light is full she is only a woman again, and she does not know you, and she does not put the cup down." } }),
   E("sight.missing-berth", "sight", "great-station", "The Berth Too Few", ["A4"], ["c.hush.takes-the-unclaimed-first"], { text: { plain: "The harbor lists its berths in order, and one number is not there. The dockhands step around the gap without looking, as people do around a thing they were told, once, not to mention." } }),
 ];
 
@@ -167,6 +168,9 @@ export const STORY_EDGES: readonly StoryEdge[] = [
   T("obj.orus-bead", "relic.basin-stone", "echo", "what is kept warm by being returned to"),
   T("account.tall-tale", "obj.follower-ribbon", "provenance", "he may have told her into being, one day behind"),
   T("account.tall-tale", "obj.anonymous-payments", "echo", "a small wrong thing repeated until it is a habit"),
+  T("obj.sleepwalkers-cup", "companion.dock-1", "echo", "the stranger who shared a cup with you had shared one with her"),
+  T("obj.sleepwalkers-cup", "obj.sleepwalkers-lantern", "possession", "she carries a flameless lantern by night and a cup at dawn"),
+  T("obj.sleepwalkers-cup", "sight.gatepost-lamp", "echo", "a lamp kept lit on the dock for someone who is not there"),
   T("relic.witness-without-a-name", "obj.kiths-drawing", "echo", "smooth, open, plain; torn at the mouth"),
   T("obj.kiths-drawing", "sight.empty-chair", "habit", "she sets the extra place"),
   T("sight.empty-chair", "relic.hearth-ember", "echo", "warmth with no one to be warm for"),

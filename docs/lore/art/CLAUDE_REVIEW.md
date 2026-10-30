@@ -92,3 +92,5 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 - §60 **v4** — Vesh right per the Bible (hooded dusk-violet, perfect round hollow, hands open and empty); Noor young, dark bun, ink-stained; candle shared between them. → `relic.stillness-seal`.
 - §61 **v1** — one cord, big clear knots, the end undone in open space, Sethane small and distant with her back turned; the station reads as contemporary hardware, which suits Scale's real ISS (the lore's own "Station in the Sky"). → `obj.measurers-cord`. (v2 multiplies the cord; sheet says one.)
 - §62 **v3** — the child's chalk lines and the peeling page read; Dig-Warden dark-haired in a chalk apron. The page is literal, which I accept as the sheet's own metaphor. → `sight.missing-stratum`.
+
+- §63 **v2** — the Sleepwalker, dark wavy hair, pale nightgown, quietly content; the pier lantern is tended (not §22's flameless hand lantern) and the second cup is empty beside it. New entry `obj.sleepwalkers-cup` (Draft 7 dock lamp / Companion cup echo).

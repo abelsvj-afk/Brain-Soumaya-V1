@@ -132,6 +132,7 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "sight.marens-winter", how: "regard", world: "growing-place", hour: "rest", spot: { origin: true, near: 90 } },
   { entryId: "obj.orus-bead", how: "regard", world: "deep-past", hour: "first-light", spot: { place: "^glb-basin$", near: 1.2 } },
   { entryId: "account.tall-tale", how: "regard", world: "people", hour: "hearths", spot: { place: "^field-ground$", at: [-0.2, 0, -0.6], near: 0.25 } },
+  { entryId: "obj.sleepwalkers-cup", how: "regard", world: "great-station", hour: "first-light", spot: { place: "^witness-drydock-gantry$", near: 1.6 } },
   { entryId: "sight.gatepost-lamp", how: "regard", world: "great-station", hour: "hearths", spot: { place: "^annex-(?!model)", at: [0.9, 0, 0], near: 1.1 } },
   { entryId: "obj.linnets-coat", how: "regard", world: "great-station", hour: "rest", spot: { place: "^annex-(?!model)", at: [0, 0.5, -0.4], near: 0.9 } },
   // Listen: stay still and hear (echoes).
