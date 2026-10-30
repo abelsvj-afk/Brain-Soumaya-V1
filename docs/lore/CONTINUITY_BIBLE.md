@@ -67,3 +67,9 @@ In-game hulls for the ambient cast (Quaternius models, `shared/npcs.ts`) are sep
 
 ## 5. When in doubt
 Flag it, don't guess: list the conflict in your report and keep the image out of the "keepers" until the owner answers. Kinds of conflicts to flag: a pronoun the sheet doesn't cover, two ships that look alike, a relationship the sheet doesn't state, a prompt whose wording admits two readings.
+
+## Ruling — the torn page (2026-10-31, owner: "You decide")
+Draft 5 (locked): *Ysmerel tore the page herself.* Draft 7 (locked): *Aldous Fenn refused the cut and carried the torn page out; Ysmerel finished the cut and has never asked who tore it, because she has always known.* Both hold, because they are about two hands and two moments:
+- **Aldous** refused, and carried the page OUT of the hymnal when he was sung into the first Silence — the page is his keeping.
+- **Ysmerel** is the one who TORE it for good — she finished the cut. She has never said so, and has never asked whose hand it was, because it was hers.
+Therefore: the story edge "Ysmerel tore the page herself" (echo.hymnal-gap ↔ sight.ysmerel-at-the-edge) STANDS; the edge "the page he carried out" (echo.hymnal-gap ↔ sight.aldous-at-rest) STANDS; and Ysmerel's talk line ("I have never said whose hand tore it…") is correct as written — she never says. Nothing may state which of them tore it in plain words; the two facts are only ever shown side by side.
