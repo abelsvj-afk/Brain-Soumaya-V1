@@ -106,6 +106,10 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   // --- Draft 7 (locked 2026-10-31), the Station knot: a lamp kept for one who walked in; one person kept in three places. ---
   E("sight.gatepost-lamp", "sight", "great-station", "The Lamp Nobody Pays For", ["A3", "A8"], ["c.mara.keeps-a-lamp-lit-for-one-who-walked-in"], { text: { plain: "At the foot of the harbor gate stands one lantern on an iron post, lit every dusk by a weathered woman in a long green scarf. No berth is listed under it and no ship has ever moored near it. She pours the oil with great care, and never looks up, and says only that someone might be walking." } }),
   E("obj.linnets-coat", "object", "great-station", "The Coat on the Hook", ["A4", "A10"], ["c.linnet.one-person-kept-in-three-places"], { text: { plain: "In the locked store-room a long plain coat hangs alone on its hook beneath a single lamp. Beside it is pinned a child's drawing of a woman with no face. Elsewhere a narrow cot is made up each morning for whoever wore it. No one has put the three together, and each of the three who keep a part has been careful never to ask." } }),
+  // --- Draft 7 slices B and C (the Archive's silence; the ward's laugh) ---
+  E("sight.ruels-laugh", "sight", "people", "The Laugh in the Ward", ["A10", "A4"], ["c.ruel.laughs-on-days-tamsin-is-away"], { text: { plain: "In the ward one cot is occupied only on the days the woman in the green apron is elsewhere. Whoever lies there is faint at the edges and laughs, quietly, at something no one else heard, and the laugh is the warmest thing in the room. By the time she returns the cot is made and empty." } }),
+  E("sight.aldous-at-rest", "sight", "quiet-archive", "The One Who Rests in the Alcove", ["A2", "A6"], ["c.aldous.stands-at-rest-in-the-silence"], { text: { plain: "Some visitors say the open alcove is not empty: a tall old man in a pale robe stands in it with a hymnal against his chest, faint as breath on glass. His eyes are closed. The hush gathers on the floor around him and goes no nearer. The book is missing a page, and he looks as if he had chosen that." } }),
+  E("sight.ysmerels-hum", "sight", "quiet-archive", "The Note She Keeps", ["A4", "A6"], ["c.ysmerel.hums-the-first-note-once"], { text: { plain: "If you stay at the edge long enough, the choirmaster with her hand flat on her chest hums one note, once, the first of a verse, and stops. The silent singers do not move. In the aisle the stall that is always left empty is lit, and stays lit a little after the note is gone." } }),
   E("sight.missing-berth", "sight", "great-station", "The Berth Too Few", ["A4"], ["c.hush.takes-the-unclaimed-first"], { text: { plain: "The harbor lists its berths in order, and one number is not there. The dockhands step around the gap without looking, as people do around a thing they were told, once, not to mention." } }),
 ];
 
@@ -137,6 +141,16 @@ export const STORY_EDGES: readonly StoryEdge[] = [
   T("obj.linnets-coat", "sight.locked-room", "provenance", "it hangs among the belongings of the Faded"),
   T("obj.linnets-coat", "obj.kiths-drawing", "echo", "the coat the faceless woman is drawn in"),
   T("obj.linnets-coat", "sight.tamsins-ward", "echo", "the cot made up for whoever wore it"),
+  // Draft 7 §3 — W7, W8, W9: the ward's laugh; the first Silence
+  T("sight.ruels-laugh", "sight.tamsins-ward", "echo", "the laugh returns in a patient on the days she is not there"),
+  T("sight.ruels-laugh", "sight.empty-chair", "absence", "a cot made up for someone who is only partly there"),
+  T("sight.ruels-laugh", "relic.witness-without-a-name", "echo", "the one warm thing that survived"),
+  T("sight.aldous-at-rest", "sight.open-alcove", "provenance", "the alcove is his; it only looks empty"),
+  T("sight.aldous-at-rest", "echo.hymnal-gap", "provenance", "the page torn from the hymnal is the page he carried out"),
+  T("sight.aldous-at-rest", "sight.ysmerel-at-the-edge", "absence", "she sits at the edge of the silence he went into first"),
+  T("sight.ysmerels-hum", "sight.ysmerel-at-the-edge", "habit", "she keeps the edge by night"),
+  T("sight.ysmerels-hum", "obj.choirmasters-breath", "echo", "the held breath, given once as a note"),
+  T("sight.ysmerels-hum", "sight.aldous-at-rest", "provenance", "she hums toward the one who refused"),
   T("relic.witness-without-a-name", "obj.kiths-drawing", "echo", "smooth, open, plain; torn at the mouth"),
   T("obj.kiths-drawing", "sight.empty-chair", "habit", "she sets the extra place"),
   T("sight.empty-chair", "relic.hearth-ember", "echo", "warmth with no one to be warm for"),

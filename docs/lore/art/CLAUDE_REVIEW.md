@@ -60,3 +60,10 @@ I opened one image from each of the first four Sheet-2 sets and **approved all f
 - `45-hesks-locked-room-v1` → `sight.locked-room` (the big grey-bearded Warden polishing the tin soldier among hundreds of blank-tagged belongings; cold blue doorway).
 - `46-three-parts-of-one-v1` → NEW entry `obj.linnets-coat` (the coat and the child's drawing / the sleeping half-transparent woman with soup / the child laying the extra place; faces: the drawn figure has no face, Kith is from behind).
 **Sixteen entries now have a painting.** Also: Draft 7's torn-page claim (Aldous) disagreed with an older locked edge ("Ysmerel tore the page herself"); I did NOT change the edge, and I softened Ysmerel's dialogue line so it contradicts neither — your call which is canon.
+
+## Round 8 (2026-10-31) — Sheet 2 sets 47–49
+
+Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.aldous-at-rest`, `sight.ysmerels-hum`, Draft 7 slices B/C):
+- §47 **v4** — Ruel's laugh as a gold ring, softest watercolour edge on the patient; Tamsin's hand to her mouth reads "moved and bracing". (v2/v3 lean sci-fi or too busy.)
+- §48 **v4** — the only wide frame; the torn hymnal page is clearest, eyes closed, rested not dead. Alcove is weaker than v2, accepted for the stalls and shelves.
+- §49 **v2** — lit empty stall is clearest, visitor fully from behind, held-breath mood.
