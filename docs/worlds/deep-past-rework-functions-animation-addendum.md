@@ -16,6 +16,63 @@ FAIL under these criteria, by design: that is exactly the failure mode
 of the build this rework replaces (the layout computed explanations,
 a rise, and thread stops that the world never showed).
 
+**Amendment 2 — owner decisions (2026-10-29 ~21:29 EDT).** Three
+decisions, made after the addendum above was written; this amendment
+is part of the gate on the same terms (the build is gated on A1–A12
+**and** F1–F18 / AN1–AN16 as amended here):
+
+1. **The ship is back.** "Place Soumaya back into doing a lot of the
+   things — she doesn't necessarily have to do every single thing,
+   but you can have her ship being used in those animations." The
+   ship rides the Chronicle descent (ship-led, as the mockup),
+   performs the carry/transit of a memory down the helix (the
+   mockup's A1–A3 role), and is present at arrival. Flags **C3 and
+   C5 are RESOLVED toward the mockup** (§3). The Walk stays on
+   foot — the ship parks meanwhile (F16) — and the perch is the
+   traveler's. Amended in place, with dated supersession notes:
+   F4, F5, F8, AN11; added: F16, AN14.
+2. **Free camera, everywhere, always.** "Able to get the good
+   angles too, and able to actually move the camera around…
+   wherever her ship is — that was another problem: you couldn't
+   move the camera around." In every mode the traveler can move
+   the camera around the current focus (the ship during the ride)
+   at any moment, **including while animations play**; being
+   camera-locked during any animation is a FAIL. Added: F17, AN16
+   — composed default angles per mode plus the gentle-return rule,
+   which **extends** the note §7.2's walk-only "look returns
+   gently" wording to all modes; flagged in AN16 so the note's
+   text is not silently outgrown.
+3. **The bead's beauty is a requirement — BEAD VISIBILITY.**
+   **Corrected by the owner (2026-10-29 ~21:33 EDT), superseding
+   this amendment's first bead wording.** He identified the bead
+   himself: "It was like cosmic and it had three of them inside,
+   not just one and they were different colors and they moved
+   around freely… we need to be able to see those too, how
+   beautiful they are." The bead he means is **not** the GLB's
+   single gold orb. Source chain: the GLB (`route-bead.glb`,
+   generator `builds/make_route_bead.py`) carries ONE gold light
+   on a tilted loop ('Flow', 4 s) inside a clear shell — the
+   mechanism, **superseded as the visual target**. Afterwards on
+   2026-10-28 he gave feedback on the in-app route-bead artifact
+   (slug `route-bead`, 2D canvas) and it was edited in place —
+   **that** version is the one he approved with "Perfect.." and
+   is describing now. Its settled spec (recorded 2026-10-28):
+   glass tinted cosmic — deep violet, still see-through —
+   teal/magenta nebula drifting inside the glass, a violet-teal
+   rim, the centre nearly open, lights dimming when behind the
+   far wall; and **FOUR inner lights** moving freely, not on one
+   shared ring: a gold lead (keeps sparks), teal on a slower
+   wider loop, violet on a slower wider loop, a tiny rose on a
+   tight fast loop — each with its own trail, its own pulse, and
+   its own pool of light on the inner floor, depth-sorted so
+   they cross in front of and behind each other. ⚠ **Count flag:
+   he said "three"; the recorded approved spec has FOUR.**
+   Criteria here are written for FOUR (§3 C8); the discrepancy
+   is his to confirm, never silently resolved to three. Amended:
+   AN2 (current-stop emphasis across all the lights — never a
+   collapse to the gold alone). Added: F18, AN15. Flagged for
+   his call: a single hero bead (§3 C7) — default NO.
+
 **Sources read for this addendum** (citations inline):
 - Mockup: `~/workspace/worlds-vision/mockups/deep-past/index.html`
   (1094 lines; line numbers are this file's) + its `README.md`.
@@ -32,7 +89,7 @@ collected in §3). "Today" = the shipped app @ `87b9e2e9`.
 
 ---
 
-## 1. Functions — F1–F15
+## 1. Functions — F1–F18
 
 ### F1 — Arrival & overview
 **Behavior.** Arriving in Deep Past opens on the rim overview: the
@@ -44,6 +101,9 @@ recipe §2.1.
 **Check.** Arrive → overview frames the full descent with the basin
 visible at the bottom; the arrival line appears; move once → the line
 does not reappear this visit; leave and return → it shows again, once.
+**Amendment 2:** the arrival view includes the ship at its rim berth
+(F16), and the overview is free-camera orbitable from the first
+moment (F17).
 
 ### F2 — Walk the Descent (the primary way down)
 **Behavior.** From the dock ("Walk the stair") or by tapping the stair
@@ -86,6 +146,13 @@ route line appear, naming the real route; the thread and its beads are
 visible from the rim before starting. Delete/complete-no-route state:
 with no qualifying Journey, no button, no thread, no beads — and no
 error (see F13).
+**Amendment 2 (2026-10-29 ~21:29 EDT).** Arming the route also stages
+the ship: when a route exists, the ship waits at its rim berth as the
+ride's vehicle (F16), and "Descend the Chronicle" boards her — the
+ride's first leg is the ship leaving the berth (AN14), not a camera
+move. Bead visibility from the rim obeys F18/AN15: the beads are
+identifiable as violet-cosmic glass orbs with several colored
+lights moving inside before starting, not gray dots.
 
 ### F5 — Chronicle ride: travel, stops, resume, completion
 **Behavior.** The ride travels stop to stop in route order. At each
@@ -104,12 +171,23 @@ place). N§7.4, N§8 ("the ride waits — indefinitely").
 stops at all** (S95–103; W~1862–1890) — progress parks and resumes
 (W1477–1491), but there is nothing to dwell at, approach, or complete.
 F5 is the criterion that closes that.
+**Amendment 2 (2026-10-29 ~21:29 EDT) — the ride is ship-led.** The
+owner resolved C5 toward the mockup: **the ship rides the thread.**
+The ride's vehicle is the ship, traveling stop to stop along the
+thread curve with the traveler aboard (camera focus = the ship,
+F17), dwelling at each stop with the ship resting at the stop's
+alcove. Everything else in this criterion stands — dwell, approach,
+park/resume, completion; read "the ride travels" as "the ship
+travels" throughout. The ship's path and pace against the kindling
+are AN14; its presence per mode is F16.
 **Check.** Start the ride → it travels to stop 1 and waits; wait 60 s
 touching nothing → still at stop 1; tap the stop's memory → its card
 opens (F9); close it → you are still on the ride at stop 1; Continue →
 stop 2; leave to overview mid-ride, re-enter → you resume at the
 parked stop, not the rim; finish → completion state at the basin,
-route fully lit (AN3).
+route fully lit (AN3). Throughout, as amended: it is the **ship**
+that travels, dwells, and rests at the basin — a camera-only ride
+FAILS this criterion.
 
 ### F6 — The rise: a deep memory comes forward ◆
 **Behavior.** When a member's context warms (tended or linked within
@@ -157,17 +235,28 @@ L192–197).
 **Source.** Mockup A1–A3 (~792–828: carry 1.2 s → transit down the
 helix as visible cargo → placement glide 2.6 s → identity/home CHECK);
 recipe §2.3, §8.
-◆ Interpretation, flagged: the mockup's chain is a *manual* carry by
-the ship; the app has no carry verb and the note adds none — placement
-in the app is the eligibility transition itself. This criterion
-therefore exercises the transition, and AN11 covers its visible
-settle. If the owner wants a literal carry verb, that is new scope —
-it is not smuggled into this addendum.
+◆ Interpretation, **superseded by Amendment 2 (2026-10-29 ~21:29
+EDT)**. This criterion originally read the chain as the eligibility
+transition alone, flagging the mockup's *manual* carry by the ship
+as owner scope (C3). The owner has since resolved C3 toward the
+mockup: **the carry is in scope.** When the transition happens
+while the traveler is in the world, the ship performs it: collects
+the memory at the rim, transits the helix with it visibly aboard,
+and places it at the alcove the rule computed (motion: AN11 as
+amended; ship path/pace: AN14). The eligibility rule itself is
+unchanged — the ship is how the transition *appears*, never a
+second placement path: identity, home, atomicity, and the
+archive-wins rule are exactly as above, and the mockup's
+post-placement identity/home CHECK is part of the carry's end
+state. If the traveler is not in the world, the memory simply
+rests — no off-screen theater (AN11).
 **Check.** Take a memory just under the age threshold; cross it (or
 un-archive an eligible one) → it rests at the stratum its date
 computes, one instance only; archive it → it is gone from the world
 entirely; its card (F9) shows the resting why-line for the right
-stratum.
+stratum. When the crossing is witnessed in-world, the ship performs
+the carry (F16/AN14): the memory is seen aboard during the transit
+and the ship — not a fade — delivers it to that alcove.
 
 ### F9 — Approach & read a memory
 **Behavior.** Tapping a resting (or risen) member — its form or its
@@ -283,9 +372,114 @@ membership controls is at most the taps the build record states;
 change an exclude → the member leaves the world on next layout; undo
 → it returns to the same alcove.
 
+### Amendment 2 additions — F16–F18 (2026-10-29 ~21:29 EDT)
+
+### F16 — The ship is present, with a role in every mode ◆ (new)
+**Behavior.** The ship is *in* Deep Past, visibly, in every mode —
+she brought you here, and the world doesn't hide her:
+- **Arrival / overview:** the ship rests at its **rim berth** —
+  parked at the arrival gap in the rim band, in frame in the A1
+  entry composition (note §10 A1a), engines quiet.
+- **Chronicle ride:** the ship is the vehicle (F5 as amended): it
+  rides the thread stop to stop and dwells at each stop's alcove.
+- **The carry:** the ship performs a witnessed placement (F8/AN11
+  as amended), then returns to its berth — or, if a ride is parked
+  mid-route, to the ride.
+- **Walk the descent:** the traveler goes **on foot** (the owner's
+  division: she doesn't have to do every single thing). The ship
+  stays parked at its rim berth for the whole walk — it does not
+  follow, shadow, or teleport after you.
+- **Stratum perch:** the ship stays where the mode left it — berth
+  during a walk, at the current stop during a parked ride — visible
+  when the perch's view includes it, never yanked into frame.
+- **Basin:** at the ride's completion the ship rests at the basin
+  with you. The walk's end leaves it at the rim — fly-to First
+  Light (F11) is the traveler's shortcut, not the ship's cue.
+**Source.** Owner decision, Amendment 2 §1; mockup: the ship is a
+scene resident that rides the spiral with cargo aboard (index.html
+ship/Chronicle blocks; README piece notes keep a ship in this
+scene). The note §7 has no ship at all — the omission this closes.
+**Check.** Arrive → the ship is visible at the rim berth in the
+entry view. Start the walk, descend three strata, look back up →
+the ship is still at the rim berth (not following, not vanished).
+Return and start the Chronicle → the ship is what travels (F5).
+Trigger a witnessed placement → the ship performs it and returns
+to berth. Finish a ride → the ship rests at the basin; exit and
+re-enter → on fresh arrival the ship is at its rim berth again
+(F1's contract).
+
+### F17 — Free camera around the focus, in every mode, always ◆ (new)
+**Behavior.** At **any** moment — in every mode (overview, walk,
+perch, Chronicle ride, basin) and **while any animation is
+playing** (ride legs, the rise glide, the carry, clip loops) —
+the traveler can move the camera around the current **focus**:
+orbit, look, and zoom, in the existing look grammar (drag /
+pinch / scroll). The focus is what the mode is about: overview →
+the helix/rim vista; walk → the walker's position on the curve;
+perch → the stratum anchor; ride → **the ship**; basin → the
+orb/dish. Camera input is a *viewpoint*, never a pause and never
+a fight: while the traveler drags, their input wins outright,
+and the underlying animation continues on its own clock — the
+ship keeps riding, the kindling keeps pace, the clips keep
+playing. **Being camera-locked during any animation is a FAIL**,
+expressly including the rise (AN10), the carry (AN11/AN14), and
+the ride's legs.
+**Source.** Owner decision, Amendment 2 §2 ("able to get the good
+angles too, and able to actually move the camera around…
+wherever her ship is"); his QA on the shipped build ("you
+couldn't move the camera around"). Note §7.2 grants free look
+during the walk only — this criterion generalizes it to every
+mode and every animation, which §7 did not state.
+**Check.** During the ride's longest leg: drag to orbit the ship
+~180° and zoom in → the view obeys immediately, the ship keeps
+traveling, and the stop arrives on schedule. During a rise
+glide: orbit the shelf throughout → no lock, no mid-glide
+snap-back. During the walk: pause, orbit the walker, resume
+(F2). In overview and at the basin: full orbit/zoom of the
+vista and the orb. Reduced motion: free camera applies in full
+(it is input, not motion); returns to composed angles become
+the fades of AN16.
+
+### F18 — Beads are visible from where the traveler stands ◆ (new)
+**Behavior.** Every thread stop's bead reads as what the owner
+approved: a **violet-cosmic glass orb with several distinctly
+colored lights moving freely inside it** (the full spec is
+AN15) — from the positions the traveler actually occupies: the
+walk eye (floor + 3.2) passing a stop, the ride dwelling at it,
+the rim before starting (F4). No zooming should be needed for
+the bead to register as alive: from the approach you can
+already tell there are **multiple lights of different colors**
+moving independently inside tinted glass; at the dwell the
+full interior — four lights (see the count flag, §3 C8), the
+nebula drift, the floor pools — is unmistakable. Size basis:
+**bead diameter ≈ 1 unit at ×1** — the generator's own
+radius-1.0 sphere at native spirit, roughly a third of the walk
+eye height, floating above its stop's floor; at the ~10–15
+units from which a stop is approached, the glass rim and at
+least three distinguishable moving colors must each subtend
+real pixels on a phone frame (the render numbers are AN15's).
+A bead that reads as a gray dot, a white ball, a single dot,
+an opaque tint, or nothing at all from the path FAILS, however
+correct its file is.
+**Source.** Owner decision + correction, Amendment 2 §3
+(2026-10-29 ~21:29, corrected ~21:33 EDT); the approved
+route-bead artifact edit of 2026-10-28 ("Perfect.."); generator
+`builds/make_route_bead.py` (radius-1.0 shell — mechanism only,
+superseded as the visual target); note §4 #2 (the bead is kept
+as data markers — this criterion is what "kept" must mean
+visually).
+**Check.** Walk or ride the descent at phone aspect without
+touching zoom: at every stop the bead is identifiable *before*
+arrival, from the approach, as a cosmic glass orb with
+multiple colored lights moving inside it, and unmistakable at
+the dwell. Any stop whose bead only becomes findable — or only
+stops looking like a gray ball — in a deliberate close-up
+fails this criterion (the close view is AN15's evidence, not
+the traveler's burden).
+
 ---
 
-## 2. Animations — AN1–AN13
+## 2. Animations — AN1–AN16
 
 General rules for every AN: motion is capped, gentle, and
 user-controlled (recipe §4 vertigo care); reduced motion (RM)
@@ -317,10 +511,26 @@ S806–822, all stops uniformly). During the ride, the **current**
 stop's bead additionally pulses — a visible scale/brightness swell
 that the other beads do not share — so the eye finds the stop the
 ride is waiting at.
+**Amendment 2 (2026-10-29 ~21:29 EDT; bead spec corrected
+~21:33 EDT).** The bead's interior is the approved multi-light
+cosmic spec (AN15) — four colored lights moving freely inside
+violet glass — and the current-stop emphasis is expressed
+**without collapsing it to one light** (this addendum's stated
+design call): at the current stop, **all four lights brighten
+together** — a shared swell of the whole interior — **and the
+gold lead flares**, its pulse peaking harder with a small burst
+of its sparks, while teal, violet, and rose keep their own
+paths, trails, and pulse rhythms untouched. Nothing freezes,
+vanishes, or syncs to the gold. An emphasis that reads as a
+single dot blinking, or a swell on an opaque gray ball, does
+NOT satisfy this criterion as amended: AN2 and AN15 pass or
+fail together at a stop.
 **Verify.** Start the ride; at stop 1, capture frames ~1 s apart: the
-stop-1 bead swells while beads at later stops only flow; Continue →
-the pulse moves to stop 2's bead. RM: no swell — the current bead
-carries a static brightness offset instead.
+stop-1 bead's whole interior is brighter and its gold lead flares
+with sparks, all four lights still visibly distinct and moving;
+beads at later stops only flow. Continue → the emphasis moves to
+stop 2's bead. RM: no swell or flare — the current bead carries a
+static interior brightness offset instead, all lights still present.
 
 ### AN3 — The Chronicle thread: kindling ◆ (conflict C1, resolved)
 **Mockup.** The gold thread starts unlit (drawRange 0) and **kindles
@@ -448,6 +658,11 @@ mockup behavior the note forgot — restored here (§3 G5).
 of orbit; first drag → orbit never resumes this visit. Walk a flight:
 frame timestamps show eased (slow-fast-slow) progress, no constant-
 velocity segment. RM: stage holds / fades per N§7, no orbit.
+**Amendment 2.** The camera is now also a *framing* question,
+because the ship moves: composed default angles per mode and the
+gentle-return rule are AN16, and the traveler's free control of
+the camera at all times is F17. This criterion's easing and pace
+rules apply to the ship's legs as well (AN14).
 
 ### AN10 — Rise & return motion ◆ (the note's largest animation gap)
 **Mockup.** The rise is a **5.2 s cosine-eased glide** (riseAnim,
@@ -476,24 +691,37 @@ warmth lapse → return glide plays, column gone at home. RM: fade
 between positions (recipe §5: "Fade-rise between positions"), states
 identical.
 
-### AN11 — Placement settle (A3's visible half) ◆
+### AN11 — The carry: transit & placement settle (A1–A3, as amended) ◆
 **Mockup.** Placement is a 2.6 s cosine glide to the shelf/alcove,
 ending with the identity CHECK and the alcove's light warming to
 receive the memory (recipe §2.3: "the alcove light warms to receive
 it"). (Mockup ~806–828.)
-**Required.** When a memory newly comes to rest while the traveler is
-in the world (F8's transition), its alcove light warms in over ~2–3 s
-and the member fades/glides the last short distance into rest — a
-visible *arrival*, never a pop-in. If the traveler is elsewhere in
-the world, no off-screen theater is required; the member is simply
-resting when found.
-◆ Interpretation flagged with F8: the app's placement is a data
-transition, not a carried cargo; this criterion covers its visible
-surface only.
-**Verify.** In-world, cross a memory into eligibility → its alcove
-warms and it settles within ~3 s; screenshots at t=0 and t=3 s show
-resting state, identity unchanged (card check per F8/F9). RM:
-appears rested with a fade.
+**Required, as amended by Amendment 2 (2026-10-29 ~21:29 EDT).**
+When a memory newly comes to rest while the traveler is in the
+world (F8's transition), the **ship carries it**, timed on the
+mockup's chain: the ship collects the memory at the rim (carry
+beat ≈ 1.2 s), **transits down the helix with the memory visibly
+aboard** — cargo, seen against the spiral, the ship following
+the helix/thread path per AN14 — and the placement glide
+(≈ 2.6 s, cosine) sets it into the alcove the rule computed,
+ending with the identity CHECK and the alcove's light warming
+to receive it (recipe §2.3). A visible *delivery*, never a
+pop-in, never a bare fade. If the traveler is not in the world,
+no off-screen theater is required; the member is simply resting
+when found.
+◆ This criterion originally covered only the settle, the carry
+having been flagged as owner scope alongside F8. **Amendment 2
+resolves C3:** the carry is in scope, ship-performed, and this
+criterion now covers the whole visible chain. Underneath, the
+app's placement remains the same data transition (F8) — the
+carry is its witnessed form, not a separate mechanism.
+**Verify.** In-world, cross a memory into eligibility → frame
+sequence shows the memory aboard the ship during transit (it
+never appears at the alcove first), the ship's path following
+the helix, placement completing in the mockup's shape
+(≈ 1.2 s + transit + 2.6 s), alcove warmed, identity unchanged
+(card check per F8/F9). RM: the member appears rested with a
+fade — the same end state, motion substituted.
 
 ### AN12 — Shelf presentation
 **Mockup.** The risen memory rests on the presentation shelf near the
@@ -522,6 +750,146 @@ skippable by the first touch, like the drift.
 reveals by orbit; first touch hands over control instantly. RM: a
 single gentle fade-in (recipe §5 A15 RM equivalent).
 
+### Amendment 2 additions — AN14–AN16 (2026-10-29 ~21:29 EDT; bead spec corrected ~21:33 EDT)
+
+### AN14 — The ship rides the thread ◆ (new; resolves C5's motion half)
+**Mockup.** The ship itself descends the spiral: its progress
+value advances along the Chronicle curve with the ride's legs,
+cargo aboard when carrying (index.html ship/Chronicle blocks);
+legs use the 'drift' gait (AN9).
+**Required.** During the Chronicle ride the ship follows the
+**thread curve** between stops — the same CatmullRom the thread
+draws (note §5.4) — hull oriented along the curve's tangent, at
+the ride's leg pacing (cosine 'drift' class, AN9; no linear
+glide, no teleport between stops). The ship rides **at the
+kindling front**: the thread's bright head (AN3) reaches the
+ship's position and never runs ahead of it — light and ship
+arrive at each stop together; the dwell (F5) is the ship at
+rest at the stop's alcove, its bead in the AN2 emphasis. On a
+carry (AN11), the same path discipline holds with the memory
+visibly aboard. Parked states per F16. RM: the ship fades
+between stops with the stage holds (note §7) — positions and
+dwell states identical, motion substituted.
+**Verify.** Frame sequence over one full leg: the ship's
+position tracks the drawn thread (never off-curve), its nose
+turns with the helix, the bright thread head is co-located
+with the ship at leg end; at the stop the ship rests while the
+bead shows the AN2 emphasis. RM: the fade sequence lands the
+ship at the same stops in the same order.
+
+### AN15 — BEAD VISIBILITY ◆ (new; named by the owner, spec corrected 2026-10-29 ~21:33 EDT)
+**The piece — two sources, one target.** The bead has two
+ancestors and only one approved look:
+- *The GLB (mechanism, superseded as the visual target).*
+  `route-bead.glb` (generator `builds/make_route_bead.py`): a
+  clear shell ('ClearBead', baseColor [0.75, 0.88, 1.0] at
+  alpha 0.28, BLEND, roughness 0.08) with **one** gold orb
+  ('FlowGlow', emissive [2.2, 1.7, 0.7]) orbiting inside on a
+  loop tilted 28°, pulsing twice per loop, keyed as the 'Flow'
+  clip (4.0 s, looping). It also renders badly: in every
+  captured frame (`dpfix-renders/bead-master.png`,
+  `bead-slim.png` — the master too, in the software renderer)
+  it is a flat gray ball with a white core; the 2026-10-28
+  record already noted the grayness.
+- *The approved look (the target).* On 2026-10-28 the owner
+  gave feedback on the in-app route-bead artifact (slug
+  `route-bead`, 2D canvas); it was edited in place, and **that
+  edit is what he approved with "Perfect.."** — and what he
+  described on 2026-10-29: "cosmic… three of them inside… not
+  just one and they were different colors and they moved
+  around freely." Its settled spec, recorded 2026-10-28:
+  **glass tinted cosmic but still see-through** — deep violet
+  tint, teal/magenta **nebula drifting inside the glass**, a
+  violet-teal rim, the centre still nearly open, lights
+  **dimming when behind the far wall** — and **four inner
+  lights**, each with **its own trail, its own pulse, and its
+  own floor light pooled on the inner floor**, depth-sorted
+  with real depth so they cross in front of and behind each
+  other: a **gold lead** (keeps sparks), **teal** on a slower
+  wider loop, **violet** on a slower wider loop, and a **tiny
+  rose** on a tight fast loop. They move **freely** inside —
+  independent paths, **not one shared ring**.
+- ⚠ **Count discrepancy, flagged not resolved (§3 C8).** The
+  owner said "three" (2026-10-29); the recorded approved spec
+  has **four**. This criterion is written for **four**. The
+  count is his to confirm; nothing here silently writes three.
+**Required.** In the **built app's own renderer** (a real GPU
+path — not the sandbox software renderer that grayed the
+master), every stop's bead shows all of:
+1. **Cosmic glass.** The shell is transparent and tinted deep
+   violet: the world shows through it; the rim reads
+   violet-teal; the centre stays nearly open, not fogged.
+2. **Nebula.** Teal/magenta nebula drifts slowly *inside* the
+   glass volume — a moving cosmic medium, not a flat tint and
+   not a backdrop.
+3. **Four free lights.** Gold (lead, with sparks), teal,
+   violet, rose (tiny) — each visibly on its **own** path at
+   its own tempo, each trailing, each pulsing on its own
+   rhythm, each pooling its own light on the inner floor.
+   Lights cross in front of and behind one another and **dim
+   behind the far wall** — the depth is real.
+4. **The current-stop emphasis (AN2)** plays across this whole
+   interior — all four brighten, the gold lead flares — and
+   never reduces the bead to its gold light.
+**Named-in-advance FAILs.** The bead renders as a gray ball or
+a white ball; as a **single-dot** / single-light orb; under an
+**opaque tint** you cannot see into; with its lights locked in
+unison on one shared ring; or as plain tinted glass with dots
+and **no nebula drift**. Any one of these fails AN15 however
+the rest of the build scores.
+**Build-path honesty.** The GLB alone cannot satisfy this
+criterion — it is single-gold by construction. How the build
+reproduces the approved artifact look inside the 3D scene
+(in-scene lights/sprites/shader around the shell, a re-authored
+bead, or another path) is the build's choice; the build record
+must state the path taken and show this criterion's evidence
+for it. Sizing per F18 (≈ 1 unit diameter at ×1, basis stated
+there).
+**Verify.** (a) **Phone size:** in the A1-class composed
+renders and from the walk/ride approach (F18), the stops'
+beads read as violet-cosmic glass with multiple colored lights
+moving inside — countable colors ≥ 3 even before the dwell.
+(b) **Close view** (perch/fly-to at a stop, bead ~2–3 units
+from camera): a frame sequence across ~8 s shows **four**
+distinctly colored lights on independent paths — positions
+relative to each other change between frames (proof of free
+motion, not a ring), trails and floor pools visible, at least
+one light seen dimming as it passes behind the far wall, the
+nebula visibly drifted between first and last frame.
+(c) **Depth read:** in the same sequence, lights visibly cross
+— one passes in front of another and later behind it. RM: the
+lights hold still and the nebula rests, but the transparent
+cosmic glass, the four distinct lights, and the depth order
+are NOT reduced-motion casualties.
+
+### AN16 — Composed default angles & the gentle return ◆ (new)
+**Required.** Every mode has a **composed default framing** —
+what the traveler sees before touching anything — taken from
+the design note's A1 compositions: **overview/entry** = A1a
+(rim vista: nine gold trims winding down, basin the brightest
+object); **walk** = A1b's grammar (on the curve at eye height,
+flights visibly continuous ahead, the descent the subject);
+**ride** = the ship framed with the thread running ahead of
+it and the next stop in view; **basin** = A1c (dish, orb,
+shaft rising out of frame). **The return rule (picked and
+stated):** when the traveler stops giving camera input, after
+a short hold (~2–3 s) the view **glides gently back** to the
+mode's composed default (cosine ease, no cut). This
+**generalizes** the note §7.2's walk-only "look returns
+gently when walking resumes" to all modes after a hold —
+**flagged here** so the note's wording is extended openly,
+not silently outgrown. A fresh input during the return
+interrupts it instantly (F17: input always wins). The idle
+orbit (AN9) is the overview default's motion, not a separate
+angle.
+**Verify.** In each mode: release the camera from a
+traveler-chosen angle → after the hold, a frame sequence
+shows a smooth glide settling into the A1-class framing
+(compare against the A1 renders — same subject, same read);
+interrupt the glide mid-return with a drag → control is
+immediate, no tug-of-war. RM: the return is a fade, not a
+glide.
+
 ---
 
 ## 3. Conflicts & gaps register
@@ -545,6 +913,10 @@ single gentle fade-in (recipe §5 A15 RM equivalent).
   rule; the note adds no carry verb. **Flagged, not resolved** (F8,
   AN11): the criteria cover the placement transition and its visible
   settle. A literal carry verb is owner scope if wanted.
+  **RESOLVED by the owner 2026-10-29 ~21:29 EDT (Amendment 2):**
+  the carry is in scope, ship-performed, as the mockup had it.
+  F8 and AN11 are amended in place; F16/AN14 carry the ship's
+  presence and path. No waiver needed; no longer a flag.
 - **C4 — Alcove breathing is recipe-only.** Present in the recipe's
   §3/§5, absent from mockup code, app code, and the note. Carried as
   AN8 with an omission-must-be-recorded clause.
@@ -555,12 +927,40 @@ single gentle fade-in (recipe §5 A15 RM equivalent).
   visibly riding the thread during the Chronicle (as the mockup had
   it), that is an addition to N§7 — this addendum does not silently
   restore it, and does not forbid it.
+  **RESOLVED by the owner 2026-10-29 ~21:29 EDT (Amendment 2):**
+  "Place Soumaya back into doing a lot of the things… her ship can
+  be used in those animations." The ship rides the Chronicle (F5
+  as amended), is present per mode (F16), and its motion is
+  specced (AN14). Restored — openly, by his word. The Walk stays
+  on foot and the perch is the traveler's (F16): she does not
+  have to do every single thing.
 - **C6 — Fuel/warp grammar scope.** The mockup exercises warp cost,
   zero-fuel refusal, and the cancel window *inside* its stage
   flights. In the app those belong to shared inter-world travel;
   in-world movement is free (N§7). **Scoped in F12:** the grammar
   criteria apply at the world's boundary (departures/arrivals), never
   to in-world modes.
+- **C7 — A hero bead? (owner flag, added by Amendment 2).** The
+  bead requirement (F18/AN15) covers the stop beads as approved.
+  Whether one **single larger hero bead** — presentational only,
+  at the arrival or the first stop, so the piece's beauty has a
+  showcase — is wanted is **the owner's call**. **Default specced:
+  NO new hero** — stops only, exactly as the design has them; the
+  close view in AN15's verification is evidence, not a place. If
+  he says yes later, it is a small addition (a singular showcase
+  of a data marker, not dressing — it does not break the note's
+  no-repeat rule); until then the build must not invent one.
+- **C8 — Bead light count: three remembered, four recorded
+  (owner-confirm flag, added 2026-10-29 ~21:33 EDT).** The owner
+  described the approved bead as having "three of them inside";
+  the recorded approved spec (the 2026-10-28 artifact edit he
+  approved with "Perfect..") has **four** inner lights — gold,
+  teal, violet, rose. F18/AN15 are written for **four**, with
+  this flag standing until he confirms. If he confirms three,
+  the criteria drop one light by his naming (the rose, tight
+  and fast, is the smallest and the natural candidate — but the
+  choice is his, not this document's). **Never silently resolved
+  to three.**
 
 ### Gaps — computed but never surfaced (today), closed by criteria
 
@@ -596,10 +996,16 @@ not re-criteria'd here.
 
 ## Appendix — what "done" means for this addendum
 
-The build's gate (note §10) gains: F1–F15 exercised end-to-end in the
-built app (each check above is the test script — a function that
-cannot be exercised fails, however complete its code), AN1–AN13
+The build's gate (note §10) gains: F1–F18 exercised end-to-end in
+the built app (each check above is the test script — a function that
+cannot be exercised fails, however complete its code), AN1–AN16
 verified by the stated frame/render evidence alongside A1's composed
-renders, and §3's flagged items (C3, C5, F15/G6) either resolved in
-the build record or carrying an explicit owner waiver. A12 still
-outranks everything: the owner's phone verdict is the final gate.
+renders, and §3's flagged items either resolved in the build record
+or carrying an explicit owner waiver. As amended 2026-10-29 ~21:29
+EDT: **C3 and C5 stand resolved by the owner** (the ship carries
+and rides — F5/F8/AN11 as amended, F16/AN14) and need no waiver;
+**C7's** hero-bead default is NO unless the owner says otherwise;
+**C8's** bead count stands at FOUR recorded lights until the owner
+confirms three-vs-four; F15/G6 remains waiver-eligible as before.
+A12 still outranks everything: the owner's phone verdict is the
+final gate.
