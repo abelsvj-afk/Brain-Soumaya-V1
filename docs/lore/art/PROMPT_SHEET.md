@@ -1,5 +1,7 @@
 # Lore image prompts — paste-ready sheet
 
+> **Identity first:** see `docs/lore/CONTINUITY_BIBLE.md` for who is male/female/they and which ship belongs to whom. **Eternity is MALE (he/him) and has no ship.** If a prompt below leaves a gender open, the Bible decides.
+
 ## 1. The First Morning (key art)
 Aspect ratio: 16:9
 
@@ -21,7 +23,7 @@ NEGATIVE: text, letters, logos, watermark, UI, cartoon, anime, plastic, neon cyb
 ## 3. Eternity — the sky made a person
 Aspect ratio: 2:3 (portrait)
 
-An immense standing figure of pale radiance in a pure white void, human in shape but cosmic in scale, seen from far below as if the viewer were a speck at his feet. Face serene and impossible to describe: no clear features, only warmth. A soft ring of light behind the head (a halo of the figure's own light, not a religious symbol). Tiny stars, planets and ship-lights drift near his hands like motes. The figure is white-on-white, defined only by gentle shadow and glow. Mood: absolute calm, vast kindness, a hint of unspoken grief. Palette: whites, pearl, the faintest gold; the only dark is a few tiny ships. Painterly cinematic, no text.
+An immense standing MALE figure of pale radiance in a pure white void — he is a man in shape (tall, broad-shouldered, a masculine presence), cosmic in scale, seen from far below as if the viewer were a speck at his feet. His face is serene and impossible to describe: no clear features, only warmth — but he is unmistakably a man (he/him), never female or androgynous. A soft ring of light behind the head (a halo of the figure's own light, not a religious symbol). Tiny stars, planets and ship-lights drift near his hands like motes. The figure is white-on-white, defined only by gentle shadow and glow. Mood: absolute calm, vast kindness, a hint of unspoken grief. Palette: whites, pearl, the faintest gold; the only dark is a few tiny ships. Painterly cinematic, no text.
 
 mythic space-fantasy concept art, painterly cinematic realism, soft volumetric light, deep indigo-black space with warm gold and pale cyan accents, restrained palette, heavy atmosphere, large sense of scale, no text, no logos, no UI, no watermarks, no real-world religious symbols.
 
