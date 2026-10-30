@@ -47,6 +47,17 @@ export const EMPTY_POOL_MESSAGE =
 export const WRONG_WORLD_MESSAGE = "That relic does not rest in the world you are standing in right now.";
 export const NOT_FINDABLE_MESSAGE = "That relic cannot be found yet — its resting place is not open.";
 export const UNKNOWN_RELIC_MESSAGE = "That relic is not in the Codex.";
+/** The exact-copy refusal (follow-up to I-5, approved design §3): a
+ *  stirred claim standing at the wrong anchor is refused plainly —
+ *  the promised copy is never substituted, and the stirring stays
+ *  open because the trail still leads to the copy's own place. */
+export const STIRRED_ELSEWHERE_MESSAGE =
+  "Your stirring does not rest here — the copy it promised waits at its own place, and no other copy will be given in its stead.";
+/** The trail-gone-quiet refusal (§3): the copy a stirring promised
+ *  is no longer there to claim; the stirring resolves quiet in the
+ *  same transaction that records this refusal. */
+export const TRAIL_QUIET_MESSAGE =
+  "The trail has gone quiet — the copy your stirring promised is no longer there to claim.";
 export const HOLD_CAP_MESSAGE = `You can hold ${MAX_HELD_RELICS} relics at once. Set one down first to take up another — setting one down costs nothing and loses nothing.`;
 
 /** Owner spaces: deployment config only (env RELIC_OWNER_SPACE_IDS, comma-separated; empty by default). Used ONLY to gate the scarcity switch. */
@@ -83,6 +94,11 @@ export type FindResult =
 export type AwardResult =
   | { status: "already" }
   | { status: "empty" }
+  /** An exact-copy award was demanded (a stirring's promise) and the
+   *  promised copy is not bindable as read inside this transaction —
+   *  the structural backstop for the claim service's own read of the
+   *  promise; it never falls through to a substitute. */
+  | { status: "exact-missed" }
   | { status: "awarded"; copyId: string; anchorKey: string; rewardAmount: number; testOnly: boolean };
 
 /** The NPC award core's outcome (Relics I-5): the player AwardResult's
@@ -566,10 +582,12 @@ export class RelicHoldingsStore {
    * receipt; claimFind below wraps it for the store-level callers.
    * anchorKey null = any anchor (the pre-sampling presence model);
    * a non-null anchorKey binds/materializes at exactly that anchor.
+   * exactCopyId (the stirring's promise, §3) binds exactly that copy
+   * or returns "exact-missed" — no substitute, no materialization.
    * The reward is computed here but NOT paid — paying is the caller's
    * act, inside the caller's transaction.
    */
-  awardClaimInTransaction(spaceId: string, relicId: string, anchorKey: string | null): AwardResult {
+  awardClaimInTransaction(spaceId: string, relicId: string, anchorKey: string | null, exactCopyId?: string): AwardResult {
     // I-2: any pre-existing holdings on this volume become copies first
     // (idempotent), so the scarcity check below reads the true copy pool.
     this.backfillCopies();
@@ -589,7 +607,27 @@ export class RelicHoldingsStore {
     // rests in scope (binding is always allowed: the copy exists and is
     // free), else a newly materialized one while the scope count is
     // below the class limit, else the empty-pool refusal.
-    let bound = this.bindPlacedCopyAt(spaceId, relicId, scope, testOnly, anchorKey);
+    // The stirring's promise (approved design §3, exact-copy follow-up):
+    // when the claim service names the promised copy, the award binds
+    // THAT copy or no copy — re-validated here inside the transaction
+    // (same relic, resting placed, this scope, the validated anchor),
+    // and never substituted, never materialized around. The promised
+    // copy is read without the claimer's test_only filter: issuance
+    // furnishes real (test_only = 0) copies, and the promise binds the
+    // claim to that copy whatever the claimer's scarcity mode; the
+    // holding row below still records the claimer's own flag.
+    let bound: { copyId: string; anchorKey: string } | null = null;
+    if (exactCopyId !== undefined) {
+      const copy = this.h.sqlite.prepare(`SELECT * FROM relic_copies WHERE copy_id = ?`).get(exactCopyId) as CopyRow | undefined;
+      if (!copy || copy.relic_id !== relicId || copy.state !== "placed" || copy.scope_space_id !== scope || (anchorKey !== null && copy.anchor_key !== anchorKey)) {
+        return { status: "exact-missed" };
+      }
+      const boundAnchor = copy.anchor_key ?? firstAnchorKey(relicId);
+      this.bindCopy(copy.copy_id, spaceHolder(spaceId), copy.world ?? RELIC_BY_ID.get(relicId)?.world ?? "", boundAnchor);
+      bound = { copyId: copy.copy_id, anchorKey: boundAnchor };
+    } else {
+      bound = this.bindPlacedCopyAt(spaceId, relicId, scope, testOnly, anchorKey);
+    }
     if (!bound) {
       if (!testOnly) {
         const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
@@ -687,7 +725,9 @@ export class RelicHoldingsStore {
       const claimKey = relicCodexKey(relicId);
       const r = this.awardClaimInTransaction(spaceId, relicId, null);
       if (r.status === "already") return { ok: true, alreadyFound: true, rewardAmount: 0, claimKey };
-      if (r.status === "empty") return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
+      // Unreachable here (no exact copy is ever named on this path) —
+      // the guard keeps the outcome union honest rather than assumed.
+      if (r.status === "empty" || r.status === "exact-missed") return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
       return { ok: true, alreadyFound: false, rewardAmount: r.rewardAmount, claimKey };
     });
     return run.immediate();

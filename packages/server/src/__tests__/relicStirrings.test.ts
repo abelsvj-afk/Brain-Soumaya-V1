@@ -165,20 +165,26 @@ describe("the stirring → claim loop (§8.1: a claim via a stirring awards exac
     expect(after.resolved_at).not.toBeNull();
   });
 
-  it("honest resolution: the stirred copy goes to a faster hunter; when the pool finally empties, the stirring resolves quiet — never a substitute, never silent", () => {
+  it("honest resolution: a faster hunter takes the very copy a stirring promised — the stirring resolves quiet AT that award, never a substitute, never silent", () => {
     const s = stir().issue("s1", "witness-without-a-name", "ambient")!;
-    // A faster hunter takes the very copy s1 was promised (pool 1/3 — the stirring stays open, the hunt is still real).
+    // A faster hunter takes the very copy s1 was promised. The promise
+    // is exact (approved design §3; exact-copy follow-up): s1's
+    // stirring resolves quiet inside THAT award's transaction —
+    // reason 'copy-claimed'. (This test previously asserted the I-5
+    // supply-based resolution — the stirring stayed open until the
+    // pool emptied — which the follow-up replaces.)
     const faster = sampledClaim("s2", "witness-without-a-name", "deep-past", WITNESS_POS);
     expect(faster.ok).toBe(true);
     if (faster.ok) expect(faster.copyId).toBe(s.copy_id);
-    expect(stirringById(s.id).state).toBe("open");
-    // Two more hunters empty the pool (3/3) — the emptying claim resolves s1's stirring quiet, inside its transaction.
-    expect(sampledClaim("s3", "witness-without-a-name", "deep-past", WITNESS_POS).ok).toBe(true);
-    expect(stirringById(s.id).state).toBe("open");
-    expect(sampledClaim("s4", "witness-without-a-name", "deep-past", WITNESS_POS).ok).toBe(true);
     const after = stirringById(s.id);
     expect(after.state).toBe("quiet");
-    expect(after.resolved_reason).toBe("pool-emptied");
+    expect(after.resolved_reason).toBe("copy-claimed");
+    // The pool still fills honestly for everyone else (3/3), and the
+    // resolution does not move again.
+    expect(sampledClaim("s3", "witness-without-a-name", "deep-past", WITNESS_POS).ok).toBe(true);
+    expect(sampledClaim("s4", "witness-without-a-name", "deep-past", WITNESS_POS).ok).toBe(true);
+    expect(stirringById(s.id).state).toBe("quiet");
+    expect(stirringById(s.id).resolved_reason).toBe("copy-claimed");
   });
 });
 
@@ -285,7 +291,13 @@ describe("last-copy courtesy (§4.1/R2-4, §8.1 #6): inside the transaction, or 
     const r = svc().claimForNpc("npc-space", "harbor-controller", "great-station", "harbor-nail");
     expect(r.status).toBe("awarded");
     if (r.status === "awarded") expect(r.copyId).toBe(s.copy_id); // the resting copy is the one bound
-    expect(stirringById(s.id).state).toBe("open"); // the pool did not empty; the stirring hunts on
+    // The NPC took the very copy sP's stirring promised: the promise
+    // is exact (§3), so the stirring resolves quiet at this award,
+    // even though the pool did not empty. (This previously asserted
+    // the I-5 supply-based resolution — the stirring stayed "open" —
+    // which the exact-copy follow-up replaces.)
+    expect(stirringById(s.id).state).toBe("quiet");
+    expect(stirringById(s.id).resolved_reason).toBe("copy-claimed");
   });
 
   it("an EXPIRED stirring does not block: expiry is evaluated inside the NPC transaction (R2-4), and the NPC takes the copy", () => {
@@ -344,7 +356,23 @@ describe("the loop (§5.5): explore becomes a real attempt; issuance rides the d
       `SELECT copy_id FROM relic_copies WHERE holder_kind = 'npc' AND holder_space_id = 'arrival-space'`,
     ).get() as { copy_id: string };
     expect(held.copy_id).toBe(rows[0]!.copy_id);
-    expect(stir().forSpace("arrival-space")).toHaveLength(1); // cap held: no second stirring issued
+    // The NPC took the very copy the brain's stirring promised: the
+    // promise is exact (§3), so that stirring resolves quiet
+    // ('copy-claimed') inside the award — and the SAME tick's
+    // issuance evaluation (the loop evaluates after the act) finds
+    // the world's ambient slot free and the relic still undiscovered
+    // by the space itself, so a NEW stirring issues toward a new
+    // copy (§5.4 re-eligibility). (This previously asserted exactly
+    // one row — true only while the first stirring never resolved,
+    // the I-5 supply-based behavior the follow-up replaces.)
+    const after = stir().forSpace("arrival-space");
+    expect(after).toHaveLength(2);
+    expect(after[0]!.id).toBe(rows[0]!.id);
+    expect(after[0]!.state).toBe("quiet");
+    expect(after[0]!.resolved_reason).toBe("copy-claimed");
+    expect(after[1]!.state).toBe("open");
+    expect(after[1]!.relic_id).toBe("harbor-nail");
+    expect(after[1]!.copy_id).not.toBe(rows[0]!.copy_id);
   });
 });
 

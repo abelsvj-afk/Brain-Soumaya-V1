@@ -31,6 +31,17 @@
  * transaction (§5.2 step 5, relics/stirrings.ts), and NPC claims
  * honor the last-copy courtesy in the same serialization as the
  * award — never a check-then-act gap.
+ *
+ * The exact-copy follow-up (approved design §3; I-5 review P2-2;
+ * owner delegation 2026-10-30) makes the stirring's promise exact
+ * at claim time: a claimer with an open stirring is awarded exactly
+ * the stirred copy or nothing — standing at another anchor is an
+ * honest, non-committed refusal with the stirring left open, a
+ * promised copy no longer placed resolves the stirring quiet at
+ * the holder's own attempt, and ANY award (player or NPC) quiets
+ * every other space's stirring that promised the awarded copy,
+ * inside the award transaction. The P2-A rider rides here too:
+ * the scan's private-class read converts first (senseableAnchors).
  */
 import {
   RELICS, RELIC_BY_ID, RELIC_ANCHOR_POINTS, RELIC_COPY_LIMITS,
@@ -44,6 +55,7 @@ import { EconomyRepo } from "../economy.js";
 import {
   RelicHoldingsStore, EMPTY_POOL_MESSAGE, WRONG_WORLD_MESSAGE,
   NOT_FINDABLE_MESSAGE, UNKNOWN_RELIC_MESSAGE,
+  STIRRED_ELSEWHERE_MESSAGE, TRAIL_QUIET_MESSAGE,
 } from "./holdings.js";
 import { RelicStirringService } from "./stirrings.js";
 
@@ -149,6 +161,13 @@ export class RelicClaimService {
       // including one resting PLACED (re-review P1-B): a placed copy is
       // the scope's one copy, and minting a second beside it would
       // break the one-per-brain invariant. Mirrors the award core.
+      // The read converts first (P2-A, I-5 P2-1 follow-up — the same
+      // backfill-first discipline as poolCount, which the limited
+      // branch above already gets): on a dormant volume, an
+      // unconverted private holding is invisible to the count below,
+      // and the scan would signal anchors the award core — which
+      // converts first — would refuse.
+      try { this.store.backfillCopies(); } catch { /* bare handle without the I-2 tables: the count below fails exactly as the award core's read does */ }
       const liveInScope = this.h.sqlite.prepare(
         `SELECT COUNT(*) AS n FROM relic_copies WHERE relic_id = ? AND test_only = 0 AND state IN ('placed','held','return-pool') AND scope_space_id IS ?`,
       ).get(relicId, scope) as { n: number };
@@ -409,7 +428,58 @@ export class RelicClaimService {
       // A non-committed row for this key (an earlier refusal) yields to
       // the committed outcome written below.
       if (inner) this.deleteReceipt(spaceId, claimId);
-      const award = this.store.awardClaimInTransaction(spaceId, relicId, presence.anchor.anchorKey);
+      // The stirring's promise (approved design §3; I-5 bound it at
+      // issuance, this follow-up enforces it at claim time): a claimer
+      // WITH an open stirring for this relic is promised ONE specific
+      // copy, and this claim honors exactly that promise or none.
+      // Read inside the transaction, expiries evaluated — the promise
+      // that is honored is the promise that is live in this same
+      // serialization.
+      const stirrings = new RelicStirringService(this.h);
+      const stirring = stirrings.openFor(spaceId, relicId);
+      let exactCopyId: string | undefined;
+      if (stirring) {
+        const promised = this.h.sqlite.prepare(
+          `SELECT state, anchor_key FROM relic_copies WHERE copy_id = ?`,
+        ).get(stirring.copy_id) as { state: string; anchor_key: string | null } | undefined;
+        if (!promised || promised.state !== "placed") {
+          // The promised copy is no longer there to claim (held by
+          // another through a path that carried no stirring
+          // resolution, waiting in the return pool, or gone): the
+          // stirring resolves quiet HERE, at its holder's own claim
+          // attempt, and no award is made under it — never a
+          // substitute in its stead. The refusal is non-committed:
+          // the stirring is honestly over, and a fresh attempt hunts
+          // as an ordinary claim.
+          stirrings.resolveCopyGone(stirring.copy_id);
+          const outcome: StoredOutcome = { ok: false, kind: "empty-pool", reason: TRAIL_QUIET_MESSAGE, plausibility: presence.plausibility, committed: false };
+          this.writeReceipt(spaceId, claimId, relicId, outcome);
+          return this.outcomeToResult(outcome, false);
+        }
+        if (promised.anchor_key !== presence.anchor.anchorKey) {
+          // The promised copy rests — at a DIFFERENT anchor than the
+          // one this claim validated. No award, no substitute: the
+          // stirring stays open (the trail still leads to the copy's
+          // own place), and the refusal is non-committed so the same
+          // claim key re-executes when the hunter stands where the
+          // promise rests.
+          const outcome: StoredOutcome = { ok: false, kind: "no-presence", reason: STIRRED_ELSEWHERE_MESSAGE, plausibility: presence.plausibility, committed: false };
+          this.writeReceipt(spaceId, claimId, relicId, outcome);
+          return this.outcomeToResult(outcome, false);
+        }
+        exactCopyId = stirring.copy_id;
+      }
+      const award = this.store.awardClaimInTransaction(spaceId, relicId, presence.anchor.anchorKey, exactCopyId);
+      if (award.status === "exact-missed") {
+        // The award core's own re-validation refused the promised
+        // copy the read above had just seen placed — unreachable
+        // under this transaction's serialization; answered with the
+        // copy-gone honesty rather than any substitute.
+        if (stirring) stirrings.resolveCopyGone(stirring.copy_id);
+        const outcome: StoredOutcome = { ok: false, kind: "empty-pool", reason: TRAIL_QUIET_MESSAGE, plausibility: presence.plausibility, committed: false };
+        this.writeReceipt(spaceId, claimId, relicId, outcome);
+        return this.outcomeToResult(outcome, false);
+      }
       if (award.status === "already") {
         const heldRow = this.store.rows(spaceId).find((r) => r.relic_id === relicId);
         const outcome: StoredOutcome = { ok: true, alreadyFound: true, awarded: false, copyId: heldRow?.copy_id ?? null, plausibility: presence.plausibility, committed: true };
@@ -438,7 +508,12 @@ export class RelicClaimService {
       // §5.2 step 5: the claimer's stirring resolves `claimed`, and a
       // pool this award emptied quiets every stirring still open on
       // it — inside this same transaction, never after the fact.
-      new RelicStirringService(this.h).resolveAfterPlayerClaim(spaceId, relicId, true);
+      stirrings.resolveAfterPlayerClaim(spaceId, relicId, true);
+      // The exact-copy promise (§3): this award took a specific copy,
+      // and any OTHER space's open stirring promising that very copy
+      // resolves quiet at this moment — whether or not the claimer
+      // themselves hunted under a stirring.
+      stirrings.resolveCopyClaimed(award.copyId, spaceId);
       return this.outcomeToResult(outcome, false);
     });
     return run.immediate();
@@ -490,7 +565,15 @@ export class RelicClaimService {
           continue;
         }
         const award = this.store.awardCopyForNpcInTransaction(spaceId, npcId, def.id);
-        if (award.status === "awarded") return { status: "awarded", relicId: def.id, copyId: award.copyId };
+        if (award.status === "awarded") {
+          // The exact-copy promise (§3): the copy this NPC just took
+          // may be the very copy a player's open stirring promises
+          // (courtesy guards only the pool's LAST copy) — that
+          // stirring resolves quiet inside this same transaction.
+          // NPCs hold no stirrings of their own; none is spared.
+          stirrings.resolveCopyClaimed(award.copyId, null);
+          return { status: "awarded", relicId: def.id, copyId: award.copyId };
+        }
         // "already"/"empty" after the reads above cannot disagree
         // with them inside one serialized transaction; either way
         // this candidate is unavailable — move on, never fail the tick.
