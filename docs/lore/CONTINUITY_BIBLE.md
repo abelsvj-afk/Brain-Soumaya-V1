@@ -1,6 +1,6 @@
 # Continuity Bible — who is who (for every image, voice and line of text)
 
-*Source of truth for IDENTITY: gender/pronouns, age, build, signature things, ships. Written 2026-10-30 from the locked lore (Drafts 1–6). If an image, voice or line disagrees with this sheet, the sheet wins; if the sheet disagrees with the lore, the lore wins and this sheet gets fixed. Anything marked **PROPOSED** was silent in the lore — it is Claude's choice, awaiting the owner's confirmation; Muse may use it but must not invent a different one.*
+*Source of truth for IDENTITY: gender/pronouns, age, build, signature things, ships. Written 2026-10-30 from the locked lore (Drafts 1–6). If an image, voice or line disagrees with this sheet, the sheet wins; if the sheet disagrees with the lore, the lore wins and this sheet gets fixed. Anything once marked **PROPOSED** was silent in the lore and began as Claude's choice; **the six identity defaults (Maren, Nuaré, Tamsin, Ossian Reed, Pell the Follower, Wim Ostler) were CONFIRMED by the owner on 2026-10-30** and are no longer proposals — treat them as settled canon.*
 
 ## 0. The five things that must never be wrong
 1. **Eternity is MALE — he / him / his.** The owner's own words: "he is and always was … he created." Vast, pale, radiant, face serene and impossible to describe, but unmistakably a man's presence: broad-shouldered, tall, calm. **Never female, never "they", never androgynous.** He has **no ship** ("he is where ships go"). He is a Maker, not a god-of-any-real-religion: no halo copied from a religion, no cross/crescent/etc.
@@ -16,17 +16,17 @@
 | **Oru, the Dawnkeeper** | **he/him** (Draft 2: "he alone remembers") | old, calm, slight | pale robes; a small cup of morning light | young, armoured |
 | **Sethane, the Measurer** | **she/her** ("her apprentice" — the Surveyor) | tall, slim, dark-clad; tired from wonder | ring of measuring arms; a knotted cord with the LAST KNOT UNTIED | a weapon |
 | **Calend, the Doorkeeper** (the Wayfarer) | **he/him** | wiry, travel-worn, wry, ancient eyes | long layered coat of many faded colours (one patch unfinished); an always-warm iron nail; a door-frame | a home; a uniform |
-| **Maren, the Gardener** | **she/her — PROPOSED** | patient, middle-aged, weathered hands | green-gold robes; a seedling; a watering can with a stoppered spout | blades, machinery |
-| **Nuaré, the Hearthkeeper** | **she/her — PROPOSED** | warm, broad, ageless mother-presence | ember-orange; a cushion carried between hearths; a lantern-like glow | cold colours |
+| **Maren, the Gardener** | **she/her** | patient, middle-aged, weathered hands | green-gold robes; a seedling; a watering can with a stoppered spout | blades, machinery |
+| **Nuaré, the Hearthkeeper** | **she/her** | warm, broad, ageless mother-presence | ember-orange; a cushion carried between hearths; a lantern-like glow | cold colours |
 | **Vesh, the Hollow Mercy** | **they/them** | androgynous, tall, tired | chest hollow; hooded dusk robes; folded paper boats | cruelty — Vesh is sympathetic |
 | **Ysmerel, the Last Choirmaster** | **she/her** (prompt 21: "woman") | tall, weathered, pale-gold choir robes | hymnal with ONE page cleanly torn out; closed mouth, mid-breath | singing mouth open |
 | **Dorrow Quint, the Ledger's Grandmaster** | **he/him** (prompt 24: "man") | heavy, shrewd, impeccably dressed | the Great Book; fresh ink; a trader's smile that doesn't reach the eyes | a villain's sneer |
 | **Hesk, the Warden-General** | **he/him** (prompt 42: "man") | big, stern, Warden's coat | ring of small keys; a tin soldier he polishes | cruelty — he is guarding, not enforcing |
-| **Tamsin of the Open Hand** | **she/her — PROPOSED** | middle-aged healer | rolled-sleeve green apron; buttons in her pockets | a uniform |
-| **Ossian Reed, the Last Honest Liar** | **he/him — PROPOSED** | wiry storyteller, grin with truth underneath | patchwork many-pocketed coat; a coin that isn't his | a con-man leer |
+| **Tamsin of the Open Hand** | **she/her** | middle-aged healer | rolled-sleeve green apron; buttons in her pockets | a uniform |
+| **Ossian Reed, the Last Honest Liar** | **he/him** | wiry storyteller, grin with truth underneath | patchwork many-pocketed coat; a coin that isn't his | a con-man leer |
 | **Kith** | **she/her** (the child) | about six; patched plain dress | a torn crayon drawing of a faceless woman; sets one place too many | an adult face |
-| **The Follower (Pell)** | **she/her — PROPOSED** | slight, young; hooded jacket; seen from behind | a coin, a ribbon, a note | a visible face |
-| **Wim Ostler** (Brannoch's clerk) | **he/him — PROPOSED** | young, tidy junior clerk | a berth-log; Ledger stamp | — |
+| **The Follower (Pell)** | **she/her** | slight, young; hooded jacket; seen from behind | a coin, a ribbon, a note | a visible face |
+| **Wim Ostler** (Brannoch's clerk) | **he/him** | young, tidy junior clerk | a berth-log; Ledger stamp | — |
 | **Ilsabet Marrow, the Cartographer** | **she/her** ("she" in Draft 4) | patient, ink-stained | a chart that changes when unrolled | — |
 | **The Sleepwalker** | **she/her** (prompt 22: "a woman") | a Faded woman in a pale nightgown | a flameless lantern held in both hands | fear — she is listening |
 | **Tamsin's patients (the Faded)** | mixed | half-transparent, watercolour-soft edges | — | gore |
