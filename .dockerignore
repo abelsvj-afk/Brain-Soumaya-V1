@@ -12,3 +12,6 @@ node_modules
 npm-debug.log*
 *.log
 .DS_Store
+
+# lore art (hundreds of MB of PNGs) is for the repo, never the image
+docs/lore/art
