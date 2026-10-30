@@ -1592,4 +1592,43 @@ export const BOOTSTRAP_SQL = `
       space_id TEXT PRIMARY KEY,
       stopped INTEGER NOT NULL DEFAULT 0
     );
+    -- G0 backup lifecycle records (increment B1). One row per backup
+    -- ATTEMPT; state is plain TEXT so later increments (B2+) extend the
+    -- lifecycle (uploaded → verified_stored → promoted) without a
+    -- migration. A row with state 'failed' is an attempt record, never
+    -- a backup. DDL identical in db/client.ts migrateSchema.
+    CREATE TABLE IF NOT EXISTS backup_attempts (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      state TEXT NOT NULL DEFAULT 'created',
+      failure_stage TEXT,
+      failure_detail TEXT,
+      snapshot_path TEXT,
+      snapshot_sha256 TEXT,
+      snapshot_bytes INTEGER,
+      manifest_json TEXT,
+      finished_at TEXT
+    );
+    -- daily_quests reconciliation (G0 inventory v4, 2026-10-30):
+    -- production carries this table (3 rows) from the streaks-and-quests
+    -- era, but main's schema never created it, so a main-pinned backup
+    -- inventory met it in production as an unrecognized table. The DDL
+    -- below mirrors production's ACTUAL definition (extracted read-only
+    -- from sqlite_master, 2026-10-30); the plan doc
+    -- (plans/streaks-and-quests-spec.md) disagrees with production —
+    -- FK parent (space_meta vs spaces), NOT NULL flags, index name —
+    -- and production wins. DDL identical in db/client.ts migrateSchema.
+    CREATE TABLE IF NOT EXISTS daily_quests (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      quest_type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      current_progress INTEGER NOT NULL DEFAULT 0,
+      target_count INTEGER NOT NULL,
+      fuel_reward REAL NOT NULL,
+      completed INTEGER NOT NULL DEFAULT 0,
+      reward_claimed INTEGER NOT NULL DEFAULT 0,
+      created_date TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS daily_quests_space_date_idx ON daily_quests(space_id, created_date);
 `;

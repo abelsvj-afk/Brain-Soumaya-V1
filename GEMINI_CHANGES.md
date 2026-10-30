@@ -1,3 +1,40 @@
+### 2026-10-30 (Claude): G0 B1 — backup snapshot, manifest, local verification (no caller wired yet)
+- [ ] Verified by Claude
+- First increment of the owner-approved G0 backup & restore plan. New module
+  `packages/server/src/backup/`: `inventory.ts` (the B0 table inventory pinned
+  in-repo, bumped to v2: 109 named tables / 108 included / 29 MUST-BE-NONEMPTY;
+  v2 delta = `relic_copies` + `relic_copy_events` from Relics I-2 plus the new
+  `backup_attempts`), `manifest.ts` (manifest builder; bucketed live-object
+  assertion per B0 amendment A — included / excluded / FTS+vec shadows via a
+  FINITE suffix set / sqlite internals / unrecognized-fails-loudly; standalone
+  snapshot verification: SHA-256 + byte size, `integrity_check`,
+  `foreign_key_check`, per-table count reconciliation, MUST wiped-DB guard —
+  and it returns failures instead of throwing on missing/corrupt files),
+  `service.ts` (`runBackupAttempt`: attempt row → bucketed assertion →
+  `VACUUM INTO` snapshot → manifest built FROM the snapshot artifact → verify
+  → VERIFIED-LOCAL; every operational failure is recorded on the attempt row
+  with its stage — snapshot/manifest/verify — and a failed attempt is never
+  listed as a backup).
+- Schema: ONE additive table, `backup_attempts` (states are plain TEXT so B2's
+  UPLOADED/PROMOTED states need no migration), added with identical DDL to
+  BOTH schema locations (`db/schemaSql.ts` BOOTSTRAP_SQL and
+  `db/client.ts` migrateSchema).
+- Scope stops at VERIFIED-LOCAL per the plan: no upload, no encryption (B2),
+  no scheduler/status UI (B3), no restore (B4), no caller wired — the module
+  is exercised only by its tests (`src/__tests__/g0Backup.test.ts`, 13 tests
+  mapped to G0-AC-01/02/04, including the review-driven regressions:
+  virtual-parent-prefixed rogue table, FK-violation branch, unusable-dir
+  recording, missing/garbage snapshot handling).
+- Production preflight (B0 amendment B, read-only counts on the live brain):
+  26 of 29 MUST tables confirmed nonempty; `episodes_fts`, `vec_episodes`,
+  and `fin_expense` are EMPTY in production — MUST enforcement therefore
+  stays OFF for production callers (`enforceMustNonempty: false`, documented
+  in `inventory.ts`) until those three are resolved by reclassification or
+  backfill. Enforcement is not silently enabled by this increment.
+- Independent review: first pass BLOCKED on one P1 (classifier shadow-prefix
+  escape) + two P2s (unwrapped throw paths; test gaps) — all fixed in this
+  same branch with fail-before/pass-after tests.
+
 ### 2026-09-11 (Codex): Graph reliability and multi-tenant query hardening
 - [x] Verified by Claude
 - Fixed the graph client treating an HTTP error or malformed graph payload as a successful
