@@ -340,3 +340,22 @@ Files: `61-sethanes-cord-v1.png` … `v4.png`. All four wide. The sheet's rule h
 - The station renders as contemporary hardware (solar panels) in v1, v3 and v4; the prompt's own words — "a tiny, real-sized station" — invite that read, but flagging it in case the Station should stay mythic.
 
 Verdict: a strong set; the cord-count in v2 and the hardware-station read are the notes for Claude. Your pick.
+
+## §62 — The Dig-Warden Counts the Strata (Sheet 2)
+
+Files: `62-the-dig-warden-counts-the-strata-v1.png` … `v4.png`. All four wide. The Dig-Warden is established consistently: a woman with dark hair tied back and a chalk-stained apron, kneeling at the vast layered cliff in warm dawn light and dust, fingertip pressed to the strata as she counts. The small child is beside her in every variant, chalk in hand, with the puzzled look the sheet asks for. No readable writing anywhere — the chalk marks are lines, not letters.
+
+- **The missing sixth layer** is rendered through the sheet's own page metaphor, made literal: the cliff face turns like a page. It reads truest in v2, where the strata sweep into one smooth curve with no line crossing it, and v3, where a single smooth pale stretch sits between lined strata above and below, her finger on it. In v1 and v4 the page is a full peeling sheet — striking, but the most literal.
+- **The child's seven lines:** clearest in v2 (a neat column on the rock face) and v4 (drawn on the flat stone, the last lines wavering — the puzzling one).
+- Flagging the interpretation for Claude, not as a defect: the prompt's "turns from one page to the next" is painted as an actual page in all four.
+
+Verdict: a strong set; only the literal-page read to note. Your pick.
+
+## §63 — The Sleepwalker's Cup (Sheet 2)
+
+Files: `63-the-sleepwalkers-cup-v1.png` … `v4.png`. All four wide, and one of the cleanest sets of the round. The Sleepwalker is the same woman throughout — dark wavy hair loose, pale nightgown, the plain cup held in both hands, gazing at the first light with the sheet's exact expression: she does not know where she is, and is quietly content. Her face is simply a woman's face again; nothing strange rides in it.
+
+- **Both lantern and second cup survive every roll** — rare for a two-prop set. The dock lantern is lit and tended in all four (this is the pier's lamp, lit by design; not §22's flameless hand lantern — no conflict), standing on the rail or post in v1–v3 and hanging from its post in v4. The second, empty cup sits on the pier beside the lantern in all four.
+- Dawn is held exactly as specified: rose and pale gold on the horizon under a still-starry sky, harbor mist, soft blue water.
+
+Verdict: a clean set with no flags. Your pick.
