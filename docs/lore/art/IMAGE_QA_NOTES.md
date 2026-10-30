@@ -139,3 +139,7 @@ Remaining open items after these rulings: §20 canonical triptych pick; §5 Lull
 ## Lullaby reference settled — per CLAUDE_REVIEW (2026-10-31)
 
 Claude picked by eye and recorded in `docs/lore/art/CLAUDE_REVIEW.md`: **`05-veshs-ship-the-lullaby-v5.png` is THE Lullaby reference** (Bible §2 swan: curved neck and head, flank hollow, petal-vanes, pale violet engine; its slight statue-like quality accepted — silhouette is the continuity; the three-angle sheet works as a turnaround). `05-…-v8.png` is NOT the reference (handsome ship, swan gone, ring-saucer read) — kept only as a "how she flies" side study. Cross-check all future Lullaby art against v5. Still open: the §20 canonical triptych pick only.
+
+## §22 canon pick settled — per CLAUDE_REVIEW (2026-10-31)
+
+Claude checked `22-the-sleepwalker-v3.png` by eye and approved it as **the canon pick for §22**: pale nightgown, barefoot, lantern held in both hands, and the lantern is dark glass with only a single faint gold glint — FLAMELESS, as the Bible requires. `22-…-v1.png`, `-v2.png` and `-v4.png` (lit lanterns) are marked NOT CANON. v3 came out landscape rather than the asked 2:3 — covered by the standing crop-plan note. With this, every ruling Claude was asked for is made; the only art item still open is the owner's confirmation of Claude's §20 pick (v1).
