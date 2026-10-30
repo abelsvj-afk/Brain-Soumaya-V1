@@ -328,3 +328,15 @@ Files: `60-noor-asks-vesh-v1.png` … `v4.png`. Vesh is right in all four and co
 - Small slips only: v2 has a second paper boat in the mid-background, and its seal's ringed-planet emblem reads slightly like a coin. Neither touches continuity.
 
 Verdict: a clean, consistent set with no flags. Your pick.
+
+## §61 — Sethane's Cord (Sheet 2)
+
+Files: `61-sethanes-cord-v1.png` … `v4.png`. All four wide. The sheet's rule holds in every variant: Sethane is small and distant at the far end, tall, slim and dark-clad, with her back to us — the last place she was seen — standing at the edge of the vast pale gap with a ring of measuring arms around her. The long pale-gold cord crosses a wide field of planets from a tiny station, its knots tied along the way and its measure never closing.
+
+- **Closest to the sheet: v1** — one cord, big clear knots, the end coming undone in open space, Sethane and her ring of articulated arms on the ledge before the gap.
+- v2 multiplies the cord into a fan of ropes running to her station of arms; the sheet says one cord.
+- v3's single cord is the cleanest diagonal, but its open end finishes mid-frame, apart from Sethane's corner.
+- v4 makes the measuring arms a radial burst of instruments around her in the gap — the most literal ring — while the cord runs in long parallel strands.
+- The station renders as contemporary hardware (solar panels) in v1, v3 and v4; the prompt's own words — "a tiny, real-sized station" — invite that read, but flagging it in case the Station should stay mythic.
+
+Verdict: a strong set; the cord-count in v2 and the hardware-station read are the notes for Claude. Your pick.
