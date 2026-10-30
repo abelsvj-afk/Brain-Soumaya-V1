@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { WARD_COT_WALL_X, WARD_HALL, specialCot, wardCots, wardLanternPositions, wardOccupied } from "./wardLayout.js";
+import { WARD_COT_WALL_X, WARD_HALL, WARD_VIEW_Z, specialCot, wardCots, wardLanternPositions, wardOccupied } from "./wardLayout.js";
 
 /**
  * The Faded Ward (docs/specs/seam-faded-ward-2026-10-31.md): one long hall of narrow cots under a ribbed, open roof, ember lanterns hung down its length, the far end lost in fog.
@@ -218,6 +218,13 @@ export function createWardScene(): WardScene {
   group.add(far);
 
   group.userData.wallX = WARD_COT_WALL_X;
+  // The host orbits the world's origin. Measured in a real browser: with the origin at the door, the orbit sat OUTSIDE the hall and the walls hid
+  // every cot. Shift the whole hall so the origin stands in the aisle a little way in, between the rows; the host's orbit stays inside the walls.
+  const hall = new THREE.Group();
+  hall.name = "ward-hall";
+  for (const child of [...group.children]) hall.add(child);
+  hall.position.z = -WARD_VIEW_Z;
+  group.add(hall);
 
   const update = (ms: number, opts?: { reducedMotion?: boolean }) => {
     if (opts?.reducedMotion) {

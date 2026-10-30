@@ -88,6 +88,7 @@ import {
   type QuietArchiveLayout,
 } from "../graph/quietArchiveLayout.js";
 import { createWardScene } from "../graph/wardScene.js";
+import { WARD_ORBIT_HEIGHT, WARD_ORBIT_RADIUS } from "../graph/wardLayout.js";
 import { attachWorldProps } from "../graph/worldProps.js";
 import { tintRigForHour } from "../graph/hourTint.js";
 import {
@@ -583,9 +584,9 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     light: { env: 0.6, hemi: { sky: 0xcfe8d8, ground: 0x1a2420, intensity: 1.15 }, key: { color: 0xffe6b8, intensity: 0.9, from: [200, 420, 120] } },
     background: 0x0c1412,
     fogDensity: 0.0006,
-    orbitRadius: 460,
-    orbitHeight: 100,
-    lookAtY: 40,
+    orbitRadius: WARD_ORBIT_RADIUS,
+    orbitHeight: WARD_ORBIT_HEIGHT,
+    lookAtY: 30,
     fallback: "The ward view needs graphics support on this device — your memories are unaffected.",
     build: () => createWardScene(),
   },
