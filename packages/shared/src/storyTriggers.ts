@@ -124,6 +124,9 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "obj.tin-soldier", how: "regard", world: "great-station", hour: "rest", spot: { place: "^witness-drydock-gantry$", at: [0, -0.5, 0], near: 1.0 } },
   { entryId: "obj.vesh-paper-boat", how: "regard", world: "quiet-archive", hour: "rest", spot: { place: "^still-threshold$", at: [0, 0, 0.7], near: 1.0 } },
   { entryId: "obj.measurers-cord", how: "regard", world: "scale", hour: "measure", spot: { place: "^iss-holder$", near: 1.8 } },
+  // Draft 7 (the Station knot)
+  { entryId: "sight.gatepost-lamp", how: "regard", world: "great-station", hour: "hearths", spot: { place: "^annex-(?!model)", at: [0.9, 0, 0], near: 1.1 } },
+  { entryId: "obj.linnets-coat", how: "regard", world: "great-station", hour: "rest", spot: { place: "^annex-(?!model)", at: [0, 0.5, -0.4], near: 0.9 } },
   // Listen: stay still and hear (echoes).
   { entryId: "echo.hymnal-gap", how: "listen", world: "quiet-archive", hour: "hearths", spot: { place: "^still-threshold$", at: [0, 0, -0.5], near: 1.2 } },
   { entryId: "echo.eighth-bell", how: "listen", world: "eternity", hour: "standing", spot: { near: 0, view: { nearerThan: 330 } } },

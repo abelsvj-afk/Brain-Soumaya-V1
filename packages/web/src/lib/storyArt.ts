@@ -16,4 +16,8 @@ export const STORY_ART: Readonly<Record<string, { src: string; alt: string }>> =
   "obj.choirmasters-breath": { src: "/lore/obj.choirmasters-breath.webp", alt: "An old woman in pale-gold choir robes, mouth closed, raises one hand in a ruined hall beside a hymnal with a torn page." },
   "obj.dorrows-page": { src: "/lore/obj.dorrows-page.webp", alt: "A heavy man in a burgundy velvet coat smiles behind an enormous open ledger among towering shelves and brass lamps." },
   "echo.eighth-bell": { src: "/lore/echo.eighth-bell.webp", alt: "A row of small keepers' emblems, each carrying a bell, along a stone ledge; at the end a hooded figure raises a fist to ring a bell that is not there, and rings of light spread out." },
+  "sight.gatepost-lamp": { src: "/lore/sight.gatepost-lamp.webp", alt: "A weathered old woman in a long dark-green scarf pours oil into a lantern beside an iron gate-post on a night harbor wall, with a coil of rope and empty oil tins at her feet." },
+  "relic.harbor-nail": { src: "/lore/relic.harbor-nail.webp", alt: "A travel-worn man steps out of a tall narrow door standing alone on a harbor pier, an iron nail in his hand; beside the door a wiry man in a patchwork coat rests his palm on the frame." },
+  "sight.locked-room": { src: "/lore/sight.locked-room.webp", alt: "A big stern man in a Warden's coat polishes a tin soldier in a long store-room lined with small belongings, each on a blank paper tag, under one hanging lamp." },
+  "obj.linnets-coat": { src: "/lore/obj.linnets-coat.webp", alt: "Three panels: a long coat on a hook beside a child's drawing of a faceless woman; a half-transparent woman asleep on a narrow cot beside a bowl of soup; a small child, seen from behind, setting an extra place at a long table." },
 };

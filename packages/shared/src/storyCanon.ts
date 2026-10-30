@@ -103,6 +103,9 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   E("sight.unlooked-direction", "sight", "eternity", "The Direction He Does Not Look", ["A11", "A5"], ["c.eternity.never-looks-one-way"], { text: { plain: "He looks at everything. He does not look in one direction, and wherever you stand it is the same direction, as though the thing he does not look at were walking beside you." } }),
   E("sight.blank-nameplate", "sight", "anywhere", "The Blank Nameplate", ["A12"], ["c.soumaya.hull-has-no-nameplate"], { text: { plain: "Six ships of one family carry their names on the flank in a plain hand. Hers carries a clean rectangle of bare metal where a name would go. It has been polished, though no one admits to polishing it. When it is asked about, her engines hum a half-step lower." } }),
   E("sight.lullaby-hollow", "sight", "quiet-archive", "The Lullaby's Hollow", ["A12", "A1"], ["c.vesh.ship-has-a-hull-length-gap"], { text: { plain: "A long, hushed ship lies at its mooring in the Archive like a swan asleep with its head under its wing. Along its flank runs one smooth hollow, the whole length of the hull, where something was taken out so cleanly that the edges are soft. On quiet nights the hollow hums, very low, as a held note does." } }),
+  // --- Draft 7 (locked 2026-10-31), the Station knot: a lamp kept for one who walked in; one person kept in three places. ---
+  E("sight.gatepost-lamp", "sight", "great-station", "The Lamp Nobody Pays For", ["A3", "A8"], ["c.mara.keeps-a-lamp-lit-for-one-who-walked-in"], { text: { plain: "At the foot of the harbor gate stands one lantern on an iron post, lit every dusk by a weathered woman in a long green scarf. No berth is listed under it and no ship has ever moored near it. She pours the oil with great care, and never looks up, and says only that someone might be walking." } }),
+  E("obj.linnets-coat", "object", "great-station", "The Coat on the Hook", ["A4", "A10"], ["c.linnet.one-person-kept-in-three-places"], { text: { plain: "In the locked store-room a long plain coat hangs alone on its hook beneath a single lamp. Beside it is pinned a child's drawing of a woman with no face. Elsewhere a narrow cot is made up each morning for whoever wore it. No one has put the three together, and each of the three who keep a part has been careful never to ask." } }),
   E("sight.missing-berth", "sight", "great-station", "The Berth Too Few", ["A4"], ["c.hush.takes-the-unclaimed-first"], { text: { plain: "The harbor lists its berths in order, and one number is not there. The dockhands step around the gap without looking, as people do around a thing they were told, once, not to mention." } }),
 ];
 
@@ -127,6 +130,13 @@ export const STORY_EDGES: readonly StoryEdge[] = [
   T("obj.vesh-paper-boat", "sight.lullaby-hollow", "echo", "the paper's missing stroke and the hull's missing section are one shape"),
   T("sight.lullaby-hollow", "sight.blank-nameplate", "echo", "Soumaya's gap is the same shape as Vesh's hull hollow"),
   T("sight.blank-nameplate", "relic.witness-without-a-name", "echo", "an unnamed thing wearing a place where a name goes"),
+  // Draft 7 §3 — the Station knot
+  T("sight.gatepost-lamp", "relic.harbor-nail", "provenance", "the lamp is kept by Teru's sister; it is lit for him"),
+  T("sight.gatepost-lamp", "obj.doorkeepers-nail", "echo", "two warm things kept for the same man"),
+  T("sight.gatepost-lamp", "sight.missing-berth", "absence", "a lamp with no berth beside a berth with no ship"),
+  T("obj.linnets-coat", "sight.locked-room", "provenance", "it hangs among the belongings of the Faded"),
+  T("obj.linnets-coat", "obj.kiths-drawing", "echo", "the coat the faceless woman is drawn in"),
+  T("obj.linnets-coat", "sight.tamsins-ward", "echo", "the cot made up for whoever wore it"),
   T("relic.witness-without-a-name", "obj.kiths-drawing", "echo", "smooth, open, plain; torn at the mouth"),
   T("obj.kiths-drawing", "sight.empty-chair", "habit", "she sets the extra place"),
   T("sight.empty-chair", "relic.hearth-ember", "echo", "warmth with no one to be warm for"),

@@ -52,3 +52,11 @@ I opened one candidate from each of eight more sets (Muse's notes chose the vari
 | `echo.eighth-bell` | §35 v3 | The line of keepers' emblems with bells; the eighth, earth-toned and hooded, from behind, ringing empty air; the white void on the left. |
 
 **Twelve entries now have a painting.** Entries without one are not an oversight: each needs an image approved by eye, and several have none generated (see `PROMPT_SHEET_2_DRAFTS_7_8.md`). Sets I did **not** place (no entry maps one-to-one, or I have not viewed them): §1 First Morning, §2 Seven Hours, §3 Eternity (a mood piece, not an entry), §4 Vesh, §6 Rending, §7 Witness, §8 Calend, §9 Archive, §10 Firstborn, §11 Player, §12 Hush, §13 Fading, §14 Oru, §15–18, §27–30, §32, §34. They stay in the repo for the lore and for the marketing/intro surfaces; none is wrong, they are just not Book illustrations yet.
+
+## Round 7 (2026-10-31) — Sheet 2 (Draft 7 Station knot), placed in the Book
+I opened one image from each of the first four Sheet-2 sets and **approved all four**; they illustrate the two new Draft-7 entries and two existing ones:
+- `43-the-lamp-nobody-pays-for-v2` → NEW entry `sight.gatepost-lamp` (Mara: weathered, long dark-green scarf, oil poured with care, no ship, rope and tins — the gate reads clearly in v2/v4).
+- `44-terus-first-door-v1` → `relic.harbor-nail` (the owner's pick; straight-on, door centred, Teru steps toward us with the nail). **Continuity flag for the owner:** this Calend (beside the door) has a younger dark-haired face; the Bible and §8/§15/§29 give him the older, greyer, wry face. v4 has the older face. The owner chose v1, so I placed it, but I'd swap to v4 if you want Calend consistent.
+- `45-hesks-locked-room-v1` → `sight.locked-room` (the big grey-bearded Warden polishing the tin soldier among hundreds of blank-tagged belongings; cold blue doorway).
+- `46-three-parts-of-one-v1` → NEW entry `obj.linnets-coat` (the coat and the child's drawing / the sleeping half-transparent woman with soup / the child laying the extra place; faces: the drawn figure has no face, Kith is from behind).
+**Sixteen entries now have a painting.** Also: Draft 7's torn-page claim (Aldous) disagreed with an older locked edge ("Ysmerel tore the page herself"); I did NOT change the edge, and I softened Ysmerel's dialogue line so it contradicts neither — your call which is canon.

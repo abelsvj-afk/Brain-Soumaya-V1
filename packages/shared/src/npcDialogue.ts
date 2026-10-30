@@ -68,7 +68,7 @@ export const NPC_TALK: readonly NpcTalk[] = [
     placeAway: "Even here the hours turn, and I sing them under my breath. It is a habit. It is also a mercy.",
     job: "I give the hours their voices. Every hymn has its place and its time, and I see that none of them is rushed.",
     thread: [
-      { id: "ysmerel.torn", ask: "What is the hymnal like?", say: "There is a page torn out of the hymnal. I did not tear it. I have never quite asked who did.", minMeetings: 1 },
+      { id: "ysmerel.torn", ask: "What is the hymnal like?", say: "There is a page torn out of the hymnal. I have never said whose hand tore it, and in all this time no one has asked twice.", minMeetings: 1 },
       { id: "ysmerel.gap", ask: "Why does the Choir pause?", say: "Every hymn we sing has a held breath in it, always the same length. We do not speak of why. We keep it, as one keeps a chair at a table.", minMeetings: 3, after: "ysmerel.torn" },
       { id: "ysmerel.hum", ask: "Could I hear it?", say: "Sometimes I ask a visitor to hum the gap. No one has ever hummed it the same way twice. It is not that they are wrong.", minMeetings: 4, after: "ysmerel.gap" },
     ],
