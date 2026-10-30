@@ -173,3 +173,11 @@ Files: `46-three-parts-of-one-v1.png` … `v4.png`. All four are true triptychs 
 - Same warm-gold light carries across all three panels in every variant; no text anywhere.
 
 Verdict: a complete, clean set — no flags beyond the small v4 hand note. Your pick, as usual.
+
+## §44 — correction and replacement (2026-10-30, owner's words)
+
+Clarifying the §44 note above: the owner did not reject the set — he approved **v1** ("the second one looks perfect") and asked for **v3 to be REPLACED** because its camera angle is wrong: v3 is shot side-on, Calend looming in the left foreground and Teru crossing the doorway in profile, so the stepping-through does not read. In v1 the door is centred, shot straight-on at eye level, and Teru steps toward the viewer over the threshold.
+
+- **Replacement filed: `44-terus-first-door-v5.png`** — generated with v1 as the angle/composition reference: same straight-on view, door centred, Teru stepping toward the viewer with the nail in his closed hand, Calend at the right in the many-coloured patchwork coat (unfinished pale patch visible), palm on the frame, not touching him. Wide 16:9.
+- v3 stays in the folder marked **do-not-use (superseded by v5 at the owner's word)** — do not pick it.
+- Live candidates for §44 are now v1, v2, v4, v5. The Calend face question from the original §44 note still stands for your pick (v1/v2/v5 younger dark-haired; v4 older greyer).
