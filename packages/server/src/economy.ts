@@ -4,6 +4,21 @@ import { buffsForSpace } from "./relics/buffs.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
 
 /**
+ * Relics I-6 (§4.7, §9 ruling 1): the exchange's Credits option reads
+ * its price from ONE place — a posted value. No posted value exists:
+ * there is no Credits ledger anywhere in the app and the G0 D-07
+ * value decisions have not priced a Legacy, so this seam reports
+ * "not offered" for every relic and no caller can invent a number.
+ * When a real posted value exists, this is where it lands
+ * (offered: true, value: the posted amount), and the exchange is
+ * where it would be paid.
+ */
+export type PostedExchangeValue = { offered: false } | { offered: true; value: number };
+export function postedExchangeValue(_relicId: string): PostedExchangeValue {
+  return { offered: false };
+}
+
+/**
  * The "Celestial Economy": Fuel is a free, in-app energy that powers Soumaya's
  * autonomous work. You EARN it by tending the galaxy (adding memories, forging
  * links, clearing action items) and she SPENDS it on autonomous LLM jobs — on

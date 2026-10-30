@@ -196,8 +196,12 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     // transaction. addHolding — the direct seed this test uses —
     // still writes ONLY the NPC table, so the invariant below (no
     // player-pool rows from an NPC holding) stands as written.
+    // Relics I-6 adds `relic_seed_effects` (a Seed's permanent effect,
+    // recorded once per space) and `relic_exchange_attempts` (the
+    // Legacy exchange's receipts) via the same dual DDL. Both are
+    // player records; the NPC invariant below is untouched.
     expect(new Set(tables.map((t) => t.name))).toEqual(
-      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened", "relic_position_samples", "relic_claim_attempts", "relic_codex_layers", "relic_first_discoveries", "relic_stirrings"]),
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened", "relic_position_samples", "relic_claim_attempts", "relic_codex_layers", "relic_first_discoveries", "relic_stirrings", "relic_seed_effects", "relic_exchange_attempts"]),
     );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
     // No row for this space (or any space) appeared in the player pool:

@@ -820,6 +820,32 @@ export function migrateSchema(sqlite: RawDb): void {
     CREATE INDEX IF NOT EXISTS relic_stirrings_open_idx ON relic_stirrings(relic_id, state, open_until);
     CREATE UNIQUE INDEX IF NOT EXISTS relic_stirrings_one_open_idx
       ON relic_stirrings(space_id, relic_id) WHERE state = 'open';
+    -- Relics I-6 (§4.5, §4.9): Seed effects + exchange receipts. A
+    -- seed's permanent effect is recorded exactly once per space —
+    -- the primary key IS the idempotency (a duplicate seed inserts
+    -- nothing and is consumed without effect, R3-3). An exchange
+    -- receipt records one atomic exchange, so a replayed attempt key
+    -- answers with the same committed outcome and grants nothing
+    -- twice. Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_seed_effects (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_exchange_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      attempt_key TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      option TEXT NOT NULL CHECK (option IN ('lore','credits','chart')),
+      chart_target_relic_id TEXT,
+      outcome TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (space_id, attempt_key)
+    );
   `);
   // Relics I-2: relic_holdings gains copy_id + location on volumes whose
   // relic_holdings table predates them (guarded, the space_meta pattern).
