@@ -21,6 +21,7 @@ import { GardenTendSheet } from "./GardenTendSheet.js";
 import { GardenGroveSheet } from "./GardenGroveSheet.js";
 import { GardenRecallSheet } from "./GardenRecallSheet.js";
 import { GardenObjective } from "./GardenObjective.js";
+import NpcTalk from "./NpcTalk.js";
 import {
   EMPTY_DAY,
   EMPTY_GUIDE,
@@ -112,7 +113,7 @@ import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
 import { encounterLine, encounterStep, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
 import { anchorFromBounds, createNpcBodies, type NpcBodies } from "../graph/npcBodies.js";
-import { castIn, castMember, faithLabel, hash01, worldLife, type SocietyDay } from "@brain/shared";
+import { canTalkTo, castIn, castMember, faithLabel, hash01, worldLife, type SocietyDay } from "@brain/shared";
 import { useSociety } from "../hooks/useSociety.js";
 import { patrolLabel } from "../graph/npcPresence.js";
 import { HARBOR_CONTROLLER_BERTH } from "../graph/stationLayout.js";
@@ -793,6 +794,14 @@ export default function WorldsSurface({
   const npcScriptRef = useRef<NpcDayScript | null>(null);
   // A tapped NPC's card (job, what they are doing, what is known of them).
   const [npcCard, setNpcCard] = useState<string | null>(null);
+  // Talking to a person (S3 of docs/specs/living-worlds-dialogue-2026-10-31.md): they stop and face you while it is open. The ref feeds the frame loop.
+  const [talkNpc, setTalkNpc] = useState<string | null>(null);
+  const talkNpcRef = useRef<string | null>(null);
+  talkNpcRef.current = talkNpc;
+  // If they go (the clock moves them out of this world) the conversation ends with them.
+  useEffect(() => {
+    if (talkNpc && !presentNpcs.some((n) => n.id === talkNpc)) setTalkNpc(null);
+  }, [talkNpc, presentNpcs]);
   const [npcNote, setNpcNote] = useState<string | null>(null);
   // Station interior (Wave 2, settled design): a mode of the Station
   // stay, not a world. `inside` swaps the exterior scene for the hall;
@@ -995,6 +1004,7 @@ export default function WorldsSurface({
     npcPhasesRef.current = new Map();
     setNpcNote(null);
     setNpcCard(null);
+    setTalkNpc(null);
     const active = visible && mode === "world" && !!currentWorld;
     const compute = () => castIn(active ? currentWorld : null, Date.now());
     let before = new Set<string>(compute().map((m) => m.id));
@@ -2052,6 +2062,8 @@ export default function WorldsSurface({
             });
             return out;
           },
+          // Where each person in the scene is right now (a read-only probe for the talk-holds-still check).
+          npcs: () => [...npcPosRef.current.entries()].map(([id, pos]) => ({ id, pos })),
           // Where her ship is and what it is doing (null until she is out), so a script can check a tap really flew her somewhere.
           flight: () => (flightRef.current ? { phase: flightRef.current.phase, pos: [flightRef.current.pos[0], flightRef.current.pos[1], flightRef.current.pos[2]] } : null),
           report: () => {
@@ -2347,10 +2359,14 @@ export default function WorldsSurface({
             npcAnchor = anchorFromBounds(world.group) ?? npcAnchor;
           }
         }
+        const talking = talkNpcRef.current;
+        const flTalk = flightRef.current;
         const frames = npcBodies.update(Date.now(), dt, {
           reducedMotion,
           anchor: npcAnchor,
           berth: currentWorld === "great-station" ? HARBOR_CONTROLLER_BERTH : null,
+          hold: talking ? new Set([talking]) : undefined,
+          faceToward: talking ? (flTalk ? flTalk.pos : [camera.position.x, camera.position.y, camera.position.z]) : null,
         });
         for (const f of frames) {
           const member = castMember(f.id);
@@ -3295,12 +3311,28 @@ export default function WorldsSurface({
               <span className="npc-card-line">{m.lore.tagline}</span>
               {met && <span className="npc-card-line">You have met {met.count} time{met.count === 1 ? "" : "s"}.</span>}
             </div>
+            {canTalkTo(m.id) && (
+              <button
+                type="button"
+                className="mini"
+                onClick={() => {
+                  // Talking is a meeting too (the same 20-minute cooldown applies), so a thread can open from a conversation, not only from passing by.
+                  const mt = recordMeeting(getSpaceId(), m.id);
+                  if (mt.recorded) void storyRef.current.onMeeting(m.id, mt.count);
+                  setNpcCard(null);
+                  setTalkNpc(m.id);
+                }}
+              >
+                Talk
+              </button>
+            )}
             <button type="button" className="mini" onClick={() => setNpcCard(null)} aria-label="Close">
               ✕
             </button>
           </div>
         );
       })()}
+      {talkNpc && mode === "world" && <NpcTalk npc={talkNpc} world={currentWorld ?? null} meetings={readMet(getSpaceId())[talkNpc]?.count ?? 1} onClose={() => setTalkNpc(null)} />}
       {story.caption && mode === "world" && (
         <p className="story-notice" role="status">
           {story.caption}

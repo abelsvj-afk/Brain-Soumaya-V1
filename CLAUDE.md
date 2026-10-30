@@ -817,6 +817,18 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   to read the lore. Found during the work: the once-a-day and first-in-world checks used the entry's world, which is "anywhere" for several entries — they now use the trigger's world.
   Next (same spec): S2 canon cast · S3 talk to people · S4 places with a past · S5 the world breathes + art in the Book. Look at: whether the foreword reads right and whether
   "one a day per world" now feels like the pace you want.
+- **Living worlds S2+S3 — the cast are the lore's people, and you can talk to them (2026-10-31, owner: "yes to 1 & 3", "NPCs should be able to stop when you're talking to them and have some
+  dialogue … for help with lore immersion") — MEASURED in a real browser (card → Talk → panel at 412×915, 5 choices, panel 484 px = under the 55 % cap; the person stopped: 0 units
+  moved in 4 s while others moved 35–67, then resumed after Goodbye), shared 80 / web 2,781 / server 2,573 tests; NOT yet voiced, needs on-device confirmation** (shared/npcDialogue.ts,
+  shared/npcs.ts names + canon + `lore.layers`, web components/NpcTalk.tsx, graph/npcTalk.ts, graph/npcBodies.ts `hold`/`faceToward`, WorldsSurface.tsx Talk button + probe `npcs()`; spec
+  `docs/specs/living-worlds-dialogue-2026-10-31.md`): the wayfarer is Calend, the cantor Ysmerel, the broker Dorrow Quint (ids unchanged); the other four keep their canon titles; all seven are
+  `canon` with a THREAD each (3–4 steps that open as you meet them more and hear the one before — surface only, each keeps back what the lore says they never say). Tap a name → card → **Talk**:
+  they stop where they are and turn to you; authored choices (Who are you? · What is this place to you? · What do you do? · the thread · **Is there something I should look for?** — a pointer, in
+  their words, toward an entry in the Book you have not found; never a number or map pin) and Goodbye. Nothing is spent, scored or gated; Eternity cannot be talked to and the harbor controller keeps
+  her own panel. Tests pin: every pointer names a real entry findable by stillness in a world that person visits; threads are in order and match the layers; no digits/banned words; nothing
+  the lore forbids saying. Talking counts as a meeting (20-minute cooldown). Look at: whether the lines read as the lore's people (they are mine — rewrite freely, they are data in
+  `npcDialogue.ts`), the panel's height over the scene on a short phone, and that the lag prompt can sit on top of it. Not built: voicing the lines (role voices exist; needs an endpoint
+  that names a line, not text), the harbor controller as a conversation, S4 places with a past, S5 the world breathes.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

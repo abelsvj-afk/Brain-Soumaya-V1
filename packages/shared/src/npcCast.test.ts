@@ -43,11 +43,16 @@ describe("the cast's lives", () => {
 });
 
 describe("the cast's data", () => {
-  it("has unique ids, only provisional canon (no lore is invented), and offline greetings for everyone who speaks", () => {
+  it("has unique ids, canon people with lore layers (the harbor controller and Eternity keep none), and offline greetings for everyone who speaks", () => {
     expect(new Set(NPC_CAST.map((c) => c.id)).size).toBe(NPC_CAST.length);
     for (const c of NPC_CAST) {
-      expect(c.canon).toBe("provisional");
-      expect(c.lore.layers).toEqual([]);
+      if (c.id === "harbor-controller" || c.id === "eternity") {
+        expect(c.canon).toBe("provisional");
+        expect(c.lore.layers).toEqual([]);
+      } else {
+        expect(c.canon).toBe("canon");
+        expect(c.lore.layers.length).toBeGreaterThan(0);
+      }
       if (c.speaks) expect(c.greetings.length).toBeGreaterThan(0);
       for (const w of c.roams) expect(NPC_NEVER_WORLDS).not.toContain(w);
       expect(c.homeShare).toBeGreaterThan(0);

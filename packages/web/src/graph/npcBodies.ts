@@ -41,7 +41,7 @@ export interface NpcBodies {
   update: (
     nowMs: number,
     dtMs: number,
-    ctx: { reducedMotion: boolean; anchor: RoamAnchor | null; berth: PatrolBerth | null },
+    ctx: { reducedMotion: boolean; anchor: RoamAnchor | null; berth: PatrolBerth | null; /** People being talked to: they stop where they are and turn to face `faceToward` (presentation only — the clock is untouched, so they resume where it says they should be). */ hold?: ReadonlySet<string>; faceToward?: readonly [number, number, number] | null },
   ) => NpcBodyFrame[];
   has: (id: string) => boolean;
   dispose: () => void;
@@ -130,6 +130,12 @@ export function createNpcBodies(parent: THREE.Object3D): NpcBodies {
           phase = pose.phase;
           b.existing.updateWorldMatrix(true, false);
           tmpV.setFromMatrixPosition(b.existing.matrixWorld);
+        } else if (ctx.anchor && ctx.hold?.has(id)) {
+          // Stopped to talk: keep the place they were in, and turn toward the one speaking to them.
+          if (ctx.faceToward) b.holder.rotation.y = Math.atan2(ctx.faceToward[0] - b.holder.position.x, ctx.faceToward[2] - b.holder.position.z) + Math.PI;
+          b.holder.updateWorldMatrix(true, false);
+          tmpV.setFromMatrixPosition(b.holder.matrixWorld);
+          phase = "docked";
         } else if (ctx.anchor) {
           const pose = roamAt(nowMs, id, ctx.anchor, { reducedMotion: ctx.reducedMotion });
           b.holder.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
