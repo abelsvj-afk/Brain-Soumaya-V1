@@ -808,6 +808,7 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   hooks/useStoryNotice.ts; spec `docs/specs/lore-physical-spots-2026-10-31.md` §10): Eternity's three entries now answer by where your camera is round him (far side · pulled
   well out · brought close); every speaking cast member has ≥ 3 Item Reactions (24 total, Eternity included); a slow low "find" sting plays when something is kept in the Book
   (honours the sound switch). Look at: whether the far/near thresholds (330 / 1100) are findable but not trivial with drag + pinch, and the sting's loudness.
+  **Lore sound wired (2026-10-31, Muse's files in `public/audio/`):** four beds (morning · hearth · hush · standing) fade in quietly under the narrator ONLY while a line is read (chosen by the place you are in: Deep Past → morning, Quiet/Archive → hush, Eternity → standing, else hearth) and fade out after; `lore-sting-find.mp3` plays when something is kept in the Book (the synthesized sting is only the fallback). Sound switch silences all of it (graph/loreBeds.ts). Not heard on a real device: check the bed level under the voice (BED_LEVEL 0.55) and the fades.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

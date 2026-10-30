@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { castMember, hourBand, npcGifts, pickNoticed, reactionFor, type StoryTrigger } from "@brain/shared";
-import { playSfx } from "../graph/sfx.js";
+import { ensureLoreBeds, playFindSting } from "../graph/loreBeds.js";
 import { worldHasSpots } from "../graph/storySpots.js";
 import { useStoryBook } from "./useStoryBook.js";
 import { emitReveal } from "../lib/narrationBus.js";
@@ -47,7 +47,8 @@ export function useStoryNotice({
   notifyRef.current = notify;
   // A find is marked by a slow low sting (the SFX kit already honours the sound switch and reduced-motion).
   const announceFind = (text: string) => {
-    playSfx("find");
+    ensureLoreBeds();
+    playFindSting();
     notifyRef.current(text);
   };
   const [noticing, setNoticing] = useState<"regard" | "listen" | null>(null);

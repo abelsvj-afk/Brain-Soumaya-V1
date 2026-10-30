@@ -2,6 +2,7 @@ import type { CurrentKey, Register } from "@brain/shared";
 import { API, afetch } from "../api/http.js";
 import { speak, stopSpeaking } from "../voice.js";
 import { emitNarration } from "./narrationBus.js";
+import { ensureLoreBeds } from "../graph/loreBeds.js";
 import { FALLBACK_CHARS_PER_SECOND } from "./captions.js";
 
 /**
@@ -98,6 +99,7 @@ export interface NarrationOpts {
 /** Start reading. Returns which voice is used. Starting a new one stops the old. */
 export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" | "none"> {
   if (getNarrationMode() === "off") return "none";
+  ensureLoreBeds(); // the quiet bed that fades in under the voice (graph/loreBeds.ts)
   stopNarration();
   const el = unlockedAudio(); // synchronous: still inside the tap that asked
   let finished = false;
