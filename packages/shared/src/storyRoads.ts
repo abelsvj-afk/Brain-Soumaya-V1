@@ -163,6 +163,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "Each of the three is right about one thing. None of them is wrong.",
   },
+  {
+    id: "road.soup-for-the-ward", world: "faded-ward", giver: "tamsin", title: "Soup for the Ward",
+    offer: "Carry the bowl down the rows with me tonight. Say nothing. Listen.",
+    steps: [
+      S("bowl", "Find the bowl that stays warm.", find("obj.ward-bowl")),
+      S("hum", "Listen over the cots until something hums back.", find("echo.ward-hum")),
+    ],
+    gift: "She takes the bowl from you and sets it down where it was. She does not say what you heard, and neither do you.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

@@ -4,6 +4,7 @@ import { SCALE_BELT_PIECES, SCALE_CENTERPIECES, SCALE_ENCOUNTERS, SCALE_HUNT2_PL
 import { STATION_BACKDROP_PLANETS } from "./stationAssets.js";
 import { PEOPLE_BACKDROP_PLANETS } from "./peopleAssets.js";
 import { STORY_TRIGGERS } from "@brain/shared";
+import { WARD_HOLDERS } from "./wardLayout.js";
 
 /**
  * Every body's passage is anchored to a scene holder the scene code really creates. Rather than trust a hand-typed name, the holder names are DERIVED from the same layout data the
@@ -31,6 +32,8 @@ function holderNames(world: string): string[] {
       return ["glb-basin", "glb-orb", "glb-spire", "glb-supernova", "place-rim", "stair"];
     case "quiet-archive":
       return ["still-threshold", "field-ground"];
+    case "faded-ward":
+      return [...WARD_HOLDERS];
     default:
       return [];
   }
