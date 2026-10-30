@@ -214,3 +214,13 @@ Files: `49-ysmerel-hums-the-gap-v1.png` … `v4.png`. All four wide. Ysmerel is 
 - Her robe carries fine star-chart embroidery in v1, v2 and v4 — decoration, no symbols.
 
 Verdict: clean, consistent set; the held-breath mood lands in all four. Your pick.
+
+## §50 — Dorrow's Blank Line (Sheet 2)
+
+Files: `50-dorrows-blank-line-v1.png` … `v4.png`. All four wide. **The hard rule holds in all four: the ledger script is fine pseudo-handwriting — no readable word anywhere.** Dorrow is a heavy man in the burgundy velvet coat with gold trim at the enormous ledger, shelves rising into shadow, brass lamps lit; in every variant his eyes are somewhere else in the room, never on the page.
+
+- **The blank line:** clearest in **v2** (one big empty ruled space at the very bottom of the near page, his pen hovering right at it, every line above filled) and **v4** (a long empty ruled line at the foot of the near page; his pen is a feather quill). In v1 the blank is a wide empty band at the foot of the left page. In **v3 it is weakest** — the pages are scripted nearly to the bottom.
+- **The smile:** v3 has the full famous trader's smile, bright-eyed, but its pen floats unheld in mid-air over the ledger — a generator slip, though an oddly literal one ("his pen hovers"). v1 has the wry half-smile. In v2 and v4 the smile is gone — he reads worried, almost afraid.
+- Dorrow's face varies a little across the set (hair length and beard shape); v2/v4 are the closest pair.
+
+Verdict: no rule breaks; the trade-off is blank-line clarity (v2, v4) against the smile (v3, v1). Your pick.
