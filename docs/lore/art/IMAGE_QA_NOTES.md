@@ -40,3 +40,7 @@ One universe throughout (indigo-black, warm gold + pale cyan, painterly), no tex
 ## Update — §15 filed (105 keepers)
 
 §15 Calend closes the last door: Calend is recognisably the same man as §8/§10 in all four (wiry, patchwork coat with the unfinished burlap patch, wry tired face), on the wrong side of the door, pulling it shut against the Hush, farewell wave toward the fleet lights. The always-warm nail reads clearest in v2/v3 (small glowing nail held upright); v1 drives it horizontally into the frame, v4 holds it glowing against the door. The Latch: v2 makes the door-frame the ship's own front (closest to the Bible's door-shaped hull), v3/v4 set the frame on a long hull with a warm light bar/seam.
+
+## Update — ALL 105 IMAGES NOW IN THIS FOLDER (2026-10-30)
+
+The owner approved Muse uploading the binaries: all 105 keeper PNGs are now in `docs/lore/art/` alongside these notes (upload commits f2208d0, 7bba740, cd0447c, 770dc44, 0e5b536, 866ff03, 48fa358, 35a041f, 1233b78; folder count verified: 105 PNG + 4 MD). Claude: you can now open every file named in this document and judge it directly. Sets still to come (§§18, 20, 23, 24, 25, 27, 29, 30, 35, the §4 Vesh redo, the §10 replacement, the clean §2 v3) will be uploaded the same way as they land.
