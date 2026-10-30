@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   RELICS,
+  RELIC_ANCHOR_POINTS,
+  RELIC_ANCHOR_RADIUS,
   RELIC_BY_ID,
   RELIC_CODEX_KEYS,
+  RELIC_THREADS,
+  WORLD_BEARING_SECTORS,
   discoverableRelics,
   eternityGateOpen,
   relicCodexKey,
@@ -108,5 +112,95 @@ describe("relic registry", () => {
     expect(
       eternityGateOpen(["witness-without-a-name", "harbor-nail", "not-a-relic"]),
     ).toBe(false);
+  });
+});
+
+/**
+ * The I-1 vocabulary (implementation design §3): tier classes, lore-layer
+ * structures, and server-known anchor points — data only, shipped dark.
+ * Exactly two tier classes are committed by the approved design; the
+ * other thirteen ship an explicit null (unassigned = today's behavior),
+ * and NO lore text exists yet anywhere in the new structures (O-R1:
+ * the owner approves every canon line before it becomes text).
+ */
+describe("relic vocabulary (I-1)", () => {
+  it("commits exactly two tier classes; the other thirteen are explicitly null", () => {
+    const assigned = RELICS.filter((r) => r.tierClass !== null);
+    expect(assigned.map((r) => `${r.id}:${r.tierClass}`)).toEqual([
+      "witness-without-a-name:keystone",
+      "unnumbered-fragment:legacy",
+    ]);
+    for (const r of RELICS) {
+      // The field is PRESENT on every def — null is a stated value,
+      // never a missing property a consumer could misread as a class.
+      expect("tierClass" in r, r.id).toBe(true);
+      if (r.id !== "witness-without-a-name" && r.id !== "unnumbered-fragment") {
+        expect(r.tierClass, r.id).toBeNull();
+      }
+    }
+    // The naming trap, pinned: the relic NAMED Witness Seed is not
+    // thereby a Seed — its class is the worksheet's to assign (null).
+    expect(RELIC_BY_ID.get("witness-seed")!.tierClass).toBeNull();
+  });
+
+  it("carries no lore text in the new structures (structure only)", () => {
+    for (const r of RELICS) {
+      expect(r.loreStirring, r.id).toBeUndefined();
+      expect(r.lore.length, r.id).toBeGreaterThan(0); // L2 predates I-1
+    }
+    expect(RELIC_THREADS).toEqual([]);
+    const worlds = Object.keys(WORLD_BEARING_SECTORS).sort();
+    expect(worlds).toEqual([
+      "deep-past",
+      "great-station",
+      "growing-place",
+      "people",
+      "quiet-archive",
+      "scale",
+    ]);
+    for (const sectors of Object.values(WORLD_BEARING_SECTORS)) {
+      expect(sectors).toEqual([]);
+    }
+  });
+
+  it("gives every placed relic exactly one server-known anchor; the unplaced get empty sets", () => {
+    // The anchor keys are stable ids — I-2's provenance records will
+    // cite them, so they are pinned exactly, not just by prefix.
+    const expectedKeys: Record<string, string> = {
+      "harbor-nail": "harbor-nail:lower-rim",
+      "mooring-ring": "mooring-ring:harbor-road",
+      "dawn-leaf": "dawn-leaf:witness-roots",
+      "witness-seed": "witness-seed:trunk-base",
+      "first-light-shard": "first-light-shard:basin-floor",
+      "basin-stone": "basin-stone:basin-floor",
+      "lantern-of-keeping": "lantern-of-keeping:lowest-alcove",
+      "witness-without-a-name": "witness-without-a-name:basin-center",
+      "hearth-ember": "hearth-ember:first-hearths",
+      "thread-of-many": "thread-of-many:field-edge",
+    };
+    for (const r of RELICS) {
+      const points = RELIC_ANCHOR_POINTS[r.id];
+      expect(points, r.id).toBeDefined();
+      if (!r.discoverable) {
+        expect(points, r.id).toEqual([]);
+        continue;
+      }
+      expect(points, r.id).toHaveLength(1);
+      const a = points![0]!;
+      expect(a.anchorKey).toBe(expectedKeys[r.id]);
+      expect(a.world).toBe(r.world);
+      // placeName is the registry's own place words — no new text.
+      expect(a.placeName).toBe(r.place);
+      expect(a.radius).toBe(RELIC_ANCHOR_RADIUS);
+      for (const v of a.position) expect(Number.isFinite(v)).toBe(true);
+      // L1 place text is unwritten until the content pipeline fills it.
+      expect(a.placeText).toBeUndefined();
+    }
+  });
+
+  it("the anchor-points record covers exactly the fifteen relics — no stray keys", () => {
+    expect(Object.keys(RELIC_ANCHOR_POINTS).sort()).toEqual(
+      RELICS.map((r) => r.id).sort(),
+    );
   });
 });

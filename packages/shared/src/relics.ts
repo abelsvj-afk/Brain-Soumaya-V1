@@ -35,6 +35,11 @@ export type RelicWorld =
   | "scale"
   | "quiet-archive";
 
+/** Tier class (approved design §5; implementation design §3.1).
+ *  Deliberately NOT named "class" and NOT related to RelicScarcityClass
+ *  (the 7/3/1 copy-limit class further below). */
+export type RelicTierClass = "keystone" | "seed" | "legacy";
+
 export interface RelicDef {
   /** Slug — also the codex key suffix (`relic-<id>`) and the asset name. */
   id: string;
@@ -48,8 +53,15 @@ export interface RelicDef {
   place: string;
   /** Short glimmer phrase for the in-world find line ("by the harbor's lower rim"). */
   glimmer: string;
-  /** The relic's story, in plain words (lore §6 + buffs §3 hook). */
+  /** The relic's story, in plain words (lore §6 + buffs §3 hook).
+   *  This is the L2 item description in the layered Codex (approved
+   *  design §3); the field keeps its name — the layer mapping is what
+   *  matters, not the identifier. */
   lore: string;
+  /** L0 — the stirring fragment (approved design §3). Absent until the
+   *  text is authored and owner-approved (O-R1); no code may treat an
+   *  absent fragment as an empty one — the layer is simply unwritten. */
+  loreStirring?: string;
   /** Public URL of the slim GLB. */
   assetUrl: string;
   /** Triangles of the shipped slim, index-based, measured from the file. */
@@ -60,6 +72,12 @@ export interface RelicDef {
    *  with this flag. The gate opens for a traveler holding the key plus
    *  any two other relics, and stays open to them after that. */
   gateKey: boolean;
+  /** Tier class (approved design §5). null = unassigned — behaves
+   *  exactly as relics do today (holdable, releasable, no exchange, no
+   *  seed consumption) until the O-R5 worksheet assigns it. Only the two
+   *  design-committed values are set (witness-without-a-name: keystone,
+   *  unnumbered-fragment: legacy); the other thirteen ship null. */
+  tierClass: RelicTierClass | null;
   /** False when the relic's world does not exist in the app yet — the
    *  registry entry is real, but no find can happen until its world opens. */
   discoverable: boolean;
@@ -80,6 +98,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14282,
     glow: "bare metal, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🔩",
   },
@@ -95,6 +114,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14999,
     glow: "bare metal, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "⚓",
   },
@@ -110,6 +130,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 17537,
     glow: "the leaf's own dawn colors, no added glow",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🍃",
   },
@@ -125,6 +146,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14522,
     glow: "bare, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🌱",
   },
@@ -140,6 +162,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14495,
     glow: "pale and see-through, with a warm-white light inside (as made: transmission 0.45, glow 2.0)",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "💎",
   },
@@ -155,6 +178,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15000,
     glow: "bare stone, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🪨",
   },
@@ -170,6 +194,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15000,
     glow: "a warm light inside (as made: glow 1.5)",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🏮",
   },
@@ -185,6 +210,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15002,
     glow: "pale, no glow",
     gateKey: true,
+    tierClass: "keystone",
     discoverable: true,
     icon: "🗝️",
   },
@@ -200,6 +226,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15881,
     glow: "a low amber glow in its cracks (as made: glow 2.0)",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🔥",
   },
@@ -215,6 +242,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 22500,
     glow: "bare thread, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: true,
     icon: "🧵",
   },
@@ -230,6 +258,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14999,
     glow: "bare metal, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: false,
     icon: "🌟",
   },
@@ -245,6 +274,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14390,
     glow: "bare metal, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: false,
     icon: "🧭",
   },
@@ -260,6 +290,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14367,
     glow: "bare, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: false,
     icon: "🕯️",
   },
@@ -275,6 +306,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 22500,
     glow: "bare, no glow",
     gateKey: false,
+    tierClass: null,
     discoverable: false,
     icon: "✉️",
   },
@@ -290,6 +322,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15000,
     glow: "a pale glow inside (as made: glow 1.5)",
     gateKey: false,
+    tierClass: "legacy",
     discoverable: false,
     icon: "🔮",
   },
@@ -338,6 +371,203 @@ export function eternityGateOpen(
   }
   return others >= 2;
 }
+
+// ---------------------------------------------------------------------------
+// Relic vocabulary (implementation design §3) — anchor points, lore-layer
+// structures, thread records, bearing sectors. DATA ONLY, shipped dark:
+// no behavior reads these fields until later increments (I-2 anchors and
+// copies, I-4 sampling/scan/claim, I-5 stirrings, I-6 exchange, I-7
+// presentation). No lore text is authored here — the content pipeline
+// (O-R1: King drafts, the owner approves every canon line) fills text
+// into these structures; every mechanic is built to run with it absent.
+// ---------------------------------------------------------------------------
+
+/** One resting place of a relic, as a server-known fact (implementation
+ *  design §3.2). The claim-time sampling the owner chose (R2-6) needs
+ *  anchor coordinates the server can check — until this record, they
+ *  existed only in the web's scene module. */
+export interface RelicAnchorDef {
+  /** Stable id, e.g. "harbor-nail:lower-rim". */
+  anchorKey: string;
+  /** The world this anchor rests in (always the relic's own world). */
+  world: RelicWorld;
+  /** Scene units, the relic's center — the same convention the web
+   *  scene uses (the model is recentered on load). */
+  position: readonly [number, number, number];
+  /** Claim radius in scene units (tuning constant, §9 ruling 3). */
+  radius: number;
+  /** "the lower rim of the harbor" — the registry's own `place` words
+   *  for the relic; display text and the scan's bearing fallback. */
+  placeName: string;
+  /** L1 — what this place has to do with the relic (approved design
+   *  §3). Place text lives on the anchor, not the relic: a relic rests
+   *  at different places over its life. Absent until authored and
+   *  owner-approved (O-R1). */
+  placeText?: string;
+}
+
+/** The claim radius for every anchor, in scene units — the I-1 starting
+ *  tuning constant (implementation design §9 ruling 3: tuning stays
+ *  centralized; I-4 validates sampling constants against real client
+ *  flight before any of them may reject a claim). Anchors are relic
+ *  centers and placed relics span 22 units, so 30 reads as "standing
+ *  at the relic" on the worlds' scale (basin radius 320, wheel 210). */
+export const RELIC_ANCHOR_RADIUS = 30;
+
+/**
+ * Server-known anchor points, one per placed relic — the relic's ONE
+ * existing resting place (anchor SETS are I-2's work, §3.2). Positions
+ * are lifted verbatim (evaluated) from the web record
+ * (`packages/web/src/graph/relicAssets.ts` RELIC_ANCHORS), which derives
+ * them from the world layout constants: Station wheel radius 210,
+ * Garden top terrace 90 (+12 clearance), Deep Past basin floor −830
+ * (+12), People field radius 560 (+10 at the edge). The web keeps
+ * deriving its scene placement from those constants; the parity test in
+ * `packages/web/src/graph/relicAssets.test.ts` asserts the two records
+ * agree per anchor, so scene and server can never silently drift.
+ *
+ * An EMPTY array means unplaced (approved design §3.3): no stirrings,
+ * no references, no claims until an O-R6 placement session gives the
+ * relic a real resting place. No position is invented here — the five
+ * relics whose worlds are unbuilt keep empty sets, exactly as they
+ * keep `discoverable: false`.
+ */
+export const RELIC_ANCHOR_POINTS: Readonly<
+  Record<string, readonly RelicAnchorDef[]>
+> = {
+  "harbor-nail": [
+    {
+      anchorKey: "harbor-nail:lower-rim",
+      world: "great-station",
+      position: [210, 38, 0],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the lower rim of the harbor, set into an ancient seam",
+    },
+  ],
+  "mooring-ring": [
+    {
+      anchorKey: "mooring-ring:harbor-road",
+      world: "great-station",
+      position: [214, 14, 78],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "where the harbor's stone meets the open road",
+    },
+  ],
+  "dawn-leaf": [
+    {
+      anchorKey: "dawn-leaf:witness-roots",
+      world: "growing-place",
+      position: [-34, 102, 22],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "near the roots of the witness tree",
+    },
+  ],
+  "witness-seed": [
+    {
+      anchorKey: "witness-seed:trunk-base",
+      world: "growing-place",
+      position: [26, 102, 14],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "beneath the witness tree, at the trunk's base",
+    },
+  ],
+  "first-light-shard": [
+    {
+      anchorKey: "first-light-shard:basin-floor",
+      world: "deep-past",
+      position: [120, -818, 80],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "near the First Light basin",
+    },
+  ],
+  "basin-stone": [
+    {
+      anchorKey: "basin-stone:basin-floor",
+      world: "deep-past",
+      position: [-140, -818, 60],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "on the floor of the basin",
+    },
+  ],
+  "lantern-of-keeping": [
+    {
+      anchorKey: "lantern-of-keeping:lowest-alcove",
+      world: "deep-past",
+      position: [150, -712, 242],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "in a lowest-stratum alcove above the basin",
+    },
+  ],
+  "witness-without-a-name": [
+    {
+      anchorKey: "witness-without-a-name:basin-center",
+      world: "deep-past",
+      position: [0, -818, 0],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "the lowest stratum, at the First Light basin",
+    },
+  ],
+  "hearth-ember": [
+    {
+      anchorKey: "hearth-ember:first-hearths",
+      world: "people",
+      position: [0, 12, 0],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "near the first hearths",
+    },
+  ],
+  "thread-of-many": [
+    {
+      anchorKey: "thread-of-many:field-edge",
+      world: "people",
+      position: [570, 12, 0],
+      radius: RELIC_ANCHOR_RADIUS,
+      placeName: "between the stones of the hearths",
+    },
+  ],
+  "star-hanger": [],
+  "sunward-compass": [],
+  "stillness-seal": [],
+  "unopened-fold": [],
+  "unnumbered-fragment": [],
+};
+
+/** A thread between two relics (approved design §3.3): the Codex's
+ *  cross-reference layer, L3. A thread's text can be REVEALED only when
+ *  it is authored (`text` present) AND owner-approved AND the other
+ *  member is placed (non-empty anchor set) — unauthored or unapproved
+ *  text is indistinguishable from unwritten text to every reader, so
+ *  future content cannot leak through a half-filled record. */
+export interface RelicThreadDef {
+  threadId: string;
+  relicA: string;
+  relicB: string;
+  /** Unlock condition for the pair: "discovery" (the default — personal
+   *  discovery of both) or the stricter authored "held". */
+  condition: "discovery" | "held";
+  /** The thread text — absent until authored (content pipeline). */
+  text?: string;
+  /** O-R1: owner-approved canon only. */
+  approved: boolean;
+}
+
+/** No threads are authored yet — structure only (O-R1). */
+export const RELIC_THREADS: readonly RelicThreadDef[] = [];
+
+/** Bearing sector labels per world (implementation design §3.3): eight
+ *  authored phrases per world, filled by the content pipeline and
+ *  approved like all canon. Shipped empty — the scan's bearing falls
+ *  back to the anchor's `placeName` until a world's sectors exist. */
+export const WORLD_BEARING_SECTORS: Readonly<
+  Record<RelicWorld, readonly string[]>
+> = {
+  "great-station": [],
+  "growing-place": [],
+  "deep-past": [],
+  people: [],
+  scale: [],
+  "quiet-archive": [],
+};
 
 // ---------------------------------------------------------------------------
 // Relic Buffs v2 (design note v2 §§5, 10, 11) — data beside the registry.
