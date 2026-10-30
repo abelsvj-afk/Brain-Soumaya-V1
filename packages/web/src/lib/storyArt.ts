@@ -8,4 +8,12 @@ export const STORY_ART: Readonly<Record<string, { src: string; alt: string }>> =
   "companion.dock-1": { src: "/lore/companion.dock-1.webp", alt: "A traveller sits on a crate on a night dock; a stranger's hand, in a brown cloak, holds out a flask beside two cups." },
   "sight.blank-nameplate": { src: "/lore/sight.blank-nameplate.webp", alt: "A sleek blue-white ship with a violet edge and a single blank rectangular plate on its flank." },
   "sight.lullaby-hollow": { src: "/lore/sight.lullaby-hollow.webp", alt: "A pale ship shaped like a swan with its neck curved, a long hollow along its side and petal-shaped vanes." },
+  "sight.tamsins-ward": { src: "/lore/sight.tamsins-ward.webp", alt: "A woman in a green apron kneels with a bowl and spoon beside a half-transparent patient; rows of pale, watercolour-soft figures lie on narrow cots under hanging lanterns." },
+  "obj.kiths-drawing": { src: "/lore/obj.kiths-drawing.webp", alt: "A small child in a patched dress holds up a torn crayon drawing of a faceless woman; behind her, adults at a long table hold fingers to their lips; one plate is set for no one." },
+  "sight.long-room": { src: "/lore/sight.long-room.webp", alt: "A hooded figure seen from behind stands in a long stone hall of small rooms, each lit by a lantern; at the far end, one tall doorway opens onto pure white light." },
+  "obj.follower-ribbon": { src: "/lore/obj.follower-ribbon.webp", alt: "A hooded figure in a small boat, seen from behind, reaches a note toward a ribbon tied round a mooring post on a dark harbor with lights beyond." },
+  "echo.hymnal-gap": { src: "/lore/echo.hymnal-gap.webp", alt: "Rows of pale, mist-edged singers fill a great hall; at the centre one choir stall stands empty beneath a shaft of gold light." },
+  "obj.choirmasters-breath": { src: "/lore/obj.choirmasters-breath.webp", alt: "An old woman in pale-gold choir robes, mouth closed, raises one hand in a ruined hall beside a hymnal with a torn page." },
+  "obj.dorrows-page": { src: "/lore/obj.dorrows-page.webp", alt: "A heavy man in a burgundy velvet coat smiles behind an enormous open ledger among towering shelves and brass lamps." },
+  "echo.eighth-bell": { src: "/lore/echo.eighth-bell.webp", alt: "A row of small keepers' emblems, each carrying a bell, along a stone ledge; at the end a hooded figure raises a fist to ring a bell that is not there, and rings of light spread out." },
 };
