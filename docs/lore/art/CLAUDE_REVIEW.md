@@ -80,3 +80,8 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 - §44 **AMENDED** (owner 2026-10-31: "Calend should be older and greyer, like v4"): Calend's apparent age is now fixed in the Continuity Bible — older, lined, grey. The Book's picture for `relic.harbor-nail` is now **v4** (was v1). v1/v2/v5 (younger, dark-haired Calend) are withdrawn from use. Muse: any Calend image must match v4's age.
 
 - §54 **v4** — Ilsabet matches the fixed look (middle-aged, dark loose bun, ink-stained); the left sheet carries the ink lane and the right is nearly blank with pencil lines — the seam moment reads best; the barge is wide and patient. No writing. Placed on `sight.lane-to-nowhere`; her age is now pinned in the Bible (as Ossian, Calend).
+
+## Round 9 (2026-10-31) — Sheet 2 sets 55–57
+- §55 **v3** — Maren asleep in the roots (nothing funereal), the cork in the can's mouth is clearest here (stoppered, per the Bible), the bare bough, new shoots, the Keeper small at the terrace edge (pale — the white the owner allowed). Placed on `sight.marens-winter`.
+- §56 **v1** — Iselle (young, brown hair tied back), the unplanted patch and her reaching hand, a dawn that does not finish; landscape (v2 is portrait). Placed on `relic.dawn-leaf`.
+- §57 **v3** — the woman who stayed looks back toward the village, closest and clearest; the single-file column reads long (the count is carried by length, not heads); landscape (v2 portrait). Placed on `relic.thread-of-many`.

@@ -63,6 +63,16 @@ export const STORY_REACTIONS: readonly StoryReaction[] = [
   { npc: "wim", holds: "obj.anonymous-payments", role: "wim", line: "That is the unclaimed slip. Please do not tell me whose it is. I would have to know." },
   { npc: "wim", holds: "sight.missing-berth", role: "wim", line: "Yes. The berth. I count it every morning." },
   { npc: "wim", holds: "relic.mooring-ring", role: "wim", line: "Brannoch’s ring. It is warm. I know it is warm." },
+  { npc: "wayfarer", holds: "sight.gatepost-lamp", role: "calend", line: "Someone keeps that lit. I have never once asked who lights it for whom." },
+  { npc: "tamsin", holds: "sight.ruels-laugh", role: "tamsin", line: "You heard him. Please do not tell the others. They will want to wait for him." },
+  { npc: "tamsin", holds: "obj.linnets-coat", role: "tamsin", line: "I made up a cot for whoever wore that. It is not a rule. It is a habit." },
+  { npc: "hesk", holds: "obj.linnets-coat", role: "hesk", line: "That coat stays on its hook. If it is gone, I will notice. I will not ask." },
+  { npc: "cantor", holds: "sight.aldous-at-rest", role: "ysmerel", line: "He is resting. Do not stand too near. He would only try to make room." },
+  { npc: "archivist", holds: "sight.aldous-at-rest", role: "archivist", line: "You saw him. Then I was right to leave the alcove open." },
+  { npc: "broker", holds: "obj.blank-line", role: "dorrow", line: "A printing error. I have said so for years. You are kind not to answer." },
+  { npc: "keeper", holds: "sight.marens-winter", role: "keeper", line: "Round it, please, not through it. Some things are not finished. They are resting." },
+  { npc: "ossian", holds: "account.tall-tale", role: "ossian", line: "You noticed the wrong thing in it. Good. Now do not tell me which." },
+  { npc: "surveyor", holds: "obj.orus-bead", role: "surveyor", line: "It is warmer than it should be, and exactly the size of a morning I was not there for." },
 ];
 
 export function reactionFor(npc: string, found: ReadonlySet<string>): StoryReaction | null {
