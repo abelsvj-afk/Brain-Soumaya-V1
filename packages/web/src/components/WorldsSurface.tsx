@@ -122,6 +122,7 @@ import {
 import { portraitFit } from "../graph/worldCamera.js";
 import type { TransitScene } from "../graph/transitScene.js";
 import { createShipAvatar, type ShipAvatar } from "../graph/shipAvatar.js";
+import { createEnginePlume } from "../graph/enginePlume.js";
 import { findPlaces, PLACE_RULES, type Place } from "../graph/worldPlaces.js";
 import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, type FlightState, type V3 } from "../graph/worldFlight.js";
 import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
@@ -571,6 +572,7 @@ export default function WorldsSurface({
   onFocus,
   onHangarEquipChanged,
   onGardenChanged,
+  equippedTrail = "blue",
   spaceId = "",
 }: {
   enabled?: boolean;
@@ -592,6 +594,8 @@ export default function WorldsSurface({
   onGardenChanged?: (newNodeIds?: number[]) => void;
   /** The brain the viewer is in; the relic find is recorded per space. */
   spaceId?: string;
+  /** The trail colour she wears (blue / neon / gold / purple): the flame and trail come off her ship in it, everywhere. */
+  equippedTrail?: string;
 }) {
   const travel = useTravel(enabled);
   const [dismissed, setDismissed] = useState(false);
@@ -739,6 +743,8 @@ export default function WorldsSurface({
   // The mounted scene handle — the Eternity gesture/tool buttons below
   // call into it. Set in the mount effect, cleared in its cleanup.
   const sceneHandleRef = useRef<WorldSceneHandle | null>(null);
+  const trailRef = useRef(equippedTrail);
+  trailRef.current = equippedTrail;
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   useEffect(
     () => () => {
@@ -1618,6 +1624,7 @@ export default function WorldsSurface({
             destination: journey?.destination ?? "home",
             // A turn-back has no departure to draw; every other flight begins with the cancel window.
             armMs: armMsOf(journey),
+            trail: trailRef.current,
           })
         : built;
     if (!world) return;
@@ -1641,11 +1648,17 @@ export default function WorldsSurface({
           : null;
     sceneHandleRef.current = world;
     // The traveller's ship inside a world that has places to fly to (hidden until the first flight).
-    const avatar: ShipAvatar | null = mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside ? createShipAvatar() : null;
+    const avatar: ShipAvatar | null = mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside ? createShipAvatar(trailRef.current) : null;
     if (avatar) {
       avatar.group.visible = false;
       scene.add(avatar.group);
     }
+    // Her exhaust trail in world space — flying her ship through a world leaves the same trail she leaves at home (graph/enginePlume.ts).
+    const plume = avatar || currentWorld === "growing-place" ? createEnginePlume(trailRef.current, { scale: currentWorld === "growing-place" ? 1.8 : 1 }) : null;
+    if (plume) scene.add(plume.group);
+    let plumeTrail = trailRef.current;
+    let plumeFed = false;
+    const exhaustV = new THREE.Vector3();
     const eternityCtl = currentWorld === "eternity" ? built?.eternity : undefined;
     if (gardenScene) {
       gardenSceneRef.current = gardenScene;
@@ -1944,6 +1957,10 @@ export default function WorldsSurface({
           }
           avatar.setPose(fs.pos, fs.yaw, fs.pitch);
           avatar.setHeat(fs.engine);
+          avatar.group.updateMatrixWorld(true);
+          avatar.setThrust(Math.max(0.12, fs.speed, fs.phase === "spool" ? fs.engine * 0.5 : 0));
+          plume?.update(dt, avatar.exhaust(exhaustV));
+          plumeFed = true;
           const pose = chasePose(fs);
           const prev = chaseCamRef.current ?? { pos: pose.position, target: pose.target };
           // Tighter during the burn, so she stays in frame while she takes off.
@@ -2034,6 +2051,11 @@ export default function WorldsSurface({
           gardenSceneRef.current.setAvatar(pos.x, f.y, pos.z, step.state.heading);
           gardenSceneRef.current.setCarrying(carryingRef.current !== null);
           gardenSceneRef.current.setGrovePulse(carryingRef.current !== null);
+          // Her flame while she skims (a low idle glow when she stands), and the trail she leaves behind.
+          gardenSceneRef.current.setThrust(step.state.route.length > 0 ? 0.8 : 0.12);
+          const hd = step.state.heading;
+          plume?.update(dt, step.state.route.length > 0 ? exhaustV.set(pos.x - Math.sin(hd) * 14, f.y, pos.z - Math.cos(hd) * 14) : null);
+          plumeFed = true;
           const pose = followPose(pos, f.y, f.yaw);
           const k = ease(260);
           const prev = f.cam ?? pose.position;
@@ -2093,6 +2115,15 @@ export default function WorldsSurface({
       // The warp swings the whole sky round the holding ship (the same yaw its gates turn with).
       sky?.update(camera.position, elapsed / 1000, mode === "transit" ? -((world as TransitScene).view?.yaw ?? 0) : 0, reducedMotion);
       try {
+        // The trail fades out when the ship is hidden or parked away, and follows a trail colour changed mid-visit.
+        if (plume && !plumeFed) plume.update(dt, null);
+        plumeFed = false;
+        if (plumeTrail !== trailRef.current) {
+          plumeTrail = trailRef.current;
+          plume?.setTrail(plumeTrail);
+          avatar?.setTrail(plumeTrail);
+          gardenSceneRef.current?.setTrail(plumeTrail);
+        }
         renderer.render(scene, camera);
       } catch (err) {
         console.error(`[worlds] render failed for ${mode === "transit" ? "transit" : currentWorld}`, err);
@@ -2119,6 +2150,7 @@ export default function WorldsSurface({
       lighting?.dispose();
       sky?.dispose();
       avatar?.dispose();
+      plume?.dispose();
       world.dispose();
       sceneHandleRef.current = null;
       // Keep the renderer (and its context) for the next world; free only this scene's render lists.

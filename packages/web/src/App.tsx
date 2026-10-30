@@ -2595,6 +2595,7 @@ export default function App() {
             onFocus={focus}
             onHangarEquipChanged={() => void handleChanged(-1)}
             onGardenChanged={(ids) => void refresh(ids)}
+            equippedTrail={previewTrail ?? equippedTrail}
           />
         </ErrorBoundary>
       )}

@@ -710,6 +710,14 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   path remains the fallback). Harbor controller encounter lines are third-person DESCRIPTION only (quotes rejected — she only answers); her brief is travel
   facts, no memory text. Routes, prices and her actual answers/welcome stay deterministic code. Look at: the first real model-written lines (tone, the
   3–4 variants rotating by meeting count), token use in the usage ledger (expect ~1 call/brain/day), and that nothing calls the model when a brain is idle.
+- **Her engine flame + trail in every world and the warp (2026-10-30, owner: "the colour and flame that come off her ship in her brain should come
+  off in the other worlds and when warping") — MEASURED in a real browser (flight in the Station: red-hot spool → blue burn; garden walk: a cyan
+  flame trailing; warp: flame under the ship through align/jump), needs on-device confirmation of the look** (graph/enginePlume.ts, shipAvatar.ts,
+  transitScene.ts, gardenScene.ts `setThrust/setTrail`, WorldsSurface.tsx `equippedTrail` prop ← App.tsx): at home she leaves a world-space plume tinted by
+  the trail colour she wears; worlds and the warp only had one glow. Now a shared **flame** (stretched glow at the nozzle that lengthens with thrust) is on
+  the in-world flight avatar, the garden avatar and the warp ship, and a world-space **plume** trails the flight and garden ships — all in her equipped trail
+  colour (blue/neon/gold/purple, live-updating). Headless runs ~2 fps so the trail reads thin; judge density on a phone. Look at: flame length at the Station's
+  scale, the plume vs. the red spool glow, and the garden flame's size against the 24-unit hull.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

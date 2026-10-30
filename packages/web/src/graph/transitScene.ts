@@ -3,6 +3,7 @@ import { disposeObject3D } from "./graph3dHelpers.js";
 import { buildGate } from "./gateScene.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
 import { glowTexture, heatColor, heatGlow } from "./shipHeat.js";
+import { createEngineFlame } from "./enginePlume.js";
 
 /**
  * Transit scene (Phase 2, P2-5) — the space you fly through between
@@ -226,6 +227,8 @@ export function createTransitScene(opts: {
   destination: string;
   /** The cancel window drawn as the align/spool cinematic (0 = none: the flight starts at t=0). */
   armMs?: number;
+  /** The trail colour she wears (blue / neon / gold / purple) — the flame comes off her ship in it. */
+  trail?: string;
 }): TransitScene {
   const { kind, totalMs, origin, destination } = opts;
   const armMs = opts.armMs ?? 0;
@@ -262,6 +265,10 @@ export function createTransitScene(opts: {
   engineGlow.position.set(0, 0, 7.5);
   engineGlow.scale.setScalar(8);
   ship.add(engineGlow);
+  // The flame at her nozzle (graph/enginePlume.ts): the same trail colour she wears at home, lengthening with thrust.
+  const flame = createEngineFlame(opts.trail ?? "blue");
+  flame.group.position.set(0, 0, 7.5);
+  ship.add(flame.group);
   let disposed = false;
   void loadSoumayaShip().then((hero) => {
     if (disposed) {
@@ -365,6 +372,8 @@ export function createTransitScene(opts: {
       const g = heatGlow(view.engine);
       engineGlow.scale.setScalar(g.scale);
       (engineGlow.material as THREE.SpriteMaterial).opacity = g.opacity;
+      // Thrust: the spool builds it, the jump/cruise holds it by speed, a settled ship idles low.
+      flame.setThrust(Math.max(0.15, view.speed, view.engine * 0.6));
       // Without a departure cinematic the origin gate whips astern once the ship jumps.
       if (armMs === 0) departureGate.group.position.z = DEP.z + p * 260 + (D / 1000) * 400;
       if (armMs > 0) {

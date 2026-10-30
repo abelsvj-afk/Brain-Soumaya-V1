@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createEngineFlame } from "./enginePlume.js";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { GARDEN_BACKDROP_PLANETS, loadGardenAsset } from "./gardenAssets.js";
 import { buildHygStarfield } from "./hygStars.js";
@@ -161,6 +162,10 @@ export interface GardenScene {
   setAvatar: (x: number, y: number, z: number, heading: number) => void;
   /** Show the memory she's carrying to a grove — a warm glow riding above her ship. */
   setCarrying: (on: boolean) => void;
+  /** 0..1 thrust: the flame at her nozzle (graph/enginePlume.ts) — the host sets it from her walking speed. */
+  setThrust: (level: number) => void;
+  /** The trail colour she wears (blue / neon / gold / purple). */
+  setTrail: (trail: string) => void;
   /** Ring every grove's lawn in pulsing gold while she carries a memory ("place it here"). */
   setGrovePulse: (on: boolean) => void;
   /**
@@ -820,6 +825,10 @@ export function createGardenScene(
   carried.position.y = 14;
   carried.visible = false;
   avatar.add(carried);
+  // Her flame (graph/enginePlume.ts): her ship is ~24 long in the garden, so the tail sits at z≈13.
+  const engineFlame = createEngineFlame("blue", { scale: 1.8 });
+  engineFlame.group.position.set(0, 0, 13);
+  avatar.add(engineFlame.group);
   group.add(avatar);
   // "Place it here": a gold ring on each grove's lawn, shown only while she carries a memory.
   const pulseRings = new THREE.Group();
@@ -1504,6 +1513,12 @@ export function createGardenScene(
     },
     setCarrying(on: boolean) {
       carried.visible = on;
+    },
+    setThrust(level: number) {
+      engineFlame.setThrust(level);
+    },
+    setTrail(trail: string) {
+      engineFlame.setTrail(trail);
     },
     setGrovePulse(on: boolean) {
       pulseRings.visible = on && pulseRings.children.length > 0;

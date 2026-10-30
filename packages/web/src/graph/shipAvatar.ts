@@ -3,6 +3,7 @@ import { disposeObject3D } from "./graph3dHelpers.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
 import { buildProceduralShip } from "./transitScene.js";
 import { glowTexture, heatColor, heatGlow } from "./shipHeat.js";
+import { createEngineFlame } from "./enginePlume.js";
 import type { V3 } from "./worldFlight.js";
 
 /**
@@ -15,10 +16,15 @@ export interface ShipAvatar {
   /** Position and heading. Her nose points down −z, so the yaw is turned half a revolution. */
   setPose: (pos: V3, yaw: number, pitch: number) => void;
   setHeat: (heat: number) => void;
+  /** 0..1 thrust: the flame at the nozzle lengthens with it. */
+  setThrust: (level: number) => void;
+  /** The exhaust's world position (for the host's plume) — call after setPose. */
+  exhaust: (out: THREE.Vector3) => THREE.Vector3;
+  setTrail: (trail: string) => void;
   dispose: () => void;
 }
 
-export function createShipAvatar(): ShipAvatar {
+export function createShipAvatar(trail = "blue"): ShipAvatar {
   const group = new THREE.Group();
   group.name = "ship-avatar";
   group.rotation.order = "YXZ";
@@ -33,6 +39,9 @@ export function createShipAvatar(): ShipAvatar {
   glow.name = "avatar-engine-glow";
   glow.position.set(0, 0, 7.5);
   body.add(glow);
+  const flame = createEngineFlame(trail);
+  flame.group.position.set(0, 0, 7.5);
+  body.add(flame.group);
 
   let disposed = false;
   void loadSoumayaShip().then((hero) => {
@@ -63,6 +72,9 @@ export function createShipAvatar(): ShipAvatar {
       glow.scale.setScalar(g.scale);
       (glow.material as THREE.SpriteMaterial).opacity = g.opacity;
     },
+    setThrust: (level) => flame.setThrust(level),
+    exhaust: (out) => out.set(0, 0, 8.5).applyMatrix4(group.matrixWorld),
+    setTrail: (t) => flame.setTrail(t),
     dispose() {
       if (disposed) return;
       disposed = true;
