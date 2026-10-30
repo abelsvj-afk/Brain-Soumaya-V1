@@ -7,7 +7,7 @@
  *
  * The key is read from the environment only (a Fly secret) and never written anywhere.
  */
-import { STORY_ENTRIES, STORY_REACTIONS } from "../packages/shared/src/index.js";
+import { NPC_TALK, STORY_REACTIONS, STORY_ROADS, STORY_ENTRIES, talkLine } from "../packages/shared/src/index.js";
 import { createNarrator, narrationConfig } from "../packages/server/src/story/narration.js";
 import type { Register, VoiceRole } from "../packages/shared/src/index.js";
 
@@ -22,6 +22,15 @@ for (const e of STORY_ENTRIES) {
 }
 // What people say about what you hold, each in their own voice.
 for (const r of STORY_REACTIONS) lines.set(`${r.role}|plain|${r.line}`, { id: `${r.npc} on ${r.holds}`, register: "plain", text: r.line, role: r.role });
+// The people's talk lines (docs/specs/npc-dialogue-voice-2026-10-31.md): voiced once in their role voice, exactly as the talk panel asks for them.
+for (const t of NPC_TALK) {
+  const keys = ["who", "place-home", "place-away", "job", "allfound", "rumour", ...t.thread.map((x) => `step:${x.id}`), ...t.points.map((x) => `point:${x.entryId}`)];
+  for (const road of STORY_ROADS.filter((r) => r.giver === t.npc)) keys.push(`road:${road.id}:offer`, `road:${road.id}:gift`);
+  for (const key of keys) {
+    const l = talkLine(t.npc, key);
+    if (l) lines.set(`${l.role}|plain|${l.text}`, { id: `${t.npc} ${key}`, register: "plain", text: l.text, role: l.role as VoiceRole });
+  }
+}
 const chars = [...lines.values()].reduce((n, l) => n + l.text.length, 0);
 console.log(`${lines.size} lines, ${chars.toLocaleString()} characters to voice at most (cached lines cost nothing).`);
 
