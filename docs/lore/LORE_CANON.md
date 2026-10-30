@@ -73,3 +73,5 @@ Full text: `docs/lore/DRAFT_5_THE_WEB.md` — the **Depth Charter**, the **Later
 
 ## DRAFT 6 — The Loom (written 2026-10-30; structure + flavour only, no new canon events)
 Full text: `docs/lore/DRAFT_6_THE_LOOM.md` — the story as a **spider's web** (hub = the unsaid, twelve Anchors, radial strands = the eight doors in, spiral cross-threads = the five ways things connect; redundancy, convergence, late binding, resonance), the two orthogonal dials **Knowledge** (what you've found → what can be revealed) and **Flavour** (brain colour + play leaning + the Hour → how it is voiced), the six flavour slots, the firewall of what Flavour may never touch, the Tide table (currents → Eternity's register, Hush face, first door, tint, Companion form), relationships and transitions under flavour, worked examples. Engineering: `docs/specs/story-flavor-engine-2026-10-30.md`. Flavour *voices* canon; it never alters, hides or reorders a fact.
+
+Narration (ElevenLabs voice + music for the Book): `docs/specs/lore-narration-2026-10-30.md`.
