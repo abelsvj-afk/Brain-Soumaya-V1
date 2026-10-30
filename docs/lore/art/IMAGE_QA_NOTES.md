@@ -299,3 +299,13 @@ Files: `57-the-forty-second-v1.png` … `v4.png`. The composition lands in all f
 - v1 has a few extra standing figures near the houses right of the doorway; they read as villagers watching, not part of the column.
 
 Verdict: a strong set; the count and the v2 orientation are the only notes. Your pick.
+
+## §58 — Brannoch and the Mooring Ring (Sheet 2)
+
+Files: `58-brannoch-and-the-mooring-ring-v1.png` … `v4.png`. All four wide. Brannoch is established consistently: the same heavy, grey-bearded, calm man at the end of the long stone quay in every variant, one hand resting on the ring, the coil of rope beside him, the distant harbor lights behind, and the patient smile of a man who has been here a very long time and wants nothing. The ring glows faintly warm in all four.
+
+- **The rope that ends in nothing:** truest in v1, where it trails off the quay and frays out in the water; clear in v3 and v4, where it drops from the ring into the water and fades. In v2 the rope runs along the quay's edge and its entry into the water is the least clear.
+- He sits directly in the coil in v3 (closest to the prompt's "sits on a coil of rope"); in the others the coil is beside him.
+- v3's ring reads as worn stone with the warm glow at its knot; the others are metal rings glowing gold.
+
+Verdict: a clean, consistent set. Your pick.
