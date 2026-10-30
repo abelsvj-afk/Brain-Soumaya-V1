@@ -82,3 +82,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §4 REDO filed (145 keepers) — supersedes v1–v4
 
 §4 Vesh regenerated as v5–v8 with an explicit androgynous direction line added to the verbatim prompt. The fix worked: all four now read as genuinely ungendered — one consistent gaunt, ageless, tired face that settles as neither man nor woman — hooded dusk-violet robes, the hollow a clean perfectly circular gap with the archive visible through it, no gore, one empty open palm, the other hand raised as if letting go. **v5–v8 are the canonical Vesh; the female-reading v1–v4 still in this folder are SUPERSEDED — do not use them.** This set can serve as the Vesh face reference for future art.
+
+## Update — §10 replacement variants filed (147 keepers) — v4 superseded
+
+§10 replacement generated with Bible gender lines added (Oru/Calend men; Sethane/Maren/Nuaré women; Vesh androgynous; hollow specified as a small clean circular hole through the chest only). All four candidates came back correct this time (six figures, Nuaré present, gap of lit air, clean circular hollow); two are filed: **v5** (clearest gap; Vesh most androgynous; nail rides on top of Calend's door-frame) and **v6** (most distinct ship silhouettes behind each figure, including a violet swan-form at Vesh's end). Two further correct candidates exist locally unfiled if wanted. **v4 (five figures, Nuaré missing, hollow = whole midsection) is SUPERSEDED — do not use it.** Minor: Oru reads middle-aged rather than old in the replacements, as in v1–v3.
