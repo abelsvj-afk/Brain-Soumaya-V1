@@ -23,7 +23,7 @@
 | **Dorrow Quint, the Ledger's Grandmaster** | **he/him** (prompt 24: "man") | heavy, shrewd, impeccably dressed | the Great Book; fresh ink; a trader's smile that doesn't reach the eyes | a villain's sneer |
 | **Hesk, the Warden-General** | **he/him** (prompt 42: "man") | big, stern, Warden's coat | ring of small keys; a tin soldier he polishes | cruelty — he is guarding, not enforcing |
 | **Tamsin of the Open Hand** | **she/her** | middle-aged healer | rolled-sleeve green apron; buttons in her pockets | a uniform |
-| **Ossian Reed, the Last Honest Liar** | **he/him** | wiry storyteller, grin with truth underneath | patchwork many-pocketed coat; a coin that isn't his | a con-man leer |
+| **Ossian Reed, the Last Honest Liar** | **he/him** | **middle-aged (fixed — owner: age must not drift between images), dark untidy hair, short stubble**; wiry storyteller, grin with truth underneath | patchwork many-pocketed coat; a coin that isn't his | a con-man leer |
 | **Kith** | **she/her** (the child) | about six; patched plain dress | a torn crayon drawing of a faceless woman; sets one place too many | an adult face |
 | **The Follower (Pell)** | **she/her** | slight, young; hooded jacket; seen from behind | a coin, a ribbon, a note | a visible face |
 | **Wim Ostler** (Brannoch's clerk) | **he/him** | young, tidy junior clerk | a berth-log; Ledger stamp | — |
