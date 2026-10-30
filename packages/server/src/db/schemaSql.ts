@@ -1399,6 +1399,12 @@ export const BOOTSTRAP_SQL = `
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, entry_id)
     );
+    CREATE TABLE IF NOT EXISTS lore_voices (
+      role TEXT PRIMARY KEY,
+      voice_id TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
     CREATE TABLE IF NOT EXISTS story_prefs (
       space_id TEXT PRIMARY KEY,
       flavor_on INTEGER NOT NULL DEFAULT 1

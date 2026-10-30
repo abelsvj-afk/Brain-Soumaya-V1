@@ -25,17 +25,18 @@ export interface NarrationConfig {
 type Env = Record<string, string | undefined>;
 
 /** The gate. Reuses the Telegram TTS secret if no lore-specific one is set, so the key already on Fly works. Null = narration is off (captions + browser voice only). */
-export function narrationConfig(env: Env = process.env): NarrationConfig | null {
+export function narrationConfig(env: Env = process.env, overrides: Readonly<Record<string, string>> = {}): NarrationConfig | null {
   const off = (env.LORE_TTS_ENABLED ?? "").trim().toLowerCase();
   if (off === "0" || off === "false") return null;
   const apiKey = (env.LORE_TTS_API_KEY ?? env.TELEGRAM_TTS_API_KEY)?.trim();
-  const voiceId = (env.LORE_TTS_VOICE_NARRATOR ?? env.TELEGRAM_TTS_VOICE_ID)?.trim();
+  // A voice chosen in the app (the owner's Voices console) wins over a Fly secret, so nobody has to edit secrets to change who speaks.
+  const voiceId = (overrides.narrator ?? env.LORE_TTS_VOICE_NARRATOR ?? env.TELEGRAM_TTS_VOICE_ID)?.trim();
   if (!apiKey || !voiceId) return null;
   const cap = Number(env.LORE_TTS_MONTHLY_CHARS);
   return {
     apiKey,
     voiceId,
-    voiceFor: (role) => (role !== "narrator" ? env[`LORE_TTS_VOICE_${role.toUpperCase()}`]?.trim() : undefined) || voiceId,
+    voiceFor: (role) => overrides[role]?.trim() || (role !== "narrator" ? env[`LORE_TTS_VOICE_${role.toUpperCase()}`]?.trim() : undefined) || voiceId,
     // Narration is cached forever, so quality beats the Telegram replies' latency-tuned model.
     modelId: env.LORE_TTS_MODEL_ID?.trim() || "eleven_multilingual_v2",
     monthlyChars: Number.isFinite(cap) && cap > 0 ? cap : 200_000,
@@ -53,11 +54,11 @@ export const NARRATION_SETTINGS: Readonly<Record<Register, { stability: number; 
  * WHY narration is not using the studio voice, in the owner's terms (names of the secrets, never their values). Null = it is configured. Shown in the Book and printed at boot,
  * because "it fell back to the browser voice" otherwise gives no clue which secret is missing.
  */
-export function narrationIssue(env: Env = process.env): string | null {
+export function narrationIssue(env: Env = process.env, overrides: Readonly<Record<string, string>> = {}): string | null {
   const off = (env.LORE_TTS_ENABLED ?? "").trim().toLowerCase();
   if (off === "0" || off === "false") return "narration is switched off (LORE_TTS_ENABLED)";
   if (!(env.LORE_TTS_API_KEY ?? env.TELEGRAM_TTS_API_KEY)?.trim()) return "no ElevenLabs API key is set — add LORE_TTS_API_KEY (or TELEGRAM_TTS_API_KEY)";
-  if (!(env.LORE_TTS_VOICE_NARRATOR ?? env.TELEGRAM_TTS_VOICE_ID)?.trim()) return "no narrator voice is set — add LORE_TTS_VOICE_NARRATOR";
+  if (!(overrides.narrator ?? env.LORE_TTS_VOICE_NARRATOR ?? env.TELEGRAM_TTS_VOICE_ID)?.trim()) return "no narrator voice is chosen — pick one in the Book’s Voices section (or set LORE_TTS_VOICE_NARRATOR)";
   return null;
 }
 
@@ -72,6 +73,8 @@ type FetchImpl = typeof fetch;
 
 export interface NarratorDeps {
   env?: Env;
+  /** Voices chosen in the app (role → ElevenLabs voice id), read fresh each time. */
+  overrides?: () => Record<string, string>;
   fetchImpl?: FetchImpl;
   /** Where shared clips live (a persistent volume on Fly). */
   dir: string;
@@ -115,14 +118,31 @@ export function createNarrator(deps: NarratorDeps) {
   };
 
   return {
+    /** The voices this ElevenLabs account can use (names + ids + labels), so the owner can pick instead of hunting for ids. Null = no key or the request failed. */
+    async voices(): Promise<{ id: string; name: string; category: string; labels: Record<string, string>; preview: string | null }[] | null> {
+      const apiKey = (env.LORE_TTS_API_KEY ?? env.TELEGRAM_TTS_API_KEY)?.trim();
+      if (!apiKey) return null;
+      try {
+        const res = await fetchImpl(`${API}/voices`, { headers: { "xi-api-key": apiKey, Accept: "application/json" } });
+        if (!res.ok) {
+          lastIssue = `ElevenLabs refused the voice list (HTTP ${res.status}${res.status === 401 ? " — check the API key" : ""})`;
+          return null;
+        }
+        const j = (await res.json()) as { voices?: { voice_id: string; name: string; category?: string; labels?: Record<string, string>; preview_url?: string }[] };
+        return (j.voices ?? []).slice(0, 200).map((v) => ({ id: v.voice_id, name: v.name, category: v.category ?? "", labels: v.labels ?? {}, preview: v.preview_url ?? null }));
+      } catch {
+        lastIssue = "the voice list could not reach ElevenLabs";
+        return null;
+      }
+    },
     /** Is the studio voice available, and if not, why. Words only. */
     status(): { on: boolean; issue: string | null } {
-      const config = narrationIssue(env);
+      const config = narrationIssue(env, deps.overrides?.() ?? {});
       return { on: config === null && lastIssue === null, issue: config ?? lastIssue };
     },
     /** The clip for these words in this register, from the shared cache or (once) from ElevenLabs. Null = no audio; the client speaks it itself. */
     async narrate(text: string, register: Register, role: VoiceRole = "narrator"): Promise<Narrated | null> {
-      const cfg = narrationConfig(env);
+      const cfg = narrationConfig(env, deps.overrides?.() ?? {});
       if (!cfg) return null;
       const settings = NARRATION_SETTINGS[register];
       const voiceId = cfg.voiceFor(role);

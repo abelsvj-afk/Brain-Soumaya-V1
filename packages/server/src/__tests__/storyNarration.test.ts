@@ -128,3 +128,25 @@ describe("telling the owner why the studio voice is not in use", () => {
     expect(n.status().issue).not.toContain("k-test");
   });
 });
+
+describe("voices chosen in the app", () => {
+  it("win over secrets, per role, and satisfy the gate even when no voice secret is set", () => {
+    const cfg = narrationConfig({ LORE_TTS_API_KEY: "k", LORE_TTS_VOICE_CALEND: "env-calend" }, { narrator: "app-narrator", dorrow: "app-dorrow" })!;
+    expect(cfg.voiceFor("narrator")).toBe("app-narrator");
+    expect(cfg.voiceFor("dorrow")).toBe("app-dorrow");
+    expect(cfg.voiceFor("calend")).toBe("env-calend"); // a secret still works for a role not chosen in the app
+    expect(cfg.voiceFor("keeper")).toBe("app-narrator"); // anyone without a voice is read by the narrator
+    expect(narrationIssue({ LORE_TTS_API_KEY: "k" }, { narrator: "v" })).toBeNull();
+    expect(narrationIssue({ LORE_TTS_API_KEY: "k" }, {})).toMatch(/pick one in the Book/);
+  });
+  it("lists the account's voices for the owner to pick from (names and ids, never the key)", async () => {
+    const impl = (async (url: string, init: RequestInit) => {
+      expect(String(url)).toMatch(/\/voices$/);
+      expect((init.headers as Record<string, string>)["xi-api-key"]).toBe("k-test");
+      return new Response(JSON.stringify({ voices: [{ voice_id: "abc1234567", name: "Old Marlowe", category: "premade", labels: { gender: "male", age: "old" }, preview_url: "https://x/p.mp3" }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const v = await createNarrator({ env: ENV, fetchImpl: impl, dir }).voices();
+    expect(v).toEqual([{ id: "abc1234567", name: "Old Marlowe", category: "premade", labels: { gender: "male", age: "old" }, preview: "https://x/p.mp3" }]);
+    expect(await createNarrator({ env: {}, dir }).voices()).toBeNull();
+  });
+});

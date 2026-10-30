@@ -7,6 +7,7 @@ import { useStoryFlavor } from "../hooks/useStoryFlavor.js";
 import { BOOK_H, BOOK_W, KIND_WORD, brightness, entryWords, skyLayout } from "../lib/storyBook.js";
 import { getNarrationMode, playNarration, setNarrationMode, stopNarration, type NarrationMode } from "../lib/narration.js";
 import { useEffect } from "react";
+import VoiceConsole from "./VoiceConsole.js";
 import { getNarrationStatus } from "../api/story.js";
 import { sentenceAt, splitCaptionSentences } from "../lib/captions.js";
 
@@ -208,6 +209,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             )}
           </section>
         )}
+        <VoiceConsole />
         <p className="book-voice" role="status">
           {studio === null
             ? ""

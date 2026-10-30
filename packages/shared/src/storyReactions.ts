@@ -9,6 +9,9 @@
 /** Who is speaking — selects the ElevenLabs voice (`LORE_TTS_VOICE_<ROLE>`); any role without its own voice set is read by the narrator's. */
 export type VoiceRole = "narrator" | "eternity" | "calend" | "ysmerel" | "dorrow" | "dissenter" | "surveyor" | "archivist" | "keeper";
 
+/** Every role that can have its own voice, in the order the console lists them. */
+export const VOICE_ROLES: readonly VoiceRole[] = ["narrator", "eternity", "calend", "ysmerel", "dorrow", "dissenter", "surveyor", "archivist", "keeper"];
+
 export interface StoryReaction {
   npc: string;
   /** The entry they notice you are holding. */

@@ -65,3 +65,30 @@ export async function getNarrationStatus(): Promise<{ on: boolean; issue: string
   const d = await send<{ on: boolean; issue: string | null }>("/narration-status", "GET");
   return d && typeof d.on === "boolean" ? d : null;
 }
+
+/** The owner's Voices console (server refuses anyone else): the account's voices, who is assigned to what, and a spoken test. */
+export interface AccountVoice {
+  id: string;
+  name: string;
+  category: string;
+  labels: Record<string, string>;
+  preview: string | null;
+}
+export interface VoiceConsoleData {
+  available: AccountVoice[] | null;
+  assigned: Record<string, string>;
+  roles: string[];
+  status: { on: boolean; issue: string | null };
+}
+export const getVoiceConsole = () => send<VoiceConsoleData>("/narration/voices", "GET");
+export const putVoiceChoice = (role: string, voiceId: string | null, label = "") => send<{ assigned: Record<string, string>; status: { on: boolean; issue: string | null } }>("/narration/voice", "PUT", { role, voiceId, label });
+/** Speak the test line in a role's voice. Returns an object URL to play, or the server's plain reason it could not. */
+export async function testVoice(role: string): Promise<{ url: string } | { error: string }> {
+  try {
+    const res = await afetch(`${API}/story/narration/test`, { method: "POST", headers: json, body: JSON.stringify({ role }) });
+    if (!res.ok) return { error: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The test failed (${res.status}).` };
+    return { url: URL.createObjectURL(await res.blob()) };
+  } catch {
+    return { error: "Could not reach the server." };
+  }
+}

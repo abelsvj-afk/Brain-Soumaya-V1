@@ -7864,3 +7864,15 @@ body.in-transit .perf-suggest { display: none; }
 .book-now { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; font-style: normal; font-weight: 700; color: #fff4cf; }
 
 .book-voice { margin: 12px 0 0; color: #8fa0c4; font-size: 0.76rem; min-height: 1em; }
+
+.voice-console { margin: 16px 0 0; padding-top: 10px; border-top: 1px solid rgba(255, 233, 168, 0.25); color: #b8c6e4; font-size: 0.8rem; }
+.voice-console h3 { margin: 0 0 4px; font-size: 0.95rem; color: #ffe9a8; }
+.voice-console h4 { margin: 12px 0 4px; font-size: 0.82rem; color: #cfe0ff; }
+.voice-note { margin: 6px 0; color: #8fa0c4; }
+.voice-assigned, .voice-list { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.voice-assigned { max-height: none; }
+.voice-assigned li, .voice-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; }
+.voice-btns { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.voice-console button, .voice-console select { min-height: 44px; padding: 0 12px; border: 1px solid rgba(255, 233, 168, 0.5); border-radius: 999px; background: rgba(255, 233, 168, 0.08); color: #ffe9a8; font: inherit; cursor: pointer; }
+.voice-console button:disabled { opacity: 0.5; cursor: default; }
+.voice-console select { color: #e6eefc; background: rgba(8, 12, 28, 0.95); }

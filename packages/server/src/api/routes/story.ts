@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { spaceOf } from "../middleware.js";
-import { reactionBetween } from "@brain/shared";
+import { VOICE_ROLES, reactionBetween } from "@brain/shared";
+import { isOwnerSpace } from "../../auth/owner.js";
 import { StoryError, StoryRepo } from "../../story/story.js";
 import { computeFlavor, setFlavorOn } from "../../story/flavor.js";
 import { createNarrator, isTide, narrationText, type Narrator } from "../../story/narration.js";
@@ -13,12 +14,22 @@ import { tmpdir } from "node:os";
  * The story's private progress (docs/specs/lore-storage-2026-10-30.md). The client reports EVENTS ("I found this here"); the server decides. No response carries a
  * total, ratio or percentage. Validate → delegate → json.
  */
+/** Voices the owner chose in the app (global — the lore is public canon, so the voices are the deployment's, not a brain's). */
+function voiceOverrides(ctx: AppContext): Record<string, string> {
+  try {
+    const rows = ctx.handle.sqlite.prepare(`SELECT role, voice_id FROM lore_voices`).all() as { role: string; voice_id: string }[];
+    return Object.fromEntries(rows.map((r) => [r.role, r.voice_id]));
+  } catch {
+    return {};
+  }
+}
+
 export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {}): Router {
   const r = Router();
   // Shared, public-canon audio lives beside the database on the persistent volume (or the temp dir for an in-memory test database).
   const dbPath = process.env.DB_PATH ?? "";
   const narrator =
-    deps.narrator ?? createNarrator({ dir: process.env.LORE_AUDIO_DIR ?? (dbPath && dbPath !== ":memory:" ? join(dirname(dbPath), "lore-audio") : join(tmpdir(), "soumaya-lore-audio")) });
+    deps.narrator ?? createNarrator({ overrides: () => voiceOverrides(ctx), dir: process.env.LORE_AUDIO_DIR ?? (dbPath && dbPath !== ":memory:" ? join(dirname(dbPath), "lore-audio") : join(tmpdir(), "soumaya-lore-audio")) });
   const repo = (res: Parameters<typeof spaceOf>[0]) => new StoryRepo(ctx.handle, spaceOf(res));
   const id = z.string().min(1).max(120);
 
@@ -89,6 +100,43 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
 
   // Narration: the clip for an entry the brain has FOUND. The server speaks canon text only — the request names an entry, never words. 204 = no audio (the client reads it
   // with captions and the browser's own voice).
+  // --- The owner's Voices console: see the account's voices, pick one per role, hear a test. Owner brains only (OWNER_SPACE_IDS); everyone else gets 403. ---
+  const ownerOnly = (res: import("express").Response): boolean => {
+    if (isOwnerSpace(spaceOf(res))) return true;
+    res.status(403).json({ error: "Only the deployment owner can choose the voices." });
+    return false;
+  };
+  r.get("/narration/voices", async (_req, res) => {
+    if (!ownerOnly(res)) return;
+    const voices = await narrator.voices();
+    res.json({ available: voices, assigned: voiceOverrides(ctx), roles: VOICE_ROLES, status: narrator.status() });
+  });
+  const voiceBody = z.object({ role: z.enum(VOICE_ROLES as unknown as [string, ...string[]]), voiceId: z.string().regex(/^[A-Za-z0-9]{10,40}$/).nullable(), label: z.string().max(80).optional() });
+  r.put("/narration/voice", (req, res) => {
+    if (!ownerOnly(res)) return;
+    const p = voiceBody.safeParse(req.body);
+    if (!p.success) return bad(res, "Expected { role, voiceId | null }.");
+    if (p.data.voiceId === null) ctx.handle.sqlite.prepare(`DELETE FROM lore_voices WHERE role = ?`).run(p.data.role);
+    else
+      ctx.handle.sqlite
+        .prepare(`INSERT INTO lore_voices (role, voice_id, label) VALUES (?, ?, ?) ON CONFLICT(role) DO UPDATE SET voice_id = excluded.voice_id, label = excluded.label, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`)
+        .run(p.data.role, p.data.voiceId, p.data.label ?? "");
+    res.json({ assigned: voiceOverrides(ctx), status: narrator.status() });
+  });
+  // Speak one fixed line in a role's voice so the owner can hear it (cached like any clip, so a repeat test is free).
+  r.post("/narration/test", async (req, res) => {
+    if (!ownerOnly(res)) return;
+    const role = z.enum(VOICE_ROLES as unknown as [string, ...string[]]).safeParse((req.body as { role?: unknown })?.role ?? "narrator");
+    if (!role.success) return bad(res, "Unknown role.");
+    const clip = await narrator.narrate("The first light has come again. Be at ease.", "plain", role.data as (typeof VOICE_ROLES)[number]);
+    if (!clip) {
+      res.status(502).json({ error: narrator.status().issue ?? "The studio voice could not be reached." });
+      return;
+    }
+    res.setHeader("Content-Type", clip.contentType);
+    res.send(clip.audio);
+  });
+
   // Is the studio voice on, and if not, why (names of secrets, never their values). The Book shows it so "it used my phone's voice" is never a mystery.
   r.get("/narration-status", (_req, res) => {
     res.json(narrator.status());

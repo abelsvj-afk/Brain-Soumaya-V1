@@ -307,3 +307,54 @@ describe("/api/story/narration over HTTP", () => {
     expect(JSON.stringify(j)).not.toMatch(/"(score|count|percent|total)"/i);
   });
 });
+
+describe("the owner's Voices console", () => {
+  let ctx: AppContext;
+  let server: Server;
+  let base: string;
+  let ownerId: string;
+  let otherId: string;
+  const saved = process.env.OWNER_SPACE_IDS;
+  const call = (path: string, space: string, init: { method?: string; body?: unknown } = {}) =>
+    fetch(`${base}/api/story${path}`, { method: init.method ?? "GET", headers: { "Content-Type": "application/json", "x-space-id": space }, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
+  beforeAll(async () => {
+    ctx = await buildContext({ dbPath: ":memory:", embeddings: new HashEmbeddingProvider(EMBED_DIM), llm: new HeuristicProvider() });
+    const app = createApp(ctx);
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => resolve());
+    });
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const reg = async (tag: string) =>
+      ((await (await fetch(`${base}/api/space/auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gamerTag: tag, passcode: "secret123", name: tag }) })).json()) as { id: string }).id;
+    ownerId = await reg("voiceowner");
+    otherId = await reg("voiceguest");
+    process.env.OWNER_SPACE_IDS = ownerId;
+  });
+  afterAll(() => {
+    if (saved === undefined) delete process.env.OWNER_SPACE_IDS;
+    else process.env.OWNER_SPACE_IDS = saved;
+    server?.close();
+    ctx.handle.sqlite.close();
+  });
+
+  it("is for the owner only — everyone else gets 403 and nothing changes", async () => {
+    expect((await call("/narration/voices", otherId)).status).toBe(403);
+    expect((await call("/narration/voice", otherId, { method: "PUT", body: { role: "narrator", voiceId: "abcdefghij12" } })).status).toBe(403);
+    expect((await call("/narration/test", otherId, { method: "POST", body: {} })).status).toBe(403);
+    expect(ctx.handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM lore_voices`).get()).toEqual({ n: 0 });
+  });
+  it("lets the owner choose and clear a voice per role, and rejects nonsense", async () => {
+    const put = (body: unknown) => call("/narration/voice", ownerId, { method: "PUT", body });
+    expect((await put({ role: "calend", voiceId: "abcdefghij12" })).status).toBe(200);
+    expect(ctx.handle.sqlite.prepare(`SELECT voice_id FROM lore_voices WHERE role = 'calend'`).get()).toEqual({ voice_id: "abcdefghij12" });
+    expect((await put({ role: "calend", voiceId: "bad id; drop table" })).status).toBe(400);
+    expect((await put({ role: "nobody", voiceId: "abcdefghij12" })).status).toBe(400);
+    expect((await put({ role: "calend", voiceId: null })).status).toBe(200);
+    expect(ctx.handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM lore_voices`).get()).toEqual({ n: 0 });
+  });
+  it("a test with no key says exactly why instead of failing silently", async () => {
+    const r = await call("/narration/test", ownerId, { method: "POST", body: { role: "narrator" } });
+    expect(r.status).toBe(502);
+    expect(((await r.json()) as { error: string }).error).toMatch(/API key|narrator voice/);
+  });
+});

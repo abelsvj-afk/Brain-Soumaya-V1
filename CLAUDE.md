@@ -788,6 +788,11 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   *Voice:* the studio voice needs BOTH `LORE_TTS_API_KEY` (or `TELEGRAM_TTS_API_KEY`) AND `LORE_TTS_VOICE_NARRATOR`. If only the voice id is set, narration is silently off and the
   browser voice reads — the likely cause of the report. The Book now says which voice you are getting and WHY (it never prints a secret), the boot log prints
   `[lore-tts] narration: …`, and the first clip is started inside the tap itself (phones refuse audio that starts after a network wait), with the reason shown when it still falls back.
+- **Owner Voices console (2026-10-30, owner: "I don't know how to do voices for individual characters … the narrator isn't even working") — route/unit-tested, NOT yet tried
+  against the live ElevenLabs account** (server story/narration.ts `voices()`/overrides, table `lore_voices` (global, not per brain), `GET /api/story/narration/voices`, `PUT
+  /narration/voice`, `POST /narration/test` — all owner-only via OWNER_SPACE_IDS; web components/VoiceConsole.tsx inside the Book; plain steps in
+  `docs/specs/lore-voices-howto-2026-10-30.md`): the owner sees every voice on the ElevenLabs account (with a sample), gives one to the Narrator or to a character, tests it, and
+  clears it — a voice chosen in the app beats a Fly secret, and a role without a voice is read by the Narrator, so one choice makes everything work. The only secret needed is the API key.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
