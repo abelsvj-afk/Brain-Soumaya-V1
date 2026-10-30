@@ -31,15 +31,18 @@ export const PLACE_RULES: Record<string, Rule[]> = {
     { match: /^backdrop-(?!.*-model$)/, label: "Planet", icon: "i:planet" },
   ],
   "deep-past": [
-    { match: /^glb-basin$/, label: "First Light basin", icon: "i:sun" },
-    { match: /^glb-rim$/, label: "The rim", icon: "i:recenter" },
-    { match: /^glb-stair$/, label: "The stair", icon: "i:rise" },
-    { match: /^glb-lantern$/, label: "Hero lantern", icon: "i:insights" },
-    { match: /^glb-crystal$/, label: "Crystals", icon: "i:insights" },
-    { match: /^glb-supernova$/, label: "Supernova remnant", icon: "i:insights" },
-    { match: /^glb-spire$/, label: "The spire", icon: "i:rise" },
-    { match: /^glb-orb$/, label: "First Light orb", icon: "i:sun" },
-    { match: /^glb-terrace$/, label: "Terrace", icon: "i:rise" },
+    { match: /^glb-basin$/, label: "First Light", icon: "i:sun" },
+    { match: /^place-rim$/, label: "The rim", icon: "i:recenter" },
+    // The generated stair is a named landmark (main's lore spot obj.follower-ribbon anchors to
+    // it); as a place rule it also joins the fly-to list — a merge-integration consequence of the
+    // rework, named in the PR (2026-10-30).
+    { match: /^stair$/, label: "The stair", icon: "i:rise" },
+    { match: /^glb-spire$/, label: "Anchor Spire", icon: "i:rise" },
+    { match: /^glb-supernova$/, label: "Supernova", icon: "i:insights" },
+    { match: /^place-shelf$/, label: "Rise shelf", icon: "i:insights" },
+    { match: /^place-landing-deepest$/, label: "Deepest memories", icon: "i:rise" },
+    { match: /^place-landing-mid$/, label: "Mid-descent", icon: "i:rise" },
+    { match: /^place-landing-last$/, label: "Last landing", icon: "i:rise" },
   ],
   scale: [
     { match: /^iss-holder$/, label: "The ISS", icon: "i:harbor" },

@@ -2,13 +2,23 @@ import { describe, it, expect } from "vitest";
 import type { GraphData, GraphEdge, GraphNode, Journey, JourneyLinkSummary } from "@brain/shared";
 import {
   buildDeepPastLayout,
+  buildDeepPastStairSteps,
+  buildDeepPastWalkPoints,
+  deepPastFloorY,
   isEligibleDeepPastNode,
   stratumForDate,
   DEEP_PAST_BUDGET,
   DEEP_PAST_STRATA_COUNT,
   DEEP_PAST_MIN_AGE_YEARS,
   DEEP_PAST_BASIN_Y,
+  DEEP_PAST_BASIN_RADIUS,
+  DEEP_PAST_DISC_THICKNESS,
   DEEP_PAST_RISE_SHELF,
+  DEEP_PAST_SHIP_BERTH,
+  DEEP_PAST_STAIR,
+  DEEP_PAST_STRATUM_ARC_START,
+  DEEP_PAST_STRATUM_RADIUS,
+  DEEP_PAST_STRATUM_Y,
 } from "./deepPastLayout.js";
 
 const NOW = new Date("2026-10-25T12:00:00");
@@ -113,8 +123,9 @@ describe("deep past layout (P3-2, C1/C2)", () => {
     expect(tended.risen).toBe(true);
     expect(tended.riseReason).toBe("tended recently");
     expect(tended.stratum).toBe(5); // chronological home unchanged by the rise
-    expect(tended.homeY).toBeLessThan(-400); // home is at depth
-    expect(Math.hypot(tended.x - DEEP_PAST_RISE_SHELF.x, tended.z - DEEP_PAST_RISE_SHELF.z)).toBeLessThan(60); // presentation is at the rim shelf
+    expect(tended.homeY).toBe(deepPastFloorY(5)); // home rests on its stratum's disc, at depth
+    expect(tended.y).toBe(DEEP_PAST_RISE_SHELF.y); // presentation rests on the shelf platform
+    expect(Math.hypot(tended.x - DEEP_PAST_RISE_SHELF.x, tended.z - DEEP_PAST_RISE_SHELF.z)).toBeLessThan(10); // presentation is at the rim shelf (scatter radius 2–9)
     const linked = layout.members.find((m) => m.nodeId === 8)!;
     expect(linked.risen).toBe(true);
     expect(linked.riseReason).toBe("linked recently");
@@ -228,15 +239,132 @@ describe("deep past layout (P3-2, C1/C2)", () => {
   });
 
   it("the recipe budget is asserted as constants, not as performance proof", () => {
-    // The 2026-10-29 fix's caps (design note §9): the full dressing —
-    // terrace slices, lanterns, the helix staircase, the route bead —
-    // costs more than the one-of-each estimate the old caps were
-    // written for; points get their own cap (the supernova's cloud).
-    expect(DEEP_PAST_BUDGET.maxDrawCalls).toBe(110);
-    expect(DEEP_PAST_BUDGET.maxTris).toBe(620_000);
-    expect(DEEP_PAST_BUDGET.maxPoints).toBe(220_000);
+    // The rework's caps (design note §9), set at the pre-asset generated
+    // scene's weight class: generated triangles and GLB bytes are capped
+    // separately so a singular kept piece can't hide in the total.
+    expect(DEEP_PAST_BUDGET.maxDrawCalls).toBe(48);
+    expect(DEEP_PAST_BUDGET.maxTris).toBe(195_000);
+    expect(DEEP_PAST_BUDGET.maxPoints).toBe(65_000);
+    expect(DEEP_PAST_BUDGET.maxGeneratedTris).toBe(45_000);
+    expect(DEEP_PAST_BUDGET.maxGlbBytes).toBe(3_700_000);
     // The basin is the finished bottom: below the deepest stratum, solid.
-    expect(DEEP_PAST_BASIN_Y).toBeLessThan(-720);
-    expect(DEEP_PAST_BASIN_Y).toBe(-830);
+    expect(DEEP_PAST_BASIN_Y).toBeLessThan(DEEP_PAST_STRATUM_Y[DEEP_PAST_STRATA_COUNT - 1]!);
+    expect(DEEP_PAST_BASIN_Y).toBe(-168);
+    expect(DEEP_PAST_BASIN_RADIUS).toBe(66);
+  });
+
+  it("geometry is the mockup's ×1 proportions, and members rest on the discs", () => {
+    expect([...DEEP_PAST_STRATUM_RADIUS]).toEqual([88, 84.5, 81, 77.5, 74, 70.5, 67, 63.5, 60]);
+    expect([...DEEP_PAST_STRATUM_Y]).toEqual([0, -18, -36, -54, -72, -90, -108, -126, -144]);
+    expect(DEEP_PAST_DISC_THICKNESS).toBe(2.6);
+    expect(deepPastFloorY(0)).toBeCloseTo(1.3, 10);
+    expect(deepPastFloorY(8)).toBeCloseTo(-142.7, 10);
+    // The rise shelf is the open wedge near the rim: radius 54, platform top y = 9.
+    expect(Math.hypot(DEEP_PAST_RISE_SHELF.x, DEEP_PAST_RISE_SHELF.z)).toBeCloseTo(54, 10);
+    expect(DEEP_PAST_RISE_SHELF.y).toBe(9);
+    // The ship berth sits just off stratum 0's rim, above its floor.
+    expect(DEEP_PAST_SHIP_BERTH.angle).toBe(3.4);
+    expect(DEEP_PAST_SHIP_BERTH.radius).toBe(DEEP_PAST_STRATUM_RADIUS[0] + 2);
+    expect(DEEP_PAST_SHIP_BERTH.y).toBeCloseTo(deepPastFloorY(0) + 4, 10);
+    // Every non-risen member rests exactly on its stratum's disc top.
+    const layout = buildDeepPastLayout(
+      graph([
+        node({ id: 1, createdAt: "2025-05-01T00:00:00.000Z" }),
+        node({ id: 2, createdAt: "2022-01-01T00:00:00.000Z" }),
+        node({ id: 3, createdAt: "2017-01-01T00:00:00.000Z" }),
+      ]),
+      [],
+      noLinks,
+      NOW,
+    );
+    for (const m of layout.members) {
+      expect(m.risen).toBe(false);
+      expect(m.y).toBe(deepPastFloorY(m.stratum));
+      expect(m.homeY).toBe(deepPastFloorY(m.stratum));
+    }
+  });
+
+  it("the layout summarises every stratum: member counts and earliest years", () => {
+    const layout = buildDeepPastLayout(
+      graph([
+        node({ id: 1, createdAt: "2025-05-01T00:00:00.000Z" }), // stratum 0
+        node({ id: 2, createdAt: "2017-01-01T00:00:00.000Z" }), // stratum 8 (clamped)
+        node({ id: 3, createdAt: "2016-06-01T00:00:00.000Z" }), // stratum 8 (clamped), earlier year
+        node({ id: 4, status: "archived", createdAt: "2010-01-01T00:00:00.000Z" }), // never a member
+      ]),
+      [],
+      noLinks,
+      NOW,
+    );
+    expect(layout.strata).toHaveLength(DEEP_PAST_STRATA_COUNT);
+    expect(layout.strata.map((s) => s.stratum)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(layout.strata[0]).toEqual({ stratum: 0, memberCount: 1, earliestYear: 2025 });
+    expect(layout.strata[8]).toEqual({ stratum: 8, memberCount: 2, earliestYear: 2016 });
+    expect(layout.strata[4]).toEqual({ stratum: 4, memberCount: 0, earliestYear: null });
+    const empty = buildDeepPastLayout(graph([]), [], noLinks, NOW);
+    expect(empty.strata).toHaveLength(DEEP_PAST_STRATA_COUNT);
+    expect(empty.strata.every((s) => s.memberCount === 0 && s.earliestYear === null)).toBe(true);
+  });
+});
+
+describe("deep past stair derivation (rework §5.2–5.3, A2)", () => {
+  const steps = buildDeepPastStairSteps();
+  const halfWindStep = DEEP_PAST_STAIR.windRad / DEEP_PAST_STAIR.stepsPerFlight / 2;
+
+  it("has 112 steps: eight 12-step flights plus the 16-step basin flight", () => {
+    expect(steps).toHaveLength(112);
+    for (let k = 1; k <= 8; k++) {
+      expect(steps.filter((s) => s.flight === k)).toHaveLength(DEEP_PAST_STAIR.stepsPerFlight);
+    }
+    expect(steps.filter((s) => s.flight === 9)).toHaveLength(DEEP_PAST_STAIR.basinSteps);
+  });
+
+  it("every flight connects: top step one rise below the upper floor, last step exactly the lower floor", () => {
+    for (let k = 1; k <= 8; k++) {
+      const flight = steps.filter((s) => s.flight === k);
+      expect(flight[0]!.topY).toBeCloseTo(deepPastFloorY(k - 1) - DEEP_PAST_STAIR.rise, 9);
+      expect(flight[flight.length - 1]!.topY).toBeCloseTo(deepPastFloorY(k), 9);
+      // The flight hugs the upper disc's inner face, at the band centre.
+      for (const s of flight) {
+        expect(s.radius).toBe(DEEP_PAST_STRATUM_RADIUS[k - 1]! - 10);
+        expect(Math.hypot(s.x, s.z)).toBeCloseTo(s.radius, 9);
+      }
+    }
+  });
+
+  it("flights start at arc-relative 3.25 and end at 3.55 on the lower stratum, inside its arc", () => {
+    for (let k = 1; k <= 8; k++) {
+      const flight = steps.filter((s) => s.flight === k);
+      const startRel = flight[0]!.angle - (k - 1) * DEEP_PAST_STRATUM_ARC_START - halfWindStep;
+      expect(startRel).toBeCloseTo(DEEP_PAST_STAIR.startArcRel, 9);
+      expect(startRel).toBeCloseTo(3.25, 9);
+      const endRel = flight[flight.length - 1]!.angle - k * DEEP_PAST_STRATUM_ARC_START;
+      expect(Math.abs(endRel - 3.55)).toBeLessThanOrEqual(halfWindStep + 1e-9);
+      expect(endRel).toBeLessThan(4.4);
+    }
+  });
+
+  it("the basin flight lands exactly on the basin floor", () => {
+    const basin = steps.filter((s) => s.flight === 9);
+    expect(basin[0]!.topY).toBeCloseTo(deepPastFloorY(8) - DEEP_PAST_STAIR.rise, 9);
+    expect(basin[basin.length - 1]!.topY).toBeCloseTo(DEEP_PAST_BASIN_Y + 1.3, 9);
+    for (const s of basin) {
+      expect(s.radius).toBe(DEEP_PAST_STRATUM_RADIUS[8]! - 10);
+    }
+  });
+
+  it("the walk route lands on every stratum and the basin, each landing on its floor", () => {
+    const walk = buildDeepPastWalkPoints();
+    expect(walk.landings).toHaveLength(10);
+    expect(walk.landings.map((l) => l.stratum)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    for (const landing of walk.landings) {
+      const floor =
+        landing.stratum === 9 ? DEEP_PAST_BASIN_Y + 1.3 : deepPastFloorY(landing.stratum);
+      expect(landing.point[1]).toBeCloseTo(floor, 9);
+    }
+    // The route starts at stratum 0's flight start and ends walking into the basin.
+    expect(walk.points[0]).toEqual(walk.landings[0]!.point);
+    expect(walk.points[walk.points.length - 1]).toEqual(walk.landings[9]!.point);
+    expect(Math.hypot(walk.points[walk.points.length - 1]![0], walk.points[walk.points.length - 1]![2])).toBeCloseTo(20, 9);
   });
 });

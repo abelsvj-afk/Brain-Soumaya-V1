@@ -7,7 +7,7 @@ import {
   relicGlowTexture,
 } from "./relicAssets.js";
 import { discoverableRelics } from "@brain/shared";
-import { DEEP_PAST_BASIN_Y } from "./deepPastLayout.js";
+import { DEEP_PAST_BASIN_Y, DEEP_PAST_BASIN_RADIUS, deepPastFloorY } from "./deepPastLayout.js";
 import { GARDEN_TERRACE_HEIGHT, GARDEN_TERRACE_COUNT } from "./gardenLayout.js";
 import { PEOPLE_FIELD_RADIUS } from "./peopleLayout.js";
 import { STATION_WHEEL_RADIUS } from "./stationLayout.js";
@@ -57,19 +57,21 @@ describe("relic anchors", () => {
   it("Deep Past relics sit on the basin floor or the lowest alcoves", () => {
     for (const id of ["first-light-shard", "basin-stone", "witness-without-a-name"]) {
       const a = RELIC_ANCHORS[id]!;
-      expect(Math.hypot(a.position[0], a.position[2])).toBeLessThan(320);
+      expect(Math.hypot(a.position[0], a.position[2])).toBeLessThan(DEEP_PAST_BASIN_RADIUS);
       expect(a.position[1]).toBeGreaterThan(DEEP_PAST_BASIN_Y);
     }
     // The Witness rests at the basin's center, in the First Light.
     const witness = RELIC_ANCHORS["witness-without-a-name"]!;
     expect(witness.position[0]).toBe(0);
     expect(witness.position[2]).toBe(0);
-    // The Lantern rests in the lowest stratum's alcove band (radius 250–285, y −712).
+    // The Lantern rests in the lowest stratum's alcove band at ×1
+    // (band radius 10–52 on stratum 8's disc, just above its floor).
     const lantern = RELIC_ANCHORS["lantern-of-keeping"]!;
     const r = Math.hypot(lantern.position[0], lantern.position[2]);
-    expect(r).toBeGreaterThanOrEqual(250);
-    expect(r).toBeLessThanOrEqual(285);
-    expect(lantern.position[1]).toBe(-712);
+    expect(r).toBeGreaterThanOrEqual(10);
+    expect(r).toBeLessThanOrEqual(52);
+    expect(lantern.position[1]).toBe(deepPastFloorY(8) + 2);
+    expect(Math.atan2(lantern.position[2], lantern.position[0])).toBeCloseTo(1.016, 3);
   });
 
   it("People relics sit at the field's heart and edge, clear of every hearth", () => {

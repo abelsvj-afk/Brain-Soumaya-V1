@@ -476,10 +476,12 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
     } as never);
     mountEngaged(<WorldsSurface enabled graph={deepPastGraph} />);
     expect(await screen.findByText(/Chronicle route: Done chapter — 2 stops along the descent/)).toBeTruthy();
-    // The guided descent is user-initiated, never auto-started.
+    // The Chronicle ride is user-initiated, never auto-started.
     const descend = screen.getByRole("button", { name: "Descend the Chronicle" });
     fireEvent.click(descend);
-    expect(screen.getByRole("button", { name: "Back to the rim" })).toBeTruthy();
+    // Rework: entering the ride offers "Leave the ride" (leaving parks
+    // the stop) — the old guided toggle's "Back to the rim" is gone.
+    expect(screen.getByRole("button", { name: "Leave the ride" })).toBeTruthy();
   });
 
   it("with no qualifying route there is no thread and no guided button", async () => {
@@ -489,6 +491,8 @@ describe("WorldsSurface — the Deep Past (P3-2)", () => {
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
     expect(screen.queryByText(/Chronicle route:/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Descend the Chronicle" })).toBeNull();
+    // The walk needs no route: it is always offered in Deep Past.
+    expect(screen.getByRole("button", { name: "Walk the stair" })).toBeTruthy();
   });
 });
 

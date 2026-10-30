@@ -112,6 +112,12 @@ The source is a point cloud (2,168,851 points, 0 triangles); this
 file is the slimmed derivative (216,902 points, 10% subsample), the
 only version that ships. The "lighting 2" twin is the same cloud and
 does not ship.
+`sf-supernova-remnant-rework.glb` — the Deep Past rework's derivative
+of the same Aiekick cloud (CC-BY 4.0, same source as above): the
+slim's 216,902 points stride-subsampled to 54,226 and merged into a
+single points primitive, so the remnant costs one draw call in the
+reworked scene. This is the version the Deep Past loads now; the
+slim remains in the repo for reference.
 
 **The International Space Station (Scale world)** — `ISS-A.glb`
 The catalog's low-poly International Space Station model from NASA 3D

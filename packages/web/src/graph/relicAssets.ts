@@ -6,7 +6,7 @@ import {
   type RelicDef,
   type RelicWorld,
 } from "@brain/shared";
-import { DEEP_PAST_BASIN_Y, DEEP_PAST_BASIN_RADIUS } from "./deepPastLayout.js";
+import { DEEP_PAST_BASIN_Y, DEEP_PAST_BASIN_RADIUS, deepPastFloorY } from "./deepPastLayout.js";
 import {
   GARDEN_TERRACE_COUNT,
   GARDEN_TERRACE_HEIGHT,
@@ -50,9 +50,10 @@ export interface RelicAnchor {
  * - Garden: the crown disc (radius 60) at the top terrace (y = 90) under
  *   the witness tree (trunk base radius 22). The seed rests just outside
  *   the trunk; the leaf rests at the roots' edge.
- * - Deep Past: the basin floor (y = −830, radius 320) and the lowest
- *   stratum's alcove band (radius 250–285, y = −712). The Witness rests
- *   at the basin's center, in the First Light itself.
+ * - Deep Past: the basin floor (y = DEEP_PAST_BASIN_Y, radius
+ *   DEEP_PAST_BASIN_RADIUS; the two off-centre relics sit at fractions of
+ *   that radius) and the lowest stratum's alcove band (radius 250–285,
+ *   y = −712). The Witness rests at the basin's center, in the First Light.
  * - People: the field is data — clusters rest at radius 90–510 with
  *   lights orbiting to 30, so no fixed point inside the cluster band is
  *   guaranteed clear of a person's hearth (and no relic is ever tied to
@@ -80,16 +81,25 @@ export const RELIC_ANCHORS: Readonly<Record<string, RelicAnchor>> = {
     position: [26, GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]! + 12, 14],
     size: RELIC_DISPLAY_SIZE,
   },
+  // Basin positions are fractions of the basin radius (the ×5 values
+  // [120, ·, 80] / [−140, ·, 60] over the old radius 320), so the relics
+  // keep their relative basin positions at any basin scale.
   "first-light-shard": {
-    position: [120, DEEP_PAST_BASIN_Y + 12, 80],
+    position: [0.375 * DEEP_PAST_BASIN_RADIUS, DEEP_PAST_BASIN_Y + 12, 0.25 * DEEP_PAST_BASIN_RADIUS],
     size: RELIC_DISPLAY_SIZE,
   },
   "basin-stone": {
-    position: [-140, DEEP_PAST_BASIN_Y + 12, 60],
+    position: [-0.4375 * DEEP_PAST_BASIN_RADIUS, DEEP_PAST_BASIN_Y + 12, 0.1875 * DEEP_PAST_BASIN_RADIUS],
     size: RELIC_DISPLAY_SIZE,
   },
   "lantern-of-keeping": {
-    position: [150, -712, 242],
+    // Stratum 8's disc, re-derived for the ×1 Deep Past (rework A9): the
+    // ×5 anchor [150, −712, 242] rested in the lowest stratum's alcove
+    // band at angle ≈1.016 rad and radius ≈285 (the old band's outer
+    // edge), 8 above the old floor plane. Same terms at ×1: the angle
+    // is preserved (it sits inside stratum 8's arc), radius 50 is the
+    // ×1 alcove band's outer edge (band 10–52), just above floor(8).
+    position: [Math.cos(1.016) * 50, deepPastFloorY(8) + 2, Math.sin(1.016) * 50],
     size: RELIC_DISPLAY_SIZE,
   },
   "witness-without-a-name": {

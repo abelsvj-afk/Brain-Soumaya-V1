@@ -41,7 +41,7 @@ describe("findPlaces", () => {
   });
 
   it("skips a holder whose model hasn't loaded (empty bounds) — it appears when the model lands", () => {
-    const empty = holder("glb-rim", [0, 0, 0], 100, false);
+    const empty = holder("place-rim", [0, 0, 0], 100, false);
     const root = rootWith(empty);
     expect(findPlaces("deep-past", root)).toEqual([]);
     const m = new THREE.Mesh(new THREE.BoxGeometry(100, 100, 100), new THREE.MeshBasicMaterial());
