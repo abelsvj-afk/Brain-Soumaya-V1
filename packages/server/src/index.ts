@@ -5,6 +5,7 @@ import { setTelegramWebhook, sendDailyDigests, tgSend, createTelegramSpaceSender
 import { runToolRouter } from "./agent/tools/router.js";
 import { createPolicyNotify, sweepNotifications } from "./agent/notify/boundary.js";
 import { runEternityContact } from "./npcs/eternityContact.js";
+import { getDayScript } from "./npcs/dailyScript.js";
 import { createEternityVoice } from "./npcs/eternityVoiceProvider.js";
 import { sweepPendingPushes } from "./push/outbox.js";
 import { captureEpisode } from "./agent/episodic.js"; // W2: job_run capture (§5.1)
@@ -210,7 +211,7 @@ setInterval(() => {
         // Eternity reaches out on his own (wake-up + one visitation a day; docs/specs/eternity-autonomy-2026-10-29.md
         // §2c): the in-app inbox always, Telegram through the same policy boundary as every proactive send.
         try {
-          const contact = await runEternityContact(ctx.handle, spaceId, { voice: eternityVoice, notify: tgToken ? policyNotify : undefined });
+          const contact = await runEternityContact(ctx.handle, spaceId, { voice: eternityVoice, notify: tgToken ? policyNotify : undefined, script: () => getDayScript(ctx.handle, spaceId, eternityVoice) });
           if (contact.sent) console.log(`[eternity] ${spaceId.slice(0, 8)}: ${contact.sent} (${contact.reason})`);
         } catch (err) {
           console.error("[eternity] contact error:", err);

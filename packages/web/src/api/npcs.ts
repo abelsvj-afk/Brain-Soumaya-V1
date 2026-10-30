@@ -136,3 +136,15 @@ export async function getEternityPresence(): Promise<import("@brain/shared").Ete
     return null;
   }
 }
+
+/** Today's NPC lines (one batched model call per brain per day, cached server-side). Encounter situations only; null when unreachable. */
+export async function getNpcScript(): Promise<import("@brain/shared").NpcDayScript | null> {
+  try {
+    const res = await afetch(`${API}/npcs/script`);
+    if (!res.ok) return null;
+    const d = (await res.json()) as { script?: import("@brain/shared").NpcDayScript };
+    return d?.script ?? null;
+  } catch {
+    return null;
+  }
+}

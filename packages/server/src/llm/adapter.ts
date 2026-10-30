@@ -172,6 +172,9 @@ export interface LlmProvider {
    *  occasion ("wake", "visitation"), from a brief that may hold a few of the user's memories. His OWN identity,
    *  never Soumaya's. Absent on the heuristic provider → his template lines are the always-available fallback. */
   eternalVoice?(occasion: string, brief: string): Promise<string>;
+  /** Optional: the NPCs' whole day in ONE call (docs/specs/npc-daily-script-2026-10-30.md): a prompt holding every NPC's persona,
+   *  situations and brief → entries of lines per npc+situation. Absent on the heuristic provider → offline lines. */
+  npcDayScript?(prompt: string): Promise<{ npc: string; situation: string; lines: string[] }[]>;
   /** Optional: pick the best next maintenance job from candidate options, given a
    *  brain summary. Returns the chosen index. Absent on heuristic → the deterministic
    *  ladder decides (the always-available fallback). */

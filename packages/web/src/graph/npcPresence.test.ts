@@ -82,4 +82,20 @@ describe("roster + lines", () => {
     expect(encounterLine(hc, null, true)).toMatch(/You've met the Harbor controller/);
     expect(encounterLine(hc, "patrolling", false)).not.toMatch(/[“"]/);
   });
+  it("uses the day's model script when it has variants, rotating with the meeting count; offline otherwise", () => {
+    const hc = NPC_PRESENCES[0]!;
+    const script = {
+      dayKey: "d",
+      source: "model" as const,
+      generatedAt: "x",
+      lines: { "harbor-controller": { encounter_patrolling: ["A.", "B."], encounter_first: ["First."] } },
+    };
+    expect(encounterLine(hc, "patrolling", false, script, 1)).toBe("A.");
+    expect(encounterLine(hc, "patrolling", false, script, 2)).toBe("B.");
+    expect(encounterLine(hc, "patrolling", false, script, 3)).toBe("A.");
+    expect(encounterLine(hc, null, true, script, 1)).toBe("First.");
+    // docked has no scripted variants → the offline line; a fallback script is never used.
+    expect(encounterLine(hc, "docked", false, script, 1)).toMatch(/moored/);
+    expect(encounterLine(hc, "patrolling", false, { ...script, source: "fallback" }, 1)).toMatch(/sweeps past/);
+  });
 });

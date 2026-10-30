@@ -160,6 +160,43 @@ export interface EternityPresence {
   crown: { journeyId: number; title: string } | null;
 }
 
+/**
+ * The daily script (docs/specs/npc-daily-script-2026-10-30.md): every line the NPCs may need for a brain's local day, asked of the
+ * model in ONE batched call and cached. Each NPC lists its situations and how many variants it wants; `need` is the guidance the
+ * prompt gives the model for that situation (descriptions only for NPCs that merely answer — the fence).
+ */
+export type NpcSituation = "encounter_patrolling" | "encounter_docked" | "encounter_arrival" | "encounter_first" | "wake" | "visitation";
+
+export interface NpcSituationSpec {
+  situation: NpcSituation;
+  /** Variants wanted (the client rotates through them). */
+  count: number;
+  /** What the line is, in plain words, for the prompt. */
+  need: string;
+}
+
+export const NPC_SCRIPT_SPECS: Readonly<Record<NpcId, readonly NpcSituationSpec[]>> = {
+  "harbor-controller": [
+    { situation: "encounter_patrolling", count: 4, need: "One short sentence describing the Harbor controller sweeping past the visitor's ship on patrol. Third person, about HER. End by noting the visitor can tap her tag to talk." },
+    { situation: "encounter_docked", count: 4, need: "One short sentence describing the Harbor controller moored at her berth as the visitor passes. Third person. End by noting the visitor can tap her tag to talk." },
+    { situation: "encounter_first", count: 3, need: "One short sentence for a visitor's very FIRST time meeting her: who she is (she is who you ask about routes and arrivals) and that she only answers when asked." },
+  ],
+  eternity: [
+    { situation: "encounter_arrival", count: 4, need: "One short sentence of atmosphere as the visitor arrives in Eternity's world: he is here, vast, still. Not addressed as a question; no commands." },
+    { situation: "encounter_first", count: 3, need: "One short sentence for the visitor's very FIRST arrival: who Eternity is and that his gestures are how they answer him." },
+    { situation: "wake", count: 4, need: "His own words (first person, 1-2 sentences, max 240 characters) waking the person gently for the day. May name ONE thing from their recent memories, truthfully." },
+    { situation: "visitation", count: 3, need: "His own words (first person, 1-2 sentences, max 240 characters) telling the person he acted in his world today and turned toward their galaxy. May name ONE recent memory." },
+  ],
+} as const;
+
+/** One brain's lines for one local day. `source: "fallback"` means no model produced it (offline lines only). */
+export interface NpcDayScript {
+  dayKey: string;
+  source: "model" | "fallback";
+  generatedAt: string;
+  lines: Partial<Record<NpcId, Partial<Record<NpcSituation, string[]>>>>;
+}
+
 export const NPC_DEFINITIONS: readonly NpcDefinition[] = [HARBOR_CONTROLLER, ETERNITY_FIGURE] as const;
 
 export function npcDefinition(id: string): NpcDefinition | undefined {

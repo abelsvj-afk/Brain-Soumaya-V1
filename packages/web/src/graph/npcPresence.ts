@@ -5,6 +5,8 @@
  * NPC fence (shared/npcs.ts) is untouched: the harbor controller still only answers, Eternity alone initiates.
  */
 
+import type { NpcDayScript, NpcSituation } from "@brain/shared";
+
 export type NpcKey = "harbor-controller" | "eternity";
 
 export interface NpcPresence {
@@ -175,8 +177,26 @@ export function recordMeeting(
   return { recorded: true, first: !prev, count: next.count };
 }
 
-/** The one ambient line for an encounter — description, never the NPC's own speech (she only answers). */
-export function encounterLine(npc: NpcPresence, phase: PatrolPhase | null, first: boolean): string {
+/** The situation an encounter is, for the daily script (shared/npcs.ts NPC_SCRIPT_SPECS). */
+export function encounterSituation(npc: NpcPresence, phase: PatrolPhase | null, first: boolean): NpcSituation {
+  if (first) return "encounter_first";
+  if (npc.id === "harbor-controller") return phase === "patrolling" || phase === "leaving" ? "encounter_patrolling" : "encounter_docked";
+  return "encounter_arrival";
+}
+
+/**
+ * The one ambient line for an encounter — description, never the NPC's own speech (she only answers). When today's batched script has
+ * variants for the situation, one is chosen by meeting count (so repeat meetings read differently); otherwise the plain offline line.
+ */
+export function encounterLine(
+  npc: NpcPresence,
+  phase: PatrolPhase | null,
+  first: boolean,
+  script?: NpcDayScript | null,
+  count = 1,
+): string {
+  const scripted = script?.source === "model" ? script.lines[npc.id]?.[encounterSituation(npc, phase, first)] : undefined;
+  if (scripted && scripted.length > 0) return scripted[Math.max(0, count - 1) % scripted.length]!;
   if (first) return `You've met ${npc.name === "Eternity" ? "Eternity" : `the ${npc.name}`} — ${npc.role}.`;
   if (npc.id === "harbor-controller") {
     return phase === "patrolling" || phase === "leaving"

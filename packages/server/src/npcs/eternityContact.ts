@@ -5,7 +5,9 @@ import { NotificationsRepo } from "../repositories/notifications.repo.js";
 import { localTime, spaceTimezone, type NotifyMeta } from "../agent/notify/policy.js";
 import { NpcRepo, localDateKey } from "./repo.js";
 import { checkFence } from "./loop.js";
-import { eternityMemories, speakAsEternity, type EternityOccasion } from "./eternityVoice.js";
+import { cleanLine, eternityMemories, speakAsEternity, type EternityOccasion } from "./eternityVoice.js";
+import { scriptedLine } from "./dailyScript.js";
+import type { NpcDayScript } from "@brain/shared";
 
 /**
  * Eternity reaching out (docs/specs/eternity-autonomy-2026-10-29.md §2c — the owner reversed "no pull", 2026-10-29).
@@ -43,7 +45,7 @@ const VISIT_CAUSE = "He acted in his world today";
 export async function runEternityContact(
   h: DbHandle,
   spaceId: string,
-  deps: { voice?: Pick<EternalVoice, "eternalVoice"> | null; notify?: Notify },
+  deps: { voice?: Pick<EternalVoice, "eternalVoice"> | null; notify?: Notify; script?: () => Promise<NpcDayScript> },
   nowMs: number = Date.now(),
 ): Promise<ContactResult> {
   const def = ETERNITY_FIGURE;
@@ -79,14 +81,25 @@ export async function runEternityContact(
   if (!repo.budgetAllows(def.id, "speak", nowMs, def)) return { sent: null, reason: "budget" };
 
   const retryKey = `${spaceId}|${day}|${occasion}`;
-  const pending = pendingVoice.get(retryKey);
+  // The day's batched script (npcs/dailyScript.ts) already holds his wake/visitation words: use one — no extra call.
+  let scripted: { line: string; source: "voice" } | null = null;
+  if (deps.script) {
+    try {
+      const line = scriptedLine(await deps.script(), def.id, occasion, retryKey);
+      const clean = line ? cleanLine(line) : null;
+      if (clean) scripted = { line: clean, source: "voice" };
+    } catch {
+      /* the batch is best-effort; his own per-occasion path below still works */
+    }
+  }
+  const pending = scripted ? undefined : pendingVoice.get(retryKey);
   if (pending && nowMs < pending.nextAt) {
     return { sent: null, reason: `voice retry in ${Math.ceil((pending.nextAt - nowMs) / 60_000)} min` };
   }
   const attempts = (pending?.attempts ?? 0) + 1;
   const lastTry = attempts > VOICE_RETRY_DELAYS_MS.length;
-  const memories = eternityMemories(h, spaceId, nowMs);
-  const spoken = await speakAsEternity(deps.voice, occasion, memories, hhmm, retryKey, { fallback: lastTry });
+  const memories = scripted ? [] : eternityMemories(h, spaceId, nowMs);
+  const spoken = scripted ?? (await speakAsEternity(deps.voice, occasion, memories, hhmm, retryKey, { fallback: lastTry }));
   if (!spoken) {
     const delay = VOICE_RETRY_DELAYS_MS[attempts - 1]!;
     pendingVoice.set(retryKey, { attempts, nextAt: nowMs + delay });

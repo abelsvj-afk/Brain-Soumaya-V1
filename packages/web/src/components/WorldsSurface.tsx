@@ -101,6 +101,8 @@ import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { renderIcon } from "./icons/Icon.js";
+import { getNpcScript } from "../api/npcs.js";
+import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
 import { NPC_PRESENCES, encounterLine, encounterStep, npcsIn, patrolAt, patrolLabel, recordMeeting, type NpcKey, type PatrolPhase } from "../graph/npcPresence.js";
 import { HARBOR_CONTROLLER_BERTH } from "../graph/stationLayout.js";
@@ -653,6 +655,8 @@ export default function WorldsSurface({
   const npcPhaseRef = useRef<PatrolPhase | null>(null);
   const [npcPhase, setNpcPhase] = useState<PatrolPhase | null>(null);
   const metThisVisitRef = useRef<Set<NpcKey>>(new Set());
+  // Today's batched NPC lines (one model call per brain per day, cached server-side) — fetched when you enter a world that has NPCs.
+  const npcScriptRef = useRef<NpcDayScript | null>(null);
   const [npcNote, setNpcNote] = useState<string | null>(null);
   // Station interior (Wave 2, settled design): a mode of the Station
   // stay, not a world. `inside` swaps the exterior scene for the hall;
@@ -833,14 +837,28 @@ export default function WorldsSurface({
     npcNearRef.current = false;
     npcBodyRef.current = null;
     setNpcNote(null);
+    // The day's script is one cached read (the first of the day makes the single model call); offline lines if it never arrives.
+    let scriptReady: Promise<unknown> = Promise.resolve();
+    if (visible && mode === "world" && npcsIn(currentWorld).length > 0) {
+      scriptReady = getNpcScript().then((sc) => {
+        npcScriptRef.current = sc;
+      });
+    }
     if (!visible || mode !== "world" || currentWorld !== "eternity") return;
     const e = NPC_PRESENCES.find((n) => n.id === "eternity")!;
-    const t = window.setTimeout(() => {
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      // Give the day's script (its first read of the day is the one model call) a few seconds; the offline line covers a slow one.
+      await Promise.race([scriptReady, new Promise((r) => window.setTimeout(r, 6000))]);
+      if (cancelled) return;
       metThisVisitRef.current.add(e.id);
       const m = recordMeeting(getSpaceId(), e.id);
-      if (m.recorded) pushToast(encounterLine(e, null, m.first), "✦", 7000, "normal");
+      if (m.recorded) pushToast(encounterLine(e, null, m.first, npcScriptRef.current, m.count), "✦", 7000, "normal");
     }, 4000);
-    return () => window.clearTimeout(t);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
   }, [visible, mode, currentWorld]);
   const goHomeRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -1783,7 +1801,7 @@ export default function WorldsSurface({
           if (enc.entered && !metThisVisitRef.current.has(hc.id)) {
             metThisVisitRef.current.add(hc.id);
             const m = recordMeeting(getSpaceId(), hc.id);
-            if (m.recorded) pushToast(encounterLine(hc, pose.phase, m.first), "🛰️", 7000, "normal");
+            if (m.recorded) pushToast(encounterLine(hc, pose.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal");
           }
           // The tag rides her on screen (a ref write, no re-render).
           const tag = npcTagRef.current;

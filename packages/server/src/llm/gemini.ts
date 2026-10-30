@@ -13,6 +13,7 @@ import {
   composeLogSystem,
   CHRONICLE_SYSTEM,
   ETERNITY_SYSTEM,
+  NPC_SCRIPT_SYSTEM,
   PLAN_SYSTEM,
   DISTILL_SYSTEM,
   CONSOLIDATE_SYSTEM,
@@ -596,6 +597,33 @@ export class GeminiProvider implements LlmProvider {
       required: ["line"],
     });
     return raw.line;
+  }
+
+  async npcDayScript(prompt: string): Promise<{ npc: string; situation: string; lines: string[] }[]> {
+    const raw = await this.json<{ entries: { npc: string; situation: string; lines: string[] }[] }>(
+      NPC_SCRIPT_SYSTEM,
+      prompt,
+      {
+        type: Type.OBJECT,
+        properties: {
+          entries: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                npc: { type: Type.STRING },
+                situation: { type: Type.STRING },
+                lines: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: ["npc", "situation", "lines"],
+            },
+          },
+        },
+        required: ["entries"],
+      },
+      0.9,
+    );
+    return Array.isArray(raw.entries) ? raw.entries : [];
   }
 
   async planJob(summary: string, options: { type: string; objective: string }[]): Promise<number> {

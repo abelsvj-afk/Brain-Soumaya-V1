@@ -5,6 +5,8 @@ import { spaceOf } from "../middleware.js";
 import { askNpc, getNpcState, NpcError, resumeNpc, runNpcTick, stopNpc } from "../../npcs/loop.js";
 import { NpcRepo } from "../../npcs/repo.js";
 import { eternityPresence } from "../../npcs/eternityPresence.js";
+import { getDayScript, publicScript } from "../../npcs/dailyScript.js";
+import { createEternityVoice, type EternalVoice } from "../../npcs/eternityVoiceProvider.js";
 
 /**
  * NPC autonomy (Wave 2): thin routes over the loop in npcs/loop.ts.
@@ -41,6 +43,16 @@ export function npcsRoutes(ctx: AppContext): Router {
     } catch (e) {
       fail(res, e);
     }
+  });
+
+  // The day's NPC lines (npcs/dailyScript.ts): ONE batched model call per brain per local day, cached — this read is free after the first.
+  // Only the encounter lines are exposed; Eternity's wake/visitation words are his to deliver. Never throws: offline lines on any failure.
+  let voice: Promise<EternalVoice | null> | null = null;
+  r.get("/script", async (_req, res) => {
+    const spaceId = spaceOf(res);
+    voice ??= createEternityVoice(ctx).catch(() => null);
+    const script = await getDayScript(ctx.handle, spaceId, await voice);
+    res.json({ script: publicScript(script) });
   });
 
   // Eternity's presence across the app (phase 2d/2e) — read-only, never a tick.

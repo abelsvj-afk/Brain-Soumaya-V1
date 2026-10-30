@@ -11,9 +11,13 @@ export interface EternalVoice {
   /** "gemini" = his own free-tier line; "shared" = the app's configured provider. */
   readonly via: "gemini" | "shared";
   eternalVoice(occasion: string, brief: string): Promise<string>;
+  /** The whole cast's day in ONE call (npcs/dailyScript.ts). Absent when the line has no such method. */
+  npcDayScript?(prompt: string): Promise<{ npc: string; situation: string; lines: string[] }[]>;
 }
 
 export const ETERNITY_VOICE_TIMEOUT_MS = 20_000;
+/** The batched day script is one bigger call than a single line. */
+export const NPC_SCRIPT_TIMEOUT_MS = 45_000;
 
 function findGeminiKey(): string | undefined {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
@@ -48,6 +52,10 @@ export async function createEternityVoice(ctx: AppContext): Promise<EternalVoice
         if (ctx.usage.overBudget()) throw new Error("AI budget reached for now");
         return withTimeout(gemini.eternalVoice(occasion, brief), ETERNITY_VOICE_TIMEOUT_MS);
       },
+      npcDayScript: async (prompt) => {
+        if (ctx.usage.overBudget()) throw new Error("AI budget reached for now");
+        return withTimeout(gemini.npcDayScript(prompt), NPC_SCRIPT_TIMEOUT_MS);
+      },
     };
   }
   const shared = ctx.llm;
@@ -55,6 +63,9 @@ export async function createEternityVoice(ctx: AppContext): Promise<EternalVoice
     return {
       via: "shared",
       eternalVoice: (occasion, brief) => withTimeout(shared.eternalVoice!(occasion, brief), ETERNITY_VOICE_TIMEOUT_MS),
+      ...(shared.npcDayScript
+        ? { npcDayScript: (prompt: string) => withTimeout(shared.npcDayScript!(prompt), NPC_SCRIPT_TIMEOUT_MS) }
+        : {}),
     };
   }
   return null;

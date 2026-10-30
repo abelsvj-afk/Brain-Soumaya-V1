@@ -1341,6 +1341,16 @@ export function migrateSchema(sqlite: RawDb): void {
       last_explore_day TEXT,
       PRIMARY KEY (space_id, npc_id)
     );
+    CREATE TABLE IF NOT EXISTS npc_day_script (
+      space_id TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      source TEXT NOT NULL,
+      script TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_retry_at TEXT,
+      PRIMARY KEY (space_id, day_key)
+    );
     CREATE TABLE IF NOT EXISTS npc_relic_holdings (
       npc_id TEXT NOT NULL,
       space_id TEXT NOT NULL,

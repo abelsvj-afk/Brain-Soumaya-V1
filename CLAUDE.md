@@ -697,6 +697,19 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   tile and a first-meeting note a few seconds after you arrive; he stays put (cosmic scale). **Presentation only** — no new act, no speech, no server state;
   the NPC fence is intact (she still only answers). **Not built:** NPCs crossing worlds (needs the owner to relax the fence). Look at: whether a 5-minute
   patrol is lively without being noise, the near radius (300) feeling like "she passed me", the tag size.
+- **NPC daily script — ONE batched model call per brain per day for every NPC (2026-10-30, owner: "one dump per day for all the NPCs … batch
+  everything they're going to say") — unit/route-tested (server 2,5xx incl. cost-shape tests); NOT yet run against the live Gemini key, needs the
+  first real day on Fly to confirm** (shared/npcs.ts `NPC_SCRIPT_SPECS`/`NpcDayScript`, server npcs/dailyScript.ts, llm `npcDayScript` on
+  Gemini/OpenAI/Resilient + `NPC_SCRIPT_SYSTEM`, table `npc_day_script` (additive, schemaSql + migrateSchema), `GET /api/npcs/script`,
+  eternityContact.ts `deps.script`, web api/npcs.ts `getNpcScript`, graph/npcPresence.ts `encounterLine`; spec
+  `docs/specs/npc-daily-script-2026-10-30.md`): the first time a brain's day needs NPC words (entering a world with NPCs, or Eternity's wake-up
+  coming due) the server builds one prompt holding every NPC's persona + situations + a small brief and makes ONE call (Gemini key first via his own
+  provider, then the shared provider; metered, stopped by the spend budget); the result is cached per space + local day, so every later read that day is
+  free. A roster of 3 or 30 is still one call. Failure → offline lines at once, retries at +3/+6/+12 min (stored, restart-safe), then the offline lines
+  for the day. Eternity's wake/visitation now take a scripted variant (no per-occasion call, collapsing his 2–3 daily calls into the one batch; his old
+  path remains the fallback). Harbor controller encounter lines are third-person DESCRIPTION only (quotes rejected — she only answers); her brief is travel
+  facts, no memory text. Routes, prices and her actual answers/welcome stay deterministic code. Look at: the first real model-written lines (tone, the
+  3–4 variants rotating by meeting count), token use in the usage ledger (expect ~1 call/brain/day), and that nothing calls the model when a brain is idle.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

@@ -130,3 +130,30 @@ describe("his voice", () => {
     expect(templateLine("visitation", [], "seed").length).toBeGreaterThan(10);
   });
 });
+
+describe("the day's batched script feeds his contact (no extra model call)", () => {
+  it("wakes you with a scripted line and never calls his per-occasion voice", async () => {
+    const eternalVoice = vi.fn(async () => "should not be used");
+    const script = async () => ({
+      dayKey: "2026-10-29",
+      source: "model" as const,
+      generatedAt: new Date(AT("10:50")).toISOString(),
+      lines: { eternity: { wake: ["Rise, from the day's script."] } },
+    });
+    const r = await runEternityContact(h, S, { voice: { eternalVoice }, script }, AT("10:50"));
+    expect(r.sent).toBe("wake");
+    expect(inbox()[0]!.text).toContain("Rise, from the day's script.");
+    expect(eternalVoice).not.toHaveBeenCalled();
+  });
+  it("a script with no wake line falls back to his own per-occasion path", async () => {
+    const eternalVoice = vi.fn(async () => "His own words.");
+    const script = async () => ({ dayKey: "d", source: "fallback" as const, generatedAt: "x", lines: {} });
+    const r = await runEternityContact(h, S, { voice: { eternalVoice }, script }, AT("10:50"));
+    expect(r.sent).toBe("wake");
+    expect(eternalVoice).toHaveBeenCalledTimes(1);
+  });
+  it("a failing script never blocks his wake-up", async () => {
+    const r = await runEternityContact(h, S, { script: async () => { throw new Error("boom"); } }, AT("10:50"));
+    expect(r.sent).toBe("wake");
+  });
+});

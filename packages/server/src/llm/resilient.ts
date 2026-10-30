@@ -269,6 +269,12 @@ export class ResilientLlmProvider implements LlmProvider {
     return await withTimeout(this.primary.eternalVoice(occasion, brief), this.timeoutMs, "eternalVoice");
   }
 
+  /** Only when the primary supports it; the NPCs' offline lines are the fallback (npcs/dailyScript.ts). A whole day in one call, so a longer bound. */
+  async npcDayScript(prompt: string): Promise<{ npc: string; situation: string; lines: string[] }[]> {
+    if (this.blocked || !this.primary.npcDayScript) throw new Error("npcDayScript unavailable");
+    return await withTimeout(this.primary.npcDayScript(prompt), Math.max(this.timeoutMs, 30_000), "npcDayScript");
+  }
+
   /** Only when the primary supports it; the dream cycle's template is the fallback. */
   async consolidate(nodes: LinkCandidate[]): Promise<{ belief: string; confidence: number }> {
     if (this.blocked || !this.primary.consolidate) throw new Error("consolidate unavailable");

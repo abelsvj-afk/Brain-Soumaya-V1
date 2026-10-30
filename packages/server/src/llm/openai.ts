@@ -12,6 +12,7 @@ import {
   composeLogSystem,
   CHRONICLE_SYSTEM,
   ETERNITY_SYSTEM,
+  NPC_SCRIPT_SYSTEM,
   buildEternityPrompt,
   PLAN_SYSTEM,
   DISTILL_SYSTEM,
@@ -726,6 +727,36 @@ export class OpenAiProvider implements LlmProvider {
       "eternalVoice",
     );
     return raw.line;
+  }
+
+  async npcDayScript(prompt: string): Promise<{ npc: string; situation: string; lines: string[] }[]> {
+    const raw = await this.json<{ entries: { npc: string; situation: string; lines: string[] }[] }>(
+      NPC_SCRIPT_SYSTEM,
+      prompt,
+      {
+        type: "object",
+        properties: {
+          entries: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                npc: { type: "string" },
+                situation: { type: "string" },
+                lines: { type: "array", items: { type: "string" } },
+              },
+              required: ["npc", "situation", "lines"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["entries"],
+        additionalProperties: false,
+      },
+      "npcDayScript",
+      0.9,
+    );
+    return Array.isArray(raw.entries) ? raw.entries : [];
   }
 
   async consolidate(nodes: LinkCandidate[]): Promise<{ belief: string; confidence: number }> {

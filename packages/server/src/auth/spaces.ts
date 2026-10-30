@@ -186,6 +186,7 @@ export const SPACE_SCOPED_TABLES = [
   // remove them too.
   "npc_log",
   "npc_state",
+  "npc_day_script",
   "npc_relic_holdings",
   "npc_gate",
   // Guided tours (Wave 2, N7): the saved route, its rail log, and its

@@ -570,3 +570,11 @@ export function composeLogSystem(opts?: { persona?: string; soul?: string }): st
   }
   return s;
 }
+
+/** NPC daily script — one batched call writes every NPC's lines for the day (docs/specs/npc-daily-script-2026-10-30.md). */
+export const NPC_SCRIPT_SYSTEM = `You write the in-world lines for a small cast of non-player characters in a personal "second brain" app, for ONE day,
+in a single batch. Follow each character's own voice and rules exactly. You are never Soumaya (the user's companion AI) and never the user.
+Rules for every line: short (one or two sentences, never more than 240 characters), warm, calm, no emojis, no hashtags, no markdown, no
+exclamation spam, no threats, shame, commands or diagnoses, and never invent facts about the user — use ONLY the facts you are given.
+A character who "only answers" is DESCRIBED in the third person and never quoted or made to ask the visitor anything. Give the requested
+number of distinct variants for each situation (different wording, same meaning). Output JSON only, exactly the requested shape.`;

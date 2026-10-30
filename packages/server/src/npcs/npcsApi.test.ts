@@ -122,4 +122,14 @@ describe("NPC routes", () => {
     expect(npc.actsToday).toBe(1);
     expect(npc.recentLog).toHaveLength(1);
   });
+
+  it("GET /script serves today's lines (offline without a key), scoped to the brain, encounter lines only", async () => {
+    const r = await call("GET", "/api/npcs/script", spaceId);
+    expect(r.status).toBe(200);
+    const script = r.body.script as { source: string; lines: Record<string, Record<string, string[]>> };
+    expect(script.source).toBe("fallback"); // the heuristic provider has no model
+    expect(script.lines["harbor-controller"]?.encounter_patrolling?.length).toBeGreaterThan(0);
+    expect(script.lines.eternity?.wake).toBeUndefined();
+    expect((await call("GET", "/api/npcs/script", "")).status).not.toBe(200); // no brain, no script
+  });
 });
