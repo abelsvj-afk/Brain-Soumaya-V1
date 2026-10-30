@@ -7863,7 +7863,10 @@ body.in-transit .perf-suggest { display: none; }
 .book-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .book-head h2 { margin: 0; font-size: 1.05rem; color: #ffe9a8; }
 .book-close { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid rgba(255, 233, 168, 0.55); border-radius: 999px; background: rgba(255, 233, 168, 0.1); color: #ffe9a8; cursor: pointer; }
-.book-lede, .book-empty { margin: 8px 0; color: #b8c6e4; }
+.book-lede, .book-empty, .book-foreword { margin: 8px 0; color: #b8c6e4; }
+.book-foreword { font-style: italic; line-height: 1.5; }
+.book-preview { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 4px 0; color: #ffe9a8; font-size: 0.9rem; }
+.book-preview input { width: 22px; height: 22px; }
 .book-empty { color: #ffe9a8; }
 .book-sky { width: 100%; height: auto; display: block; margin: 6px 0 0; background: radial-gradient(circle at 50% 50%, #0c1230 0%, #04060f 100%); border-radius: 10px; }
 .book-point { cursor: pointer; outline: none; }

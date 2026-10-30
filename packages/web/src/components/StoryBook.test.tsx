@@ -15,13 +15,33 @@ describe("The Sixteenth's Book", () => {
   it("is only shapes at first: an invitation, no counts, nothing locked", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [] });
     const { container } = render(<StoryBook onClose={() => {}} />);
-    await waitFor(() => expect(screen.getByText(/Nothing is kept here yet/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/This book keeps what you notice/)).toBeTruthy());
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\d/); // no number anywhere in the Book
     expect(text).not.toMatch(/locked|unlocked|complete|%|of \d/i);
     // every entry is a button, all of them silhouettes
     expect(container.querySelectorAll(".book-point").length).toBeGreaterThan(40);
     expect(container.querySelectorAll(".book-point.is-found").length).toBe(0);
+  });
+
+  it("the owner can preview everything (a view only); nobody else is offered it", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [], owner: true });
+    const put = vi.spyOn(api, "putStoryLink");
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    const box = await screen.findByLabelText(/Preview everything/);
+    expect(container.querySelectorAll(".book-point.is-found").length).toBe(0);
+    fireEvent.click(box);
+    expect(container.querySelectorAll(".book-point.is-found").length).toBeGreaterThan(40);
+    expect(put).not.toHaveBeenCalled();
+    fireEvent.click(box);
+    expect(container.querySelectorAll(".book-point.is-found").length).toBe(0);
+  });
+
+  it("a player who is not the owner is not offered the preview", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [] });
+    render(<StoryBook onClose={() => {}} />);
+    await screen.findByText(/This book keeps what you notice/);
+    expect(screen.queryByLabelText(/Preview everything/)).toBeNull();
   });
 
   it("lights what is found and shows its words; a partner adds the second reading", async () => {

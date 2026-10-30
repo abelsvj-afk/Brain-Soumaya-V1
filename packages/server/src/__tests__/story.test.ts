@@ -103,6 +103,8 @@ describe("finds", () => {
 
   it("outside its own Hour a sighting answers only on its good days — decided by a seed, so retrying cannot re-roll it", () => {
     const at = goTo("deep-past");
+    // the FIRST stillness a brain keeps in a world always answers (a first taste); the good-day rule governs the ones after it
+    expect(repo().find("obj.follower-ribbon", "regard", Date.parse("2026-10-31T13:00:00.000Z")).isNew).toBe(true);
     // find a day when the stratum (First Light) does NOT answer at 15:00, and one when it does; then the answer is stable all day
     let quiet: number | null = null;
     let good: number | null = null;
@@ -119,6 +121,18 @@ describe("finds", () => {
     expect(() => repo().find("sight.missing-stratum", "regard", quiet! + 600_000)).toThrow(/Nothing stirs/); // same day, same answer
     expect(at).toBeGreaterThan(0);
     expect(repo().find("sight.missing-stratum", "regard", good!).isNew).toBe(true);
+  });
+
+  it("the first stillness a brain keeps in a world is always answered — even on a quiet day", () => {
+    goTo("deep-past", "first-taste", "spaceFirst");
+    let quiet: number | null = null;
+    for (let d = 1; d <= 28 && quiet === null; d++) {
+      const t = Date.parse(`2026-11-${String(d).padStart(2, "0")}T15:00:00.000Z`);
+      const key = new Date(t).toISOString().slice(0, 10);
+      if (!worldAnswers({ entryId: "sight.missing-stratum", hour: "first-light" }, 15, "spaceFirst", key)) quiet = t;
+    }
+    expect(quiet).not.toBeNull();
+    expect(repo("spaceFirst").find("sight.missing-stratum", "regard", quiet!).isNew).toBe(true);
   });
 
   it("is private to a brain", () => {
@@ -232,7 +246,7 @@ describe("/api/story over HTTP", () => {
   });
 
   it("finds, links, notes and recalls end to end — and never returns a number", async () => {
-    expect((await (await call("/book")).json()) as object).toEqual({ finds: [], links: [], notes: [] });
+    expect((await (await call("/book")).json()) as object).toEqual({ finds: [], links: [], notes: [], owner: false });
     const gifts: [string, string][] = [["obj.doorkeepers-nail", "npc:wayfarer"], ["obj.choirmasters-breath", "npc:cantor"]];
     for (const [id, source] of gifts) {
       const r = await call("/find", { method: "POST", body: { entryId: id, source } });
@@ -247,7 +261,7 @@ describe("/api/story over HTTP", () => {
     expect(book.links).toHaveLength(1);
     expect(book.notes).toHaveLength(1);
     // The Book is lists only: no total, count, ratio or percentage key anywhere in the payload.
-    expect(Object.keys(book).sort()).toEqual(["finds", "links", "notes"]);
+    expect(Object.keys(book).sort()).toEqual(["finds", "links", "notes", "owner"]);
     expect(JSON.stringify(book)).not.toMatch(/"(total|count|percent|progress|remaining|of)"/i);
     expect((await call("/link", { method: "DELETE", body: { a: B, b: A } })).status).toBe(200);
   });

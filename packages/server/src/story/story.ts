@@ -1,5 +1,5 @@
 import type { DbHandle } from "../db/client.js";
-import { STORY_ENTRY_BY_ID, storyPairIsLit, triggerFor, worldAnswers, type TriggerHow } from "@brain/shared";
+import { STORY_ENTRY_BY_ID, STORY_TRIGGERS, storyPairIsLit, triggerFor, worldAnswers, type TriggerHow } from "@brain/shared";
 import { localTime, spaceTimezone } from "../agent/notify/policy.js";
 import { localDateKey } from "../npcs/repo.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
@@ -108,11 +108,17 @@ export class StoryRepo {
       const tz = spaceTimezone(db, this.spaceId);
       const dayKey = localDateKey(tz, nowMs);
       const localHour = Number(localTime(new Date(nowMs), tz).slice(0, 2));
-      if (!worldAnswers(trigger, localHour, this.spaceId, dayKey)) throw new StoryError("Nothing stirs.", 403);
+      // First stillness ever kept in THIS world: the world always answers (the once-a-day rule below still holds).
+      // (The world a stillness belongs to is its TRIGGER's world — several entries are "anywhere" in the canon but are only ever answered in one place.)
+      const triggerWorld = (entry: string) => STORY_TRIGGERS.find((x) => x.entryId === entry && (x.how === "regard" || x.how === "listen"))?.world;
+      const keptHere = (db.prepare(`SELECT entry_id FROM story_finds WHERE space_id = ? AND source IN ('regard','listen')`).all(this.spaceId) as { entry_id: string }[]).some(
+        (r) => triggerWorld(r.entry_id) === trigger.world,
+      );
+      if (!worldAnswers(trigger, localHour, this.spaceId, dayKey, !keptHere)) throw new StoryError("Nothing stirs.", 403);
       const recent = db
         .prepare(`SELECT entry_id, found_at FROM story_finds WHERE space_id = ? AND source IN ('regard','listen') AND found_at >= ?`)
         .all(this.spaceId, new Date(nowMs - 36 * 3_600_000).toISOString()) as { entry_id: string; found_at: string }[];
-      const spokeToday = recent.some((r) => STORY_ENTRY_BY_ID.get(r.entry_id)?.world === trigger.world && localDateKey(tz, Date.parse(r.found_at)) === dayKey);
+      const spokeToday = recent.some((r) => triggerWorld(r.entry_id) === trigger.world && localDateKey(tz, Date.parse(r.found_at)) === dayKey);
       if (spokeToday) throw new StoryError("Nothing stirs.", 403);
     }
     const iso = new Date(nowMs).toISOString();

@@ -24,6 +24,8 @@ export interface StoryBookData {
   finds: StoryFindRow[];
   links: StoryLinkRow[];
   notes: StoryNoteRow[];
+  /** True only for the deployment owner's brain: the Book offers a read-only "preview everything". */
+  owner?: boolean;
 }
 
 const json = { "Content-Type": "application/json" };

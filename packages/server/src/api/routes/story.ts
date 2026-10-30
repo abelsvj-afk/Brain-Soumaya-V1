@@ -43,7 +43,8 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
   const bad = (res: import("express").Response, msg: string) => res.status(400).json({ error: msg });
 
   r.get("/book", (_req, res) => {
-    res.json(repo(res).book());
+    // `owner` only tells the Book whether to offer the owner's read-only preview (the server still records nothing from it).
+    res.json({ ...repo(res).book(), owner: isOwnerSpace(spaceOf(res)) });
   });
 
   const findBody = z.object({ entryId: id, source: z.string().min(1).max(60) });

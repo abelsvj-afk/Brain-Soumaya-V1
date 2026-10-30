@@ -64,9 +64,16 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
   const now = Date.now();
 
   const layout = useMemo(() => new Map(skyLayout().map((p) => [p.id, p])), []);
-  const foundById = useMemo(() => new Map(book.finds.map((f) => [f.entryId, f])), [book.finds]);
-  const foundSet = useMemo(() => new Set(book.finds.map((f) => f.entryId)), [book.finds]);
-  const latest = book.finds.length ? [...book.finds].sort((a, b) => b.foundAt.localeCompare(a.foundAt))[0]!.entryId : null;
+  // The owner's preview (docs/specs/living-worlds-dialogue-2026-10-31.md S1): every entry lit so the lore can be read without playing for days. READ-ONLY — it is a view, nothing is
+  // sent to the server and no find, link or note is recorded; the real Book is untouched when it is switched off.
+  const [preview, setPreview] = useState(false);
+  const finds = useMemo(
+    () => (preview ? STORY.entries.filter((e) => !e.retired).map((e) => ({ entryId: e.id, foundAt: new Date().toISOString(), source: "preview", lastRecalledAt: null, recallCount: 0 })) : book.finds),
+    [preview, book.finds],
+  );
+  const foundById = useMemo(() => new Map(finds.map((f) => [f.entryId, f])), [finds]);
+  const foundSet = useMemo(() => new Set(finds.map((f) => f.entryId)), [finds]);
+  const latest = !preview && finds.length ? [...finds].sort((a, b) => b.foundAt.localeCompare(a.foundAt))[0]!.entryId : null;
   // The tremor: neighbours of the newest find give a faint shimmer — never an arrow.
   const tremor = useMemo(() => {
     // Emphasis, not a hint: with nothing found yet, the door this brain's tide surfaces first gives the faint shimmer. Every door is still equally there.
@@ -134,8 +141,14 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
         <p className="book-lede">
           What you notice in the worlds is kept here as a light. What you have not found is only a shape. Nothing here is counted, and nothing here can be lost.
         </p>
-        {loaded && book.finds.length === 0 && (
-          <p className="book-empty">Nothing is kept here yet. Stand still where something feels wrong, or listen where a hymn catches. It will be here when you do.</p>
+        <p className="book-foreword">
+          This book keeps what you notice, and no two who tell it agree. Stand still where something feels wrong. Listen where it is quiet. Ask the people you meet what they carry.
+          What you find will be here, a light at a time.
+        </p>
+        {book.owner && (
+          <label className="book-preview">
+            <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> Preview everything (owner — a view only; nothing is recorded)
+          </label>
         )}
 
         <svg className="book-sky" viewBox={`0 0 ${BOOK_W} ${BOOK_H}`} role="group" aria-label="The sky of what is kept">

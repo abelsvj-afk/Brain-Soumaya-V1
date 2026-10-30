@@ -162,14 +162,16 @@ function hash01(str: string): number {
   return (x >>> 0) / 4294967295;
 }
 
-/** Outside its own Hour a sighting still answers — but only on about one day in three, chosen by a seed (brain + entry + day) so spamming stillness cannot re-roll it. */
-export const OUT_OF_HOUR_CHANCE = 1 / 3;
+/** Outside its own Hour a sighting still answers — but only on about one day in two, chosen by a seed (brain + entry + day) so spamming stillness cannot re-roll it. (Was one in three; loosened 2026-10-31, docs/specs/living-worlds-dialogue-2026-10-31.md.) */
+export const OUT_OF_HOUR_CHANCE = 1 / 2;
 
 /**
  * Does the world answer THIS stillness, for this entry, now? In its own Hour: yes. Otherwise only on its good days. Deterministic, so server and client agree and a
  * second try the same day gives the same answer. Never a lock: every sighting has good days, and nothing here depends on any other entry.
  */
-export function worldAnswers(t: Pick<StoryTrigger, "entryId" | "hour">, localHour: number, brainId: string, dayKey: string): boolean {
+export function worldAnswers(t: Pick<StoryTrigger, "entryId" | "hour">, localHour: number, brainId: string, dayKey: string, firstHere = false): boolean {
+  // The very first stillness a brain keeps in a world is always answered: a first taste, so the slowness that follows is never a silent wall.
+  if (firstHere) return true;
   if (!t.hour) return true;
   if (hourBandOfHour(localHour) === t.hour) return true;
   return hash01(`${brainId}|${t.entryId}|${dayKey}|answers`) < OUT_OF_HOUR_CHANCE;

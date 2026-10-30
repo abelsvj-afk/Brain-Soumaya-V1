@@ -809,6 +809,14 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   well out · brought close); every speaking cast member has ≥ 3 Item Reactions (24 total, Eternity included); a slow low "find" sting plays when something is kept in the Book
   (honours the sound switch). Look at: whether the far/near thresholds (330 / 1100) are findable but not trivial with drag + pinch, and the sting's loudness.
   **Lore sound wired (2026-10-31, Muse's files in `public/audio/`):** four beds (morning · hearth · hush · standing) fade in quietly under the narrator ONLY while a line is read (chosen by the place you are in: Deep Past → morning, Quiet/Archive → hush, Eternity → standing, else hearth) and fade out after; `lore-sting-find.mp3` plays when something is kept in the Book (the synthesized sting is only the fallback). Sound switch silences all of it (graph/loreBeds.ts). Not heard on a real device: check the bed level under the voice (BED_LEVEL 0.55) and the fades.
+- **Living worlds S1 — the Book is never silent, the first stillness always answers, pace looser (2026-10-31, owner: "I don't see the lore in the Book", "2 can be slightly
+  looser") — unit/route-tested (shared 72, server story 27, web 2,775), NOT seen on a real screen** (spec `docs/specs/living-worlds-dialogue-2026-10-31.md`; shared/storyTriggers.ts
+  `worldAnswers(…, firstHere)` + `OUT_OF_HOUR_CHANCE` 1/3 → 1/2, server story/story.ts first-stillness-per-world + trigger-world fix, `GET /api/story/book` adds `owner`, web
+  StoryBook.tsx foreword + owner-only "Preview everything" (a read-only view; records nothing)): the Book opens with a plain foreword saying where to look (no counts); the FIRST
+  Regard/Listen a brain keeps in a world is always answered (once-a-day still holds), then sightings answer in their Hour or on about one day in two; the owner can light the whole Book
+  to read the lore. Found during the work: the once-a-day and first-in-world checks used the entry's world, which is "anywhere" for several entries — they now use the trigger's world.
+  Next (same spec): S2 canon cast · S3 talk to people · S4 places with a past · S5 the world breathes + art in the Book. Look at: whether the foreword reads right and whether
+  "one a day per world" now feels like the pace you want.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
