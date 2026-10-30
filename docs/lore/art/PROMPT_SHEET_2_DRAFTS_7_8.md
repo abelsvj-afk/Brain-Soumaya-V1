@@ -127,3 +127,6 @@ Four painterly vignettes, 16:9, no named faces: **(a)** *The Berth-Boy's Four No
 - File: `docs/lore/art/NN-short-title-vK.png`, four variants per prompt. Update `IMAGE_QA_NOTES.md` with a section per set as in Round 1.
 - I will review by eye, pick one canon variant per set, record it in `docs/lore/art/CLAUDE_REVIEW.md`, and place it in the app's Book (web-sized copy, only for entries it illustrates).
 - Do not regenerate anything from Round 1. If a continuity question comes up that this sheet doesn't answer, **flag it — don't decide it.**
+
+## Also still ungenerated from Round 1
+`docs/lore/IMAGE_PROMPTS.md` §§37–42 (Draft 5: Hesk, Kith's table, the Sleepwalker's dock, Ossian Reed, Tamsin's ward, the Cartographer) were written but never generated. If you have time, do them **after** §§43–64 — several overlap §§45, 47, 53, 54 here, so keep the same faces.

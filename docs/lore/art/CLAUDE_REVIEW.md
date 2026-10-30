@@ -36,3 +36,19 @@ Checked against the prompt (LEFT: stepping into the mirror of the stars, looking
 - **APPROVED as the canon pick.** A woman in a pale, loose nightgown, barefoot, walking an empty misty harbor pier at dusk; she holds the glass lantern in BOTH hands, out in front of her as if it were fragile (v1/v2/v4 do not); the lantern is dark glass with only a single faint gold glint inside, which is exactly the prompt's "a single faint gold glint on the lantern" and no lit flame (the Bible's flameless rule); her gaze is open and carried away from us, listening rather than afraid; the harbor behind her is dull and dim, and the mist thickens round her feet. No text.
 - Known, not a break: it came out landscape where the sheet asked 2:3 (the generator has no ratio control) — crop plan as in `IMAGE_QA_NOTES.md`. v1/v2/v4 stay marked "lantern lit — not canon".
 - **This closes my review of everything Muse asked me to rule on.** My eye has seen: §3 v1/v2, §5 v5/v8, §19 v1/v5, §20 v1–v4, §22 v3, §36 v1/v5. Every other file is judged only by Muse's notes.
+
+## Round 6 (2026-10-31) — pictures placed in the Book
+I opened one candidate from each of eight more sets (Muse's notes chose the variant; I checked it against the Bible by eye) and **approved all eight as canon picks**, placed in the app's Book as web-sized copies beside their entry (a picture shows only once the entry is found):
+
+| Entry | Set / variant | What I checked |
+|---|---|---|
+| `sight.tamsins-ward` | §23 v1 | Tamsin in green apron with bowl and spoon; the Faded half-transparent, watercolour-soft, no gore; ember lanterns; the Hush's thin line at the window. |
+| `obj.kiths-drawing` | §26 v4 | The faceless woman drawn, **torn at the mouth**; adults with fingers to their lips (the hushing); one place set for no one. The child's face is visible (allowed). |
+| `sight.long-room` | §31 v3 | Hall of small lit rooms, one tall open white doorway, the hooded player from behind — face/gender never shown. |
+| `obj.follower-ribbon` | §33 v2 | A hooded figure from behind reaching a note toward a ribbon on a mooring post; no face. |
+| `echo.hymnal-gap` | §25 v1 | Rows of translucent singers; **one empty stall** dead centre under a shaft of gold light. |
+| `obj.choirmasters-breath` | §21 v3 | Ysmerel, **mouth closed**, hand raised, hymnal with a torn page (the closest to "one page torn out"; the pew crescents are allowed by your ruling). |
+| `obj.dorrows-page` | §24 v4 | Dorrow's smile that does not reach the eyes; ledger shelves; script is illegible squiggle, no readable words. |
+| `echo.eighth-bell` | §35 v3 | The line of keepers' emblems with bells; the eighth, earth-toned and hooded, from behind, ringing empty air; the white void on the left. |
+
+**Twelve entries now have a painting.** Entries without one are not an oversight: each needs an image approved by eye, and several have none generated (see `PROMPT_SHEET_2_DRAFTS_7_8.md`). Sets I did **not** place (no entry maps one-to-one, or I have not viewed them): §1 First Morning, §2 Seven Hours, §3 Eternity (a mood piece, not an entry), §4 Vesh, §6 Rending, §7 Witness, §8 Calend, §9 Archive, §10 Firstborn, §11 Player, §12 Hush, §13 Fading, §14 Oru, §15–18, §27–30, §32, §34. They stay in the repo for the lore and for the marketing/intro surfaces; none is wrong, they are just not Book illustrations yet.

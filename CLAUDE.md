@@ -846,6 +846,12 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   ~25 ordinary lives and ambient traffic as lore; the **road tracker, the Draft 7 entries/edges (Station, Archive, Ward slices), the lineage view, the eight seams and ambient lives/traffic ships are NOT built**
   (order in Draft 8 §5). The broker's earlier "I don't know whose that is" reaction (Hesk's line by canon) moved to Hesk. Look at: Station crowding with up to eight tags, Pell's lag feeling like a
   person and not a bug, and whether Hesk/Tamsin/Ossian/Ilsabet/Wim read as the lore's people.
+- **Lore art placed: twelve paintings in the Book; Prompt Sheet 2 for Muse (2026-10-31, owner: "make sure you're done with all the lore images and reading it and placing it … write a prompt for Muse")
+  — unit-tested (web storyArt test: every key is a real entry, file exists, < 150 KB, alt text never explains); the paintings NOT yet seen in the live app** (web lib/storyArt.ts + public/lore/*.webp (12 files,
+  ~650 KB total), docs/lore/art/CLAUDE_REVIEW.md rounds 1–6, docs/lore/art/PROMPT_SHEET_2_DRAFTS_7_8.md): by eye I approved and placed eight more canon picks (Tamsin's ward, Kith's drawing, the Long Room, the Follower's
+  ribbon, the hymnal gap, the choirmaster's breath, Dorrow's page, the Eighth Bell) on top of the first four; the sheet holds 22 new prompts (§§43–64: Mara's lamp, Teru's first door, Hesk's locked room, "Three Parts of One"
+  triptych, the Forty-Second, Maren's winter, …) with identity cards and the never-list, to be generated in four variants each, then picked by me and placed. The other image sets stay in the repo, not in the Book (no one-to-one
+  entry). Muse: IMAGE_PROMPTS §§37–42 are also still ungenerated.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
