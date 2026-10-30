@@ -9,6 +9,7 @@ import { getNarrationMode, playNarration, setNarrationMode, stopNarration, type 
 import { useEffect } from "react";
 import VoiceConsole from "./VoiceConsole.js";
 import BookRoads from "./BookRoads.js";
+import BookLines from "./BookLines.js";
 import { STORY_ART } from "../lib/storyArt.js";
 import { getNarrationStatus } from "../api/story.js";
 import { sentenceAt, splitCaptionSentences } from "../lib/captions.js";
@@ -196,6 +197,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
         <p className="book-legend" aria-hidden="true">● held · ◆ told · ◎ noticed · ○ heard · ✦ walked beside</p>
         <div className="book-said" role="status" aria-live="polite">{said}</div>
         <BookRoads found={new Set(book.finds.map((f) => f.entryId))} />
+        <BookLines found={new Set(book.finds.map((f) => f.entryId))} />
 
         {sel && (
           <section className="book-card" aria-label={selFind ? sel.title : "A shape waiting"}>

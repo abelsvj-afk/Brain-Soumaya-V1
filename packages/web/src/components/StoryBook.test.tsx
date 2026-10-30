@@ -130,3 +130,16 @@ describe("Roads in the Book", () => {
     await waitFor(() => expect(put).toHaveBeenCalledWith("road.open-alcove", "rested"));
   });
 });
+
+describe("Lines in the Book", () => {
+  it("names only the lit, joins two lit with a thread in words, and never counts", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("relic.harbor-nail"), find("sight.gatepost-lamp"), find("obj.orus-bead")], links: [], notes: [] });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/The Line of the Door/)).toBeTruthy());
+    expect(screen.getByText("Teru · Mara")).toBeTruthy();
+    expect(screen.getByText("The story joins them.")).toBeTruthy();
+    expect(screen.getByText("Oru")).toBeTruthy();
+    expect(screen.queryByText(/Orsolya/)).toBeNull(); // not yet found: not named
+    expect(container.querySelector(".book-lines")?.textContent ?? "").not.toMatch(/\d|%|locked|missing/i);
+  });
+});
