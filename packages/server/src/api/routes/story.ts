@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { spaceOf } from "../middleware.js";
 import { StoryError, StoryRepo } from "../../story/story.js";
+import { computeFlavor, setFlavorOn } from "../../story/flavor.js";
 
 /**
  * The story's private progress (docs/specs/lore-storage-2026-10-30.md). The client reports EVENTS ("I found this here"); the server decides. No response carries a
@@ -76,6 +77,18 @@ export function storyRoutes(ctx: AppContext): Router {
     } catch (e) {
       fail(res, e);
     }
+  });
+
+  // Flavour: how the locked story is voiced for this brain. Words and coarse labels only; never a number about the player, never memory text.
+  r.get("/flavor", (_req, res) => {
+    res.json(computeFlavor(ctx.handle, spaceOf(res)));
+  });
+  const flavorBody = z.object({ on: z.boolean() });
+  r.put("/flavor", (req, res) => {
+    const p = flavorBody.safeParse(req.body);
+    if (!p.success) return bad(res, "Expected { on: boolean }.");
+    setFlavorOn(ctx.handle, spaceOf(res), p.data.on);
+    res.json(computeFlavor(ctx.handle, spaceOf(res)));
   });
 
   return r;

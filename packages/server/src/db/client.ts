@@ -1368,6 +1368,17 @@ export function migrateSchema(sqlite: RawDb): void {
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (space_id, entry_id)
     );
+    CREATE TABLE IF NOT EXISTS story_prefs (
+      space_id TEXT PRIMARY KEY,
+      flavor_on INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS story_flavor_day (
+      space_id TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      lean TEXT NOT NULL,
+      computed_at TEXT NOT NULL,
+      PRIMARY KEY (space_id, day_key)
+    );
     CREATE TABLE IF NOT EXISTS npc_day_script (
       space_id TEXT NOT NULL,
       day_key TEXT NOT NULL,

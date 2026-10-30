@@ -7852,3 +7852,6 @@ body.in-transit .perf-suggest { display: none; }
 
 /* Noticing (docs/lore/DRAFT_5_THE_WEB.md): the caption while you stay still. Below the dock; never covers the HUD rails. */
 .story-notice { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--worlds-bar-h, 127px) + 0.5rem); z-index: 31; max-width: calc(100% - 140px); margin: 0; padding: 8px 14px; border-radius: 999px; background: rgba(8, 12, 28, 0.88); border: 1px solid rgba(255, 233, 168, 0.45); color: #ffe9a8; font-size: 0.84rem; font-style: italic; text-align: center; pointer-events: none; }
+
+.book-flavor { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; min-height: 44px; color: #8fa0c4; font-size: 0.76rem; }
+.book-flavor input { width: 24px; height: 24px; flex: 0 0 auto; margin-top: 2px; }

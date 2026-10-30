@@ -36,21 +36,21 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   // --- The eight doors in (Draft 5 §2.2): any one is a valid first find ---
   E("obj.kiths-drawing", "object", "people", "Kith's Drawing", ["A10"], ["c.kith.draws-a-faceless-woman"], {
     door: true,
-    text: { plain: "A woman with no face, sitting at a table set for one more than the family counts. The crayon has been pressed so hard it has torn the paper at the mouth." },
+    text: { plain: "A woman with no face, sitting at a table set for one more than the family counts. The crayon has been pressed so hard it has torn the paper at the mouth.", warm: "A woman with no face sits at a table set for one more than the family counts. Kith drew her carefully, and pressed so hard on the crayon that the paper tore at the mouth.", grave: "A woman with no face, at a table laid for one more than the family counts. The crayon has gone through the paper at the mouth." },
   }),
   E("obj.sleepwalkers-lantern", "object", "great-station", "The Sleepwalker's Lantern", ["A4"], ["c.sleepwalker.carries-a-flameless-lantern"], {
     door: true,
-    text: { plain: "She carries it at night. It has no flame. She cannot say why she carries it, and she will not put it down." },
+    text: { plain: "She carries it at night. It has no flame. She cannot say why she carries it, and she will not put it down.", warm: "At night she carries it carefully, as one carries something that matters. It has no flame. She cannot say why she holds it, and she will not put it down.", grave: "At night she carries it. There is no flame in it. She cannot say why, and she will not put it down." },
   }),
   E("obj.dorrows-page", "object", "great-station", "Dorrow's Page", ["A4"], ["c.ledger.owes-one-unrecorded"], {
     door: true,
-    text: { plain: "A ledger page with a single line: owed to one unrecorded. The ink is the freshest in the Book. It is renewed every year, and no clerk will admit to renewing it." },
+    text: { plain: "A ledger page with a single line: owed to one unrecorded. The ink is the freshest in the Book. It is renewed every year, and no clerk will admit to renewing it.", warm: "One page in the Book has a single line: owed to one unrecorded. The ink is the freshest in the Book, renewed every year by someone no clerk will name.", grave: "A single line on a single page: owed to one unrecorded. The ink is the freshest in the Book. It is renewed each year, and no clerk will admit to it." },
   }),
-  E("sight.missing-stratum", "sight", "deep-past", "The Missing Stratum", ["A3"], ["c.deep-past.no-sixth-hour-layer"], { door: true, text: { plain: "The deepest layers lie one on another like pages. Between the fifth and the seventh there is no sixth: a clean absence, one hand's-breadth thick, where nothing was ever laid down. The rock on either side is not scarred. It simply does not remember being touched." } }),
+  E("sight.missing-stratum", "sight", "deep-past", "The Missing Stratum", ["A3"], ["c.deep-past.no-sixth-hour-layer"], { door: true, text: { plain: "The deepest layers lie one on another like pages. Between the fifth and the seventh there is no sixth: a clean absence, one hand's-breadth thick, where nothing was ever laid down. The rock on either side is not scarred. It simply does not remember being touched.", warm: "The oldest layers lie like pages, and between the fifth and the seventh there is no sixth: a clean absence, one hand's-breadth thick. The stone beside it is unscarred, and gentle, and does not remember being touched.", grave: "Between the fifth layer and the seventh there is no sixth. One hand's-breadth of absence, clean as a cut. The rock on either side is not scarred. It does not remember being touched." } }),
   E("sight.dead-bough", "sight", "growing-place", "The Dead Bough", ["A5"], ["c.tree.bough-points-at-the-hole"], { door: true, text: { plain: "One bough of the great tree has never leafed. Those who have carried a Journey all the way to its end say it greens, a little, as they pass. It points the way you would not think to look." } }),
   E("sight.hung-star", "sight", "scale", "The Star Hung for Someone", ["A8"], ["c.scale.uncatalogued-star-late-light"], { door: true, text: { plain: "A star in no catalogue, entered in one hand only and titled the one that was hung for someone. Its light always arrives late, as though it had further to come than the distance allows." } }),
   E("sight.open-alcove", "sight", "quiet-archive", "The Open Alcove", ["A2"], ["c.archive.alcove-open-and-empty"], { door: true, text: { plain: "Among the sealed alcoves one stands open and empty, with a letter inside that has not been unfolded. Nothing has been set down here. Someone stands before it each night for exactly the length of a lullaby." } }),
-  E("companion.dock-1", "companion", "anywhere", "The Stranger at the Dock", ["A8"], ["c.companion.shared-a-cup-once"], { door: true, text: { plain: "A stranger shared a flask on the dock, and a cup, and a little of the road. You cannot say what they looked like. You are sure they were kind." } }),
+  E("companion.dock-1", "companion", "anywhere", "The Stranger at the Dock", ["A8"], ["c.companion.shared-a-cup-once"], { door: true, text: { plain: "A stranger sat with you on the dock, and shared a cup, and a little of the road. You cannot say what they looked like. You are sure they were kind." } }),
 
   // --- The fifteen witnesses' kept things (relics.ts ids) ---
   E("relic.witness-without-a-name", "object", RELIC_BY_ID.get("witness-without-a-name")!.world, "The Witness Without a Name", ["A1", "A10"], ["c.relic.what-she-held-when-she-asked"]),
@@ -207,3 +207,14 @@ export function storySecondReading(entryId: string, found: ReadonlySet<string>):
   const r = STORY_SECOND_READINGS[entryId];
   return r && r.with.some((w) => found.has(w)) ? r.text : null;
 }
+
+/**
+ * Each wording of an entry voices the SAME claim (Flavour colours; it never changes a fact). Tokens every register must contain — a test holds every variant to them, so a
+ * warmer or graver telling cannot quietly drop or add a fact.
+ */
+export const STORY_VARIANT_TOKENS: Readonly<Record<string, readonly string[]>> = {
+  "obj.kiths-drawing": ["no face", "one more", "mouth"],
+  "obj.sleepwalkers-lantern": ["night", "no flame", "put it down"],
+  "obj.dorrows-page": ["owed to one unrecorded", "freshest", "renewed"],
+  "sight.missing-stratum": ["no sixth", "hand's-breadth", "remember"],
+};

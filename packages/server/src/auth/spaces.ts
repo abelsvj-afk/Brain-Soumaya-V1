@@ -191,6 +191,8 @@ export const SPACE_SCOPED_TABLES = [
   "story_finds",
   "story_links",
   "story_notes",
+  "story_prefs",
+  "story_flavor_day",
   "npc_relic_holdings",
   "npc_gate",
   // Guided tours (Wave 2, N7): the saved route, its rail log, and its

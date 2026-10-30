@@ -1,3 +1,4 @@
+import type { FlavorKey } from "@brain/shared";
 import { API, afetch } from "./http.js";
 
 /** The player's private progress through the story (docs/specs/lore-storage-2026-10-30.md): ids only. Lists only — the server never returns a total. */
@@ -47,3 +48,14 @@ export const putStoryLink = (a: string, b: string) => send<StoryLinkRow>("/link"
 export const deleteStoryLink = (a: string, b: string) => send<{ ok: true }>("/link", "DELETE", { a, b });
 export const putStoryNote = (entryId: string, note: string) => send<{ ok: true }>("/note", "PUT", { entryId, note });
 export const postStoryRecall = (entryId: string) => send<{ ok: true }>("/recall", "POST", { entryId });
+
+/** How the locked story is voiced for this brain: coarse labels only (never a number about the player, never memory text). */
+export interface StoryFlavorReading {
+  on: boolean;
+  key: FlavorKey;
+}
+export async function getStoryFlavor(): Promise<StoryFlavorReading | null> {
+  const d = await send<StoryFlavorReading>("/flavor", "GET");
+  return d?.key ? d : null;
+}
+export const putStoryFlavor = (on: boolean) => send<StoryFlavorReading>("/flavor", "PUT", { on });

@@ -44,3 +44,23 @@ describe("entry words", () => {
     expect(entryWords(nail, new Set()).text).toMatch(/always warm/);
   });
 });
+
+import { neutralFlavor } from "@brain/shared";
+describe("flavoured words", () => {
+  const kith = STORY.entries.find((e) => e.id === "obj.kiths-drawing")!;
+  it("changes the wording by register but never the claim", () => {
+    const plain = entryWords(kith, new Set(), neutralFlavor()).text!;
+    const grave = entryWords(kith, new Set(), { ...neutralFlavor(), register: "grave" }).text!;
+    expect(grave).not.toBe(plain);
+    for (const tok of ["no face", "one more", "mouth"]) {
+      expect(plain.toLowerCase()).toContain(tok);
+      expect(grave.toLowerCase()).toContain(tok);
+    }
+  });
+  it("the dock stranger takes a form that suits the tide, and stays unnamed", () => {
+    const dock = STORY.entries.find((e) => e.id === "companion.dock-1")!;
+    const k = { ...neutralFlavor(), register: "warm" as const, tide: { first: "weight" as const, second: "peace" as const } };
+    expect(entryWords(dock, new Set(), k).text).toMatch(/^A child with a flask sat with you on the dock/);
+    expect(entryWords(dock, new Set(), neutralFlavor()).text).toMatch(/^A stranger sat with you/);
+  });
+});

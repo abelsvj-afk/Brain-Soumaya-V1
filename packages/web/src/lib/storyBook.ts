@@ -1,4 +1,4 @@
-import { STORY_ENTRIES, storySecondReading, type StoryEntry, type StoryKind } from "@brain/shared";
+import { COMPANION_FORM, STORY_ENTRIES, neutralFlavor, pickText, storySecondReading, type FlavorKey, type StoryEntry, type StoryKind } from "@brain/shared";
 import type { StoryFindRow } from "../api/story.js";
 
 /**
@@ -85,7 +85,15 @@ export function brightness(find: Pick<StoryFindRow, "foundAt" | "lastRecalledAt"
   return Math.max(0.4, Math.exp(-days / 21));
 }
 
-/** What a found entry shows: its words (plain until Flavour lands) plus a Second Reading if a partner is held. Knowledge decides; nothing is ever hidden by taste. */
-export function entryWords(entry: StoryEntry, found: ReadonlySet<string>): { text: string | null; second: string | null } {
-  return { text: entry.text?.plain ?? null, second: storySecondReading(entry.id, found) };
+/**
+ * What a found entry shows: its words in the register Flavour picks (the claim is identical in every register) plus a Second Reading if a partner is held. Knowledge decides
+ * what may be revealed; Flavour only decides how it is said. The quiet stranger at the dock takes a form that suits the brain's tide, and stays unnamed.
+ */
+export function entryWords(entry: StoryEntry, found: ReadonlySet<string>, flavor: FlavorKey = neutralFlavor()): { text: string | null; second: string | null } {
+  let text = entry.text ? pickText(entry.text, flavor.register) : null;
+  if (text && entry.id === "companion.dock-1" && flavor.register !== "plain") {
+    const form = COMPANION_FORM[flavor.tide.first];
+    text = text.replace(/^A stranger/, form.charAt(0).toUpperCase() + form.slice(1));
+  }
+  return { text, second: storySecondReading(entry.id, found) };
 }

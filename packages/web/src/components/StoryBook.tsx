@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { STORY, WORLD_NAMES, storyNeighbours, type StoryEntry } from "@brain/shared";
+import { FIRST_DOOR, STORY, WORLD_NAMES, storyNeighbours, type StoryEntry } from "@brain/shared";
 import { Icon } from "./icons/Icon.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { useStoryBook } from "../hooks/useStoryBook.js";
+import { useStoryFlavor } from "../hooks/useStoryFlavor.js";
 import { BOOK_H, BOOK_W, KIND_WORD, brightness, entryWords, skyLayout } from "../lib/storyBook.js";
 import { isVoiceSupported, speak, stopSpeaking } from "../voice.js";
 
@@ -43,6 +44,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
   const ref = useRef<HTMLDivElement>(null);
   useDialogA11y(ref, onClose);
   const { book, loaded, link, unlink, saveNote, recall } = useStoryBook(true);
+  const { flavor, on: flavorOn, setOn: setFlavorOn } = useStoryFlavor(true);
   const [selected, setSelected] = useState<string | null>(openId);
   const [laying, setLaying] = useState<string | null>(null);
   const [said, setSaid] = useState("");
@@ -55,7 +57,11 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
   const foundSet = useMemo(() => new Set(book.finds.map((f) => f.entryId)), [book.finds]);
   const latest = book.finds.length ? [...book.finds].sort((a, b) => b.foundAt.localeCompare(a.foundAt))[0]!.entryId : null;
   // The tremor: neighbours of the newest find give a faint shimmer — never an arrow.
-  const tremor = useMemo(() => new Set(latest ? storyNeighbours(STORY, latest).filter((n) => !foundSet.has(n)) : []), [latest, foundSet]);
+  const tremor = useMemo(() => {
+    // Emphasis, not a hint: with nothing found yet, the door this brain's tide surfaces first gives the faint shimmer. Every door is still equally there.
+    if (!latest) return new Set([FIRST_DOOR[flavor.tide.first]]);
+    return new Set(storyNeighbours(STORY, latest).filter((n) => !foundSet.has(n)));
+  }, [latest, foundSet, flavor.tide.first]);
   const sel = selected ? BY_ID.get(selected) : undefined;
   const selFind = selected ? foundById.get(selected) : undefined;
   const noteOf = (id: string) => book.notes.find((n) => n.entryId === id)?.note ?? "";
@@ -147,13 +153,13 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             {selFind ? (
               <FoundCard
                 entry={sel}
-                words={entryWords(sel, foundSet)}
+                words={entryWords(sel, foundSet, flavor)}
                 note={draft?.id === sel.id ? draft.text : noteOf(sel.id)}
                 laid={book.links.filter((l) => l.a === sel.id || l.b === sel.id).map((l) => (l.a === sel.id ? l.b : l.a))}
                 speaking={speaking}
                 canListen={isVoiceSupported()}
                 laying={laying === sel.id}
-                onListen={() => listen([entryWords(sel, foundSet).text, entryWords(sel, foundSet).second].filter(Boolean).join(" "))}
+                onListen={() => listen([entryWords(sel, foundSet, flavor).text, entryWords(sel, foundSet, flavor).second].filter(Boolean).join(" "))}
                 onRecall={() => void recall(sel.id)}
                 onLay={() => setLaying(laying === sel.id ? null : sel.id)}
                 onUnlay={(other) => void unlink(sel.id, other)}
@@ -169,6 +175,12 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             )}
           </section>
         )}
+        <label className="book-flavor">
+          <input type="checkbox" checked={flavorOn} onChange={(e) => void setFlavorOn(e.target.checked)} />
+          <span>
+            Let the telling lean toward me. It colours how the story speaks to you — its voice and which door shows first. It never changes the story, and nothing of yours is read for it.
+          </span>
+        </label>
       </div>
     </div>
   );
