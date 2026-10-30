@@ -63,6 +63,12 @@ export const STORY_REACTIONS: readonly StoryReaction[] = [
   { npc: "wim", holds: "obj.anonymous-payments", role: "wim", line: "That is the unclaimed slip. Please do not tell me whose it is. I would have to know." },
   { npc: "wim", holds: "sight.missing-berth", role: "wim", line: "Yes. The berth. I count it every morning." },
   { npc: "wim", holds: "relic.mooring-ring", role: "wim", line: "Brannoch’s ring. It is warm. I know it is warm." },
+  // Item Reactions to the heavens (Draft 9 §6): a person remarks on a thing you hold that sits on one of the bodies' threads.
+  { npc: "pell", holds: "relic.star-hanger", role: "pell", line: "Someone hung that for whoever was late. I have always been grateful, and always a little after." },
+  { npc: "surveyor", holds: "relic.unnumbered-fragment", role: "surveyor", line: "It came off something that was never on a chart. Measure it if you like. It will not agree." },
+  { npc: "ilsabet", holds: "relic.sunward-compass", role: "ilsabet", line: "It points the way I have been drawing. I did not ask it to." },
+  { npc: "dissenter", holds: "relic.first-light-shard", role: "dissenter", line: "The oldest light still arriving. Do not let anyone tell you it is finished arriving." },
+  { npc: "wayfarer", holds: "relic.mooring-ring", role: "calend", line: "He stopped on the road and stayed. Some of us cannot. I envy him a little." },
   { npc: "tamsin", holds: "obj.ward-soldier", role: "tamsin", line: "Someone stands it facing the door. I do not move it. I do not ask." },
   { npc: "tamsin", holds: "obj.ward-bowl", role: "tamsin", line: "It has never been cold. I have stopped checking, and I check every night." },
   { npc: "hesk", holds: "obj.ward-soldier", role: "hesk", line: "Leave it as it stands. It has been standing there longer than my orders." },
