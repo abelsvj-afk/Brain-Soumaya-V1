@@ -72,3 +72,5 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 
 - §51 **v2** — Wim reads as a young adult (v3 reads a boy, too young for his card); confusion and tenderness land; blank slip, ring glowing at the edge. Placed on `obj.anonymous-payments` (the Mooring Payments; road 3).
 - §52 **v1** — the star and its single ribbon of light are the most literal; the three leavings sit together on the bollard; she is hooded and from behind. Placed on `sight.hung-star` (the star hung for someone). Flag: the figure reads broader than "slight" — acceptable from behind and in shadow.
+
+- §53 **v3** — RULING on the hovering word: no legible word (standing rule: no readable writing; a spelled-out "truth" explains the entry's meaning, which alt text and picture must never do). v3 keeps the idea as a loose drifting thread of light. Placed on `account.tall-tale`. Flags for the owner: Ossian reads older/grey-haired here (v1/v2/v4 are dark-haired middle-aged — pick by the Bible's age if it matters), and v3's crowd has one non-human traveller (grey-blue, goggles), the only one in the harbor sets so far.
