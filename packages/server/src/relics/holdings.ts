@@ -35,9 +35,9 @@
 import { randomUUID } from "node:crypto";
 import {
   RELICS, RELIC_BY_ID, RELIC_BLESSINGS, RELIC_COPY_LIMITS, MAX_HELD_RELICS,
-  RELIC_ANCHOR_POINTS, relicCodexKey, eternityGateOpen, eligibleExchangeThreads,
-  type EternityGateHoldings, type RelicExchangeView, type RelicGateView, type RelicHoldingView,
-  type RelicReturnView, type RelicsStateView,
+  RELIC_ANCHOR_POINTS, RELIC_THREADS, relicCodexKey, eternityGateOpen, eligibleExchangeThreads,
+  type EternityGateHoldings, type RelicCodexView, type RelicExchangeView, type RelicGateView, type RelicHoldingView,
+  type RelicProvenanceEventView, type RelicReturnView, type RelicStirringView, type RelicsStateView,
 } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { buffsForSpace, computeRelicBuffs, heldRelicIds, relicName } from "./buffs.js";
@@ -92,6 +92,12 @@ function firstAnchorKey(relicId: string): string {
 function realAnchorOrFirst(relicId: string, anchorKey: string | null | undefined): string {
   const keys = (RELIC_ANCHOR_POINTS[relicId] ?? []).map((a) => a.anchorKey);
   return anchorKey && keys.includes(anchorKey) ? anchorKey : firstAnchorKey(relicId);
+}
+
+/** The plain place words for one of a relic's real anchors (Relics I-7 read model), or null when the key names no real anchor. */
+function anchorPlaceName(relicId: string, anchorKey: string | null | undefined): string | null {
+  if (!anchorKey) return null;
+  return (RELIC_ANCHOR_POINTS[relicId] ?? []).find((a) => a.anchorKey === anchorKey)?.placeName ?? null;
 }
 export type FindResult =
   | { ok: true; alreadyFound: boolean; rewardAmount: number; claimKey: string; disposition?: "seed-consumed" | "seed-consumed-duplicate" }
@@ -1050,6 +1056,179 @@ export class RelicHoldingsStore {
     return this.h.sqlite.transaction(body).immediate();
   }
 
+  // ---- Relics I-7: the presentation read model (§5.1/§5.8) ----------
+  // Everything in this section is a READ over records the earlier
+  // increments wrote (relic_codex_layers, codex_claims,
+  // relic_first_discoveries, relic_stirrings, relic_copy_events).
+  // CONCEALMENT: a layer's text is included ONLY when this viewer has
+  // unlocked that layer — locked text is never serialized (approved
+  // design §3.3, acceptance §8.1 #12). A layer whose canon text does
+  // not exist yet reads "unwritten", never as an empty unlocked text.
+
+  /** The viewer's PERSONAL DISCOVERY record (review P1-2): the
+   *  codex_claims rows — written by every award path, permanent across
+   *  release, and the same record the stirring service and the chart
+   *  eligibility read. NOT the holdings rows: a released relic stays
+   *  discovered, and a consumed Seed was discovered without ever being
+   *  held. */
+  private personalDiscoveryIds(spaceId: string): Set<string> {
+    try {
+      const rows = this.h.sqlite.prepare(
+        `SELECT reward_key FROM codex_claims WHERE space_id = ? AND reward_key LIKE 'relic-%'`,
+      ).all(spaceId) as { reward_key: string }[];
+      return new Set(rows.map((r) => r.reward_key.slice("relic-".length)));
+    } catch { return new Set(); }
+  }
+
+  /** Whether THIS viewer has unlocked the relic's place (L1) layer —
+   *  the gate every place string in the payload answers to (§8.1 #12:
+   *  an anchor's placeName IS the L1 layer text for its relic, so it is
+   *  serialized only for viewers who hold the unlock; review P1-1). */
+  private placeUnlockedIds(spaceId: string): Set<string> {
+    try {
+      const rows = this.h.sqlite.prepare(
+        `SELECT DISTINCT relic_id FROM relic_codex_layers WHERE space_id = ? AND layer = 'L1'`,
+      ).all(spaceId) as { relic_id: string }[];
+      return new Set(rows.map((r) => r.relic_id));
+    } catch { return new Set(); }
+  }
+
+  /** One held copy's provenance: its whole event chain, in order.
+   *  Event place names ride only when the viewer holds the relic's L1
+   *  unlock (placeUnlocked) — otherwise the step reads by kind alone. */
+  private provenanceFor(copyId: string, relicId: string, placeUnlocked: boolean): RelicProvenanceEventView[] {
+    try {
+      const rows = this.h.sqlite.prepare(
+        `SELECT kind, world, anchor_key, detail FROM relic_copy_events WHERE copy_id = ? ORDER BY id ASC`,
+      ).all(copyId) as { kind: string; world: string | null; anchor_key: string | null; detail: string | null }[];
+      return rows.map((e) => {
+        let reason: string | null = null;
+        if (e.detail) {
+          try {
+            const d = JSON.parse(e.detail) as { reason?: unknown };
+            if (typeof d?.reason === "string") reason = d.reason;
+          } catch { reason = null; }
+        }
+        return { kind: e.kind, world: e.world, anchorKey: e.anchor_key, placeName: placeUnlocked ? anchorPlaceName(relicId, e.anchor_key) : null, reason };
+      });
+    } catch { return []; }
+  }
+
+  /** The copy's pool context in plain words, from the registry truth. */
+  private copyContextFor(relicId: string): string {
+    const lim = RELIC_COPY_LIMITS[relicId];
+    if (!lim) return "A copy in the shared pool.";
+    if (lim.scarcityClass === "private") return "A copy made for your brain alone.";
+    if (lim.limit !== null) return `One of at most ${lim.limit} copies in the shared pool.`;
+    return "A copy in the shared pool.";
+  }
+
+  /** The viewer's stirrings, oldest first. Expiry is evaluated at
+   *  read time (§4.6 — there is no background sweeper), the same
+   *  update the stirring service performs on its own reads. */
+  private stirringViews(spaceId: string): RelicStirringView[] {
+    try {
+      const nowIso = new Date().toISOString();
+      this.h.sqlite.prepare(
+        `UPDATE relic_stirrings SET state = 'expired', resolved_at = ?, resolved_reason = 'window-ended' WHERE space_id = ? AND state = 'open' AND open_until <= ?`,
+      ).run(nowIso, spaceId, nowIso);
+    } catch { /* bare handle without the I-5 table: no stirrings to read */ }
+    try {
+      const rows = this.h.sqlite.prepare(
+        `SELECT relic_id, source, state, resolved_reason FROM relic_stirrings WHERE space_id = ? ORDER BY id ASC`,
+      ).all(spaceId) as { relic_id: string; source: string; state: string; resolved_reason: string | null }[];
+      return rows.flatMap((r) => {
+        const def = RELIC_BY_ID.get(r.relic_id);
+        if (!def) return [];
+        return [{
+          relicId: r.relic_id, name: def.name, world: def.world, worldName: def.worldName,
+          source: (r.source === "chart" ? "chart" : "ambient") as RelicStirringView["source"],
+          state: r.state as RelicStirringView["state"], resolvedReason: r.resolved_reason,
+        }];
+      });
+    } catch { return []; }
+  }
+
+  /** The layered Codex (§5.8): per relic, the layer unlocks for THIS
+   *  viewer, the first-discovery record for the relic's scope, the
+   *  viewer's own discovery state, and the viewer's stirrings. */
+  private codexViews(spaceId: string, found: Set<string>): RelicCodexView[] {
+    const layerRows = new Map<string, Set<string>>();
+    try {
+      const rows = this.h.sqlite.prepare(
+        `SELECT relic_id, layer, thread_id FROM relic_codex_layers WHERE space_id = ?`,
+      ).all(spaceId) as { relic_id: string; layer: string; thread_id: string }[];
+      for (const r of rows) {
+        const set = layerRows.get(r.relic_id) ?? new Set<string>();
+        set.add(`${r.layer}:${r.thread_id}`);
+        layerRows.set(r.relic_id, set);
+      }
+    } catch { /* bare handle without the I-4 table: every layer reads locked/unwritten */ }
+    const stirrings = this.stirringViews(spaceId);
+    return RELICS.map((def) => {
+      const unlocked = layerRows.get(def.id) ?? new Set<string>();
+      const discovered = found.has(def.id);
+      const stirringText = typeof def.loreStirring === "string" && def.loreStirring.length > 0 ? def.loreStirring : null;
+      const stirringLayer: RelicCodexView["layers"]["stirring"] = stirringText === null
+        ? { state: "unwritten" }
+        : unlocked.has("L0:")
+          ? { state: "unlocked", text: stirringText }
+          : { state: "locked" };
+      const placeLayer: RelicCodexView["layers"]["place"] = unlocked.has("L1:")
+        ? { state: "unlocked", text: def.place }
+        : { state: "locked" };
+      const descriptionLayer: RelicCodexView["layers"]["description"] = discovered
+        ? { state: "unlocked", text: def.lore }
+        : { state: "locked" };
+      const threadEntries = RELIC_THREADS
+        .filter((t) => t.relicA === def.id || t.relicB === def.id)
+        .map((t) => {
+          const otherId = t.relicA === def.id ? t.relicB : t.relicA;
+          const isUnlocked = unlocked.has(`L3:${t.threadId}`) && t.approved === true && typeof t.text === "string" && t.text.length > 0;
+          return {
+            threadId: t.threadId, otherRelicId: otherId,
+            otherName: RELIC_BY_ID.get(otherId)?.name ?? otherId,
+            unlocked: isUnlocked, ...(isUnlocked ? { text: t.text as string } : {}),
+          };
+        });
+      const threadsState: RelicCodexView["layers"]["threads"]["state"] = threadEntries.length === 0
+        ? "unwritten"
+        : threadEntries.some((e) => e.unlocked) ? "unlocked" : "locked";
+      // The first-discovery record for the relic's scope (the same
+      // scope rule the claim writes with: private pools are per-brain,
+      // every other pool's record is the public one).
+      let firstDiscovery: RelicCodexView["firstDiscovery"] = null;
+      try {
+        const scope = RELIC_COPY_LIMITS[def.id]?.scarcityClass === "private" ? spaceId : "public";
+        const row = this.h.sqlite.prepare(
+          `SELECT space_id, anchor_key FROM relic_first_discoveries WHERE scope = ? AND relic_id = ?`,
+        ).get(scope, def.id) as { space_id: string; anchor_key: string } | undefined;
+        if (row) {
+          const byViewer = row.space_id === spaceId;
+          let discovererName = "Another traveller";
+          if (byViewer) discovererName = "You";
+          else {
+            try {
+              const s = this.h.sqlite.prepare(`SELECT name FROM spaces WHERE id = ?`).get(row.space_id) as { name: string } | undefined;
+              if (s?.name) discovererName = s.name;
+            } catch { /* the record stands without a resolvable name */ }
+          }
+          // The record's place is the relic's L1 layer text: it rides
+          // ONLY for viewers holding the L1 unlock (review P1-1 —
+          // §8.1 #12 concealment governs every field, not just layers).
+          const placeName = unlocked.has("L1:") ? (anchorPlaceName(def.id, row.anchor_key) ?? def.place) : undefined;
+          firstDiscovery = { discovererName, byViewer, ...(placeName !== undefined ? { placeName } : {}) };
+        }
+      } catch { /* bare handle without the I-4 table */ }
+      return {
+        relicId: def.id, name: def.name, world: def.world, worldName: def.worldName, discovered,
+        layers: { stirring: stirringLayer, place: placeLayer, description: descriptionLayer, threads: { state: threadsState, entries: threadEntries } },
+        firstDiscovery,
+        stirrings: stirrings.filter((s) => s.relicId === def.id),
+      };
+    });
+  }
+
   /**
    * Recent departures read from BOTH records: copy event chains
    * (returned / brain-deleted events, I-2 onward) and the legacy
@@ -1058,7 +1237,7 @@ export class RelicHoldingsStore {
    * the RelicReturnView the web already renders.
    */
   recentDepartures(spaceId: string, limit = 5): RelicReturnView[] {
-    interface Dep { relicId: string; reason: "release" | "brain-deleted"; fromAnchor: string | null; toAnchor: string | null; at: string; ord: number }
+    interface Dep { relicId: string; reason: "release" | "exchange" | "brain-deleted"; fromAnchor: string | null; toAnchor: string | null; at: string; ord: number }
     const deps: Dep[] = [];
     try {
       const evs = this.h.sqlite.prepare(
@@ -1066,10 +1245,19 @@ export class RelicHoldingsStore {
       ).all(spaceId, limit) as { kind: string; anchor_key: string | null; detail: string | null; created_at: string; id: number; relic_id: string }[];
       for (const e of evs) {
         let toAnchor: string | null = null;
+        let detailReason: string | null = null;
         if (e.kind === "returned" && e.detail) {
-          try { toAnchor = (JSON.parse(e.detail) as { toAnchor?: string | null }).toAnchor ?? null; } catch { toAnchor = null; }
+          try {
+            const d = JSON.parse(e.detail) as { toAnchor?: string | null; reason?: unknown };
+            toAnchor = d.toAnchor ?? null;
+            if (typeof d.reason === "string") detailReason = d.reason;
+          } catch { toAnchor = null; }
         }
-        deps.push({ relicId: e.relic_id, reason: e.kind === "brain-deleted" ? "brain-deleted" : "release", fromAnchor: e.anchor_key, toAnchor, at: e.created_at, ord: e.id });
+        // Relics I-7: an exchange's return is labeled an exchange —
+        // the stored detail has carried reason='exchange' since I-6;
+        // only the presentation mapping called everything a release.
+        const reason: Dep["reason"] = e.kind === "brain-deleted" ? "brain-deleted" : detailReason === "exchange" ? "exchange" : "release";
+        deps.push({ relicId: e.relic_id, reason, fromAnchor: e.anchor_key, toAnchor, at: e.created_at, ord: e.id });
       }
     } catch { /* bare handle without the I-2 tables: the legacy rows below still read */ }
     const rows = this.h.sqlite.prepare(`SELECT * FROM relic_returns WHERE space_id = ? ORDER BY id DESC LIMIT ?`).all(spaceId, limit) as
@@ -1117,6 +1305,7 @@ export class RelicHoldingsStore {
     const buffs = buffsForSpace(this.h, spaceId);
     const currentAnchorByRelic: Record<string, string> = {};
     for (const def of RELICS) currentAnchorByRelic[def.id] = this.currentAnchorFor(def.id);
+    const placeIds = this.placeUnlockedIds(spaceId);
     return {
       found: rows.map((r) => r.relic_id),
       held,
@@ -1131,6 +1320,11 @@ export class RelicHoldingsStore {
         tierClass: RELIC_BY_ID.get(r.relic_id)?.tierClass ?? null,
         location: r.location,
         exchange: this.exchangeViewFor(r.relic_id),
+        // Relics I-7 (§5.1): the held copy's identity, pool context,
+        // and provenance chain ride the read model.
+        copyId: r.copy_id,
+        copyContext: this.copyContextFor(r.relic_id),
+        provenance: r.copy_id ? this.provenanceFor(r.copy_id, r.relic_id, placeIds.has(r.relic_id)) : [],
       })),
       buffs: { ...buffs, riseWindowSetByName: relicName(buffs.riseWindowSetBy), riseWindowOverruledNames: buffs.riseWindowOverruled.map((id) => relicName(id) ?? id) } as RelicsStateView["buffs"],
       gate: this.gateView(spaceId),
@@ -1139,6 +1333,11 @@ export class RelicHoldingsStore {
       scarcityOff: this.scarcityOff(spaceId),
       currentAnchorByRelic,
       chartTargets: this.chartEligibleTargetIds(spaceId),
+      // Relics I-7 (§5.1/§5.8): the layered Codex + stirring states.
+      // Discovery keys to the PERSONAL DISCOVERY record (codex_claims),
+      // never to current holdings (review P1-2).
+      codex: this.codexViews(spaceId, this.personalDiscoveryIds(spaceId)),
+      stirrings: this.stirringViews(spaceId),
     };
   }
 
