@@ -32,3 +32,7 @@ One universe throughout (indigo-black, warm gold + pale cyan, painterly), no tex
 ## Update — §13 filed (97 keepers)
 
 §13 The Fading of the Growing Place: consistent across all four — top-down terraces, great tree, outer ring ghost-white with pencil-sketch trees, gold-green heart. Slow Bloom present in all four as seed-pod + petal-vanes. Minor: v4's Bloom is ornate enough to read slightly like a mask/face — check if it bothers; v1–v3 are cleaner. Terrace count is approximately six, not exact, in every variant.
+
+## Update — §14 filed (101 keepers)
+
+§14 Oru and the Siege of the First Light: consistent across all four and with §10's Oru (old, pale robes, hand to forehead, passing the ball of light to the witness-from-behind; edges dissolving into the Hush). The Dawnward now has a reference look: a great pale unfolded fan of light above a slim hull — v3 is the cleanest read of the silhouette; v1/v2 carry a visible hull under the fan, v4 spreads the fan horizontally. Cross-check any future Dawnward against v3 first. v4 came out portrait against the 16:9 ask (see item 13).
