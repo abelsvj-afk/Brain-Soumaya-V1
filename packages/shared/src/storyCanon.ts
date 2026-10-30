@@ -184,3 +184,25 @@ export const STORY_ENTRY_BY_ID: ReadonlyMap<string, StoryEntry> = new Map(STORY_
 export function storyPairIsLit(a: string, b: string): boolean {
   return STORY_EDGES.some((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
 }
+
+/**
+ * Second Readings (Draft 4 §10.3, Draft 5): when a player holds ANY entry in `with`, the entry gains one more sentence — never announced, never highlighted.
+ * This is Knowledge (what you have found), not Flavour. Derived at read time; nothing is stored. One sentence each, implying, never explaining.
+ */
+export const STORY_SECOND_READINGS: Readonly<Record<string, { with: readonly string[]; text: string }>> = {
+  "obj.kiths-drawing": { with: ["obj.choirmasters-breath", "echo.hymnal-gap", "relic.witness-without-a-name"], text: "The tear is exactly as long as a held breath." },
+  "obj.sleepwalkers-lantern": { with: ["relic.lantern-of-keeping"], text: "The glass is old, and it was lent; someone is still waiting for it back." },
+  "obj.dorrows-page": { with: ["echo.hymnal-gap", "obj.choirmasters-breath"], text: "Somewhere a hymnal is missing exactly this line." },
+  "obj.tin-soldier": { with: ["obj.kiths-drawing", "sight.locked-room"], text: "A second soldier is missing from a mantel, and a child has been told hers is only a toy." },
+  "obj.choirmasters-breath": { with: ["obj.kiths-drawing", "obj.dorrows-page"], text: "It is the length of a tear in paper, and of a debt with no name." },
+  "obj.faded-ticket": { with: ["sight.missing-berth"], text: "The berth it names is the one the harbor walks around." },
+  "obj.vesh-paper-boat": { with: ["sight.lullaby-hollow"], text: "The missing stroke would fit, exactly, the gap along a certain hull." },
+  "obj.doorkeepers-nail": { with: ["relic.harbor-nail"], text: "There is another, given to a man who walked toward a seam, and it is warm too." },
+  "obj.measurers-cord": { with: ["echo.eighth-bell"], text: "The untied knot is the length of one beat." },
+};
+
+/** The sentence an entry has gained for what this player holds, or null. Knowledge only; Flavour never decides this. */
+export function storySecondReading(entryId: string, found: ReadonlySet<string>): string | null {
+  const r = STORY_SECOND_READINGS[entryId];
+  return r && r.with.some((w) => found.has(w)) ? r.text : null;
+}

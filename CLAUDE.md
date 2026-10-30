@@ -748,6 +748,16 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   lore session (data-only: `FACTIONS` + cast rows). **Not built (full ordered backlog in the spec):** lore content/layers, faction consequences and rivalries, a real NPC economy
   (money/fuel are captions), per-faction visuals, acts beyond words for the ambient cast, invitations into personal brains, currents tuning, a Settings duplicate of the switch. Look at: whether the
   seven currents' word lists catch your real language (they are plain stems — easy to tune in `CURRENT_LEXICON`), and how crowded a world feels with 5+ NPCs.
+- **The Sixteenth's Book — the lore, kept as a night sky (2026-10-30) — MEASURED headless (component tests; web build: lazy 9 KB chunk), NOT yet seen on a real
+  screen, needs on-device confirmation** (shared/story.ts + storyCanon.ts, server story/story.ts + `/api/story/*` + tables `story_finds|links|notes`, web
+  components/StoryBook.tsx, hooks/useStoryBook.ts, lib/storyBook.ts, ToolsMenu "The Book"; specs `docs/specs/lore-storage-…`, `story-flavor-engine-…`,
+  `lore-narration-…`; lore `docs/lore/DRAFT_1…6`, all LOCKED by the owner 2026-10-30 except Draft 5/6 additions): found entries are lights, unfound are only
+  shapes (● held · ◆ told · ◎ noticed · ○ heard · ✦ walked beside — shape, not colour); NO counts, percentages or "locked" anywhere (a test asserts the Book has no
+  digit); fading is only a cue to recall; lay two lights beside each other and a thread of light appears only if the story joins them; Second Readings add one
+  sentence when a partner is held; private per-entry notes; "Listen" uses the browser voice until the ElevenLabs narration endpoint lands. The server is the only
+  authority (canon-checked ids, travel-ledger-checked world finds, idempotent). **Nothing yet lets a player FIND an entry** — the regard/echo triggers are the next
+  slice, so the Book is shapes only until they ship. Look at: the 360×440 sky on a real phone (point spacing ≥ 24 units; tap size 44 px), whether the legend line
+  reads, and the fading cue.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

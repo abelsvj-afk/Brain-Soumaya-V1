@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkStoryGraph, storyNeighbours, type StoryGraph } from "./story.js";
-import { STORY } from "./storyCanon.js";
+import { STORY, STORY_SECOND_READINGS, storySecondReading } from "./storyCanon.js";
 import { RELICS } from "./relics.js";
 import { WORLD_COORDS } from "./worlds.js";
 
@@ -29,6 +29,17 @@ describe("the story web", () => {
 
   it("every register of an entry has a plain fallback (the neutral / offline text)", () => {
     for (const e of STORY.entries) if (e.text) expect(e.text.plain.length).toBeGreaterThan(0);
+  });
+
+  it("Second Readings point at real entries, appear only with a held partner, and are one sentence", () => {
+    const ids = new Set(STORY.entries.map((e) => e.id));
+    for (const [id, r] of Object.entries(STORY_SECOND_READINGS)) {
+      expect(ids.has(id), id).toBe(true);
+      for (const w of r.with) expect(ids.has(w), `${id} with ${w}`).toBe(true);
+      expect((r.text.match(/[.!?]/g) ?? []).length, id).toBe(1);
+    }
+    expect(storySecondReading("obj.vesh-paper-boat", new Set())).toBeNull();
+    expect(storySecondReading("obj.vesh-paper-boat", new Set(["sight.lullaby-hollow"]))).toMatch(/gap along a certain hull/);
   });
 
   it("gives a door a tremor: its neighbours are other entries, never anchors", () => {

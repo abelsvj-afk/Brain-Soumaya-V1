@@ -7814,3 +7814,38 @@ body.in-transit .perf-suggest { display: none; }
 .society-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .society-reflect { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; min-height: 44px; }
 .society-reflect input { width: 24px; height: 24px; flex: 0 0 auto; margin-top: 2px; }
+
+/* The Sixteenth's Book (docs/specs/lore-storage-2026-10-30.md). Lights and shapes; never a count. */
+.book-scrim { position: fixed; inset: 0; z-index: 74; background: rgba(2, 4, 14, 0.78); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: calc(var(--hud-top, 66px) + 8px) 10px 90px; }
+.book-panel { width: min(480px, 100%); background: rgba(8, 12, 28, 0.98); border: 1px solid rgba(255, 233, 168, 0.35); border-radius: 14px; padding: 14px 16px 18px; color: #e6eefc; font-size: 0.88rem; line-height: 1.45; }
+.book-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.book-head h2 { margin: 0; font-size: 1.05rem; color: #ffe9a8; }
+.book-close { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid rgba(255, 233, 168, 0.55); border-radius: 999px; background: rgba(255, 233, 168, 0.1); color: #ffe9a8; cursor: pointer; }
+.book-lede, .book-empty { margin: 8px 0; color: #b8c6e4; }
+.book-empty { color: #ffe9a8; }
+.book-sky { width: 100%; height: auto; display: block; margin: 6px 0 0; background: radial-gradient(circle at 50% 50%, #0c1230 0%, #04060f 100%); border-radius: 10px; }
+.book-point { cursor: pointer; outline: none; }
+.book-point:focus-visible .book-ring, .book-point:focus-visible circle:first-child { stroke: #ffe9a8; stroke-width: 2; }
+.book-ring { stroke: #ffe9a8; stroke-width: 1.5; }
+.book-thread { stroke: #ffd36b; stroke-width: 1.6; opacity: 0.85; filter: drop-shadow(0 0 3px #ffd36b); }
+.book-point.is-tremor { animation: book-tremor 2.6s ease-in-out infinite; }
+@keyframes book-tremor { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .book-point.is-tremor { animation: none; }
+  .book-point.is-tremor g, .book-point.is-tremor > *:not(circle:first-child) { stroke-width: 2.4; }
+}
+.book-legend { margin: 4px 0 0; font-size: 0.72rem; color: #8fa0c4; text-align: center; }
+.book-said { min-height: 1.2em; margin: 4px 0; color: #ffd36b; text-align: center; font-size: 0.82rem; }
+.book-card { border-top: 1px solid rgba(255, 233, 168, 0.25); margin-top: 6px; padding-top: 8px; }
+.book-card h3 { margin: 0 0 2px; font-size: 1rem; color: #ffe9a8; }
+.book-meta { margin: 0 0 6px; color: #8fa0c4; font-size: 0.78rem; }
+.book-text { margin: 6px 0; font-style: italic; }
+.book-second { color: #cfe0ff; border-left: 2px solid rgba(255, 233, 168, 0.5); padding-left: 8px; }
+.book-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.book-actions button, .book-save, .book-laid button { min-height: 44px; padding: 0 14px; border: 1px solid rgba(255, 233, 168, 0.5); border-radius: 999px; background: rgba(255, 233, 168, 0.08); color: #ffe9a8; cursor: pointer; }
+.book-actions button[aria-pressed="true"] { background: rgba(255, 233, 168, 0.25); font-weight: 700; }
+.book-laid { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.book-laid li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.book-note { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; color: #b8c6e4; font-size: 0.8rem; }
+.book-note textarea { width: 100%; box-sizing: border-box; background: rgba(255, 255, 255, 0.06); color: #e6eefc; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 8px; font: inherit; }
+.book-save { margin-top: 6px; }
