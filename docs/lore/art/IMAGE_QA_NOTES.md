@@ -234,3 +234,7 @@ Files: `51-wim-and-the-empty-cradle-v1.png` … `v4.png`. All four wide. Every v
 - **The ring:** textbook in v1 (wooden post, warm glow, right beside him); larger and more foreground in v2–v4.
 
 Verdict: clean set, no rule breaks; the only real question is Wim's age. Your pick.
+
+## §44 — OWNER RULING: Calend's face (2026-10-30)
+
+Asked to choose between the younger dark-haired Calend of §44 v1/v2/v5 and the older Calend the Bible describes, the owner ruled: **Calend stays older, as the Bible says.** §44 v4 is the face reference for Calend; the younger faces in v1, v2 and v5 are the deviation. (The owner still approved v1 as an image — the ruling is about which face is canon, not about the painting.) This closes the Calend question flagged in the original §44 note.
