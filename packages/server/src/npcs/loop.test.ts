@@ -71,7 +71,12 @@ describe("C2 — the loop is provable", () => {
     const first = runNpcTick(handle, "spaceA", "harbor-controller", T0);
     expect(first.acted).toBe(true);
     expect(first.entry?.kind).toBe("explore");
-    expect(first.entry?.act).toContain("found no relic");
+    // Relics I-5 (§5.5): the explore is a real find attempt through
+    // the unified claim core now — the first explore FINDS the
+    // Harbor Nail and the log names the find. (Before I-5 an explore
+    // could find nothing, and this asserted the fixed "found no
+    // relic" outcome string.)
+    expect(first.entry?.act).toContain("Harbor Nail");
     expect(first.entry?.cause).toBeTruthy();
 
     const second = runNpcTick(handle, "spaceA", "harbor-controller", AFTER_TICK);
@@ -131,15 +136,25 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     expect(getNpcState(handle, "spaceA", "harbor-controller", T0).gateOpen).toBe(false);
     repo().addHolding("harbor-controller", "witness-without-a-name", "great-station", T0);
     repo().addHolding("harbor-controller", "mooring-ring", "great-station", T0);
-    const stillClosed = runNpcTick(handle, "spaceA", "harbor-controller", T0);
+    // Witness + ONE other is not the set — still closed before any tick.
     expect(getNpcState(handle, "spaceA", "harbor-controller", T0).gateOpen).toBe(false);
-    expect(stillClosed.entry?.act).toContain("found no relic");
+    // Relics I-5 (§5.5): the tick's explore is a real hunt — the
+    // controller finds the Harbor Nail through the unified claim
+    // core, and THAT find completes the set (Witness + two others),
+    // so the gate opens on this very tick and is marked in it.
+    // (Before I-5 the explore could find nothing — "found no relic" —
+    // and the gate stayed shut until a third holding was seeded.)
+    const huntTick = runNpcTick(handle, "spaceA", "harbor-controller", T0);
+    expect(huntTick.entry?.act).toContain("Harbor Nail");
+    const afterHunt = getNpcState(handle, "spaceA", "harbor-controller", T0);
+    expect(afterHunt.gateOpen).toBe(true);
+    expect(afterHunt.relicsHeld).toBe(3);
 
     repo().addHolding("harbor-controller", "dawn-leaf", "great-station", T0);
     runNpcTick(handle, "spaceA", "harbor-controller", AFTER_TICK);
     const st = getNpcState(handle, "spaceA", "harbor-controller", AFTER_TICK);
     expect(st.gateOpen).toBe(true);
-    expect(st.relicsHeld).toBe(3);
+    expect(st.relicsHeld).toBe(4);
     // Once opened it stays open even if the holdings row is read later.
     expect(repo().gateOpen("harbor-controller")).toBe(true);
   });
@@ -173,8 +188,16 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     // record) via the same dual DDL. All are player/world records; the
     // NPC invariant below is untouched (NPC claims join this core in
     // I-5, by design).
+    // Relics I-5 adds `relic_stirrings` (the hunt's invitations, each
+    // promising one specific placed copy) via the same dual DDL, and
+    // unifies the pool: an NPC CLAIM (relics/claims.ts claimForNpc)
+    // binds a real copy from the shared pool with holder_kind='npc'
+    // while writing its npc_relic_holdings row in the same
+    // transaction. addHolding — the direct seed this test uses —
+    // still writes ONLY the NPC table, so the invariant below (no
+    // player-pool rows from an NPC holding) stands as written.
     expect(new Set(tables.map((t) => t.name))).toEqual(
-      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened", "relic_position_samples", "relic_claim_attempts", "relic_codex_layers", "relic_first_discoveries"]),
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened", "relic_position_samples", "relic_claim_attempts", "relic_codex_layers", "relic_first_discoveries", "relic_stirrings"]),
     );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
     // No row for this space (or any space) appeared in the player pool:

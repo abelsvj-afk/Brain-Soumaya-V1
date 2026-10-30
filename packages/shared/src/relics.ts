@@ -495,6 +495,22 @@ export const RELIC_SCAN_BAND_EDGES: Readonly<Record<RelicWorld, { near: number; 
   "quiet-archive": { near: 90, warm: 220 },
 };
 
+// ---------------------------------------------------------------------------
+// Relics I-5 — stirring tuning (implementation design §4.6/§5.4, owner
+// ruling 4). Same discipline as the I-4 block: one home for the number,
+// and tuning it is a data change here, never a logic change elsewhere.
+// ---------------------------------------------------------------------------
+
+/** How long a stirring stays open — the window in which it promises
+ *  its copy and shields it with the last-copy courtesy (approved
+ *  starting constant, ruling 4: seven days — "a reasonable opportunity
+ *  to hunt"). Server-computed from issuance; expiry is evaluated
+ *  inside serialized transactions and at read time, never by a
+ *  background sweeper. At most one AMBIENT stirring is open per
+ *  (space, world) at a time (ruling 4); chart stirrings are exempt
+ *  from that cap, never from eligibility. */
+export const RELIC_STIRRING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
  * Server-known anchor SETS (I-2 expanded the I-1 single anchors per
  * implementation design §3.2). Each placed relic's FIRST entry is its

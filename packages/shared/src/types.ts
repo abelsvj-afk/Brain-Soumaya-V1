@@ -337,7 +337,7 @@ export interface Insight {
  *  have been away: a delivered daily digest, a synthesized insight, a charted
  *  Codex discovery, a bill-risk warning, or a system notice (fix round 2:
  *  a saved note that could not be processed — the permanent-failure item). */
-export type NotificationSource = "digest" | "insight" | "discovery" | "bill-risk" | "system";
+export type NotificationSource = "digest" | "insight" | "discovery" | "bill-risk" | "system" | "relic-stirring";
 
 /** A notification in the server-backed Inbox store (IM-74). Unlike the local
  *  toast log (device-only, capped at 100), these persist server-side per space
