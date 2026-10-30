@@ -85,3 +85,10 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 - §55 **v3** — Maren asleep in the roots (nothing funereal), the cork in the can's mouth is clearest here (stoppered, per the Bible), the bare bough, new shoots, the Keeper small at the terrace edge (pale — the white the owner allowed). Placed on `sight.marens-winter`.
 - §56 **v1** — Iselle (young, brown hair tied back), the unplanted patch and her reaching hand, a dawn that does not finish; landscape (v2 is portrait). Placed on `relic.dawn-leaf`.
 - §57 **v3** — the woman who stayed looks back toward the village, closest and clearest; the single-file column reads long (the count is carried by length, not heads); landscape (v2 portrait). Placed on `relic.thread-of-many`.
+
+## Round 10 (2026-10-31) — Sheet 2 sets 58–62
+- §58 **v1** — Brannoch calm and grey-bearded, hand on the glowing ring, the rope trails off the quay and frays into the water (the "ends in nothing" is truest). → `relic.mooring-ring`.
+- §59 **v2** — the star's ribbon fades well above the valley (the "not yet" reads best); Sahl hooded, never a face. → `relic.star-hanger`.
+- §60 **v4** — Vesh right per the Bible (hooded dusk-violet, perfect round hollow, hands open and empty); Noor young, dark bun, ink-stained; candle shared between them. → `relic.stillness-seal`.
+- §61 **v1** — one cord, big clear knots, the end undone in open space, Sethane small and distant with her back turned; the station reads as contemporary hardware, which suits Scale's real ISS (the lore's own "Station in the Sky"). → `obj.measurers-cord`. (v2 multiplies the cord; sheet says one.)
+- §62 **v3** — the child's chalk lines and the peeling page read; Dig-Warden dark-haired in a chalk apron. The page is literal, which I accept as the sheet's own metaphor. → `sight.missing-stratum`.
