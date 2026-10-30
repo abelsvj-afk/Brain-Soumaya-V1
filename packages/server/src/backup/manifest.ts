@@ -19,6 +19,7 @@ import {
   INCLUDED_TABLES,
   MUST_BE_NONEMPTY_TABLES,
 } from "./inventory.js";
+import type { BackupEncryptionRecord } from "./encryption.js";
 
 export interface BackupManifest {
   backupId: string;
@@ -32,6 +33,14 @@ export interface BackupManifest {
   snapshotSha256: string;
   /** Row counts for every INCLUDED inventory table (never the excluded cache). */
   tableCounts: Record<string, number>;
+  /**
+   * Encryption of the OFF-VOLUME copy (B2; spec §3/§6): algorithm,
+   * nonce, and the ciphertext SHA-256 the stored object must re-hash
+   * to at VERIFIED-STORED. Absent on B1-era manifests (local-only
+   * backups were never encrypted — encryption protects the copy that
+   * leaves the volume). Never key material.
+   */
+  encryption?: BackupEncryptionRecord;
 }
 
 export function sha256File(path: string): string {

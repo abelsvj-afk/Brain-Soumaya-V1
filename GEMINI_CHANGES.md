@@ -1,3 +1,84 @@
+### 2026-10-30 (Claude): G0 B2 — encryption, off-volume upload, verified-stored, promotion, retention (no caller wired yet)
+- [ ] Verified by Claude
+- Second increment of the owner-approved G0 backup & restore plan; continues
+  B1's lifecycle in `packages/server/src/backup/` from VERIFIED-LOCAL to
+  PROMOTED (spec §5). New modules: `encryption.ts` (AES-256-GCM via Node's
+  built-in crypto, no new dependency; per-backup random nonce; auth tag
+  appended to the stored object; the manifest gains an `encryption` record —
+  algorithm, nonce, CIPHERTEXT SHA-256, ciphertext bytes — never key
+  material; key read from `BACKUP_ENCRYPTION_KEY` env, base64 or hex,
+  must decode to exactly 32 bytes, anything else yields null and the
+  attempt fails CLOSED at the encrypt stage — there is no plaintext upload
+  path), `store.ts` (one narrow `BackupObjectStore` interface;
+  `InMemoryBackupStore` fake for the gate; `S3BackupStore` — a minimal
+  SigV4-signed S3 client over global fetch for Cloudflare R2, config from
+  `BACKUP_R2_ENDPOINT`/`BACKUP_R2_BUCKET`/`BACKUP_R2_ACCESS_KEY_ID`/
+  `BACKUP_R2_SECRET_ACCESS_KEY`/`BACKUP_R2_REGION` env, null config unless
+  all are set), `index.ts` (the off-volume backup index stored IN the
+  bucket as `backup-index.json`; latest-good recovery reads index →
+  latestGoodId → manifest object with NO application database, G0-AC-05;
+  a corrupt index throws rather than silently resetting latest-good),
+  `retention.ts` (owner-decided policy: newest 14 daily + 8 weekly kept,
+  goldens pinned and never auto-deleted, current latest-good never
+  deleted; `planRetention` is a pure function = the dry-run/list mode;
+  `executeRetention` deletes only planned entries' objects, marks them
+  pruned in the index, and appends a prune-log record per removal),
+  `offvolume.ts` (`runOffVolumeBackup`: B1 leg → encrypt → upload
+  (ciphertext, manifest, index entry — index never points at missing
+  objects) → VERIFIED-STORED (both objects re-read, ciphertext re-hashed
+  against the manifest, G0-AC-03) → PROMOTED (one index write moves
+  latestGoodId + entry state together; any earlier failure leaves the
+  previous latest-good intact, G0-AC-09, and is recorded on the attempt
+  row with its stage — encrypt/upload/verify_stored/promote);
+  `retrieveSnapshotPlaintext` performs the full hash-chain + decrypt
+  round trip B4's restore will build on).
+- Schema: NO new tables. `backup_attempts` gains three bookkeeping
+  columns — `tier TEXT NOT NULL DEFAULT 'daily'`, `pinned INTEGER NOT
+  NULL DEFAULT 0`, `promoted_at TEXT` — added to the CREATE in BOTH
+  schema locations (DDL verified identical) plus PRAGMA-guarded ALTERs
+  in `db/client.ts` migrateSchema for existing volumes (with a
+  regression test upgrading a B1-shaped table in place). The B2
+  lifecycle states (uploaded/verified_stored/promoted/pruned) and
+  failure stages are plain TEXT — no DDL for those. MUST-BE-NONEMPTY
+  enforcement untouched (still OFF for production callers; the three
+  unexpectedly-empty MUST tables from B1's preflight remain an open
+  item).
+- Independent review rounds (same branch): first pass NOT READY —
+  2 P1 + 7 P2 in the complete report, all fixed here with
+  fail-before/pass-after regression tests: (P1) index recovery
+  now validates strictly — a non-string `latestGoodId` or a malformed
+  entry is corruption that throws, never coerced to "no backups";
+  latest-good must name a PROMOTED entry whose manifest agrees with
+  the entry's ciphertext hash; (P1) a promote-stage failure after the
+  index write restores latestGoodId to the previous latest-good — a
+  failed attempt never remains latest-good; verify/promote stages
+  re-read the index inside the stage instead of writing back the
+  upload-stage copy (an interleaved-runs test proves a backup promoted
+  mid-run is never erased); VERIFIED-STORED deep-compares the whole
+  stored manifest, not three fields; the decrypt helper accepts the
+  tag-only ciphertext of an empty plaintext; (P2) key loading requires
+  canonical base64/hex — Node's lenient decoder would otherwise accept
+  a corrupted secret as a wrong key until restore time; (P2) both SigV4 paths share one canonical
+  query construction; (P2) retention marks + records each entry in the
+  index BEFORE deleting its objects, so a crash mid-prune can only
+  orphan objects, never leave the index advertising deleted ones.
+- Tests: `src/__tests__/g0BackupOffVolume.test.ts`, 27 tests mapped to
+  G0-AC-03/05/09/12 — encrypt→store→re-download→decrypt byte-identical
+  round trip with the manifest hash chain and a standalone
+  verifySnapshotFile pass on the decrypted snapshot; store-only
+  latest-good recovery; missing-key fail-closed (store stays EMPTY);
+  corrupted-stored-copy and upload-outage failures leaving latest-good
+  untouched; retention plan/dry-run/real-prune exactness incl.
+  latest-good-outside-the-window protection; B1-era schema upgrade;
+  SigV4 shape + 404 mapping + ListObjectsV2 parsing against a stubbed
+  fetch. B1's 13 tests unchanged and green.
+- NOT live-verified, by design: no R2 bucket or API token exists yet
+  (owner-side Cloudflare step) and `BACKUP_ENCRYPTION_KEY` is not yet
+  set as a Fly secret (owner key-custody step). Everything is built and
+  gated against the transport interface + fake; the env names are
+  documented in `.env.example`. Scope stops at PROMOTED per the plan:
+  no scheduler/status UI (B3), no restore/drill (B4), no caller wired.
+
 ### 2026-10-30 (Claude): G0 B1 — backup snapshot, manifest, local verification (no caller wired yet)
 - [ ] Verified by Claude
 - First increment of the owner-approved G0 backup & restore plan. New module

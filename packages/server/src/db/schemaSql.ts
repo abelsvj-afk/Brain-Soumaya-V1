@@ -1597,6 +1597,9 @@ export const BOOTSTRAP_SQL = `
     -- lifecycle (uploaded → verified_stored → promoted) without a
     -- migration. A row with state 'failed' is an attempt record, never
     -- a backup. DDL identical in db/client.ts migrateSchema.
+    -- Increment B2 adds three bookkeeping columns (tier / pinned /
+    -- promoted_at) for the off-volume lifecycle + retention; existing
+    -- volumes gain them via the guarded ALTERs in migrateSchema.
     CREATE TABLE IF NOT EXISTS backup_attempts (
       id TEXT PRIMARY KEY,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -1607,7 +1610,10 @@ export const BOOTSTRAP_SQL = `
       snapshot_sha256 TEXT,
       snapshot_bytes INTEGER,
       manifest_json TEXT,
-      finished_at TEXT
+      finished_at TEXT,
+      tier TEXT NOT NULL DEFAULT 'daily',
+      pinned INTEGER NOT NULL DEFAULT 0,
+      promoted_at TEXT
     );
     -- daily_quests reconciliation (G0 inventory v4, 2026-10-30):
     -- production carries this table (3 rows) from the streaks-and-quests
