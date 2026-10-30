@@ -81,7 +81,8 @@ import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
 import { markRelicFound, replaceFoundRelics, useFoundRelics } from "./relicsFound.js";
-import { findRelic, sampleRelicClaimStart } from "../api/relics.js";
+import { findRelic, sampleRelicClaimStart, type RelicsState } from "../api/relics.js";
+import { RelicHuntControls } from "./RelicHuntControls.js";
 import { useRelicBuffs } from "../hooks/useRelicBuffs.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -498,6 +499,15 @@ export default function WorldsSurface({
   const [findError, setFindError] = useState<string | null>(null);
   // Relics I-4: the relic whose dwell-and-claim moment is in progress.
   const [settlingRelic, setSettlingRelic] = useState<string | null>(null);
+  // Relics I-7: the hunt's visible state — the latest relics state view
+  // (the buffs hook's, refreshed by every claim answer, which carries a
+  // fresh state on success AND refusal) and the per-relic claim notices
+  // (the server's plain refusal sentences, shown beside their glimmer).
+  const [relicState, setRelicState] = useState<RelicsState | null>(null);
+  // Adopt the hook's view only as the FIRST load (review P2-3): a late
+  // hook fetch must never overwrite a fresher claim answer's state.
+  useEffect(() => { if (relicBuffs) setRelicState((prev) => prev ?? relicBuffs); }, [relicBuffs]);
+  const [claimNotices, setClaimNotices] = useState<Record<string, string>>({});
   const [dismissed, setDismissed] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
@@ -987,13 +997,23 @@ export default function WorldsSurface({
       : `claim-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const out = await findRelic(relic.id, claimId, position);
     setSettlingRelic(null);
+    // I-7: every claim answer carries a fresh state — refusals included —
+    // so a stirring that resolved (claimed / gone quiet) shows its new
+    // state beside the glimmer at once, in the server's own vocabulary.
+    if (out.state) setRelicState(out.state);
     if (!out.ok) {
-      setFindError(out.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready.");
+      setClaimNotices((m) => ({ ...m, [relic.id]: out.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready." }));
+      if (out.state) replaceFoundRelics(spaceId, out.state.found.map((id) => relicCodexKey(id)));
       return;
     }
+    setClaimNotices((m) => { const next = { ...m }; delete next[relic.id]; return next; });
     if (out.state) replaceFoundRelics(spaceId, out.state.found.map((id) => relicCodexKey(id)));
     else markRelicFound(spaceId, relicCodexKey(relic.id));
-    pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
+    // The claim celebration carries the L2 fragment the server just
+    // unlocked for this viewer — text it sent, never text invented here.
+    const frag = out.state?.codex?.find((c) => c.relicId === relic.id)?.layers.description;
+    const fragText = frag?.state === "unlocked" ? frag.text : undefined;
+    pushToast(fragText ? `You found ${relic.name}. ${fragText}` : `You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
   };
 
   const toggleGuided = () => {
@@ -1363,12 +1383,17 @@ export default function WorldsSurface({
       )}
       {mode === "world" &&
         glimmers.map((r) => (
-          <p key={r.id} className="worlds-surface-fallback">
-            Something glimmers {r.glimmer}.{" "}
-            <button type="button" onClick={() => onFindRelic(r)} disabled={settlingRelic === r.id}>
-              {settlingRelic === r.id ? "Settling beside it…" : "Look closer"}
-            </button>
-          </p>
+          <RelicHuntControls
+            key={r.id}
+            relicId={r.id}
+            relicName={r.name}
+            glimmer={r.glimmer}
+            settling={settlingRelic === r.id}
+            onLookCloser={() => void onFindRelic(r)}
+            scanPosition={RELIC_ANCHOR_POINTS[r.id]?.[0] ? [...RELIC_ANCHOR_POINTS[r.id]![0]!.position] : [0, 0, 0]}
+            stirring={(() => { const list = (relicState?.stirrings ?? []).filter((s) => s.relicId === r.id); return list.find((s) => s.state === "open") ?? list[list.length - 1] ?? null; })()}
+            notice={claimNotices[r.id] ?? null}
+          />
         ))}
       {mode === "world" && findError && (
         <p className="worlds-surface-fallback" role="alert">{findError}</p>
