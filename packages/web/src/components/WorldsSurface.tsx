@@ -89,6 +89,7 @@ import {
 } from "../graph/quietArchiveLayout.js";
 import { createWardScene } from "../graph/wardScene.js";
 import { attachWorldProps } from "../graph/worldProps.js";
+import { tintRigForHour } from "../graph/hourTint.js";
 import {
   createQuietArchiveScene,
   EMPTY_QUIET_ARCHIVE_LAYOUT,
@@ -105,7 +106,7 @@ import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
 import { useStoryNotice } from "../hooks/useStoryNotice.js";
 import { inspectablesHere, locateLandmarks, makeReach } from "../graph/storySpots.js";
-import { STORY_TRIGGERS } from "@brain/shared";
+import { STORY_TRIGGERS, hourBand } from "@brain/shared";
 import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -2102,7 +2103,7 @@ export default function WorldsSurface({
       mode === "transit"
         ? applyWorldLighting(scene, renderer, TRANSIT_LIGHT_RIG)
         : mode === "world" && entry?.light
-          ? applyWorldLighting(scene, renderer, entry.light)
+          ? applyWorldLighting(scene, renderer, tintRigForHour(entry.light, hourBand(new Date())))
           : null;
     sceneHandleRef.current = world;
     // A measuring probe for scripts/spots-check.mjs ONLY: it exists when the page was opened with localStorage "soumaya.probe" = "1". It reports where each of this world's lore spots
