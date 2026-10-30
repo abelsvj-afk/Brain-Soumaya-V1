@@ -528,17 +528,26 @@ describe("HTTP contract (A4, A5 server half, A10 web half server side)", () => {
   });
   it("A1/A3 over HTTP: wrong world refused; standing in the world, the find lands once and pays once", async () => {
     const space = await auth("relic-http-find");
-    const wrong = await call("POST", "/api/relics/found", space, { relicId: "harbor-nail" });
+    // Relics I-4: the find is a SAMPLED claim — { relicId, claimId,
+    // position } with presence proven from server-stamped samples. The
+    // harbor-nail's first anchor rests at [210, 38, 0] (shared registry).
+    const nailPos = [210, 38, 0];
+    const wrong = await call("POST", "/api/relics/found", space, { relicId: "harbor-nail", claimId: "a13-wrong", position: nailPos });
     expect(wrong.status).toBe(400);
     expect(wrong.body.state.found).toEqual([]);
     standIn(space, "great-station");
     const balBefore = (await call("GET", "/api/maintenance/fuel", space)).body.fuel as number;
-    const found = await call("POST", "/api/relics/found", space, { relicId: "harbor-nail" });
+    // Settle beside the glimmer (the sample is stamped on receipt),
+    // then let the dwell elapse by the server's own stamps.
+    const sampled = await call("POST", "/api/relics/sample", space, { position: nailPos, kind: "claim-start" });
+    expect(sampled.status).toBe(200);
+    ctx.handle.sqlite.prepare(`UPDATE relic_position_samples SET received_at = ? WHERE space_id = ? AND kind = 'claim-start'`).run(new Date(Date.now() - 6000).toISOString(), space);
+    const found = await call("POST", "/api/relics/found", space, { relicId: "harbor-nail", claimId: "a13-find", position: nailPos });
     expect(found.status).toBe(200);
     expect(found.body.state.found).toEqual(["harbor-nail"]);
     const balAfter = (await call("GET", "/api/maintenance/fuel", space)).body.fuel as number;
     expect(balAfter).toBeGreaterThan(balBefore);
-    const again = await call("POST", "/api/relics/found", space, { relicId: "harbor-nail" });
+    const again = await call("POST", "/api/relics/found", space, { relicId: "harbor-nail", claimId: "a13-again", position: nailPos });
     expect(again.body.alreadyFound).toBe(true);
     const balAgain = (await call("GET", "/api/maintenance/fuel", space)).body.fuel as number;
     expect(balAgain).toBeCloseTo(balAfter, 1);

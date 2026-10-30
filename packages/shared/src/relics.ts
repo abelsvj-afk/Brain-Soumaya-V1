@@ -414,6 +414,87 @@ export interface RelicAnchorDef {
  *  at the relic" on the worlds' scale (basin radius 320, wheel 210). */
 export const RELIC_ANCHOR_RADIUS = 30;
 
+// ---------------------------------------------------------------------------
+// Relics I-4 — the hunt's tuning constants (implementation design §5.2/
+// §5.3, owner ruling 3). ONE home for every sampling number: dwell,
+// cooldown, freshness, speed caps, band edges. Tuning any of these is a
+// data change here, never a logic change elsewhere.
+// ---------------------------------------------------------------------------
+
+/** Dwell: how long a hunter must settle inside an anchor's radius
+ *  before a claim can land, measured between SERVER receipt stamps of
+ *  the claim-start and claim-end samples (approved starting constant,
+ *  ruling 3). A client-reported duration is never read. */
+export const RELIC_DWELL_MS = 5_000;
+
+/** Scan cooldown: the minimum interval between free pulses in a world
+ *  (approved starting constant, ruling 3). A widened pulse waives it. */
+export const RELIC_SCAN_COOLDOWN_MS = 3_000;
+
+/** Freshness: a claim-start sample older than this cannot support a
+ *  claim — the dwell must have ENDED recently, not just happened once. */
+export const RELIC_SAMPLE_FRESHNESS_MS = 120_000;
+
+/** Samples are validation evidence, not history: only the most recent
+ *  this-many per (space, world) are kept (§4.7). */
+export const RELIC_SAMPLE_KEEP = 20;
+
+/** Plausibility slack, in world units, added to every sample-to-sample
+ *  movement allowance (measurement noise is not cheating). */
+export const RELIC_PLAUSIBILITY_SLACK_UNITS = 60;
+
+/**
+ * Whether the speed caps below may REJECT a claim. FALSE in I-4 —
+ * observe-only (ruling 3: caps must be measured against actual client
+ * flight before they may reject). The measurement, recorded in the I-4
+ * gate record: the deploy branch has no client flight model at all
+ * (worldFlight.ts exists only on main; this branch's world camera is
+ * presentational), and main's burn model — peak speed
+ * 3·dist/clamp(2400 + 1.2·dist, 2400, 6500)ms — reaches ≈451 u/s
+ * (great-station), ≈576 (growing-place), ≈537 (deep-past), ≈908
+ * (people) over this registry's anchor spans, with an instant-relocation
+ * reduced-motion mode any fixed cap would falsely reject. Every claim
+ * therefore COMPUTES and RECORDS its plausibility verdict on the
+ * attempt receipt; nothing is rejected on speed until the branches
+ * reconcile and a gated measurement against the real client flips this.
+ */
+export const RELIC_SPEED_CAPS_ENFORCED = false;
+
+/** Per-world maximum plausible travel speed, world units per second —
+ *  ≈2× the peak legitimate speeds measured from main's flight model
+ *  over this registry's anchor spans (see RELIC_SPEED_CAPS_ENFORCED).
+ *  The scale / quiet-archive values are UNMEASURED placeholders — no
+ *  relic is anchored or discoverable in those worlds today — and must
+ *  be measured like the others before enforcement ever flips on. */
+export const RELIC_WORLD_SPEED_CAPS: Readonly<Record<RelicWorld, number>> = {
+  "great-station": 1000,
+  "growing-place": 1200,
+  "deep-past": 1100,
+  people: 1900,
+  scale: 1000,
+  "quiet-archive": 1000,
+};
+
+/** The scan's strength bands (approved design §4: Far / Warm / Near /
+ *  Resonant). Resonant = inside the anchor's claim radius. A widened
+ *  pulse reads the SAME distances through a finer ladder — Closing
+ *  between Near and Warm, Fading between Warm and Far — finer
+ *  granularity within the same information class (§5.3). */
+export type RelicScanBand = "Resonant" | "Near" | "Closing" | "Warm" | "Fading" | "Far";
+
+/** Per-world band edges, world units from the nearest anchor: Near at
+ *  or below `near`, Warm at or below `warm`, Far beyond. Worlds differ
+ *  wildly in scale (Station ~440 across its anchor span, the People
+ *  field ~1140), so the edges are per-world (§5.3). */
+export const RELIC_SCAN_BAND_EDGES: Readonly<Record<RelicWorld, { near: number; warm: number }>> = {
+  "great-station": { near: 90, warm: 220 },
+  "growing-place": { near: 130, warm: 300 },
+  "deep-past": { near: 120, warm: 300 },
+  people: { near: 200, warm: 570 },
+  scale: { near: 90, warm: 220 },
+  "quiet-archive": { near: 90, warm: 220 },
+};
+
 /**
  * Server-known anchor SETS (I-2 expanded the I-1 single anchors per
  * implementation design §3.2). Each placed relic's FIRST entry is its

@@ -194,6 +194,18 @@ export const SPACE_SCOPED_TABLES = [
   // (space_id is its primary key) — it dies with the brain like every
   // other per-space record.
   "relic_gate_opened",
+  // Relics I-4: the space's position samples (its own movement
+  // evidence), its claim receipts, and its Codex layer unlocks are
+  // per-space rows — they die with the brain. relic_first_discoveries
+  // joins them under the same rule (the I-2 copy-events precedent):
+  // a row naming this space as discoverer is the space's data and is
+  // erased with it, even for the public scope — erasure takes
+  // precedence over world-history preservation, and a later claim may
+  // then record the earliest SURVIVING discovery.
+  "relic_position_samples",
+  "relic_claim_attempts",
+  "relic_codex_layers",
+  "relic_first_discoveries",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.
