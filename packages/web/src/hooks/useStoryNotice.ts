@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hourBand, npcGifts, pickNoticed } from "@brain/shared";
 import { useStoryBook } from "./useStoryBook.js";
+import { emitReveal } from "../lib/narrationBus.js";
+import { getNarrationMode } from "../lib/narration.js";
 
 /** How long a player has to stay still for the world to answer. One constant; same under reduced motion (it is time, not animation). */
 export const NOTICE_MS = 4000;
@@ -40,6 +42,8 @@ export function useStoryNotice({
 
   const report = useCallback(async (entryId: string, source: string): Promise<boolean> => {
     const r = await findRef.current(entryId, source);
+    // If the player asked for the lore to be read to them, a new find opens in the Book and begins (the Book's own Listen otherwise).
+    if (r?.isNew && getNarrationMode() === "on") emitReveal(entryId);
     return !!r?.isNew;
   }, []);
 

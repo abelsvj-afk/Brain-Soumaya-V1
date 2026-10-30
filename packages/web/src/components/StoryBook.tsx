@@ -5,7 +5,8 @@ import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { useStoryBook } from "../hooks/useStoryBook.js";
 import { useStoryFlavor } from "../hooks/useStoryFlavor.js";
 import { BOOK_H, BOOK_W, KIND_WORD, brightness, entryWords, skyLayout } from "../lib/storyBook.js";
-import { isVoiceSupported, speak, stopSpeaking } from "../voice.js";
+import { getNarrationMode, playNarration, setNarrationMode, stopNarration, type NarrationMode } from "../lib/narration.js";
+import { useEffect } from "react";
 
 const BY_ID = new Map(STORY.entries.map((e) => [e.id, e]));
 const worldWord = (w: string) => (w === "anywhere" ? "anywhere" : (WORLD_NAMES[w] ?? w));
@@ -43,7 +44,7 @@ function Mark({ kind, found, glow }: { kind: StoryEntry["kind"]; found: boolean;
 export default function StoryBook({ onClose, openId = null }: { onClose: () => void; openId?: string | null }) {
   const ref = useRef<HTMLDivElement>(null);
   useDialogA11y(ref, onClose);
-  const { book, loaded, link, unlink, saveNote, recall } = useStoryBook(true);
+  const { book, loaded, reload, link, unlink, saveNote, recall } = useStoryBook(true);
   const { flavor, on: flavorOn, setOn: setFlavorOn } = useStoryFlavor(true);
   const [selected, setSelected] = useState<string | null>(openId);
   const [laying, setLaying] = useState<string | null>(null);
@@ -78,15 +79,36 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
     setSaid("");
     setSelected(id);
   };
-  const listen = (text: string) => {
+  const [mode, setMode] = useState<NarrationMode>(() => getNarrationMode());
+  // A reveal while the Book is already open: show that card and re-read the Book so the new light is there.
+  useEffect(() => {
+    if (!openId) return;
+    setSelected(openId);
+    void reload();
+  }, [openId, reload]);
+  const listen = (entry: StoryEntry, text: string) => {
     if (speaking) {
-      stopSpeaking();
+      stopNarration();
       setSpeaking(false);
       return;
     }
     setSpeaking(true);
-    speak(text, undefined, { onEnd: () => setSpeaking(false) });
+    void playNarration({ entryId: entry.id, register: flavor.register, tide: flavor.tide.first, text, onEnd: () => setSpeaking(false) }).then((how) => {
+      if (how === "none") setSpeaking(false);
+    });
   };
+  // A find that opened the Book (narration "on") begins reading as soon as its words are ready. Leaving the Book stops it.
+  const autoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openId || mode !== "on" || autoRef.current === openId || !foundSet.has(openId)) return;
+    const e = BY_ID.get(openId);
+    const w = e ? entryWords(e, foundSet, flavor) : null;
+    if (!e || !w?.text) return;
+    autoRef.current = openId;
+    listen(e, [w.text, w.second].filter(Boolean).join(" "));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, mode, foundSet, flavor]);
+  useEffect(() => () => stopNarration(), []);
 
   return (
     <div className="book-scrim" onClick={onClose}>
@@ -157,9 +179,9 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
                 note={draft?.id === sel.id ? draft.text : noteOf(sel.id)}
                 laid={book.links.filter((l) => l.a === sel.id || l.b === sel.id).map((l) => (l.a === sel.id ? l.b : l.a))}
                 speaking={speaking}
-                canListen={isVoiceSupported()}
+                canListen={mode !== "off"}
                 laying={laying === sel.id}
-                onListen={() => listen([entryWords(sel, foundSet, flavor).text, entryWords(sel, foundSet, flavor).second].filter(Boolean).join(" "))}
+                onListen={() => listen(sel, [entryWords(sel, foundSet, flavor).text, entryWords(sel, foundSet, flavor).second].filter(Boolean).join(" "))}
                 onRecall={() => void recall(sel.id)}
                 onLay={() => setLaying(laying === sel.id ? null : sel.id)}
                 onUnlay={(other) => void unlink(sel.id, other)}
@@ -175,6 +197,23 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             )}
           </section>
         )}
+        <fieldset className="book-narration">
+          <legend>Read the lore to me</legend>
+          {(["ask", "on", "off"] as const).map((m) => (
+            <label key={m}>
+              <input
+                type="radio"
+                name="book-narration"
+                checked={mode === m}
+                onChange={() => {
+                  setNarrationMode(m);
+                  setMode(m);
+                }}
+              />
+              <span>{m === "ask" ? "When I ask" : m === "on" ? "Whenever I find something" : "Never"}</span>
+            </label>
+          ))}
+        </fieldset>
         <label className="book-flavor">
           <input type="checkbox" checked={flavorOn} onChange={(e) => void setFlavorOn(e.target.checked)} />
           <span>

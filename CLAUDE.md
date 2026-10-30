@@ -761,6 +761,19 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   validates every find against `shared/storyTriggers.ts` and the travel ledger; only entries whose words are written are released (≈ 30 of ~46 so far).
   Look at: the 360×440 sky on a real phone (point spacing ≥ 24 units; tap size 44 px), whether the legend line
   reads, and the fading cue.
+- **Story Flavour + ElevenLabs narration (2026-10-30) — unit/route-tested (shared 63, server story 26, web), NO live ElevenLabs call has been made, needs the
+  first real listen on Fly** (shared/storyFlavor.ts, server story/flavor.ts + story/narration.ts + `/api/story/flavor|narration/:id`, tables `story_prefs|story_flavor_day`,
+  web hooks/useStoryFlavor.ts + lib/narration.ts + lib/narrationBus.ts + audio.ts ducking, scripts/lore-narrate.ts; specs `lore-narration-…`, `story-flavor-engine-…`):
+  *Flavour* = the brain's colour (society currents) × how it is played (five non-moral leanings from COUNTS only) × the Hour → a register (plain/warm/grave) that
+  voices the SAME locked claims (a test holds every register of an entry to the same key tokens); it can never hide, add or reorder a fact (availability-invariance
+  tests); opt-out switch in the Book (default on); thin evidence → neutral. *Narration*: the lore is public canon, so each line is voiced ONCE through ElevenLabs and the
+  clip is shared across brains on the volume (`/data/lore-audio`); the request names an ENTRY, never text; only a FOUND entry can be voiced; no key / monthly cap
+  (`LORE_TTS_MONTHLY_CHARS`, default 200,000) / any error → 204 and the browser's own voice reads the same words; while it reads, the ambient bed ducks to 20 %.
+  Setting "Read the lore to me": when I ask (default) / whenever I find something (new finds open in the Book and begin) / never. **Owner steps:** set
+  `LORE_TTS_VOICE_NARRATOR` (an ElevenLabs voice id; `LORE_TTS_API_KEY` falls back to `TELEGRAM_TTS_API_KEY`) as Fly secrets, then optionally pre-voice all 60 lines
+  (~10.8k characters) with `npx tsx scripts/lore-narrate.ts --yes`. Look at: the narrator voice choice and the three delivery presets (`NARRATION_SETTINGS`, tuned by ear),
+  whether a find opening itself in the Book feels right with "whenever I find something", and the duck depth. Not built yet: lore music beds, per-character voices,
+  sentence-synced captions, service-worker caching of clips.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

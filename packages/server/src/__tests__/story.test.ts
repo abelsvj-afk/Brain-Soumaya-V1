@@ -224,3 +224,43 @@ describe("/api/story over HTTP", () => {
     expect(((await (await call("/book", { space: otherId })).json()) as { finds: unknown[] }).finds).toEqual([]);
   });
 });
+
+describe("/api/story/narration over HTTP", () => {
+  let ctx: AppContext;
+  let server: Server;
+  let base: string;
+  let spaceId: string;
+  beforeAll(async () => {
+    ctx = await buildContext({ dbPath: ":memory:", embeddings: new HashEmbeddingProvider(EMBED_DIM), llm: new HeuristicProvider() });
+    const app = createApp(ctx);
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => resolve());
+    });
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    spaceId = (
+      (await (
+        await fetch(`${base}/api/space/auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gamerTag: "listener", passcode: "secret123", name: "listener" }) })
+      ).json()) as { id: string }
+    ).id;
+  });
+  afterAll(() => {
+    server?.close();
+    ctx.handle.sqlite.close();
+  });
+  const get = (path: string) => fetch(`${base}/api/story${path}`, { headers: { "x-space-id": spaceId } });
+
+  it("will not voice something you have not found (no leaking unfound lore)", async () => {
+    expect((await get("/narration/obj.kiths-drawing")).status).toBe(403);
+  });
+  it("says 204 (read it yourself) when there is no key — and never errors", async () => {
+    await fetch(`${base}/api/story/find`, { method: "POST", headers: { "Content-Type": "application/json", "x-space-id": spaceId }, body: JSON.stringify({ entryId: "obj.doorkeepers-nail", source: "npc:wayfarer" }) });
+    const res = await get("/narration/obj.doorkeepers-nail?register=grave&tide=weight");
+    expect(res.status).toBe(204);
+  });
+  it("serves the flavour key as words and labels only", async () => {
+    const j = (await (await get("/flavor")).json()) as { on: boolean; key: { register: string; tide: { first: string }; lean: string[]; hour: string } };
+    expect(["plain", "warm", "grave"]).toContain(j.key.register);
+    expect(j.key.lean).toHaveLength(2);
+    expect(JSON.stringify(j)).not.toMatch(/"(score|count|percent|total)"/i);
+  });
+});

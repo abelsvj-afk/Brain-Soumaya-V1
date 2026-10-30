@@ -85,6 +85,7 @@ import { ObjectLoreCard } from "./components/ObjectLoreCard.js";
 import { NotificationsBar } from "./components/NotificationsBar.js";
 import { NavRail } from "./components/NavRail.js";
 import { ToolsMenu } from "./components/ToolsMenu.js";
+import { REVEAL_EVENT } from "./lib/narrationBus.js";
 import { useEternityPresence } from "./hooks/useEternityPresence.js";
 import { ActionRail } from "./components/ActionRail.js";
 import {
@@ -224,6 +225,18 @@ export default function App() {
   const [showWorldMap, setShowWorldMap] = useState(false);
   const [showSociety, setShowSociety] = useState(false);
   const [showBook, setShowBook] = useState(false);
+  const [bookOpenId, setBookOpenId] = useState<string | null>(null);
+  // A new find, when the player has asked for the lore to be read to them, opens in the Book (docs/specs/lore-narration-2026-10-30.md §5).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const id = (e as CustomEvent<{ entryId: string }>).detail?.entryId;
+      if (!id) return;
+      setBookOpenId(id);
+      setShowBook(true);
+    };
+    window.addEventListener(REVEAL_EVENT, on);
+    return () => window.removeEventListener(REVEAL_EVENT, on);
+  }, []);
   const [travelFocus, setTravelFocus] = useState<string | null>(null);
   // The travel sheet: the worlds panels' one positioned home. Every way in
   // (Tools → Travel, the map's handoff, a Try-It "travel" action) goes
@@ -2570,7 +2583,7 @@ export default function App() {
           popup menu. Travelling still happens in the travel panel: the
           map hands over with a focus world, closes, and opens the sheet. */}
       {space && showSociety && <SocietyPanel onClose={() => setShowSociety(false)} />}
-      {space && showBook && <StoryBook onClose={() => setShowBook(false)} />}
+      {space && showBook && <StoryBook openId={bookOpenId} onClose={() => { setShowBook(false); setBookOpenId(null); }} />}
       {space && showWorldMap && (
         <ErrorBoundary label="world-map" fallback={null}>
           <WorldMap

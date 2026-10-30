@@ -14,6 +14,7 @@
  * show the count.
  */
 import { densityBedGain, bedFilterFreq } from "./adaptiveAudio.js";
+import { NARRATION_DUCK, onNarration } from "../lib/narrationBus.js";
 import { audioContext } from "./sfx.js";
 
 export interface Track {
@@ -87,7 +88,9 @@ export function makeAmbientAudio(): AmbientAudio {
   let adaptiveGain = 1;
   let filterNode: BiquadFilterNode | null = null;
   let routed = false;
-  const effectiveTarget = () => TARGET_VOLUME * adaptiveGain;
+  // While the lore is read aloud the bed steps back (docs/specs/lore-narration-2026-10-30.md §4).
+  let duck = 1;
+  const effectiveTarget = () => TARGET_VOLUME * adaptiveGain * duck;
 
   const ensureRouted = (): boolean => {
     if (routed) return filterNode != null;
@@ -151,6 +154,11 @@ export function makeAmbientAudio(): AmbientAudio {
       }
     }, 50);
   };
+
+  onNarration((narrating) => {
+    duck = narrating ? NARRATION_DUCK : 1;
+    if (el && playing) fadeTo(effectiveTarget(), narrating ? 600 : 1200);
+  });
 
   const toggle = (): boolean => {
     const a = ensure();

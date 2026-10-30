@@ -7855,3 +7855,8 @@ body.in-transit .perf-suggest { display: none; }
 
 .book-flavor { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; min-height: 44px; color: #8fa0c4; font-size: 0.76rem; }
 .book-flavor input { width: 24px; height: 24px; flex: 0 0 auto; margin-top: 2px; }
+
+.book-narration { margin: 14px 0 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; color: #8fa0c4; font-size: 0.78rem; }
+.book-narration legend { padding: 0; margin-bottom: 4px; color: #b8c6e4; }
+.book-narration label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.book-narration input { width: 22px; height: 22px; }

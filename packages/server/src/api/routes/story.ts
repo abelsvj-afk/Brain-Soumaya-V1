@@ -4,13 +4,20 @@ import type { AppContext } from "../../context.js";
 import { spaceOf } from "../middleware.js";
 import { StoryError, StoryRepo } from "../../story/story.js";
 import { computeFlavor, setFlavorOn } from "../../story/flavor.js";
+import { createNarrator, isTide, narrationText, type Narrator } from "../../story/narration.js";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 
 /**
  * The story's private progress (docs/specs/lore-storage-2026-10-30.md). The client reports EVENTS ("I found this here"); the server decides. No response carries a
  * total, ratio or percentage. Validate → delegate → json.
  */
-export function storyRoutes(ctx: AppContext): Router {
+export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {}): Router {
   const r = Router();
+  // Shared, public-canon audio lives beside the database on the persistent volume (or the temp dir for an in-memory test database).
+  const dbPath = process.env.DB_PATH ?? "";
+  const narrator =
+    deps.narrator ?? createNarrator({ dir: process.env.LORE_AUDIO_DIR ?? (dbPath && dbPath !== ":memory:" ? join(dirname(dbPath), "lore-audio") : join(tmpdir(), "soumaya-lore-audio")) });
   const repo = (res: Parameters<typeof spaceOf>[0]) => new StoryRepo(ctx.handle, spaceOf(res));
   const id = z.string().min(1).max(120);
 
@@ -77,6 +84,30 @@ export function storyRoutes(ctx: AppContext): Router {
     } catch (e) {
       fail(res, e);
     }
+  });
+
+  // Narration: the clip for an entry the brain has FOUND. The server speaks canon text only — the request names an entry, never words. 204 = no audio (the client reads it
+  // with captions and the browser's own voice).
+  r.get("/narration/:entryId", async (req, res) => {
+    const entryId = String(req.params.entryId);
+    const register = req.query.register === "warm" || req.query.register === "grave" ? req.query.register : "plain";
+    const tide = isTide(req.query.tide) ? req.query.tide : undefined;
+    const book = repo(res).book();
+    const found = new Set(book.finds.map((f) => f.entryId));
+    if (!found.has(entryId)) {
+      res.status(403).json({ error: "You have not found that yet." });
+      return;
+    }
+    const text = narrationText(entryId, register, found, tide);
+    const clip = text ? await narrator.narrate(text, register) : null;
+    if (!clip) {
+      res.status(204).end();
+      return;
+    }
+    res.setHeader("Content-Type", clip.contentType);
+    res.setHeader("ETag", `"${clip.key}"`);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(clip.audio);
   });
 
   // Flavour: how the locked story is voiced for this brain. Words and coarse labels only; never a number about the player, never memory text.
