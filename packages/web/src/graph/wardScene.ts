@@ -198,7 +198,7 @@ export function createWardScene(): WardScene {
   steam.name = "ward-steam";
   steam.position.set(0, 36, 0);
   bowl.add(steam);
-  bowl.position.set(0, 0, 330);
+  bowl.position.set(0, 0, 720); // well down the aisle, so the orbit sees the rows first and the bowl ahead
   group.add(bowl);
 
   // The window: a tall arch of starlight on the left wall.

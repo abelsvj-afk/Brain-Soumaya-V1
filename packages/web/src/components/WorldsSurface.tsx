@@ -581,9 +581,10 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   // The Faded Ward (a door in the story, opened by finding Tamsin's Ward): one long hall of cots, pale green and ember gold, the far end lost in fog.
   "faded-ward": {
     title: "The Faded Ward",
-    light: { env: 0.6, hemi: { sky: 0xcfe8d8, ground: 0x1a2420, intensity: 1.15 }, key: { color: 0xffe6b8, intensity: 0.9, from: [200, 420, 120] } },
-    background: 0x0c1412,
-    fogDensity: 0.0006,
+    // Measured in a real browser: env 0.6 + a bright fill washed the hall to flat grey. Dimmer fill, a warm key, thinner fog — the lanterns carry the light.
+    light: { env: 0.3, hemi: { sky: 0x9fb8a8, ground: 0x0e1612, intensity: 0.55 }, key: { color: 0xffd9a0, intensity: 0.8, from: [120, 400, 300] } },
+    background: 0x0a100e,
+    fogDensity: 0.00035,
     orbitRadius: WARD_ORBIT_RADIUS,
     orbitHeight: WARD_ORBIT_HEIGHT,
     lookAtY: 30,
