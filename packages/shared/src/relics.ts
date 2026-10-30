@@ -992,8 +992,56 @@ export interface RelicHoldingView {
   /** Relics I-6: the exchange surface for this holding (present for
    *  every holding; `eligible` true only for Legacies). */
   exchange?: RelicExchangeView;
+  /** Relics I-7 (§5.1): the held copy's identity, its pool context in
+   *  plain words, and its provenance — the copy's own event chain
+   *  (I-2), read in order. Optional: the server always populates
+   *  them; older constructions stay valid. */
+  copyId?: string | null;
+  copyContext?: string;
+  provenance?: RelicProvenanceEventView[];
 }
-export interface RelicReturnView { relicId: string; name: string; reason: "release" | "brain-deleted"; fromAnchor: string | null; toAnchor: string | null; }
+/** Relics I-7: one step of a copy's life, as the Hold card tells it.
+ *  `placeName` is the anchor's plain place words when the event names
+ *  a real anchor; `reason` is the stored detail's reason where one is
+ *  recorded (an exchange's return carries "exchange"). */
+export interface RelicProvenanceEventView {
+  kind: string; world: string | null; anchorKey: string | null; placeName: string | null; reason: string | null;
+}
+/** Relics I-7 (§3.3/§5.8): a Codex layer's state for one viewer.
+ *  "unlocked" — the layer is open to this viewer and its text (when
+ *  canon text exists) rides along. "locked" — text exists but is NOT
+ *  serialized: the field is absent, never blanked. "unwritten" — no
+ *  canon text exists yet (O-R1); the layer is honestly empty. */
+export type RelicLayerState = "unlocked" | "locked" | "unwritten";
+export interface RelicLayerView { state: RelicLayerState; text?: string }
+/** Relics I-7: an L3 thread as the Codex may show it — a silhouette
+ *  (the two relics' names) while dark; text only once unlocked. */
+export interface RelicThreadSilhouetteView {
+  threadId: string; otherRelicId: string; otherName: string; unlocked: boolean; text?: string;
+}
+/** Relics I-7: the first-in-world discovery record for a relic's
+ *  scope (approved design §2.3) — who found it first, and where. */
+export interface RelicFirstDiscoveryView { discovererName: string; byViewer: boolean; /** The discovery's place — serialized ONLY for viewers who have unlocked the relic's place (L1) layer; the place string IS the L1 layer text, so concealment (§8.1 #12) gates it identically. Absent while locked. */ placeName?: string }
+/** Relics I-7: one stirring in its honest state (I-5's vocabulary:
+ *  open / claimed / quiet / expired — quiet is an ending, not an
+ *  error). */
+export interface RelicStirringView {
+  relicId: string; name: string; world: string; worldName: string;
+  source: "ambient" | "chart"; state: "open" | "claimed" | "quiet" | "expired"; resolvedReason: string | null;
+}
+/** Relics I-7 (§5.1/§5.8): one relic's layered Codex entry for one
+ *  viewer — layer unlocks, the first-discovery record, the viewer's
+ *  own discovery state, and the viewer's stirrings for the relic. */
+export interface RelicCodexView {
+  relicId: string; name: string; world: string; worldName: string; discovered: boolean;
+  layers: {
+    stirring: RelicLayerView; place: RelicLayerView; description: RelicLayerView;
+    threads: { state: RelicLayerState; entries: RelicThreadSilhouetteView[] };
+  };
+  firstDiscovery: RelicFirstDiscoveryView | null;
+  stirrings: RelicStirringView[];
+}
+export interface RelicReturnView { relicId: string; name: string; reason: "release" | "exchange" | "brain-deleted"; fromAnchor: string | null; toAnchor: string | null; }
 export interface RelicGateView { open: boolean; openedBefore: boolean; missingPlain: string; }
 export interface RelicsStateView {
   found: string[]; held: string[]; holdings: RelicHoldingView[]; buffs: EffectiveRelicBuffs;
@@ -1003,4 +1051,15 @@ export interface RelicsStateView {
    *  by a Legacy exchange right now (the same eligibility the
    *  exchange transaction re-validates). */
   chartTargets?: string[];
+  /** Relics I-7 (§5.1/§5.8): the layered Codex read model and the
+   *  viewer's stirrings. Locked layer text is never serialized into
+   *  either (concealment, §8.1 #12). Optional: the server always
+   *  populates them on GET /relics; older constructions stay valid. */
+  codex?: RelicCodexView[];
+  stirrings?: RelicStirringView[];
+  /** Relics I-7: the server-derived world the viewer is standing in
+   *  (travel state — the same derivation the Station gate enforces),
+   *  so Hold controls can tell the truth about where changes happen.
+   *  Populated by the GET /relics route; absent elsewhere. */
+  currentWorld?: string;
 }

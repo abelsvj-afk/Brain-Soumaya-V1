@@ -52,6 +52,20 @@ export async function findRelic(relicId: string, claimId: string, position: read
 export async function holdRelic(relicId: string) { return postRelic("hold", { relicId }); }
 export async function unholdRelic(relicId: string) { return postRelic("unhold", { relicId }); }
 export async function releaseRelic(relicId: string) { return postRelic("release", { relicId }); }
+/**
+ * Relics I-7: the Hold's remaining changes, wired to the I-6 routes.
+ * Store/carry flip the holding's location state; the exchange posts
+ * the menu choice the SERVER's state view offered (the client never
+ * decides eligibility) under a fresh attempt key, so a replay answers
+ * with the recorded outcome. All three are Station-gated server-side;
+ * off-Station the server refuses with its plain reason.
+ */
+export async function storeRelic(relicId: string) { return postRelic("store", { relicId }); }
+export async function carryRelic(relicId: string) { return postRelic("carry", { relicId }); }
+export type RelicExchangeOption = "lore" | "credits" | "chart";
+export async function exchangeRelic(relicId: string, option: RelicExchangeOption, chartTargetRelicId: string | null, attemptKey: string) {
+  return postRelic("exchange", { relicId, option, chartTargetRelicId, attemptKey });
+}
 export async function syncLegacyRelics(relicIds: string[]) { return postRelic("legacy-sync", { relicIds }); }
 export async function setRelicScarcity(off: boolean): Promise<{ ok: boolean; scarcityOff?: boolean; error?: string }> {
   try {
