@@ -1,5 +1,7 @@
 import type { DbHandle } from "../db/client.js";
-import { STORY_ENTRY_BY_ID, storyPairIsLit, triggerFor, type TriggerHow } from "@brain/shared";
+import { STORY_ENTRY_BY_ID, storyPairIsLit, triggerFor, worldAnswers, type TriggerHow } from "@brain/shared";
+import { localTime, spaceTimezone } from "../agent/notify/policy.js";
+import { localDateKey } from "../npcs/repo.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
 
 /**
@@ -95,6 +97,24 @@ export class StoryRepo {
     if (!trigger) throw new StoryError("That cannot be found that way.", 403);
     if (how !== "npc" && new TravelRepo(this.h, this.spaceId).currentWorld(nowMs) !== trigger.world) throw new StoryError("You are not there.", 403);
     const db = this.h.sqlite;
+    if (how === "regard" || how === "listen") {
+      // A replay of something already found is harmless and never refused.
+      if (db.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId)) {
+        const row = db.prepare(`SELECT found_at FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId) as { found_at: string };
+        return { entryId, foundAt: row.found_at, isNew: false };
+      }
+      // The world answers a visitor who stays, not one who taps: it speaks in its own Hour (otherwise only on its good days), and at most ONCE a day. Every refusal reads the same,
+      // so nothing is learned from being turned away.
+      const tz = spaceTimezone(db, this.spaceId);
+      const dayKey = localDateKey(tz, nowMs);
+      const localHour = Number(localTime(new Date(nowMs), tz).slice(0, 2));
+      if (!worldAnswers(trigger, localHour, this.spaceId, dayKey)) throw new StoryError("Nothing stirs.", 403);
+      const recent = db
+        .prepare(`SELECT entry_id, found_at FROM story_finds WHERE space_id = ? AND source IN ('regard','listen') AND found_at >= ?`)
+        .all(this.spaceId, new Date(nowMs - 36 * 3_600_000).toISOString()) as { entry_id: string; found_at: string }[];
+      const spokeToday = recent.some((r) => STORY_ENTRY_BY_ID.get(r.entry_id)?.world === trigger.world && localDateKey(tz, Date.parse(r.found_at)) === dayKey);
+      if (spokeToday) throw new StoryError("Nothing stirs.", 403);
+    }
     const iso = new Date(nowMs).toISOString();
     const res = db.prepare(`INSERT OR IGNORE INTO story_finds (space_id, entry_id, found_at, source) VALUES (?, ?, ?, ?)`).run(this.spaceId, entryId, iso, source);
     const row = db.prepare(`SELECT found_at FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId) as { found_at: string };

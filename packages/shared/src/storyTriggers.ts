@@ -9,7 +9,10 @@
 export type HourBand = "first-light" | "measure" | "threshold" | "growing" | "hearths" | "rest" | "standing";
 
 export function hourBand(d: Date): HourBand {
-  const h = d.getHours();
+  return hourBandOfHour(d.getHours());
+}
+
+export function hourBandOfHour(h: number): HourBand {
   if (h >= 5 && h < 9) return "first-light";
   if (h >= 9 && h < 12) return "measure";
   if (h >= 12 && h < 15) return "threshold";
@@ -82,11 +85,11 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.hymnal-gap", how: "listen", world: "quiet-archive", hour: "hearths" },
   { entryId: "echo.eighth-bell", how: "listen", world: "eternity", hour: "standing" },
   // Met people give things after they have met you enough (the client reports the meeting; the pairing is checked here).
-  { entryId: "obj.doorkeepers-nail", how: "npc", world: "great-station", npc: "wayfarer", minMeetings: 1 },
-  { entryId: "obj.choirmasters-breath", how: "npc", world: "quiet-archive", npc: "cantor", minMeetings: 2 },
-  { entryId: "obj.dorrows-page", how: "npc", world: "great-station", npc: "broker", minMeetings: 2 },
-  { entryId: "obj.anonymous-payments", how: "npc", world: "great-station", npc: "broker", minMeetings: 3 },
-  { entryId: "obj.dissenters-chart", how: "npc", world: "great-station", npc: "dissenter", minMeetings: 2 },
+  { entryId: "obj.doorkeepers-nail", how: "npc", world: "great-station", npc: "wayfarer", minMeetings: 3 },
+  { entryId: "obj.choirmasters-breath", how: "npc", world: "quiet-archive", npc: "cantor", minMeetings: 4 },
+  { entryId: "obj.dorrows-page", how: "npc", world: "great-station", npc: "broker", minMeetings: 4 },
+  { entryId: "obj.anonymous-payments", how: "npc", world: "great-station", npc: "broker", minMeetings: 6 },
+  { entryId: "obj.dissenters-chart", how: "npc", world: "great-station", npc: "dissenter", minMeetings: 4 },
   // The stranger at the dock: once, on a harbor, on a later day than the first.
   { entryId: "companion.dock-1", how: "companion", world: "great-station" },
 ];
@@ -108,4 +111,23 @@ export function pickNoticed(world: string, how: "regard" | "listen", hour: HourB
 /** Entries a met person is ready to give, given how often you have met. */
 export function npcGifts(npc: string, meetings: number, found: ReadonlySet<string>): string[] {
   return STORY_TRIGGERS.filter((t) => t.how === "npc" && t.npc === npc && (t.minMeetings ?? 1) <= meetings && !found.has(t.entryId)).map((t) => t.entryId);
+}
+
+function hash01(str: string): number {
+  let x = 2166136261;
+  for (let i = 0; i < str.length; i++) x = Math.imul(x ^ str.charCodeAt(i), 16777619);
+  return (x >>> 0) / 4294967295;
+}
+
+/** Outside its own Hour a sighting still answers — but only on about one day in three, chosen by a seed (brain + entry + day) so spamming stillness cannot re-roll it. */
+export const OUT_OF_HOUR_CHANCE = 1 / 3;
+
+/**
+ * Does the world answer THIS stillness, for this entry, now? In its own Hour: yes. Otherwise only on its good days. Deterministic, so server and client agree and a
+ * second try the same day gives the same answer. Never a lock: every sighting has good days, and nothing here depends on any other entry.
+ */
+export function worldAnswers(t: Pick<StoryTrigger, "entryId" | "hour">, localHour: number, brainId: string, dayKey: string): boolean {
+  if (!t.hour) return true;
+  if (hourBandOfHour(localHour) === t.hour) return true;
+  return hash01(`${brainId}|${t.entryId}|${dayKey}|answers`) < OUT_OF_HOUR_CHANCE;
 }

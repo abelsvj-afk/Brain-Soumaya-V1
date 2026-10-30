@@ -4,8 +4,11 @@ import { useStoryBook } from "./useStoryBook.js";
 import { emitReveal } from "../lib/narrationBus.js";
 import { getNarrationMode, playNarration } from "../lib/narration.js";
 
-/** How long a player has to stay still for the world to answer. One constant; same under reduced motion (it is time, not animation). */
-export const NOTICE_MS = 4000;
+/**
+ * How long a player has to stay still for the world to answer. Eight seconds, and a touch, key or scroll in that time lets the stillness go: the world answers someone who is
+ * actually there, not someone tapping. Same under reduced motion (it is time, not animation).
+ */
+export const NOTICE_MS = 8000;
 const FIRST_DAY_KEY = "soumaya.story.first-day";
 
 const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -35,9 +38,11 @@ export function useStoryNotice({
   const [noticing, setNoticing] = useState<"regard" | "listen" | null>(null);
   const [caption, setCaption] = useState("");
   const timer = useRef<number | null>(null);
+  const stillnessOff = useRef<(() => void) | null>(null);
   const clearTimer = () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = null;
+    stillnessOff.current?.();
   };
 
   const report = useCallback(async (entryId: string, source: string): Promise<boolean> => {
@@ -59,8 +64,25 @@ export function useStoryNotice({
       }
       setNoticing(how);
       setCaption(how === "regard" ? "You stay still, and regard this place…" : "You stay still, and listen…");
+      // Any movement — a touch, a key, a scroll — breaks the stillness (listeners start after this tap has finished).
+      const letGo = () => {
+        clearTimer();
+        setNoticing(null);
+        setCaption("");
+        cleanup();
+      };
+      const events = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
+      const cleanup = () => {
+        for (const e of events) window.removeEventListener(e, letGo);
+        stillnessOff.current = null;
+      };
+      window.setTimeout(() => {
+        if (timer.current !== null) for (const e of events) window.addEventListener(e, letGo, { once: true });
+      }, 0);
+      stillnessOff.current = cleanup;
       timer.current = window.setTimeout(async () => {
         timer.current = null;
+        stillnessOff.current?.();
         setNoticing(null);
         const id = pickNoticed(world, how, hourBand(new Date()), foundRef.current);
         if (!id) {

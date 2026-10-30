@@ -33,6 +33,27 @@ describe("noticing", () => {
     expect(result.current.noticing).toBeNull();
   });
 
+  it("a touch, key or scroll breaks the stillness: nothing is reported (the world answers someone who is there, not someone tapping)", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
+    const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
+    const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn() }));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    vi.useFakeTimers();
+    act(() => result.current.begin("regard"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_MS / 2); // listeners are in place by now
+    });
+    expect(result.current.noticing).toBe("regard");
+    act(() => {
+      window.dispatchEvent(new Event("pointerdown"));
+    });
+    expect(result.current.noticing).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTICE_MS * 2);
+    });
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("pressing again lets the stillness go: nothing is reported", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
     const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
@@ -81,11 +102,11 @@ describe("noticing", () => {
     const { result } = renderHook(() => useStoryNotice({ active: true, world: "great-station", notify: vi.fn() }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     await act(async () => {
-      await result.current.onMeeting("broker", 1); // not yet: she wants two meetings
+      await result.current.onMeeting("broker", 3); // not yet: she wants more than a few meetings
     });
     expect(post).not.toHaveBeenCalled();
     await act(async () => {
-      await result.current.onMeeting("wayfarer", 1);
+      await result.current.onMeeting("wayfarer", 3);
       await result.current.onRelic("harbor-nail");
     });
     expect(post).toHaveBeenCalledWith("obj.doorkeepers-nail", "npc:wayfarer");
@@ -101,7 +122,7 @@ describe("noticing", () => {
     await waitFor(() => expect(result.current.loaded).toBe(true));
     await act(async () => {
       await result.current.onMeeting("keeper", 1);
-      await result.current.onMeeting("wayfarer", 1); // holds nothing she remarks on
+      await result.current.onMeeting("wayfarer", 3); // holds nothing she remarks on
     });
     expect(notify).toHaveBeenCalledWith(expect.stringMatching(/Keeper: “Do not water what you cannot name\.”/));
     expect(notify).toHaveBeenCalledTimes(1);

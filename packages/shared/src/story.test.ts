@@ -150,9 +150,12 @@ describe("how things are found", () => {
   });
   it("people give things only after enough meetings, once", () => {
     expect(npcGifts("wayfarer", 0, new Set())).toEqual([]);
-    expect(npcGifts("wayfarer", 1, new Set())).toEqual(["obj.doorkeepers-nail"]);
-    expect(npcGifts("wayfarer", 5, new Set(["obj.doorkeepers-nail"]))).toEqual([]);
-    expect(npcGifts("broker", 1, new Set())).toEqual([]);
+    expect(npcGifts("wayfarer", 2, new Set())).toEqual([]); // trust is not given on a second meeting
+    expect(npcGifts("wayfarer", 3, new Set())).toEqual(["obj.doorkeepers-nail"]);
+    expect(npcGifts("wayfarer", 9, new Set(["obj.doorkeepers-nail"]))).toEqual([]);
+    expect(npcGifts("broker", 3, new Set())).toEqual([]);
+    expect(npcGifts("broker", 4, new Set())).toEqual(["obj.dorrows-page"]);
+    expect(npcGifts("broker", 6, new Set(["obj.dorrows-page"]))).toEqual(["obj.anonymous-payments"]);
   });
 });
 

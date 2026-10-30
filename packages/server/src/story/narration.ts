@@ -49,6 +49,18 @@ export const NARRATION_SETTINGS: Readonly<Record<Register, { stability: number; 
   grave: { stability: 0.5, similarity_boost: 0.75, style: 0.35, speed: 0.85 },
 };
 
+/**
+ * WHY narration is not using the studio voice, in the owner's terms (names of the secrets, never their values). Null = it is configured. Shown in the Book and printed at boot,
+ * because "it fell back to the browser voice" otherwise gives no clue which secret is missing.
+ */
+export function narrationIssue(env: Env = process.env): string | null {
+  const off = (env.LORE_TTS_ENABLED ?? "").trim().toLowerCase();
+  if (off === "0" || off === "false") return "narration is switched off (LORE_TTS_ENABLED)";
+  if (!(env.LORE_TTS_API_KEY ?? env.TELEGRAM_TTS_API_KEY)?.trim()) return "no ElevenLabs API key is set — add LORE_TTS_API_KEY (or TELEGRAM_TTS_API_KEY)";
+  if (!(env.LORE_TTS_VOICE_NARRATOR ?? env.TELEGRAM_TTS_VOICE_ID)?.trim()) return "no narrator voice is set — add LORE_TTS_VOICE_NARRATOR";
+  return null;
+}
+
 export interface Narrated {
   audio: Buffer;
   contentType: string;
@@ -89,6 +101,8 @@ export function createNarrator(deps: NarratorDeps) {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? Date.now;
   const inflight = new Map<string, Promise<Narrated | null>>();
+  /** The last thing that stopped a clip from being made (a status code, the cap) — cleared by the next success. Words only; never the key. */
+  let lastIssue: string | null = null;
 
   const clipPath = (key: string) => join(deps.dir, `${key}.mp3`);
   const spendPath = () => join(deps.dir, `spend-${new Date(now()).toISOString().slice(0, 7)}.json`);
@@ -101,6 +115,11 @@ export function createNarrator(deps: NarratorDeps) {
   };
 
   return {
+    /** Is the studio voice available, and if not, why. Words only. */
+    status(): { on: boolean; issue: string | null } {
+      const config = narrationIssue(env);
+      return { on: config === null && lastIssue === null, issue: config ?? lastIssue };
+    },
     /** The clip for these words in this register, from the shared cache or (once) from ElevenLabs. Null = no audio; the client speaks it itself. */
     async narrate(text: string, register: Register, role: VoiceRole = "narrator"): Promise<Narrated | null> {
       const cfg = narrationConfig(env);
@@ -118,6 +137,7 @@ export function createNarrator(deps: NarratorDeps) {
       const call = (async (): Promise<Narrated | null> => {
         if (readSpend() + text.length > cfg.monthlyChars) {
           console.error("[lore-tts] monthly character cap reached — falling back to captions and the browser voice");
+          lastIssue = "this month's narration character cap (LORE_TTS_MONTHLY_CHARS) has been reached";
           return null;
         }
         try {
@@ -128,6 +148,7 @@ export function createNarrator(deps: NarratorDeps) {
           });
           if (!res.ok) {
             console.error(`[lore-tts] ElevenLabs synthesis failed: HTTP ${res.status}`);
+            lastIssue = `ElevenLabs refused the request (HTTP ${res.status}${res.status === 401 ? " — check the API key" : res.status === 404 || res.status === 422 ? " — check the voice id and that this account may use it" : res.status === 402 ? " — out of credits" : ""})`;
             return null;
           }
           const audio = Buffer.from(await res.arrayBuffer());
@@ -135,9 +156,11 @@ export function createNarrator(deps: NarratorDeps) {
           mkdirSync(deps.dir, { recursive: true });
           writeFileSync(clipPath(key), audio);
           writeFileSync(spendPath(), JSON.stringify({ chars: readSpend() + text.length }));
+          lastIssue = null;
           return { audio, contentType: "audio/mpeg", key };
         } catch (err) {
           console.error("[lore-tts] synthesis error:", err);
+          lastIssue = "the narration request could not reach ElevenLabs";
           return null;
         }
       })().finally(() => inflight.delete(key));

@@ -5,7 +5,8 @@ import { createDb, type DbHandle } from "../db/client.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
 import { StoryError, StoryRepo, NOTE_MAX_CHARS } from "../story/story.js";
 import { SPACE_SCOPED_TABLES } from "../auth/spaces.js";
-import { STORY_ENTRIES } from "@brain/shared";
+import { setPreference } from "../agent/notify/policy.js";
+import { STORY_ENTRIES, worldAnswers } from "@brain/shared";
 import { buildContext, type AppContext } from "../context.js";
 import { createApp } from "../api/server.js";
 import { HashEmbeddingProvider } from "../embeddings/hash.js";
@@ -13,7 +14,7 @@ import { HeuristicProvider } from "../llm/heuristic.js";
 import { EMBED_DIM } from "../db/vec.js";
 
 /** docs/specs/lore-storage-2026-10-30.md — progress is private, id-only, idempotent, server-authoritative and never a number. */
-const T0 = Date.parse("2026-10-30T12:00:00.000Z");
+const T0 = Date.parse("2026-10-30T07:00:00.000Z"); // 07:00 UTC = First Light for a brain whose clock is UTC (set below)
 const DEEP = "sight.missing-stratum"; // regard · deep-past
 const SEAM = "sight.second-seam"; // regard · great-station
 const NAIL = "obj.doorkeepers-nail"; // npc wayfarer · great-station
@@ -24,6 +25,10 @@ const ANOTHER = "sight.blank-nameplate";
 let handle: DbHandle;
 beforeEach(() => {
   handle = createDb(":memory:");
+  for (const sp of ["spaceA", "spaceB"]) {
+    handle.sqlite.prepare(`INSERT OR IGNORE INTO space_meta (space_id) VALUES (?)`).run(sp);
+    setPreference(handle.sqlite, sp, "timezone", "UTC");
+  }
 });
 afterEach(() => handle.sqlite.close());
 const repo = (space = "spaceA") => new StoryRepo(handle, space);
@@ -82,6 +87,38 @@ describe("finds", () => {
   it("takes a met person's gift on their word (the meeting is only known to the client), but only the pairing the canon names", () => {
     expect(repo().find(NAIL, "npc:wayfarer", T0).isNew).toBe(true);
     expect(() => repo().find(NAIL, "npc:broker", T0)).toThrow(/cannot be found that way/);
+  });
+
+  it("the world answers once a day: the second stillness the same day is turned away, the next day it speaks again", () => {
+    const at = goTo("deep-past");
+    expect(repo().find("sight.missing-stratum", "regard", at).isNew).toBe(true);
+    expect(() => repo().find("obj.follower-ribbon", "regard", at + 60_000)).toThrow(/Nothing stirs/);
+    expect(repo().book().finds.map((f) => f.entryId)).toEqual(["sight.missing-stratum"]);
+    // the same thing again is a harmless replay, never refused
+    expect(repo().find("sight.missing-stratum", "regard", at + 120_000).isNew).toBe(false);
+    // next day (any hour: its own seeded good day may or may not be today, so try the Hour it prefers)
+    const tomorrowThreshold = Date.parse("2026-10-31T13:00:00.000Z"); // 13:00 = Threshold, the ribbon's own Hour
+    expect(repo().find("obj.follower-ribbon", "regard", tomorrowThreshold).isNew).toBe(true);
+  });
+
+  it("outside its own Hour a sighting answers only on its good days — decided by a seed, so retrying cannot re-roll it", () => {
+    const at = goTo("deep-past");
+    // find a day when the stratum (First Light) does NOT answer at 15:00, and one when it does; then the answer is stable all day
+    let quiet: number | null = null;
+    let good: number | null = null;
+    for (let d = 1; d <= 28 && (quiet === null || good === null); d++) {
+      const t = Date.parse(`2026-11-${String(d).padStart(2, "0")}T15:00:00.000Z`);
+      const key = new Date(t).toISOString().slice(0, 10);
+      const answers = worldAnswers({ entryId: "sight.missing-stratum", hour: "first-light" }, 15, "spaceA", key);
+      if (!answers && quiet === null) quiet = t;
+      if (answers && good === null) good = t;
+    }
+    expect(quiet).not.toBeNull();
+    expect(good).not.toBeNull();
+    expect(() => repo().find("sight.missing-stratum", "regard", quiet!)).toThrow(/Nothing stirs/);
+    expect(() => repo().find("sight.missing-stratum", "regard", quiet! + 600_000)).toThrow(/Nothing stirs/); // same day, same answer
+    expect(at).toBeGreaterThan(0);
+    expect(repo().find("sight.missing-stratum", "regard", good!).isNew).toBe(true);
   });
 
   it("is private to a brain", () => {

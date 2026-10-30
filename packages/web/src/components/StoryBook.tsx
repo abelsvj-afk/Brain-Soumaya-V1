@@ -7,6 +7,7 @@ import { useStoryFlavor } from "../hooks/useStoryFlavor.js";
 import { BOOK_H, BOOK_W, KIND_WORD, brightness, entryWords, skyLayout } from "../lib/storyBook.js";
 import { getNarrationMode, playNarration, setNarrationMode, stopNarration, type NarrationMode } from "../lib/narration.js";
 import { useEffect } from "react";
+import { getNarrationStatus } from "../api/story.js";
 import { sentenceAt, splitCaptionSentences } from "../lib/captions.js";
 
 const BY_ID = new Map(STORY.entries.map((e) => [e.id, e]));
@@ -52,6 +53,12 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
   const [said, setSaid] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  // Which voice you are getting, and why — so "it used my phone's voice" is never a mystery.
+  const [studio, setStudio] = useState<{ on: boolean; issue: string | null } | null>(null);
+  const [fallbackWhy, setFallbackWhy] = useState<string | null>(null);
+  useEffect(() => {
+    void getNarrationStatus().then(setStudio);
+  }, []);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const now = Date.now();
 
@@ -96,7 +103,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
       return;
     }
     setSpeaking(true);
-    void playNarration({ entryId: entry.id, register: flavor.register, tide: flavor.tide.first, text, onProgress: setProgress, onEnd: () => { setSpeaking(false); setProgress(null); } }).then((how) => {
+    void playNarration({ entryId: entry.id, register: flavor.register, tide: flavor.tide.first, text, onProgress: setProgress, onFallback: setFallbackWhy, onEnd: () => { setSpeaking(false); setProgress(null); } }).then((how) => {
       if (how === "none") { setSpeaking(false); setProgress(null); }
     });
   };
@@ -201,6 +208,15 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             )}
           </section>
         )}
+        <p className="book-voice" role="status">
+          {studio === null
+            ? ""
+            : studio.on
+              ? fallbackWhy
+                ? `Narrator: this device’s voice just now — ${fallbackWhy}.`
+                : "Narrator: the studio voice."
+              : `Narrator: this device’s voice — ${studio.issue ?? "the studio voice is unavailable"}.`}
+        </p>
         <fieldset className="book-narration">
           <legend>Read the lore to me</legend>
           {(["ask", "on", "off"] as const).map((m) => (

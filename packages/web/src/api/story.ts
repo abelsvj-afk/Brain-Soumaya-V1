@@ -59,3 +59,9 @@ export async function getStoryFlavor(): Promise<StoryFlavorReading | null> {
   return d?.key ? d : null;
 }
 export const putStoryFlavor = (on: boolean) => send<StoryFlavorReading>("/flavor", "PUT", { on });
+
+/** Is the studio narrator on, and if not, why — names of settings, never their values. */
+export async function getNarrationStatus(): Promise<{ on: boolean; issue: string | null } | null> {
+  const d = await send<{ on: boolean; issue: string | null }>("/narration-status", "GET");
+  return d && typeof d.on === "boolean" ? d : null;
+}

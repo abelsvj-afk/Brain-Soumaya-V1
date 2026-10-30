@@ -89,6 +89,11 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
 
   // Narration: the clip for an entry the brain has FOUND. The server speaks canon text only — the request names an entry, never words. 204 = no audio (the client reads it
   // with captions and the browser's own voice).
+  // Is the studio voice on, and if not, why (names of secrets, never their values). The Book shows it so "it used my phone's voice" is never a mystery.
+  r.get("/narration-status", (_req, res) => {
+    res.json(narrator.status());
+  });
+
   // A person's reaction to something you hold, in THEIR voice. Names the person and the held thing, never words; only a pairing the canon has, and only if you hold it.
   r.get("/narration/react/:npc", async (req, res) => {
     const reaction = reactionBetween(String(req.params.npc), String(req.query.holds ?? ""));

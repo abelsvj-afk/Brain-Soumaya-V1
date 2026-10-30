@@ -7862,3 +7862,5 @@ body.in-transit .perf-suggest { display: none; }
 .book-narration input { width: 22px; height: 22px; }
 
 .book-now { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; font-style: normal; font-weight: 700; color: #fff4cf; }
+
+.book-voice { margin: 12px 0 0; color: #8fa0c4; font-size: 0.76rem; min-height: 1em; }

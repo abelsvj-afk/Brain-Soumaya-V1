@@ -1,3 +1,4 @@
+import { narrationIssue } from "./story/narration.js";
 import { buildContext } from "./context.js";
 import { createApp } from "./api/server.js";
 import { NodesRepo } from "./repositories/nodes.repo.js";
@@ -42,6 +43,8 @@ const app = createApp(ctx);
 // Eternity's own voice: the free Gemini key when one is configured, else the shared provider, else none (his own lines).
 const eternityVoice = await createEternityVoice(ctx);
 console.log(`[eternity] voice: ${eternityVoice ? eternityVoice.via : "offline lines (no AI key)"}`);
+const loreIssue = narrationIssue();
+console.log(`[lore-tts] narration: ${loreIssue ? `browser voice only — ${loreIssue}` : "studio voice on"}`);
 
 // Verbatim-Recall V1 boot recovery (sections 12E / 18.3 / 18.4.4): log
 // the preserved-source count, backfill chunk vectors, and resume any

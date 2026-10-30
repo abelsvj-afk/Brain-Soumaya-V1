@@ -779,6 +779,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   for the browser voice; the sentence being read is underlined + heavier, never colour alone); **clips are kept on the device** by the service worker (per brain, keyed by a hash of
   the exact words, only real audio). `scripts/lore-narrate.ts` now counts ~146 lines / ~29k characters (three registers × each entry + reactions). Not built yet: lore music beds
   (Muse task `docs/specs/muse-lore-music-beds-2026-10-30.md`), a sting for new finds, Item Reactions for people not yet in the cast.
+- **Lore harder to surface + "why is it not the studio voice" (2026-10-30, owner: "the lore is still too easy to surface … it's not using the actual narrator voice") —
+  unit/route-tested; needs on-device confirmation** (shared/storyTriggers.ts `worldAnswers`, server story/story.ts, story/narration.ts `narrationIssue`/`status`,
+  `GET /api/story/narration-status`, web hooks/useStoryNotice.ts, lib/narration.ts, StoryBook.tsx): *Surfacing:* stillness is now 8 s and a touch/key/scroll breaks it; the
+  server lets a world answer at most ONCE per local day, and a sighting speaks in its own Hour (otherwise only on its seeded "good days", ~1 in 3 — fixed per brain+entry+day,
+  so retrying cannot re-roll it); every refusal reads the same ("Nothing stirs"); met people give things after more meetings (3–6, not 1–2). Nothing is a prerequisite and every
+  sighting still has good days, so nothing is lost — only slower. Not yet done: binding a sighting to a physical PLACE in the scene (the stronger fix; needs per-world scene work).
+  *Voice:* the studio voice needs BOTH `LORE_TTS_API_KEY` (or `TELEGRAM_TTS_API_KEY`) AND `LORE_TTS_VOICE_NARRATOR`. If only the voice id is set, narration is silently off and the
+  browser voice reads — the likely cause of the report. The Book now says which voice you are getting and WHY (it never prints a secret), the boot log prints
+  `[lore-tts] narration: …`, and the first clip is started inside the tap itself (phones refuse audio that starts after a network wait), with the reason shown when it still falls back.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

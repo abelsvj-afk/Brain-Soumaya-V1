@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createNarrator, narrationConfig, narrationText } from "../story/narration.js";
+import { createNarrator, narrationConfig, narrationIssue, narrationText } from "../story/narration.js";
 
 const ENV = { LORE_TTS_API_KEY: "k-test", LORE_TTS_VOICE_NARRATOR: "voice-n" };
 let dir: string;
@@ -107,5 +107,24 @@ describe("each speaking role has its own voice, falling back to the narrator's",
     expect(f.calls).toHaveLength(2);
     expect(f.calls[0]!.url).toContain("voice-calend");
     expect(f.calls[1]!.url).toContain("voice-n");
+  });
+});
+
+describe("telling the owner why the studio voice is not in use", () => {
+  it("names the missing secret, never a value", () => {
+    expect(narrationIssue({})).toMatch(/LORE_TTS_API_KEY/);
+    expect(narrationIssue({ LORE_TTS_API_KEY: "k" })).toMatch(/LORE_TTS_VOICE_NARRATOR/);
+    expect(narrationIssue({ LORE_TTS_ENABLED: "0" })).toMatch(/switched off/);
+    expect(narrationIssue(ENV)).toBeNull();
+    expect(JSON.stringify([narrationIssue({}), narrationIssue({ LORE_TTS_API_KEY: "secret-key" })])).not.toContain("secret-key");
+  });
+  it("remembers the last provider problem (status code, cap) until a clip succeeds", async () => {
+    const bad = fakeFetch({ status: 401 });
+    const n = createNarrator({ env: ENV, fetchImpl: bad.impl, dir });
+    expect(n.status()).toEqual({ on: true, issue: null });
+    await n.narrate("x", "plain");
+    expect(n.status().on).toBe(false);
+    expect(n.status().issue).toMatch(/HTTP 401.*API key/);
+    expect(n.status().issue).not.toContain("k-test");
   });
 });

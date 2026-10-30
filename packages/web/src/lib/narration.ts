@@ -33,6 +33,23 @@ export function setNarrationMode(m: NarrationMode): void {
 
 let current: { stop: () => void } | null = null;
 
+/**
+ * Phones only let audio start inside the tap that asked for it, but the clip arrives a moment LATER (a network round trip). So the tap itself starts one audio element on a
+ * silent sound, and the clip is then played through that same, already-allowed element. Without this the first clip is refused and the browser's own voice reads instead.
+ */
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+let shared: HTMLAudioElement | null = null;
+function unlockedAudio(): HTMLAudioElement | null {
+  try {
+    if (!shared) shared = new Audio();
+    shared.src = SILENCE;
+    void shared.play()?.catch(() => {});
+    return shared;
+  } catch {
+    return null;
+  }
+}
+
 export function stopNarration(): void {
   current?.stop();
   current = null;
@@ -72,6 +89,8 @@ export interface NarrationOpts {
   onEnd?: () => void;
   /** A person's reaction to a held thing: voiced in THEIR voice (the server names the pairing; the words never leave the client). */
   reaction?: { npc: string; holds: string };
+  /** Called when the studio voice was NOT used, with a plain reason (shown in the Book so it is never a mystery). */
+  onFallback?: (why: string) => void;
   /** 0..1 progress through the words, for captions that follow the voice. Exact for a clip; an estimate for the browser voice, which cannot report it. */
   onProgress?: (fraction: number) => void;
 }
@@ -80,6 +99,7 @@ export interface NarrationOpts {
 export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" | "none"> {
   if (getNarrationMode() === "off") return "none";
   stopNarration();
+  const el = unlockedAudio(); // synchronous: still inside the tap that asked
   let finished = false;
   let tick: number | null = null;
   const done = () => {
@@ -92,8 +112,10 @@ export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" 
     o.onEnd?.();
   };
   const url = await clipFor(o.entryId, o.register, o.tide, o.text, o.reaction);
+  if (!url) o.onFallback?.("the server has no studio clip for this line");
   if (url) {
-    const audio = new Audio(url);
+    const audio = el ?? new Audio();
+    audio.src = url;
     audio.ontimeupdate = () => {
       if (audio.duration > 0) o.onProgress?.(audio.currentTime / audio.duration);
     };
@@ -114,6 +136,7 @@ export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" 
       return "clip";
     } catch {
       // Autoplay refused or a decode failure: fall through to the browser voice.
+      o.onFallback?.("this device would not start the audio — tap Listen again");
       current = null;
       finished = true;
       emitNarration(false);
