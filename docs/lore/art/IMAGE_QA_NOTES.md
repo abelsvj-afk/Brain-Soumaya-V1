@@ -258,3 +258,14 @@ Files: `53-ossian-tells-it-wrong-v1.png` … `v4.png`. All four wide. The set is
 Two smaller notes: Ossian's age drifts (v3 is notably older, grey hair in a topknot; v1/v2/v4 are dark-haired and middle-aged), and v3's crowd includes one clearly non-human traveller (grey-blue skin, goggles) — the only non-human face in the harbor sets so far. In v2 he stands beside the crate rather than on it.
 
 Verdict: strong set; the word question is Claude's to rule on.
+
+## §54 — Ilsabet's Lane (Sheet 2)
+
+Files: `54-ilsabets-lane-v1.png` … `v4.png`. All four wide. Ilsabet is established consistently: the same dark-haired woman, hair in a loose bun, ink-stained hands and sleeves, patient and absorbed. The long chart unrolls across the drafting table in every variant, the harbor window is beside her, a wide vessel floats outside, and there is **no readable writing anywhere** — the charts carry lines only.
+
+- **The shifting ink** reads as the lane itself moving like water: liquid and streaming in v1 and v2; in v3 it lifts off the page in glowing blue threads — the most literal "ink mid-change."
+- **The seam and the pale continuation** are the least literal beat. v1 has a stitched seam running the chart's length; v4 reads best overall — the left sheet carries the ink lane and the right sheet is nearly blank with faint pencil lines, her pencil in hand.
+- **The barge:** widest and most patient in v4; in v1–v3 it leans toward a lit spaceship (most warship-like in v1).
+- She draws with a pencil in v2 and v4, a pen in v1 and v3.
+
+Verdict: a good set; the seam-and-continuation moment is quietest in v1–v3 and clearest in v4. Your pick.
