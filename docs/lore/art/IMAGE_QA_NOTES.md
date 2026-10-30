@@ -224,3 +224,13 @@ Files: `50-dorrows-blank-line-v1.png` … `v4.png`. All four wide. **The hard ru
 - Dorrow's face varies a little across the set (hair length and beard shape); v2/v4 are the closest pair.
 
 Verdict: no rule breaks; the trade-off is blank-line clarity (v2, v4) against the smile (v3, v1). Your pick.
+
+## §51 — Wim and the Empty Cradle (Sheet 2)
+
+Files: `51-wim-and-the-empty-cradle-v1.png` … `v4.png`. All four wide. Every variant has the full set: the young clerk in the neat dark Ledger coat with brass buttons, berth-log under one arm, the small slip in his other hand, the vast empty drydock cradle swept and ready, and the mooring ring on its post beside him glowing faintly warm. **No readable writing** — the slips are blank or carry only faint marks, the logs stay shut. The mood (faithful, quiet, a little sad) lands in all four.
+
+- **Wim's age drifts:** v2 reads as a young man in his twenties and carries the confusion-and-tenderness best; v1 is late-teens; v4 is a soft-faced older teen; **v3 reads youngest — close to a boy** — which may sit young against his identity card.
+- **The cradle:** v3's is the largest and most hull-like; v1's is a long ribbed slipway; v2's a clean timber cradle; v4's a broad empty berth basin.
+- **The ring:** textbook in v1 (wooden post, warm glow, right beside him); larger and more foreground in v2–v4.
+
+Verdict: clean set, no rule breaks; the only real question is Wim's age. Your pick.
