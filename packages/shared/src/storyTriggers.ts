@@ -39,6 +39,27 @@ export interface StorySpot {
   min?: number;
   /** Anchored at the world origin (the garden's witness tree) instead of a named place. */
   origin?: boolean;
+  /** Eternity (no flying ship): where the viewer's CAMERA is, round him. All given limits must hold. */
+  view?: EternityView;
+}
+
+/** Camera limits round Eternity's figure (units from him; `behind` = on the far side from where visitors arrive, +z). */
+export interface EternityView {
+  nearerThan?: number;
+  fartherThan?: number;
+  behind?: boolean;
+}
+
+/** Eternity's figure stands here; the camera orbits it. */
+export const ETERNITY_PIVOT: readonly [number, number, number] = [0, 70, 0];
+
+/** Is a camera at `cam` inside the view limits? Pure. */
+export function viewReach(view: EternityView, cam: readonly [number, number, number]): boolean {
+  const d = Math.hypot(cam[0] - ETERNITY_PIVOT[0], cam[1] - ETERNITY_PIVOT[1], cam[2] - ETERNITY_PIVOT[2]);
+  if (view.nearerThan !== undefined && d >= view.nearerThan) return false;
+  if (view.fartherThan !== undefined && d <= view.fartherThan) return false;
+  if (view.behind && cam[2] > -0.3 * d) return false;
+  return true;
 }
 
 export interface StoryTrigger {
@@ -88,7 +109,7 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "sight.hung-star", how: "regard", world: "scale", hour: "measure", spot: { place: "^planet-(?!model)", near: 1.6 } },
   { entryId: "sight.open-alcove", how: "regard", world: "quiet-archive", hour: "rest", spot: { place: "^still-threshold$", near: 1.5 } },
   { entryId: "sight.empty-chair", how: "regard", world: "people", hour: "hearths", spot: { place: "^field-ground$", near: 0.35 } },
-  { entryId: "sight.unlooked-direction", how: "regard", world: "eternity", hour: "standing" },
+  { entryId: "sight.unlooked-direction", how: "regard", world: "eternity", hour: "standing", spot: { near: 0, view: { behind: true } } },
   { entryId: "sight.locked-room", how: "regard", world: "great-station", hour: "first-light", spot: { place: "^annex-(?!model)", at: [0, 0, 0.6], near: 1.1 } },
   { entryId: "sight.lane-to-nowhere", how: "regard", world: "great-station", hour: "measure", spot: { place: "^station-rotating$", at: [-0.9, 0.2, 0.3], near: 0.4 } },
   { entryId: "sight.blank-nameplate", how: "regard", world: "great-station", hour: "growing", spot: { place: "^witness-drydock-gantry$", at: [0, 0.6, 0], near: 1.0 } },
@@ -97,7 +118,7 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "obj.follower-ribbon", how: "regard", world: "deep-past", hour: "threshold", spot: { place: "^stair$", near: 0.45 } },
   { entryId: "sight.lullaby-hollow", how: "regard", world: "quiet-archive", hour: "first-light", spot: { place: "^field-ground$", at: [0, 0, -0.6], near: 0.3 } },
   { entryId: "sight.ysmerel-at-the-edge", how: "regard", world: "quiet-archive", hour: "standing", spot: { place: "^field-ground$", at: [-0.9, 0, 0], near: 0.3 } },
-  { entryId: "sight.long-room", how: "regard", world: "eternity", hour: "rest" },
+  { entryId: "sight.long-room", how: "regard", world: "eternity", hour: "rest", spot: { near: 0, view: { fartherThan: 1100 } } },
   { entryId: "obj.kiths-drawing", how: "regard", world: "people", hour: "growing", spot: { place: "^field-ground$", at: [-0.5, 0, 0.5], near: 0.25 } },
   { entryId: "obj.sleepwalkers-lantern", how: "regard", world: "great-station", hour: "hearths", spot: { place: "^station-rotating$", at: [0.9, 0, 0], near: 0.4 } },
   { entryId: "obj.tin-soldier", how: "regard", world: "great-station", hour: "rest", spot: { place: "^witness-drydock-gantry$", at: [0, -0.5, 0], near: 1.0 } },
@@ -105,7 +126,7 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "obj.measurers-cord", how: "regard", world: "scale", hour: "measure", spot: { place: "^iss-holder$", near: 1.8 } },
   // Listen: stay still and hear (echoes).
   { entryId: "echo.hymnal-gap", how: "listen", world: "quiet-archive", hour: "hearths", spot: { place: "^still-threshold$", at: [0, 0, -0.5], near: 1.2 } },
-  { entryId: "echo.eighth-bell", how: "listen", world: "eternity", hour: "standing" },
+  { entryId: "echo.eighth-bell", how: "listen", world: "eternity", hour: "standing", spot: { near: 0, view: { nearerThan: 330 } } },
   // Met people give things after they have met you enough (the client reports the meeting; the pairing is checked here).
   { entryId: "obj.doorkeepers-nail", how: "npc", world: "great-station", npc: "wayfarer", minMeetings: 3 },
   { entryId: "obj.choirmasters-breath", how: "npc", world: "quiet-archive", npc: "cantor", minMeetings: 4 },

@@ -955,6 +955,7 @@ export default function WorldsSurface({
         const w = walkRef.current;
         return w.route.length === 0 ? makeReach(currentWorld, null, [w.pos.x, 0, w.pos.z]) : null;
       }
+      if (currentWorld === "eternity") return makeReach(currentWorld, null, overviewCamRef.current.pos);
       const fl = flightRef.current;
       const root = sceneHandleRef.current?.group;
       if (!fl || !root || fl.phase !== "idle") return null;
@@ -2051,6 +2052,8 @@ export default function WorldsSurface({
             });
             return out;
           },
+          // Where her ship is and what it is doing (null until she is out), so a script can check a tap really flew her somewhere.
+          flight: () => (flightRef.current ? { phase: flightRef.current.phase, pos: [flightRef.current.pos[0], flightRef.current.pos[1], flightRef.current.pos[2]] } : null),
           report: () => {
             world.group.updateMatrixWorld(true);
             return STORY_TRIGGERS.filter((t) => t.world === currentWorld && t.spot).map((t) => ({
