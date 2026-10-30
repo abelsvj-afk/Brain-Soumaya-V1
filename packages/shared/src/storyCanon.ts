@@ -110,6 +110,7 @@ export const STORY_ENTRIES: readonly StoryEntry[] = [
   E("sight.ruels-laugh", "sight", "people", "The Laugh in the Ward", ["A10", "A4"], ["c.ruel.laughs-on-days-tamsin-is-away"], { text: { plain: "In the ward one cot is occupied only on the days the woman in the green apron is elsewhere. Whoever lies there is faint at the edges and laughs, quietly, at something no one else heard, and the laugh is the warmest thing in the room. By the time she returns the cot is made and empty." } }),
   E("sight.aldous-at-rest", "sight", "quiet-archive", "The One Who Rests in the Alcove", ["A2", "A6"], ["c.aldous.stands-at-rest-in-the-silence"], { text: { plain: "Some visitors say the open alcove is not empty: a tall old man in a pale robe stands in it with a hymnal against his chest, faint as breath on glass. His eyes are closed. The hush gathers on the floor around him and goes no nearer. The book is missing a page, and he looks as if he had chosen that." } }),
   E("sight.ysmerels-hum", "sight", "quiet-archive", "The Note She Keeps", ["A4", "A6"], ["c.ysmerel.hums-the-first-note-once"], { text: { plain: "If you stay at the edge long enough, the choirmaster with her hand flat on her chest hums one note, once, the first of a verse, and stops. The silent singers do not move. In the aisle the stall that is always left empty is lit, and stays lit a little after the note is gone." } }),
+  E("obj.blank-line", "object", "great-station", "The Line at the Foot of the Page", ["A4"], ["c.ledger.every-page-ends-in-one-blank-line"], { text: { plain: "Every page of the Great Book is ruled and filled to the last line but one. The last is left empty, and the binder swears it was a printing error. The keeper of the Book turns each page with his eyes on the room, never on that line, and his pen hovers over it a moment longer than over any other." } }),
   E("sight.missing-berth", "sight", "great-station", "The Berth Too Few", ["A4"], ["c.hush.takes-the-unclaimed-first"], { text: { plain: "The harbor lists its berths in order, and one number is not there. The dockhands step around the gap without looking, as people do around a thing they were told, once, not to mention." } }),
 ];
 
@@ -151,6 +152,9 @@ export const STORY_EDGES: readonly StoryEdge[] = [
   T("sight.ysmerels-hum", "sight.ysmerel-at-the-edge", "habit", "she keeps the edge by night"),
   T("sight.ysmerels-hum", "obj.choirmasters-breath", "echo", "the held breath, given once as a note"),
   T("sight.ysmerels-hum", "sight.aldous-at-rest", "provenance", "she hums toward the one who refused"),
+  T("obj.blank-line", "obj.dorrows-page", "echo", "one page keeps a debt unrecorded; every page keeps a line unwritten"),
+  T("obj.blank-line", "obj.anonymous-payments", "possession", "the Ledger leaves room for the hand that pays"),
+  T("obj.blank-line", "echo.hymnal-gap", "echo", "a missing page and a missing line are one shape"),
   T("relic.witness-without-a-name", "obj.kiths-drawing", "echo", "smooth, open, plain; torn at the mouth"),
   T("obj.kiths-drawing", "sight.empty-chair", "habit", "she sets the extra place"),
   T("sight.empty-chair", "relic.hearth-ember", "echo", "warmth with no one to be warm for"),

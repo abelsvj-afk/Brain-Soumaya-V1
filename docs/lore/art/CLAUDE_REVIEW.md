@@ -67,3 +67,5 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 - §47 **v4** — Ruel's laugh as a gold ring, softest watercolour edge on the patient; Tamsin's hand to her mouth reads "moved and bracing". (v2/v3 lean sci-fi or too busy.)
 - §48 **v4** — the only wide frame; the torn hymnal page is clearest, eyes closed, rested not dead. Alcove is weaker than v2, accepted for the stalls and shelves.
 - §49 **v2** — lit empty stall is clearest, visitor fully from behind, held-breath mood.
+
+- §50 **v2** — the blank last line is clearest, pen hovering at it, eyes elsewhere; placed on new entry `obj.blank-line` (Draft 7 W10). (v3 has the full smile but the blank is weak and the pen floats.)
