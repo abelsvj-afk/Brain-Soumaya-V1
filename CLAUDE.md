@@ -852,6 +852,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   ribbon, the hymnal gap, the choirmaster's breath, Dorrow's page, the Eighth Bell) on top of the first four; the sheet holds 22 new prompts (§§43–64: Mara's lamp, Teru's first door, Hesk's locked room, "Three Parts of One"
   triptych, the Forty-Second, Maren's winter, …) with identity cards and the never-list, to be generated in four variants each, then picked by me and placed. The other image sets stay in the repo, not in the Book (no one-to-one
   entry). Muse: IMAGE_PROMPTS §§37–42 are also still ungenerated.
+- **The Heavens — every body in the worlds' skies has a story (2026-10-31, owner: "every celestial body, every planet … how every planet is connected to story … the environment is what immerses you")
+  — unit-tested (shared 84 incl. placeLore; web placeLore test DERIVES holder names from the scenes' own layout data: every passage matches a real holder, and every named real body in Scale — planets, probes,
+  belt pieces, encounters, centerpieces — has a passage); NOT seen on a real screen** (docs/lore/DRAFT_9_THE_HEAVENS.md PROPOSED; shared/placeLore.ts now 44 passages: +33 bodies in Scale/Station/People/Deep Past;
+  prompt sheet batch 2 §§65–72): Earth the Remembered, the Courtesy (Moon), the Claim, Mars the Unplanted Garden, Jupiter the Pauser, Saturn the Many-Handed, the Sun, the Pair, the Lamp That Never Lit (brown dwarf),
+  the Unnamed Worlds, Voyager the Late Signal, Pioneer the Unanswered Greeting, Kepler the Counter, Dawn the Stayer, Bennu, the Unclaimed, the Long Eye (Hubble), the Bell That Rings Itself (pulsar), the Visitors,
+  the Log-Keeper, the Honest Hole, the Slow Garden, the Loud Rest, the Breath Held Out, the Hush's Cousins, the Furnace, the Pale World, Far Home, the Far Table, First Light, the Anchor Spire, the Spinning Heart and
+  the Remnant — each read in item-description voice when she is parked beside it, each tied in the doc to a Draft 7/8 person by an echo. **Not built (Draft 9 §6):** constellations as sky decals, in-scene clues (the
+  pencil outlines, the dark sixteenth star, the one-lamp-short Earth), environment props per world, Item Reactions to bodies, paintings. Look at: reach on distant bodies (big bodies need flying to — use the Fly-to
+  tiles), and whether passages read as the sky's own voice.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

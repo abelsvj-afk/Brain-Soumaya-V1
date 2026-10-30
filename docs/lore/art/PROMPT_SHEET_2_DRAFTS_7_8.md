@@ -130,3 +130,32 @@ Four painterly vignettes, 16:9, no named faces: **(a)** *The Berth-Boy's Four No
 
 ## Also still ungenerated from Round 1
 `docs/lore/IMAGE_PROMPTS.md` §§37–42 (Draft 5: Hesk, Kith's table, the Sleepwalker's dock, Ossian Reed, Tamsin's ward, the Cartographer) were written but never generated. If you have time, do them **after** §§43–64 — several overlap §§45, 47, 53, 54 here, so keep the same faces.
+
+---
+
+## BATCH 2 — the Heavens (Draft 9) — §§65–72
+*Same rules as above. These paint the sky bodies that carry lore (see `docs/lore/DRAFT_9_THE_HEAVENS.md`). Wide 16:9, four variants each; no faces needed (a distant figure may appear only where stated).*
+
+### §65 — Voyager and the Late Signal
+A tiny dark probe far out in deep space, its long thin antenna folded, trailing behind it — in the direction it *came from*, not where it is going — a single long pale ribbon of light. Far behind that, small and faint, a hooded figure (seen from behind, face never shown) walks along a quiet shore of stars, following the ribbon. Mood: always almost there. Palette: indigo-black, pale cyan ribbon, a single warm point at the horizon.
+
+### §66 — The Pale World and the Gap
+A cool pale-blue world hung in the dark beyond a harbor's lights. On its night side a ring of dim city-lights runs all the way round — except one small clean dark gap in the ring, the exact shape of a single locked room. A Warden's patrol-ship passes in the foreground, turning its head away. Mood: where someone came from, and doesn't say. Palette: pale blue, ash grey, one gold patrol light.
+
+### §67 — The Furnace and the Nail
+A red-black lava world with glowing seams, seen from a harbor wall at night; in the foreground a wiry man in a long patchwork coat holds a small iron nail up to the planet's light, its tip glowing the same amber as the world's seams. His other hand rests on a standing door-frame. Mood: where a warmth came from, maybe. Palette: furnace red, amber, dusk blue.
+
+### §68 — Far Home and the Tables
+A blue world and its pale moon hung low on a dark horizon over a wide field of many small cottage tables; every table is laid for one more than sat, and every extra place faces the blue world. Warm lantern-light on each table. Mood: missing, not mourning. Palette: warm gold, soft blue, night green.
+
+### §69 — The Slow Garden (the Pillars)
+Towering columns of cold blue-gold dust in space, their tips each glowing with a held, unfinished dawn; a small ship sits at a respectful distance, no one visible. Mood: patience, unfinished becoming. Palette: dawn rose, deep blue, gold.
+
+### §70 — The Honest Hole
+A black hole drawn with a perfect, clear ring of light at its edge, and in front of it, small and seen from behind, a sharp-tongued-looking figure in a plain coat standing with arms folded as if comparing it to something not in the frame. Mood: an edge shown plainly. Palette: orange ring, indigo, cold white.
+
+### §71 — The Fifteen and the Dark Sixteenth (over the witness tree)
+A huge old tree on a terraced hill at night, one bare bough pointing; above it a starfield in which fifteen warm stars are faintly brighter and form a loose arc, and in the arc's end, exactly one place where a star should be is dark. Mood: counting, one short. Palette: night blue, gold stars, deep green.
+
+### §72 — Saturn's Extra Gap
+Saturn at true size, its many rings turning at different paces like joined hands, and in one ring a single thin dark division that no moon explains, just wide enough for one more hand. Mood: someone turned back. Palette: pale gold, steel blue.

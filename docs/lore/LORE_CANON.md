@@ -80,3 +80,5 @@ Narration (ElevenLabs voice + music for the Book): `docs/specs/lore-narration-20
 
 - **Draft 7 is LOCKED (owner, 2026-10-31):** keep all [NEW]; *nothing dies, things rest* (loss is real, finality is not); Oru's recall tie: yes; all eight seams to be built, order by Claude (see Draft 8 §5).
 - **Draft 8 — The Small Lives and the Side Roads** (`docs/lore/DRAFT_8_THE_SMALL_LIVES_AND_THE_SIDE_ROADS.md`, 2026-10-31, **PROPOSED**): thirty-six side roads, the ordinary people who live in the shadow of the lore, six new canon NPCs to fly the worlds (incl. Pell, always one day behind), ambient traffic. Additive.
+
+- **Draft 9 — The Heavens** (`docs/lore/DRAFT_9_THE_HEAVENS.md`, 2026-10-31, **PROPOSED**): every body in the worlds' skies — each planet, probe, nebula, remnant, asteroid and the constellations — as something a witness refused to forget, tied to the Draft 7/8 people by an echo; environment-storytelling props per world. Additive; 33 of its passages are in the app as "Look closely" text.
