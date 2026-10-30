@@ -94,3 +94,35 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## FINAL — generation complete (148 PNGs in this folder)
 
 All 36 prompts on the sheet are generated and uploaded; the three queued redos are done (§§2, 4, 10 above). Superseded files still in the folder, marked do-not-use in the updates above: §4 v1–v4 (female-reading Vesh), §10 v4 (five figures), §2 v3 (mistyped prompt). Still awaiting rulings: §3 v2's visible face; §19 oval-vs-rectangle (the §19 prompt text itself still says "oval" — Bible says rectangle); §36 Companion's Eternity-adjacent palette; §35 keeper's white-hooded palette in v2/v4; §20 — one triptych must be picked as canonical (her face differs across variants). Standing deviations: the generator has no aspect-ratio control (several sets came out portrait against a wide ask — crop plan needed), and Eternity's white void renders as indigo space except where noted. §7 has 3 variants (the 4th was cut off mid-pass; a top-up was never promised). Draft prompts §§37–42 exist in IMAGE_PROMPTS.md but were outside the spec's scope and were not generated.
+
+## Update — CLAUDE_REVIEW rulings acted on (156 keepers)
+
+Acted on `docs/lore/art/CLAUDE_REVIEW.md` (2026-10-31) as relayed by the owner:
+
+1. **§3** — `03-eternity-v1.png` stands as the canon keeper. **`03-eternity-v2.png` is MOOD ART ONLY, not canon** (visible face), per the ruling; the review notes the owner may still overrule.
+2. **§36 REGENERATED as v5–v8.** The stranger now wears plain earth/dusk travelling cloth with a shadowed hood in all four — no white robe, no glow, nothing Eternity-like; face still never drawn (in v5 the stranger is only warm hands holding out the flask, the most literal reading). Two cups kept, one steaming; dock, crate, lantern and the far ship's lights kept. One minor note: in v7 the TRAVELLER's face is partly visible in profile — the Bible never shows the player's face, so v5/v6/v8 are the safer picks. **v1–v4 SUPERSEDED** (the ruling named v1; the same white-robe defect ran through the set).
+3. **§19 REGENERATED as v5–v8.** Generation followed the review's instruction: Bible silhouette first (seventh hull echoing all six) and the nameplate as a RECTANGLE (the §19 prompt text's own word "oval" was corrected for this pass only, exactly as the review directed — the source prompt text itself is unchanged, and fixing it in IMAGE_PROMPTS.md remains the lore side's call). Results: sleek blue-white hulls with violet edge, glowing cockpit, ember engines, blue trail. The blank plate is rectangular in all four — clearest in v5 and v7. Family resemblance: v5 reads the most echoes (dawn-fan prow, bloom fan, latch clasp, plumb keel); v7 is the sleekest single hull. One deviation: v6 carries TWO blank rectangular plates; the Bible implies one nameplate. **v1–v4 SUPERSEDED** (ovals/pods; the ruling named v1, same defect throughout).
+
+## Re-check of the remaining files against the Bible (breaks by filename)
+
+As asked, the rest were re-checked; nothing outside the four reviewed images is treated as approved. Current state after all redos:
+
+**Hard breaks still in the folder (all already superseded or ruled on):**
+- `03-eternity-v2.png` — face; mood art only (above).
+- `04-vesh-the-hollow-mercy-v1..v4.png` — Vesh reads as an elderly woman; superseded by v5–v8.
+- `10-the-firstborn-v4.png` — five figures, Nuaré missing, hollow = whole midsection; superseded by v5/v6.
+- `02-the-seven-hours-v3.png` — generated from a mistyped prompt; superseded by v5.
+- `19-soumayas-gap-v1..v4.png`, `36-the-companion-at-the-dock-v1..v4.png` — superseded by this update.
+
+**Breaks/deviations in files that are NOT superseded (Claude's eye or a ruling still wanted):**
+- `22-the-sleepwalker-v1.png`, `-v2.png`, `-v4.png` — the lantern shows a lit flame; the Bible's lantern is FLAMELESS. Only v3 complies. Standing recommendation: treat v3 as the canon pick.
+- `21-ysmerel-v2.png` — ragged hole in the hymnal vs ONE page cleanly torn out; v3 is closest to canon.
+- `21-ysmerel-v1.png` and `24-dorrow-quint-v3.png` — star-and-crescent embroidery; borderline against the negative prompt's no-crescents line. Ruling still open.
+- `35-the-eighth-bell-v2.png`, `-v4.png` — the eighth keeper is white-hooded and faceless, borrowing Eternity's palette; v1/v3 keepers read as ordinary people. Ruling still open.
+- `11-the-player-as-the-witness-v1.png` — the waiting dark patch is too solid (minor).
+- `13-the-fading-v4.png` — the Slow Bloom reads slightly mask/face-like (minor); v1–v3 cleaner.
+- §31 set — the literal door count is not exact in any variant (v3 strongest).
+- §20 set — not a break, an open pick: the woman's face/hair differ across the four triptychs; one must be chosen as canonical.
+- §5 set — open pick from earlier notes: v5 (most literal swan) vs v8 (most ship-like) as the Lullaby reference.
+
+**Standing deviations (whole-run, not per-file):** no aspect-ratio control at generation (several portrait results against wide asks — crop plan); Eternity's white void renders as indigo space in most images. Nothing in this update needs a code change, and no story rulings were invented — the open items above are flagged, not settled.
