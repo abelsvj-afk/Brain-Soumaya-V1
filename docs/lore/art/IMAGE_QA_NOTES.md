@@ -62,3 +62,7 @@ Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 s
 ## Update — §25 filed (125 keepers)
 
 §25 The Hollow Choir: all four faithful — archive hall (shelves line the walls in v2–v4), rows of pale translucent singers mid-note with mist-dissolving edges, grey hush creeping at the walls, and the centre beat exact: ONE empty choir stall under a shaft of pure gold light (v1/v2 most literal — a single empty bench dead centre; v4's empty place is a whole stall-block and v4 came out PORTRAIT despite the 16:9 ask, see the standing ratio note). Observation, not a flagged break: the singers read predominantly as women in all four variants; the Bible does not gender the Choir, noting it only in case it matters to you.
+
+## Update — §27 filed (129 keepers)
+
+§27 The Sixteenth Doorway: clean set, no flags. All four: stone-blue hall of smaller sealed doors, ONE tall open doorway with pure soft white beyond, the hooded player from behind (face and gender never shown, per the Bible) holding out all three objects — nail, pale smooth stone, folded letter — readable in every variant. v1 most balanced (objects split across both hands); v4 closest framing and PORTRAIT despite the 16:9 ask.
