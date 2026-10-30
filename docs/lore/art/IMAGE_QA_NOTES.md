@@ -369,3 +369,11 @@ Files: `64-orus-bead-v1.png` … `v4.png`. Oru is the same man in all four — o
 - The bead's light leans brighter toward the witness in v2–v4, as the sheet asks.
 
 Verdict: a strong closing set for the sheet; v1's orb and orientation are the only notes. Your pick.
+
+## §37 — The Seven Kept from the Night (Round 1 leftover, Draft 5)
+
+Files: `37-the-seven-kept-from-the-night-v1.png` … `v4.png`. All four wide, all four complete: the seven stations stand in the sheet's order on the dark stone — the chipped bead of pale gold light (the hair-thin crack visible in every variant), the knotted cord, the iron nail faintly ember-warm, the seed with its tiny label, the cushion still pressed into a seated shape and glowing warm, the folded paper with a single ink stroke, and at the arc's end the empty patch of stone, lit as if something belonged there (a ring of light in v1 and v4, a pool of white in v2). No hands, no people anywhere; the only person is the cushion's shape. No readable writing — the seed's label is blank in v1 and v3, and in v4 it carries a tiny line-drawing of two hands, the "two-handed label" as a wordless pictogram; v1 even gives the seed two tiny green hands holding its label card.
+
+- **One real flag: the nail.** The sheet specifies a *headless* iron nail; all four variants give it a flat round head — it reads as a heavy iron spike. Everything else matches the list item for item, so if the headless detail matters to the lore, this set misses it the same way four times; Claude's call whether to accept or ask for a redo.
+
+Verdict: a reverent set with a single consistent miss on the nail. Your pick.
