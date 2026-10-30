@@ -60,8 +60,12 @@ import {
 import { RelicStirringService } from "./stirrings.js";
 
 export type ClaimFailureKind = "unknown" | "not-findable" | "wrong-world" | "no-presence" | "empty-pool" | "malformed";
+/** Relics I-6 (R2-1/R3-3): a Seed claim's disposition — the copy was
+ *  consumed, never held; a duplicate's effect was already recorded,
+ *  so it was consumed without effect. Present only on Seed claims. */
+export type ClaimDisposition = "seed-consumed" | "seed-consumed-duplicate";
 export type ClaimResult =
-  | { ok: true; alreadyFound: boolean; awarded: boolean; replayed: boolean; copyId: string | null }
+  | { ok: true; alreadyFound: boolean; awarded: boolean; replayed: boolean; copyId: string | null; disposition?: ClaimDisposition }
   | { ok: false; reason: string; kind: ClaimFailureKind; replayed: boolean };
 export type ScanResult =
   | { ok: true; band: RelicScanBand | null; bearing: string | null; widened: boolean; quiet: boolean }
@@ -99,6 +103,9 @@ function scopeFor(relicId: string, spaceId: string): string | null {
 interface StoredOutcome {
   ok: boolean; alreadyFound?: boolean; awarded?: boolean; copyId?: string | null;
   kind?: ClaimFailureKind; reason?: string; plausibility?: PlausibilityVerdict;
+  /** Relics I-6: a Seed claim's disposition, recorded on the receipt
+   *  so a replay answers with the same disposition it committed. */
+  disposition?: ClaimDisposition;
   /**
    * Only COMMITTED dispositions replay (awarded / already-found /
    * empty-pool — outcomes the claim transaction or the caller's own
@@ -318,7 +325,7 @@ export class RelicClaimService {
 
   private outcomeToResult(outcome: StoredOutcome, replayed: boolean): ClaimResult {
     if (outcome.ok) {
-      return { ok: true, alreadyFound: outcome.alreadyFound ?? false, awarded: outcome.awarded ?? false, replayed, copyId: outcome.copyId ?? null };
+      return { ok: true, alreadyFound: outcome.alreadyFound ?? false, awarded: outcome.awarded ?? false, replayed, copyId: outcome.copyId ?? null, ...(outcome.disposition ? { disposition: outcome.disposition } : {}) };
     }
     return { ok: false, reason: outcome.reason ?? "That claim could not land.", kind: outcome.kind ?? "no-presence", replayed };
   }
@@ -503,7 +510,15 @@ export class RelicClaimService {
         ).run(scope, relicId, award.copyId, spaceId, def.world, award.anchorKey);
       }
       if (award.rewardAmount > 0) new EconomyRepo(this.h, spaceId).add(award.rewardAmount);
-      const outcome: StoredOutcome = { ok: true, alreadyFound: false, awarded: award.rewardAmount > 0, copyId: award.copyId, plausibility: presence.plausibility, committed: true };
+      const outcome: StoredOutcome = {
+        ok: true, alreadyFound: false, awarded: award.rewardAmount > 0, copyId: award.copyId, plausibility: presence.plausibility, committed: true,
+        // Relics I-6: a Seed's award consumed its copy instead of
+        // holding it — the disposition rides the receipt so the
+        // claim's answer (and any replay of it) says so plainly.
+        ...(award.status === "seed-consumed"
+          ? { disposition: (award.duplicate ? "seed-consumed-duplicate" : "seed-consumed") as ClaimDisposition }
+          : {}),
+      };
       this.writeReceipt(spaceId, claimId, relicId, outcome);
       // §5.2 step 5: the claimer's stirring resolves `claimed`, and a
       // pool this award emptied quiets every stirring still open on

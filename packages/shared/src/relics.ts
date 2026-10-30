@@ -873,6 +873,23 @@ export interface RelicThreadDef {
 /** No threads are authored yet — structure only (O-R1). */
 export const RELIC_THREADS: readonly RelicThreadDef[] = [];
 
+/** Relics I-6 (§4.7, R2-3): the threads a Legacy's lore exchange can
+ *  unlock — the thread involves the relic, its text is authored AND
+ *  owner-approved, and the thread's OTHER relic is placed (has real
+ *  anchors). The lore exchange and the Hold's exchange menu read
+ *  eligibility from this one function, so the two can never disagree.
+ *  Empty today (no threads authored): the lore option honestly
+ *  reports itself unavailable rather than fabricating an unlock. */
+export function eligibleExchangeThreads(relicId: string): RelicThreadDef[] {
+  return RELIC_THREADS.filter((t) => {
+    if (t.relicA !== relicId && t.relicB !== relicId) return false;
+    if (t.approved !== true) return false;
+    if (typeof t.text !== "string" || t.text.length === 0) return false;
+    const other = t.relicA === relicId ? t.relicB : t.relicA;
+    return (RELIC_ANCHOR_POINTS[other] ?? []).length > 0;
+  });
+}
+
 /** Bearing sector labels per world (implementation design §3.3): eight
  *  authored phrases per world, filled by the content pipeline and
  *  approved like all canon. Shipped empty — the scan's bearing falls
@@ -954,11 +971,36 @@ export interface EffectiveRelicBuffs {
   riseWindowSetBy: string | null; riseWindowOverruled: string[];
   growthMultiplier: number; emotionalSwingMultiplier: number; risenHold: boolean;
 }
-export interface RelicHoldingView { relicId: string; name: string; held: boolean; testOnly: boolean; anchorKey: string; blessing: RelicBlessing; }
+/** Relics I-6 (§4.7): what a held relic's exchange offers, as the
+ *  Hold's menu reads it. `eligible` is the class rule (Legacies
+ *  alone); the options are computed, never stored — the exchange
+ *  transaction re-validates everything at exchange time. */
+export interface RelicExchangeView {
+  eligible: boolean;
+  loreThreadIds: string[];
+  creditsOffered: boolean;
+  creditsValue: number | null;
+}
+export interface RelicHoldingView {
+  relicId: string; name: string; held: boolean; testOnly: boolean; anchorKey: string; blessing: RelicBlessing;
+  /** Relics I-6: the relic's class (null until the tier worksheet
+   *  assigns one) and where the copy rests — "carried" or "station"
+   *  (the I-2 location state). Optional: the server always populates
+   *  them; older constructions stay valid. */
+  tierClass?: RelicTierClass | null;
+  location?: string;
+  /** Relics I-6: the exchange surface for this holding (present for
+   *  every holding; `eligible` true only for Legacies). */
+  exchange?: RelicExchangeView;
+}
 export interface RelicReturnView { relicId: string; name: string; reason: "release" | "brain-deleted"; fromAnchor: string | null; toAnchor: string | null; }
 export interface RelicGateView { open: boolean; openedBefore: boolean; missingPlain: string; }
 export interface RelicsStateView {
   found: string[]; held: string[]; holdings: RelicHoldingView[]; buffs: EffectiveRelicBuffs;
   gate: RelicGateView; recentDepartures: RelicReturnView[]; isOwnerSpace: boolean; scarcityOff: boolean;
   currentAnchorByRelic: Record<string, string>;
+  /** Relics I-6: the relics this space could honestly be charted to
+   *  by a Legacy exchange right now (the same eligibility the
+   *  exchange transaction re-validates). */
+  chartTargets?: string[];
 }

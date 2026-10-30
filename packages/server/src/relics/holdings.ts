@@ -35,12 +35,13 @@
 import { randomUUID } from "node:crypto";
 import {
   RELICS, RELIC_BY_ID, RELIC_BLESSINGS, RELIC_COPY_LIMITS, MAX_HELD_RELICS,
-  RELIC_ANCHOR_POINTS, relicCodexKey, eternityGateOpen,
-  type EternityGateHoldings, type RelicGateView, type RelicHoldingView,
+  RELIC_ANCHOR_POINTS, relicCodexKey, eternityGateOpen, eligibleExchangeThreads,
+  type EternityGateHoldings, type RelicExchangeView, type RelicGateView, type RelicHoldingView,
   type RelicReturnView, type RelicsStateView,
 } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
 import { buffsForSpace, computeRelicBuffs, heldRelicIds, relicName } from "./buffs.js";
+import { postedExchangeValue } from "../economy.js";
 
 export const EMPTY_POOL_MESSAGE =
   "Every copy of this relic is held right now. Yours will be here to find when one returns — nothing is lost by having come, and nothing is recorded against you.";
@@ -59,6 +60,13 @@ export const STIRRED_ELSEWHERE_MESSAGE =
 export const TRAIL_QUIET_MESSAGE =
   "The trail has gone quiet — the copy your stirring promised is no longer there to claim.";
 export const HOLD_CAP_MESSAGE = `You can hold ${MAX_HELD_RELICS} relics at once. Set one down first to take up another — setting one down costs nothing and loses nothing.`;
+/** The Station refusal (Relics I-6, O-R7 / §9 ruling 5): Hold
+ *  CHANGES — hold, unhold, store, carry, exchange — are accepted
+ *  only while the traveller stands at the Great Station. The world
+ *  is always the server-derived travel state, never client-supplied,
+ *  and a refusal mutates nothing. Reads are never gated. */
+export const STATION_REQUIRED_MESSAGE =
+  "That change happens at the Great Station — travel there first. Your relics are exactly as you left them.";
 
 /** Owner spaces: deployment config only (env RELIC_OWNER_SPACE_IDS, comma-separated; empty by default). Used ONLY to gate the scarcity switch. */
 export function ownerSpaceIds(): string[] {
@@ -86,7 +94,7 @@ function realAnchorOrFirst(relicId: string, anchorKey: string | null | undefined
   return anchorKey && keys.includes(anchorKey) ? anchorKey : firstAnchorKey(relicId);
 }
 export type FindResult =
-  | { ok: true; alreadyFound: boolean; rewardAmount: number; claimKey: string }
+  | { ok: true; alreadyFound: boolean; rewardAmount: number; claimKey: string; disposition?: "seed-consumed" | "seed-consumed-duplicate" }
   | { ok: false; reason: string; kind: "unknown" | "not-findable" | "wrong-world" | "empty-pool" };
 
 /** The award core's outcome (Relics I-4): the transaction-internal half
@@ -99,6 +107,12 @@ export type AwardResult =
    *  the structural backstop for the claim service's own read of the
    *  promise; it never falls through to a substitute. */
   | { status: "exact-missed" }
+  /** Relics I-6 (R2-1): a Seed's disposition — the copy was consumed
+   *  in this transaction and NEVER entered the Hold. `duplicate` is
+   *  true when the space's effect was already recorded: the copy is
+   *  consumed without effect and without returning to the world
+   *  (R3-3). */
+  | { status: "seed-consumed"; copyId: string; anchorKey: string; rewardAmount: number; testOnly: boolean; duplicate: boolean }
   | { status: "awarded"; copyId: string; anchorKey: string; rewardAmount: number; testOnly: boolean };
 
 /** The NPC award core's outcome (Relics I-5): the player AwardResult's
@@ -246,8 +260,11 @@ export class RelicHoldingsStore {
    * space that completed the set before this build records its
    * permanence BEFORE the release that would otherwise endanger it.
    * The caller owns the transaction; this helper only writes.
+   * Public since Relics I-6: the exchange service runs the same
+   * recorder before ITS holding delete, in its own transaction —
+   * one implementation, every relic write path.
    */
-  private recordGateCompletionIfComplete(spaceId: string): void {
+  recordGateCompletionIfComplete(spaceId: string): void {
     if (!eternityGateOpen(this.foundIds(spaceId))) return;
     try {
       this.h.sqlite.prepare(`INSERT OR IGNORE INTO relic_gate_opened (space_id) VALUES (?)`).run(spaceId);
@@ -271,8 +288,11 @@ export class RelicHoldingsStore {
       return Number(res.changes ?? 0);
     } catch { return 0; }
   }
-  /** Append one fact to a copy's chain. Events are never updated or deleted. */
-  private recordEvent(copyId: string, kind: string, facts: { spaceId?: string | null; world?: string | null; anchorKey?: string | null; detail?: unknown } = {}): void {
+  /** Append one fact to a copy's chain. Events are never updated or
+   *  deleted. Public since Relics I-6: the exchange service writes
+   *  its `exchanged` event through the same primitive as every other
+   *  copy transition. */
+  recordEvent(copyId: string, kind: string, facts: { spaceId?: string | null; world?: string | null; anchorKey?: string | null; detail?: unknown } = {}): void {
     this.h.sqlite.prepare(
       `INSERT INTO relic_copy_events (copy_id, kind, space_id, world, anchor_key, detail) VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(copyId, kind, facts.spaceId ?? null, facts.world ?? null, facts.anchorKey ?? null, facts.detail === undefined ? null : JSON.stringify(facts.detail));
@@ -650,15 +670,40 @@ export class RelicHoldingsStore {
       if (!bound) return { status: "empty" };
     }
     const nowIso = new Date().toISOString();
+    const claim = this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, relicCodexKey(relicId));
+    const effectiveReward = Number(claim.changes ?? 0) > 0 ? rewardAmount : 0;
+    // Relics I-6 (R2-1): a Seed's disposition is consumption, not
+    // keeping — the copy bound above is spent inside this same
+    // transaction and NEVER enters the Hold (no relic_holdings row
+    // is written). Its permanent effect is recorded exactly once:
+    // the relic_seed_effects primary key IS the idempotency, so a
+    // duplicate Seed — effect already recorded — inserts nothing and
+    // is consumed without effect and without returning to the world
+    // (R3-3). The Codex claim above still stands: personal discovery
+    // is written like every claim's.
+    if (RELIC_BY_ID.get(relicId)?.tierClass === "seed") {
+      const recorded = this.h.sqlite.prepare(
+        `INSERT OR IGNORE INTO relic_seed_effects (space_id, relic_id, copy_id) VALUES (?, ?, ?)`,
+      ).run(spaceId, relicId, bound.copyId);
+      const effectRecorded = Number(recorded.changes ?? 0) > 0;
+      this.h.sqlite.prepare(
+        `UPDATE relic_copies SET state = 'consumed', world = NULL, anchor_key = NULL, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+      ).run(bound.copyId);
+      this.recordEvent(bound.copyId, "consumed", { spaceId, world: RELIC_BY_ID.get(relicId)?.world ?? null, detail: { effectRecorded } });
+      // Fix (a): the recorder rides this transaction too — uniform
+      // across award paths (a Seed never lands in foundIds, so it
+      // cannot complete the B-01 set itself).
+      this.recordGateCompletionIfComplete(spaceId);
+      return { status: "seed-consumed", copyId: bound.copyId, anchorKey: bound.anchorKey, rewardAmount: effectiveReward, testOnly, duplicate: !effectRecorded };
+    }
     this.h.sqlite.prepare(
       `INSERT INTO relic_holdings (space_id, relic_id, found_at, test_only, held, held_at, anchor_key, copy_id) VALUES (?, ?, ?, ?, 0, NULL, ?, ?)`,
     ).run(spaceId, relicId, nowIso, testOnly ? 1 : 0, bound.anchorKey, bound.copyId);
-    const claim = this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, relicCodexKey(relicId));
     // Fix (a): if this find completed the set, permanence is recorded
     // in the same transaction — the gate is open from this moment,
     // whatever happens to the holdings later.
     this.recordGateCompletionIfComplete(spaceId);
-    return { status: "awarded", copyId: bound.copyId, anchorKey: bound.anchorKey, rewardAmount: Number(claim.changes ?? 0) > 0 ? rewardAmount : 0, testOnly };
+    return { status: "awarded", copyId: bound.copyId, anchorKey: bound.anchorKey, rewardAmount: effectiveReward, testOnly };
   }
 
   /**
@@ -728,6 +773,10 @@ export class RelicHoldingsStore {
       // Unreachable here (no exact copy is ever named on this path) —
       // the guard keeps the outcome union honest rather than assumed.
       if (r.status === "empty" || r.status === "exact-missed") return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
+      // Relics I-6: a Seed's find consumed its copy (R2-1) — the
+      // answer names the disposition; alreadyFound stays false
+      // because nothing was ever held.
+      if (r.status === "seed-consumed") return { ok: true, alreadyFound: false, rewardAmount: r.rewardAmount, claimKey, disposition: r.duplicate ? "seed-consumed-duplicate" : "seed-consumed" };
       return { ok: true, alreadyFound: false, rewardAmount: r.rewardAmount, claimKey };
     });
     return run.immediate();
@@ -793,6 +842,94 @@ export class RelicHoldingsStore {
     return { ok: true };
   }
 
+  /**
+   * Store or carry a held relic (Relics I-6, §5.7): the holding's
+   * location state — "carried" or "station" — is the I-2 state on
+   * the holding row. This method only flips the state; WHERE the
+   * change may happen (the Great Station only, O-R7) is enforced by
+   * the caller with the server-derived current world, exactly as
+   * hold/unhold are gated at the routes. Location never gates buffs:
+   * the §9 item-7 question (do stored relics keep lending) is still
+   * open, and until the tier worksheet rules, a stored relic lends
+   * exactly as a carried one does.
+   */
+  setLocation(spaceId: string, relicId: string, location: "carried" | "station"): { ok: boolean; reason?: string } {
+    if (!RELIC_BY_ID.has(relicId)) return { ok: false, reason: UNKNOWN_RELIC_MESSAGE };
+    const row = this.h.sqlite.prepare(`SELECT location FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).get(spaceId, relicId) as { location: string } | undefined;
+    if (!row) return { ok: false, reason: "You have not found that relic yet." };
+    if (row.location === location) return { ok: true };
+    const run = this.h.sqlite.transaction(() => {
+      this.h.sqlite.prepare(`UPDATE relic_holdings SET location = ? WHERE space_id = ? AND relic_id = ?`).run(location, spaceId, relicId);
+      // Fix (a): the recorder rides every relic write transaction (§4.8).
+      this.recordGateCompletionIfComplete(spaceId);
+    });
+    run.immediate();
+    return { ok: true };
+  }
+
+  /**
+   * Chart eligibility, read-only (Relics I-6, §5.6): could a chart
+   * stirring for this relic honestly be issued to this space right
+   * now? The mirror of RelicStirringService.issue()'s checks —
+   * discoverable, placed (has anchors), not already discovered by
+   * this space, no live open stirring, and a pool that can furnish
+   * a placed copy in scope — plus the Eternity-gate rule for
+   * Eternity-class relics. The Hold's chart menu reads this; the
+   * exchange transaction re-validates through issue() itself, so a
+   * menu that went stale can never force a bad exchange through.
+   */
+  chartTargetEligible(spaceId: string, relicId: string): boolean {
+    const def = RELIC_BY_ID.get(relicId);
+    if (!def || !def.discoverable) return false;
+    if ((RELIC_ANCHOR_POINTS[relicId] ?? []).length === 0) return false;
+    if ((def.world as string) === "eternity" && !this.gateView(spaceId).open) return false;
+    const discovered = this.h.sqlite.prepare(`SELECT 1 AS x FROM codex_claims WHERE space_id = ? AND reward_key = ?`).get(spaceId, relicCodexKey(relicId));
+    if (discovered) return false;
+    const open = this.h.sqlite.prepare(
+      `SELECT 1 AS x FROM relic_stirrings WHERE space_id = ? AND relic_id = ? AND state = 'open' AND open_until > ?`,
+    ).get(spaceId, relicId, new Date().toISOString());
+    if (open) return false;
+    return this.claimableSupply(relicId, scopeFor(relicId, spaceId)) > 0;
+  }
+
+  /** Every relic this space could honestly be charted to right now. */
+  chartEligibleTargetIds(spaceId: string): string[] {
+    return RELICS.filter((def) => this.chartTargetEligible(spaceId, def.id)).map((def) => def.id);
+  }
+
+  /**
+   * Places a freed copy back into the world (Relics I-2 fix (c),
+   * shared since I-6): the resting place is chosen from the COPY's
+   * own event-chain history — never an anchor this copy has occupied
+   * (ruling 2) — or the copy waits in the return pool when every
+   * anchor is in its history. Writes the `returned` event (with the
+   * caller's reason in its detail) and the `placed` event when a
+   * placement lands. Returns the chosen anchor, or null for the
+   * pool. The caller owns the transaction and the holding delete:
+   * release() and the I-6 exchange both end a holding this way, and
+   * §5.6's exchange return is this same machinery, never a parallel
+   * one. (Brain deletion's return is deliberately NOT this helper:
+   * its chain records `brain-deleted`, not `returned`.)
+   */
+  returnPlacedCopy(copyId: string, spaceId: string, relicId: string, fromAnchorKey: string | null, reason: string, detailExtra?: Record<string, unknown>): string | null {
+    const world = RELIC_BY_ID.get(relicId)?.world ?? null;
+    const toAnchor = this.chooseReturnAnchor(copyId);
+    this.recordEvent(copyId, "returned", { spaceId, world, anchorKey: fromAnchorKey, detail: { ...detailExtra, reason, toAnchor } });
+    if (toAnchor) {
+      this.h.sqlite.prepare(
+        `UPDATE relic_copies SET state = 'placed', world = ?, anchor_key = ?, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+      ).run(world, toAnchor, copyId);
+      this.recordEvent(copyId, "placed", { world, anchorKey: toAnchor });
+    } else {
+      // Every anchor is in this copy's history: it waits in the
+      // return pool, visible, until a placement session adds anchors.
+      this.h.sqlite.prepare(
+        `UPDATE relic_copies SET state = 'return-pool', world = NULL, anchor_key = NULL, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+      ).run(copyId);
+    }
+    return toAnchor;
+  }
+
   release(spaceId: string, relicId: string): ReleaseResult | null {
     const run = this.h.sqlite.transaction((): ReleaseResult | null => {
       this.backfillCopies();
@@ -812,25 +949,11 @@ export class RelicHoldingsStore {
       if (def?.tierClass === "keystone") {
         return { ok: false, reason: `${def.name} is a keystone — it stays with you. Keystones cannot be released or given back.` };
       }
-      const world = RELIC_BY_ID.get(relicId)?.world ?? null;
       let toAnchor: string | null = null;
       if (row.copy_id) {
         // Fix (c): placement is chosen from the COPY's own event-chain
         // history — never an anchor this copy has occupied (ruling 2).
-        toAnchor = this.chooseReturnAnchor(row.copy_id);
-        this.recordEvent(row.copy_id, "returned", { spaceId, world, anchorKey: row.anchor_key, detail: { reason: "release", toAnchor } });
-        if (toAnchor) {
-          this.h.sqlite.prepare(
-            `UPDATE relic_copies SET state = 'placed', world = ?, anchor_key = ?, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
-          ).run(world, toAnchor, row.copy_id);
-          this.recordEvent(row.copy_id, "placed", { world, anchorKey: toAnchor });
-        } else {
-          // Every anchor is in this copy's history: it waits in the
-          // return pool, visible, until a placement session adds anchors.
-          this.h.sqlite.prepare(
-            `UPDATE relic_copies SET state = 'return-pool', world = NULL, anchor_key = NULL, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
-          ).run(row.copy_id);
-        }
+        toAnchor = this.returnPlacedCopy(row.copy_id, spaceId, relicId, row.anchor_key, "release");
       }
       this.h.sqlite.prepare(`DELETE FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).run(spaceId, relicId);
       return { ok: true, event: { relicId, name: RELIC_BY_ID.get(relicId)?.name ?? relicId, reason: "release" as const, fromAnchor: row.anchor_key, toAnchor } };
@@ -1001,6 +1124,13 @@ export class RelicHoldingsStore {
         relicId: r.relic_id, name: RELIC_BY_ID.get(r.relic_id)?.name ?? r.relic_id,
         held: r.held === 1, testOnly: r.test_only === 1, anchorKey: r.anchor_key,
         blessing: RELIC_BLESSINGS[r.relic_id] ?? { status: "cut" as const, giftPlain: "It lends no blessing yet.", costPlain: "No trade-off." },
+        // Relics I-6: the class, the resting place, and the exchange
+        // surface ride the read model — computed fresh, never stored.
+        // Reads are unrestricted (O-R7); the exchange transaction
+        // re-validates everything this view offers.
+        tierClass: RELIC_BY_ID.get(r.relic_id)?.tierClass ?? null,
+        location: r.location,
+        exchange: this.exchangeViewFor(r.relic_id),
       })),
       buffs: { ...buffs, riseWindowSetByName: relicName(buffs.riseWindowSetBy), riseWindowOverruledNames: buffs.riseWindowOverruled.map((id) => relicName(id) ?? id) } as RelicsStateView["buffs"],
       gate: this.gateView(spaceId),
@@ -1008,6 +1138,25 @@ export class RelicHoldingsStore {
       isOwnerSpace: isOwnerSpace(spaceId),
       scarcityOff: this.scarcityOff(spaceId),
       currentAnchorByRelic,
+      chartTargets: this.chartEligibleTargetIds(spaceId),
+    };
+  }
+
+  /** The exchange menu for one relic (§4.7): class eligibility, the
+   *  eligible lore threads, and the Credits seam's posted value —
+   *  all computed from the same sources the exchange transaction
+   *  validates against, so menu and transaction cannot disagree
+   *  about the RULES (only about a world that changed in between,
+   *  which the transaction re-checks). */
+  private exchangeViewFor(relicId: string): RelicExchangeView {
+    const legacy = RELIC_BY_ID.get(relicId)?.tierClass === "legacy";
+    if (!legacy) return { eligible: false, loreThreadIds: [], creditsOffered: false, creditsValue: null };
+    const value = postedExchangeValue(relicId);
+    return {
+      eligible: true,
+      loreThreadIds: eligibleExchangeThreads(relicId).map((t) => t.threadId),
+      creditsOffered: value.offered,
+      creditsValue: value.offered ? value.value : null,
     };
   }
 

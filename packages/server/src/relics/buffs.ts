@@ -27,14 +27,28 @@ export const RELIC_EFFECTS: Readonly<Record<string, RelicEffect>> = {
   "unopened-fold": { discoveryDelta: 2, growthSlower: true },
 };
 
-export function computeRelicBuffs(heldIdsInOrder: readonly string[]): EffectiveRelicBuffs {
-  const effects = heldIdsInOrder.map((id) => RELIC_EFFECTS[id]).filter(Boolean) as RelicEffect[];
+/** Relics I-6 (§4.5): the permanent effects of recorded Seeds, keyed
+ *  by relic id — EMPTY. No Seed effect VALUES exist yet: the tier
+ *  worksheet assigns Seed classes and O-R1 governs authored content,
+ *  so today a recorded Seed contributes nothing but its record. The
+ *  plumbing (computeRelicBuffs' second input) ships live so the day
+ *  an effect is authored it applies with no further surgery. */
+export const RELIC_SEED_EFFECTS: Readonly<Record<string, RelicEffect>> = {};
+
+export function computeRelicBuffs(
+  heldIdsInOrder: readonly string[],
+  seedEffectIds: readonly string[] = [],
+): EffectiveRelicBuffs {
+  const effects = [
+    ...heldIdsInOrder.map((id) => RELIC_EFFECTS[id]).filter(Boolean) as RelicEffect[],
+    ...seedEffectIds.map((id) => RELIC_SEED_EFFECTS[id]).filter(Boolean) as RelicEffect[],
+  ];
   const sum = (pick: (e: RelicEffect) => number | undefined) => effects.reduce((a, e) => a + (pick(e) ?? 0), 0);
   let riseWindowDays: number = RELIC_BASE.riseWindowDays;
   let riseWindowSetBy: string | null = null;
   const riseWindowOverruled: string[] = [];
-  for (const id of heldIdsInOrder) {
-    const w = RELIC_EFFECTS[id]?.riseWindowDays;
+  for (const id of [...heldIdsInOrder, ...seedEffectIds]) {
+    const w = RELIC_EFFECTS[id]?.riseWindowDays ?? RELIC_SEED_EFFECTS[id]?.riseWindowDays;
     if (w === undefined) continue;
     if (riseWindowSetBy !== null) riseWindowOverruled.push(riseWindowSetBy);
     riseWindowDays = w; riseWindowSetBy = id;
@@ -69,8 +83,20 @@ export function heldRelicIds(h: DbHandle, spaceId: string): string[] {
     return rows.map((r) => r.relic_id).filter((id) => RELIC_BY_ID.has(id));
   } catch { return []; }
 }
+/** Relics I-6 (§4.5): this space's recorded Seed effects, in the
+ *  order they were recorded — computeRelicBuffs' second input. Same
+ *  bare-handle guard as heldRelicIds (test handles may lack the
+ *  table; a missing table means no effects, never a throw). */
+export function seedEffectIdsForSpace(h: DbHandle, spaceId: string): string[] {
+  try {
+    const rows = h.sqlite.prepare(
+      `SELECT relic_id FROM relic_seed_effects WHERE space_id = ? ORDER BY applied_at ASC, rowid ASC`,
+    ).all(spaceId) as { relic_id: string }[];
+    return rows.map((r) => r.relic_id).filter((id) => RELIC_BY_ID.has(id));
+  } catch { return []; }
+}
 export function buffsForSpace(h: DbHandle, spaceId: string): EffectiveRelicBuffs {
-  return computeRelicBuffs(heldRelicIds(h, spaceId));
+  return computeRelicBuffs(heldRelicIds(h, spaceId), seedEffectIdsForSpace(h, spaceId));
 }
 export function applyGrowthMultiplier(current: number, requested: number, multiplier: number): number {
   const c = Math.max(0, Math.min(1, current)); const r = Math.max(0, Math.min(1, requested));

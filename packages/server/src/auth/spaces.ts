@@ -211,6 +211,12 @@ export const SPACE_SCOPED_TABLES = [
   // brain like every other. The promised copy itself is a world
   // object and is NOT erased: it simply rests on, unpromised.
   "relic_stirrings",
+  // Relics I-6: a space's recorded Seed effects and its exchange
+  // receipts are per-space rows (the space's own permanent effects
+  // and its own exchange history) — they die with the brain under
+  // the same erasure rule as every other relic record above.
+  "relic_seed_effects",
+  "relic_exchange_attempts",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.

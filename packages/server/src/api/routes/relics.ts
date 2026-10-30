@@ -2,8 +2,9 @@ import { Router } from "express";
 import { RELIC_BY_ID } from "@brain/shared";
 import type { AppContext } from "../../context.js";
 import { TravelRepo } from "../../repositories/travel.repo.js";
-import { RelicHoldingsStore, isOwnerSpace } from "../../relics/holdings.js";
+import { RelicHoldingsStore, STATION_REQUIRED_MESSAGE, isOwnerSpace } from "../../relics/holdings.js";
 import { RelicClaimService } from "../../relics/claims.js";
+import { RelicExchangeService, type ExchangeOption } from "../../relics/exchange.js";
 import { spaceOf } from "../middleware.js";
 
 /** Relic Buffs v2 routes (§§6–10). Every write re-checks its preconditions server-side; no user-facing payload carries a timestamp. */
@@ -90,7 +91,9 @@ export function relicsRoutes(ctx: AppContext): Router {
       res.status(result.kind === "empty-pool" ? 409 : 400).json({ error: result.reason, state: s.state(spaceId) });
       return;
     }
-    res.json({ ok: true, alreadyFound: result.alreadyFound, awarded: result.awarded, state: s.state(spaceId) });
+    // Relics I-6: a Seed claim's disposition rides the answer — the
+    // copy was consumed, never held (R2-1/R3-3).
+    res.json({ ok: true, alreadyFound: result.alreadyFound, awarded: result.awarded, ...(result.disposition ? { disposition: result.disposition } : {}), state: s.state(spaceId) });
   });
 
   r.post("/legacy-sync", (req, res) => {
@@ -102,17 +105,70 @@ export function relicsRoutes(ctx: AppContext): Router {
     res.json({ ok: true, ...out, state: s.state(spaceId) });
   });
 
+  /**
+   * Relics I-6 (O-R7 / §9 ruling 5): Hold CHANGES — hold, unhold,
+   * store, carry — are accepted only while the traveller stands at
+   * the Great Station. The world is the server-derived travel state
+   * (currentWorldOf), never client-supplied; a refusal mutates
+   * nothing. Release is deliberately NOT gated (§5.7 enumerates
+   * hold/unhold/store/carry/exchange only), and reads never are.
+   */
+  const atStation = (res: import("express").Response, s: RelicHoldingsStore) => currentWorldOf(res, s) === "great-station";
+  const refuseOffStation = (res: import("express").Response, s: RelicHoldingsStore, spaceId: string) => {
+    res.status(400).json({ error: STATION_REQUIRED_MESSAGE, state: s.state(spaceId) });
+  };
+
   r.post("/hold", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
+    if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
     const out = s.hold(spaceId, String(req.body?.relicId ?? ""));
     if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
     res.json({ ok: true, state: s.state(spaceId) });
   });
   r.post("/unhold", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
+    if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
     const out = s.unhold(spaceId, String(req.body?.relicId ?? ""));
     if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
     res.json({ ok: true, state: s.state(spaceId) });
+  });
+  r.post("/store", (req, res) => {
+    const spaceId = spaceOf(res); const s = store(res);
+    if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
+    const out = s.setLocation(spaceId, String(req.body?.relicId ?? ""), "station");
+    if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
+    res.json({ ok: true, state: s.state(spaceId) });
+  });
+  r.post("/carry", (req, res) => {
+    const spaceId = spaceOf(res); const s = store(res);
+    if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
+    const out = s.setLocation(spaceId, String(req.body?.relicId ?? ""), "carried");
+    if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
+    res.json({ ok: true, state: s.state(spaceId) });
+  });
+  /**
+   * Relics I-6 (§5.6): the Legacy exchange. The service enforces the
+   * Station rule itself (it also owns the replay path, which is not
+   * a change and answers from anywhere); the route only shapes the
+   * HTTP answer. The response names the outcome — never a
+   * RelicReturnView: the exchange's return is its own record (the
+   * copy's chain carries the `exchanged`/`returned` truth).
+   */
+  r.post("/exchange", (req, res) => {
+    const spaceId = spaceOf(res); const s = store(res);
+    s.ensureMigrated();
+    const out = new RelicExchangeService(ctx.handle).exchange(spaceId, {
+      relicId: String(req.body?.relicId ?? ""),
+      option: String(req.body?.option ?? "") as ExchangeOption,
+      chartTargetRelicId: typeof req.body?.chartTargetRelicId === "string" ? req.body.chartTargetRelicId : null,
+      attemptKey: typeof req.body?.attemptKey === "string" ? req.body.attemptKey : "",
+    }, currentWorldOf(res, s));
+    if (!out.ok) { res.status(out.kind === "not-held" ? 404 : 400).json({ error: out.reason, state: s.state(spaceId) }); return; }
+    res.json({
+      ok: true, replayed: out.replayed, option: out.option, relicId: out.relicId,
+      unlockedThreadIds: out.unlockedThreadIds, chartStirringId: out.chartStirringId,
+      returnAnchor: out.returnAnchor, returnState: out.returnState, state: s.state(spaceId),
+    });
   });
   r.post("/release", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
