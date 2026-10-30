@@ -20,6 +20,17 @@
  * claim records its verdict on the attempt receipt; nothing is
  * rejected on speed until the caps are measured against the real
  * client flight.
+ *
+ * Relics I-5 makes this service the single claim entry for BOTH
+ * claimer kinds (§5.5, fix (d)): the player route above, and
+ * claimForNpc below for the NPC daily loop. The store under them is
+ * shared (one copy pool, one bind/materialize core — relics/
+ * holdings.ts); the dispositions stay player-shaped (holdings +
+ * Codex + discovery + reward) vs NPC-shaped (the read-model row
+ * only). Player claims also resolve stirrings inside their award
+ * transaction (§5.2 step 5, relics/stirrings.ts), and NPC claims
+ * honor the last-copy courtesy in the same serialization as the
+ * award — never a check-then-act gap.
  */
 import {
   RELICS, RELIC_BY_ID, RELIC_ANCHOR_POINTS, RELIC_COPY_LIMITS,
@@ -34,6 +45,7 @@ import {
   RelicHoldingsStore, EMPTY_POOL_MESSAGE, WRONG_WORLD_MESSAGE,
   NOT_FINDABLE_MESSAGE, UNKNOWN_RELIC_MESSAGE,
 } from "./holdings.js";
+import { RelicStirringService } from "./stirrings.js";
 
 export type ClaimFailureKind = "unknown" | "not-findable" | "wrong-world" | "no-presence" | "empty-pool" | "malformed";
 export type ClaimResult =
@@ -42,6 +54,12 @@ export type ClaimResult =
 export type ScanResult =
   | { ok: true; band: RelicScanBand | null; bearing: string | null; widened: boolean; quiet: boolean }
   | { ok: false; reason: string; kind: "unknown" | "not-findable" | "wrong-world" | "cooldown" | "malformed" };
+/** Relics I-5: the NPC claim's outcome — awarded, deferred by the
+ *  last-copy courtesy, or nothing takeable in the NPC's world. */
+export type NpcClaimResult =
+  | { status: "awarded"; relicId: string; copyId: string }
+  | { status: "deferred" }
+  | { status: "empty" };
 export interface PlausibilityVerdict { enforced: boolean; wouldReject: boolean; maxSpeed: number; cap: number }
 
 type Pos = readonly [number, number, number];
@@ -401,9 +419,11 @@ export class RelicClaimService {
       if (award.status === "empty") {
         // Another traveller took the last copy first — the honest empty
         // outcome, recorded like every other (never a fabricated reward,
-        // never the winner's identity).
+        // never the winner's identity). Stirrings for this relic read
+        // the emptied pool in the same transaction (§5.2 step 5).
         const outcome: StoredOutcome = { ok: false, kind: "empty-pool", reason: EMPTY_POOL_MESSAGE, plausibility: presence.plausibility, committed: true };
         this.writeReceipt(spaceId, claimId, relicId, outcome);
+        new RelicStirringService(this.h).resolveAfterPlayerClaim(spaceId, relicId, false);
         return this.outcomeToResult(outcome, false);
       }
       if (!award.testOnly) {
@@ -415,8 +435,69 @@ export class RelicClaimService {
       if (award.rewardAmount > 0) new EconomyRepo(this.h, spaceId).add(award.rewardAmount);
       const outcome: StoredOutcome = { ok: true, alreadyFound: false, awarded: award.rewardAmount > 0, copyId: award.copyId, plausibility: presence.plausibility, committed: true };
       this.writeReceipt(spaceId, claimId, relicId, outcome);
+      // §5.2 step 5: the claimer's stirring resolves `claimed`, and a
+      // pool this award emptied quiets every stirring still open on
+      // it — inside this same transaction, never after the fact.
+      new RelicStirringService(this.h).resolveAfterPlayerClaim(spaceId, relicId, true);
       return this.outcomeToResult(outcome, false);
     });
     return run.immediate();
+  }
+
+  /**
+   * THE NPC CLAIM (Relics I-5, §5.5 / fix (d)). The NPC hunts in its
+   * own world — the design's hunt definition — taking the first
+   * relic of that world it lacks (or the one named), through the
+   * same copy pool and award core as players. Presence for an NPC
+   * is its own server-known state, so there are no samples, no
+   * dwell, and no scan here; scarcity, placement, and the pool
+   * rules are exactly the player's.
+   *
+   * COURTESY lives here, in this same serialized transaction
+   * (approved design §4.1 / ruling R2-4): before the award, the
+   * candidate relic's stirring expiries are evaluated (expired ones
+   * resolve here and stop blocking), and when exactly ONE claimable
+   * copy remains in the relic's pool and a player's stirring for it
+   * is live, the NPC defers — no write, no decrement — and the
+   * stirring's player keeps the chance the stirring promised them.
+   * "The pool's last copy" is the store's claimableSupply, the same
+   * number the quiet-resolution reads, so the two rules can never
+   * disagree. Player claims are never deferred.
+   *
+   * Returns awarded (with the copy bound), deferred (courtesy held
+   * for every takeable candidate), or empty (nothing takeable in
+   * this world — the loop's daily throttle means at most one
+   * successful find per day, §5.5).
+   */
+  claimForNpc(spaceId: string, npcId: string, world: string, relicId?: string): NpcClaimResult {
+    const body = (): NpcClaimResult => {
+      const stirrings = new RelicStirringService(this.h);
+      const candidates = RELICS.filter((def) =>
+        def.world === world && def.discoverable && (RELIC_ANCHOR_POINTS[def.id] ?? []).length > 0 &&
+        (relicId === undefined || def.id === relicId));
+      let deferred = false;
+      for (const def of candidates) {
+        const held = this.h.sqlite.prepare(
+          `SELECT 1 AS x FROM npc_relic_holdings WHERE space_id = ? AND npc_id = ? AND relic_id = ?`,
+        ).get(spaceId, npcId, def.id);
+        if (held) continue;
+        const scope = scopeFor(def.id, spaceId);
+        const supply = this.store.claimableSupply(def.id, scope);
+        if (supply <= 0) continue;
+        stirrings.evaluateExpiriesForRelic(def.id);
+        if (supply === 1 && stirrings.liveStirringExists(def.id, scope)) {
+          deferred = true;
+          continue;
+        }
+        const award = this.store.awardCopyForNpcInTransaction(spaceId, npcId, def.id);
+        if (award.status === "awarded") return { status: "awarded", relicId: def.id, copyId: award.copyId };
+        // "already"/"empty" after the reads above cannot disagree
+        // with them inside one serialized transaction; either way
+        // this candidate is unavailable — move on, never fail the tick.
+      }
+      return deferred ? { status: "deferred" } : { status: "empty" };
+    };
+    if ((this.h.sqlite as { inTransaction?: boolean }).inTransaction) return body();
+    return this.h.sqlite.transaction(body).immediate();
   }
 }

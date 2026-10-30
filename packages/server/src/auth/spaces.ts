@@ -206,6 +206,11 @@ export const SPACE_SCOPED_TABLES = [
   "relic_claim_attempts",
   "relic_codex_layers",
   "relic_first_discoveries",
+  // Relics I-5: a stirring is the space's own invitation (its open
+  // window, its promised copy) — a per-space row that dies with the
+  // brain like every other. The promised copy itself is a world
+  // object and is NOT erased: it simply rests on, unpromised.
+  "relic_stirrings",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.

@@ -21,6 +21,16 @@
  * (relics/claims.ts) and this store's claimFind both wrap — the player
  * route's claim is validated from server-stamped position samples
  * before it ever reaches the award.
+ *
+ * Relics I-5: the pool becomes ONE pool. The copy-binding primitives
+ * are parameterized by HOLDER (space | npc), so the NPC award
+ * (`awardCopyForNpcInTransaction`) binds and materializes through the
+ * exact same code as the player award — only the disposition differs
+ * (an npc_relic_holdings read-model row instead of the player
+ * records). `claimableSupply` is the single supply reading the
+ * last-copy courtesy and stirring resolution share, and
+ * `ensurePlacedCopyInScope` is how a stirring gets a real placed
+ * copy to promise.
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -74,6 +84,22 @@ export type AwardResult =
   | { status: "already" }
   | { status: "empty" }
   | { status: "awarded"; copyId: string; anchorKey: string; rewardAmount: number; testOnly: boolean };
+
+/** The NPC award core's outcome (Relics I-5): the player AwardResult's
+ *  sibling — no reward is ever computed for an NPC claim. */
+export type NpcAwardResult =
+  | { status: "already" }
+  | { status: "empty" }
+  | { status: "awarded"; copyId: string; anchorKey: string };
+
+/**
+ * Who is claiming a copy (Relics I-5, §5.5): a player space, or an
+ * NPC resident in a space. The copy-binding primitives are
+ * parameterized by holder so there is exactly ONE bind/materialize
+ * implementation under both claim dispositions.
+ */
+export interface CopyHolder { kind: "space" | "npc"; id: string; spaceId: string }
+const spaceHolder = (spaceId: string): CopyHolder => ({ kind: "space", id: spaceId, spaceId });
 
 /**
  * release() outcome (I-3, fix (b)): the return view on success, or a
@@ -297,12 +323,15 @@ export class RelicHoldingsStore {
     return row.n;
   }
 
-  /** Bind a copy to a space: state held, holder set, resting place cleared from the copy row (the claim event keeps it). */
-  private bindCopy(copyId: string, spaceId: string, world: string, anchorKey: string): void {
+  /** Bind a copy to its claimer: state held, holder set, resting place cleared from the copy row (the claim event keeps it). */
+  private bindCopy(copyId: string, holder: CopyHolder, world: string, anchorKey: string): void {
     this.h.sqlite.prepare(
-      `UPDATE relic_copies SET state = 'held', world = NULL, anchor_key = NULL, holder_kind = 'space', holder_id = ?, holder_space_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
-    ).run(spaceId, spaceId, copyId);
-    this.recordEvent(copyId, "claimed", { spaceId, world, anchorKey });
+      `UPDATE relic_copies SET state = 'held', world = NULL, anchor_key = NULL, holder_kind = ?, holder_id = ?, holder_space_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+    ).run(holder.kind, holder.id, holder.spaceId, copyId);
+    this.recordEvent(copyId, "claimed", {
+      spaceId: holder.spaceId, world, anchorKey,
+      ...(holder.kind === "npc" ? { detail: { npcId: holder.id } } : {}),
+    });
   }
 
   /** Bind a resting copy of this definition in scope to the claimant, or null when none rests placed. */
@@ -317,7 +346,7 @@ export class RelicHoldingsStore {
    * presence (§5.2 step 5); which copy rests there is the pool's fact,
    * never the client's assertion.
    */
-  private bindPlacedCopyAt(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, anchorKey: string | null): { copyId: string; anchorKey: string } | null {
+  private bindPlacedCopyAt(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, anchorKey: string | null, holder: CopyHolder = spaceHolder(spaceId)): { copyId: string; anchorKey: string } | null {
     const copy = anchorKey === null
       ? this.h.sqlite.prepare(
           `SELECT * FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND test_only = ? AND scope_space_id IS ? ORDER BY created_at ASC, copy_id ASC LIMIT 1`,
@@ -327,7 +356,7 @@ export class RelicHoldingsStore {
         ).get(relicId, testOnly ? 1 : 0, scope, anchorKey) as CopyRow | undefined;
     if (!copy) return null;
     const boundAnchor = copy.anchor_key ?? firstAnchorKey(relicId);
-    this.bindCopy(copy.copy_id, spaceId, copy.world ?? RELIC_BY_ID.get(relicId)?.world ?? "", boundAnchor);
+    this.bindCopy(copy.copy_id, holder, copy.world ?? RELIC_BY_ID.get(relicId)?.world ?? "", boundAnchor);
     return { copyId: copy.copy_id, anchorKey: boundAnchor };
   }
 
@@ -337,7 +366,7 @@ export class RelicHoldingsStore {
    * genesis + placed events, then bind it. Null only when the definition
    * has no anchors at all (unplaced relics refuse finds earlier anyway).
    */
-  private materializeAndBind(spaceId: string, relicId: string, scope: string | null, testOnly: boolean): { copyId: string; anchorKey: string } | null {
+  private materializeAndBind(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, holder: CopyHolder = spaceHolder(spaceId)): { copyId: string; anchorKey: string } | null {
     const anchors = RELIC_ANCHOR_POINTS[relicId] ?? [];
     if (anchors.length === 0) return null;
     const world = RELIC_BY_ID.get(relicId)?.world ?? anchors[0]!.world;
@@ -349,9 +378,9 @@ export class RelicHoldingsStore {
     this.h.sqlite.prepare(
       `INSERT INTO relic_copies (copy_id, relic_id, state, world, anchor_key, holder_kind, holder_id, holder_space_id, scope_space_id, test_only) VALUES (?, ?, 'placed', ?, ?, NULL, NULL, NULL, ?, ?)`,
     ).run(copyId, relicId, world, anchor.anchorKey, scope, testOnly ? 1 : 0);
-    this.recordEvent(copyId, "genesis", { spaceId, world, anchorKey: anchor.anchorKey, detail: { materializedAtClaim: true } });
+    this.recordEvent(copyId, "genesis", { spaceId: holder.spaceId, world, anchorKey: anchor.anchorKey, detail: { materializedAtClaim: true } });
     this.recordEvent(copyId, "placed", { world, anchorKey: anchor.anchorKey });
-    this.bindCopy(copyId, spaceId, world, anchor.anchorKey);
+    this.bindCopy(copyId, holder, world, anchor.anchorKey);
     return { copyId, anchorKey: anchor.anchorKey };
   }
 
@@ -361,7 +390,7 @@ export class RelicHoldingsStore {
    * the pool has room). Null when the anchor is not one of the
    * definition's resting places at all.
    */
-  private materializeAndBindAt(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, anchorKey: string): { copyId: string; anchorKey: string } | null {
+  private materializeAndBindAt(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, anchorKey: string, holder: CopyHolder = spaceHolder(spaceId)): { copyId: string; anchorKey: string } | null {
     const anchor = (RELIC_ANCHOR_POINTS[relicId] ?? []).find((a) => a.anchorKey === anchorKey);
     if (!anchor) return null;
     const world = anchor.world;
@@ -369,9 +398,9 @@ export class RelicHoldingsStore {
     this.h.sqlite.prepare(
       `INSERT INTO relic_copies (copy_id, relic_id, state, world, anchor_key, holder_kind, holder_id, holder_space_id, scope_space_id, test_only) VALUES (?, ?, 'placed', ?, ?, NULL, NULL, NULL, ?, ?)`,
     ).run(copyId, relicId, world, anchor.anchorKey, scope, testOnly ? 1 : 0);
-    this.recordEvent(copyId, "genesis", { spaceId, world, anchorKey: anchor.anchorKey, detail: { materializedAtClaim: true } });
+    this.recordEvent(copyId, "genesis", { spaceId: holder.spaceId, world, anchorKey: anchor.anchorKey, detail: { materializedAtClaim: true } });
     this.recordEvent(copyId, "placed", { world, anchorKey: anchor.anchorKey });
-    this.bindCopy(copyId, spaceId, world, anchor.anchorKey);
+    this.bindCopy(copyId, holder, world, anchor.anchorKey);
     return { copyId, anchorKey: anchor.anchorKey };
   }
 
@@ -418,6 +447,64 @@ export class RelicHoldingsStore {
     const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
     if (limit === null) return null;
     return limit - this.poolCount(relicId);
+  }
+  /**
+   * Claimable supply for (relic, scope) — how many more copies a
+   * claim could still bind there: copies resting `placed` in scope,
+   * plus the room to materialize (limit − live copies, for the
+   * limited classes). For the private class the scope's one copy is
+   * the whole supply, claimable only while it does not yet exist or
+   * rests placed — a held or return-pool private copy is supply 0,
+   * exactly as the award core rules it (I-4, P1-B). Relics I-5: the
+   * last-copy courtesy and stirring quiet-resolution both read THIS
+   * number, so the two rules can never disagree about what "the
+   * last copy" means.
+   */
+  claimableSupply(relicId: string, scopeSpaceId: string | null): number {
+    const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
+    const resting = this.copiesInScope(relicId, scopeSpaceId, false, ["placed"]);
+    if (limit !== null) {
+      const live = this.copiesInScope(relicId, scopeSpaceId, false);
+      return resting + Math.max(0, limit - live);
+    }
+    const live = this.copiesInScope(relicId, scopeSpaceId, false);
+    return live === 0 ? 1 : resting;
+  }
+
+  /**
+   * Relics I-5 (§4.6): guarantee a copy of this definition rests
+   * PLACED in scope, and say which — a stirring promises a specific
+   * placed copy, so issuance needs one to exist. A copy already
+   * resting in scope is the promise (earliest first, the award
+   * core's own order); else one materializes at the first anchor
+   * not holding a placed sibling in scope, while the pool allows;
+   * else null — the pool could not furnish a copy, and no stirring
+   * may be issued against it. Writes genesis + placed events;
+   * binds nothing. The caller owns the transaction.
+   */
+  ensurePlacedCopyInScope(relicId: string, scopeSpaceId: string | null, actorSpaceId: string): { copyId: string; anchorKey: string } | null {
+    const resting = this.h.sqlite.prepare(
+      `SELECT * FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND test_only = 0 AND scope_space_id IS ? ORDER BY created_at ASC, copy_id ASC LIMIT 1`,
+    ).get(relicId, scopeSpaceId) as CopyRow | undefined;
+    if (resting?.anchor_key) return { copyId: resting.copy_id, anchorKey: resting.anchor_key };
+    const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
+    const live = this.copiesInScope(relicId, scopeSpaceId, false);
+    if (limit !== null ? live >= limit : live >= 1) return null;
+    const anchors = RELIC_ANCHOR_POINTS[relicId] ?? [];
+    if (anchors.length === 0) return null;
+    const occupied = new Set((this.h.sqlite.prepare(
+      `SELECT anchor_key FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND scope_space_id IS ? AND anchor_key IS NOT NULL`,
+    ).all(relicId, scopeSpaceId) as { anchor_key: string }[]).map((r) => r.anchor_key));
+    const anchor = anchors.find((a) => !occupied.has(a.anchorKey));
+    if (!anchor) return null;
+    const world = RELIC_BY_ID.get(relicId)?.world ?? anchor.world;
+    const copyId = `rc_${randomUUID()}`;
+    this.h.sqlite.prepare(
+      `INSERT INTO relic_copies (copy_id, relic_id, state, world, anchor_key, holder_kind, holder_id, holder_space_id, scope_space_id, test_only) VALUES (?, ?, 'placed', ?, ?, NULL, NULL, NULL, ?, 0)`,
+    ).run(copyId, relicId, world, anchor.anchorKey, scopeSpaceId);
+    this.recordEvent(copyId, "genesis", { spaceId: actorSpaceId, world, anchorKey: anchor.anchorKey, detail: { materializedForStirring: true } });
+    this.recordEvent(copyId, "placed", { world, anchorKey: anchor.anchorKey });
+    return { copyId, anchorKey: anchor.anchorKey };
   }
   scarcityOff(spaceId: string): boolean {
     if (!isOwnerSpace(spaceId)) {
@@ -527,11 +614,55 @@ export class RelicHoldingsStore {
   }
 
   /**
+   * THE NPC AWARD (Relics I-5, §5.5 / fix (d)): the same copy pool
+   * and the same bind/materialize primitives as the player award
+   * above, with the NPC disposition — the copy binds with
+   * holder_kind='npc', and the npc_relic_holdings read-model row is
+   * written in the SAME transaction (the two records can never
+   * diverge because they are never written separately; the copy
+   * table remains the single counting source for scarcity). No
+   * player records are written: no relic_holdings row, no Codex
+   * claim, no first discovery (that record names a discoverer
+   * SPACE, resolvable to a display name — an NPC is a resident of a
+   * space, not a space), and no Fuel reward (the discovery earn is
+   * the player's). Courtesy is not decided here — it is the claim
+   * service's pre-award check inside the same transaction
+   * (relics/claims.ts, claimForNpc). The CALLER owns the transaction.
+   */
+  awardCopyForNpcInTransaction(spaceId: string, npcId: string, relicId: string): NpcAwardResult {
+    // Same conversion-first discipline as the player award: any
+    // pre-unification NPC rows become copies before scarcity reads.
+    this.backfillCopies();
+    const held = this.h.sqlite.prepare(
+      `SELECT 1 AS x FROM npc_relic_holdings WHERE space_id = ? AND npc_id = ? AND relic_id = ?`,
+    ).get(spaceId, npcId, relicId) as { x: number } | undefined;
+    if (held) return { status: "already" };
+    const scope = scopeFor(relicId, spaceId);
+    const holder: CopyHolder = { kind: "npc", id: npcId, spaceId };
+    let bound = this.bindPlacedCopyAt(spaceId, relicId, scope, false, null, holder);
+    if (!bound) {
+      const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
+      if (limit !== null && this.copiesInScope(relicId, scope, false) >= limit) return { status: "empty" };
+      // Private class: one copy per scope — ANY live copy in scope
+      // blocks materialization (the award core's P1-B rule, I-4).
+      if (limit === null && this.copiesInScope(relicId, scope, false) >= 1) return { status: "empty" };
+      bound = this.materializeAndBind(spaceId, relicId, scope, false, holder);
+      if (!bound) return { status: "empty" };
+    }
+    this.h.sqlite.prepare(
+      `INSERT OR IGNORE INTO npc_relic_holdings (npc_id, space_id, relic_id, found_at, found_in_world) VALUES (?, ?, ?, ?, ?)`,
+    ).run(npcId, spaceId, relicId, new Date().toISOString(), RELIC_BY_ID.get(relicId)?.world ?? "");
+    return { status: "awarded", copyId: bound.copyId, anchorKey: bound.anchorKey };
+  }
+
+  /**
    * The store-level find (§7): world-level presence, derived by the
    * caller (the travel ledger's current world) and passed in. This is
-   * the entry the pre-sampling callers use — the test suites, and from
-   * I-5 the NPC loop (§5.5: an NPC has no client, so there are no
-   * samples; its presence is its own server-known state). The player
+   * the entry the pre-sampling callers use — today, the test suites.
+   * (The NPC loop's §5.5 presence model — an NPC has no client, so
+   * there are no samples; its presence is its own server-known
+   * state — lands in Relics I-5 as awardCopyForNpcInTransaction
+   * above, wrapped by the claim service, not through this entry.) The player
    * HTTP path no longer lands here: it goes through the sampled claim
    * in relics/claims.ts, which wraps the same award core with sample
    * validation, receipts, and the reward paid inside the transaction.
@@ -699,6 +830,41 @@ export class RelicHoldingsStore {
           // No copy bound (the I-2 tables are unavailable on this handle):
           // preserve the pre-I-2 count without inventing a placement.
           returnedCounted++;
+        }
+      }
+      // Relics I-5: copies held by this brain's NPC residents leave
+      // with the brain too (the exit I-2's review deferred to
+      // unification). Brain deletion erases the npc_* rows in its
+      // census; unless the copies move first, a counted copy would
+      // sit 'held' by a dead resident forever, silently out of the
+      // pool it now shares with everyone. Counted copies return
+      // through their chains exactly like player copies; private
+      // copies — minted against this brain's own scope — are
+      // deleted with it, as player private copies are above.
+      const npcCopies = this.h.sqlite.prepare(
+        `SELECT * FROM relic_copies WHERE holder_kind = 'npc' AND holder_space_id = ?`,
+      ).all(spaceId) as CopyRow[];
+      for (const copy of npcCopies) {
+        const counted = (RELIC_COPY_LIMITS[copy.relic_id]?.limit ?? null) !== null && copy.test_only === 0;
+        const world = RELIC_BY_ID.get(copy.relic_id)?.world ?? null;
+        this.recordEvent(copy.copy_id, "brain-deleted", { spaceId, world, anchorKey: copy.anchor_key, detail: { reason: "brain-deleted", counted, npcId: copy.holder_id } });
+        if (counted) {
+          const toAnchor = this.chooseReturnAnchor(copy.copy_id);
+          if (toAnchor) {
+            this.h.sqlite.prepare(
+              `UPDATE relic_copies SET state = 'placed', world = ?, anchor_key = ?, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+            ).run(world, toAnchor, copy.copy_id);
+            this.recordEvent(copy.copy_id, "placed", { world, anchorKey: toAnchor });
+          } else {
+            this.h.sqlite.prepare(
+              `UPDATE relic_copies SET state = 'return-pool', world = NULL, anchor_key = NULL, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+            ).run(copy.copy_id);
+          }
+          returnedCounted++;
+        } else {
+          // The brain's own private/test NPC copies leave with it:
+          // the copy row is deleted; its event chain remains.
+          this.h.sqlite.prepare(`DELETE FROM relic_copies WHERE copy_id = ?`).run(copy.copy_id);
         }
       }
       const removed = this.h.sqlite.prepare(`DELETE FROM relic_holdings WHERE space_id = ?`).run(spaceId);

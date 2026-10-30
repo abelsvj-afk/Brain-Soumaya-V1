@@ -415,6 +415,31 @@ export const BOOTSTRAP_SQL = `
       discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (scope, relic_id)
     );
+    -- Relics I-5 (§4.6): stirrings — the hunt's invitations. A stirring
+    -- promises ONE specific placed copy (copy_id — the copy it binds
+    -- at issuance); its states are the honest endings (claimed when
+    -- its relic is claimed, quiet when the pool empties beneath it,
+    -- expired when its window ends), and expiry is evaluated inside
+    -- serialized transactions and at read time — no background
+    -- sweeper. The partial unique index enforces one OPEN stirring
+    -- per (space, relic) at the database level. Same DDL runs in
+    -- the other established place.
+    CREATE TABLE IF NOT EXISTS relic_stirrings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      source TEXT NOT NULL CHECK (source IN ('ambient','chart')),
+      chart_exchange_id INTEGER,
+      issued_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      open_until TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','claimed','quiet','expired')),
+      resolved_at TEXT,
+      resolved_reason TEXT
+    );
+    CREATE INDEX IF NOT EXISTS relic_stirrings_open_idx ON relic_stirrings(relic_id, state, open_until);
+    CREATE UNIQUE INDEX IF NOT EXISTS relic_stirrings_one_open_idx
+      ON relic_stirrings(space_id, relic_id) WHERE state = 'open';
     -- REG-197 (RC-04): one receipt per grade attempt, so a retry of the same
     -- attempt replays the committed outcome instead of re-grading, re-paying,
     -- and re-running SM-2. Same DDL runs in db/client.ts migrateSchema().

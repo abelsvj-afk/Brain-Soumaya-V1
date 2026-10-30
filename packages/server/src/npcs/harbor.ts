@@ -245,10 +245,12 @@ export function decide(p: HarborPerception, question: NpcQuestionKind | null): H
   return { act: "wait", cause: "Nothing asked, no arrival to answer, its daily look already done — waiting is behaving correctly." };
 }
 
-/** The explore outcome, in plain words. Until relics exist in the
- *  app (no registry, no placements — the Relics increment's work),
- *  an explore can find nothing, and the controller says so instead
- *  of inventing a find. */
+/** The explore outcome when the hunt found nothing, in plain words.
+ *  Relics I-5: explores now attempt real claims through the unified
+ *  claim core (the loop logs a find itself when one lands); this
+ *  string is the honest remainder — an empty pool, a courtesy
+ *  deferral, or nothing left in its world that it lacks — and the
+ *  controller says so instead of inventing a find. */
 export function exploreOutcome(p: HarborPerception): string {
   if (p.gate.open) return "Looked for a way onward — the way is already open for me.";
   return "Looked for a way onward in my own world — found no relic. The way to Eternity stays unfound until I hold the Witness and two others.";
