@@ -5,7 +5,7 @@ import { STORY_ENTRY_BY_ID } from "./storyCanon.js";
 import { STORY_TRIGGERS } from "./storyTriggers.js";
 
 const words = (s: string) => s.trim().split(/\s+/).length;
-const BANNED = /\b(locked|unlocked|complete|percent|score|quest|mission|level up)\b|%/i;
+const BANNED = /\b(unlocked|complete|percent|score|quest|mission|level up)\b|%/i; // a door may be "locked"; the game may not be
 
 describe("talking to the cast", () => {
   it("everyone with a conversation is a real speaking cast member — never Eternity, never the harbor controller", () => {

@@ -77,3 +77,6 @@ Full text: `docs/lore/DRAFT_6_THE_LOOM.md` — the story as a **spider's web** (
 Narration (ElevenLabs voice + music for the Book): `docs/specs/lore-narration-2026-10-30.md`.
 
 - **Draft 7 — The Deep Cast** (`docs/lore/DRAFT_7_THE_DEEP_CAST.md`, 2026-10-31, **PROPOSED, nothing locked**): wounds/wants/warmth/debts/ends for every canon person, the Lines of keeping, 24 new typed edges, five more shared events with disagreeing tellers, and eight expansion seams. Strictly additive; each [NEW] can be struck without breaking the rest.
+
+- **Draft 7 is LOCKED (owner, 2026-10-31):** keep all [NEW]; *nothing dies, things rest* (loss is real, finality is not); Oru's recall tie: yes; all eight seams to be built, order by Claude (see Draft 8 §5).
+- **Draft 8 — The Small Lives and the Side Roads** (`docs/lore/DRAFT_8_THE_SMALL_LIVES_AND_THE_SIDE_ROADS.md`, 2026-10-31, **PROPOSED**): thirty-six side roads, the ordinary people who live in the shadow of the lore, six new canon NPCs to fly the worlds (incl. Pell, always one day behind), ambient traffic. Additive.

@@ -64,3 +64,18 @@ describe("the cast's data", () => {
     expect(scriptSpecsFor(castMember("keeper")!).map((s) => s.situation)).toEqual(["encounter_near", "encounter_visiting", "encounter_first", "chatter"]);
   });
 });
+
+describe("Pell is always one day behind", () => {
+  it("is where the world put her yesterday, by the same clock as everyone else", () => {
+    const pell = castMember("pell")!;
+    const unlagged = { ...pell, lagMs: 0 };
+    for (let k = 0; k < 40; k++) {
+      const t = T0 + k * NPC_SLOT_MS + 123_456;
+      expect(npcLocation(pell, t)).toBe(npcLocation(unlagged, t - 24 * 3_600_000));
+    }
+  });
+  it("is the only one who lags, and the six new canon people are all in the cast", () => {
+    expect(NPC_CAST.filter((c) => c.lagMs).map((c) => c.id)).toEqual(["pell"]);
+    for (const id of ["hesk", "tamsin", "ossian", "ilsabet", "pell", "wim"]) expect(castMember(id)?.canon).toBe("canon");
+  });
+});

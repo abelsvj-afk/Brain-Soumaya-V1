@@ -7,10 +7,10 @@
  */
 
 /** Who is speaking — selects the ElevenLabs voice (`LORE_TTS_VOICE_<ROLE>`); any role without its own voice set is read by the narrator's. */
-export type VoiceRole = "narrator" | "eternity" | "calend" | "ysmerel" | "dorrow" | "dissenter" | "surveyor" | "archivist" | "keeper";
+export type VoiceRole = "narrator" | "eternity" | "calend" | "ysmerel" | "dorrow" | "dissenter" | "surveyor" | "archivist" | "keeper" | "hesk" | "tamsin" | "ossian" | "ilsabet" | "pell" | "wim";
 
 /** Every role that can have its own voice, in the order the console lists them. */
-export const VOICE_ROLES: readonly VoiceRole[] = ["narrator", "eternity", "calend", "ysmerel", "dorrow", "dissenter", "surveyor", "archivist", "keeper"];
+export const VOICE_ROLES: readonly VoiceRole[] = ["narrator", "eternity", "calend", "ysmerel", "dorrow", "dissenter", "surveyor", "archivist", "keeper", "hesk", "tamsin", "ossian", "ilsabet", "pell", "wim"];
 
 export interface StoryReaction {
   npc: string;
@@ -39,12 +39,30 @@ export const STORY_REACTIONS: readonly StoryReaction[] = [
   { npc: "surveyor", holds: "sight.hung-star", role: "surveyor", line: "It isn’t where the charts keep it. It never was. That is the whole trouble." },
   { npc: "surveyor", holds: "relic.sunward-compass", role: "surveyor", line: "That points at something. I have stopped asking whether it is the sun." },
   { npc: "cantor", holds: "sight.ysmerel-at-the-edge", role: "ysmerel", line: "You saw her standing there. Thank you for not calling out." },
-  { npc: "broker", holds: "obj.tin-soldier", role: "dorrow", line: "I don’t know whose that is." },
+  { npc: "broker", holds: "sight.missing-berth", role: "dorrow", line: "The berths and the ships come out equal on the count. That is what troubles me." },
   { npc: "archivist", holds: "sight.open-alcove", role: "archivist", line: "Yes. It was left open on purpose. Please do not fill it." },
   { npc: "keeper", holds: "relic.dawn-leaf", role: "keeper", line: "That is from a morning I was not awake for. Keep it dry." },
   { npc: "eternity", holds: "sight.long-room", role: "eternity", line: "Long. It is meant to be. I have not yet reached the end of it either." },
   { npc: "eternity", holds: "echo.eighth-bell", role: "eternity", line: "You counted. Most do not count past seven." },
   { npc: "eternity", holds: "relic.witness-without-a-name", role: "eternity", line: "I will not say its name. It is not mine to say, and not yours to ask." },
+  { npc: "hesk", holds: "obj.tin-soldier", role: "hesk", line: "I don’t know whose that is." },
+  { npc: "hesk", holds: "sight.locked-room", role: "hesk", line: "You stood at the door. Then you know I never meant it as a wall." },
+  { npc: "hesk", holds: "obj.kiths-drawing", role: "hesk", line: "A child drew that? Put it where it will not be hushed." },
+  { npc: "tamsin", holds: "obj.kiths-drawing", role: "tamsin", line: "She draws her every week. I keep the ones she leaves behind." },
+  { npc: "tamsin", holds: "sight.tamsins-ward", role: "tamsin", line: "You sat with them. Thank you. They can tell when someone has." },
+  { npc: "tamsin", holds: "obj.vesh-paper-boat", role: "tamsin", line: "A boat folded from a page. Someone is very tired, and very kind." },
+  { npc: "ossian", holds: "obj.follower-ribbon", role: "ossian", line: "You found my ribbon. It was never mine, but I will say it was." },
+  { npc: "ossian", holds: "sight.lane-to-nowhere", role: "ossian", line: "That lane is true, which spoils it for me. Walk it anyway." },
+  { npc: "ossian", holds: "obj.doorkeepers-nail", role: "ossian", line: "Calend’s nail. I told that story once and made the nail cold. I was wrong on purpose." },
+  { npc: "ilsabet", holds: "sight.lane-to-nowhere", role: "ilsabet", line: "Mine. The lane. I only drew where it stops." },
+  { npc: "ilsabet", holds: "obj.dissenters-chart", role: "ilsabet", line: "Where did you find that? That is my chart, in his hand." },
+  { npc: "ilsabet", holds: "sight.second-seam", role: "ilsabet", line: "You heard it hum. Then you can tell me which way to draw." },
+  { npc: "pell", holds: "obj.follower-ribbon", role: "pell", line: "That is mine. Or it will be. I have never been sure of the tense." },
+  { npc: "pell", holds: "sight.hung-star", role: "pell", line: "Its light is late. So am I. We have never met in the same hour." },
+  { npc: "pell", holds: "companion.dock-1", role: "pell", line: "You shared a cup with someone. I left them a note." },
+  { npc: "wim", holds: "obj.anonymous-payments", role: "wim", line: "That is the unclaimed slip. Please do not tell me whose it is. I would have to know." },
+  { npc: "wim", holds: "sight.missing-berth", role: "wim", line: "Yes. The berth. I count it every morning." },
+  { npc: "wim", holds: "relic.mooring-ring", role: "wim", line: "Brannoch’s ring. It is warm. I know it is warm." },
 ];
 
 export function reactionFor(npc: string, found: ReadonlySet<string>): StoryReaction | null {

@@ -837,6 +837,15 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   (a test pins it). The Book shows a painting above a FOUND entry's words for the four canon picks approved by eye (Sleepwalker v3, Companion v5, Blank Nameplate v5, Lullaby v5) as 1024 px WebP
   copies (~35–55 KB each) — the 270 MB originals stay out of the app. Not built: pictures for the other entries (each needs an approved pick), voicing, S5's Hours tint/rumours, Eternity passages.
   Look at: whether "Look closely" feels discoverable (it only appears beside a landmark), the card over the scene on a short phone, picture crops (object-fit: cover, max 34 vh).
+- **Lore Draft 7 LOCKED + Draft 8 + six more canon people flying the worlds (2026-10-31, owner: "keep all of them … nothing dies, things rest … add lore again … side quests are possible … more NPCs flying
+  around") — shared 85 / web 2,784 / server 2,573 tests green, typecheck clean; presence distribution measured by the clock (84 slots): Station avg 4 (max 8), Scale 2.6, People 2.2, Quiet 2.1, Garden 1.6,
+  Deep Past 1.5; NOT seen on a real screen, NOT voiced** (docs/lore/DRAFT_7_THE_DEEP_CAST.md LOCKED, docs/lore/DRAFT_8_THE_SMALL_LIVES_AND_THE_SIDE_ROADS.md PROPOSED; shared/npcs.ts six new cast rows + `lagMs`,
+  shared/npcDialogue.ts six new threads, shared/storyReactions.ts 18 new reactions + six voice roles `hesk|tamsin|ossian|ilsabet|pell|wim` (a role without a voice is read by the narrator)): Hesk (Warden-General),
+  Tamsin (the ward), Ossian Reed (the honest liar), Ilsabet Marrow (the Cartographer), **Pell (the Follower — where the world put her YESTERDAY: `npcLocation` evaluates her clock 24 h in the past)** and Wim
+  Ostler (the clerk) now fly, wear tags, speak, can be talked to (threads of three, pointers to entries findable by stillness in worlds they visit) and react to what you hold. Draft 8 holds **36 side roads**,
+  ~25 ordinary lives and ambient traffic as lore; the **road tracker, the Draft 7 entries/edges (Station, Archive, Ward slices), the lineage view, the eight seams and ambient lives/traffic ships are NOT built**
+  (order in Draft 8 §5). The broker's earlier "I don't know whose that is" reaction (Hesk's line by canon) moved to Hesk. Look at: Station crowding with up to eight tags, Pell's lag feeling like a
+  person and not a bug, and whether Hesk/Tamsin/Ossian/Ilsabet/Wim read as the lore's people.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
