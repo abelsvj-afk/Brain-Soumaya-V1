@@ -204,3 +204,13 @@ Files: `48-aldouss-alcove-v1.png` … `v4.png`. Aldous in all four: tall, gentle
 - **Alcove:** v2 frames him squarely inside the stone alcove; v4 opens into the archive aisle instead (alcove weakest there, but the stalls and shelves are strongest).
 
 Verdict: complete set, no rule breaks; v4 is the only one at the asked ratio. Your pick.
+
+## §49 — Ysmerel Hums the Gap (Sheet 2)
+
+Files: `49-ysmerel-hums-the-gap-v1.png` … `v4.png`. All four wide. Ysmerel is the same woman in every variant — tall, weathered, grey-braided, pale-gold choir robe, eyes closed, mouth closed mid-breath, one hand flat at her chest keeping the note she is not singing. The hall of pale translucent singers sits (v1, v3) or stands (v2, v4) silent behind her; the small hooded visitor is in the aisle, seen from behind; a shaft of gold light picks out the single empty stall. No text.
+
+- **Empty stall + light shaft:** clearest in v2 (lit empty stall, lower left, light falling from above); v1 and v4 land the light on the right-hand stalls/steps; v3 on the raised platform at right.
+- **Minor note, v3:** the visitor is caught in slight profile rather than purely from behind — a sliver of face in shadow. The other three keep him fully from behind.
+- Her robe carries fine star-chart embroidery in v1, v2 and v4 — decoration, no symbols.
+
+Verdict: clean, consistent set; the held-breath mood lands in all four. Your pick.
