@@ -678,6 +678,14 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   **garden day** (tend 3 · place 1 · recall 1, counted per local day) close with a bloom + harvest once, never replayed on reload; **no fuel
   reward** by design. Look at: the strip's height (~180 px) over the scene on a short phone, and whether the lag prompt / toasts stack
   awkwardly above it.
+- **Place truth + a welcome that describes the real app (2026-10-30, owner: "it should always know where you are", "the welcome card needs to
+  reflect what's actually there") — MEASURED in a real browser (server `growing-place` + app opened → server `home` after load; Observatory in the
+  garden shows the place card; its button starts a free warp home), needs on-device confirmation** (server travel.repo.ts `recallHome` +
+  `POST /api/travel/recall-home`, web WorldsSurface.tsx, lib/worldPlace.ts, Observatory.tsx, WelcomeIntro.tsx; spec
+  `docs/specs/owner-feedback-2026-10-30-place-truth-welcome.md`): the app opens in the galaxy, but the ledger kept the last world, so the Travel panel
+  and map named the wrong place. Now a session that opens with the ledger out in a world (and no journey active) settles it home once — free, no bonus.
+  The first-run card names Worlds/travel/fuel and, away from home, where you are; the Observatory says "in <world>" with a purpose card and "Warp back
+  to your galaxy". Look at: that nothing ever strands you in a world the app isn't showing, and the Observatory's header wrap on a small phone.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

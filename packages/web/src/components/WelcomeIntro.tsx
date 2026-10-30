@@ -13,18 +13,24 @@
  * deliberately NOT expanded into a tour or manual itself.
  */
 import { SoumayaEye } from "./SoumayaEye.js";
+import { placeName } from "../graph/worldPurpose.js";
+import type { WorldPlace } from "../lib/worldPlace.js";
 
 export function WelcomeIntro({
   companionName,
   onClose,
   onSeeHelp,
+  place,
 }: {
+  /** Where the traveller is now; a card opened away from home says so. */
+  place?: WorldPlace;
   companionName: string;
   onClose: () => void;
   /** Optional: dismisses this card AND opens the existing Help manual in one tap.
    *  Omit to fall back to a plain dismiss (the button simply doesn't render). */
   onSeeHelp?: () => void;
 }) {
+  const placeLine = place?.world && !place.transit ? `You are in ${placeName(place.world)} right now.` : null;
   return (
     <div className="welcome-overlay" role="dialog" aria-label="Welcome to Soumaya" onClick={onClose}>
       <div className="welcome-card" onClick={(e) => e.stopPropagation()}>
@@ -53,14 +59,22 @@ export function WelcomeIntro({
             much it matters and linked to the goals, people, and money it relates to.
           </li>
           <li>
+            <b>Worlds</b> are places built from your life that you can fly to in your ship —
+            a garden that grows your Journeys, a Deep Past, a Station, and more as you earn the way.
+            Open Tools → Travel or the World map. Your buttons stay with you everywhere, and
+            “← Galaxy” always brings you home.
+          </li>
+          <li>
             <b>Money and Journeys</b> are real tabs, not just words — and Life Vision is a real section at the top of the Mind tab — track what you
             earn and owe, name what you're ultimately building toward, and group it all into the
             life chapters (journeys) it actually belongs to.
           </li>
           <li>
             <b>Capture</b> is how a memory becomes a star: tap ＋, dump a thought, and it lands in
-            your galaxy, linked to what it relates to.
+            your galaxy, linked to what it relates to. Capturing also earns the fuel your ship
+            spends on warps.
           </li>
+          {placeLine && <li>{placeLine}</li>}
         </ul>
         {onSeeHelp && (
           <button className="welcome-help-link" onClick={onSeeHelp}>

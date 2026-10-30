@@ -1,3 +1,5 @@
+import { requestGoHome, type WorldPlace } from "../lib/worldPlace.js";
+import { worldPurpose, placeName } from "../graph/worldPurpose.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AwayDigest, GraphNode, Constellation, Insight } from "@brain/shared";
 import {
@@ -162,8 +164,11 @@ export function Observatory({
   onSearch,
   onAnswered,
   actionCount = 0,
+  place,
 }: {
   spaceName: string;
+  /** Where the traveller is right now (null/home when in the galaxy) — the greeting names it. */
+  place?: WorldPlace;
   /** Brain id — scopes the persisted quest day state (per-brain localStorage). */
   spaceId?: string;
   memories: GraphNode[]; // non-action nodes
@@ -360,6 +365,7 @@ export function Observatory({
 
   // IM-124 loading treatment: a shimmer skeleton in the fetched-cards zone,
   // following the app's DigestPanel skeleton idiom (`.loading-shimmer`).
+  const inWorld = !!place?.world && !place.transit;
   const loadingCard = anyLoading ? (
     <div className="obs-card obs-loading loading-shimmer" aria-live="polite" data-testid="observatory-loading">
       <span className="obs-ic">🛰️</span>
@@ -461,6 +467,7 @@ export function Observatory({
           <h2>Welcome back, {spaceName}.</h2>
           <span className="obs-sub">
             {count} {count === 1 ? "memory" : "memories"}
+            {inWorld ? ` · in ${placeName(place!.world!)}` : place?.transit ? " · in the warp" : ""}
             {streak > 0 ? ` · 🔥 ${streak}-day streak` : ""}
             {away ? ` · away ${humanAway(away.awayMs)}` : ""}
           </span>
@@ -479,6 +486,19 @@ export function Observatory({
             (away, agenda, capture, quests, recent) render immediately. */}
         {loadingCard}
         {errorCard}
+
+        {inWorld && (
+          <div className="obs-card obs-place">
+            <span className="obs-ic">🪐</span>
+            <span className="obs-body">
+              <span className="obs-title">You are in {placeName(place!.world!)}</span>
+              {worldPurpose(place!.world!) && <span className="obs-line">{worldPurpose(place!.world!)}</span>}
+              <button className="obs-enter" onClick={() => { onEnter(); requestGoHome(); }}>
+                Warp back to your galaxy
+              </button>
+            </span>
+          </div>
+        )}
 
         {away && (
           <div className="obs-card obs-away">

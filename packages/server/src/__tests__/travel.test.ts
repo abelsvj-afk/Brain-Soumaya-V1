@@ -852,3 +852,38 @@ describe("Eternity's gate (B-01): key + two relics, then a three-leg chain", () 
     expect(othersOnly.getState(T0).eternityReachable).toBe(false);
   });
 });
+
+describe("recallHome — a session opens at home, and the ledger agrees", () => {
+  function arriveAt(t: TravelRepo, dest: string, key: string, at: number) {
+    const j = t.depart({ clientKey: key, kind: "drift", destination: dest }, at);
+    const dep = past(j.cancelDeadline);
+    t.settle(j.id, dep);
+    return t.arrive(j.id, dep + 1000)!;
+  }
+
+  it("brings a traveller left out in a world home, free, once", () => {
+    const t = travel();
+    arriveAt(t, "great-station", "k1", T0);
+    expect(t.currentWorld(T0 + 60_000)).toBe("great-station");
+    const before = econ().get();
+    expect(t.recallHome(T0 + 120_000)).toEqual({ currentWorld: "home", recalled: true });
+    expect(t.currentWorld(T0 + 130_000)).toBe("home");
+    expect(econ().get()).toBeCloseTo(before, 1); // no charge, no bonus
+    expect(t.recallHome(T0 + 140_000)).toEqual({ currentWorld: "home", recalled: false }); // idempotent
+  });
+
+  it("does nothing when already home, and never touches a journey in progress", () => {
+    const t = travel();
+    expect(t.recallHome(T0).recalled).toBe(false);
+    arriveAt(t, "great-station", "k1", T0);
+    const active = t.depart({ clientKey: "k2", kind: "drift", destination: "growing-place" }, T0 + 200_000);
+    expect(t.recallHome(T0 + 200_500).recalled).toBe(false);
+    expect(t.getJourney(active.id, T0 + 200_500)?.state).toBe("arming");
+  });
+
+  it("is scoped to the space", () => {
+    arriveAt(travel("spaceA"), "great-station", "k1", T0);
+    expect(travel("spaceB").recallHome(T0 + 1000).recalled).toBe(false);
+    expect(travel("spaceA").currentWorld(T0 + 2000)).toBe("great-station");
+  });
+});

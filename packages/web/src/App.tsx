@@ -16,6 +16,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { makeAmbientAudio, TRACKS, type AmbientAudio } from "./graph/audio.js";
 import { setGraphicsMode, resolveGraphics, getGraphics } from "./graph/graphicsConfig.js";
 import { Observatory } from "./components/Observatory.js";
+import { useWorldPlace } from "./lib/worldPlace.js";
 import { ChatDock } from "./components/ChatDock.js";
 import { FuelEarnSheet, type EarnKind } from "./components/FuelEarnSheet.js";
 import { getDueReviews } from "./api/client.js";
@@ -242,6 +243,7 @@ export default function App() {
     dismissCurrent: dismissUnlockMoment,
   } = useCelebrationQueue();
   const [awayDigest, setAwayDigest] = useState<AwayDigest | null>(null);
+  const place = useWorldPlace();
   // The Observatory home overlay — fades in once, after the cinematic fly-in settles.
   const [showObs, setShowObs] = useState(false);
   // Phase M first-launch framing (docs/specs/soumaya-product-audit.md) — a single, one-time
@@ -2493,6 +2495,7 @@ export default function App() {
       )}
       {showIntro && space && (
         <WelcomeIntro
+          place={place}
           companionName={space.name || "Soumaya"}
           onClose={dismissIntro}
           onSeeHelp={() => {
@@ -3180,6 +3183,7 @@ export default function App() {
 
       {showObs && space && (
         <Observatory
+          place={place}
           spaceName={space.name}
           spaceId={space.id}
           memories={(data.nodes as GraphNode[]).filter((n) => n.kind !== "action")}

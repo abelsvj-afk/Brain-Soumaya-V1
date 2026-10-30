@@ -100,6 +100,19 @@ export async function getTravelState(): Promise<TravelState | null> {
   }
 }
 
+/** The app opened at home but the server still has the traveller out in a world: ask it to
+ *  write the free way home. Returns whether it changed anything; false on any failure. */
+export async function recallHome(): Promise<boolean> {
+  try {
+    const res = await afetch(`${API}/travel/recall-home`, { method: "POST" });
+    if (!res.ok) return false;
+    const d = (await res.json()) as { recalled?: boolean };
+    return d.recalled === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Depart. `clientKey` identifies the departure INTENT: the caller
  * generates it once per intent and reuses it across retries, so a

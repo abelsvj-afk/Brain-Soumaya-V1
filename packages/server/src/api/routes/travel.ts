@@ -75,6 +75,12 @@ export function travelRoutes(ctx: AppContext): Router {
     }
   });
 
+  // The app opened in the home galaxy but the ledger says "out in a world": write the free way home so the
+  // travel panel and the map name the place the traveller actually is. Idempotent; never charges.
+  r.post("/recall-home", (_req, res) => {
+    res.json(repo(res).recallHome());
+  });
+
   r.get("/state", (req, res) => {
     const spaceId = spaceOf(res);
     const state = new TravelRepo(ctx.handle, spaceId).getState();

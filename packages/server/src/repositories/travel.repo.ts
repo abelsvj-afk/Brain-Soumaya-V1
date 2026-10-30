@@ -310,6 +310,34 @@ export class TravelRepo implements JourneyBonusCreditor {
     return this.deriveWorld(this.latestRow());
   }
 
+  /**
+   * A session opens in the home galaxy (the app never starts inside a world). When the ledger
+   * still says the traveller is out in a world — they closed the app out there, or left with the
+   * old instant return — the app and the ledger disagreed, and the travel panel / map named a
+   * place the traveller wasn't. This writes the honest ending: a free, already-arrived leg home.
+   * No-op while a journey is active (that is the truth) or when already home. Never charges or pays.
+   */
+  recallHome(nowMs: number = Date.now()): { currentWorld: string; recalled: boolean } {
+    this.settleActive(nowMs);
+    const run = this.h.sqlite.transaction((): boolean => {
+      if (this.activeRow()) return false;
+      const origin = this.deriveWorld(this.latestRow());
+      if (origin === HOME_WORLD) return false;
+      const id = randomUUID();
+      const nowIso = new Date(nowMs).toISOString();
+      this.h.sqlite
+        .prepare(
+          `INSERT INTO travel_journeys (id, space_id, client_key, kind, origin, destination, state, fuel_charged, created_at, cancel_deadline, departed_at, arrived_at, ended_at)
+           VALUES (?, ?, ?, 'drift', ?, ?, 'arrived', 0, ?, ?, ?, ?, ?)`,
+        )
+        .run(id, this.spaceId, `recall-home-${id}`, origin, HOME_WORLD, nowIso, nowIso, nowIso, nowIso, nowIso);
+      this.addEvent(id, "arrived", { kind: "drift", recalled: true, bonusAmount: 0 }, nowMs);
+      return true;
+    });
+    const recalled = run.immediate();
+    return { currentWorld: this.deriveWorld(this.latestRow()), recalled };
+  }
+
   // --- settlement: the cancel window closes here, and only here ---
 
   /**

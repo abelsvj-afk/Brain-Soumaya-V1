@@ -69,9 +69,10 @@ function memory(over: Partial<GraphNode>): GraphNode {
   return { id: 1, label: "a memory", type: "memory", content: "", ...over } as GraphNode;
 }
 
-function renderObs() {
+function renderObs(place?: { world: string | null; transit: boolean }) {
   return render(
     <Observatory
+      place={place}
       spaceName="You"
       memories={[memory({ id: 1, label: "a memory" })]}
       streak={0}
@@ -112,5 +113,21 @@ describe("Observatory IM-124 residual — resolved-but-failed fetches surface ho
     await screen.findByText("Welcome back, You.");
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByText("Couldn't load everything")).toBeNull();
+  });
+});
+
+describe("Observatory names the place you are in", () => {
+  it("in a world: header + a place card with its purpose and the way home", async () => {
+    renderObs({ world: "growing-place", transit: false });
+    await screen.findByText("Welcome back, You.");
+    expect(document.body.textContent).toMatch(/in The Growing Place/);
+    expect(screen.getByText("You are in The Growing Place")).toBeTruthy();
+    expect(screen.getByText(/grows your Journeys as groves/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Warp back to your galaxy" })).toBeTruthy();
+  });
+  it("at home: no place card", async () => {
+    renderObs({ world: null, transit: false });
+    await screen.findByText("Welcome back, You.");
+    expect(screen.queryByText(/You are in/)).toBeNull();
   });
 });

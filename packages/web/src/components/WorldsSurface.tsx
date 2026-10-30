@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { TRAVEL_CANCEL_WINDOW_SECONDS, WORLDS_TRAVEL_ENABLED, relicCodexKey, relicsForWorld } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
+import { recallHome } from "../api/travel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { getDueReviews, type DueReview } from "../api/features.js";
 import { getArchivedNodesStrict, getIncidentEdges, getSpaceId } from "../api/client.js";
@@ -99,7 +100,8 @@ import { pushToast } from "./Toasts.js";
 import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
-import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, type TravelChangedDetail } from "../lib/travelEvents.js";
+import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
+import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelChangedDetail } from "../lib/travelEvents.js";
 import {
   approachPoint,
   easeAngle,
@@ -611,6 +613,22 @@ export default function WorldsSurface({
       window.removeEventListener(ENTER_WORLD_EVENT, onEnter);
     };
   }, [enabled]);
+  // The travel panel and the map name the place the SERVER holds. The app opens in the home galaxy, so
+  // if the server still has the traveller out in a world (the app was closed out there, or an old
+  // instant return), settle it ONCE as soon as the state first loads — otherwise they would say "you
+  // are in the Station" over a view of the galaxy. A journey in progress is the truth and is left alone.
+  const reconciledRef = useRef(false);
+  const engagedRef = useRef(false);
+  engagedRef.current = engaged;
+  useEffect(() => {
+    const st = travel.state;
+    if (!enabled || !st || reconciledRef.current) return;
+    reconciledRef.current = true;
+    if (engagedRef.current || st.activeJourney || st.currentWorld === "home") return;
+    void recallHome().then((changed) => {
+      if (changed) void travel.refresh().then(() => announceTravelChanged("arrive"));
+    });
+  }, [enabled, travel.state, travel.refresh]);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
@@ -792,12 +810,24 @@ export default function WorldsSurface({
   }, [visible, mode]);
   // Tell the home galaxy it is covered, so it stops rendering (Graph3D listens).
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("worlds:surface-visible", { detail: { visible } }));
-    return () => {
-      window.dispatchEvent(new CustomEvent("worlds:surface-visible", { detail: { visible: false } }));
-    };
-  }, [visible]);
+    announcePlace(visible, { world: visible && mode === "world" ? (currentWorld ?? null) : null, transit: visible && mode === "transit" });
+    return () => announcePlace(false, HOME_PLACE);
+  }, [visible, mode, currentWorld]);
+  // "Take me home" from elsewhere (the Observatory's place card): the same warp as the ← Galaxy button.
+  const goHomeRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const on = () => goHomeRef.current();
+    window.addEventListener(GO_HOME_EVENT, on);
+    return () => window.removeEventListener(GO_HOME_EVENT, on);
+  }, []);
   journeyRef.current = journey;
+  // The instant return only hides the layer; tell the server too, so the panel/map agree with the view.
+  const leaveInstantly = () => {
+    setDismissed(true);
+    void recallHome().then((changed) => {
+      if (changed) void travel.refresh();
+    });
+  };
   const goHome = async () => {
     if (mode !== "world" || currentWorld === "home" || !travel.state) {
       setDismissed(true);
@@ -805,11 +835,12 @@ export default function WorldsSurface({
     }
     try {
       const j = await travel.depart("warp", "home");
-      if (!j) setDismissed(true); // couldn't arm the trip — the instant return still works
+      if (!j) leaveInstantly(); // couldn't arm the trip — the instant return still works
     } catch {
-      setDismissed(true);
+      leaveInstantly();
     }
   };
+  goHomeRef.current = () => void goHome();
   const refreshTravelRef = useRef<() => Promise<void>>(async () => {});
   refreshTravelRef.current = travel.refresh;
   const lastDepartPollRef = useRef(0);

@@ -7751,3 +7751,6 @@ body.in-transit .perf-suggest { display: none; }
 .garden-day-ring { display: inline-flex; gap: 3px; }
 .garden-day-ring i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #f3e6c4; display: inline-block; }
 .garden-day-ring i.on { background: #ffd27a; border-color: #ffd27a; }
+
+/* Observatory place card: where you are, in words, with the way home. */
+.obs-place .obs-enter { margin-top: 0.4rem; min-height: 44px; }

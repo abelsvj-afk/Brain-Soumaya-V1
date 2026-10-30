@@ -1,3 +1,4 @@
+import { WORLD_CHART } from "../lib/routeBoard.js";
 /**
  * One line per world saying what it is for and one thing to do (audit X4, docs/AUDIT_SPEED_UI_UX_2026-10-29.md): the worlds
  * taught nothing about themselves. Shown once per world, on the first arrival, in the slot the look-around hint uses.
@@ -16,4 +17,9 @@ export const purposeSeenKey = (world: string): string => `worlds.purposeSeen.${w
 
 export function worldPurpose(world: string | undefined): string | null {
   return (world && WORLD_PURPOSE[world]) || null;
+}
+
+/** A world's display name ("The Growing Place"); the key itself for one the chart doesn't know. */
+export function placeName(world: string): string {
+  return WORLD_CHART.find((w) => w.key === world)?.name ?? world;
 }
