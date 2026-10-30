@@ -57,3 +57,10 @@ Landmarks the spots resolve to in the built scenes (radius, reach in world units
 Guesses that measuring corrected: the Station's `hero-ship` and a Station `backdrop-*` planet are not in the scene (replaced by the rim and the drydock); the People world's only `backdrop-*` is a planet 3,000+ units away (replaced by the field); the Deep Past stair (r = 783) reached nearly the whole world at 1.4× (now 0.45×).
 **Deep Past:** its models load slowly in a software renderer. It resolved once in the real browser, then timed out on reruns, so its two spots are confirmed by one measurement plus the scene's own holder list (`glb-rim`, `glb-stair`, `stratum-0…8` present). *Later idea:* the scene has nine named strata — the "missing sixth" could be tied to `stratum-6` itself.
 **Not exercised in a real browser:** tap-to-fly (worlds would not mount reliably headless here). Unit-tested at the maths level only.
+
+## 10. Addendum — Eternity (PROPOSED, not built; awaiting owner nod)
+Eternity's ship does not fly: `eternity-player-ship` eases to one `ETERNITY_STAGES.presence.ship` anchor. Proposed physical model that fits that scene rather than inventing a flight one:
+- **Where you stand = the stage you have chosen** (the same stage/pose control the world already has). Each of Eternity's three entries gets a *stage* it answers at: `sight.unlooked-direction` → the far side (`eternity-far`), `sight.long-room` → the long approach (`eternity-world`), `echo.eighth-bell` → beside him (`eternity-figure`). Regard/Listen answer only from that stage, same stillness (8 s), same once-per-day, same uniform "Nothing stirs."
+- Moving between stages = a slow glide of the ship (existing easing), not free flight; the figure stays at cosmic scale and never moves toward you.
+- Cost: one `stage` field on `StorySpot`, the viewer-position provider in WorldsSurface returning the current stage, and a glide target per stage. No server change.
+- Open for the owner: do you want free flight in Eternity (bigger scene work, changes his "he stays put" feel) or the three stages above (recommended)?
