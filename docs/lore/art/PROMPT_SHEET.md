@@ -167,7 +167,7 @@ NEGATIVE: text, letters, logos, watermark, UI, cartoon, anime, plastic, neon cyb
 ## 19. Soumaya's gap
 Aspect ratio: 1:1
 
-A small, elegant companion starship hovering alone in a dark void, her hull detailed and warm and friendly, with a soft glow in her cockpit and a gentle trail of blue light behind. Along her flank, just in front of the engines, is a small clean *blank oval patch* with no markings, as though a name had once been painted there and gently wiped away. Faint pale mist at the very edge of the frame curls toward her. Mood: tender and unsettling. Palette: warm blue, gold, soft grey. Painterly macro render, shallow depth of field, no text.
+A small, elegant companion starship hovering alone in a dark void, her hull detailed and warm and friendly, with a soft glow in her cockpit and a gentle trail of blue light behind. Along her flank, just in front of the engines, is a small clean *blank RECTANGULAR nameplate patch* (a rectangle with square corners, never an oval) with no markings, as though a name had once been painted there and gently wiped away. Faint pale mist at the very edge of the frame curls toward her. Mood: tender and unsettling. Palette: warm blue, gold, soft grey. Painterly macro render, shallow depth of field, no text.
 
 mythic space-fantasy concept art, painterly cinematic realism, soft volumetric light, deep indigo-black space with warm gold and pale cyan accents, restrained palette, heavy atmosphere, large sense of scale, no text, no logos, no UI, no watermarks, no real-world religious symbols.
 
@@ -350,7 +350,7 @@ Then — the rest: 2, 9, 10, 11, 12, 13, 14, 15, 18, 20, 23, 24, 25, 27, 29, 30,
 - §16 — The Lullaby hangs motionless and unarmed — no firing, ramming or blasts; the figure dissolves into pale light, no gore.
 - §17 — The Hush passes through Eternity without wounding him — no torn chest or gore; the small glow inside his light stays faint.
 - §18 — Exactly fifteen lit doorways and fifteen objects — the sixteenth doorway stays empty and dark, never filled or lit.
-- §19 — The blank oval is wiped-clean bare hull, not a scratch, scar or battle damage; the ship stays warm and cared-for, not derelict.
+- §19 — The blank rectangular nameplate is wiped-clean bare hull, not a scratch, scar or battle damage; the ship stays warm and cared-for, not derelict.
 - §20 — The same woman in all three panels — same face, age and light; no labels or text over the panels.
 - §21 — Ysmerel's mouth stays closed, mid-breath — no open-mouth singing pose; the torn page is one clean tear at the spine.
 - §22 — Eyes open but unfocused — no closed-eye sleeping and no zombie sleepwalker pose; the glass lantern stays unlit.
