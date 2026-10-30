@@ -193,3 +193,14 @@ Files: `47-tamsin-beside-a-laughing-patient-v1.png` … `v4.png`. All four wide 
 Verdict: clean set, no rule breaks; the differences are taste in how literal the laugh-ring should be. Your pick.
 
 **Correction to the §47 note above:** the four files are 1920×1280 — **3:2, not 16:9**. The generator ignored the stated ratio (the standing deviation); a 16:9 crop is available from the 3:2 frame if you want one. Everything else in the note stands.
+
+## §48 — Aldous's Alcove (Sheet 2)
+
+Files: `48-aldouss-alcove-v1.png` … `v4.png`. Aldous in all four: tall, gentle, white-haired, pale-gold choir robe, faintly translucent, hymnal held against his chest, empty choir stalls in rows behind him, the pale hush gathered as mist on the floor around — not on — him. He stands at rest, eyes peaceful; no body, no grave, nothing dead. No readable writing anywhere (books closed or blank).
+
+- **Ratio miss:** v1–v3 came out **portrait**; only **v4 is wide** as the sheet's 16:9 asks. Same standing generator deviation.
+- **Torn page:** clearest in v4 (the open hymnal has a cleanly torn-out section) and v2 (a torn chunk out of the book at his chest); v1 shows a torn corner; v3's book is slim and the tear is not really visible.
+- **Eyes:** closed in v1, v2, v4; open and meeting the viewer in v3 — the one that least matches "eyes at peace."
+- **Alcove:** v2 frames him squarely inside the stone alcove; v4 opens into the archive aisle instead (alcove weakest there, but the stalls and shelves are strongest).
+
+Verdict: complete set, no rule breaks; v4 is the only one at the asked ratio. Your pick.
