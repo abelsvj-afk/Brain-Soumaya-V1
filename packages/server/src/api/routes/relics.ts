@@ -28,7 +28,14 @@ export function relicsRoutes(ctx: AppContext): Router {
       });
       return;
     }
-    res.json(s.state(spaceId));
+    // Relics I-7: the state view also carries the server-derived
+    // current world (the travel ledger's word, never the client's),
+    // so Hold controls can tell the truth about the Station rule
+    // before a change is attempted. Reads themselves are never gated.
+    const state = s.state(spaceId);
+    let currentWorld: string | null = null;
+    try { currentWorld = currentWorldOf(res, s); } catch { currentWorld = null; }
+    res.json(currentWorld ? { ...state, currentWorld } : state);
   });
 
   /**
