@@ -844,7 +844,21 @@ export function ChatDock({
         <span className="chatdock-title">
           <SoumayaEye state={eyeState} mood={lastMood} size={30} /> {spaceName}
         </span>
-        <div className="chatdock-tools">
+        {/* The one way out is a real, prominent ✕ Close (owner: "soumaya chat has no x"): a bordered 44 px button, not a
+            header tool lookalike. Escape and a tap on the dimmed outside close it too. */}
+        <button
+          className="chatdock-close"
+          onClick={() => void handleClose()}
+          title="Close chat"
+          aria-label="Close"
+        >
+          <Icon name="close" size={20} />
+          <span className="chatdock-close-label">Close</span>
+        </button>
+      </header>
+      {/* The tools scroll sideways in their own row, so a narrow phone never pushes ✕ Close off the header (owner: "the x is off and
+          barely visible … make the buttons in chat scrollable"). */}
+        <div className="chatdock-tools" role="toolbar" aria-label="Chat tools">
           {/* REG-084 (CH-04): every header tool carries its name VISIBLY —
               on a phone there is no hover, so a title-only glyph is an
               unexplained glyph. Captions follow the program's round-3
@@ -855,7 +869,7 @@ export function ChatDock({
             onClick={() => setShowPersona((v) => !v)}
             title="Who she is to you — About Me, custom roles, knowledge"
             aria-label="Persona — who she is to you"
-          >
+        >
             <span aria-hidden="true">🎭</span>
             <span className="chatdock-tool-label">Persona</span>
           </button>
@@ -905,19 +919,7 @@ export function ChatDock({
               <span className="chatdock-tool-label">Clear</span>
             </button>
           )}
-          {/* The one way out is a real, prominent ✕ Close (owner: "soumaya chat has no x"): a bordered 44 px button, not a
-              header tool lookalike. Escape and a tap on the dimmed outside close it too. */}
-          <button
-            className="chatdock-close"
-            onClick={() => void handleClose()}
-            title="Close chat"
-            aria-label="Close"
-          >
-            <Icon name="close" size={20} />
-            <span className="chatdock-close-label">Close</span>
-          </button>
         </div>
-      </header>
 
       {/* REG-159/JN-01: an armed journey context is visible while it lasts —
           the chat names the journey whose scope the next send will carry, with
@@ -933,7 +935,7 @@ export function ChatDock({
             onClick={() => onConsumeJourneyContext?.()}
             title="Remove the journey scope — ask about the whole galaxy instead"
             aria-label="Remove journey scope"
-          >
+        >
             ✕ Remove scope
           </button>
         </div>
@@ -1207,7 +1209,7 @@ export function ChatDock({
             disabled={attachBusy}
             title={attachBusy ? "Reading file…" : "Attach a file — she'll read it with your next message"}
             aria-label="Attach a file"
-          >
+        >
             {attachBusy ? "⏳" : "📎"}
           </button>
           {micSupported && (

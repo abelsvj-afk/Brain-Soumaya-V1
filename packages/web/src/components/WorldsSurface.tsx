@@ -100,7 +100,10 @@ import { pushToast } from "./Toasts.js";
 import { markRelicFound, useFoundRelics } from "./relicsFound.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
+import { renderIcon } from "./icons/Icon.js";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
+import { NPC_PRESENCES, encounterLine, encounterStep, npcsIn, patrolAt, patrolLabel, recordMeeting, type NpcKey, type PatrolPhase } from "../graph/npcPresence.js";
+import { HARBOR_CONTROLLER_BERTH } from "../graph/stationLayout.js";
 import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelChangedDetail } from "../lib/travelEvents.js";
 import {
   approachPoint,
@@ -642,6 +645,15 @@ export default function WorldsSurface({
   const [archivedRetry, setArchivedRetry] = useState(0);
   const [guided, setGuided] = useState(false);
   const [showController, setShowController] = useState(false);
+  // NPC presence (docs/specs/npcs-alive-2026-10-30.md): the Station controller's patrol, her on-screen tag, and who you have met.
+  const npcTagRef = useRef<HTMLButtonElement | null>(null);
+  const npcBodyRef = useRef<THREE.Object3D | null>(null);
+  const npcWorldPosRef = useRef<V3>([0, 0, 0]);
+  const npcNearRef = useRef(false);
+  const npcPhaseRef = useRef<PatrolPhase | null>(null);
+  const [npcPhase, setNpcPhase] = useState<PatrolPhase | null>(null);
+  const metThisVisitRef = useRef<Set<NpcKey>>(new Set());
+  const [npcNote, setNpcNote] = useState<string | null>(null);
   // Station interior (Wave 2, settled design): a mode of the Station
   // stay, not a world. `inside` swaps the exterior scene for the hall;
   // `interiorRoom` jumps instantly between the four rooms (no walking,
@@ -814,6 +826,22 @@ export default function WorldsSurface({
     return () => announcePlace(false, HOME_PLACE);
   }, [visible, mode, currentWorld]);
   // "Take me home" from elsewhere (the Observatory's place card): the same warp as the ← Galaxy button.
+  // A new stay is a new visit: encounters can happen again (the 20-minute cooldown still applies), and Eternity — cosmic,
+  // not roaming — is "met" a few seconds after you arrive in his world.
+  useEffect(() => {
+    metThisVisitRef.current = new Set();
+    npcNearRef.current = false;
+    npcBodyRef.current = null;
+    setNpcNote(null);
+    if (!visible || mode !== "world" || currentWorld !== "eternity") return;
+    const e = NPC_PRESENCES.find((n) => n.id === "eternity")!;
+    const t = window.setTimeout(() => {
+      metThisVisitRef.current.add(e.id);
+      const m = recordMeeting(getSpaceId(), e.id);
+      if (m.recorded) pushToast(encounterLine(e, null, m.first), "✦", 7000, "normal");
+    }, 4000);
+    return () => window.clearTimeout(t);
+  }, [visible, mode, currentWorld]);
   const goHomeRef = useRef<() => void>(() => {});
   useEffect(() => {
     const on = () => goHomeRef.current();
@@ -1724,6 +1752,57 @@ export default function WorldsSurface({
       lastFrameAt = now;
       // The worlds' orbit distances were tuned on a landscape screen; back off on a phone (graph/worldCamera.ts).
       const fit = portraitFit(camera.aspect);
+      // The Station's harbor controller lives here: a patrol on a wall-clock cycle, a tag that follows her, and an encounter when
+      // your ship or camera comes near (graph/npcPresence.ts). Presentation only — no act, no speech.
+      if (mode === "world" && currentWorld === "great-station" && !inside) {
+        const hc = NPC_PRESENCES[0]!;
+        let body = npcBodyRef.current;
+        if (!body || !body.parent) {
+          body = world.group.getObjectByName(hc.objectName ?? "") ?? null;
+          npcBodyRef.current = body;
+        }
+        if (body) {
+          const pose = patrolAt(Date.now(), HARBOR_CONTROLLER_BERTH, { reducedMotion });
+          body.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
+          body.rotation.y = pose.rotationY;
+          if (npcPhaseRef.current !== pose.phase) {
+            npcPhaseRef.current = pose.phase;
+            setNpcPhase(pose.phase);
+          }
+          body.updateWorldMatrix(true, false);
+          const wp = new THREE.Vector3().setFromMatrixPosition(body.matrixWorld);
+          npcWorldPosRef.current = [wp.x, wp.y, wp.z];
+          // Nearest of the camera and (while flying) the ship.
+          const fl = flightRef.current;
+          const d = Math.min(
+            camera.position.distanceTo(wp),
+            fl ? Math.hypot(fl.pos[0] - wp.x, fl.pos[1] - wp.y, fl.pos[2] - wp.z) : Infinity,
+          );
+          const enc = encounterStep(npcNearRef.current, d);
+          npcNearRef.current = enc.near;
+          if (enc.entered && !metThisVisitRef.current.has(hc.id)) {
+            metThisVisitRef.current.add(hc.id);
+            const m = recordMeeting(getSpaceId(), hc.id);
+            if (m.recorded) pushToast(encounterLine(hc, pose.phase, m.first), "🛰️", 7000, "normal");
+          }
+          // The tag rides her on screen (a ref write, no re-render).
+          const tag = npcTagRef.current;
+          if (tag) {
+            const sp = wp.clone().project(camera);
+            const onScreen = sp.z < 1 && Math.abs(sp.x) < 0.92 && sp.y > -0.8 && sp.y < 0.85;
+            tag.style.display = onScreen ? "" : "none";
+            if (onScreen) {
+              const host = hostRef.current;
+              const w = host?.clientWidth ?? 0;
+              const h = host?.clientHeight ?? 0;
+              // Centred above her, but never half off the screen edge.
+              const tw = tag.offsetWidth || 150;
+              const x = Math.min(Math.max((sp.x * 0.5 + 0.5) * w - tw / 2, 6), Math.max(6, w - tw - 6));
+              tag.style.transform = `translate(${x.toFixed(1)}px, calc(${((-sp.y * 0.5 + 0.5) * h).toFixed(1)}px - 130%))`;
+            }
+          }
+        }
+      }
       // Places to fly to are read from the scene's own named holders once a second (a model that loads late
       // simply appears); the avatar shows only while a flight is under way or parked.
       if (mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside) {
@@ -2147,6 +2226,30 @@ export default function WorldsSurface({
         ],
       });
     }
+    // Who's here: the NPCs that live in this world, findable in one tap (docs/specs/npcs-alive-2026-10-30.md).
+    const whoIsHere = npcsIn(currentWorld);
+    if (mode === "world" && !inside && whoIsHere.length > 0) {
+      dockGroups.push({
+        id: "npcs",
+        label: "Who's here",
+        tiles: whoIsHere.map((n) => {
+          const isController = n.id === "harbor-controller";
+          return {
+            id: `npc-${n.id}`,
+            icon: n.icon,
+            label: isController ? "Controller" : n.name,
+            name: isController ? `Fly to the Harbor controller, ${patrolLabel(npcPhase ?? "docked")}` : `${n.name}: ${n.role}`,
+            onClick: () => {
+              if (isController && npcBodyRef.current) {
+                flyTo({ id: "npc-harbor-controller", label: "Harbor controller", icon: n.icon, center: npcWorldPosRef.current, radius: 14 });
+              } else {
+                setNpcNote(`${n.name} is here — ${n.role}.`);
+              }
+            },
+          };
+        }),
+      });
+    }
     if (atEternity) {
       dockGroups.push(
         {
@@ -2242,6 +2345,29 @@ export default function WorldsSurface({
         <div key={`arrived-${arrivalFadeKey}`} className="travel-arrived" role="status">
           {`Arrived · ${worldName(currentWorld ?? "home")}`}
         </div>
+      )}
+      {mode === "world" && atStation && !inside && !showController && npcBodyRef.current && (
+        <button
+          type="button"
+          ref={npcTagRef}
+          className="npc-tag"
+          aria-label={`Harbor controller, ${patrolLabel(npcPhase ?? "docked")} — tap to talk`}
+          onClick={() => setShowController(true)}
+        >
+          <span aria-hidden="true">{renderIcon("i:harbor", 16)}</span>
+          <span>
+            <strong>Harbor controller</strong>
+            <em>{patrolLabel(npcPhase ?? "docked")}</em>
+          </span>
+        </button>
+      )}
+      {npcNote && mode === "world" && (
+        <p className="npc-note" role="status">
+          {npcNote}
+          <button type="button" className="mini" onClick={() => setNpcNote(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </p>
       )}
       {lookHint && visible && mode === "world" && (
         <p className="worlds-look-hint" role="status">

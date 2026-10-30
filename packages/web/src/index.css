@@ -7754,3 +7754,33 @@ body.in-transit .perf-suggest { display: none; }
 
 /* Observatory place card: where you are, in words, with the way home. */
 .obs-place .obs-enter { margin-top: 0.4rem; min-height: 44px; }
+
+/* Chat header: title + a pinned ✕ Close; the tools live in their own sideways-scrolling row (owner: the ✕ was off-screen). */
+.chatdock-head { gap: 8px; }
+.chatdock-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatdock-close { flex: 0 0 auto; margin-left: 0; }
+.chatdock-tools {
+  flex: 0 0 auto; overflow-x: auto; overflow-y: hidden; padding: 4px 10px;
+  border-bottom: 1px solid rgba(122, 200, 255, 0.18);
+  -webkit-overflow-scrolling: touch; scrollbar-width: thin; overscroll-behavior-x: contain;
+  /* a soft fade on the right edge says "more this way" */
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.chatdock-tools .chatdock-tool { flex: 0 0 auto; }
+
+/* NPC presence (docs/specs/npcs-alive-2026-10-30.md): the tag that rides a roaming NPC, and the Who's-here note. */
+.npc-tag {
+  position: absolute; left: 0; top: 0; z-index: 24; display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 4px 12px 4px 10px; border-radius: 999px; cursor: pointer; font: inherit;
+  background: rgba(8, 18, 38, 0.86); border: 1px solid rgba(122, 200, 255, 0.7); color: #eaf6ff;
+  will-change: transform; text-align: left;
+}
+.npc-tag strong { display: block; font-size: 0.78rem; line-height: 1.1; }
+.npc-tag em { display: block; font-size: 0.68rem; font-style: normal; color: #aebbd6; line-height: 1.1; }
+.npc-tag:hover, .npc-tag:focus-visible { background: rgba(20, 40, 80, 0.95); border-color: #7af9ff; }
+.npc-note {
+  position: absolute; left: var(--hud-rail, 62px); right: var(--hud-rail, 62px); bottom: 5.5rem; z-index: 26; margin: 0;
+  display: flex; gap: 0.5rem; align-items: center; padding: 0.5rem 0.75rem; border-radius: 12px; font-size: 0.82rem;
+  background: rgba(8, 18, 38, 0.92); border: 1px solid rgba(122, 200, 255, 0.5); color: #eaf6ff;
+}

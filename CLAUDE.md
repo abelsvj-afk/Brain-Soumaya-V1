@@ -686,6 +686,17 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   and map named the wrong place. Now a session that opens with the ledger out in a world (and no journey active) settles it home once — free, no bonus.
   The first-run card names Worlds/travel/fuel and, away from home, where you are; the Observatory says "in <world>" with a purpose card and "Warp back
   to your galaxy". Look at: that nothing ever strands you in a world the app isn't showing, and the Observatory's header wrap on a small phone.
+- **Chat header + NPCs that live (2026-10-30, owner: "the x in Soumaya chat is off and barely visible … make the buttons scrollable", "NPCs can
+  live and free-roam … they aren't felt or encountered") — MEASURED in a real browser (close button on screen at 360×640 and 412×915, 87×44;
+  patrol/tag/encounter/Who's-here in the Station), needs on-device confirmation** (ChatDock.tsx + index.css tail; graph/npcPresence.ts,
+  WorldsSurface.tsx, index.css `.npc-tag`; spec `docs/specs/npcs-alive-2026-10-30.md`): the chat's ✕ Close is now pinned in the header beside the
+  title and the tools (Persona/Voice/Wrap up/Tools/Clear) scroll sideways in their own row with an edge fade. The Station's harbor controller now keeps a
+  5-minute wall-clock patrol (docked → casts off → one lap → returns; still at her berth under reduced motion), wears a name tag that rides her on
+  screen (a 44 px button that opens her panel), is listed under a **Who's here** dock group (tap = fly your ship to where she is now), and is **met**: coming
+  near (ship or camera, hysteresis) shows one ambient line once per visit, the first ever meeting is recorded per brain (local). Eternity gets a Who's-here
+  tile and a first-meeting note a few seconds after you arrive; he stays put (cosmic scale). **Presentation only** — no new act, no speech, no server state;
+  the NPC fence is intact (she still only answers). **Not built:** NPCs crossing worlds (needs the owner to relax the fence). Look at: whether a 5-minute
+  patrol is lively without being noise, the near radius (300) feeling like "she passed me", the tag size.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy
