@@ -69,3 +69,6 @@ Approved by eye and placed in the Book (new entries `sight.ruels-laugh`, `sight.
 - §49 **v2** — lit empty stall is clearest, visitor fully from behind, held-breath mood.
 
 - §50 **v2** — the blank last line is clearest, pen hovering at it, eyes elsewhere; placed on new entry `obj.blank-line` (Draft 7 W10). (v3 has the full smile but the blank is weak and the pen floats.)
+
+- §51 **v2** — Wim reads as a young adult (v3 reads a boy, too young for his card); confusion and tenderness land; blank slip, ring glowing at the edge. Placed on `obj.anonymous-payments` (the Mooring Payments; road 3).
+- §52 **v1** — the star and its single ribbon of light are the most literal; the three leavings sit together on the bollard; she is hooded and from behind. Placed on `sight.hung-star` (the star hung for someone). Flag: the figure reads broader than "slight" — acceptable from behind and in shadow.
