@@ -98,3 +98,15 @@ describe("Side roads from a person", () => {
     await waitFor(() => expect(put).toHaveBeenCalledWith("road.open-alcove", "done"));
   });
 });
+
+describe("Rumours from a person", () => {
+  it("are offered only after a few meetings, and say a silence without explaining it", () => {
+    const { unmount } = render(<NpcTalk npc="cantor" world="quiet-archive" meetings={1} onClose={() => {}} />);
+    expect(screen.queryByText("Heard anything lately?")).toBeNull();
+    unmount();
+    const { container } = render(<NpcTalk npc="cantor" world="quiet-archive" meetings={3} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Heard anything lately?"));
+    expect(screen.getByText(/count six hours and then six again/)).toBeTruthy();
+    expect(container.textContent ?? "").not.toMatch(/\d/);
+  });
+});

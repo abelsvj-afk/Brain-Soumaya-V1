@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { castMember, NPC_TALK_BY_ID, openSteps, pointerFor, STORY_ROADS, roadView } from "@brain/shared";
+import { castMember, NPC_TALK_BY_ID, openSteps, pointerFor, STORY_ROADS, roadView, rumourFor } from "@brain/shared";
 import { getSpaceId } from "../api/http.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { useStoryBook } from "../hooks/useStoryBook.js";
@@ -49,6 +49,8 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
     } else if (roadState === "taken") say(view.current ? `You said you would. ${view.current}` : road.offer);
     else say(road.offer);
   };
+  // A rumour pointing at one of the silences the story walks past (a seed for a later expansion); said once they know you a little, never required.
+  const rumour = rumourFor(npc, meetings);
   const choices: { id: string; label: string; run: () => void }[] = [
     { id: "who", label: "Who are you?", run: () => say(talk.who) },
     { id: "place", label: "What is this place to you?", run: () => say(atHome ? talk.placeHome : talk.placeAway) },
@@ -62,6 +64,7 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
       },
     })),
     ...(road ? [{ id: "road", label: "Is there something I can do for you?", run: talkRoad }] : []),
+    ...(rumour ? [{ id: "rumour", label: "Heard anything lately?", run: () => say(rumour.line) }] : []),
     { id: "look", label: "Is there something I should look for?", run: () => say(point ? point.say : talk.allFound) },
   ];
 
