@@ -309,3 +309,22 @@ Files: `58-brannoch-and-the-mooring-ring-v1.png` … `v4.png`. All four wide. Br
 - v3's ring reads as worn stone with the warm glow at its knot; the others are metal rings glowing gold.
 
 Verdict: a clean, consistent set. Your pick.
+
+## §59 — Sahl Hangs a Star (Sheet 2)
+
+Files: `59-sahl-hangs-a-star-v1.png` … `v4.png`. All four wide. The whole story is in every variant: Sahl alone on the high rock, hooded and cloaked, reaching up with both hands to hang the one small warm star on its hook, lit only by the star's own light; far below, tiny on the winding road, the stranger looks up; and the star's light falls toward them in a long slow ribbon of pale cyan. The mood — care for a stranger — lands in all four.
+
+- **The "not yet":** the ribbon's shortfall is clearest in v2 (it fades well above the valley) and v4 (it splits and thins before the road). In v1 and v3 the ribbon comes very close to the traveller, who still stands in their own small pool of dark.
+- **The hook:** a large wrought hook in v1; a bracket arm from the rock face in v2–v4.
+- Sahl's face is never shown — hood and shadow in all four, which suits a witness painting.
+
+Verdict: a clean, consistent set with no flags. Your pick.
+
+## §60 — Noor Asks Vesh (Sheet 2)
+
+Files: `60-noor-asks-vesh-v1.png` … `v4.png`. Vesh is right in all four and consistent with the §4 canon: tall and androgynous, face gentle and ungendered, hooded dusk-violet robes, and the clean, perfectly circular hollow through the chest showing the starfield beyond — no gore. The painting's heart is present every time: Vesh's hands open in their lap, empty — the kindly non-answer. Noor is established as a young archivist with dark hair in a bun and ink-blackened fingers (heaviest in v2 and v3). Between them on the stone floor sit the small round seal and the paper boat in all four, and the alcove is lit by one candle's gold.
+
+- The candle stands on the floor between them in v4 — the most literal shared light; in the others it burns at the alcove's edge.
+- Small slips only: v2 has a second paper boat in the mid-background, and its seal's ringed-planet emblem reads slightly like a coin. Neither touches continuity.
+
+Verdict: a clean, consistent set with no flags. Your pick.
