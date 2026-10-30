@@ -181,3 +181,13 @@ Clarifying the §44 note above: the owner did not reject the set — he approved
 - **Replacement filed: `44-terus-first-door-v5.png`** — generated with v1 as the angle/composition reference: same straight-on view, door centred, Teru stepping toward the viewer with the nail in his closed hand, Calend at the right in the many-coloured patchwork coat (unfinished pale patch visible), palm on the frame, not touching him. Wide 16:9.
 - v3 stays in the folder marked **do-not-use (superseded by v5 at the owner's word)** — do not pick it.
 - Live candidates for §44 are now v1, v2, v4, v5. The Calend face question from the original §44 note still stands for your pick (v1/v2/v5 younger dark-haired; v4 older greyer).
+
+## §47 — Tamsin Beside a Laughing Patient (Sheet 2)
+
+Files: `47-tamsin-beside-a-laughing-patient-v1.png` … `v4.png`. All four wide 16:9, all elements present in every variant: the half-transparent patient (Ruel) sitting up in his cot laughing, the laugh rendered as warm gold light; Tamsin at the foot of the cot, back half-turned, hand to her mouth, bowl in her other hand, greying bun and rolled-sleeve green apron — consistent with her §23 face reference; rows of pale patients asleep behind them under ember lanterns. Nobody reads as dead; the laugh keeps the ward alive. No text.
+
+- **v1 / v4:** the laugh is a single soft ring of gold light, as written. v4 has the strongest watercolour-soft edges on the patient.
+- **v2:** the ring is more constructed — concentric circles, reads slightly like a portal — and the ward leans hard-sci-fi (bare metal ship interior, large viewport).
+- **v3:** the ring multiplies into large concentric swirls around his head; the background opens to space with ships — the busiest of the four.
+
+Verdict: clean set, no rule breaks; the differences are taste in how literal the laugh-ring should be. Your pick.
