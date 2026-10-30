@@ -27,7 +27,7 @@
 | **Kith** | **she/her** (the child) | about six; patched plain dress | a torn crayon drawing of a faceless woman; sets one place too many | an adult face |
 | **The Follower (Pell)** | **she/her** | slight, young; hooded jacket; seen from behind | a coin, a ribbon, a note | a visible face |
 | **Wim Ostler** (Brannoch's clerk) | **he/him** | young, tidy junior clerk | a berth-log; Ledger stamp | — |
-| **Ilsabet Marrow, the Cartographer** | **she/her** ("she" in Draft 4) | patient, ink-stained | a chart that changes when unrolled | — |
+| **Ilsabet Marrow, the Cartographer** | **she/her** ("she" in Draft 4) | **middle-aged (fixed), dark hair in a loose bun**; patient, ink-stained | a chart that changes when unrolled | — |
 | **The Sleepwalker** | **she/her** (prompt 22: "a woman") | a Faded woman in a pale nightgown | a flameless lantern held in both hands | fear — she is listening |
 | **Tamsin's patients (the Faded)** | mixed | half-transparent, watercolour-soft edges | — | gore |
 | **The Companion** (dock stranger) | **unspecified on purpose** | takes a form suited to the viewer's tide (see Draft 6 §4) | warm hands; a flask; a cup | **a visible face; never named; never Eternity-looking** |
