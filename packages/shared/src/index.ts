@@ -18,3 +18,5 @@ export * from "./tours.js";
 export * from "./fleetDefense.js";
 export * from "./fleetDefenseEngine.js";
 export * from "./missions.js";
+export * from "./story.js";
+export * from "./storyCanon.js";
