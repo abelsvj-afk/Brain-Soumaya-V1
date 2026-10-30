@@ -238,3 +238,13 @@ Verdict: clean set, no rule breaks; the only real question is Wim's age. Your pi
 ## §44 — OWNER RULING: Calend's face (2026-10-30)
 
 Asked to choose between the younger dark-haired Calend of §44 v1/v2/v5 and the older Calend the Bible describes, the owner ruled: **Calend stays older, as the Bible says.** §44 v4 is the face reference for Calend; the younger faces in v1, v2 and v5 are the deviation. (The owner still approved v1 as an image — the ruling is about which face is canon, not about the painting.) This closes the Calend question flagged in the original §44 note.
+
+## §52 — Pell Walks in the Late Light (Sheet 2)
+
+Files: `52-pell-walks-in-the-late-light-v1.png` … `v4.png`. All four wide. **The hard rule holds in every variant: Pell is hooded, in shadow, seen only from behind — her face is never shown.** The full set is in all four: the quiet dock, the distant single warm star, its light arriving as one long slow ribbon across the water, the dark unlit skiff moored nearby, and the leavings behind her — a ribbon, a coin and a folded note (blank; no readable writing).
+
+- **The leavings:** clearest in v1, all three items together on top of the bollard; v3 also on the bollard top; in v2 and v4 the ribbon is tied to the bollard and the coin and note rest on the planks at its base.
+- **The ribbon of light:** straightest in v1 (the star is also the most literal single star there); a slow S-curve in v2 and v3; a winding double ribbon in v4, where the pier itself stretches far into the distance.
+- The mood — always arriving just after — lands in all four: the left things, the empty planks, her already walking away.
+
+Verdict: a clean set with no flags. Your pick.
