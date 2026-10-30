@@ -406,3 +406,12 @@ Files: `40-soumayas-ship-the-seventh-hull-v1.png` … `v4.png`. All four wide, a
 - One delight worth Claude's eye either way: v4 makes the "latch-like fin" literal — an actual latch mechanism rides the dorsal fin in its side and three-quarter views. Charming or too on-the-nose is a taste call, not a defect.
 
 Verdict: the strongest possible outcome for this set — the rectangle survived every roll. Your pick.
+
+## §41 — Ysmerel at the Hush's Edge (Round 1 leftover, Draft 5)
+
+Files: `41-ysmerel-at-the-hushs-edge-v1.png` … `v4.png`. All four wide. Ysmerel is herself in every variant — the same tall, weathered woman from §21 and §49, grey hair tied back, seated in profile on the low stool at the plain's edge — and the sheet's discipline holds in all four: mouth closed, eyes open, gaze on the Hush, and her thin hand resting flat on the ground beside the stool, counting a breath. The choir-robe is carried folded over her arm, not worn; her clothes stay plain and dark, as written. Down the line, far off, the other quiet sitters keep their distance in every variant — chosen company, not a crowd.
+
+- **The Hush** stands as a still pale wall on the horizon throughout; the v3 and v4 walls are the smoothest and most mist-true, while v1 and v2 carry the same faint frozen-waterfall streaking noted in §38 — flagged there, same note here.
+- The single pale gold glint is kept to one in every variant (a lone star in v1/v3, a distant point of light on the line in v2/v4).
+
+Verdict: a clean, consistent set; no new flags. Your pick.
