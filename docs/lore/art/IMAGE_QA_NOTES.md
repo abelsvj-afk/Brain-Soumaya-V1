@@ -158,3 +158,7 @@ Teru established: the same travel-worn, hollow-eyed man in all four, nail visibl
 
 ## §45 Hesk's Locked Room (170 keepers)
 Hesk established: the same big, stern, grey-bearded man in the brown Warden's coat in all four — this set is his face reference (needed again in §§46/57 and §42). Every beat present in every variant: ring of small keys at the belt, tin soldier polished with a cloth, long narrow store-room under one hanging lamp, hundreds of belongings each with a BLANK tag (single boot, ribbon, child's pale-blue mitten, coat, cup all identifiable), cold blue at the starfield doorway. His expression is effort and tenderness, never cruelty. Tags carry no readable writing. All four wide. Clean set, nothing flagged.
+
+## §44 — owner rejection (2026-10-30)
+
+The owner viewed `44-terus-first-door-v3.png` and rejected it ("I don't like this one"). **v3 is OWNER-REJECTED — do not pick it.** The set's live candidates are v1, v2 and v4. (File left in place, marked here, per the standing superseded-file practice.)
