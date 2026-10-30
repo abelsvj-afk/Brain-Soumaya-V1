@@ -65,13 +65,14 @@ export function textTag(text: string): string {
   return (x >>> 0).toString(36);
 }
 
-async function clipFor(entryId: string, register: Register, tide: CurrentKey | undefined, text: string, reaction?: { npc: string; holds: string }): Promise<string | null> {
+async function clipFor(entryId: string, register: Register, tide: CurrentKey | undefined, text: string, reaction?: { npc: string; holds: string }, say?: { npc: string; key: string }): Promise<string | null> {
   try {
     const q = new URLSearchParams({ register });
     if (tide) q.set("tide", tide);
     q.set("t", textTag(text));
     if (reaction) q.set("holds", reaction.holds);
-    const path = reaction ? `react/${encodeURIComponent(reaction.npc)}` : encodeURIComponent(entryId);
+    if (say) q.set("key", say.key);
+    const path = say ? `say/${encodeURIComponent(say.npc)}` : reaction ? `react/${encodeURIComponent(reaction.npc)}` : encodeURIComponent(entryId);
     const res = await afetch(`${API}/story/narration/${path}?${q.toString()}`);
     if (res.status !== 200) return null;
     const blob = await res.blob();
@@ -90,6 +91,8 @@ export interface NarrationOpts {
   onEnd?: () => void;
   /** A person's reaction to a held thing: voiced in THEIR voice (the server names the pairing; the words never leave the client). */
   reaction?: { npc: string; holds: string };
+  /** A line of a person's talk: voiced in THEIR voice (the server resolves the canon words from the key). */
+  say?: { npc: string; key: string };
   /** Called when the studio voice was NOT used, with a plain reason (shown in the Book so it is never a mystery). */
   onFallback?: (why: string) => void;
   /** 0..1 progress through the words, for captions that follow the voice. Exact for a clip; an estimate for the browser voice, which cannot report it. */
@@ -113,7 +116,7 @@ export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" 
     current = null;
     o.onEnd?.();
   };
-  const url = await clipFor(o.entryId, o.register, o.tide, o.text, o.reaction);
+  const url = await clipFor(o.entryId, o.register, o.tide, o.text, o.reaction, o.say);
   if (!url) o.onFallback?.("the server has no studio clip for this line");
   if (url) {
     const audio = el ?? new Audio();

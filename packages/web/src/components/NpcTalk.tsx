@@ -5,6 +5,7 @@ import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { useStoryBook } from "../hooks/useStoryBook.js";
 import { useStoryRoads } from "../hooks/useStoryRoads.js";
 import { markHeard, readHeard } from "../graph/npcTalk.js";
+import { getNarrationMode, playNarration } from "../lib/narration.js";
 
 /**
  * Talking to a person (docs/specs/living-worlds-dialogue-2026-10-31.md, S3). Authored choices, never free text. While this is open the person stops where they are and turns to
@@ -30,9 +31,11 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
   const atHome = world === member.home;
   const steps = openSteps(talk, { meetings, heard });
   const point = pointerFor(talk, found);
-  const say = (text: string) => {
+  /** Show the words; with narration on ("whenever I find something") the person's own voice reads the same line (the server names the canon line from `key`). */
+  const say = (text: string, key?: string) => {
     setSaid(text);
     setBye(false);
+    if (key && getNarrationMode() === "on") void playNarration({ entryId: key, register: "plain", text, say: { npc, key } });
   };
   // A road this person can give, walked by what the Book and meetings already show — never a counter. A finished road is recorded once and just keeps its gift.
   const roadCtx = { found, meetings: { [npc]: meetings } };
@@ -45,27 +48,27 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
     setRoadId(road.id);
     if (roadState === "done" || (view.done && roadState === "taken")) {
       if (roadState !== "done") void setRoad(road.id, "done");
-      say(road.gift);
+      say(road.gift, `road:${road.id}:gift`);
     } else if (roadState === "taken") say(view.current ? `You said you would. ${view.current}` : road.offer);
-    else say(road.offer);
+    else say(road.offer, `road:${road.id}:offer`);
   };
   // A rumour pointing at one of the silences the story walks past (a seed for a later expansion); said once they know you a little, never required.
   const rumour = rumourFor(npc, meetings);
   const choices: { id: string; label: string; run: () => void }[] = [
-    { id: "who", label: "Who are you?", run: () => say(talk.who) },
-    { id: "place", label: "What is this place to you?", run: () => say(atHome ? talk.placeHome : talk.placeAway) },
-    { id: "job", label: "What do you do?", run: () => say(talk.job) },
+    { id: "who", label: "Who are you?", run: () => say(talk.who, "who") },
+    { id: "place", label: "What is this place to you?", run: () => say(atHome ? talk.placeHome : talk.placeAway, atHome ? "place-home" : "place-away") },
+    { id: "job", label: "What do you do?", run: () => say(talk.job, "job") },
     ...steps.map((s) => ({
       id: s.id,
       label: s.ask,
       run: () => {
-        say(s.say);
+        say(s.say, `step:${s.id}`);
         setHeard(markHeard(getSpaceId(), npc, s.id));
       },
     })),
     ...(road ? [{ id: "road", label: "Is there something I can do for you?", run: talkRoad }] : []),
-    ...(rumour ? [{ id: "rumour", label: "Heard anything lately?", run: () => say(rumour.line) }] : []),
-    { id: "look", label: "Is there something I should look for?", run: () => say(point ? point.say : talk.allFound) },
+    ...(rumour ? [{ id: "rumour", label: "Heard anything lately?", run: () => say(rumour.line, "rumour") }] : []),
+    { id: "look", label: "Is there something I should look for?", run: () => say(point ? point.say : talk.allFound, point ? `point:${point.entryId}` : "allfound") },
   ];
 
   return (

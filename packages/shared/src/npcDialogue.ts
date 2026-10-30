@@ -306,3 +306,20 @@ export function openSteps(t: NpcTalk, ctx: Pick<TalkContext, "meetings" | "heard
 export function pointerFor(t: NpcTalk, found: ReadonlySet<string>): TalkPoint | null {
   return t.points.find((p) => !found.has(p.entryId)) ?? null;
 }
+
+/** The voice role of each speaking cast member (selects `LORE_TTS_VOICE_<ROLE>`; one without its own voice is read by the narrator). */
+export const NPC_VOICE_ROLE: Readonly<Record<string, string>> = {
+  wayfarer: "calend",
+  cantor: "ysmerel",
+  broker: "dorrow",
+  dissenter: "dissenter",
+  surveyor: "surveyor",
+  archivist: "archivist",
+  keeper: "keeper",
+  hesk: "hesk",
+  tamsin: "tamsin",
+  ossian: "ossian",
+  ilsabet: "ilsabet",
+  pell: "pell",
+  wim: "wim",
+};

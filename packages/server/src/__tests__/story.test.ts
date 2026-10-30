@@ -314,6 +314,12 @@ describe("/api/story/narration over HTTP", () => {
     await fetch(`${base}/api/story/find`, { method: "POST", headers: { "Content-Type": "application/json", "x-space-id": spaceId }, body: JSON.stringify({ entryId: "obj.dorrows-page", source: "npc:broker" }) });
     expect((await get("/narration/react/broker?holds=obj.dorrows-page")).status).toBe(204); // held, but no key in tests: read it yourself
   });
+  it("a spoken talk line names a canon line, never text: unknown keys and other people's roads are 404, a real line is 204 without a key", async () => {
+    expect((await get("/narration/say/cantor?key=whatever%20I%20like")).status).toBe(404);
+    expect((await get("/narration/say/nobody?key=who")).status).toBe(404);
+    expect((await get("/narration/say/hesk?key=road:road.open-alcove:offer")).status).toBe(404);
+    expect((await get("/narration/say/cantor?key=who")).status).toBe(204); // a real line, but no studio key in tests: read it yourself
+  });
   it("serves the flavour key as words and labels only", async () => {
     const j = (await (await get("/flavor")).json()) as { on: boolean; key: { register: string; tide: { first: string }; lean: string[]; hour: string } };
     expect(["plain", "warm", "grave"]).toContain(j.key.register);

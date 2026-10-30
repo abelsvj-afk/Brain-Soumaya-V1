@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { spaceOf } from "../middleware.js";
-import { VOICE_ROLES, reactionBetween } from "@brain/shared";
+import { VOICE_ROLES, reactionBetween, talkLine } from "@brain/shared";
 import { isOwnerSpace } from "../../auth/owner.js";
 import { StoryError, StoryRepo } from "../../story/story.js";
 import { RoadsRepo } from "../../story/roads.js";
@@ -171,6 +171,24 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
       return;
     }
     const clip = await narrator.narrate(reaction.line, "plain", reaction.role);
+    if (!clip) {
+      res.status(204).end();
+      return;
+    }
+    res.setHeader("Content-Type", clip.contentType);
+    res.setHeader("ETag", `"${clip.key}"`);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(clip.audio);
+  });
+
+  // One line of a person's talk, in THEIR voice. Names the person and a line key, never words (shared/talkLine.ts resolves canon text only).
+  r.get("/narration/say/:npc", async (req, res) => {
+    const line = talkLine(String(req.params.npc), String(req.query.key ?? ""));
+    if (!line) {
+      res.status(404).json({ error: "They have nothing to say like that." });
+      return;
+    }
+    const clip = await narrator.narrate(line.text, "plain", line.role as (typeof VOICE_ROLES)[number]);
     if (!clip) {
       res.status(204).end();
       return;

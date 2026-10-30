@@ -26,5 +26,6 @@ export * from "./storyTriggers.js";
 export * from "./storyRoads.js";
 export * from "./storyLines.js";
 export * from "./storyRumours.js";
+export * from "./talkLine.js";
 export * from "./storyFlavor.js";
 export * from "./storyReactions.js";
