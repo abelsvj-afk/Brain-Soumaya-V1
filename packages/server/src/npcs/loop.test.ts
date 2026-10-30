@@ -5,7 +5,7 @@ import { EconomyRepo } from "../economy.js";
 import { NPC_TICK_MIN_INTERVAL_MS, type NpcActKind } from "@brain/shared";
 import { NpcRepo } from "./repo.js";
 import { checkFence, askNpc, getNpcState, NpcError, resumeNpc, runNpcTick, stopNpc } from "./loop.js";
-import { HARBOR_CONTROLLER } from "@brain/shared";
+import { ETERNITY_FIGURE, HARBOR_CONTROLLER } from "@brain/shared";
 
 /**
  * NPC autonomy — the loop and the fence (design note §2/§3, C2–C4).
@@ -169,11 +169,20 @@ describe("C3 — the fence holds", () => {
     expect(npcRows.n).toBe(3);
   });
 
-  it("no cross-world reach: the controller acts only in the Station", () => {
+  it("roams only where she may: home world + her roamed worlds; never a personal brain, never an unlisted world", () => {
     runNpcTick(handle, "spaceA", "harbor-controller", T0);
     const st = getNpcState(handle, "spaceA", "harbor-controller", T0);
     expect(st.world).toBe("great-station");
-    expect(() => checkFence(HARBOR_CONTROLLER, "speak", "deep-past")).toThrow(NpcError);
+    // npc-society (2026-10-30): she may be in the worlds she roams…
+    expect(() => checkFence(HARBOR_CONTROLLER, "speak", "great-station")).not.toThrow();
+    expect(() => checkFence(HARBOR_CONTROLLER, "speak", "deep-past")).not.toThrow();
+    // …but never a personal brain (invitation-only is a future feature), and never a world outside her list (Eternity's).
+    expect(() => checkFence(HARBOR_CONTROLLER, "speak", "home")).toThrow(/personal brain/);
+    expect(() => checkFence(HARBOR_CONTROLLER, "speak", "eternity")).toThrow(NpcError);
+    // Eternity does not roam at all: only his own world.
+    expect(() => checkFence(ETERNITY_FIGURE, "wait", "eternity")).not.toThrow();
+    expect(() => checkFence(ETERNITY_FIGURE, "wait", "deep-past")).toThrow(NpcError);
+    expect(() => checkFence(ETERNITY_FIGURE, "wait", "home")).toThrow(NpcError);
   });
 
   it("no structural self-apply: kinds outside the NPC's allow-list are refused", () => {

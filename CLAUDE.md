@@ -718,6 +718,20 @@ standards, learned the hard way (shipping "the code should spread the bodies" fi
   the in-world flight avatar, the garden avatar and the warp ship, and a world-space **plume** trails the flight and garden ships — all in her equipped trail
   colour (blue/neon/gold/purple, live-updating). Headless runs ~2 fps so the trail reads thin; judge density on a phone. Look at: flame length at the Station's
   scale, the plume vs. the red spool glow, and the garden flame's size against the 24-unit hull.
+- **NPC society — they cross worlds, speak, have jobs/lives, and carry lore hooks (2026-10-30, owner: "let NPCs cross worlds too … I do want NPCs
+  speaking … multiple NPCs … canon NPCs tied to the lore … never into personal brains, only if invited") — MEASURED in a real browser with a skewed clock
+  (4 NPCs in the Station incl. the Keeper "visiting from afar", each with a ship + coloured flame, name tag, Who's-here tile, card, spoken first-meeting toast;
+  3 in the garden; positions change over time), needs on-device confirmation** (shared/npcs.ts `NPC_CAST`/`npcLocation`/`castIn`/`scriptSpecsFor`/
+  `NPC_NEVER_WORLDS`; server npcs/loop.ts `checkFence`, npcs/dailyScript.ts; web graph/npcPresence.ts, graph/npcBodies.ts, WorldsSurface.tsx, index.css `.npc-*`;
+  spec `docs/specs/npc-society-2026-10-30.md` — **supersedes** the "never acts outside its own world" fence and the "NPCs crossing worlds not built" note
+  in the NPCs-alive entry above): the fence is now "home world + the worlds you roam, never a personal brain (`home`; invitations are a future feature, nothing here
+  is a back door)". Each cast member has a home world, a roam list, a job/life/voice, a Quaternius ship + trail colour, offline greetings and a first-person intro.
+  Where they are is a pure clock function (2-hour slots, per-NPC home share) computed identically by server and web — no table, nothing to drift. They SPEAK:
+  encounters say `Name: “line”`, from the daily batched script (still ONE call per brain per day for the whole cast; quotes allowed now) or their own greetings offline.
+  The harbor controller still ANSWERS in her panel from live state and her routes/prices stay deterministic. Cast shipped: harbor controller, Eternity (stays home),
+  the Keeper (Growing Place), the Archivist (Quiet), the Surveyor (Scale), the Wayfarer (roams everywhere) — all `canon: "provisional"` placeholders with **no lore
+  invented** (`lore.layers` empty): the story is the owner's, to be written in a dedicated lore session. Look at: whether 2-hour slots feel alive (people appear/leave
+  with a quiet note), tag/card density when 4+ are in one world, ring radius (capped 560) vs. sight lines in each world, and the provisional names/jobs.
 - **Fly billing hold, ongoing since 2026-08-29:** most of the above (and everything shipped since)
   still hasn't been visually verified on a real device via this app's own deploy pipeline. On
   2026-09-03 the owner sent real on-device screenshots of two screens (Observatory, the galaxy

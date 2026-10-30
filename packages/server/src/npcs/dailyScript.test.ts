@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NPC_DEFINITIONS, NPC_SCRIPT_SPECS } from "@brain/shared";
+import { NPC_CAST, NPC_SCRIPT_SPECS } from "@brain/shared";
 import { createDb, type DbHandle } from "../db/client.js";
 import {
   SCRIPT_RETRY_DELAYS_MS,
@@ -20,7 +20,7 @@ beforeEach(() => {
 afterEach(() => h.sqlite.close());
 
 const goodEntries = () =>
-  NPC_DEFINITIONS.flatMap((d) =>
+  NPC_CAST.flatMap((d) =>
     (NPC_SCRIPT_SPECS[d.id] ?? []).map((s) => ({
       npc: d.id,
       situation: s.situation,
@@ -58,7 +58,7 @@ describe("one batched call per brain per day", () => {
   });
   it("one prompt carries every NPC (roster size does not change the call count)", () => {
     const prompt = buildScriptPrompt(h, "s1", "2026-10-30", T0);
-    for (const d of NPC_DEFINITIONS) expect(prompt).toContain(`"${d.id}"`);
+    for (const d of NPC_CAST) expect(prompt).toContain(`"${d.id}"`);
     // The controller's brief is travel facts only — no memory text goes to the model for her.
     expect(prompt).toMatch(/currently at home/);
   });
@@ -118,11 +118,21 @@ describe("assembling the script", () => {
     expect(s.lines["harbor-controller"]!.encounter_docked!.length).toBeGreaterThan(0);
     expect(s.source).toBe("model");
   });
-  it("never lets a character who only answers be quoted", () => {
+  it("lets a speaking character be quoted (they speak now — docs/specs/npc-society-2026-10-30.md)", () => {
     const s = assembleScript("d", T0, [
-      { npc: "harbor-controller", situation: "encounter_patrolling", lines: ['She says "welcome aboard".', "She sweeps past."] },
+      { npc: "harbor-controller", situation: "encounter_patrolling", lines: ['"Clear skies, traveller."', "Another line."] },
     ]);
-    expect(s.lines["harbor-controller"]!.encounter_patrolling).toEqual(["She sweeps past."]);
+    // The outer quotes are stripped by cleanLine (the UI adds its own); the words are kept — nothing is rejected for being spoken.
+    expect(s.lines["harbor-controller"]!.encounter_patrolling).toEqual(["Clear skies, traveller.", "Another line."]);
+  });
+  it("covers every cast member from the one prompt, and gives everyone their own offline greetings", () => {
+    const prompt = buildScriptPrompt(h, "s1", "2026-10-30", T0);
+    for (const c of NPC_CAST) {
+      expect(prompt).toContain(`"${c.id}"`);
+      expect(prompt).toContain(c.job);
+    }
+    const s = assembleScript("d", T0, []);
+    for (const c of NPC_CAST.filter((x) => x.id !== "eternity")) expect(s.lines[c.id]?.encounter_first?.length).toBeGreaterThan(0);
   });
   it("a model that returns nothing usable is a fallback, not a cached success", () => {
     expect(assembleScript("d", T0, []).source).toBe("fallback");

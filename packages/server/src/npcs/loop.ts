@@ -9,6 +9,7 @@ import {
   type NpcLogEntry,
   type NpcQuestionKind,
   type NpcState,
+  NPC_NEVER_WORLDS,
 } from "@brain/shared";
 import { NpcRepo, localDateKey } from "./repo.js";
 import { checkNpcEternityGate } from "./gate.js";
@@ -75,7 +76,12 @@ export function checkFence(def: NpcDefinition, kind: NpcActKind, world: string):
       `${def.name} cannot ${kind} — that act is not on its allow-list.`,
     );
   }
-  if (world !== def.world) {
+  // Personal brains are never entered (docs/specs/npc-society-2026-10-30.md): invitation-only is a future feature, and nothing here is a back door.
+  if (NPC_NEVER_WORLDS.includes(world)) {
+    throw new NpcError("NPC_FENCE_REFUSED", `${def.name} cannot enter a personal brain (${world}).`);
+  }
+  // Its own world, or a world it is allowed to roam.
+  if (world !== def.world && !def.roams?.includes(world)) {
     throw new NpcError(
       "NPC_FENCE_REFUSED",
       `${def.name} belongs to ${def.world} and cannot act in ${world}.`,

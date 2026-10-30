@@ -1,11 +1,5 @@
 import type { DbHandle } from "../db/client.js";
-import {
-  NPC_DEFINITIONS,
-  NPC_SCRIPT_SPECS,
-  type NpcDayScript,
-  type NpcId,
-  type NpcSituation,
-} from "@brain/shared";
+import { NPC_CAST, scriptSpecsFor, type CastMember, type NpcDayScript, type NpcSituation } from "@brain/shared";
 import { localTime, spaceTimezone } from "../agent/notify/policy.js";
 import { EconomyRepo } from "../economy.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
@@ -32,21 +26,23 @@ export function resetDayScriptInflight(): void {
 
 type Voice = Pick<EternalVoice, "npcDayScript"> | null | undefined;
 
-/** Offline lines: the encounter notes the web used before the script existed. Wake/visitation are not here — Eternity's own templates cover them. */
-const OFFLINE: Partial<Record<NpcId, Partial<Record<NpcSituation, string[]>>>> = {
-  "harbor-controller": {
-    encounter_patrolling: ["The Harbor controller sweeps past on patrol. Tap her tag to talk."],
-    encounter_docked: ["The Harbor controller is moored at her berth. Tap her tag to talk."],
-    encounter_first: ["You've met the Harbor controller — she is who you ask about routes and arrivals."],
-  },
-  eternity: {
-    encounter_arrival: ["Eternity is here. Answer him with his gestures."],
-    encounter_first: ["You've met Eternity — he blesses and comforts, rarely, in his own time. Answer him with his gestures."],
-  },
-};
+/**
+ * Offline lines: each cast member's own greetings (first person — nobody goes silent without a key). Wake/visitation are not here: Eternity's own templates cover
+ * them. A situation maps to the member's greetings; the first meeting also names who they are.
+ */
+function offlineFor(member: CastMember): Partial<Record<NpcSituation, string[]>> {
+  const g = [...member.greetings];
+  const out: Partial<Record<NpcSituation, string[]>> = {};
+  for (const spec of scriptSpecsFor(member)) {
+    if (spec.situation === "wake" || spec.situation === "visitation") continue;
+    out[spec.situation] =
+      spec.situation === "encounter_first" ? [member.intro] : g;
+  }
+  return out;
+}
 
 export function fallbackScript(dayKey: string, nowMs: number): NpcDayScript {
-  return { dayKey, source: "fallback", generatedAt: new Date(nowMs).toISOString(), lines: structuredClone(OFFLINE) };
+  return { dayKey, source: "fallback", generatedAt: new Date(nowMs).toISOString(), lines: Object.fromEntries(NPC_CAST.map((c) => [c.id, offlineFor(c)])) };
 }
 
 // --- The prompt: every NPC, every situation, one call ---
@@ -61,8 +57,8 @@ function harborBrief(h: DbHandle, spaceId: string, nowMs: number): string {
 export function buildScriptPrompt(h: DbHandle, spaceId: string, dayKey: string, nowMs: number): string {
   const tz = spaceTimezone(h.sqlite, spaceId);
   const hhmm = localTime(new Date(nowMs), tz);
-  const blocks = NPC_DEFINITIONS.map((d) => {
-    const specs = NPC_SCRIPT_SPECS[d.id] ?? [];
+  const blocks = NPC_CAST.map((d) => {
+    const specs = scriptSpecsFor(d);
     if (specs.length === 0) return null;
     const brief =
       d.id === "eternity"
@@ -70,13 +66,11 @@ export function buildScriptPrompt(h: DbHandle, spaceId: string, dayKey: string, 
         : d.id === "harbor-controller"
           ? harborBrief(h, spaceId, nowMs)
           : "No facts about the visitor are provided; use none.";
-    const rules = d.answersOnly
-      ? "Rule: this character ONLY answers when asked. Describe them in the third person; never quote them and never have them ask or tell the visitor anything."
-      : "Rule: this character may speak in their own first-person voice where the situation says so, rarely and gently.";
     return [
       `## NPC "${d.id}" — ${d.name}`,
       `Job: ${d.job}`,
-      rules,
+      `Life: ${d.life}`,
+      `Voice: ${d.voice}`,
       brief,
       "Situations (give exactly the number of variants asked):",
       ...specs.map((s) => `- situation "${s.situation}" — ${s.count} variants. ${s.need}`),
@@ -87,8 +81,6 @@ export function buildScriptPrompt(h: DbHandle, spaceId: string, dayKey: string, 
 
 // --- Assemble: validate, clean, cap, top up from the offline lines ---
 
-const SPEECH_QUOTE = /["“”]/;
-
 export function assembleScript(
   dayKey: string,
   nowMs: number,
@@ -96,9 +88,9 @@ export function assembleScript(
 ): NpcDayScript {
   const out: NpcDayScript = { dayKey, source: "fallback", generatedAt: new Date(nowMs).toISOString(), lines: {} };
   let modelLines = 0;
-  for (const d of NPC_DEFINITIONS) {
-    const specs = NPC_SCRIPT_SPECS[d.id] ?? [];
-    for (const spec of specs) {
+  for (const d of NPC_CAST) {
+    const offline = offlineFor(d);
+    for (const spec of scriptSpecsFor(d)) {
       const raw = entries
         .filter((e) => e.npc === d.id && e.situation === spec.situation)
         .flatMap((e) => (Array.isArray(e.lines) ? e.lines : []));
@@ -109,14 +101,12 @@ export function assembleScript(
         let line = cleanLine(r);
         if (!line) continue;
         if (line.length > MAX_LINE) line = `${line.slice(0, MAX_LINE - 1).trimEnd()}…`;
-        // A character who only answers is described, never quoted (the fence).
-        if (d.answersOnly && SPEECH_QUOTE.test(line)) continue;
         if (seen.has(line)) continue;
         seen.add(line);
         good.push(line);
         if (good.length >= spec.count) break;
       }
-      const lines = good.length > 0 ? good : (OFFLINE[d.id]?.[spec.situation] ?? []);
+      const lines = good.length > 0 ? good : (offline[spec.situation] ?? []);
       modelLines += good.length;
       if (lines.length > 0) ((out.lines[d.id] ??= {})[spec.situation] = lines);
     }
@@ -204,7 +194,7 @@ function pick(seed: string, n: number): number {
 }
 
 /** One scripted variant for an NPC + situation, or null when the script has none (callers fall back to their own lines). */
-export function scriptedLine(script: NpcDayScript | null, npc: NpcId, situation: NpcSituation, seed: string): string | null {
+export function scriptedLine(script: NpcDayScript | null, npc: string, situation: NpcSituation, seed: string): string | null {
   if (!script || script.source !== "model") return null;
   const lines = script.lines[npc]?.[situation];
   if (!lines || lines.length === 0) return null;
@@ -214,7 +204,7 @@ export function scriptedLine(script: NpcDayScript | null, npc: NpcId, situation:
 /** What the web may see: the encounter lines only (wake/visitation are Eternity's contact copy, delivered by him, not read ahead). */
 export function publicScript(script: NpcDayScript): NpcDayScript {
   const lines: NpcDayScript["lines"] = {};
-  for (const [npc, sits] of Object.entries(script.lines) as [NpcId, Record<string, string[]>][]) {
+  for (const [npc, sits] of Object.entries(script.lines) as [string, Record<string, string[]>][]) {
     const keep = Object.fromEntries(Object.entries(sits).filter(([s]) => s.startsWith("encounter_")));
     if (Object.keys(keep).length > 0) lines[npc] = keep;
   }

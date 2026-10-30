@@ -104,7 +104,9 @@ import { renderIcon } from "./icons/Icon.js";
 import { getNpcScript } from "../api/npcs.js";
 import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
-import { NPC_PRESENCES, encounterLine, encounterStep, npcsIn, patrolAt, patrolLabel, recordMeeting, type NpcKey, type PatrolPhase } from "../graph/npcPresence.js";
+import { encounterLine, encounterStep, npcActivity, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
+import { anchorFromBounds, createNpcBodies, type NpcBodies } from "../graph/npcBodies.js";
+import { castIn, castMember, type CastMember } from "@brain/shared";
 import { HARBOR_CONTROLLER_BERTH } from "../graph/stationLayout.js";
 import { ENTER_WORLD_EVENT, TRAVEL_CHANGED_EVENT, announceTravelChanged, type TravelChangedDetail } from "../lib/travelEvents.js";
 import {
@@ -652,15 +654,18 @@ export default function WorldsSurface({
   const [guided, setGuided] = useState(false);
   const [showController, setShowController] = useState(false);
   // NPC presence (docs/specs/npcs-alive-2026-10-30.md): the Station controller's patrol, her on-screen tag, and who you have met.
-  const npcTagRef = useRef<HTMLButtonElement | null>(null);
-  const npcBodyRef = useRef<THREE.Object3D | null>(null);
-  const npcWorldPosRef = useRef<V3>([0, 0, 0]);
-  const npcNearRef = useRef(false);
-  const npcPhaseRef = useRef<PatrolPhase | null>(null);
-  const [npcPhase, setNpcPhase] = useState<PatrolPhase | null>(null);
+  const npcBodiesRef = useRef<NpcBodies | null>(null);
+  const npcTagEls = useRef(new Map<string, HTMLButtonElement>());
+  const npcPosRef = useRef(new Map<string, V3>());
+  const npcNearRef = useRef(new Map<string, boolean>());
+  const npcPhasesRef = useRef(new Map<string, string>());
+  // Who is in this world right now (cast locations are clock-driven and shared with the server: shared/npcs.ts npcLocation).
+  const [presentNpcs, setPresentNpcs] = useState<{ id: string; activity: string }[]>([]);
   const metThisVisitRef = useRef<Set<NpcKey>>(new Set());
   // Today's batched NPC lines (one model call per brain per day, cached server-side) — fetched when you enter a world that has NPCs.
   const npcScriptRef = useRef<NpcDayScript | null>(null);
+  // A tapped NPC's card (job, what they are doing, what is known of them).
+  const [npcCard, setNpcCard] = useState<string | null>(null);
   const [npcNote, setNpcNote] = useState<string | null>(null);
   // Station interior (Wave 2, settled design): a mode of the Station
   // stay, not a world. `inside` swaps the exterior scene for the hall;
@@ -836,33 +841,52 @@ export default function WorldsSurface({
     return () => announcePlace(false, HOME_PLACE);
   }, [visible, mode, currentWorld]);
   // "Take me home" from elsewhere (the Observatory's place card): the same warp as the ← Galaxy button.
-  // A new stay is a new visit: encounters can happen again (the 20-minute cooldown still applies), and Eternity — cosmic,
-  // not roaming — is "met" a few seconds after you arrive in his world.
+  // A new stay is a new visit: encounters can happen again (the 20-minute cooldown still applies). Who is here is recomputed every half minute from the
+  // clock (people come and go between worlds); Eternity — cosmic, with no ship — is "met" a few seconds after you arrive in his world.
   useEffect(() => {
     metThisVisitRef.current = new Set();
-    npcNearRef.current = false;
-    npcBodyRef.current = null;
+    npcNearRef.current = new Map();
+    npcPosRef.current = new Map();
+    npcPhasesRef.current = new Map();
     setNpcNote(null);
+    setNpcCard(null);
+    const active = visible && mode === "world" && !!currentWorld;
+    const compute = () => castIn(active ? currentWorld : null, Date.now());
+    let before = new Set<string>(compute().map((m) => m.id));
+    const toList = (members: CastMember[]) => members.map((m) => ({ id: m.id, activity: npcActivity(m, currentWorld ?? "", npcPhasesRef.current.get(m.id) as never ?? null) }));
+    setPresentNpcs(toList(compute()));
     // The day's script is one cached read (the first of the day makes the single model call); offline lines if it never arrives.
     let scriptReady: Promise<unknown> = Promise.resolve();
-    if (visible && mode === "world" && npcsIn(currentWorld).length > 0) {
+    if (active && before.size > 0) {
       scriptReady = getNpcScript().then((sc) => {
         npcScriptRef.current = sc;
       });
     }
-    if (!visible || mode !== "world" || currentWorld !== "eternity") return;
-    const e = NPC_PRESENCES.find((n) => n.id === "eternity")!;
     let cancelled = false;
-    const t = window.setTimeout(async () => {
-      // Give the day's script (its first read of the day is the one model call) a few seconds; the offline line covers a slow one.
-      await Promise.race([scriptReady, new Promise((r) => window.setTimeout(r, 6000))]);
-      if (cancelled) return;
-      metThisVisitRef.current.add(e.id);
-      const m = recordMeeting(getSpaceId(), e.id);
-      if (m.recorded) pushToast(encounterLine(e, null, m.first, npcScriptRef.current, m.count), "✦", 7000, "normal");
-    }, 4000);
+    const tick = window.setInterval(() => {
+      if (!active) return;
+      const now = compute();
+      const ids = new Set(now.map((m) => m.id));
+      for (const m of now) if (!before.has(m.id)) setNpcNote(`${m.name} has arrived.`);
+      for (const id of before) if (!ids.has(id)) setNpcNote(`${castMember(id)?.name ?? "Someone"} has gone elsewhere.`);
+      before = ids;
+      setPresentNpcs(toList(now));
+    }, 30_000);
+    let t = 0;
+    if (active && currentWorld === "eternity") {
+      const e = castMember("eternity")!;
+      t = window.setTimeout(async () => {
+        // Give the day's script (its first read of the day is the one model call) a few seconds; the offline line covers a slow one.
+        await Promise.race([scriptReady, new Promise((r) => window.setTimeout(r, 6000))]);
+        if (cancelled) return;
+        metThisVisitRef.current.add(e.id);
+        const m = recordMeeting(getSpaceId(), e.id);
+        if (m.recorded) pushToast(encounterLine(e, "eternity", null, m.first, npcScriptRef.current, m.count), "✦", 7000, "normal");
+      }, 4000);
+    }
     return () => {
       cancelled = true;
+      window.clearInterval(tick);
       window.clearTimeout(t);
     };
   }, [visible, mode, currentWorld]);
@@ -1656,6 +1680,9 @@ export default function WorldsSurface({
     // Her exhaust trail in world space — flying her ship through a world leaves the same trail she leaves at home (graph/enginePlume.ts).
     const plume = avatar || currentWorld === "growing-place" ? createEnginePlume(trailRef.current, { scale: currentWorld === "growing-place" ? 1.8 : 1 }) : null;
     if (plume) scene.add(plume.group);
+    // The cast's ships for this world (graph/npcBodies.ts): created as people arrive, removed as they leave.
+    const npcBodies = mode === "world" && currentWorld && !inside ? createNpcBodies(scene) : null;
+    npcBodiesRef.current = npcBodies;
     let plumeTrail = trailRef.current;
     let plumeFed = false;
     const exhaustV = new THREE.Vector3();
@@ -1769,6 +1796,11 @@ export default function WorldsSurface({
     const startedAt = performance.now();
     let lastFrameAt = startedAt;
     let lastPlacesAt = 0;
+    let lastNpcSyncAt = 0;
+    const sceneStartedAt = performance.now();
+    let lastAnchorAt = 0;
+    let npcAnchorTries = 0;
+    let npcAnchor: ReturnType<typeof anchorFromBounds> = null;
     let flightPhaseShown = "";
     const BASE_ANGLE = 0.6;
     const frame = () => {
@@ -1783,50 +1815,61 @@ export default function WorldsSurface({
       lastFrameAt = now;
       // The worlds' orbit distances were tuned on a landscape screen; back off on a phone (graph/worldCamera.ts).
       const fit = portraitFit(camera.aspect);
-      // The Station's harbor controller lives here: a patrol on a wall-clock cycle, a tag that follows her, and an encounter when
-      // your ship or camera comes near (graph/npcPresence.ts). Presentation only — no act, no speech.
-      if (mode === "world" && currentWorld === "great-station" && !inside) {
-        const hc = NPC_PRESENCES[0]!;
-        let body = npcBodyRef.current;
-        if (!body || !body.parent) {
-          body = world.group.getObjectByName(hc.objectName ?? "") ?? null;
-          npcBodyRef.current = body;
-        }
-        if (body) {
-          const pose = patrolAt(Date.now(), HARBOR_CONTROLLER_BERTH, { reducedMotion });
-          body.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
-          body.rotation.y = pose.rotationY;
-          if (npcPhaseRef.current !== pose.phase) {
-            npcPhaseRef.current = pose.phase;
-            setNpcPhase(pose.phase);
+      // The cast lives here (docs/specs/npc-society-2026-10-30.md): whoever is in this world right now flies a lap of it with an engine flame and trail; the Station's
+      // controller keeps her patrol from her berth. Each wears a tag, and coming near one is an encounter — they speak. Presentation only (graph/npcBodies.ts).
+      if (mode === "world" && currentWorld && !inside && npcBodies) {
+        if (now - lastNpcSyncAt > 1000) {
+          lastNpcSyncAt = now;
+          const present = castIn(currentWorld, Date.now());
+          npcBodies.sync(present, (m) => {
+            if (m.id !== "harbor-controller" || currentWorld !== "great-station") return null;
+            // The Station draws her moored hull once its model lands; give it up to 12 s before flying a second copy.
+            return world.group.getObjectByName("harbor-controller-ship") ?? (now - sceneStartedAt < 12_000 ? "wait" : null);
+          });
+          // The lap is round what the world is: measured from its own bounds once its models have had time to land (and again as they do).
+          if (present.length > 0 && (!npcAnchor || (npcAnchorTries < 4 && now - lastAnchorAt > 5000))) {
+            lastAnchorAt = now;
+            npcAnchorTries++;
+            npcAnchor = anchorFromBounds(world.group) ?? npcAnchor;
           }
-          body.updateWorldMatrix(true, false);
-          const wp = new THREE.Vector3().setFromMatrixPosition(body.matrixWorld);
-          npcWorldPosRef.current = [wp.x, wp.y, wp.z];
+        }
+        const frames = npcBodies.update(Date.now(), dt, {
+          reducedMotion,
+          anchor: npcAnchor,
+          berth: currentWorld === "great-station" ? HARBOR_CONTROLLER_BERTH : null,
+        });
+        for (const f of frames) {
+          const member = castMember(f.id);
+          if (!member) continue;
+          npcPosRef.current.set(f.id, [f.pos.x, f.pos.y, f.pos.z]);
+          if (npcPhasesRef.current.get(f.id) !== f.phase) {
+            npcPhasesRef.current.set(f.id, f.phase);
+            setPresentNpcs((list) => list.map((n) => (n.id === f.id ? { ...n, activity: npcActivity(member, currentWorld, f.phase) } : n)));
+          }
           // Nearest of the camera and (while flying) the ship.
           const fl = flightRef.current;
           const d = Math.min(
-            camera.position.distanceTo(wp),
-            fl ? Math.hypot(fl.pos[0] - wp.x, fl.pos[1] - wp.y, fl.pos[2] - wp.z) : Infinity,
+            camera.position.distanceTo(f.pos),
+            fl ? Math.hypot(fl.pos[0] - f.pos.x, fl.pos[1] - f.pos.y, fl.pos[2] - f.pos.z) : Infinity,
           );
-          const enc = encounterStep(npcNearRef.current, d);
-          npcNearRef.current = enc.near;
-          if (enc.entered && !metThisVisitRef.current.has(hc.id)) {
-            metThisVisitRef.current.add(hc.id);
-            const m = recordMeeting(getSpaceId(), hc.id);
-            if (m.recorded) pushToast(encounterLine(hc, pose.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal");
+          const enc = encounterStep(npcNearRef.current.get(f.id) ?? false, d);
+          npcNearRef.current.set(f.id, enc.near);
+          if (enc.entered && !metThisVisitRef.current.has(f.id)) {
+            metThisVisitRef.current.add(f.id);
+            const m = recordMeeting(getSpaceId(), f.id);
+            if (m.recorded) pushToast(encounterLine(member, currentWorld, f.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal");
           }
-          // The tag rides her on screen (a ref write, no re-render).
-          const tag = npcTagRef.current;
+          // The tag rides them on screen (a ref write, no re-render).
+          const tag = npcTagEls.current.get(f.id);
           if (tag) {
-            const sp = wp.clone().project(camera);
-            const onScreen = sp.z < 1 && Math.abs(sp.x) < 0.92 && sp.y > -0.8 && sp.y < 0.85;
+            const sp = f.pos.clone().project(camera);
+            const onScreen = sp.z < 1 && Math.abs(sp.x) < 0.92 && sp.y > -0.8 && sp.y < 0.55;
             tag.style.display = onScreen ? "" : "none";
             if (onScreen) {
               const host = hostRef.current;
               const w = host?.clientWidth ?? 0;
               const h = host?.clientHeight ?? 0;
-              // Centred above her, but never half off the screen edge.
+              // Centred above them, but never half off the screen edge.
               const tw = tag.offsetWidth || 150;
               const x = Math.min(Math.max((sp.x * 0.5 + 0.5) * w - tw / 2, 6), Math.max(6, w - tw - 6));
               tag.style.transform = `translate(${x.toFixed(1)}px, calc(${((-sp.y * 0.5 + 0.5) * h).toFixed(1)}px - 130%))`;
@@ -2151,6 +2194,8 @@ export default function WorldsSurface({
       sky?.dispose();
       avatar?.dispose();
       plume?.dispose();
+      npcBodies?.dispose();
+      npcBodiesRef.current = null;
       world.dispose();
       sceneHandleRef.current = null;
       // Keep the renderer (and its context) for the next world; free only this scene's render lists.
@@ -2276,25 +2321,23 @@ export default function WorldsSurface({
         ],
       });
     }
-    // Who's here: the NPCs that live in this world, findable in one tap (docs/specs/npcs-alive-2026-10-30.md).
-    const whoIsHere = npcsIn(currentWorld);
-    if (mode === "world" && !inside && whoIsHere.length > 0) {
+    // Who's here: whoever is in this world right now (their lives move them between worlds), findable in one tap (docs/specs/npc-society-2026-10-30.md).
+    if (mode === "world" && !inside && presentNpcs.length > 0) {
       dockGroups.push({
         id: "npcs",
         label: "Who's here",
-        tiles: whoIsHere.map((n) => {
-          const isController = n.id === "harbor-controller";
+        tiles: presentNpcs.map((pn) => {
+          const m = castMember(pn.id)!;
+          const canFly = !!currentWorld && !!PLACE_RULES[currentWorld] && npcPosRef.current.has(pn.id);
           return {
-            id: `npc-${n.id}`,
-            icon: n.icon,
-            label: isController ? "Controller" : n.name,
-            name: isController ? `Fly to the Harbor controller, ${patrolLabel(npcPhase ?? "docked")}` : `${n.name}: ${n.role}`,
+            id: `npc-${pn.id}`,
+            icon: npcIcon(m),
+            label: m.name.replace(/^The /, "").split(" ")[0]!,
+            name: canFly ? `Fly to ${m.name}, ${pn.activity}` : `${m.name}, ${pn.activity}`,
             onClick: () => {
-              if (isController && npcBodyRef.current) {
-                flyTo({ id: "npc-harbor-controller", label: "Harbor controller", icon: n.icon, center: npcWorldPosRef.current, radius: 14 });
-              } else {
-                setNpcNote(`${n.name} is here — ${n.role}.`);
-              }
+              const pos = npcPosRef.current.get(pn.id);
+              if (canFly && pos) flyTo({ id: `npc-${pn.id}`, label: m.name, icon: npcIcon(m), center: pos, radius: 14 });
+              setNpcCard(pn.id);
             },
           };
         }),
@@ -2396,21 +2439,52 @@ export default function WorldsSurface({
           {`Arrived · ${worldName(currentWorld ?? "home")}`}
         </div>
       )}
-      {mode === "world" && atStation && !inside && !showController && npcBodyRef.current && (
-        <button
-          type="button"
-          ref={npcTagRef}
-          className="npc-tag"
-          aria-label={`Harbor controller, ${patrolLabel(npcPhase ?? "docked")} — tap to talk`}
-          onClick={() => setShowController(true)}
-        >
-          <span aria-hidden="true">{renderIcon("i:harbor", 16)}</span>
-          <span>
-            <strong>Harbor controller</strong>
-            <em>{patrolLabel(npcPhase ?? "docked")}</em>
-          </span>
-        </button>
-      )}
+      {mode === "world" && !inside && presentNpcs.map((pn) => {
+        const m = castMember(pn.id);
+        if (!m || !m.shipUrl || (pn.id === "harbor-controller" && showController)) return null;
+        return (
+          <button
+            key={pn.id}
+            type="button"
+            ref={(el) => {
+              if (el) npcTagEls.current.set(pn.id, el);
+              else npcTagEls.current.delete(pn.id);
+            }}
+            className="npc-tag"
+            style={{ display: "none" }}
+            aria-label={`${m.name}, ${pn.activity} — tap for details`}
+            onClick={() => {
+              if (pn.id === "harbor-controller" && atStation) setShowController(true);
+              else setNpcCard(pn.id);
+            }}
+          >
+            <span aria-hidden="true">{renderIcon(npcIcon(m), 16)}</span>
+            <span>
+              <strong>{m.name}</strong>
+              <em>{pn.activity}</em>
+            </span>
+          </button>
+        );
+      })}
+      {npcCard && mode === "world" && (() => {
+        const m = castMember(npcCard);
+        if (!m) return null;
+        const act = presentNpcs.find((n) => n.id === m.id)?.activity ?? "";
+        const met = readMet(getSpaceId())[m.id];
+        return (
+          <div className="npc-note npc-card" role="dialog" aria-label={m.name}>
+            <div>
+              <strong>{m.name}</strong> — {m.job}
+              <span className="npc-card-line">{act}{m.home !== currentWorld ? " · far from home" : ""}</span>
+              <span className="npc-card-line">{m.lore.tagline}</span>
+              {met && <span className="npc-card-line">You have met {met.count} time{met.count === 1 ? "" : "s"}.</span>}
+            </div>
+            <button type="button" className="mini" onClick={() => setNpcCard(null)} aria-label="Close">
+              ✕
+            </button>
+          </div>
+        );
+      })()}
       {npcNote && mode === "world" && (
         <p className="npc-note" role="status">
           {npcNote}

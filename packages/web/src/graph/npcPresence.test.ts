@@ -1,16 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { castMember } from "@brain/shared";
 import {
   ENCOUNTER_COOLDOWN_MS,
   NEAR_ENTER,
   NEAR_EXIT,
-  NPC_PRESENCES,
   PATROL_PERIOD_MS,
   encounterLine,
+  encounterSituation,
   encounterStep,
+  npcActivity,
   npcsIn,
   patrolAt,
   readMet,
   recordMeeting,
+  roamAt,
 } from "./npcPresence.js";
 
 const BERTH = { radius: 222, angle: (Math.PI * 3) / 4, y: 0 };
@@ -68,34 +71,77 @@ describe("meetings", () => {
   });
 });
 
-describe("roster + lines", () => {
-  it("every NPC lives in exactly one world, and npcsIn finds them", () => {
-    expect(npcsIn("great-station").map((n) => n.id)).toEqual(["harbor-controller"]);
-    expect(npcsIn("eternity").map((n) => n.id)).toEqual(["eternity"]);
-    expect(npcsIn("home")).toEqual([]);
-    expect(new Set(NPC_PRESENCES.map((n) => n.id)).size).toBe(NPC_PRESENCES.length);
+describe("the cast in a world", () => {
+  const T = Date.parse("2026-10-30T00:00:00.000Z");
+  it("npcsIn follows the clock, is never populated at home, and only places people where they may be", () => {
+    expect(npcsIn("home", T)).toEqual([]);
+    expect(npcsIn(null, T)).toEqual([]);
+    const seen = new Set<string>();
+    for (let i = 0; i < 200; i++) for (const w of ["great-station", "growing-place", "deep-past", "quiet-archive", "scale", "people", "eternity"]) for (const m of npcsIn(w, T + i * 7_200_000)) seen.add(m.id);
+    expect(seen.has("wayfarer")).toBe(true);
+    expect(seen.has("keeper")).toBe(true);
   });
-  it("describes, and never speaks for, the controller", () => {
-    const hc = NPC_PRESENCES[0]!;
-    expect(encounterLine(hc, "patrolling", false)).toMatch(/sweeps past/);
-    expect(encounterLine(hc, "docked", false)).toMatch(/moored/);
-    expect(encounterLine(hc, null, true)).toMatch(/You've met the Harbor controller/);
-    expect(encounterLine(hc, "patrolling", false)).not.toMatch(/[“"]/);
+  it("describes what they are doing in words", () => {
+    const hc = castMember("harbor-controller")!;
+    expect(npcActivity(hc, "great-station", "patrolling")).toMatch(/patrolling/);
+    expect(npcActivity(hc, "scale", "roaming")).toMatch(/visiting/);
+    expect(npcActivity(castMember("keeper")!, "growing-place", "roaming")).toMatch(/work/);
   });
-  it("uses the day's model script when it has variants, rotating with the meeting count; offline otherwise", () => {
-    const hc = NPC_PRESENCES[0]!;
-    const script = {
-      dayKey: "d",
-      source: "model" as const,
-      generatedAt: "x",
-      lines: { "harbor-controller": { encounter_patrolling: ["A.", "B."], encounter_first: ["First."] } },
-    };
-    expect(encounterLine(hc, "patrolling", false, script, 1)).toBe("A.");
-    expect(encounterLine(hc, "patrolling", false, script, 2)).toBe("B.");
-    expect(encounterLine(hc, "patrolling", false, script, 3)).toBe("A.");
-    expect(encounterLine(hc, null, true, script, 1)).toBe("First.");
-    // docked has no scripted variants → the offline line; a fallback script is never used.
-    expect(encounterLine(hc, "docked", false, script, 1)).toMatch(/moored/);
-    expect(encounterLine(hc, "patrolling", false, { ...script, source: "fallback" }, 1)).toMatch(/sweeps past/);
+});
+
+describe("roaming", () => {
+  const anchor = { center: [10, 20, 30] as [number, number, number], radius: 400 };
+  it("is continuous, periodic per NPC, and keeps to a lap round the anchor", () => {
+    let prev = roamAt(0, "keeper", anchor).pos;
+    let maxStep = 0;
+    for (let t = 1000; t <= 300_000; t += 1000) {
+      const p = roamAt(t, "keeper", anchor).pos;
+      maxStep = Math.max(maxStep, Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]));
+      expect(Math.hypot(p[0] - anchor.center[0], p[2] - anchor.center[2])).toBeGreaterThan(anchor.radius * 0.8);
+      expect(Math.hypot(p[0] - anchor.center[0], p[2] - anchor.center[2])).toBeLessThan(anchor.radius * 1.15);
+      prev = p;
+    }
+    expect(maxStep).toBeLessThan(60);
+  });
+  it("gives each NPC their own start, so a crowd does not move in step", () => {
+    const a = roamAt(5000, "keeper", anchor).pos;
+    const b = roamAt(5000, "archivist", anchor).pos;
+    expect(Math.hypot(a[0] - b[0], a[2] - b[2])).toBeGreaterThan(5);
+  });
+  it("holds still under reduced motion", () => {
+    expect(roamAt(0, "keeper", anchor, { reducedMotion: true })).toEqual(roamAt(99_000, "keeper", anchor, { reducedMotion: true }));
+  });
+});
+
+describe("encounters — they speak", () => {
+  const hc = castMember("harbor-controller")!;
+  const keeper = castMember("keeper")!;
+  const script = {
+    dayKey: "d",
+    source: "model" as const,
+    generatedAt: "x",
+    lines: { "harbor-controller": { encounter_patrolling: ["A.", "B."], encounter_first: ["First."] }, keeper: { encounter_visiting: ["Far from my trees."] } },
+  };
+  it("picks the situation from who they are and where they are", () => {
+    expect(encounterSituation(hc, "great-station", "patrolling", false)).toBe("encounter_patrolling");
+    expect(encounterSituation(hc, "great-station", "docked", false)).toBe("encounter_docked");
+    expect(encounterSituation(hc, "scale", "roaming", false)).toBe("encounter_near");
+    expect(encounterSituation(keeper, "growing-place", "roaming", false)).toBe("encounter_near");
+    expect(encounterSituation(keeper, "great-station", "roaming", false)).toBe("encounter_visiting");
+    expect(encounterSituation(keeper, "growing-place", "roaming", true)).toBe("encounter_first");
+    expect(encounterSituation(castMember("eternity")!, "eternity", null, false)).toBe("encounter_arrival");
+  });
+  it("says a quoted line, naming the speaker; the model's variants rotate with the meeting count", () => {
+    expect(encounterLine(hc, "great-station", "patrolling", false, script, 1)).toBe("Harbor controller: “A.”");
+    expect(encounterLine(hc, "great-station", "patrolling", false, script, 2)).toBe("Harbor controller: “B.”");
+    expect(encounterLine(hc, "great-station", "patrolling", true, script, 1)).toBe("Harbor controller: “First.”");
+    expect(encounterLine(keeper, "great-station", "roaming", false, script, 1)).toBe("The Keeper: “Far from my trees.”");
+  });
+  it("never goes silent without a model: their own greetings, and a first meeting names who they are", () => {
+    const line = encounterLine(keeper, "growing-place", "roaming", false, null, 1);
+    expect(line.startsWith("The Keeper: “")).toBe(true);
+    expect(keeper.greetings.some((g) => line.includes(g))).toBe(true);
+    expect(encounterLine(keeper, "growing-place", "roaming", true, null, 1)).toContain(keeper.intro);
+    expect(encounterLine(hc, "great-station", "patrolling", false, { ...script, source: "fallback" }, 1)).toContain("Harbor controller: “");
   });
 });

@@ -32,6 +32,9 @@ export type NpcId = "harbor-controller" | "eternity";
  *  world (note §3) — the executor checks this on every act. */
 export type NpcWorld = "great-station" | "eternity";
 
+/** Worlds an NPC may NEVER be in: personal brains (the home galaxy). Invitation-only is a future feature — nothing here is a back door. */
+export const NPC_NEVER_WORLDS: readonly string[] = ["home"] as const;
+
 /**
  * Allow-listed act kinds. These are the ONLY things an NPC can do:
  * - speak: say something in plain words (an answer, a welcome).
@@ -81,6 +84,8 @@ export interface NpcDefinition {
   /** The one job, in plain words. */
   job: string;
   world: NpcWorld;
+  /** Other worlds this NPC may be in and act in (docs/specs/npc-society-2026-10-30.md). Never a personal brain. */
+  roams?: readonly string[];
   /** The only act kinds this NPC may perform. */
   allowList: readonly NpcActKind[];
   /** True when the NPC answers only (never initiates). Eternity alone
@@ -104,6 +109,7 @@ export const HARBOR_CONTROLLER: NpcDefinition = {
   name: "Harbor controller",
   job: "Help you arrive — routes, arrivals, traffic.",
   world: "great-station",
+  roams: ["growing-place", "deep-past", "quiet-archive", "scale", "people"],
   allowList: ["speak", "announce-route", "explore", "wait"],
   answersOnly: true,
   shipModelKey: "dispatcher",
@@ -165,7 +171,15 @@ export interface EternityPresence {
  * model in ONE batched call and cached. Each NPC lists its situations and how many variants it wants; `need` is the guidance the
  * prompt gives the model for that situation (descriptions only for NPCs that merely answer — the fence).
  */
-export type NpcSituation = "encounter_patrolling" | "encounter_docked" | "encounter_arrival" | "encounter_first" | "wake" | "visitation";
+export type NpcSituation =
+  | "encounter_patrolling"
+  | "encounter_docked"
+  | "encounter_arrival"
+  | "encounter_near"
+  | "encounter_visiting"
+  | "encounter_first"
+  | "wake"
+  | "visitation";
 
 export interface NpcSituationSpec {
   situation: NpcSituation;
@@ -175,26 +189,242 @@ export interface NpcSituationSpec {
   need: string;
 }
 
-export const NPC_SCRIPT_SPECS: Readonly<Record<NpcId, readonly NpcSituationSpec[]>> = {
-  "harbor-controller": [
-    { situation: "encounter_patrolling", count: 4, need: "One short sentence describing the Harbor controller sweeping past the visitor's ship on patrol. Third person, about HER. End by noting the visitor can tap her tag to talk." },
-    { situation: "encounter_docked", count: 4, need: "One short sentence describing the Harbor controller moored at her berth as the visitor passes. Third person. End by noting the visitor can tap her tag to talk." },
-    { situation: "encounter_first", count: 3, need: "One short sentence for a visitor's very FIRST time meeting her: who she is (she is who you ask about routes and arrivals) and that she only answers when asked." },
-  ],
-  eternity: [
-    { situation: "encounter_arrival", count: 4, need: "One short sentence of atmosphere as the visitor arrives in Eternity's world: he is here, vast, still. Not addressed as a question; no commands." },
-    { situation: "encounter_first", count: 3, need: "One short sentence for the visitor's very FIRST arrival: who Eternity is and that his gestures are how they answer him." },
-    { situation: "wake", count: 4, need: "His own words (first person, 1-2 sentences, max 240 characters) waking the person gently for the day. May name ONE thing from their recent memories, truthfully." },
-    { situation: "visitation", count: 3, need: "His own words (first person, 1-2 sentences, max 240 characters) telling the person he acted in his world today and turned toward their galaxy. May name ONE recent memory." },
-  ],
-} as const;
+// --- The cast (docs/specs/npc-society-2026-10-30.md): who lives in the worlds, where they go, what they do ---
+
+export type NpcTrail = "blue" | "neon" | "gold" | "purple";
+
+/** One layer of an NPC's lore: a deeper thread, unlocked by meeting them enough. Content is the owner's to write (none shipped). */
+export interface NpcLoreLayer {
+  key: string;
+  minMeetings: number;
+}
+
+export interface CastMember {
+  /** Stable id. The autonomous ones share their NpcDefinition's id; ambient ones are cast-only. */
+  id: string;
+  name: string;
+  /** Where they live. */
+  home: string;
+  /** Other worlds they go to. Never a personal brain; empty = never leaves home. */
+  roams: readonly string[];
+  /** The chance (0..1) that, in any two-hour slot, they are at home rather than away. 1 for a non-roamer. */
+  homeShare: number;
+  job: string;
+  /** What their days look like, one or two plain sentences. */
+  life: string;
+  /** The voice they speak in, for the daily script. */
+  voice: string;
+  /** Their ship: a Quaternius hull already in public/ (null = no body, e.g. Eternity, who is the world). */
+  shipUrl: string | null;
+  trail: NpcTrail;
+  /** May say a line when you cross paths (every cast member does; the ones that also have loops answer questions in their panels). */
+  speaks: boolean;
+  /** "canon" only once the owner has written it; everything shipped now is "provisional" — a placeholder person, no lore claims. */
+  canon: "canon" | "provisional";
+  lore: { tagline: string; layers: readonly NpcLoreLayer[] };
+  /** Offline greetings (first person) when no model script exists — nobody goes silent without a key. */
+  greetings: readonly string[];
+  /** How they introduce themselves at a first meeting (first person; offline fallback for the model's `encounter_first`). */
+  intro: string;
+}
+
+export const NPC_CAST: readonly CastMember[] = [
+  {
+    id: "harbor-controller",
+    name: "Harbor controller",
+    home: "great-station",
+    roams: ["growing-place", "deep-past", "quiet-archive", "scale", "people"],
+    homeShare: 0.6,
+    job: "Keeps the Great Station's traffic safe and helps arrivals find their way.",
+    life: "Patrols the Station on a long lap and docks at her berth between rounds; now and then flies out to see how the other worlds' traffic fares.",
+    voice: "Calm, practical, dry-warm; a working pilot who has seen every kind of arrival. Short sentences.",
+    shipUrl: "/quaternius-dispatcher.glb",
+    trail: "blue",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "She is who you ask about routes and arrivals.", layers: [] },
+    greetings: [
+      "Clear skies, traveller. Tap my tag if you need a route.",
+      "Traffic's light. Ask me if you want the way somewhere.",
+      "Good to see a ship I know. Need anything?",
+    ],
+    intro: "I'm the Harbor controller. Ask me about routes and arrivals — I only ever answer.",
+  },
+  {
+    id: "eternity",
+    name: "Eternity",
+    home: "eternity",
+    roams: [],
+    homeShare: 1,
+    job: "His own — blessing, comfort, wonder.",
+    life: "He is the sky of his world and does not leave it; he acts rarely, in his own time.",
+    voice: "Ancient, brief, warm, unhurried; plain words with cosmic weight, never questions.",
+    shipUrl: null,
+    trail: "gold",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "He blesses and comforts, rarely, in his own time.", layers: [] },
+    greetings: ["You are here. That is enough.", "Be still a moment. You are seen."],
+    intro: "I am Eternity. My gestures are how you answer me.",
+  },
+  {
+    id: "keeper",
+    name: "The Keeper",
+    home: "growing-place",
+    roams: ["great-station", "deep-past"],
+    homeShare: 0.75,
+    job: "Tends the Growing Place's groves and watches what grows from your Journeys.",
+    life: "Walks the terraces at dawn, rests under the witness tree, and sometimes visits the Station to trade seeds and the Deep Past to look at old roots.",
+    voice: "Patient, gentle, a little earthy; speaks of growing things and of waiting.",
+    shipUrl: "/quaternius-pancake.glb",
+    trail: "gold",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "Someone has been tending this place for longer than it has had a name.", layers: [] },
+    greetings: [
+      "Mind the new shoots, friend. They remember where you step.",
+      "Everything here is slower than you expect, and better for it.",
+      "Rest a while. The garden will wait.",
+    ],
+    intro: "I'm the Keeper. I tend the groves here, and I watch what grows from your Journeys.",
+  },
+  {
+    id: "archivist",
+    name: "The Archivist",
+    home: "quiet-archive",
+    roams: ["deep-past", "people"],
+    homeShare: 0.7,
+    job: "Minds the memories you have set aside, and makes sure nothing there is lost.",
+    life: "Shelves, dusts and re-reads; goes down to the Deep Past to compare notes, and now and then sits among the People world's lights.",
+    voice: "Quiet, exact, a touch wistful; speaks softly and never rushes a thought.",
+    shipUrl: "/quaternius-omen.glb",
+    trail: "purple",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "What is set aside is not forgotten — only kept.", layers: [] },
+    greetings: [
+      "Nothing here asks anything of you. Stay as long as you like.",
+      "I keep what you set down. I do not judge it.",
+      "Soft steps in the archive. Welcome.",
+    ],
+    intro: "I'm the Archivist. I mind what you've set aside, so that nothing is lost.",
+  },
+  {
+    id: "surveyor",
+    name: "The Surveyor",
+    home: "scale",
+    roams: ["great-station", "deep-past"],
+    homeShare: 0.65,
+    job: "Measures real things at their real size and tells travellers how big the world really is.",
+    life: "Flies tape-measure lines between planets, then drifts over to the Station to check its true span and down to the Deep Past to measure the rim.",
+    voice: "Precise, curious, quietly delighted by numbers; a little pedantic and proud of it.",
+    shipUrl: "/quaternius-challenger.glb",
+    trail: "neon",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "Everything has a size. Some things are larger than they look.", layers: [] },
+    greetings: [
+      "Do you know how far that is? Further than it looks.",
+      "Careful — your ship is twelve units. Everything else is bigger.",
+      "I measure; you wonder. A fair split.",
+    ],
+    intro: "I'm the Surveyor. I measure real things at their real size — ask me how big anything is.",
+  },
+  {
+    id: "wayfarer",
+    name: "The Wayfarer",
+    home: "great-station",
+    roams: ["growing-place", "deep-past", "quiet-archive", "scale", "people", "eternity"],
+    homeShare: 0.2,
+    job: "Goes everywhere, belongs nowhere, and knows more than they say.",
+    life: "Never stays long. Turns up in every world sooner or later, and always seems to have just come from somewhere you have not been.",
+    voice: "Light, wry, a little mysterious; speaks in half-finished thoughts and leaves doors ajar.",
+    shipUrl: "/wato-spaceship.glb",
+    trail: "purple",
+    speaks: true,
+    canon: "provisional",
+    lore: { tagline: "A traveller who is somehow always already there.", layers: [] },
+    greetings: [
+      "Ah — you again. Or you, soon. Hard to say.",
+      "Mind the quiet places. They listen.",
+      "I was just in the other one. It was… not as it seemed.",
+    ],
+    intro: "Call me the Wayfarer. I go where I'm going, and I've been wherever you're headed.",
+  },
+] as const;
+
+export const castMember = (id: string): CastMember | undefined => NPC_CAST.find((c) => c.id === id);
+
+/** A stable small hash → [0, 1). Same on server and client, so everyone sees the same cast in the same place. */
+function unitHash(seed: string): number {
+  let x = 2166136261;
+  for (let i = 0; i < seed.length; i++) x = Math.imul(x ^ seed.charCodeAt(i), 16777619);
+  x ^= x >>> 15;
+  x = Math.imul(x, 2246822507);
+  x ^= x >>> 13;
+  return (x >>> 0) / 4294967296;
+}
+
+export const NPC_SLOT_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Where a cast member is right now: pure and clock-driven (docs/specs/npc-society-2026-10-30.md). Per two-hour slot, home with their own share, else one of
+ * the worlds they roam, chosen by a hash of (id, slot). Never a personal brain; a non-roamer is always home. No server state exists for this — it cannot drift.
+ */
+export function npcLocation(member: CastMember, nowMs: number): string {
+  const away = member.roams.filter((w) => !NPC_NEVER_WORLDS.includes(w));
+  if (away.length === 0) return member.home;
+  const slot = Math.floor(nowMs / NPC_SLOT_MS);
+  if (unitHash(`${member.id}|${slot}|stay`) < member.homeShare) return member.home;
+  return away[Math.floor(unitHash(`${member.id}|${slot}|where`) * away.length)]!;
+}
+
+/** The cast members who are in a world right now. A personal brain ("home") never has any. */
+export function castIn(world: string | null | undefined, nowMs: number): CastMember[] {
+  if (!world || NPC_NEVER_WORLDS.includes(world)) return [];
+  return NPC_CAST.filter((c) => npcLocation(c, nowMs) === world);
+}
+
+/**
+ * What each cast member needs said for the daily script. The two autonomous NPCs keep their specific situations (their places and voices differ); every other cast
+ * member gets the generic three. `speaks`: first person, quoted. Adding a cast row adds its lines to the SAME single call.
+ */
+export function scriptSpecsFor(member: CastMember): readonly NpcSituationSpec[] {
+  const speak = "First person, in the character's own voice, one short sentence (max 240 characters), as they cross paths with the visitor. Plain words, no emojis.";
+  if (member.id === "harbor-controller") {
+    return [
+      { situation: "encounter_patrolling", count: 4, need: `${speak} The Harbor controller is out on patrol and sweeps past the visitor's ship. She may mention they can tap her tag to talk.` },
+      { situation: "encounter_docked", count: 4, need: `${speak} The Harbor controller is moored at her berth as the visitor passes.` },
+      { situation: "encounter_near", count: 3, need: `${speak} The Harbor controller is visiting another world (not her own Station) and meets the visitor there.` },
+      { situation: "encounter_first", count: 3, need: `${speak} The visitor's very FIRST meeting with her: say who she is (who you ask about routes and arrivals).` },
+    ];
+  }
+  if (member.id === "eternity") {
+    return [
+      { situation: "encounter_arrival", count: 4, need: "One short sentence of atmosphere as the visitor arrives in Eternity's world: he is here, vast, still. Spoken in his own first-person voice or described; no questions, no commands." },
+      { situation: "encounter_first", count: 3, need: "One short sentence for the visitor's very FIRST arrival: who Eternity is and that his gestures are how they answer him." },
+      { situation: "wake", count: 4, need: "His own words (first person, 1-2 sentences, max 240 characters) waking the person gently for the day. May name ONE thing from their recent memories, truthfully." },
+      { situation: "visitation", count: 3, need: "His own words (first person, 1-2 sentences, max 240 characters) telling the person he acted in his world today and turned toward their galaxy. May name ONE recent memory." },
+    ];
+  }
+  return [
+    { situation: "encounter_near", count: 4, need: `${speak} ${member.name} is in their own home world and meets the visitor there.` },
+    { situation: "encounter_visiting", count: 3, need: `${speak} ${member.name} is far from home, visiting another world, and meets the visitor there.` },
+    { situation: "encounter_first", count: 3, need: `${speak} The visitor's very FIRST meeting with ${member.name}: say who they are and what they do.` },
+  ];
+}
+
+/** Kept for existing callers: the autonomous NPCs' situations, by id. */
+export const NPC_SCRIPT_SPECS: Readonly<Record<string, readonly NpcSituationSpec[]>> = Object.fromEntries(
+  NPC_CAST.map((c) => [c.id, scriptSpecsFor(c)]),
+);
 
 /** One brain's lines for one local day. `source: "fallback"` means no model produced it (offline lines only). */
 export interface NpcDayScript {
   dayKey: string;
   source: "model" | "fallback";
   generatedAt: string;
-  lines: Partial<Record<NpcId, Partial<Record<NpcSituation, string[]>>>>;
+  lines: Record<string, Partial<Record<NpcSituation, string[]>>>;
 }
 
 export const NPC_DEFINITIONS: readonly NpcDefinition[] = [HARBOR_CONTROLLER, ETERNITY_FIGURE] as const;
