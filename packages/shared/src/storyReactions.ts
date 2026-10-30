@@ -63,6 +63,10 @@ export const STORY_REACTIONS: readonly StoryReaction[] = [
   { npc: "wim", holds: "obj.anonymous-payments", role: "wim", line: "That is the unclaimed slip. Please do not tell me whose it is. I would have to know." },
   { npc: "wim", holds: "sight.missing-berth", role: "wim", line: "Yes. The berth. I count it every morning." },
   { npc: "wim", holds: "relic.mooring-ring", role: "wim", line: "Brannoch’s ring. It is warm. I know it is warm." },
+  { npc: "wayfarer", holds: "obj.road-nails", role: "calend", line: "I set one of those, once. I did not set the rest. They are all warm." },
+  { npc: "hesk", holds: "sight.road-post", role: "hesk", line: "My predecessors kept that post. I keep the bench swept. It is not a duty. It is a courtesy." },
+  { npc: "wayfarer", holds: "sight.road-chalk-end", role: "calend", line: "Somebody was called away. I always hope it was for something kind." },
+  { npc: "tamsin", holds: "sight.road-chalk", role: "tamsin", line: "A child's count. I know that hand, or one like it. Do not ask me whose." },
   // Item Reactions to the heavens (Draft 9 §6): a person remarks on a thing you hold that sits on one of the bodies' threads.
   { npc: "pell", holds: "relic.star-hanger", role: "pell", line: "Someone hung that for whoever was late. I have always been grateful, and always a little after." },
   { npc: "surveyor", holds: "relic.unnumbered-fragment", role: "surveyor", line: "It came off something that was never on a chart. Measure it if you like. It will not agree." },

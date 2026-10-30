@@ -17,7 +17,7 @@ import { useSociety } from "../hooks/useSociety.js";
 
 const word = (v: number) => (v >= 0.7 ? "strong" : v >= 0.45 ? "present" : v >= 0.25 ? "faint" : "quiet");
 const standingWord = (v: number) => (v >= 0.55 ? "high" : v >= 0.35 ? "middling" : "low");
-const WORLD_ORDER = ["great-station", "growing-place", "quiet-archive", "deep-past", "scale", "people", "faded-ward", "eternity"];
+const WORLD_ORDER = ["great-station", "growing-place", "quiet-archive", "deep-past", "scale", "people", "faded-ward", "road-to-the-seam", "eternity"];
 
 /**
  * The Society (docs/specs/npc-hive-society-2026-10-30.md): what runs through your galaxy lately, how the factions lean on it, the day's callings and ordinances, and who is doing

@@ -88,6 +88,8 @@ import {
   type QuietArchiveLayout,
 } from "../graph/quietArchiveLayout.js";
 import { createWardScene } from "../graph/wardScene.js";
+import { createRoadScene } from "../graph/roadScene.js";
+import { ROAD_ORBIT_HEIGHT, ROAD_ORBIT_RADIUS } from "../graph/roadLayout.js";
 import { WARD_ORBIT_HEIGHT, WARD_ORBIT_RADIUS } from "../graph/wardLayout.js";
 import { attachWorldProps } from "../graph/worldProps.js";
 import { tintRigForHour } from "../graph/hourTint.js";
@@ -590,6 +592,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     lookAtY: 42, // eye level, looking along the rows rather than down at the floor
     fallback: "The ward view needs graphics support on this device — your memories are unaffected.",
     build: () => createWardScene(),
+  },
+  // The Road to the Seam (a door in the story, opened by finding Teru's Harbor Nail): one long road under the Station, lamps and nails and chalk, going on into fog.
+  "road-to-the-seam": {
+    title: "The Road to the Seam",
+    light: { env: 0.3, hemi: { sky: 0x8a9ab8, ground: 0x12141a, intensity: 0.55 }, key: { color: 0xffd9a0, intensity: 0.7, from: [-100, 380, 260] } },
+    background: 0x0a0c10,
+    fogDensity: 0.00045,
+    orbitRadius: ROAD_ORBIT_RADIUS,
+    orbitHeight: ROAD_ORBIT_HEIGHT,
+    lookAtY: 38, // eye level along the road, as measured in the Ward
+    fallback: "The road view needs graphics support on this device — your memories are unaffected.",
+    build: () => createRoadScene(),
   },
   scale: {
     title: "Scale",

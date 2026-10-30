@@ -69,6 +69,7 @@ const WORLD_NAMES: Record<string, string> = {
   people: "the People",
   "quiet-archive": "Quiet/Archive",
   "faded-ward": "the Faded Ward",
+  "road-to-the-seam": "the Road to the Seam",
 };
 
 function worldName(key: string): string {

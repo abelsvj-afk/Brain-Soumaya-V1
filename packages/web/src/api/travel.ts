@@ -27,6 +27,8 @@ export interface TravelState {
   eternityReachable?: boolean;
   /** Whether the way to the Faded Ward stands open (the ward found in the People world) — the server's verdict; absent on an older server (read as closed). */
   wardGateOpen?: boolean;
+  /** Whether the way to the Road to the Seam stands open (Teru's Harbor Nail found) — the server's verdict; absent on an older server (read as closed). */
+  roadGateOpen?: boolean;
 }
 
 /**

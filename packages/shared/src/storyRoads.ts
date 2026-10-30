@@ -172,6 +172,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "She takes the bowl from you and sets it down where it was. She does not say what you heard, and neither do you.",
   },
+  {
+    id: "road.what-the-chalk-counts", world: "road-to-the-seam", giver: "wayfarer", title: "What the Chalk Counts",
+    offer: "Walk the wall with me as far as the chalk goes. Say nothing about what you think it counts.",
+    steps: [
+      S("chalk", "Find the chalk low on the wall.", find("sight.road-chalk")),
+      S("end", "Walk with it to where it stops.", find("sight.road-chalk-end")),
+    ],
+    gift: "He looks at the unfinished group a while, and then at you, and goes on. He does not say what it counted.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

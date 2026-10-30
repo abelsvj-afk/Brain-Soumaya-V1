@@ -33,3 +33,20 @@ describe("the Faded Ward gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).wardGateOpen).toBe(false);
   });
 });
+
+describe("the Road to the Seam gate", () => {
+  it("opens once Teru's Harbor Nail is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).roadGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "r1", kind: "drift", destination: "road-to-the-seam" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("ROAD_GATE_CLOSED");
+    }
+    find("a", "relic.harbor-nail");
+    expect(t.getState(T0).roadGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "r2", kind: "drift", destination: "road-to-the-seam" }, T0).destination).toBe("road-to-the-seam");
+    expect(new TravelRepo(handle, "b").getState(T0).roadGateOpen).toBe(false);
+  });
+});

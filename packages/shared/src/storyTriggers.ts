@@ -146,6 +146,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "obj.ward-button", how: "npc", world: "faded-ward", npc: "tamsin", minMeetings: 4 },
   { entryId: "echo.ward-count", how: "npc", world: "faded-ward", npc: "tamsin", minMeetings: 6 },
   { entryId: "obj.ward-wake", how: "npc", world: "faded-ward", npc: "hesk", minMeetings: 5 },
+  // The Road to the Seam (S-III): answers only where she is parked on the road; the Wayfarer leaves one thing after enough meetings.
+  { entryId: "sight.road-mouth", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-mouth$", near: 1.4 } },
+  { entryId: "sight.road-lamps", how: "regard", world: "road-to-the-seam", hour: "hearths", spot: { place: "^road-lamps$", near: 1.2 } },
+  { entryId: "obj.road-nails", how: "regard", world: "road-to-the-seam", hour: "measure", spot: { place: "^road-nails$", near: 1.6 } },
+  { entryId: "sight.road-chalk", how: "regard", world: "road-to-the-seam", hour: "growing", spot: { place: "^road-chalk$", near: 1.6 } },
+  { entryId: "obj.road-doorframe", how: "regard", world: "road-to-the-seam", hour: "threshold", spot: { place: "^road-doorframe$", near: 2.2 } },
+  { entryId: "sight.road-post", how: "regard", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-post$", near: 2.4 } },
+  { entryId: "sight.road-chalk-end", how: "regard", world: "road-to-the-seam", hour: "rest", spot: { place: "^road-chalk-end$", near: 3 } },
+  { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
+  { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
+  { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
   { entryId: "sight.gatepost-lamp", how: "regard", world: "great-station", hour: "hearths", spot: { place: "^annex-(?!model)", at: [0.9, 0, 0], near: 1.1 } },
   { entryId: "obj.linnets-coat", how: "regard", world: "great-station", hour: "rest", spot: { place: "^annex-(?!model)", at: [0, 0.5, -0.4], near: 0.9 } },
   // Listen: stay still and hear (echoes).

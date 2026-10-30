@@ -152,7 +152,8 @@ describe("how things are found", () => {
     expect(npcGifts("wayfarer", 0, new Set())).toEqual([]);
     expect(npcGifts("wayfarer", 2, new Set())).toEqual([]); // trust is not given on a second meeting
     expect(npcGifts("wayfarer", 3, new Set())).toEqual(["obj.doorkeepers-nail"]);
-    expect(npcGifts("wayfarer", 9, new Set(["obj.doorkeepers-nail"]))).toEqual([]);
+    expect(npcGifts("wayfarer", 4, new Set(["obj.doorkeepers-nail"]))).toEqual([]); // the lamp oil waits for a fifth meeting
+    expect(npcGifts("wayfarer", 9, new Set(["obj.doorkeepers-nail", "obj.road-oil"]))).toEqual([]);
     expect(npcGifts("broker", 3, new Set())).toEqual([]);
     expect(npcGifts("broker", 4, new Set())).toEqual(["obj.dorrows-page"]);
     expect(npcGifts("broker", 6, new Set(["obj.dorrows-page"]))).toEqual(["obj.anonymous-payments"]);

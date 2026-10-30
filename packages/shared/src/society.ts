@@ -260,6 +260,7 @@ export const WORLD_GOVERNORS: Readonly<Record<string, FactionId>> = {
   scale: "ledger",
   people: "open-hand",
   "faded-ward": "open-hand",
+  "road-to-the-seam": "wardens",
   eternity: "choir",
 };
 

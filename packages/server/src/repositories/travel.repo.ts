@@ -12,6 +12,8 @@ import {
   ETERNITY_WORLD_KEY,
   FADED_WARD_GATE_ENTRY,
   FADED_WARD_WORLD_KEY,
+  ROAD_GATE_ENTRY,
+  ROAD_WORLD_KEY,
   NO_ETERNITY_HOLDINGS,
   PEOPLE_GATE_MIN_MEMORIES_EACH,
   PEOPLE_GATE_MIN_PEOPLE,
@@ -65,7 +67,7 @@ import {
  *  Eternity's world joins the list as a GATED world (B-01): it is on the
  *  chart, but depart() admits it only through the gate below — the
  *  allow-list alone never opens the way there. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ETERNITY_WORLD_KEY];
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, ETERNITY_WORLD_KEY];
 export const HOME_WORLD = "home";
 
 /** Plain-language refusals for the Eternity gate (B-01): a closed gate
@@ -82,6 +84,7 @@ export type TravelErrorCode =
   | "UNKNOWN_DESTINATION"
   | "PEOPLE_GATE_CLOSED"
   | "WARD_GATE_CLOSED"
+  | "ROAD_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
   | "JOURNEY_NOT_DEPARTED"
   | "ETERNITY_GATE_CLOSED"
@@ -424,6 +427,9 @@ export class TravelRepo implements JourneyBonusCreditor {
       // The Faded Ward is a door in the story: it opens for a traveller who has found Tamsin's Ward (checked against the Book here, never by the client).
       if (input.destination === FADED_WARD_WORLD_KEY && !this.wardGateOpen())
         throw new TravelError("WARD_GATE_CLOSED", "The Faded Ward isn't open yet — it appears once you have found the ward in the People world.");
+      // The Road to the Seam: a door in the story, opened by finding Teru's Harbor Nail.
+      if (input.destination === ROAD_WORLD_KEY && !this.roadGateOpen())
+        throw new TravelError("ROAD_GATE_CLOSED", "The Road isn't open yet — it appears once you have found the nail a traveller set in the harbor door.");
       // B-01 (Eternity's gate): the allow-list admits the world onto
       // the chart, but only the gate admits a traveller to it. The
       // credential first (key + two relics, or opened before), then the
@@ -689,6 +695,8 @@ export class TravelRepo implements JourneyBonusCreditor {
     peopleGateOpen: boolean;
     /** Whether the way to the Faded Ward stands open (the ward found in the People world) — the board offers it only when the server says so. */
     wardGateOpen: boolean;
+    /** Whether the way to the Road to the Seam stands open (Teru's Harbor Nail found). */
+    roadGateOpen: boolean;
     eternityReachable: boolean;
   } {
     this.settleActive(nowMs);
@@ -698,8 +706,18 @@ export class TravelRepo implements JourneyBonusCreditor {
       activeJourney: active ? this.map(active, nowMs) : null,
       peopleGateOpen: this.peopleGateOpen(),
       wardGateOpen: this.wardGateOpen(),
+      roadGateOpen: this.roadGateOpen(),
       eternityReachable: this.eternityGateReachable(),
     };
+  }
+
+  roadGateOpen(): boolean {
+    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+    try {
+      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, ROAD_GATE_ENTRY);
+    } catch {
+      return false;
+    }
   }
 
   wardGateOpen(): boolean {

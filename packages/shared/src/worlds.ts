@@ -55,6 +55,13 @@ export const FADED_WARD_WORLD_KEY = "faded-ward";
 /** The Book entry whose finding opens the way (the ward seen from the People world). */
 export const FADED_WARD_GATE_ENTRY = "sight.tamsins-ward";
 
+/**
+ * The Road to the Seam (docs/specs/seam-road-to-the-seam-2026-10-31.md): a long road under the Station. Like the Ward it is a door in the story, not a progression wall — it
+ * opens for a traveller who has found Teru's Harbor Nail (the server checks the Book; the owner is exempt) and stays open. It must never say where Teru ended.
+ */
+export const ROAD_WORLD_KEY = "road-to-the-seam";
+export const ROAD_GATE_ENTRY = "relic.harbor-nail";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -106,6 +113,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   scale: { x: 850, y: 620 },
   eternity: { x: 905, y: 505 },
   "faded-ward": { x: 900, y: 420 },
+  "road-to-the-seam": { x: 700, y: 120 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */
