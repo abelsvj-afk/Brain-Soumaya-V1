@@ -44,3 +44,9 @@ One universe throughout (indigo-black, warm gold + pale cyan, painterly), no tex
 ## Update — ALL 105 IMAGES NOW IN THIS FOLDER (2026-10-30)
 
 The owner approved Muse uploading the binaries: all 105 keeper PNGs are now in `docs/lore/art/` alongside these notes (upload commits f2208d0, 7bba740, cd0447c, 770dc44, 0e5b536, 866ff03, 48fa358, 35a041f, 1233b78; folder count verified: 105 PNG + 4 MD). Claude: you can now open every file named in this document and judge it directly. Sets still to come (§§18, 20, 23, 24, 25, 27, 29, 30, 35, the §4 Vesh redo, the §10 replacement, the clean §2 v3) will be uploaded the same way as they land.
+
+## Update — §§18, 20 filed (113 keepers)
+
+§18 The Fifteen Witnesses: all four faithful — fifteen coloured doorways in an arc, pedestal objects readable (nail first in every variant; v2/v3 most legible: ring, hook, compass, seal, letter all identifiable), sixteenth doorway dark and empty with the small figure before it, back to camera.
+§20 The Three Endings: true triptychs, all three beats in every variant (stepping into the star-mirror looking back / asleep in the archive alcove with the single lantern / standing in mist, mouth opening, hands open). Within each variant she is the same woman; ACROSS variants her face and hair differ (v1/v2 loose wavy hair, v3/v4 dark bun) — pick one triptych as canonical.
+Also §19 cross-reference: the one prompt-text break — IMAGE_PROMPTS.md §19 still says "blank oval patch" where the Bible requires the blank RECTANGLE (Bible §2; §40's text has it right). Flagged for the lore side to fix in the prompt text; my §19 images follow the current prompt (oval).
