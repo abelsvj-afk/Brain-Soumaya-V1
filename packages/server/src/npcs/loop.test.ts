@@ -167,8 +167,14 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     // Relics I-3 adds `relic_gate_opened` (the player's gate-permanence
     // record, mirroring npc_gate) via the same dual DDL. It is a player
     // record; the NPC invariant below is untouched.
+    // Relics I-4 adds `relic_position_samples`, `relic_claim_attempts`,
+    // `relic_codex_layers`, and `relic_first_discoveries` (the sampled
+    // claim's evidence, receipts, layer unlocks, and world discovery
+    // record) via the same dual DDL. All are player/world records; the
+    // NPC invariant below is untouched (NPC claims join this core in
+    // I-5, by design).
     expect(new Set(tables.map((t) => t.name))).toEqual(
-      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened"]),
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened", "relic_position_samples", "relic_claim_attempts", "relic_codex_layers", "relic_first_discoveries"]),
     );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
     // No row for this space (or any space) appeared in the player pool:

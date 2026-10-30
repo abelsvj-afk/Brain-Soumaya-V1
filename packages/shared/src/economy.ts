@@ -33,6 +33,15 @@ export const EARN_REVIEW = 3;
  */
 export const WARP_COST = 10;
 /**
+ * Fuel charged for one widened relic scan pulse (Relics I-4, design
+ * §5.3): the widening buys a finer band read and waives the pulse
+ * cooldown — speed and convenience, never information the free pulse
+ * cannot yield. Priced as a trifle against FUEL_JOB_COST (2): a hunter
+ * can widen often; if the balance cannot pay, the pulse still fires
+ * free and unwidened.
+ */
+export const RELIC_SCAN_WIDEN_COST = 1;
+/**
  * Bonus credited on a completed warp arrival (server-side, once per journey).
  * Deliberately less than WARP_COST: a warp never nets positive, so journeys
  * rebate travel without becoming a fuel farm.

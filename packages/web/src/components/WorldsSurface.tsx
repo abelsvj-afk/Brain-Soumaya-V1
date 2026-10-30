@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { WORLDS_TRAVEL_ENABLED, relicCodexKey, relicsForWorld } from "@brain/shared";
+import { WORLDS_TRAVEL_ENABLED, RELIC_ANCHOR_POINTS, RELIC_DWELL_MS, relicCodexKey, relicsForWorld } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { getArchivedNodesStrict, getIncidentEdges, getSpaceId } from "../api/client.js";
@@ -81,7 +81,7 @@ import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import { pushToast } from "./Toasts.js";
 import { markRelicFound, replaceFoundRelics, useFoundRelics } from "./relicsFound.js";
-import { findRelic } from "../api/relics.js";
+import { findRelic, sampleRelicClaimStart } from "../api/relics.js";
 import { useRelicBuffs } from "../hooks/useRelicBuffs.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
@@ -496,6 +496,8 @@ export default function WorldsSurface({
   const stickyRisenRef = useRef<Set<number>>(new Set());
   const [stickyRisenTick, setStickyRisenTick] = useState(0);
   const [findError, setFindError] = useState<string | null>(null);
+  // Relics I-4: the relic whose dwell-and-claim moment is in progress.
+  const [settlingRelic, setSettlingRelic] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
@@ -957,14 +959,38 @@ export default function WorldsSurface({
 
   // A5: a find is recorded locally ONLY on server success. A failure leaves
   // the glimmer in place with a plain retry line and no celebration.
+  // Relics I-4: the glimmer button is now the dwell-and-claim moment.
+  // The scene rests the relic at its first anchor (the parity-held
+  // scene position), so "Look closer" reports the settling sample at
+  // that anchor, dwells while the server measures the dwell from its
+  // own receipt stamps, then claims under a fresh claimId. The full
+  // hunt surface (scan pulse readout, free movement) is I-7.
   const onFindRelic = async (relic: RelicDef) => {
-    if (!spaceId) return;
-    const out = await findRelic(relic.id);
+    if (!spaceId || settlingRelic) return;
+    const anchor = RELIC_ANCHOR_POINTS[relic.id]?.[0];
+    if (!anchor) {
+      setFindError("That glimmer has no resting place yet — it cannot be claimed.");
+      return;
+    }
+    const position = [...anchor.position];
+    const sampled = await sampleRelicClaimStart(position);
+    if (!sampled.ok) {
+      setFindError(sampled.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready.");
+      return;
+    }
+    setSettlingRelic(relic.id);
+    setFindError(null);
+    // A breath of margin over the dwell the server measures.
+    await new Promise((r) => setTimeout(r, RELIC_DWELL_MS + 250));
+    const claimId = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `claim-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const out = await findRelic(relic.id, claimId, position);
+    setSettlingRelic(null);
     if (!out.ok) {
       setFindError(out.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready.");
       return;
     }
-    setFindError(null);
     if (out.state) replaceFoundRelics(spaceId, out.state.found.map((id) => relicCodexKey(id)));
     else markRelicFound(spaceId, relicCodexKey(relic.id));
     pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
@@ -1339,8 +1365,8 @@ export default function WorldsSurface({
         glimmers.map((r) => (
           <p key={r.id} className="worlds-surface-fallback">
             Something glimmers {r.glimmer}.{" "}
-            <button type="button" onClick={() => onFindRelic(r)}>
-              Look closer
+            <button type="button" onClick={() => onFindRelic(r)} disabled={settlingRelic === r.id}>
+              {settlingRelic === r.id ? "Settling beside it…" : "Look closer"}
             </button>
           </p>
         ))}

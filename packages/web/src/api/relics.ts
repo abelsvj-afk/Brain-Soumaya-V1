@@ -28,8 +28,25 @@ export async function postRelic(path: string, body: Record<string, unknown>): Pr
     return { ok: res.ok, ...data };
   } catch { return { ok: false, error: "That didn't go through — please try again." }; }
 }
-export async function findRelic(relicId: string): Promise<FoundResult> {
-  const out = await postRelic("found", { relicId });
+/**
+ * Relics I-4: the claim is sampled. The client reports the settling
+ * moment (the glimmer's anchor position — where the scene rests the
+ * relic), dwells, then claims with a unique claimId. The server stamps
+ * every sample on receipt and measures the dwell from its own stamps;
+ * there is deliberately NO anchorKey and NO duration in any of these
+ * bodies — the server derives the anchor and the dwell itself.
+ */
+export async function sampleRelicClaimStart(position: readonly number[]): Promise<{ ok: boolean; error?: string; state?: RelicsStateView }> {
+  const out = await postRelic("sample", { position: [...position], kind: "claim-start" });
+  return out as { ok: boolean; error?: string; state?: RelicsStateView };
+}
+export interface ScanPulse { ok: boolean; band?: string | null; bearing?: string | null; widened?: boolean; quiet?: boolean; error?: string; state?: RelicsStateView }
+export async function scanRelic(relicId: string, position: readonly number[], widened = false): Promise<ScanPulse> {
+  const out = await postRelic("scan", { relicId, position: [...position], widened });
+  return out as ScanPulse;
+}
+export async function findRelic(relicId: string, claimId: string, position: readonly number[]): Promise<FoundResult> {
+  const out = await postRelic("found", { relicId, claimId, position: [...position] });
   return out as FoundResult;
 }
 export async function holdRelic(relicId: string) { return postRelic("hold", { relicId }); }

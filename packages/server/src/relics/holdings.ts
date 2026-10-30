@@ -15,6 +15,12 @@
  * `relic_gate_opened` (fix (a) — B-01's "once open, stays open" anchors
  * at the moment the found set completes, not at first arrival), and
  * release is class-aware (fix (b) — a Keystone is never released).
+ *
+ * Relics I-4: the find's transaction body lives in ONE award core
+ * (`awardClaimInTransaction`) that the sampled player claim
+ * (relics/claims.ts) and this store's claimFind both wrap — the player
+ * route's claim is validated from server-stamped position samples
+ * before it ever reaches the award.
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -61,6 +67,13 @@ function realAnchorOrFirst(relicId: string, anchorKey: string | null | undefined
 export type FindResult =
   | { ok: true; alreadyFound: boolean; rewardAmount: number; claimKey: string }
   | { ok: false; reason: string; kind: "unknown" | "not-findable" | "wrong-world" | "empty-pool" };
+
+/** The award core's outcome (Relics I-4): the transaction-internal half
+ *  of a find, before any caller wraps it in its own result shape. */
+export type AwardResult =
+  | { status: "already" }
+  | { status: "empty" }
+  | { status: "awarded"; copyId: string; anchorKey: string; rewardAmount: number; testOnly: boolean };
 
 /**
  * release() outcome (I-3, fix (b)): the return view on success, or a
@@ -294,13 +307,28 @@ export class RelicHoldingsStore {
 
   /** Bind a resting copy of this definition in scope to the claimant, or null when none rests placed. */
   private bindPlacedCopy(spaceId: string, relicId: string, scope: string | null, testOnly: boolean): { copyId: string; anchorKey: string } | null {
-    const copy = this.h.sqlite.prepare(
-      `SELECT * FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND test_only = ? AND scope_space_id IS ? ORDER BY created_at ASC, copy_id ASC LIMIT 1`,
-    ).get(relicId, testOnly ? 1 : 0, scope) as CopyRow | undefined;
+    return this.bindPlacedCopyAt(spaceId, relicId, scope, testOnly, null);
+  }
+
+  /**
+   * Relics I-4: bind a resting copy AT one validated anchor (the sampled
+   * claim's anchor), or — with anchorKey null — at any anchor (the
+   * legacy store-level find). Copies at one anchor are fungible for
+   * presence (§5.2 step 5); which copy rests there is the pool's fact,
+   * never the client's assertion.
+   */
+  private bindPlacedCopyAt(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, anchorKey: string | null): { copyId: string; anchorKey: string } | null {
+    const copy = anchorKey === null
+      ? this.h.sqlite.prepare(
+          `SELECT * FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND test_only = ? AND scope_space_id IS ? ORDER BY created_at ASC, copy_id ASC LIMIT 1`,
+        ).get(relicId, testOnly ? 1 : 0, scope) as CopyRow | undefined
+      : this.h.sqlite.prepare(
+          `SELECT * FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND test_only = ? AND scope_space_id IS ? AND anchor_key = ? ORDER BY created_at ASC, copy_id ASC LIMIT 1`,
+        ).get(relicId, testOnly ? 1 : 0, scope, anchorKey) as CopyRow | undefined;
     if (!copy) return null;
-    const anchorKey = copy.anchor_key ?? firstAnchorKey(relicId);
-    this.bindCopy(copy.copy_id, spaceId, copy.world ?? RELIC_BY_ID.get(relicId)?.world ?? "", anchorKey);
-    return { copyId: copy.copy_id, anchorKey };
+    const boundAnchor = copy.anchor_key ?? firstAnchorKey(relicId);
+    this.bindCopy(copy.copy_id, spaceId, copy.world ?? RELIC_BY_ID.get(relicId)?.world ?? "", boundAnchor);
+    return { copyId: copy.copy_id, anchorKey: boundAnchor };
   }
 
   /**
@@ -317,6 +345,26 @@ export class RelicHoldingsStore {
       `SELECT anchor_key FROM relic_copies WHERE relic_id = ? AND state = 'placed' AND scope_space_id IS ? AND anchor_key IS NOT NULL`,
     ).all(relicId, scope) as { anchor_key: string }[]).map((r) => r.anchor_key));
     const anchor = anchors.find((a) => !occupied.has(a.anchorKey)) ?? anchors[0]!;
+    const copyId = `rc_${randomUUID()}`;
+    this.h.sqlite.prepare(
+      `INSERT INTO relic_copies (copy_id, relic_id, state, world, anchor_key, holder_kind, holder_id, holder_space_id, scope_space_id, test_only) VALUES (?, ?, 'placed', ?, ?, NULL, NULL, NULL, ?, ?)`,
+    ).run(copyId, relicId, world, anchor.anchorKey, scope, testOnly ? 1 : 0);
+    this.recordEvent(copyId, "genesis", { spaceId, world, anchorKey: anchor.anchorKey, detail: { materializedAtClaim: true } });
+    this.recordEvent(copyId, "placed", { world, anchorKey: anchor.anchorKey });
+    this.bindCopy(copyId, spaceId, world, anchor.anchorKey);
+    return { copyId, anchorKey: anchor.anchorKey };
+  }
+
+  /**
+   * Relics I-4: materialize a fresh copy AT one validated anchor and
+   * bind it (the sampled claim's award when no copy rests there yet but
+   * the pool has room). Null when the anchor is not one of the
+   * definition's resting places at all.
+   */
+  private materializeAndBindAt(spaceId: string, relicId: string, scope: string | null, testOnly: boolean, anchorKey: string): { copyId: string; anchorKey: string } | null {
+    const anchor = (RELIC_ANCHOR_POINTS[relicId] ?? []).find((a) => a.anchorKey === anchorKey);
+    if (!anchor) return null;
+    const world = anchor.world;
     const copyId = `rc_${randomUUID()}`;
     this.h.sqlite.prepare(
       `INSERT INTO relic_copies (copy_id, relic_id, state, world, anchor_key, holder_kind, holder_id, holder_space_id, scope_space_id, test_only) VALUES (?, ?, 'placed', ?, ?, NULL, NULL, NULL, ?, ?)`,
@@ -409,67 +457,97 @@ export class RelicHoldingsStore {
   }
 
   /**
-   * The verified find (§7). Presence is derived by the caller (the travel
-   * ledger's current world) and passed in; identity, idempotency, scarcity,
-   * the holding write and the claim row all happen inside ONE immediate
-   * transaction, so two simultaneous claims for the final copy cannot both win.
+   * THE AWARD CORE (Relics I-4, implementation design §5.2/§5.5): the
+   * single implementation that turns a validated presence into an owned
+   * copy — scarcity read from the copy pool, one copy bound (a resting
+   * one at the validated anchor, else a fresh one materialized AT that
+   * anchor while the pool allows), the holding + Codex claim + gate
+   * record written. The CALLER owns the transaction (this joins it) and
+   * everything around the award: the sampled claim in relics/claims.ts
+   * wraps it with sample validation, the first-discovery write, the
+   * Fuel reward paid inside the same transaction, and the attempt
+   * receipt; claimFind below wraps it for the store-level callers.
+   * anchorKey null = any anchor (the pre-sampling presence model);
+   * a non-null anchorKey binds/materializes at exactly that anchor.
+   * The reward is computed here but NOT paid — paying is the caller's
+   * act, inside the caller's transaction.
    */
-  claimFind(spaceId: string, relicId: string, currentWorld: string, anchorKey?: string): FindResult {
+  awardClaimInTransaction(spaceId: string, relicId: string, anchorKey: string | null): AwardResult {
+    // I-2: any pre-existing holdings on this volume become copies first
+    // (idempotent), so the scarcity check below reads the true copy pool.
+    this.backfillCopies();
+    const existing = this.h.sqlite.prepare(`SELECT relic_id FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).get(spaceId, relicId);
+    if (existing) {
+      // Fix (a): an already-complete set records its permanence on any
+      // claim touch, even a repeat find that writes nothing else.
+      this.recordGateCompletionIfComplete(spaceId);
+      return { status: "already" };
+    }
+    const testOnly = this.scarcityOff(spaceId);
+    const scope = scopeFor(relicId, spaceId);
+    // Buffed discovery rate from the held set BEFORE this find — a relic's
+    // own buff never applies to its own discovery (it is not held yet).
+    const rewardAmount = buffsForSpace(this.h, spaceId).discoveryEarn;
+    // I-2: the find BINDS a physical copy (§4.3) — a resting one when one
+    // rests in scope (binding is always allowed: the copy exists and is
+    // free), else a newly materialized one while the scope count is
+    // below the class limit, else the empty-pool refusal.
+    let bound = this.bindPlacedCopyAt(spaceId, relicId, scope, testOnly, anchorKey);
+    if (!bound) {
+      if (!testOnly) {
+        const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
+        if (limit !== null && this.poolCount(relicId) >= limit) {
+          return { status: "empty" };
+        }
+        // Private class: one copy per scope — ANY live copy in scope
+        // blocks materialization, including one resting placed at a
+        // DIFFERENT anchor than the validated one (re-review P1-B,
+        // I-4): the resting copy at THIS anchor was bound above; a
+        // resting copy elsewhere is still the scope's one copy, and
+        // minting a second beside it would break §4.2's invariant.
+        if (limit === null && this.copiesInScope(relicId, scope, false, ["placed", "held", "return-pool"]) >= 1) {
+          return { status: "empty" };
+        }
+      }
+      bound = anchorKey === null
+        ? this.materializeAndBind(spaceId, relicId, scope, testOnly)
+        : this.materializeAndBindAt(spaceId, relicId, scope, testOnly, anchorKey);
+      if (!bound) return { status: "empty" };
+    }
+    const nowIso = new Date().toISOString();
+    this.h.sqlite.prepare(
+      `INSERT INTO relic_holdings (space_id, relic_id, found_at, test_only, held, held_at, anchor_key, copy_id) VALUES (?, ?, ?, ?, 0, NULL, ?, ?)`,
+    ).run(spaceId, relicId, nowIso, testOnly ? 1 : 0, bound.anchorKey, bound.copyId);
+    const claim = this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, relicCodexKey(relicId));
+    // Fix (a): if this find completed the set, permanence is recorded
+    // in the same transaction — the gate is open from this moment,
+    // whatever happens to the holdings later.
+    this.recordGateCompletionIfComplete(spaceId);
+    return { status: "awarded", copyId: bound.copyId, anchorKey: bound.anchorKey, rewardAmount: Number(claim.changes ?? 0) > 0 ? rewardAmount : 0, testOnly };
+  }
+
+  /**
+   * The store-level find (§7): world-level presence, derived by the
+   * caller (the travel ledger's current world) and passed in. This is
+   * the entry the pre-sampling callers use — the test suites, and from
+   * I-5 the NPC loop (§5.5: an NPC has no client, so there are no
+   * samples; its presence is its own server-known state). The player
+   * HTTP path no longer lands here: it goes through the sampled claim
+   * in relics/claims.ts, which wraps the same award core with sample
+   * validation, receipts, and the reward paid inside the transaction.
+   * The reward here is RETURNED, not paid — the caller owns payment.
+   */
+  claimFind(spaceId: string, relicId: string, currentWorld: string): FindResult {
     const def = RELIC_BY_ID.get(relicId);
     if (!def) return { ok: false, reason: UNKNOWN_RELIC_MESSAGE, kind: "unknown" };
     if (!def.discoverable) return { ok: false, reason: NOT_FINDABLE_MESSAGE, kind: "not-findable" };
     if (currentWorld !== def.world) return { ok: false, reason: WRONG_WORLD_MESSAGE, kind: "wrong-world" };
     const run = this.h.sqlite.transaction((): FindResult => {
-      // I-2: any pre-existing holdings on this volume become copies first
-      // (idempotent), so the scarcity check below reads the true copy pool.
-      this.backfillCopies();
-      const existing = this.h.sqlite.prepare(`SELECT relic_id FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).get(spaceId, relicId);
       const claimKey = relicCodexKey(relicId);
-      if (existing) {
-        // Fix (a): an already-complete set records its permanence on any
-        // claim touch, even a repeat find that writes nothing else.
-        this.recordGateCompletionIfComplete(spaceId);
-        return { ok: true, alreadyFound: true, rewardAmount: 0, claimKey };
-      }
-      const testOnly = this.scarcityOff(spaceId);
-      const scope = scopeFor(relicId, spaceId);
-      // Buffed discovery rate from the held set BEFORE this find — a relic's
-      // own buff never applies to its own discovery (it is not held yet).
-      const rewardAmount = buffsForSpace(this.h, spaceId).discoveryEarn;
-      // I-2: the find BINDS a physical copy (§4.3) — a resting one when one
-      // rests in scope (binding is always allowed: the copy exists and is
-      // free), else a newly materialized one while the scope count is
-      // below the class limit, else the empty-pool refusal. The copy's own
-      // resting anchor is the find's anchor; a client-supplied anchorKey
-      // is no longer authoritative for placement (the parameter is deleted
-      // in I-4 with the claim rework).
-      void anchorKey;
-      let bound = this.bindPlacedCopy(spaceId, relicId, scope, testOnly);
-      if (!bound) {
-        if (!testOnly) {
-          const limit = RELIC_COPY_LIMITS[relicId]?.limit ?? null;
-          if (limit !== null && this.poolCount(relicId) >= limit) {
-            return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
-          }
-          // Private class: one copy per scope — a held or waiting copy
-          // blocks; a resting one was bound above.
-          if (limit === null && this.copiesInScope(relicId, scope, false, ["held", "return-pool"]) >= 1) {
-            return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
-          }
-        }
-        bound = this.materializeAndBind(spaceId, relicId, scope, testOnly);
-        if (!bound) return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
-      }
-      const nowIso = new Date().toISOString();
-      this.h.sqlite.prepare(
-        `INSERT INTO relic_holdings (space_id, relic_id, found_at, test_only, held, held_at, anchor_key, copy_id) VALUES (?, ?, ?, ?, 0, NULL, ?, ?)`,
-      ).run(spaceId, relicId, nowIso, testOnly ? 1 : 0, bound.anchorKey, bound.copyId);
-      const claim = this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, claimKey);
-      // Fix (a): if this find completed the set, permanence is recorded
-      // in the same transaction — the gate is open from this moment,
-      // whatever happens to the holdings later.
-      this.recordGateCompletionIfComplete(spaceId);
-      return { ok: true, alreadyFound: false, rewardAmount: Number(claim.changes ?? 0) > 0 ? rewardAmount : 0, claimKey };
+      const r = this.awardClaimInTransaction(spaceId, relicId, null);
+      if (r.status === "already") return { ok: true, alreadyFound: true, rewardAmount: 0, claimKey };
+      if (r.status === "empty") return { ok: false, reason: EMPTY_POOL_MESSAGE, kind: "empty-pool" };
+      return { ok: true, alreadyFound: false, rewardAmount: r.rewardAmount, claimKey };
     });
     return run.immediate();
   }

@@ -749,6 +749,52 @@ export function migrateSchema(sqlite: RawDb): void {
       space_id TEXT PRIMARY KEY,
       opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- Relics I-4 (§4.7/§4.4): claim-time sampling + claim receipts.
+    -- Samples are validation evidence stamped by the SERVER on receipt
+    -- (client clocks are never consulted); attempts are the
+    -- review_grade_attempts receipt pattern for claims — a replay
+    -- returns the recorded outcome and re-executes nothing. The layer
+    -- table's L1 rows are written at a validated in-radius sample
+    -- (source='arrival'); first discoveries are written inside the
+    -- claim transaction, first writer wins. Same DDL runs in
+    -- the other established place.
+    CREATE TABLE IF NOT EXISTS relic_position_samples (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      world TEXT NOT NULL,
+      x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('scan','claim-start','claim-end')),
+      received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS relic_samples_space_world_idx
+      ON relic_position_samples(space_id, world, id);
+    CREATE TABLE IF NOT EXISTS relic_claim_attempts (
+      space_id TEXT NOT NULL,
+      attempt_key TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT,
+      outcome TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, attempt_key)
+    );
+    CREATE TABLE IF NOT EXISTS relic_codex_layers (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      layer TEXT NOT NULL CHECK (layer IN ('L0','L1','L3')),
+      thread_id TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL CHECK (source IN ('stirring','arrival','discovery','exchange')),
+      unlocked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, relic_id, layer, thread_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_first_discoveries (
+      scope TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      world TEXT NOT NULL, anchor_key TEXT NOT NULL,
+      discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (scope, relic_id)
+    );
   `);
   // Relics I-2: relic_holdings gains copy_id + location on volumes whose
   // relic_holdings table predates them (guarded, the space_meta pattern).

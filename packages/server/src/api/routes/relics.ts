@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { RELIC_BY_ID } from "@brain/shared";
 import type { AppContext } from "../../context.js";
-import { EconomyRepo } from "../../economy.js";
 import { TravelRepo } from "../../repositories/travel.repo.js";
 import { RelicHoldingsStore, isOwnerSpace } from "../../relics/holdings.js";
+import { RelicClaimService } from "../../relics/claims.js";
 import { spaceOf } from "../middleware.js";
 
 /** Relic Buffs v2 routes (§§6–10). Every write re-checks its preconditions server-side; no user-facing payload carries a timestamp. */
@@ -30,6 +30,47 @@ export function relicsRoutes(ctx: AppContext): Router {
     res.json(s.state(spaceId));
   });
 
+  /**
+   * Relics I-4 (§5.2): the claim is SAMPLED. Three calls make one claim —
+   * /sample (the settling moment), /scan (the attunement pulse), /found
+   * (the claim itself). The world is always derived server-side from
+   * the travel ledger, never taken from the request; the claim's reward
+   * is paid inside the claim transaction by the claim service.
+   */
+  const currentWorldOf = (res: import("express").Response, s: RelicHoldingsStore) =>
+    new TravelRepo(ctx.handle, spaceOf(res), () => s.gateHoldings(spaceOf(res))).currentWorld();
+
+  r.post("/sample", (req, res) => {
+    const spaceId = spaceOf(res);
+    const s = store(res);
+    s.ensureMigrated();
+    // A client-claimed world that disagrees with the ledger is refused:
+    // samples are evidence about where the server knows you are.
+    const claimed = typeof req.body?.world === "string" ? req.body.world : null;
+    const world = currentWorldOf(res, s);
+    if (claimed !== null && claimed !== world) {
+      res.status(400).json({ error: "You are not standing in that world right now.", state: s.state(spaceId) });
+      return;
+    }
+    const out = new RelicClaimService(ctx.handle).recordSample(spaceId, world, req.body?.position, String(req.body?.kind ?? ""));
+    if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
+    // §5.2's response is { ok } — the matched relics are NOT named back:
+    // the endpoint must not become an oracle for which anchor a probed
+    // position belongs to (independent review, I-4).
+    res.json({ ok: true, state: s.state(spaceId) });
+  });
+
+  r.post("/scan", (req, res) => {
+    const spaceId = spaceOf(res);
+    const s = store(res);
+    s.ensureMigrated();
+    const relicId = String(req.body?.relicId ?? "");
+    const out = new RelicClaimService(ctx.handle).scan(spaceId, relicId, req.body?.position, currentWorldOf(res, s), req.body?.widened === true);
+    if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
+    // Band + bearing only — never coordinates, never a distance (§5.3).
+    res.json({ ok: true, band: out.band, bearing: out.bearing, widened: out.widened, quiet: out.quiet, state: s.state(spaceId) });
+  });
+
   r.post("/found", (req, res) => {
     const spaceId = spaceOf(res);
     const s = store(res);
@@ -38,15 +79,18 @@ export function relicsRoutes(ctx: AppContext): Router {
     const def = RELIC_BY_ID.get(relicId);
     if (!def) { res.status(400).json({ error: "That relic is not in the Codex.", state: s.state(spaceId) }); return; }
     if (!def.discoverable) { res.status(400).json({ error: "That relic cannot be found yet — its resting place is not open.", state: s.state(spaceId) }); return; }
-    const currentWorld = new TravelRepo(ctx.handle, spaceId, () => s.gateHoldings(spaceId)).currentWorld();
-    const anchorKey = typeof req.body?.anchorKey === "string" ? req.body.anchorKey : undefined;
-    const result = s.claimFind(spaceId, relicId, currentWorld, anchorKey);
+    // I-4: the anchorKey parameter is DELETED from this contract — the
+    // server derives the anchor from the validated samples; a request
+    // that still sends one is ignored, exactly as §5.2 specifies. The
+    // claim carries { relicId, claimId, position }; claimId is the
+    // idempotency key whose recorded outcome a replay returns verbatim.
+    const claimId = typeof req.body?.claimId === "string" ? req.body.claimId : "";
+    const result = new RelicClaimService(ctx.handle).claim(spaceId, relicId, claimId, req.body?.position, currentWorldOf(res, s));
     if (!result.ok) {
       res.status(result.kind === "empty-pool" ? 409 : 400).json({ error: result.reason, state: s.state(spaceId) });
       return;
     }
-    if (result.rewardAmount > 0) new EconomyRepo(ctx.handle, spaceId).add(result.rewardAmount);
-    res.json({ ok: true, alreadyFound: result.alreadyFound, awarded: result.rewardAmount > 0, state: s.state(spaceId) });
+    res.json({ ok: true, alreadyFound: result.alreadyFound, awarded: result.awarded, state: s.state(spaceId) });
   });
 
   r.post("/legacy-sync", (req, res) => {
