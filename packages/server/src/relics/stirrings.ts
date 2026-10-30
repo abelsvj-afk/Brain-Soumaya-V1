@@ -14,9 +14,12 @@
  *   never promises a copy that does not exist.
  * - Resolution is never silent and never a fabrication: `claimed`
  *   when the relic is claimed, `quiet` ("the trail has gone quiet")
- *   when the pool empties beneath it, `expired` when its window
- *   ends. Expiry is EVALUATED inside serialized transactions and at
- *   read time (§4.6) — there is no background sweeper.
+ *   when the pool empties beneath it, when the very copy it
+ *   promised is claimed by another, or when that copy is no longer
+ *   there to claim (the exact-copy follow-up to I-5), `expired`
+ *   when its window ends. Expiry is EVALUATED inside serialized
+ *   transactions and at read time (§4.6) — there is no background
+ *   sweeper.
  * - One open stirring per (space, relic), enforced by the partial
  *   unique index; at most one open AMBIENT stirring per (space,
  *   world) (owner ruling 4). Chart stirrings are exempt from the
@@ -267,5 +270,47 @@ export class RelicStirringService {
         ).run(nowIso, spaceId, relicId);
       }
     }
+  }
+
+  /** Quiet every open stirring promising one copy. THE CALLER OWNS
+   *  THE TRANSACTION (the award transaction) — this method only
+   *  writes, like resolveAfterPlayerClaim. `exceptSpaceId` spares
+   *  one space's stirring (the claimer's own, which resolves
+   *  `claimed` by the (space, relic) update); null spares none. */
+  private quietByCopy(copyId: string, exceptSpaceId: string | null, reason: string): void {
+    const nowIso = new Date().toISOString();
+    if (exceptSpaceId === null) {
+      this.h.sqlite.prepare(
+        `UPDATE relic_stirrings SET state = 'quiet', resolved_at = ?, resolved_reason = ? WHERE copy_id = ? AND state = 'open'`,
+      ).run(nowIso, reason, copyId);
+    } else {
+      this.h.sqlite.prepare(
+        `UPDATE relic_stirrings SET state = 'quiet', resolved_at = ?, resolved_reason = ? WHERE copy_id = ? AND state = 'open' AND space_id != ?`,
+      ).run(nowIso, reason, copyId, exceptSpaceId);
+    }
+  }
+
+  /**
+   * The exact-copy promise (approved design §3, follow-up to I-5):
+   * a copy can be promised to several spaces at once (the global
+   * pool's one resting copy is every hunter's trail), so the moment
+   * ANY claim — player or NPC — awards it, every OTHER space's open
+   * stirring for that copy resolves `quiet`: the trail they were
+   * following has ended, honestly and at the moment it ended, not
+   * whenever the pool later happens to empty.
+   */
+  resolveCopyClaimed(copyId: string, claimerSpaceId: string | null): void {
+    this.quietByCopy(copyId, claimerSpaceId, "copy-claimed");
+  }
+
+  /**
+   * The promised copy is no longer placed when its holder comes to
+   * claim (held by another through a path that carried no stirring
+   * resolution, waiting in the return pool, or gone): every open
+   * stirring promising it resolves `quiet` at that claim attempt —
+   * the promise is over for everyone it was made to.
+   */
+  resolveCopyGone(copyId: string): void {
+    this.quietByCopy(copyId, null, "copy-gone");
   }
 }
