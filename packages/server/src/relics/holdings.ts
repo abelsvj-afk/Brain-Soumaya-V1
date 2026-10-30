@@ -10,6 +10,11 @@
  * provenance and its placement history (approved design §2.1/R3-4).
  * A holding is one space's current ownership of one copy (`copy_id`);
  * `location` is Hold organization only and never gates buffs.
+ *
+ * Relics I-3: gate permanence is RECORDED at set completion in
+ * `relic_gate_opened` (fix (a) — B-01's "once open, stays open" anchors
+ * at the moment the found set completes, not at first arrival), and
+ * release is class-aware (fix (b) — a Keystone is never released).
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -56,6 +61,16 @@ function realAnchorOrFirst(relicId: string, anchorKey: string | null | undefined
 export type FindResult =
   | { ok: true; alreadyFound: boolean; rewardAmount: number; claimKey: string }
   | { ok: false; reason: string; kind: "unknown" | "not-findable" | "wrong-world" | "empty-pool" };
+
+/**
+ * release() outcome (I-3, fix (b)): the return view on success, or a
+ * clean refusal with the plain reason (a Keystone is never released).
+ * A null return keeps its original meaning — the space does not hold
+ * that relic at all.
+ */
+export type ReleaseResult =
+  | { ok: true; event: RelicReturnView }
+  | { ok: false; reason: string };
 
 const migratedHandles = new WeakSet<object>();
 
@@ -139,6 +154,9 @@ export class RelicHoldingsStore {
       // I-2: the same lazy boot converts any pre-existing holdings into
       // physical copies (idempotent — see backfillCopies).
       this.backfillCopies();
+      // I-3: the same lazy boot records gate permanence for spaces that
+      // already crossed to Eternity (idempotent — see backfillGateOpened).
+      this.backfillGateOpened();
       migratedHandles.add(this.h.sqlite as object);
     } catch { /* tables may not exist in a bare unit handle */ }
   }
@@ -154,6 +172,49 @@ export class RelicHoldingsStore {
       witnessWithoutName: found.includes("witness-without-a-name"),
       otherRelicCount: found.filter((id) => id !== "witness-without-a-name").length,
     };
+  }
+  /** Fix (a): has this space's gate completion been recorded? (Reads fall back to the arrived-journey derivation when no record exists yet.) */
+  gateOpenedRecorded(spaceId: string): boolean {
+    try {
+      const row = this.h.sqlite.prepare(`SELECT 1 AS x FROM relic_gate_opened WHERE space_id = ?`).get(spaceId) as { x: number } | undefined;
+      return !!row;
+    } catch { return false; }
+  }
+
+  /**
+   * Fix (a) (§6): record gate permanence at SET COMPLETION. Runs inside
+   * the claim, hold, and release transactions: the moment the space's
+   * found set completes B-01, the fact is written once (INSERT OR
+   * IGNORE) and never removed, so releasing or storing any set member
+   * afterwards — the Witness included, before any travel — cannot
+   * re-close the gate. Running it in release's transaction too means a
+   * space that completed the set before this build records its
+   * permanence BEFORE the release that would otherwise endanger it.
+   * The caller owns the transaction; this helper only writes.
+   */
+  private recordGateCompletionIfComplete(spaceId: string): void {
+    if (!eternityGateOpen(this.foundIds(spaceId))) return;
+    try {
+      this.h.sqlite.prepare(`INSERT OR IGNORE INTO relic_gate_opened (space_id) VALUES (?)`).run(spaceId);
+    } catch { /* bare handle without the I-3 table: reads fall back to the arrived-journey derivation */ }
+  }
+
+  /**
+   * Fix (a) backfill (§4.8): spaces that already crossed to Eternity
+   * get their permanence record with the crossing's own arrival time
+   * (the earliest arrived Eternity journey). Idempotent; runs with the
+   * store's lazy migration, so a volume picks it up on first touch.
+   */
+  backfillGateOpened(): number {
+    try {
+      const res = this.h.sqlite.prepare(
+        `INSERT OR IGNORE INTO relic_gate_opened (space_id, opened_at)
+         SELECT space_id, MIN(arrived_at) FROM travel_journeys
+         WHERE destination = 'eternity' AND state = 'arrived' AND arrived_at IS NOT NULL
+         GROUP BY space_id`,
+      ).run();
+      return Number(res.changes ?? 0);
+    } catch { return 0; }
   }
   /** Append one fact to a copy's chain. Events are never updated or deleted. */
   private recordEvent(copyId: string, kind: string, facts: { spaceId?: string | null; world?: string | null; anchorKey?: string | null; detail?: unknown } = {}): void {
@@ -364,7 +425,12 @@ export class RelicHoldingsStore {
       this.backfillCopies();
       const existing = this.h.sqlite.prepare(`SELECT relic_id FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).get(spaceId, relicId);
       const claimKey = relicCodexKey(relicId);
-      if (existing) return { ok: true, alreadyFound: true, rewardAmount: 0, claimKey };
+      if (existing) {
+        // Fix (a): an already-complete set records its permanence on any
+        // claim touch, even a repeat find that writes nothing else.
+        this.recordGateCompletionIfComplete(spaceId);
+        return { ok: true, alreadyFound: true, rewardAmount: 0, claimKey };
+      }
       const testOnly = this.scarcityOff(spaceId);
       const scope = scopeFor(relicId, spaceId);
       // Buffed discovery rate from the held set BEFORE this find — a relic's
@@ -399,6 +465,10 @@ export class RelicHoldingsStore {
         `INSERT INTO relic_holdings (space_id, relic_id, found_at, test_only, held, held_at, anchor_key, copy_id) VALUES (?, ?, ?, ?, 0, NULL, ?, ?)`,
       ).run(spaceId, relicId, nowIso, testOnly ? 1 : 0, bound.anchorKey, bound.copyId);
       const claim = this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, claimKey);
+      // Fix (a): if this find completed the set, permanence is recorded
+      // in the same transaction — the gate is open from this moment,
+      // whatever happens to the holdings later.
+      this.recordGateCompletionIfComplete(spaceId);
       return { ok: true, alreadyFound: false, rewardAmount: Number(claim.changes ?? 0) > 0 ? rewardAmount : 0, claimKey };
     });
     return run.immediate();
@@ -450,7 +520,12 @@ export class RelicHoldingsStore {
     if (!row) return { ok: false, reason: "You have not found that relic yet." };
     if (row.held === 1) return { ok: true };
     if (this.heldIds(spaceId).length >= MAX_HELD_RELICS) return { ok: false, reason: HOLD_CAP_MESSAGE };
-    this.h.sqlite.prepare(`UPDATE relic_holdings SET held = 1, held_at = ? WHERE space_id = ? AND relic_id = ?`).run(new Date().toISOString(), spaceId, relicId);
+    const run = this.h.sqlite.transaction(() => {
+      this.h.sqlite.prepare(`UPDATE relic_holdings SET held = 1, held_at = ? WHERE space_id = ? AND relic_id = ?`).run(new Date().toISOString(), spaceId, relicId);
+      // Fix (a): the recorder rides every relic write transaction (§4.8).
+      this.recordGateCompletionIfComplete(spaceId);
+    });
+    run.immediate();
     return { ok: true };
   }
   unhold(spaceId: string, relicId: string): { ok: boolean; reason?: string } {
@@ -459,11 +534,25 @@ export class RelicHoldingsStore {
     return { ok: true };
   }
 
-  release(spaceId: string, relicId: string): RelicReturnView | null {
-    const run = this.h.sqlite.transaction((): RelicReturnView | null => {
+  release(spaceId: string, relicId: string): ReleaseResult | null {
+    const run = this.h.sqlite.transaction((): ReleaseResult | null => {
       this.backfillCopies();
       const row = this.h.sqlite.prepare(`SELECT * FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).get(spaceId, relicId) as HoldingRow | undefined;
       if (!row) return null;
+      // Fix (a): record permanence from the found set AS IT STANDS —
+      // inside this transaction, before the delete below can endanger
+      // it (§6). A space whose set completed before this build is made
+      // permanent by its first release, not endangered by it.
+      this.recordGateCompletionIfComplete(spaceId);
+      // Fix (b): a Keystone is never released (approved design §2.2/§5 —
+      // classification owns object behavior). The refusal is clean and
+      // honest, and the holding stays exactly as it was. Brain deletion
+      // is NOT this path: releaseAllForSpace below still returns
+      // Keystone copies when a brain ends.
+      const def = RELIC_BY_ID.get(relicId);
+      if (def?.tierClass === "keystone") {
+        return { ok: false, reason: `${def.name} is a keystone — it stays with you. Keystones cannot be released or given back.` };
+      }
       const world = RELIC_BY_ID.get(relicId)?.world ?? null;
       let toAnchor: string | null = null;
       if (row.copy_id) {
@@ -485,12 +574,18 @@ export class RelicHoldingsStore {
         }
       }
       this.h.sqlite.prepare(`DELETE FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).run(spaceId, relicId);
-      return { relicId, name: RELIC_BY_ID.get(relicId)?.name ?? relicId, reason: "release" as const, fromAnchor: row.anchor_key, toAnchor };
+      return { ok: true, event: { relicId, name: RELIC_BY_ID.get(relicId)?.name ?? relicId, reason: "release" as const, fromAnchor: row.anchor_key, toAnchor } };
     });
     return run.immediate();
   }
 
-  /** Brain deletion contract (§6, relic copies per I-2): counted copies return to the world via their own chains (brain-deleted event, then placement); test/private copies are deleted with the brain — their event chains remain as the record, with no pool effect. */
+  /** Brain deletion contract (§6, relic copies per I-2): counted copies return to the world via their own chains (brain-deleted event, then placement); test/private copies are deleted with the brain — their event chains remain as the record, with no pool effect.
+   *
+   * Fix (b) distinction (I-3): brain deletion is NOT a player release.
+   * The class gate in release() governs a living player's choices; when
+   * a brain ends, its counted Keystone copies still return to the world
+   * here — "stays held" was never a promise that a deleted brain keeps
+   * its relics out of the pool forever. */
   releaseAllForSpace(spaceId: string): { returnedCounted: number; removedTotal: number } {
     const body = () => {
       // Convert first, THEN read the rows — the snapshot must carry copy_id.
@@ -573,11 +668,18 @@ export class RelicHoldingsStore {
   }
 
   gateView(spaceId: string): RelicGateView {
-    let openedBefore = false;
-    try {
-      const row = this.h.sqlite.prepare(`SELECT COUNT(*) AS n FROM travel_journeys WHERE space_id = ? AND destination = 'eternity' AND state = 'arrived'`).get(spaceId) as { n: number };
-      openedBefore = row.n > 0;
-    } catch { openedBefore = false; }
+    // Fix (a): openedBefore reads the permanence record first — the
+    // same source TravelRepo.eternityGateOpened() reads, so the view
+    // and the enforcement can never disagree. The arrived-journey
+    // derivation remains as the fallback for a volume whose backfill
+    // has not run yet; both describe the same fact.
+    let openedBefore = this.gateOpenedRecorded(spaceId);
+    if (!openedBefore) {
+      try {
+        const row = this.h.sqlite.prepare(`SELECT COUNT(*) AS n FROM travel_journeys WHERE space_id = ? AND destination = 'eternity' AND state = 'arrived'`).get(spaceId) as { n: number };
+        openedBefore = row.n > 0;
+      } catch { openedBefore = false; }
+    }
     const found = new Set(this.foundIds(spaceId));
     const open = openedBefore || eternityGateOpen(found);
     let missingPlain = "The way to Eternity's world is open to you.";

@@ -172,7 +172,8 @@ describe("fix (c) — per-copy placement history", () => {
       const foundAt = (handle.sqlite.prepare(`SELECT anchor_key FROM relic_holdings WHERE space_id = 's1' AND relic_id = 'basin-stone'`).get() as { anchor_key: string }).anchor_key;
       expect(seen).not.toContain(foundAt);
       seen.push(foundAt);
-      const view = store().release("s1", "basin-stone");
+      const relOut = store().release("s1", "basin-stone");
+      const view = relOut?.ok ? relOut.event : null; // I-3: release() returns a discriminated result
       expect(view).not.toBeNull();
       if (cycle < set.length - 1) {
         expect(view!.toAnchor).toBe(set[cycle + 1]);
@@ -190,7 +191,8 @@ describe("fix (c) — per-copy placement history", () => {
 
   it("a resting copy's anchor is never handed to a sibling copy", () => {
     store().claimFind("s1", "harbor-nail", "great-station");
-    const first = store().release("s1", "harbor-nail");
+    const firstOut = store().release("s1", "harbor-nail");
+    const first = firstOut?.ok ? firstOut.event : null; // I-3: discriminated release result
     expect(first!.toAnchor).toBe(anchorsOf("harbor-nail")[1]);
     // A fresh copy materializes while the first rests at anchors[1]:
     // it must not materialize on top of its sibling.
@@ -198,7 +200,8 @@ describe("fix (c) — per-copy placement history", () => {
     const evs = eventsFor(holdingCopyId("s2", "harbor-nail")!);
     expect(evs.find((e) => e.kind === "placed")!.anchor_key).toBe(anchorsOf("harbor-nail")[0]);
     // And its own return skips both its history and the sibling's rest.
-    const second = store().release("s2", "harbor-nail");
+    const secondOut = store().release("s2", "harbor-nail");
+    const second = secondOut?.ok ? secondOut.event : null; // I-3: discriminated release result
     expect(second!.toAnchor).toBe(anchorsOf("harbor-nail")[2]);
   });
 });

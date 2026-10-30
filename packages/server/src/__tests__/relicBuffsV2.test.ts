@@ -117,7 +117,8 @@ describe("release and returns (A7–A9)", () => {
     for (let i = 0; i < 7; i++) give(`other-${i}`, "harbor-nail");
     expect(store().claimFind("late", "harbor-nail", "great-station").ok).toBe(false);
     give("holder", "mooring-ring", { anchor: "mooring-ring:resting-place-one" });
-    const ev = store().release("holder", "mooring-ring");
+    const relOut = store().release("holder", "mooring-ring");
+    const ev = relOut?.ok ? relOut.event : null; // I-3: release() returns a discriminated result
     expect(ev?.fromAnchor).toBe("mooring-ring:resting-place-one");
     expect(ev?.toAnchor).toBeTruthy();
     expect(ev?.toAnchor).not.toBe(ev?.fromAnchor);
@@ -242,8 +243,11 @@ describe("gate wiring with the REAL holdings callback (A13–A15, A25)", () => {
     driftLeg(t, "d2", "growing-place", T0 + 60_000);
     const j = t.depart({ clientKey: "d3", kind: "drift", destination: "eternity" }, T0 + 120_000);
     expect(t.arrive(j.id, T0 + 131_000)?.state).toBe("arrived");
-    // Release everything — the found set is now empty; the ledger remembers.
-    store().release("s1", "witness-without-a-name"); store().release("s1", "harbor-nail"); store().release("s1", "dawn-leaf");
+    // Empty the found set — the ledger must remember on its own.
+    // I-3 fix (b): the Witness is a Keystone and can no longer be
+    // released, so the set is emptied through the brain-deletion
+    // contract (releaseAllForSpace), which still returns Keystones.
+    store().releaseAllForSpace("s1");
     expect(store().foundIds("s1")).toEqual([]);
     driftLeg(t, "d4", "home", T0 + 180_000);
     driftLeg(t, "d5", "great-station", T0 + 240_000);

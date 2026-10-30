@@ -190,6 +190,10 @@ export const SPACE_SCOPED_TABLES = [
   // returned copy outlives the brain that held it, and test/private
   // copies are removed by releaseAllForSpace before the census runs.
   "relic_copy_events",
+  // Relics I-3: the gate-permanence record is the space's own row
+  // (space_id is its primary key) — it dies with the brain like every
+  // other per-space record.
+  "relic_gate_opened",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.
