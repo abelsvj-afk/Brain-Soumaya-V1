@@ -62,14 +62,17 @@ import {
 } from "../api/worldChanges.js";
 import {
   buildDeepPastLayout,
+  buildDeepPastWalkPoints,
+  DEEP_PAST_BASIN_RADIUS,
+  DEEP_PAST_BASIN_Y,
+  DEEP_PAST_SHIP_BERTH,
+  deepPastFloorY,
   type DeepPastLayout,
 } from "../graph/deepPastLayout.js";
 import {
   createDeepPastScene,
   EMPTY_DEEP_PAST_LAYOUT,
-  deepPastDescentCamera,
-  deepPastDescentStage,
-  DEEP_PAST_DESCENT,
+  type DeepPastScene,
 } from "../graph/deepPastScene.js";
 import {
   buildPeopleLayout,
@@ -210,12 +213,17 @@ import {
  * resting orbit; any pointer press skips straight to the orbit, and
  * reduced motion never plays the glide — the orbit holds from the start.
  *
- * Guided descent (P3-2, A21, follow-only): at the Deep Past, when a
- * Chronicle thread exists, one button starts the slow descent along the
- * thread (rim → basin, 90 s, capped); the same button leaves it. Leaving
- * parks the view — the orbit continues at the parked depth, and re-entering
- * resumes from there; the route is never lost. Reduced motion turns the
- * descent into stratified stage holds (rim → mid → basin).
+ * Deep Past rework (2026-10-29 design note §7–§8 + functions addendum):
+ * four modes, all with a FREE camera (the look layer applies on top of
+ * every mode; nothing in Deep Past ever sets the scripted flag). Overview
+ * is the rim orbit (idle ≈9°/s until the traveller's first interaction,
+ * then the slow parked rate). Walk rides the generated walk curve down
+ * the stair, waiting at every stratum landing. Perch is a slow orbit
+ * anchored to a landing (or to a focused member). The Chronicle ride is
+ * ship-led: her ship travels the thread stop to stop, dwells at each
+ * stop, and leaving parks the stop — re-entering resumes there. Reduced
+ * motion: no walk auto-advance (landing-to-landing jumps), the ride's
+ * Continue jumps between stops, perches hold still.
  *
  * Station interior (Wave 2, settled design 2026-10-28): the interior
  * is the Station's inside, not a new world — a mode of the Station
@@ -254,6 +262,51 @@ interface WorldSceneHandle {
   /** Garden only (Phase 4): the fog tint for the warmth now rendered. */
   getWarmthFogColor?: () => number | null;
 }
+
+/** Deep Past rework: the four in-world modes (design note §7). */
+type DpMode = "overview" | "walk" | "perch" | "ride";
+type DpVec = [number, number, number];
+
+/** The walk's runtime state (refs — the frame loop moves it every frame). */
+interface DpWalkRt {
+  /** Arc-length parameter along the walk curve, 0 (rim) … 1 (basin). */
+  s: number;
+  moving: boolean;
+  dir: 1 | -1;
+  /** Stratum of the landing the walk is waiting at (9 = basin), or null mid-flight. */
+  atLanding: number | null;
+}
+
+/** The Chronicle ride's runtime state. Waypoint keys: −1 = the rim berth,
+ *  0…n−1 = thread stops, n = the basin rest. */
+interface DpRideRt {
+  phase: "atBerth" | "dwelling" | "traveling" | "complete";
+  /** The stop the ride is dwelling at / parked at. */
+  stop: number;
+  /** Thread kindle fraction (0…1) — kept while the ride is parked. */
+  kindle: number;
+  pendingLeg: { from: number; to: number } | null;
+  leg: { from: number; to: number; tMs: number; durMs: number; fromKindle: number; toKindle: number } | null;
+}
+
+/** Where her ship berths at the rim — the layout's polar convention
+ *  (cos → x, sin → z), exactly as the scene berths her, so the ride's
+ *  first leg starts where she already rests. */
+const DP_BERTH_POS: DpVec = [
+  Math.cos(DEEP_PAST_SHIP_BERTH.angle) * DEEP_PAST_SHIP_BERTH.radius,
+  DEEP_PAST_SHIP_BERTH.y,
+  Math.sin(DEEP_PAST_SHIP_BERTH.angle) * DEEP_PAST_SHIP_BERTH.radius,
+];
+/** Where the ship rests when the Chronicle ride completes. */
+const DP_BASIN_REST: DpVec = [0, DEEP_PAST_BASIN_Y + 16, DEEP_PAST_BASIN_RADIUS * 0.4];
+/** The basin orb the walk's final segment settles facing. */
+const DP_ORB_POS: DpVec = [0, DEEP_PAST_BASIN_Y + 11, 0];
+
+const lerpVec = (a: DpVec, b: DpVec, t: number): DpVec => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+];
 
 /**
  * The garden's mutation input from the world-changes feed (Phase 4).
@@ -485,9 +538,9 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     light: { env: 0.6, hemi: { sky: 0xa890e8, ground: 0x2e1a48, intensity: 1.2 }, key: { color: 0xb8a8ff, intensity: 1.0, from: [300, 900, 200] } },
     background: 0x140d24,
     fogDensity: 0.00016,
-    orbitRadius: 850,
-    orbitHeight: 150,
-    lookAtY: -200,
+    orbitRadius: 205,
+    orbitHeight: 42,
+    lookAtY: -80,
     fallback: "The Deep Past view needs graphics support on this device — your memories are unaffected.",
     build: (layout, onRelicVisible) =>
       createDeepPastScene(isDeepPastLayout(layout) ? layout : EMPTY_DEEP_PAST_LAYOUT, { onRelicVisible }),
@@ -681,8 +734,48 @@ export default function WorldsSurface({
   const [archivedGraph, setArchivedGraph] = useState<GraphData | null>(null);
   const [archivedFailed, setArchivedFailed] = useState(false);
   const [archivedRetry, setArchivedRetry] = useState(0);
-  const [guided, setGuided] = useState(false);
   const [showController, setShowController] = useState(false);
+  // Deep Past rework: mode machine (refs are what the frame loop reads;
+  // the state mirrors exist only where the dock / labels need them).
+  const dpModeRef = useRef<DpMode>("overview");
+  const [dpMode, setDpMode] = useState<DpMode>("overview");
+  const walkRefDp = useRef<DpWalkRt>({ s: 0, moving: false, dir: 1, atLanding: null });
+  const [dpWalkMoving, setDpWalkMoving] = useState(false);
+  const [dpAtLanding, setDpAtLanding] = useState<number | null>(null);
+  const dpPerchRef = useRef<number>(0);
+  const [dpPerchStratum, setDpPerchStratum] = useState<number>(0);
+  /** Perch focus override: a member (approach) or an anchor line's top end. */
+  const dpFocusRef = useRef<{ point: DpVec; nodeId?: number; stratum?: number } | null>(null);
+  const rideRef = useRef<DpRideRt>({ phase: "atBerth", stop: 0, kindle: 0, pendingLeg: null, leg: null });
+  const [dpRidePhase, setDpRidePhase] = useState<DpRideRt["phase"]>("atBerth");
+  const [dpRideStop, setDpRideStop] = useState(0);
+  /** The typed Deep Past scene handle (garden pattern: kept out of the
+   *  WorldSceneHandle union so pickMember / setFrameState stay typed). */
+  const deepPastSceneRef = useRef<DeepPastScene | null>(null);
+  const dpCameraRef = useRef<THREE.Camera | null>(null);
+  /** The previous layout this visit, for rise-glide / carry-in diffs on rebuild. */
+  const dpPrevLayoutRef = useRef<DeepPastLayout | null>(null);
+  /** Landing arc-length positions, computed per scene build from the walk curve. */
+  const dpLandingsRef = useRef<{ stratum: number; s: number; point: DpVec }[]>([]);
+  /** Per-frame scene frame state (kindle / stop / ship pose), applied after look. */
+  const dpFrameRef = useRef<{
+    kindle: number;
+    currentStop: number;
+    shipPose: { position: DpVec; target: DpVec } | null;
+  }>({ kindle: 0, currentStop: -1, shipPose: null });
+  const dpChaseRef = useRef<{ pos: DpVec } | null>(null);
+  /** True after the traveller's first interaction this Deep Past visit
+   *  (drives the AN9 idle-orbit rate and dismisses the arrival line). */
+  const dpInteractedRef = useRef(false);
+  const [dpArrivalDismissed, setDpArrivalDismissed] = useState(false);
+  /** Set by the frame-loop effect's input handlers (they live outside React). */
+  const dpInteractRef = useRef<() => void>(() => {});
+  const lastLookInputRef = useRef(0);
+  /** A glimmer find waiting for the flight to the basin to arrive. */
+  const glimmerFindRef = useRef<RelicDef | null>(null);
+  const findRelicRef = useRef<(relic: RelicDef) => void>(() => {});
+  /** The member whose card is open (Deep Past approach, F9). */
+  const [dpCardNode, setDpCardNode] = useState<number | null>(null);
   // NPC presence (docs/specs/npcs-alive-2026-10-30.md): the Station controller's patrol, her on-screen tag, and who you have met.
   const npcBodiesRef = useRef<NpcBodies | null>(null);
   const npcTagEls = useRef(new Map<string, HTMLButtonElement>());
@@ -712,11 +805,7 @@ export default function WorldsSurface({
   const [interiorRoom, setInteriorRoom] = useState<InteriorRoomId>("hangar-bay");
   const interiorRoomRef = useRef<InteriorRoomId>("hangar-bay");
   const [bayShipNonce, setBayShipNonce] = useState(0);
-  const guidedRef = useRef(false);
-  const descentStartedAtRef = useRef(0);
-  const descentFromRef = useRef(0);
-  const parkedProgressRef = useRef(0);
-  const lastProgressRef = useRef(0);
+
   // Station arrival glide (A13): any pointer press skips it. Reset per stay.
   const arrivalSkippedRef = useRef(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -1025,6 +1114,7 @@ export default function WorldsSurface({
     flightRef.current = null;
     flightTargetRef.current = null;
     chaseCamRef.current = null;
+    glimmerFindRef.current = null; // leaving the flight cancels a pending glimmer find
     setFlightTargetId(null);
     setFlightCaption(null);
   };
@@ -1077,7 +1167,7 @@ export default function WorldsSurface({
     "The journey view needs graphics support on this device — your journey is unaffected.";
 
   // A new stay — a new world, or a new journey — reopens the view and
-  // parks the guided descent back at the rim. (A transit dismissed
+  // resets the Deep Past mode machine to overview. (A transit dismissed
   // mid-flight reopens at arrival: the destination scene is a new stay,
   // not the dismissed transit.)
   const journeyId = journey?.id ?? null;
@@ -1085,14 +1175,20 @@ export default function WorldsSurface({
     setDismissed(false);
     setGraphicsFailed(false);
     setVisibleRelics([]);
-    setGuided(false);
     setShowController(false);
     setInside(false);
     setInteriorRoom("hangar-bay");
     interiorRoomRef.current = "hangar-bay";
-    guidedRef.current = false;
-    parkedProgressRef.current = 0;
-    lastProgressRef.current = 0;
+    // Deep Past: a new stay starts in overview with the arrival line
+    // fresh; the walk's place and the ride's parked stop persist in
+    // their refs across the visit's rebuilds (and across leaving and
+    // returning within the session, as the old descent parking did).
+    dpModeRef.current = "overview";
+    setDpMode("overview");
+    dpFocusRef.current = null;
+    setDpCardNode(null);
+    dpInteractedRef.current = false;
+    setDpArrivalDismissed(false);
     arrivalSkippedRef.current = false;
     setEternityGesture(null);
   }, [mode, currentWorld, journeyId]);
@@ -1401,6 +1497,9 @@ export default function WorldsSurface({
     return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map());
   }, [atDeepPast, graph, journeys, journeyLinksMap]);
 
+  const deepPastLayoutRef = useRef<DeepPastLayout | undefined>(undefined);
+  deepPastLayoutRef.current = deepPastLayout;
+
   // The People layout derives the same way, from the graph alone — one
   // warm cluster per person with linked memories, bridges where memories
   // are shared. The world re-reads the brain on every visit.
@@ -1514,6 +1613,25 @@ export default function WorldsSurface({
       suppressClickRef.current = false; // the end of a drag, not a tap
       return;
     }
+    if (atDeepPast && mode === "world") {
+      // Deep Past (F9): a tap on a member's alcove approaches it — the
+      // same tap-vs-drag discrimination as the garden (a drag's click
+      // was suppressed above). A tap on sky / architecture does nothing.
+      const scene = deepPastSceneRef.current;
+      const camera = dpCameraRef.current;
+      const host = hostRef.current;
+      if (!scene || !camera || !host) return;
+      const rect = host.getBoundingClientRect();
+      const nodeId = scene.pickMember(
+        {
+          x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        },
+        camera,
+      );
+      if (nodeId !== null) openDpMember(nodeId);
+      return;
+    }
     if (!atGarden || mode !== "world") return;
     const scene = gardenSceneRef.current;
     const camera = gardenCameraRef.current;
@@ -1616,19 +1734,175 @@ export default function WorldsSurface({
     pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
     void storyRef.current.onRelic(relic.id);
   };
+  findRelicRef.current = onFindRelic;
 
-  const toggleGuided = () => {
-    if (guidedRef.current) {
-      // Leaving the descent parks the view at the last progress.
-      parkedProgressRef.current = lastProgressRef.current;
-      guidedRef.current = false;
-      setGuided(false);
-    } else {
-      descentFromRef.current = parkedProgressRef.current;
-      descentStartedAtRef.current = performance.now();
-      guidedRef.current = true;
-      setGuided(true);
+  // --- Deep Past rework: mode handlers (dock + card + taps) ---
+  /** Reduced-motion for UI decisions (the frame loop reads its own copy). */
+  const reducedMotionUi =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dismissDpArrival = () => {
+    dpInteractedRef.current = true;
+    setDpArrivalDismissed(true);
+  };
+  dpInteractRef.current = dismissDpArrival;
+  const setDpModeBoth = (m: DpMode) => {
+    dpModeRef.current = m;
+    setDpMode(m);
+  };
+  /** Park the ride: a mid-leg leave keeps the leg's destination stop. */
+  const parkRide = () => {
+    const R = rideRef.current;
+    if (R.phase === "traveling") {
+      const to = R.leg?.to ?? R.pendingLeg?.to ?? R.stop;
+      const n = deepPastLayoutRef.current?.thread?.stops.length ?? 0;
+      R.leg = null;
+      R.pendingLeg = null;
+      if (n > 0 && to >= n) {
+        R.phase = "complete";
+        R.kindle = 1;
+      } else if (to >= 0) {
+        R.phase = "dwelling";
+        R.stop = to;
+      }
     }
+    setDpRidePhase(R.phase);
+    setDpRideStop(R.stop);
+  };
+  const startWalk = () => {
+    dismissDpArrival();
+    parkRide();
+    backToOverview();
+    const w = walkRefDp.current;
+    if (w.s >= 1) w.s = 0; // a finished walk starts over; a parked one resumes
+    w.dir = 1;
+    w.atLanding = null;
+    setDpAtLanding(null);
+    w.moving = !reducedMotionUi;
+    setDpWalkMoving(w.moving);
+    setDpModeBoth("walk");
+  };
+  const toggleWalkMoving = () => {
+    dismissDpArrival();
+    const w = walkRefDp.current;
+    w.moving = !w.moving;
+    setDpWalkMoving(w.moving);
+  };
+  /** Resume the walk — under reduced motion, jump to the next landing instead. */
+  const keepWalking = () => {
+    dismissDpArrival();
+    const w = walkRefDp.current;
+    if (reducedMotionUi) {
+      const next = dpLandingsRef.current
+        .filter((l) => (w.dir > 0 ? l.s > w.s + 1e-4 : l.s < w.s - 1e-4))
+        .sort((a, b) => (w.dir > 0 ? a.s - b.s : b.s - a.s))[0];
+      if (!next) return;
+      w.s = next.s;
+      if (next.stratum === 9) {
+        dpFocusRef.current = null;
+        dpPerchRef.current = 9;
+        setDpPerchStratum(9);
+        setDpModeBoth("perch");
+      } else {
+        w.atLanding = next.stratum;
+        setDpAtLanding(next.stratum);
+      }
+      return;
+    }
+    w.moving = true;
+    setDpWalkMoving(true);
+  };
+  const stepOff = () => {
+    dismissDpArrival();
+    const at = walkRefDp.current.atLanding;
+    if (at === null) return;
+    dpFocusRef.current = null;
+    dpPerchRef.current = at;
+    setDpPerchStratum(at);
+    setDpModeBoth("perch");
+  };
+  /** Rejoin the walk curve from a perch, one flight in `dir`. */
+  const perchFlight = (dir: 1 | -1) => {
+    dismissDpArrival();
+    const stratum = dpFocusRef.current?.stratum ?? dpPerchRef.current;
+    const landing = dpLandingsRef.current.find((l) => l.stratum === stratum);
+    const w = walkRefDp.current;
+    if (landing) w.s = landing.s;
+    w.dir = dir;
+    w.atLanding = null;
+    setDpAtLanding(null);
+    dpFocusRef.current = null;
+    w.moving = !reducedMotionUi;
+    setDpWalkMoving(w.moving);
+    setDpModeBoth("walk");
+  };
+  const backToRim = () => {
+    dismissDpArrival();
+    parkRide();
+    backToOverview();
+    walkRefDp.current.moving = false;
+    setDpWalkMoving(false);
+    dpFocusRef.current = null;
+    setDpCardNode(null);
+    setDpModeBoth("overview");
+  };
+  const enterRide = () => {
+    dismissDpArrival();
+    backToOverview();
+    const R = rideRef.current;
+    if (R.phase === "traveling") parkRide();
+    if (R.phase === "atBerth") {
+      // F4/AN14: the ride's first leg is the ship leaving its berth.
+      R.pendingLeg = { from: -1, to: R.stop };
+      R.phase = "traveling";
+      setDpRidePhase("traveling");
+    }
+    setDpModeBoth("ride");
+  };
+  const continueRide = () => {
+    dismissDpArrival();
+    const R = rideRef.current;
+    if (R.phase !== "dwelling") return;
+    R.pendingLeg = { from: R.stop, to: R.stop + 1 };
+    R.phase = "traveling";
+    setDpRidePhase("traveling");
+  };
+  const leaveRide = () => {
+    dismissDpArrival();
+    parkRide();
+    backToOverview();
+    setDpModeBoth("overview");
+  };
+  /** F9: approach a member — perch focused on it, its card open, its alcove answering (AN4). */
+  const openDpMember = (nodeId: number) => {
+    const member = deepPastLayoutRef.current?.members.find((m) => m.nodeId === nodeId);
+    if (!member) return;
+    dismissDpArrival();
+    parkRide();
+    deepPastSceneRef.current?.pulseAlcove(nodeId);
+    dpFocusRef.current = { point: [member.x, member.y, member.z], nodeId, stratum: member.stratum };
+    dpPerchRef.current = member.stratum;
+    setDpPerchStratum(member.stratum);
+    setDpCardNode(nodeId);
+    setDpModeBoth("perch");
+  };
+  const closeDpCard = () => {
+    setDpCardNode(null);
+    dpFocusRef.current = null; // focus returns to the stratum landing
+  };
+  /** Glimmer "Look closer": in Deep Past, basin relics are traveled to
+   *  first (fly to First Light; the find completes on arrival). */
+  const onGlimmerLookCloser = (relic: RelicDef) => {
+    if (atDeepPast) {
+      const basin = places.find((p) => p.id === "glb-basin");
+      if (basin) {
+        glimmerFindRef.current = relic;
+        flyTo(basin);
+        return;
+      }
+    }
+    onFindRelic(relic);
   };
 
   useEffect(() => {
@@ -1695,6 +1969,31 @@ export default function WorldsSurface({
           { onRelicVisible: handleRelicVisible },
         );
         built = gardenScene;
+      } else if (currentWorld === "deep-past") {
+        // Deep Past rework: built directly (garden pattern) so the typed
+        // handle stays in a ref for pickMember / setFrameState. On every
+        // REbuild after the first, diff against the previous layout:
+        // members newly risen get a rise glide; members newly present
+        // get a ship carry-in (the scene owns both motions).
+        const dpLayout = isDeepPastLayout(sceneLayout) ? sceneLayout : EMPTY_DEEP_PAST_LAYOUT;
+        const prev = dpPrevLayoutRef.current;
+        let riseGlides: number[] | undefined;
+        let carryIn: number[] | undefined;
+        if (prev) {
+          const prevRisen = new Set(prev.members.filter((m) => m.risen).map((m) => m.nodeId));
+          riseGlides = dpLayout.members.filter((m) => m.risen && !prevRisen.has(m.nodeId)).map((m) => m.nodeId);
+          const prevIds = new Set(prev.members.map((m) => m.nodeId));
+          carryIn = dpLayout.members.filter((m) => !prevIds.has(m.nodeId)).map((m) => m.nodeId);
+        }
+        dpPrevLayoutRef.current = dpLayout;
+        const dpScene = createDeepPastScene(dpLayout, {
+          onRelicVisible: handleRelicVisible,
+          riseGlides,
+          carryIn,
+        });
+        deepPastSceneRef.current = dpScene;
+        dpCameraRef.current = camera;
+        built = dpScene;
       } else if (currentWorld === "great-station" && inside) {
         // Station interior: the hall replaces the exterior scene while
         // inside. The docked ship follows the hangar pick (skin).
@@ -1798,6 +2097,37 @@ export default function WorldsSurface({
     const engine = mode === "transit" ? makeEngineAudio() : null;
     const orbit = mode === "world" ? entry : null;
 
+    // Deep Past walk curve (rework §7.2): the generated route over the
+    // disc arcs and stair flights, arc-length parameterised. Landing
+    // positions along it are precomputed by nearest sample (400 samples)
+    // so the walk can wait at every landing. Rebuilt with the scene.
+    let dpCurve: THREE.CatmullRomCurve3 | null = null;
+    let dpCurveLen = 0;
+    let dpLandingS: { stratum: number; s: number; point: DpVec }[] = [];
+    if (mode === "world" && currentWorld === "deep-past") {
+      const walkData = buildDeepPastWalkPoints();
+      dpCurve = new THREE.CatmullRomCurve3(
+        walkData.points.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
+        false,
+      );
+      dpCurveLen = dpCurve.getLength();
+      const samples = dpCurve.getSpacedPoints(400);
+      dpLandingS = walkData.landings.map((l) => {
+        const target = new THREE.Vector3(l.point[0], l.point[1], l.point[2]);
+        let best = 0;
+        let bestDist = Infinity;
+        samples.forEach((sp, i) => {
+          const d = sp.distanceToSquared(target);
+          if (d < bestDist) {
+            bestDist = d;
+            best = i;
+          }
+        });
+        return { stratum: l.stratum, s: best / 400, point: [l.point[0], l.point[1], l.point[2]] as DpVec };
+      });
+      dpLandingsRef.current = dpLandingS;
+    }
+
     const onResize = () => {
       const w = host.clientWidth;
       const h = Math.max(1, host.clientHeight);
@@ -1812,6 +2142,9 @@ export default function WorldsSurface({
     const skipArrival = () => {
       arrivalSkippedRef.current = true;
       gardenSceneRef.current?.skipAnimations?.();
+      // A pointer press on the canvas host is a Deep Past interaction
+      // (AN9: it ends the idle orbit; §8: it dismisses the arrival line).
+      if (currentWorld === "deep-past") dpInteractRef.current();
     };
     host.addEventListener("pointerdown", skipArrival);
 
@@ -1824,7 +2157,13 @@ export default function WorldsSurface({
     let travelled = 0; // total pixels this gesture has moved — separates a tap from a drag
     let lastTapAt = 0;
     const DRAG_PX = 8;
-    const markLooked = () => lookedRef.current();
+    const markLooked = () => {
+      lookedRef.current();
+      lastLookInputRef.current = performance.now();
+      // Any look input (drag / pinch / wheel) is also a Deep Past
+      // interaction: it ends the idle orbit and dismisses the arrival line.
+      if (currentWorld === "deep-past") dpInteractRef.current();
+    };
     const onLookDown = (e: PointerEvent) => {
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) travelled = 0;
@@ -1894,10 +2233,14 @@ export default function WorldsSurface({
         const now = performance.now();
         if (now - lastTapAt < 320) {
           lookRef.current = NO_LOOK;
+          lastLookInputRef.current = now;
           if (tapFlyTimer !== null) window.clearTimeout(tapFlyTimer);
           tapFlyTimer = null;
-        } else if (mode === "world" && currentWorld && PLACE_RULES[currentWorld] && !inside) {
+        } else if (mode === "world" && currentWorld && currentWorld !== "deep-past" && PLACE_RULES[currentWorld] && !inside) {
           // A single tap flies there — after the double-tap window, so a double tap (reset view) never launches her.
+          // Deep Past is excluded (merge integration, 2026-10-30): its taps belong to the rework mode
+          // machine — a member tap opens its card, the walk/perch/ride own the camera — so a generic
+          // fly-to-point would fight them. Other worlds keep main's tap-to-fly unchanged.
           const cx = e.clientX;
           const cy = e.clientY;
           tapFlyTimer = window.setTimeout(() => {
@@ -1916,6 +2259,7 @@ export default function WorldsSurface({
     };
     const onDouble = () => {
       lookRef.current = NO_LOOK;
+      lastLookInputRef.current = performance.now();
     };
     host.addEventListener("pointerdown", onLookDown);
     host.addEventListener("pointermove", onLookMove);
@@ -1923,6 +2267,41 @@ export default function WorldsSurface({
     host.addEventListener("pointercancel", onLookUp);
     host.addEventListener("wheel", onWheel, { passive: false });
     host.addEventListener("dblclick", onDouble);
+
+    // Deep Past: the frame loop owns the mode refs; React state mirrors
+    // are synced only on transitions (never per frame).
+    const dpWalkSync = { moving: walkRefDp.current.moving, atLanding: walkRefDp.current.atLanding, mode: dpModeRef.current, perch: dpPerchRef.current };
+    const syncDpWalk = () => {
+      const w = walkRefDp.current;
+      if (w.moving !== dpWalkSync.moving) {
+        dpWalkSync.moving = w.moving;
+        setDpWalkMoving(w.moving);
+      }
+      if (w.atLanding !== dpWalkSync.atLanding) {
+        dpWalkSync.atLanding = w.atLanding;
+        setDpAtLanding(w.atLanding);
+      }
+      if (dpModeRef.current !== dpWalkSync.mode) {
+        dpWalkSync.mode = dpModeRef.current;
+        setDpMode(dpModeRef.current);
+      }
+      if (dpPerchRef.current !== dpWalkSync.perch) {
+        dpWalkSync.perch = dpPerchRef.current;
+        setDpPerchStratum(dpPerchRef.current);
+      }
+    };
+    const dpRideSync = { phase: rideRef.current.phase, stop: rideRef.current.stop };
+    const syncDpRide = () => {
+      const R = rideRef.current;
+      if (R.phase !== dpRideSync.phase) {
+        dpRideSync.phase = R.phase;
+        setDpRidePhase(R.phase);
+      }
+      if (R.stop !== dpRideSync.stop) {
+        dpRideSync.stop = R.stop;
+        setDpRideStop(R.stop);
+      }
+    };
 
     let raf = 0;
     const startedAt = performance.now();
@@ -2122,6 +2501,12 @@ export default function WorldsSurface({
           // stops; the camera chases behind and above her. Drag/pinch still turn and zoom around her.
           const r = stepFlight(flightRef.current, dt, { reducedMotion });
           flightRef.current = r.state;
+          // A glimmer "Look closer" that flew to the basin completes its find on arrival.
+          if (r.arrived && glimmerFindRef.current) {
+            const relic = glimmerFindRef.current;
+            glimmerFindRef.current = null;
+            findRelicRef.current(relic);
+          }
           const fs = r.state;
           const tgt = flightTargetRef.current;
           const phaseNow = r.arrived ? "arrived" : fs.phase;
@@ -2155,33 +2540,221 @@ export default function WorldsSurface({
           pivot = [fs.pos[0], fs.pos[1], fs.pos[2]];
           if (travelBlurRef.current) travelBlurRef.current.style.opacity = String(reducedMotion ? 0 : fs.speed * 0.55);
         } else if (currentWorld === "deep-past") {
-          // Guided descent (A21, follow-only): the camera follows the thread
-          // down; leaving parks the view at the last progress, and re-entering
-          // resumes from there. Reduced motion = stratified stage holds.
-          let progress = parkedProgressRef.current;
-          if (guidedRef.current) {
-            const sinceStart = performance.now() - descentStartedAtRef.current;
-            progress = reducedMotion
-              ? deepPastDescentStage(sinceStart)
-              : Math.min(1, descentFromRef.current + sinceStart / DEEP_PAST_DESCENT.durationMs);
-            lastProgressRef.current = progress;
-          }
-          const pose = deepPastDescentCamera(progress);
-          pivotY = pose.lookAt[1];
-          if (guidedRef.current) {
-            scripted = true; // following the thread down
-            camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
-            camera.lookAt(pose.lookAt[0], pose.lookAt[1], pose.lookAt[2]);
+          // Deep Past rework mode machine. FREE CAMERA (F17): no branch
+          // here ever sets `scripted` — the look layer below applies the
+          // traveller's offset on top of every mode, during every
+          // animation. Each branch sets the pivot free look turns around.
+          const dpScene = deepPastSceneRef.current;
+          const layoutDp = isDeepPastLayout(sceneLayout) ? sceneLayout : null;
+          const modeDp = dpModeRef.current;
+          let kindle = rideRef.current.kindle; // a parked ride keeps its kindle
+          let currentStop = -1;
+          let shipPose: { position: DpVec; target: DpVec } | null = null;
+          let camPos: DpVec;
+          let camLook: DpVec;
+          let pivotDp: DpVec;
+          if (modeDp === "walk" && dpCurve) {
+            const w = walkRefDp.current;
+            if (w.moving && !reducedMotion) {
+              const prevS = w.s;
+              let ns = prevS + (w.dir * (14 * dt)) / Math.max(dpCurveLen, 1);
+              // The walk WAITS at every landing it crosses (F2).
+              const crossed = dpLandingS
+                .filter((l) =>
+                  w.dir > 0
+                    ? l.s > prevS + 1e-6 && l.s <= ns + 1e-9
+                    : l.s < prevS - 1e-6 && l.s >= ns - 1e-9,
+                )
+                .sort((a, b) => (w.dir > 0 ? a.s - b.s : b.s - a.s))[0];
+              if (crossed) {
+                ns = crossed.s;
+                w.moving = false;
+                if (crossed.stratum === 9) {
+                  // The basin landing ends the walk: settle into the basin perch.
+                  w.atLanding = null;
+                  dpFocusRef.current = null;
+                  dpPerchRef.current = 9;
+                  dpModeRef.current = "perch";
+                } else {
+                  w.atLanding = crossed.stratum;
+                }
+              } else if (ns >= 1) {
+                ns = 1;
+                w.moving = false;
+                dpFocusRef.current = null;
+                dpPerchRef.current = 9;
+                dpModeRef.current = "perch";
+              } else if (ns <= 0) {
+                ns = 0;
+                w.moving = false;
+                const l0 = dpLandingS.find((l) => Math.abs(l.s) < 1e-4);
+                w.atLanding = l0 ? l0.stratum : null;
+              }
+              w.s = Math.min(1, Math.max(0, ns));
+              syncDpWalk();
+            }
+            const sC = Math.min(1, Math.max(0, w.s));
+            const pt = dpCurve.getPointAt(sC);
+            const ahead = dpCurve.getPointAt(Math.min(sC + 12 / Math.max(dpCurveLen, 1), 1));
+            // The eye rides 3 units OUT from the curve and a touch
+            // higher, and the look blends 45% toward the disc centre —
+            // tuned against the A1 mid-descent render, where riding the
+            // curve centre-line framed almost nothing but dark disc
+            // tops (prototype §9: the walk camera needs the close,
+            // angled views, not a plumb-line stare down the stair).
+            const radLen = Math.hypot(pt.x, pt.z) || 1;
+            camPos = [pt.x + (pt.x / radLen) * 3, pt.y + 3.6, pt.z + (pt.z / radLen) * 3];
+            camLook = lerpVec([ahead.x, ahead.y + 1.8, ahead.z], [0, pt.y + 1.2, 0], 0.45);
+            // On the final basin segment the look settles toward the orb.
+            const s8 = dpLandingS.find((l) => l.stratum === 8);
+            const s9 = dpLandingS.find((l) => l.stratum === 9);
+            if (s8 && s9 && sC > s8.s) {
+              const t = Math.min(1, (sC - s8.s) / Math.max(s9.s - s8.s, 1e-6));
+              camLook = lerpVec(camLook, DP_ORB_POS, t);
+            }
+            pivotDp = camLook;
+          } else if (modeDp === "perch") {
+            const focus = dpFocusRef.current;
+            const landing = dpLandingS.find((l) => l.stratum === dpPerchRef.current);
+            // The basin perch orbits INSIDE the bowl, around the orb:
+            // pivot on the orb, radius 30, a few units above its centre.
+            // Raycast proof on the built scene (probe, 2026-10-30): any
+            // perch ABOVE stratum 8's disc plane is blocked by that disc
+            // (its 252° arc covers every azimuth but the stair gap) —
+            // the prototype's basin framing is an in-bowl view, so the
+            // perch lives in the bowl too. Perching at the basin
+            // LANDING instead filled the frame with dish rim.
+            const basinPerch = dpPerchRef.current === 9 && !focus;
+            const base: DpVec = focus
+              ? focus.point
+              : basinPerch
+                ? DP_ORB_POS
+                : landing
+                  ? landing.point
+                  : [0, deepPastFloorY(Math.min(8, Math.max(0, dpPerchRef.current))), 0];
+            pivotDp = basinPerch ? base : [base[0], base[1] + 1.5, base[2]];
+            const radius = focus ? 8 : basinPerch ? 30 : 15;
+            const perchHeight = basinPerch ? 6 : 5;
+            const a = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
+            camPos = [pivotDp[0] + Math.sin(a) * radius, pivotDp[1] + perchHeight, pivotDp[2] + Math.cos(a) * radius];
+            camLook = pivotDp;
+          } else if (modeDp === "ride" && layoutDp?.thread && dpScene) {
+            // Ship-led Chronicle ride (F5/AN14): the ship travels the
+            // thread between stops; the camera chases her; the traveller
+            // may look freely around her the whole time (F17).
+            const stops = layoutDp.thread.stops;
+            const fracs = dpScene.stopFractions();
+            const wpPos = (key: number): DpVec =>
+              key < 0
+                ? DP_BERTH_POS
+                : key >= stops.length
+                  ? DP_BASIN_REST
+                  : [stops[key]!.x, stops[key]!.y + 2.2, stops[key]!.z];
+            const R = rideRef.current;
+            if (R.phase === "traveling" && !R.leg && R.pendingLeg) {
+              const from = wpPos(R.pendingLeg.from);
+              const to = wpPos(R.pendingLeg.to);
+              const dist = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
+              R.leg = {
+                from: R.pendingLeg.from,
+                to: R.pendingLeg.to,
+                tMs: 0,
+                durMs: Math.min(9, Math.max(2.2, dist / 9)) * 1000,
+                fromKindle: R.kindle,
+                toKindle: R.pendingLeg.to >= stops.length ? 1 : (fracs[R.pendingLeg.to] ?? R.kindle),
+              };
+              R.pendingLeg = null;
+            }
+            let shipPos: DpVec = DP_BERTH_POS;
+            let shipTan: DpVec = [0, 0, 1];
+            if (R.phase === "traveling" && R.leg) {
+              const leg = R.leg;
+              leg.tMs = reducedMotion ? leg.durMs : leg.tMs + dt;
+              const k = Math.min(1, leg.tMs / Math.max(leg.durMs, 1));
+              const e = (1 - Math.cos(Math.PI * k)) / 2; // cosine 'drift' gait (AN9)
+              if (leg.from >= 0 && leg.to >= 0 && leg.to < stops.length) {
+                // Stop → stop: the ship rides the thread curve itself.
+                const u = (fracs[leg.from] ?? 0) + ((fracs[leg.to] ?? 0) - (fracs[leg.from] ?? 0)) * e;
+                const tp = dpScene.threadPointAt(u);
+                if (tp) {
+                  shipPos = [tp.position[0], tp.position[1], tp.position[2]];
+                  shipTan = [tp.tangent[0], tp.tangent[1], tp.tangent[2]];
+                } else {
+                  shipPos = lerpVec(wpPos(leg.from), wpPos(leg.to), e);
+                }
+                R.kindle = u; // the kindling front is at the ship (AN14)
+              } else {
+                // Berth → first stop, or last stop → basin rest: direct legs.
+                shipPos = lerpVec(wpPos(leg.from), wpPos(leg.to), e);
+                const endTp = dpScene.threadPointAt(leg.to >= stops.length ? 1 : (fracs[leg.to] ?? 0));
+                if (endTp) shipTan = [endTp.tangent[0], endTp.tangent[1], endTp.tangent[2]];
+                R.kindle = leg.fromKindle + (leg.toKindle - leg.fromKindle) * e;
+              }
+              if (k >= 1) {
+                if (leg.to >= stops.length) {
+                  R.phase = "complete";
+                  R.kindle = 1;
+                } else {
+                  R.phase = "dwelling";
+                  R.stop = leg.to;
+                  R.kindle = fracs[leg.to] ?? R.kindle;
+                }
+                R.leg = null;
+                syncDpRide();
+              }
+            } else if (R.phase === "complete") {
+              shipPos = DP_BASIN_REST;
+              R.kindle = 1;
+              const tp = dpScene.threadPointAt(1);
+              if (tp) shipTan = [tp.tangent[0], tp.tangent[1], tp.tangent[2]];
+            } else if (R.phase === "dwelling") {
+              shipPos = wpPos(R.stop);
+              currentStop = R.stop;
+              R.kindle = fracs[R.stop] ?? R.kindle;
+              const tp = dpScene.threadPointAt(fracs[R.stop] ?? 0);
+              if (tp) shipTan = [tp.tangent[0], tp.tangent[1], tp.tangent[2]];
+            }
+            const tanLen = Math.hypot(shipTan[0], shipTan[1], shipTan[2]) || 1;
+            const tan: DpVec = [shipTan[0] / tanLen, shipTan[1] / tanLen, shipTan[2] / tanLen];
+            shipPose = {
+              position: shipPos,
+              target: [shipPos[0] + tan[0], shipPos[1] + tan[1], shipPos[2] + tan[2]],
+            };
+            kindle = R.kindle;
+            // Chase camera: behind and above the ship, exponentially smoothed.
+            const desired: DpVec = [shipPos[0] - tan[0] * 15, shipPos[1] + 6, shipPos[2] - tan[2] * 15];
+            const chase = dpChaseRef.current;
+            let chasePos: DpVec;
+            if (!chase || reducedMotion || Math.hypot(desired[0] - chase.pos[0], desired[1] - chase.pos[1], desired[2] - chase.pos[2]) > 60) {
+              dpChaseRef.current = { pos: desired };
+              chasePos = desired;
+            } else {
+              const kk = 1 - Math.exp(-dt / 240);
+              chase.pos = lerpVec(chase.pos, desired, kk);
+              chasePos = chase.pos;
+            }
+            camPos = chasePos;
+            camLook = shipPos;
+            pivotDp = shipPos;
           } else {
-            // Parked orbit: the same slow orbit, at the parked depth.
-            const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
-            camera.position.set(
+            // Overview: the rim orbit around the well's centre. Idle
+            // (AN9): ≈9°/s until the traveller's first interaction this
+            // visit, then the slow parked rate; static under RM.
+            const rate = reducedMotion ? 0 : dpInteractedRef.current ? 0.0000045 : 0.00016;
+            const angle = BASE_ANGLE + elapsed * rate;
+            camPos = [
               Math.sin(angle) * orbit.orbitRadius * fit,
-              pose.position[1],
+              orbit.orbitHeight * fit + 10,
               Math.cos(angle) * orbit.orbitRadius * fit,
-            );
-            camera.lookAt(0, pose.lookAt[1], 0);
+            ];
+            camLook = [0, orbit.lookAtY, 0];
+            pivotDp = camLook;
           }
+          camera.position.set(camPos[0], camPos[1], camPos[2]);
+          camera.lookAt(camLook[0], camLook[1], camLook[2]);
+          pivot = pivotDp;
+          pivotY = pivotDp[1];
+          dpFrameRef.current = { kindle, currentStop, shipPose };
         } else if (currentWorld === "great-station" && !inside && !reducedMotion && !arrivalSkippedRef.current) {
           // Station arrival (A13): fly the approach over 12 s, then
           // settle into the resting orbit over 3 s — radius, height,
@@ -2258,6 +2831,23 @@ export default function WorldsSurface({
           );
           camera.lookAt(0, orbit.lookAtY, 0);
         }
+        // AN16 gentle return (Deep Past only): after ~2.5 s without look
+        // input, the traveller's offset eases back toward the mode's
+        // composed default. A fresh input interrupts it instantly (the
+        // timestamp above is what the traveller's handlers stamp).
+        if (
+          currentWorld === "deep-past" &&
+          isLooked(lookRef.current) &&
+          now - lastLookInputRef.current > 2500
+        ) {
+          const f = Math.exp(-dt / 600);
+          const l = lookRef.current;
+          const next = { yaw: l.yaw * f, pitch: l.pitch * f, zoom: 1 + (l.zoom - 1) * f };
+          lookRef.current =
+            Math.abs(next.yaw) < 0.001 && Math.abs(next.pitch) < 0.001 && Math.abs(next.zoom - 1) < 0.001
+              ? NO_LOOK
+              : next;
+        }
         // Free look: the traveller's own offset on top of the pose the world just chose.
         lookAllowedRef.current = !scripted;
         if (!pivot) pivot = [0, pivotY, 0];
@@ -2269,6 +2859,18 @@ export default function WorldsSurface({
           );
           camera.position.set(p[0], p[1], p[2]);
           camera.lookAt(pivot[0], pivot[1], pivot[2]);
+        }
+        // Deep Past scene frame state, every frame (rework contract):
+        // the ride's kindle/stop/ship pose (null ship pose outside the
+        // ride — the scene berths her), and the camera's true position.
+        if (currentWorld === "deep-past") {
+          const fs = dpFrameRef.current;
+          deepPastSceneRef.current?.setFrameState({
+            kindle: fs.kindle,
+            currentStop: fs.currentStop,
+            shipPose: fs.shipPose,
+            cameraPosition: [camera.position.x, camera.position.y, camera.position.z],
+          });
         }
         // The overview camera's pose, so the first flight carries on from where you were looking.
         if (!flightRef.current) {
@@ -2329,6 +2931,8 @@ export default function WorldsSurface({
       host.removeEventListener("dblclick", onDouble);
       lookAllowedRef.current = false;
       gardenSceneRef.current = null;
+      deepPastSceneRef.current = null;
+      dpCameraRef.current = null;
       engine?.dispose();
       lighting?.dispose();
       sky?.dispose();
@@ -2451,15 +3055,65 @@ export default function WorldsSurface({
         ],
       });
     }
-    if (atDeepPast && thread) {
-      dockGroups.push({
-        id: "deep-past",
-        tiles: [
-          guided
-            ? { id: "rim", icon: "i:rise", label: "Rim", name: "Back to the rim", onClick: toggleGuided }
-            : { id: "descend", icon: "i:descend", label: "Descend", name: "Descend the Chronicle", onClick: toggleGuided },
-        ],
-      });
+    if (atDeepPast && mode === "world") {
+      // Deep Past rework dock: the mode's verbs. The dock chrome itself
+      // is untouched — only this group's contents are the modes'.
+      const tiles: DockGroup["tiles"] = [];
+      if (dpMode === "overview") {
+        tiles.push({ id: "dp-walk", icon: "i:descend", label: "Walk", name: "Walk the stair", onClick: startWalk });
+        if (thread) {
+          tiles.push({ id: "dp-ride", icon: "i:descend", label: "Chronicle", name: "Descend the Chronicle", onClick: enterRide });
+        }
+      } else if (dpMode === "walk") {
+        if (dpAtLanding !== null) {
+          tiles.push({ id: "dp-keep", icon: "i:descend", label: "Keep walking", name: "Keep walking", onClick: keepWalking });
+          tiles.push(
+            dpAtLanding === 9
+              ? { id: "dp-step-off", icon: "i:meadow", label: "Step onto", name: "Step onto the basin floor", onClick: stepOff }
+              : {
+                  id: "dp-step-off",
+                  icon: "i:meadow",
+                  label: "Step off",
+                  name: `Step off — Depth ${dpAtLanding + 1} of 9`,
+                  onClick: stepOff,
+                },
+          );
+        } else if (dpWalkMoving) {
+          tiles.push({ id: "dp-pause", icon: "i:calm", label: "Pause", name: "Pause walk", onClick: toggleWalkMoving });
+        } else {
+          // keepWalking resumes normally, and jumps landing-to-landing under reduced motion.
+          tiles.push({ id: "dp-resume", icon: "i:descend", label: "Resume", name: "Resume walk", onClick: keepWalking });
+        }
+        tiles.push({ id: "dp-rim", icon: "i:rise", label: "Rim", name: "Back to the rim", onClick: backToRim });
+      } else if (dpMode === "perch") {
+        if (dpPerchStratum < 9) {
+          tiles.push({ id: "dp-down", icon: "i:descend", label: "Down", name: "Next flight down", onClick: () => perchFlight(1) });
+        }
+        if (dpPerchStratum > 0) {
+          tiles.push({ id: "dp-up", icon: "i:rise", label: "Up", name: "Flight back up", onClick: () => perchFlight(-1) });
+        }
+        tiles.push({ id: "dp-rim", icon: "i:recenter", label: "Rim", name: "Return to the rim", onClick: backToRim });
+      } else if (dpMode === "ride") {
+        if (dpRidePhase === "dwelling") {
+          tiles.push({ id: "dp-continue", icon: "i:descend", label: "Continue", name: "Continue the Chronicle", onClick: continueRide });
+          tiles.push({
+            id: "dp-approach",
+            icon: "i:insights",
+            label: "Approach",
+            name: "Approach this memory",
+            onClick: () => {
+              const stop = thread?.stops[dpRideStop];
+              if (stop) openDpMember(stop.nodeId);
+            },
+          });
+          tiles.push({ id: "dp-leave", icon: "i:rise", label: "Leave", name: "Leave the ride", onClick: leaveRide });
+        } else if (dpRidePhase === "complete") {
+          tiles.push({ id: "dp-rim", icon: "i:recenter", label: "Rim", name: "Return to the rim", onClick: backToRim });
+        } else {
+          tiles.push({ id: "dp-leave", icon: "i:rise", label: "Leave", name: "Leave the ride", onClick: leaveRide });
+        }
+      }
+      if (tiles.length > 0) dockGroups.push({ id: "deep-past", tiles });
     }
     // Who's here: whoever is in this world right now (their lives move them between worlds), findable in one tap (docs/specs/npc-society-2026-10-30.md).
     if (mode === "world" && !inside && presentNpcs.length > 0) {
@@ -2657,13 +3311,27 @@ export default function WorldsSurface({
           </button>
         </p>
       )}
-      {lookHint && visible && mode === "world" && (
+      {atDeepPast && mode === "world" && !dpArrivalDismissed ? (
+        // Deep Past arrival line (§8): the world's whole tutorial, once
+        // per visit, in the look-hint slot — dismissed by the first
+        // interaction or any Deep Past dock press, then the generic
+        // hint logic below resumes.
         <p className="worlds-look-hint" role="status">
-          {(!purposeShown && worldPurpose(currentWorld)) ||
-            (atGarden
-              ? "Tap the ground to walk · drag to look around · pinch to zoom"
-              : "Drag to look around · pinch or scroll to zoom · double-tap to reset")}
+          {thread
+            ? "Your earliest memories rest below — the deeper, the longer ago. Walk the stair, or ride the thread."
+            : "Your earliest memories rest below — the deeper, the longer ago. Walk the stair down."}
         </p>
+      ) : (
+        lookHint &&
+        visible &&
+        mode === "world" && (
+          <p className="worlds-look-hint" role="status">
+            {(!purposeShown && worldPurpose(currentWorld)) ||
+              (atGarden
+                ? "Tap the ground to walk · drag to look around · pinch to zoom"
+                : "Drag to look around · pinch or scroll to zoom · double-tap to reset")}
+          </p>
+        )
       )}
       <header className="worlds-surface-bar">
         <h3>{title}</h3>
@@ -2681,15 +3349,97 @@ export default function WorldsSurface({
           {eternityGesture ? ` He is holding ${eternityGesture}.` : ""}
         </p>
       )}
-      {mode === "world" &&
-        glimmers.map((r) => (
-          <p key={r.id} className="worlds-surface-fallback">
-            Something glimmers {r.glimmer}.{" "}
-            <button type="button" onClick={() => onFindRelic(r)}>
-              Look closer
-            </button>
-          </p>
-        ))}
+      {mode === "world" && glimmers.length > 0 && (() => {
+        // Glimmer region (§8 fix): ONE container, at most 3 rows, never
+        // overlapping. Deep Past orders by closeness to the traveller's
+        // current depth — its relics rest at the basin (stratum 8).
+        const currentStratum = !atDeepPast
+          ? 0
+          : dpMode === "perch"
+            ? (dpFocusRef.current?.stratum ?? dpPerchStratum)
+            : dpMode === "walk"
+              ? (dpAtLanding ?? 0)
+              : 0;
+        const relicStratum = (_r: RelicDef) => (atDeepPast ? 8 : 0);
+        const ordered = atDeepPast
+          ? [...glimmers].sort((a, b) => Math.abs(relicStratum(a) - currentStratum) - Math.abs(relicStratum(b) - currentStratum))
+          : glimmers;
+        return (
+          <div className="worlds-glimmers" role="group" aria-label="Something glimmers">
+            {ordered.slice(0, 3).map((r) => (
+              <div key={r.id} className="worlds-glimmer-row">
+                Something glimmers {r.glimmer}.{" "}
+                <button type="button" onClick={() => onGlimmerLookCloser(r)}>
+                  Look closer
+                </button>
+              </div>
+            ))}
+            {glimmers.length > 3 && (
+              <div className="worlds-glimmer-row">
+                +{glimmers.length - 3} more{atDeepPast ? " below" : ""}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+      {mode === "world" && atDeepPast && (dpMode === "perch" || (dpMode === "walk" && dpAtLanding !== null)) && (() => {
+        // Stratum label (§7.2): the landing names itself, from the layout.
+        const n = dpMode === "perch" ? dpPerchStratum : dpAtLanding;
+        if (n === null) return null;
+        if (n === 9) {
+          return <p className="worlds-surface-fallback">The First Light basin — the oldest resting place.</p>;
+        }
+        const info = deepPastLayout?.strata?.find((s) => s.stratum === n);
+        const year =
+          info && info.memberCount > 0 && info.earliestYear !== null && info.earliestYear !== undefined
+            ? ` — kept since ${info.earliestYear}`
+            : "";
+        return <p className="worlds-surface-fallback">{`Depth ${n + 1} of 9${year}`}</p>;
+      })()}
+      {mode === "world" && atDeepPast && dpCardNode !== null && (() => {
+        // Member card (F9): the memory, the layout's own why line, and
+        // its anchor lines — each naming its other appearance, each
+        // followable along the light line.
+        const member = deepPastLayout?.members.find((m) => m.nodeId === dpCardNode);
+        const node = graph?.nodes.find((nd) => nd.id === dpCardNode);
+        if (!member || !node) return null;
+        const anchors = deepPastLayout?.anchors.filter((a) => a.fromNodeId === dpCardNode) ?? [];
+        return (
+          <div className="worlds-dp-card" role="dialog" aria-label={node.label}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <strong style={{ fontSize: "14px" }}>{node.label}</strong>
+              <button type="button" className="mini" onClick={closeDpCard} aria-label="Close">
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: "0 0 8px", fontSize: "13px", opacity: 0.9 }}>{member.why}</p>
+            {anchors.map((a) => {
+              const target = graph?.nodes.find((nd) => nd.id === a.toNodeId);
+              return (
+                <div key={a.edgeId} style={{ marginTop: "6px" }}>
+                  <span style={{ display: "block", fontSize: "13px", marginBottom: "4px" }}>
+                    This memory also appears at {target?.label ?? "another place"}.
+                  </span>
+                  <button
+                    type="button"
+                    className="mini"
+                    onClick={() => {
+                      // Follow the light line: perch at its top end point.
+                      dpFocusRef.current = {
+                        point: [member.homeX * 1.15, 9, member.homeZ * 1.15],
+                        stratum: member.stratum,
+                      };
+                      setDpCardNode(null);
+                    }}
+                  >
+                    Follow the light line
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
       {mode === "world" && currentWorld === "growing-place" && !sceneLayout && (
         <p className="worlds-surface-fallback">Your garden is loading — your memories are unaffected.</p>
       )}

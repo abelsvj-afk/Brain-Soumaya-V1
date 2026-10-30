@@ -7081,6 +7081,43 @@ button.mindspace-more { cursor: pointer; }
   text-align: center;
   opacity: 0.85;
 }
+/* Glimmer prompt region (Deep Past rework §8): one container in the
+   fallback note's position family, rows stacked in a column so they can
+   never overlap the way the old per-relic paragraphs did. */
+.worlds-glimmers {
+  position: absolute;
+  top: calc(var(--worlds-bar-h) + 0.5rem);
+  left: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  z-index: 15;
+}
+.worlds-glimmer-row {
+  opacity: 0.9;
+  background: rgba(16, 10, 32, 0.78);
+  border: 1px solid rgba(255, 210, 122, 0.35);
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  color: #e8e4d8;
+  font-size: 0.9rem;
+}
+/* Deep Past member card (F9): a panel in the garden suggestions'
+   position family — below the header + dock, over the view. */
+.worlds-dp-card {
+  position: absolute;
+  top: calc(var(--worlds-bar-h) + 0.5rem);
+  left: var(--hud-rail);
+  width: min(320px, calc(100vw - 2 * var(--hud-rail)));
+  background: rgba(20, 14, 38, 0.92);
+  border: 1px solid rgba(255, 210, 122, 0.4);
+  border-radius: 12px;
+  padding: 12px;
+  color: #e8e4d8;
+  z-index: 20;
+}
 
 /* Harbor controller panel (Wave 2, NPC autonomy): a readable card
    over the Station scene, bottom-left above the credits. Functional

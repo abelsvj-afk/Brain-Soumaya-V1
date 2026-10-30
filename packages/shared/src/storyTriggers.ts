@@ -81,7 +81,9 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "sight.second-seam", how: "regard", world: "great-station", hour: "threshold", spot: { place: "^station-rotating$", at: [0, -0.85, 0], near: 0.45 } },
   { entryId: "sight.missing-berth", how: "regard", world: "great-station", hour: "rest", spot: { place: "^witness-drydock-gantry$", near: 1.4 } },
   { entryId: "obj.faded-ticket", how: "regard", world: "great-station", hour: "hearths", spot: { place: "^annex-(?!model)", near: 1.6 } },
-  { entryId: "sight.missing-stratum", how: "regard", world: "deep-past", hour: "first-light", spot: { place: "^glb-rim$", at: [0, -0.6, 0], near: 0.7 } },
+  // The rim anchor follows the Deep Past rework (2026-10-30): the rim is a generated place now
+  // (scene object "place-rim", PLACE_RULES deep-past), not the removed rim GLB ("glb-rim").
+  { entryId: "sight.missing-stratum", how: "regard", world: "deep-past", hour: "first-light", spot: { place: "^place-rim$", at: [0, -0.6, 0], near: 0.7 } },
   { entryId: "sight.dead-bough", how: "regard", world: "growing-place", hour: "growing", spot: { origin: true, near: 160 } },
   { entryId: "sight.hung-star", how: "regard", world: "scale", hour: "measure", spot: { place: "^planet-(?!model)", near: 1.6 } },
   { entryId: "sight.open-alcove", how: "regard", world: "quiet-archive", hour: "rest", spot: { place: "^still-threshold$", near: 1.5 } },
@@ -91,7 +93,8 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "sight.lane-to-nowhere", how: "regard", world: "great-station", hour: "measure", spot: { place: "^station-rotating$", at: [-0.9, 0.2, 0.3], near: 0.4 } },
   { entryId: "sight.blank-nameplate", how: "regard", world: "great-station", hour: "growing", spot: { place: "^witness-drydock-gantry$", at: [0, 0.6, 0], near: 1.0 } },
   { entryId: "sight.tamsins-ward", how: "regard", world: "people", hour: "first-light", spot: { place: "^field-ground$", at: [0.8, 0, 0], near: 0.3 } },
-  { entryId: "obj.follower-ribbon", how: "regard", world: "deep-past", hour: "threshold", spot: { place: "^glb-stair$", near: 0.45 } },
+  // Same re-anchor: the stair is a generated mesh now (scene object "stair"), not the removed stair GLB.
+  { entryId: "obj.follower-ribbon", how: "regard", world: "deep-past", hour: "threshold", spot: { place: "^stair$", near: 0.45 } },
   { entryId: "sight.lullaby-hollow", how: "regard", world: "quiet-archive", hour: "first-light", spot: { place: "^field-ground$", at: [0, 0, -0.6], near: 0.3 } },
   { entryId: "sight.ysmerel-at-the-edge", how: "regard", world: "quiet-archive", hour: "standing", spot: { place: "^field-ground$", at: [-0.9, 0, 0], near: 0.3 } },
   { entryId: "sight.long-room", how: "regard", world: "eternity", hour: "rest" },

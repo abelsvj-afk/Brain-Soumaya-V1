@@ -39,16 +39,19 @@ import type { GraphData, GraphNode, Journey, JourneyLinkSummary } from "@brain/s
 export const DEEP_PAST_SEED = "deep-past / first-descent-1";
 
 /**
- * Recipe budget (R-D4 allocation): planned ceilings, asserted statically.
- * Raised by the 2026-10-29 Deep Past fix (docs/worlds/deep-past-fix-design-note.md
- * §1/§9): the dressing the owner specced on 2026-10-25 — three terrace
- * slices and three lanterns per stratum, a full helix staircase, the route
- * bead — costs more than the original one-of-each estimate, and the caps
- * moved to the note's measured envelope rather than cutting any of it.
+ * Performance budget (2026-10-29 rework design note §9): planned ceilings,
+ * asserted statically, set at the pre-asset generated scene's weight class.
  * Points get their own cap because the supernova's star cloud is points,
- * not triangles.
+ * not triangles; generated triangles and GLB bytes are capped separately
+ * so a singular kept piece can never hide inside the whole-scene total.
  */
-export const DEEP_PAST_BUDGET = { maxDrawCalls: 110, maxTris: 620_000, maxPoints: 220_000 } as const;
+export const DEEP_PAST_BUDGET = {
+  maxDrawCalls: 48,
+  maxTris: 195_000,
+  maxPoints: 65_000,
+  maxGeneratedTris: 45_000,
+  maxGlbBytes: 3_700_000,
+} as const;
 
 /** Strata: 0 = rim (members kept 1–2 years) … 8 = basin (9+ years). */
 export const DEEP_PAST_STRATA_COUNT = 9;
@@ -57,17 +60,166 @@ export const DEEP_PAST_MIN_AGE_YEARS = 1;
 /** Context stays warm for this long after a tend or a link (named, owner-correctable). */
 export const DEEP_PAST_WARM_DAYS = 30;
 
-/** Helix geometry (mockup ×5, to the garden's scale family): radius shrinks
- *  and depth grows toward the basin; the arc start twists 0.85 rad per stratum. */
-export const DEEP_PAST_STRATUM_RADIUS = [440, 422.5, 405, 387.5, 370, 352.5, 335, 317.5, 300] as const;
-export const DEEP_PAST_STRATUM_Y = [0, -90, -180, -270, -360, -450, -540, -630, -720] as const;
+/** Helix geometry (rework design note §3: the pre-asset mockup's ×1
+ *  proportions): radius shrinks and depth grows toward the basin; the arc
+ *  start twists 0.85 rad per stratum. */
+export const DEEP_PAST_STRATUM_RADIUS = [88, 84.5, 81, 77.5, 74, 70.5, 67, 63.5, 60] as const;
+export const DEEP_PAST_STRATUM_Y = [0, -18, -36, -54, -72, -90, -108, -126, -144] as const;
 export const DEEP_PAST_STRATUM_ARC_START = 0.85;
 export const DEEP_PAST_STRATUM_ARC_LENGTH = 4.4;
+/** Each stratum is a solid disc of this thickness; its top is the floor. */
+export const DEEP_PAST_DISC_THICKNESS = 2.6;
+/** The floor a stratum's members rest on: the disc's top surface. */
+export function deepPastFloorY(stratum: number): number {
+  return DEEP_PAST_STRATUM_Y[stratum]! + DEEP_PAST_DISC_THICKNESS / 2;
+}
 /** The First Light basin: the finished bottom (solid floor + rock below, C9). */
-export const DEEP_PAST_BASIN_Y = -830;
-export const DEEP_PAST_BASIN_RADIUS = 320;
-/** The rim-side resting place for risen members (a finished stone platform). */
-export const DEEP_PAST_RISE_SHELF = { x: 130, y: 30, z: 460 } as const;
+export const DEEP_PAST_BASIN_Y = -168;
+export const DEEP_PAST_BASIN_RADIUS = 66;
+/** The rim-side resting place for risen members (a finished stone platform):
+ *  the open wedge near stratum 0's rim, at angle 5.35 rad, radius 54. */
+export const DEEP_PAST_RISE_SHELF = { x: Math.cos(5.35) * 54, y: 9, z: Math.sin(5.35) * 54 } as const;
+/** Where a traveler's ship berths on arrival: just off stratum 0's rim. */
+export const DEEP_PAST_SHIP_BERTH = {
+  angle: 3.4,
+  radius: DEEP_PAST_STRATUM_RADIUS[0] + 2,
+  y: deepPastFloorY(0) + 4,
+} as const;
+
+/**
+ * The generated stair (rework design note §5.2–5.3): one continuous helical
+ * descent whose connection to the discs is an arithmetic identity, not a
+ * fit. Each stratum transition is a flight of `stepsPerFlight` steps of
+ * `rise` each (12 × 1.5 = 18 = the stratum drop), winding `windRad` along
+ * the helix in the band from R−`bandInnerOffset` to R−`bandOuterOffset`.
+ * The basin leg drops 24, so its flight has `basinSteps` steps (16 × 1.5).
+ */
+export const DEEP_PAST_STAIR = {
+  stepsPerFlight: 12,
+  rise: 1.5,
+  windRad: 1.15,
+  startArcRel: 3.25,
+  bandInnerOffset: 17,
+  bandOuterOffset: 3,
+  basinSteps: 16,
+} as const;
+
+export interface DeepPastStairStep {
+  /** 1..8 for the stratum flights; 9 for the basin flight. */
+  flight: number;
+  /** Step index within its flight, 0 = top step. */
+  index: number;
+  angle: number;
+  radius: number;
+  /** The step's top surface. */
+  topY: number;
+  x: number;
+  z: number;
+}
+
+/** The stair band's centre radius for a flight leaving `upperStratum`. */
+function stairBandRadius(upperStratum: number): number {
+  return (
+    DEEP_PAST_STRATUM_RADIUS[upperStratum]! -
+    (DEEP_PAST_STAIR.bandInnerOffset + DEEP_PAST_STAIR.bandOuterOffset) / 2
+  );
+}
+
+export function buildDeepPastStairSteps(): DeepPastStairStep[] {
+  const steps: DeepPastStairStep[] = [];
+  const pushFlight = (flight: number, upperStratum: number, count: number, windTotal: number) => {
+    const windStep = windTotal / count;
+    const radius = stairBandRadius(upperStratum);
+    for (let j = 0; j < count; j++) {
+      const angle =
+        upperStratum * DEEP_PAST_STRATUM_ARC_START + DEEP_PAST_STAIR.startArcRel + (j + 0.5) * windStep;
+      steps.push({
+        flight,
+        index: j,
+        angle,
+        radius,
+        topY: deepPastFloorY(upperStratum) - (j + 1) * DEEP_PAST_STAIR.rise,
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+      });
+    }
+  };
+  for (let k = 1; k < DEEP_PAST_STRATA_COUNT; k++) {
+    pushFlight(k, k - 1, DEEP_PAST_STAIR.stepsPerFlight, DEEP_PAST_STAIR.windRad);
+  }
+  pushFlight(
+    DEEP_PAST_STRATA_COUNT,
+    DEEP_PAST_STRATA_COUNT - 1,
+    DEEP_PAST_STAIR.basinSteps,
+    DEEP_PAST_STAIR.windRad * (DEEP_PAST_STAIR.basinSteps / DEEP_PAST_STAIR.stepsPerFlight),
+  );
+  return steps;
+}
+
+export interface DeepPastWalkPath {
+  /** Floor-level route points: disc arcs and stair flights, rim to basin. */
+  points: [number, number, number][];
+  /** One landing per stratum (0..8) plus the basin (stratum 9). */
+  landings: { stratum: number; point: [number, number, number] }[];
+}
+
+/**
+ * The walk route (rework design note §5.2/§7): stratum 0's flight-start
+ * point, then per flight its step centres, a landing on the lower stratum
+ * at arc-relative 3.55 (the flight's angular end, re-expressed on the
+ * lower stratum: 3.25 + 1.15 − 0.85), an arc point at 3.4, and the next
+ * flight's start at 3.25 — ending with the basin flight and two points
+ * walking in across the basin floor.
+ */
+export function buildDeepPastWalkPoints(): DeepPastWalkPath {
+  const points: [number, number, number][] = [];
+  const landings: DeepPastWalkPath["landings"] = [];
+  const polar = (angle: number, radius: number, y: number): [number, number, number] => [
+    Math.cos(angle) * radius,
+    y,
+    Math.sin(angle) * radius,
+  ];
+  const landingArcRel =
+    DEEP_PAST_STAIR.startArcRel + DEEP_PAST_STAIR.windRad - DEEP_PAST_STRATUM_ARC_START; // 3.55
+  const arcMidArcRel = (landingArcRel + DEEP_PAST_STAIR.startArcRel) / 2; // 3.4
+
+  const start = polar(DEEP_PAST_STAIR.startArcRel, stairBandRadius(0), deepPastFloorY(0));
+  points.push(start);
+  landings.push({ stratum: 0, point: start });
+
+  const steps = buildDeepPastStairSteps();
+  for (let k = 1; k < DEEP_PAST_STRATA_COUNT; k++) {
+    for (const step of steps) {
+      if (step.flight === k) points.push([step.x, step.topY, step.z]);
+    }
+    const landing = polar(
+      k * DEEP_PAST_STRATUM_ARC_START + landingArcRel,
+      stairBandRadius(k - 1),
+      deepPastFloorY(k),
+    );
+    points.push(landing);
+    landings.push({ stratum: k, point: landing });
+    points.push(
+      polar(k * DEEP_PAST_STRATUM_ARC_START + arcMidArcRel, stairBandRadius(k), deepPastFloorY(k)),
+    );
+    points.push(
+      polar(k * DEEP_PAST_STRATUM_ARC_START + DEEP_PAST_STAIR.startArcRel, stairBandRadius(k), deepPastFloorY(k)),
+    );
+  }
+
+  let finalAngle = 0;
+  for (const step of steps) {
+    if (step.flight !== DEEP_PAST_STRATA_COUNT) continue;
+    points.push([step.x, step.topY, step.z]);
+    finalAngle = step.angle;
+  }
+  const basinFloorY = DEEP_PAST_BASIN_Y + DEEP_PAST_DISC_THICKNESS / 2;
+  points.push(polar(finalAngle, 40, basinFloorY));
+  const basinLanding = polar(finalAngle, 20, basinFloorY);
+  points.push(basinLanding);
+  landings.push({ stratum: DEEP_PAST_STRATA_COUNT, point: basinLanding });
+  return { points, landings };
+}
 
 export interface DeepPastMember {
   nodeId: number;
@@ -115,8 +267,17 @@ export interface DeepPastThread {
   stops: DeepPastThreadStop[];
 }
 
+export interface DeepPastStratumSummary {
+  stratum: number;
+  memberCount: number;
+  /** Earliest placement year (UTC) among this stratum's members, or null when it rests empty. */
+  earliestYear: number | null;
+}
+
 export interface DeepPastLayout {
   members: DeepPastMember[];
+  /** One summary per stratum, all 9, in stratum order. */
+  strata: DeepPastStratumSummary[];
   anchors: DeepPastAnchor[];
   /** The active Chronicle route, or null when no done Journey qualifies. */
   thread: DeepPastThread | null;
@@ -196,11 +357,11 @@ export function isEligibleDeepPastNode(node: GraphNode, now: Date = new Date()):
 
 function alcovePosition(nodeId: number, stratum: number): { x: number; y: number; z: number } {
   const rand = mulberry32(hashSeeded(`${DEEP_PAST_SEED}:${nodeId}`));
-  const angle = stratum * DEEP_PAST_STRATUM_ARC_START + 0.25 + rand() * 3.9;
-  const radius = DEEP_PAST_STRATUM_RADIUS[stratum]! - 15 - rand() * 35;
+  const angle = stratum * DEEP_PAST_STRATUM_ARC_START + 0.3 + rand() * 3.8;
+  const radius = 10 + rand() * (DEEP_PAST_STRATUM_RADIUS[stratum]! - 18);
   return {
     x: Math.cos(angle) * radius,
-    y: DEEP_PAST_STRATUM_Y[stratum]! + 8,
+    y: deepPastFloorY(stratum),
     z: Math.sin(angle) * radius,
   };
 }
@@ -208,10 +369,10 @@ function alcovePosition(nodeId: number, stratum: number): { x: number; y: number
 function shelfPosition(nodeId: number): { x: number; y: number; z: number } {
   const rand = mulberry32(hashSeeded(`${DEEP_PAST_SEED}:rise:${nodeId}`));
   const angle = rand() * Math.PI * 2;
-  const radius = 12 + rand() * 38;
+  const radius = 2 + rand() * 7;
   return {
     x: DEEP_PAST_RISE_SHELF.x + Math.cos(angle) * radius,
-    y: DEEP_PAST_RISE_SHELF.y + 8,
+    y: DEEP_PAST_RISE_SHELF.y,
     z: DEEP_PAST_RISE_SHELF.z + Math.sin(angle) * radius,
   };
 }
@@ -292,6 +453,11 @@ export function buildDeepPastLayout(
   const members: DeepPastMember[] = [];
   const memberById = new Map<number, DeepPastMember>();
   const placedAtMs = new Map<number, number>();
+  const strata: DeepPastStratumSummary[] = Array.from({ length: DEEP_PAST_STRATA_COUNT }, (_, i) => ({
+    stratum: i,
+    memberCount: 0,
+    earliestYear: null,
+  }));
   for (const node of nodes) {
     if (node.status === "archived") continue;
     const placedAt = placementTimestamp(node);
@@ -318,6 +484,12 @@ export function buildDeepPastLayout(
     members.push(member);
     memberById.set(node.id, member);
     placedAtMs.set(node.id, placedAt.getTime());
+    const summary = strata[stratum]!;
+    summary.memberCount++;
+    const placedYear = utcYear(placedAt);
+    if (summary.earliestYear === null || placedYear < summary.earliestYear) {
+      summary.earliestYear = placedYear;
+    }
   }
 
   let omittedEdgeCount = 0;
@@ -366,6 +538,7 @@ export function buildDeepPastLayout(
 
   return {
     members,
+    strata,
     anchors,
     thread,
     eligibleCount: members.length,
