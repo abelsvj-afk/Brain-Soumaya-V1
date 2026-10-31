@@ -67,7 +67,11 @@ describe("backfill (I-2 §4.2)", () => {
     const before = Object.fromEntries(["harbor-nail", "dawn-leaf", "witness-without-a-name", "mooring-ring"].map((id) => [id, oldCount(id)]));
     const claimsBefore = (handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM codex_claims`).get() as { n: number }).n;
 
-    store().ensureMigrated();
+    // The I-2 backfill is this test's subject, called directly:
+    // ensureMigrated would ALSO run the tier conversion (2026-10-30),
+    // which consumes the Seed holdings above (Dawn Leaf, Mooring
+    // Ring) — that later step has its own evidence (relicTiers).
+    store().backfillCopies();
 
     expect(store().poolCount("harbor-nail")).toBe(before["harbor-nail"]);
     expect(store().poolCount("witness-without-a-name")).toBe(before["witness-without-a-name"]);
@@ -147,8 +151,11 @@ describe("claims bind copies (I-2)", () => {
     const eighth = store().claimFind("p-8", "harbor-nail", "great-station");
     expect(eighth.ok).toBe(false);
     if (!eighth.ok) expect(eighth.kind).toBe("empty-pool");
-    // Everyone sets theirs down: the copies rest placed, still counted.
-    for (let i = 0; i < 7; i++) store().release(`p-${i}`, "harbor-nail");
+    // Every copy returns to the world: the copies rest placed, still
+    // counted. The return rides brain deletion — since the tier
+    // rulings the Nail is a Keystone and its release is refused; a
+    // brain ending is the class-honest way its copies come back.
+    for (let i = 0; i < 7; i++) store().releaseAllForSpace(`p-${i}`);
     expect(copies("harbor-nail")).toHaveLength(7);
     expect(store().poolAvailable("harbor-nail")).toBe(0);
     // A new finder binds one of the resting copies — the pool mints nothing new.
@@ -191,65 +198,82 @@ describe("fix (c) — per-copy placement history", () => {
 
   it("a resting copy's anchor is never handed to a sibling copy", () => {
     store().claimFind("s1", "harbor-nail", "great-station");
-    const firstOut = store().release("s1", "harbor-nail");
-    const first = firstOut?.ok ? firstOut.event : null; // I-3: discriminated release result
-    expect(first!.toAnchor).toBe(anchorsOf("harbor-nail")[1]);
+    const firstCopy = holdingCopyId("s1", "harbor-nail")!;
+    // The return rides brain deletion (the Nail is a Keystone since
+    // the tier rulings — release is refused); the placement choice
+    // under test is the same chooseReturnAnchor either way.
+    store().releaseAllForSpace("s1");
+    const first = copies("harbor-nail").find((c) => c.copy_id === firstCopy)!;
+    expect(first.state).toBe("placed");
+    expect(first.anchor_key).toBe(anchorsOf("harbor-nail")[1]);
     // A fresh copy materializes while the first rests at anchors[1]:
     // it must not materialize on top of its sibling.
     store().claimFind("s2", "harbor-nail", "great-station");
     const evs = eventsFor(holdingCopyId("s2", "harbor-nail")!);
     expect(evs.find((e) => e.kind === "placed")!.anchor_key).toBe(anchorsOf("harbor-nail")[0]);
     // And its own return skips both its history and the sibling's rest.
-    const secondOut = store().release("s2", "harbor-nail");
-    const second = secondOut?.ok ? secondOut.event : null; // I-3: discriminated release result
-    expect(second!.toAnchor).toBe(anchorsOf("harbor-nail")[2]);
+    const secondCopy = holdingCopyId("s2", "harbor-nail")!;
+    store().releaseAllForSpace("s2");
+    const second = copies("harbor-nail").find((c) => c.copy_id === secondCopy)!;
+    expect(second.anchor_key).toBe(anchorsOf("harbor-nail")[2]);
   });
 });
 
 describe("two-space isolation (D-05)", () => {
   it("private copies are scoped: another space's find mints its own copy and cannot touch the first", () => {
-    store().claimFind("sA", "dawn-leaf", "growing-place");
-    const copyA = holdingCopyId("sA", "dawn-leaf");
-    store().claimFind("sB", "dawn-leaf", "growing-place");
-    const copyB = holdingCopyId("sB", "dawn-leaf");
+    // Subject relic: the Basin Stone (private, holdable) — the Dawn
+    // Leaf played this role before the tier rulings, but a Seed is
+    // consumed on claim now and can never be held or re-found.
+    store().claimFind("sA", "basin-stone", "deep-past");
+    const copyA = holdingCopyId("sA", "basin-stone");
+    store().claimFind("sB", "basin-stone", "deep-past");
+    const copyB = holdingCopyId("sB", "basin-stone");
     expect(copyA).toBeTruthy(); expect(copyB).toBeTruthy(); expect(copyA).not.toBe(copyB);
-    expect(copies("dawn-leaf").find((c) => c.copy_id === copyA)!.scope_space_id).toBe("sA");
-    expect(copies("dawn-leaf").find((c) => c.copy_id === copyB)!.scope_space_id).toBe("sB");
+    expect(copies("basin-stone").find((c) => c.copy_id === copyA)!.scope_space_id).toBe("sA");
+    expect(copies("basin-stone").find((c) => c.copy_id === copyB)!.scope_space_id).toBe("sB");
     // B sets its copy down and finds it again — A's copy never moves.
-    store().release("sB", "dawn-leaf");
-    expect(store().claimFind("sB", "dawn-leaf", "growing-place").ok).toBe(true);
-    expect(holdingCopyId("sB", "dawn-leaf")).toBe(copyB);
-    const a = copies("dawn-leaf").find((c) => c.copy_id === copyA)!;
+    store().release("sB", "basin-stone");
+    expect(store().claimFind("sB", "basin-stone", "deep-past").ok).toBe(true);
+    expect(holdingCopyId("sB", "basin-stone")).toBe(copyB);
+    const a = copies("basin-stone").find((c) => c.copy_id === copyA)!;
     expect(a.state).toBe("held"); expect(a.holder_id).toBe("sA");
   });
 
   it("a space cannot release a copy it does not hold; its departures list shows only its own events", () => {
-    store().claimFind("sA", "harbor-nail", "great-station");
-    expect(store().release("sB", "harbor-nail")).toBeNull();
-    expect(copies("harbor-nail").find((c) => c.holder_id === "sA")!.state).toBe("held");
-    store().release("sA", "harbor-nail");
+    // Releasable subject since the tier rulings: the Basin Stone
+    // (the Harbor Nail is a Keystone now — its release is refused
+    // for the holder too, which is a different test's subject).
+    store().claimFind("sA", "basin-stone", "deep-past");
+    expect(store().release("sB", "basin-stone")).toBeNull();
+    expect(copies("basin-stone").find((c) => c.holder_id === "sA")!.state).toBe("held");
+    store().release("sA", "basin-stone");
     expect(store().recentDepartures("sB")).toEqual([]);
     const deps = store().recentDepartures("sA");
     expect(deps).toHaveLength(1);
-    expect(deps[0]!.relicId).toBe("harbor-nail");
+    expect(deps[0]!.relicId).toBe("basin-stone");
     expect(deps[0]!.reason).toBe("release");
-    expect(deps[0]!.fromAnchor).toBe(anchorsOf("harbor-nail")[0]);
-    expect(deps[0]!.toAnchor).toBe(anchorsOf("harbor-nail")[1]);
+    expect(deps[0]!.fromAnchor).toBe(anchorsOf("basin-stone")[0]);
+    expect(deps[0]!.toAnchor).toBe(anchorsOf("basin-stone")[1]);
   });
 
   it("legacy relic_returns rows still show alongside copy-event departures", () => {
     handle.sqlite.prepare(`INSERT INTO relic_returns (space_id, relic_id, reason, from_anchor, to_anchor, created_at) VALUES ('s1', 'mooring-ring', 'release', 'mooring-ring:resting-place-one', 'mooring-ring:resting-place-two', '2026-10-01T00:00:00.000Z')`).run();
-    store().claimFind("s1", "harbor-nail", "great-station");
-    store().release("s1", "harbor-nail");
+    store().claimFind("s1", "basin-stone", "deep-past");
+    store().release("s1", "basin-stone");
     const deps = store().recentDepartures("s1");
-    expect(deps.map((d) => d.relicId)).toEqual(["harbor-nail", "mooring-ring"]);
+    expect(deps.map((d) => d.relicId)).toEqual(["basin-stone", "mooring-ring"]);
   });
 });
 
 describe("brain deletion over copies", () => {
   it("counted copies return through placement history; test/private copies are deleted with the space, their events remain", () => {
     store().claimFind("s1", "harbor-nail", "great-station");
-    store().claimFind("s1", "dawn-leaf", "growing-place");
+    // The Dawn Leaf holding is PRE-TIER state, inserted directly
+    // like the test-only Ring below: since the tier rulings a live
+    // claim consumes a Seed instead of holding it, and this test's
+    // subject is what brain deletion does with an existing private
+    // holding — not how the holding arose.
+    give("s1", "dawn-leaf");
     give("s1", "mooring-ring", { testOnly: true });
     store().backfillCopies();
     const nailCopy = holdingCopyId("s1", "harbor-nail")!;

@@ -13,7 +13,9 @@ function provenanceLabel(e: RelicProvenanceEventView): string {
     case "claimed": return "Claimed by a traveller.";
     case "returned": return e.reason === "exchange" ? "Flew back to the worlds after an exchange." : "Flew back to the worlds.";
     case "exchanged": return "Given in exchange.";
-    case "consumed": return "Consumed — a Seed's way of leaving.";
+    case "consumed": return e.reason === "tier-migration"
+      ? "Consumed when the tiers were set — a Seed's way of leaving, by the ruling that classed it."
+      : "Consumed — a Seed's way of leaving.";
     case "brain-deleted": return "Its holder's brain was let go; the copy returned to the worlds.";
     default: return e.kind;
   }

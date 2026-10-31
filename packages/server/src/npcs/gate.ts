@@ -8,6 +8,36 @@ import { NPC_GATE_KEY_RELIC, NPC_GATE_OTHER_RELICS_NEEDED } from "@brain/shared"
  * player scarce pool), so this check reads only what the NPC itself
  * holds.
  *
+ * What this gate is FOR: the NPC's own B-01 journey — a per-NPC
+ * record (npc_gate) that drives the NPC's state and its answers about
+ * the way onward. It opens Eternity for no one else; a player's gate
+ * is the player's own found set and record, untouched by anything an
+ * NPC holds.
+ *
+ * Seed parity (tier implementation, 2026-10-30 — resolving the
+ * residuals sweep's note): for LIVE claims the parity is exact — a
+ * consumed Seed can never advance this gate, because a Seed claim
+ * writes no npc_relic_holdings row; and the player's gate likewise
+ * reads the found/owned set (relic_holdings), which a consumed Seed
+ * never enters either. On both sides a Seed's consumption is a
+ * permanent effect, never a gate credential. There is no NPC
+ * discovery record to read instead (NPC claims write no Codex
+ * claims), and inventing one to count consumptions here would make
+ * the NPC gate EASIER than the player's — the opposite of the
+ * parity the design's one-rule-for-both-sides shape intends. Pinned
+ * by test on both sides (relicTiers.test.ts, gate-parity case).
+ *
+ * One scoped exception, recorded honestly (review F-2): the
+ * one-time tier MIGRATION preserves a Seed-completed PLAYER gate
+ * (permanence is recorded from the found set before the Seed
+ * holding converts), but does not mark npc_gate for an NPC in the
+ * mirror state. That state is unreachable in production today —
+ * NPC claims are world-confined and no world holds both the
+ * Witness key and a Seed — so the asymmetry is a latent
+ * inconsistency in an unreachable state, not a live one; if a
+ * future world makes it reachable, the conversion should record
+ * NPC gate permanence the same way before that world ships.
+ *
  * Pure: no database, no clock. The caller supplies the NPC's held
  * relic ids (distinct) and whether the gate is already open for it.
  */

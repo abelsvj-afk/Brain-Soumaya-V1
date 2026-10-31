@@ -26,8 +26,11 @@ import { fileURLToPath } from "node:url";
  *     its own class's map. (Fixture: seed-map entries injected into
  *     the empty RELIC_SEED_EFFECTS for these tests only.)
  *   Item 4 (I-6 P2-2, latent): the NPC award core had no Seed
- *     disposition. Fixture-proven in the I-6 style (basin-stone
- *     reclassed `seed` inside this file only).
+ *     disposition. Proven first in the I-6 fixture style (basin-stone
+ *     reclassed `seed` inside this file only); since the tier
+ *     rulings landed (2026-10-30) the tests below pin the SAME
+ *     disposition against the real Seed class — the Mooring Ring —
+ *     with no reclassing anywhere.
  *   Item 6 (I-5 P2-4, cosmetic): NPC brain-deleted events recorded
  *     anchor_key NULL where the player path records the holding's
  *     anchor. The NPC path now reads the copy's claim-event anchor.
@@ -43,7 +46,7 @@ const store = () => new RelicHoldingsStore(handle);
 const svc = () => new RelicClaimService(handle);
 const NAIL = RELIC_ANCHOR_POINTS["harbor-nail"]![0]!;
 const NAIL_POS = NAIL.position as unknown as [number, number, number];
-const BASIN = "basin-stone";
+const RING = "mooring-ring";
 
 function seedSample(space: string, world: string, pos: readonly number[], agoMs: number): void {
   handle.sqlite
@@ -156,18 +159,15 @@ describe("Item 3 — the rise window reads each id's window from its own class's
 });
 
 describe("Items 4 + 6 — the NPC core's class disposition and records (I-6 P2-2, I-5 P2-4)", () => {
-  // I-6 fixture style: basin-stone is reclassed `seed` for this file
-  // only; the shipped registry is untouched, the value restored.
-  const basinDef = RELIC_BY_ID.get(BASIN)!;
-  let basinClass: RelicTierClass | null = null;
-  beforeAll(() => { basinClass = basinDef.tierClass; basinDef.tierClass = "seed"; });
-  afterAll(() => { basinDef.tierClass = basinClass; });
+  // Tier implementation (2026-10-30): no fixture reclassing — the
+  // Mooring Ring IS a Seed in the shipped registry now, and the NPC
+  // disposition is pinned against the real class assignment.
 
   it("an NPC claim on a Seed-class relic consumes the copy: effect recorded against the NPC's space, nothing held anywhere", () => {
-    const r = svc().claimForNpc("npc-space", "deep-past-watcher", "deep-past", BASIN);
+    const r = svc().claimForNpc("npc-space", "harbor-controller", "great-station", RING);
     expect(r.status).toBe("awarded"); // the find is the claim service's answer; the disposition happened inside the award
     if (r.status !== "awarded") return;
-    const copies = copiesOf(BASIN);
+    const copies = copiesOf(RING);
     expect(copies).toHaveLength(1);
     expect(copies[0]!.state).toBe("consumed");
     expect(copies[0]!.copy_id).toBe(r.copyId);
@@ -175,24 +175,24 @@ describe("Items 4 + 6 — the NPC core's class disposition and records (I-6 P2-2
     // The chain tells the same story a player's Seed claim tells,
     // with the claiming NPC named on the consumption.
     expect(eventsOf(r.copyId).map((e) => e.kind)).toEqual(["genesis", "placed", "claimed", "consumed"]);
-    expect(JSON.parse(eventsOf(r.copyId).at(-1)!.detail ?? "{}")).toMatchObject({ effectRecorded: true, npcId: "deep-past-watcher" });
+    expect(JSON.parse(eventsOf(r.copyId).at(-1)!.detail ?? "{}")).toMatchObject({ effectRecorded: true, npcId: "harbor-controller" });
     // No holding — for the NPC (read model) or the space (player Hold).
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM npc_relic_holdings WHERE space_id = 'npc-space'`).get()).toEqual({ n: 0 });
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE space_id = 'npc-space'`).get()).toEqual({ n: 0 });
     // The effect is recorded against the NPC's space — the space the
     // consumption happened in, the player core's own key.
-    expect(effectRows("npc-space")).toEqual([{ space_id: "npc-space", relic_id: BASIN, copy_id: r.copyId }]);
-    expect(seedEffectIdsForSpace(handle, "npc-space")).toEqual([BASIN]);
+    expect(effectRows("npc-space")).toEqual([{ space_id: "npc-space", relic_id: RING, copy_id: r.copyId }]);
+    expect(seedEffectIdsForSpace(handle, "npc-space")).toEqual([RING]);
   });
 
   it("the award core names the disposition, and a duplicate NPC Seed claim consumes without effect (R3-3 parity)", () => {
-    const run = handle.sqlite.transaction(() => store().awardCopyForNpcInTransaction("npc-space", "npc-1", BASIN));
+    const run = handle.sqlite.transaction(() => store().awardCopyForNpcInTransaction("npc-space", "npc-1", RING));
     const first = run.immediate();
     expect(first.status).toBe("seed-consumed");
-    const second = handle.sqlite.transaction(() => store().awardCopyForNpcInTransaction("npc-space", "npc-2", BASIN)).immediate();
+    const second = handle.sqlite.transaction(() => store().awardCopyForNpcInTransaction("npc-space", "npc-2", RING)).immediate();
     expect(second.status).toBe("seed-consumed");
     if (second.status === "seed-consumed") expect(second.duplicate).toBe(true);
-    expect(copiesOf(BASIN).filter((c) => c.state === "consumed")).toHaveLength(2);
+    expect(copiesOf(RING).filter((c) => c.state === "consumed")).toHaveLength(2);
     expect(effectRows("npc-space")).toHaveLength(1);
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM npc_relic_holdings WHERE space_id = 'npc-space'`).get()).toEqual({ n: 0 });
   });

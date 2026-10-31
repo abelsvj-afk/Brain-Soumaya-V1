@@ -36,6 +36,13 @@ import type { Server } from "node:http";
  */
 const NAIL = "harbor-nail";
 const WITNESS = "witness-without-a-name";
+// Release subject for the two success-path tests below: the Basin
+// Stone since the tier rulings (2026-10-30) — the Harbor Nail
+// played this role before, but the Nail is a Keystone now and its
+// release is refused (that refusal has its own test, second below).
+// Hold/store/carry of the Nail remain valid and keep it as their
+// subject in the audit describe.
+const BASIN = "basin-stone";
 
 interface StateShape {
   found: string[];
@@ -92,25 +99,25 @@ function seedArrivedAtStation(space: string): void {
 describe("P2-7 — /release settles the legacy migration before it operates", () => {
   it("release as the FIRST relic operation on a fresh handle succeeds against the settled snapshot, and the holding does not resurrect in the returned state", async () => {
     const space = await auth("p2-7-release-first");
-    seedLegacyDiscovery(space, NAIL);
+    seedLegacyDiscovery(space, BASIN);
     // Precondition: nothing has been converted yet on this handle.
-    expect(holdingRows(space, NAIL)).toEqual([]);
+    expect(holdingRows(space, BASIN)).toEqual([]);
 
-    const res = await call("POST", "/api/relics/release", space, { relicId: NAIL });
+    const res = await call("POST", "/api/relics/release", space, { relicId: BASIN });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.comet?.relicId).toBe(NAIL);
+    expect(res.body.comet?.relicId).toBe(BASIN);
     // The returned state is the settled truth: no holding, not found-held.
-    expect(res.body.state?.found).not.toContain(NAIL);
-    expect(res.body.state?.holdings.find((h) => h.relicId === NAIL)).toBeUndefined();
+    expect(res.body.state?.found).not.toContain(BASIN);
+    expect(res.body.state?.holdings.find((h) => h.relicId === BASIN)).toBeUndefined();
     // The database agrees after the response — no later resurrection.
-    expect(holdingRows(space, NAIL)).toEqual([]);
+    expect(holdingRows(space, BASIN)).toEqual([]);
     // Discovery itself is permanent: the codex_claims row is untouched.
-    expect(discoveryRow(space, NAIL)).toBeTruthy();
+    expect(discoveryRow(space, BASIN)).toBeTruthy();
     // And a later read still shows no holding.
     const after = await call("GET", "/api/relics", space);
-    expect(after.body.found).not.toContain(NAIL);
-    expect(after.body.holdings?.find((h) => h.relicId === NAIL)).toBeUndefined();
+    expect(after.body.found).not.toContain(BASIN);
+    expect(after.body.holdings?.find((h) => h.relicId === BASIN)).toBeUndefined();
   });
 
   it("a Keystone release attempted as the first operation is refused 400 with the plain reason, and the migrated holding is untouched", async () => {
@@ -128,16 +135,16 @@ describe("P2-7 — /release settles the legacy migration before it operates", ()
 
   it("the settled path is unchanged: once a state read has settled the migration, release behaves exactly as before", async () => {
     const space = await auth("p2-7-settled");
-    seedLegacyDiscovery(space, NAIL);
+    seedLegacyDiscovery(space, BASIN);
     const settled = await call("GET", "/api/relics", space);
-    expect(settled.body.found).toContain(NAIL);
+    expect(settled.body.found).toContain(BASIN);
 
-    const res = await call("POST", "/api/relics/release", space, { relicId: NAIL });
+    const res = await call("POST", "/api/relics/release", space, { relicId: BASIN });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.comet?.relicId).toBe(NAIL);
-    expect(res.body.state?.holdings.find((h) => h.relicId === NAIL)).toBeUndefined();
-    expect(holdingRows(space, NAIL)).toEqual([]);
+    expect(res.body.comet?.relicId).toBe(BASIN);
+    expect(res.body.state?.holdings.find((h) => h.relicId === BASIN)).toBeUndefined();
+    expect(holdingRows(space, BASIN)).toEqual([]);
   });
 });
 

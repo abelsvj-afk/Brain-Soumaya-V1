@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createDb, type DbHandle } from "../db/client.js";
 import { RelicHoldingsStore } from "../relics/holdings.js";
 import { RelicClaimService } from "../relics/claims.js";
 import { buffsForSpace, computeRelicBuffs, seedEffectIdsForSpace } from "../relics/buffs.js";
-import { RELIC_BY_ID, RELIC_ANCHOR_POINTS, type RelicTierClass } from "@brain/shared";
+import { RELIC_ANCHOR_POINTS } from "@brain/shared";
 
 /**
  * Relics I-6 acceptance evidence, Seeds (implementation design §4.5,
@@ -12,26 +12,24 @@ import { RELIC_BY_ID, RELIC_ANCHOR_POINTS, type RelicTierClass } from "@brain/sh
  * the claim transaction, its permanent effect recorded exactly once
  * (the relic_seed_effects primary key IS the idempotency), a duplicate
  * consumed without effect and without returning to the world, and no
- * owned copy EVER appears in the Hold. computeRelicBuffs gains its
- * second input (the space's recorded Seed effects) shipping with an
- * EMPTY effect map: the plumbing is live, behavior is identical.
+ * owned copy EVER appears in the Hold.
  *
- * Fixture: basin-stone is reclassed `seed` for this file only (the
- * shipped registry is untouched; the original value is restored).
+ * Subject relic: the Dawn Leaf — reclassed `seed` by fixture when
+ * this suite was written (no real Seed was discoverable then), and a
+ * REAL Seed in the shipped registry since the tier rulings landed
+ * (2026-10-30), with NO authored effect entry (debt D-1) — which is
+ * exactly the property the second-input describe below pins. The
+ * authored-effect Seeds (Mooring Ring, Stillness Seal) are pinned in
+ * relicTiers.test.ts.
  */
 let handle: DbHandle;
 beforeEach(() => { handle = createDb(":memory:"); });
 afterEach(() => { handle.sqlite.close(); delete process.env.RELIC_OWNER_SPACE_IDS; });
 
-const basinDef = RELIC_BY_ID.get("basin-stone")!;
-let basinClass: RelicTierClass | null = null;
-beforeAll(() => { basinClass = basinDef.tierClass; basinDef.tierClass = "seed"; });
-afterAll(() => { basinDef.tierClass = basinClass; });
-
 const store = () => new RelicHoldingsStore(handle);
 const svc = () => new RelicClaimService(handle);
-const BASIN = "basin-stone";
-const BASIN_POS = RELIC_ANCHOR_POINTS[BASIN]![0]!.position as unknown as [number, number, number];
+const DAWN = "dawn-leaf";
+const DAWN_POS = RELIC_ANCHOR_POINTS[DAWN]![0]!.position as unknown as [number, number, number];
 
 interface CopyRowT { copy_id: string; relic_id: string; state: string; anchor_key: string | null; holder_kind: string | null }
 const copiesOf = (relicId: string): CopyRowT[] =>
@@ -59,14 +57,14 @@ function sampledClaim(space: string, relicId: string, world: string, pos: readon
 
 describe("Seed disposition — consumed on claim, never in the Hold (§8.1 #11)", () => {
   it("a Seed claim consumes its copy in the claim transaction: effect recorded once, no holding ever, discovery still written", () => {
-    const out = store().claimFind("s1", BASIN, "deep-past");
+    const out = store().claimFind("s1", DAWN, "growing-place");
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.rewardAmount).toBeGreaterThan(0);
     // No owned copy ever exists — the Hold is relic_holdings, and it stays empty.
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE space_id = 's1'`).get()).toEqual({ n: 0 });
-    expect(store().foundIds("s1")).not.toContain(BASIN);
+    expect(store().foundIds("s1")).not.toContain(DAWN);
     // The copy exists exactly once, in its terminal state, holder cleared.
-    const copies = copiesOf(BASIN);
+    const copies = copiesOf(DAWN);
     expect(copies).toHaveLength(1);
     expect(copies[0]!.state).toBe("consumed");
     expect(copies[0]!.holder_kind).toBeNull();
@@ -76,33 +74,33 @@ describe("Seed disposition — consumed on claim, never in the Hold (§8.1 #11)"
     const consumed = eventsOf(copies[0]!.copy_id).at(-1)!;
     expect(JSON.parse(consumed.detail ?? "{}")).toMatchObject({ effectRecorded: true });
     // The permanent effect is recorded, naming the very copy that created it.
-    expect(effectRows("s1")).toEqual([{ space_id: "s1", relic_id: BASIN, copy_id: copies[0]!.copy_id }]);
+    expect(effectRows("s1")).toEqual([{ space_id: "s1", relic_id: DAWN, copy_id: copies[0]!.copy_id }]);
     // Personal discovery (the Codex claim, L2) is written like every claim's.
-    const codex = handle.sqlite.prepare(`SELECT 1 AS x FROM codex_claims WHERE space_id = 's1' AND reward_key = 'relic-basin-stone'`).get();
+    const codex = handle.sqlite.prepare(`SELECT 1 AS x FROM codex_claims WHERE space_id = 's1' AND reward_key = 'relic-dawn-leaf'`).get();
     expect(codex).toBeTruthy();
     // The consumed copy is out of the pool for good.
-    expect(liveCopies(BASIN)).toHaveLength(0);
+    expect(liveCopies(DAWN)).toHaveLength(0);
   });
 
   it("the sampled claim path records the disposition on its receipt (seed-consumed)", () => {
-    const out = sampledClaim("s2", BASIN, "deep-past", BASIN_POS);
+    const out = sampledClaim("s2", DAWN, "growing-place", DAWN_POS);
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.disposition).toBe("seed-consumed");
     const receipt = handle.sqlite.prepare(`SELECT outcome FROM relic_claim_attempts WHERE space_id = 's2'`).get() as { outcome: string };
     expect(JSON.parse(receipt.outcome)).toMatchObject({ ok: true, disposition: "seed-consumed" });
     expect(effectRows("s2")).toHaveLength(1);
-    expect(copiesOf(BASIN).filter((c) => c.state === "consumed")).toHaveLength(1);
+    expect(copiesOf(DAWN).filter((c) => c.state === "consumed")).toHaveLength(1);
   });
 });
 
 describe("Duplicate Seed — consumed without effect and without returning (§8.1 #10, R3-3)", () => {
   it("a second claim consumes a second copy: no second effect, no Hold entry, no return to the pool", () => {
-    expect(store().claimFind("s1", BASIN, "deep-past").ok).toBe(true);
-    const first = copiesOf(BASIN)[0]!;
-    const dup = store().claimFind("s1", BASIN, "deep-past");
+    expect(store().claimFind("s1", DAWN, "growing-place").ok).toBe(true);
+    const first = copiesOf(DAWN)[0]!;
+    const dup = store().claimFind("s1", DAWN, "growing-place");
     expect(dup.ok).toBe(true);
     if (dup.ok) expect(dup.rewardAmount).toBe(0); // discovery already recorded — no second payout
-    const copies = copiesOf(BASIN);
+    const copies = copiesOf(DAWN);
     expect(copies).toHaveLength(2);
     expect(copies.every((c) => c.state === "consumed")).toBe(true);
     expect(copies[1]!.copy_id).not.toBe(first.copy_id);
@@ -110,40 +108,43 @@ describe("Duplicate Seed — consumed without effect and without returning (§8.
     expect(dupEvent.kind).toBe("consumed");
     expect(JSON.parse(dupEvent.detail ?? "{}")).toMatchObject({ effectRecorded: false });
     // The effect is still exactly the first copy's, recorded exactly once.
-    expect(effectRows("s1")).toEqual([{ space_id: "s1", relic_id: BASIN, copy_id: first.copy_id }]);
+    expect(effectRows("s1")).toEqual([{ space_id: "s1", relic_id: DAWN, copy_id: first.copy_id }]);
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE space_id = 's1'`).get()).toEqual({ n: 0 });
-    expect(liveCopies(BASIN)).toHaveLength(0);
+    expect(liveCopies(DAWN)).toHaveLength(0);
   });
 
   it("the sampled path names the duplicate honestly (seed-consumed-duplicate)", () => {
-    expect(sampledClaim("s3", BASIN, "deep-past", BASIN_POS).ok).toBe(true);
-    const dup = sampledClaim("s3", BASIN, "deep-past", BASIN_POS);
+    expect(sampledClaim("s3", DAWN, "growing-place", DAWN_POS).ok).toBe(true);
+    const dup = sampledClaim("s3", DAWN, "growing-place", DAWN_POS);
     expect(dup.ok).toBe(true);
     if (dup.ok) expect(dup.disposition).toBe("seed-consumed-duplicate");
     expect(effectRows("s3")).toHaveLength(1);
-    expect(copiesOf(BASIN).filter((c) => c.state === "consumed")).toHaveLength(2);
+    expect(copiesOf(DAWN).filter((c) => c.state === "consumed")).toHaveLength(2);
   });
 
   it("seed effects are per-space: another brain's consumption is its own record", () => {
-    expect(store().claimFind("sA", BASIN, "deep-past").ok).toBe(true);
-    expect(store().claimFind("sB", BASIN, "deep-past").ok).toBe(true);
+    expect(store().claimFind("sA", DAWN, "growing-place").ok).toBe(true);
+    expect(store().claimFind("sB", DAWN, "growing-place").ok).toBe(true);
     expect(effectRows("sA")).toHaveLength(1);
     expect(effectRows("sB")).toHaveLength(1);
     expect(effectRows("sA")[0]!.copy_id).not.toBe(effectRows("sB")[0]!.copy_id);
-    expect(seedEffectIdsForSpace(handle, "sA")).toEqual([BASIN]);
-    expect(seedEffectIdsForSpace(handle, "sB")).toEqual([BASIN]);
+    expect(seedEffectIdsForSpace(handle, "sA")).toEqual([DAWN]);
+    expect(seedEffectIdsForSpace(handle, "sB")).toEqual([DAWN]);
     expect(seedEffectIdsForSpace(handle, "sC")).toEqual([]);
   });
 });
 
-describe("computeRelicBuffs second input — plumbing live, effect map empty (§4.5)", () => {
-  it("the second input flows through buffsForSpace and changes nothing while the Seed-effect map is empty", () => {
-    // Identical with no second input, an empty one, or a recorded id:
-    // no effect VALUES exist yet (the worksheet owns them), so a Seed
-    // id contributes nothing — the seam is live, behavior is identical.
+describe("computeRelicBuffs second input — a recorded id with NO authored entry contributes nothing (§4.5, D-1)", () => {
+  it("the second input flows through buffsForSpace; the Dawn Leaf's recorded id changes nothing — its effect is owed, not authored", () => {
+    // Identical with no second input, an empty one, or the Dawn
+    // Leaf's id: the tier rulings authored values for the Ring and
+    // the Seal, but the Leaf's entry is deliberately absent (debt
+    // D-1 — no partial-milestone feed exists for it to act on), so
+    // its recorded consumption contributes nothing until the day
+    // the value exists. The seam is the live map, read fresh.
     const held = ["harbor-nail", "thread-of-many"];
     expect(computeRelicBuffs(held, [])).toEqual(computeRelicBuffs(held));
-    expect(computeRelicBuffs(held, [BASIN])).toEqual(computeRelicBuffs(held));
+    expect(computeRelicBuffs(held, [DAWN])).toEqual(computeRelicBuffs(held));
     // A recorded effect row reaches computeRelicBuffs via buffsForSpace:
     // hold the Nail (its held effect is real), record a Seed effect for
     // the same definition directly — the buffs must NOT double or drift.

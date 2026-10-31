@@ -74,9 +74,11 @@ export interface RelicDef {
   gateKey: boolean;
   /** Tier class (approved design §5). null = unassigned — behaves
    *  exactly as relics do today (holdable, releasable, no exchange, no
-   *  seed consumption) until the O-R5 worksheet assigns it. Only the two
-   *  design-committed values are set (witness-without-a-name: keystone,
-   *  unnumbered-fragment: legacy); the other thirteen ship null. */
+   *  seed consumption). The O-R5 worksheet has now ruled ALL fifteen
+   *  (tier decisions, 2026-10-30: 4 Keystones, 3 Seeds, 8 Legacies —
+   *  class follows nature, not name, so the Witness Seed is a
+   *  Keystone); no def ships null any more, and the type keeps null
+   *  only so an unreached future def states its state explicitly. */
   tierClass: RelicTierClass | null;
   /** False when the relic's world does not exist in the app yet — the
    *  registry entry is real, but no find can happen until its world opens. */
@@ -98,7 +100,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14282,
     glow: "bare metal, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "keystone",
     discoverable: true,
     icon: "🔩",
   },
@@ -114,7 +116,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14999,
     glow: "bare metal, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "seed",
     discoverable: true,
     icon: "⚓",
   },
@@ -130,7 +132,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 17537,
     glow: "the leaf's own dawn colors, no added glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "seed",
     discoverable: true,
     icon: "🍃",
   },
@@ -146,7 +148,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14522,
     glow: "bare, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "keystone",
     discoverable: true,
     icon: "🌱",
   },
@@ -162,7 +164,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14495,
     glow: "pale and see-through, with a warm-white light inside (as made: transmission 0.45, glow 2.0)",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: true,
     icon: "💎",
   },
@@ -178,7 +180,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15000,
     glow: "bare stone, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: true,
     icon: "🪨",
   },
@@ -194,7 +196,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15000,
     glow: "a warm light inside (as made: glow 1.5)",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: true,
     icon: "🏮",
   },
@@ -226,7 +228,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 15881,
     glow: "a low amber glow in its cracks (as made: glow 2.0)",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: true,
     icon: "🔥",
   },
@@ -242,7 +244,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 22500,
     glow: "bare thread, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "keystone",
     discoverable: true,
     icon: "🧵",
   },
@@ -258,7 +260,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14999,
     glow: "bare metal, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: false,
     icon: "🌟",
   },
@@ -274,7 +276,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14390,
     glow: "bare metal, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: false,
     icon: "🧭",
   },
@@ -290,7 +292,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 14367,
     glow: "bare, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "seed",
     discoverable: false,
     icon: "🕯️",
   },
@@ -306,7 +308,7 @@ export const RELICS: readonly RelicDef[] = [
     tris: 22500,
     glow: "bare, no glow",
     gateKey: false,
-    tierClass: null,
+    tierClass: "legacy",
     discoverable: false,
     icon: "✉️",
   },
@@ -942,8 +944,8 @@ export type RelicBlessingStatus = "live" | "cut" | "gate-key";
 export interface RelicBlessing { status: RelicBlessingStatus; giftPlain: string; costPlain: string; cutReason?: string; }
 export const RELIC_BLESSINGS: Readonly<Record<string, RelicBlessing>> = {
   "harbor-nail": { status: "live", giftPlain: "Your fuel tank holds 225 instead of 200.", costPlain: "Review earnings are 1 less while you hold it." },
-  "mooring-ring": { status: "live", giftPlain: "Drift journeys pay 4 instead of 3, and up to 3 drift bonuses can pay in a day instead of 2.", costPlain: "No trade-off." },
-  "dawn-leaf": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — the app has no way for partial milestones to feed progress, so there is nothing for it to change." },
+  "mooring-ring": { status: "live", giftPlain: "Drift journeys pay 4 instead of 3, permanently — the Ring is a Seed, spent the moment you find it, and its gift never switches off.", costPlain: "No trade-off." },
+  "dawn-leaf": { status: "cut", giftPlain: "It lends no blessing yet — the Leaf is a Seed, spent the moment you find it; its gift is owed, and your finding stands recorded for the day it can be given.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — the app has no way for partial milestones to feed progress, so there is nothing for it to change." },
   "witness-seed": { status: "live", giftPlain: "Memories from the last 45 days can rise in the Deep Past, instead of 30.", costPlain: "Progress increases grow more slowly (three quarters of the usual step) while you hold it." },
   "first-light-shard": { status: "live", giftPlain: "Review earnings are 1 more.", costPlain: "The mood curve is shown with its swings a little larger — only how it looks changes, never what is stored." },
   "basin-stone": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — the app has no way to soften swings from particular memories, and a trade-off on its own would only be a cost." },
@@ -953,7 +955,7 @@ export const RELIC_BLESSINGS: Readonly<Record<string, RelicBlessing>> = {
   "thread-of-many": { status: "live", giftPlain: "Link earnings pay 4 per link instead of 2.", costPlain: "Memories from only the last 20 days can rise in the Deep Past while you hold it (if it is the most recently held relic that sets the window)." },
   "star-hanger": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — there is no Alignment measure in the app for it to speed up." },
   "sunward-compass": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — travelling never changes emotional weight, so there is nothing for it to steady." },
-  "stillness-seal": { status: "live", giftPlain: "Fuel returns faster — 5 per hour instead of 3.5.", costPlain: "Review earnings are 1 less while you hold it." },
+  "stillness-seal": { status: "live", giftPlain: "Fuel returns faster — 4 per hour instead of 3.5, permanently — the Seal is a Seed, spent the moment you find it, and its gift never switches off.", costPlain: "No trade-off." },
   "unopened-fold": { status: "live", giftPlain: "Discovery earnings pay 6 instead of 4.", costPlain: "Progress increases grow more slowly (three quarters of the usual step) while you hold it." },
   "unnumbered-fragment": { status: "cut", giftPlain: "It lends no blessing yet.", costPlain: "No trade-off.", cutReason: "It lends no blessing yet — there is no Alignment measure in the app for it to speed up." },
 };
@@ -983,8 +985,9 @@ export interface RelicExchangeView {
 }
 export interface RelicHoldingView {
   relicId: string; name: string; held: boolean; testOnly: boolean; anchorKey: string; blessing: RelicBlessing;
-  /** Relics I-6: the relic's class (null until the tier worksheet
-   *  assigns one) and where the copy rests — "carried" or "station"
+  /** Relics I-6: the relic's class (the O-R5 worksheet has assigned
+   *  all fifteen; null survives in the type only for an unreached
+   *  future def) and where the copy rests — "carried" or "station"
    *  (the I-2 location state). Optional: the server always populates
    *  them; older constructions stay valid. */
   tierClass?: RelicTierClass | null;

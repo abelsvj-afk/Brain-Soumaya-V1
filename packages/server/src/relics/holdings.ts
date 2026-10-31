@@ -40,7 +40,7 @@ import {
   type RelicProvenanceEventView, type RelicReturnView, type RelicStirringView, type RelicsStateView,
 } from "@brain/shared";
 import type { DbHandle } from "../db/client.js";
-import { buffsForSpace, computeRelicBuffs, heldRelicIds, relicName } from "./buffs.js";
+import { buffsForSpace, computeRelicBuffs, heldRelicIds, relicName, seedEffectIdsForSpace } from "./buffs.js";
 import { postedExchangeValue } from "../economy.js";
 
 export const EMPTY_POOL_MESSAGE =
@@ -178,6 +178,15 @@ export class RelicHoldingsStore {
     for (const r of rows) {
       const id = r.reward_key.slice("relic-".length);
       if (!RELIC_BY_ID.has(id)) continue;
+      // Tier implementation (2026-10-30): a Seed's codex claim is a
+      // DISCOVERY record, never a holding — every claim writes one,
+      // and a Seed claim's disposition is consumption, so converting
+      // the claim into a holding would resurrect a Seed into the
+      // Hold on every fresh handle (each restart would mint and
+      // re-consume a phantom copy). A genuine pre-tier Seed holding
+      // exists as a relic_holdings row already and converts through
+      // convertSeedHoldings below; it never needs this path.
+      if (RELIC_BY_ID.get(id)?.tierClass === "seed") continue;
       const res = ins.run(r.space_id, id, nowIso, this.currentAnchorFor(id));
       inserted += Number(res.changes ?? 0);
     }
@@ -238,6 +247,11 @@ export class RelicHoldingsStore {
       // I-3: the same lazy boot records gate permanence for spaces that
       // already crossed to Eternity (idempotent — see backfillGateOpened).
       this.backfillGateOpened();
+      // Tier implementation (2026-10-30): the same lazy boot converts
+      // any pre-existing holdings of Seed-class relics — the Seed
+      // lifecycle admits no owned state (idempotent, atomic per
+      // space — see convertSeedHoldings).
+      this.convertSeedHoldings();
       migratedHandles.add(this.h.sqlite as object);
     } catch { /* tables may not exist in a bare unit handle */ }
   }
@@ -300,6 +314,128 @@ export class RelicHoldingsStore {
       return Number(res.changes ?? 0);
     } catch { return 0; }
   }
+  /**
+   * Tier implementation (2026-10-30, decisions doc §6 — the flagged
+   * riskiest point): the one-time conversion of pre-existing Seed
+   * holdings. Until the tier rulings landed, a space could OWN — and
+   * hold — a Mooring Ring or a Dawn Leaf; the Seed lifecycle (§2.2)
+   * admits no owned state: a Seed is consumed inside its claim
+   * transaction and an owned copy never exists. Grandfathering the
+   * old holdings was considered and rejected in the decisions doc
+   * (it would leave a permanent exception class in every future
+   * feature); conversion is one honest moment instead.
+   *
+   * Per affected space, in ONE transaction: gate permanence is
+   * recorded from the found set AS IT STANDS (a Seed can be one of
+   * B-01's "two others" today; conversion must never re-close a
+   * completed gate), then every Seed-class holding — held or merely
+   * owned, carried or Station-stored — converts: the Seed Effect is
+   * recorded (the relic_seed_effects primary key is the idempotency;
+   * a Dawn Leaf records with NO effect entry, debt D-1 — its
+   * consumption is banked and lights up when the value is authored),
+   * the copy enters its terminal `consumed` state through the same
+   * update the award core performs, its chain gains a truthful
+   * consumption event whose detail names the tier migration (NOT
+   * dressed up as a claim — it wasn't one), and the holding row is
+   * removed. The converted
+   * Ring holder's one real cost is named in the decisions doc: the
+   * held form's daily-cap half does not carry into permanence.
+   * NPC residents' Seed holdings convert by the same class rule —
+   * the residuals sweep established that an NPC's Seed claim
+   * consumes with the effect recorded against the NPC's space; a
+   * pre-tier NPC holding is the same fact waiting for the same
+   * disposition. Pool copies (placed, unowned) are untouched — only
+   * OWNED copies convert.
+   *
+   * Idempotent by construction: after conversion no Seed holdings
+   * exist, so any later pass finds nothing. Runs inside
+   * ensureMigrated (after the copies backfill has bound every
+   * holding), and once more inside syncLegacy's transaction for the
+   * finds that path reports. Returns the number of copies converted.
+   */
+  convertSeedHoldings(): number {
+    const seedIds = RELICS.filter((r) => r.tierClass === "seed").map((r) => r.id);
+    if (seedIds.length === 0) return 0;
+    // Every holding must be copy-bound before it can convert (the
+    // I-2 discipline: convert first, then read).
+    try { this.backfillCopies(); } catch { /* bare handle without the I-2 tables: the reads below fail exactly as poolCount's do */ }
+    const marks = seedIds.map(() => "?").join(",");
+    const spaces = new Set<string>();
+    for (const r of this.h.sqlite.prepare(`SELECT DISTINCT space_id FROM relic_holdings WHERE relic_id IN (${marks})`).all(...seedIds) as { space_id: string }[]) spaces.add(r.space_id);
+    for (const r of this.h.sqlite.prepare(`SELECT DISTINCT space_id FROM npc_relic_holdings WHERE relic_id IN (${marks})`).all(...seedIds) as { space_id: string }[]) spaces.add(r.space_id);
+    let converted = 0;
+    for (const spaceId of spaces) {
+      if ((this.h.sqlite as { inTransaction?: boolean }).inTransaction) {
+        converted += this.convertSeedHoldingsForSpace(spaceId);
+      } else {
+        const run = this.h.sqlite.transaction(() => { converted += this.convertSeedHoldingsForSpace(spaceId); });
+        run.immediate();
+      }
+    }
+    return converted;
+  }
+
+  /** One space's half of convertSeedHoldings. The caller owns the
+   *  transaction; this only writes. Public for syncLegacy, which
+   *  converts the Seed finds it just recorded inside its own
+   *  transaction, and for the idempotency tests. */
+  convertSeedHoldingsForSpace(spaceId: string): number {
+    let converted = 0;
+    // Fix (a) discipline, same as release/exchange: permanence is
+    // recorded from the found set as it stands BEFORE any delete in
+    // this conversion can drop it below completion.
+    this.recordGateCompletionIfComplete(spaceId);
+    const consumeCopy = (copyId: string, relicId: string, effectRecorded: boolean, npcId?: string): void => {
+      // The award core's own terminal update (I-6): same state, same
+      // cleared holder fields — a converted copy is indistinguishable
+      // in state from a claimed-and-consumed one; only its chain's
+      // last event differs, and it differs truthfully.
+      this.h.sqlite.prepare(
+        `UPDATE relic_copies SET state = 'consumed', world = NULL, anchor_key = NULL, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+      ).run(copyId);
+      // The event kind is the schema's own `consumed` (the
+      // relic_copy_events CHECK constraint enumerates the kinds —
+      // a new kind would be a schema change, outside this
+      // increment's fence); the DETAIL names it what it is: reason
+      // "tier-migration" — a tier-migration consumption, told apart
+      // from a claim's consumption at a glance, never dressed as one.
+      this.recordEvent(copyId, "consumed", {
+        spaceId, world: RELIC_BY_ID.get(relicId)?.world ?? null,
+        detail: { reason: "tier-migration", effectRecorded, ...(npcId ? { npcId } : {}) },
+      });
+    };
+    const rows = this.h.sqlite.prepare(`SELECT * FROM relic_holdings WHERE space_id = ?`).all(spaceId) as HoldingRow[];
+    for (const row of rows) {
+      if (RELIC_BY_ID.get(row.relic_id)?.tierClass !== "seed") continue;
+      // A holding the copies backfill could not bind (a bare handle
+      // without the I-2 tables) cannot convert truthfully — its
+      // effect record names a copy — so it is left for a later,
+      // fuller touch rather than converted halfway.
+      if (!row.copy_id) continue;
+      const recorded = this.h.sqlite.prepare(
+        `INSERT OR IGNORE INTO relic_seed_effects (space_id, relic_id, copy_id) VALUES (?, ?, ?)`,
+      ).run(spaceId, row.relic_id, row.copy_id);
+      consumeCopy(row.copy_id, row.relic_id, Number(recorded.changes ?? 0) > 0);
+      this.h.sqlite.prepare(`DELETE FROM relic_holdings WHERE space_id = ? AND relic_id = ?`).run(spaceId, row.relic_id);
+      converted++;
+    }
+    const npcRows = this.h.sqlite.prepare(`SELECT npc_id, relic_id FROM npc_relic_holdings WHERE space_id = ?`).all(spaceId) as { npc_id: string; relic_id: string }[];
+    for (const row of npcRows) {
+      if (RELIC_BY_ID.get(row.relic_id)?.tierClass !== "seed") continue;
+      const copy = this.h.sqlite.prepare(
+        `SELECT copy_id FROM relic_copies WHERE holder_kind = 'npc' AND holder_id = ? AND holder_space_id = ? AND relic_id = ? AND state = 'held'`,
+      ).get(row.npc_id, spaceId, row.relic_id) as { copy_id: string } | undefined;
+      if (!copy) continue; // unbound on a bare handle: left, as above
+      const recorded = this.h.sqlite.prepare(
+        `INSERT OR IGNORE INTO relic_seed_effects (space_id, relic_id, copy_id) VALUES (?, ?, ?)`,
+      ).run(spaceId, row.relic_id, copy.copy_id);
+      consumeCopy(copy.copy_id, row.relic_id, Number(recorded.changes ?? 0) > 0, row.npc_id);
+      this.h.sqlite.prepare(`DELETE FROM npc_relic_holdings WHERE npc_id = ? AND space_id = ? AND relic_id = ?`).run(row.npc_id, spaceId, row.relic_id);
+      converted++;
+    }
+    return converted;
+  }
+
   /** Append one fact to a copy's chain. Events are never updated or
    *  deleted. Public since Relics I-6: the exchange service writes
    *  its `exchanged` event through the same primitive as every other
@@ -854,6 +990,13 @@ export class RelicHoldingsStore {
           } catch { /* bare handle without the I-2 tables: the next claim backfills it */ }
         }
       }
+      // Tier implementation (2026-10-30): a synced Seed find is a
+      // consumption, not a holding — it converts inside this same
+      // transaction, so the sync never leaves a Seed in the Hold for
+      // a later migration pass to find. `added` still names it: the
+      // find happened, and its record (discovery + banked Seed
+      // consumption) is exactly what a claim would have written.
+      this.convertSeedHoldingsForSpace(spaceId);
       this.h.sqlite.prepare(`INSERT OR IGNORE INTO space_meta (space_id) VALUES (?)`).run(spaceId);
       try { this.h.sqlite.prepare(`UPDATE space_meta SET relic_legacy_synced = 1 WHERE space_id = ?`).run(spaceId); } catch { /* column absent on bare handles */ }
     });
@@ -887,10 +1030,10 @@ export class RelicHoldingsStore {
    * the holding row. This method only flips the state; WHERE the
    * change may happen (the Great Station only, O-R7) is enforced by
    * the caller with the server-derived current world, exactly as
-   * hold/unhold are gated at the routes. Location never gates buffs:
-   * the §9 item-7 question (do stored relics keep lending) is still
-   * open, and until the tier worksheet rules, a stored relic lends
-   * exactly as a carried one does.
+   * hold/unhold are gated at the routes. Location never gates buffs
+   * (§9 item 7, RULED in the tier decisions, 2026-10-30): a stored
+   * relic lends exactly as a carried one does — decided law, pinned
+   * by test, not an open question.
    */
   setLocation(spaceId: string, relicId: string, location: "carried" | "station"): { ok: boolean; reason?: string } {
     if (!RELIC_BY_ID.has(relicId)) return { ok: false, reason: UNKNOWN_RELIC_MESSAGE };
@@ -1406,12 +1549,18 @@ export class RelicHoldingsStore {
 
   preview(spaceId: string, relicId: string): { refused?: string; buffs: ReturnType<typeof computeRelicBuffs>; heldIds: string[] } {
     const held = this.heldIds(spaceId);
-    if (!RELIC_BY_ID.has(relicId)) return { refused: UNKNOWN_RELIC_MESSAGE, buffs: computeRelicBuffs(held), heldIds: held };
-    if (!this.foundIds(spaceId).includes(relicId)) return { refused: "You have not found that relic yet.", buffs: computeRelicBuffs(held), heldIds: held };
-    if (held.includes(relicId)) return { refused: `You already hold ${RELIC_BY_ID.get(relicId)!.name}.`, buffs: computeRelicBuffs(held), heldIds: held };
-    if (held.length >= MAX_HELD_RELICS) return { refused: HOLD_CAP_MESSAGE, buffs: computeRelicBuffs(held), heldIds: held };
+    // The preview must read the same buffs as every other surface:
+    // recorded Seed gifts are part of the space's true buffs, so the
+    // seed input rides every branch (review F-1 — while the seed map
+    // was empty this omission was vacuous; with ruled values live it
+    // understated a player's permanent gifts on this surface).
+    const seeds = seedEffectIdsForSpace(this.h, spaceId);
+    if (!RELIC_BY_ID.has(relicId)) return { refused: UNKNOWN_RELIC_MESSAGE, buffs: computeRelicBuffs(held, seeds), heldIds: held };
+    if (!this.foundIds(spaceId).includes(relicId)) return { refused: "You have not found that relic yet.", buffs: computeRelicBuffs(held, seeds), heldIds: held };
+    if (held.includes(relicId)) return { refused: `You already hold ${RELIC_BY_ID.get(relicId)!.name}.`, buffs: computeRelicBuffs(held, seeds), heldIds: held };
+    if (held.length >= MAX_HELD_RELICS) return { refused: HOLD_CAP_MESSAGE, buffs: computeRelicBuffs(held, seeds), heldIds: held };
     const would = [...held, relicId];
-    const buffs = computeRelicBuffs(would);
+    const buffs = computeRelicBuffs(would, seeds);
     return { buffs: { ...buffs, riseWindowSetByName: relicName(buffs.riseWindowSetBy), riseWindowOverruledNames: buffs.riseWindowOverruled.map((id) => relicName(id) ?? id) } as ReturnType<typeof computeRelicBuffs>, heldIds: would };
   }
 }

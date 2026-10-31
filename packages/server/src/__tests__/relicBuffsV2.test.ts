@@ -116,28 +116,36 @@ describe("release and returns (A7–A9)", () => {
   it("A7: releasing returns exactly one copy, records one return naming both anchors, anchors differ", () => {
     for (let i = 0; i < 7; i++) give(`other-${i}`, "harbor-nail");
     expect(store().claimFind("late", "harbor-nail", "great-station").ok).toBe(false);
-    give("holder", "mooring-ring", { anchor: "mooring-ring:resting-place-one" });
-    const relOut = store().release("holder", "mooring-ring");
+    // Release subject: the Basin Stone since the tier rulings — the
+    // Mooring Ring played this role before, but a Seed is consumed
+    // on claim now and is never released; the return machinery under
+    // test is the same for every releasable relic.
+    give("holder", "basin-stone", { anchor: "basin-stone:resting-place-one" });
+    const relOut = store().release("holder", "basin-stone");
     const ev = relOut?.ok ? relOut.event : null; // I-3: release() returns a discriminated result
-    expect(ev?.fromAnchor).toBe("mooring-ring:resting-place-one");
+    expect(ev?.fromAnchor).toBe("basin-stone:resting-place-one");
     expect(ev?.toAnchor).toBeTruthy();
     expect(ev?.toAnchor).not.toBe(ev?.fromAnchor);
     // I-2: the return is recorded on the copy's event chain, not in
     // relic_returns (which receives no new rows from this increment on).
-    const copy = handle.sqlite.prepare(`SELECT copy_id FROM relic_copies WHERE relic_id = 'mooring-ring'`).get() as { copy_id: string };
+    const copy = handle.sqlite.prepare(`SELECT copy_id FROM relic_copies WHERE relic_id = 'basin-stone'`).get() as { copy_id: string };
     const returned = handle.sqlite.prepare(`SELECT anchor_key, detail FROM relic_copy_events WHERE copy_id = ? AND kind = 'returned'`).all(copy.copy_id) as { anchor_key: string; detail: string }[];
     expect(returned).toHaveLength(1);
     expect(returned[0]!.anchor_key).toBe(ev?.fromAnchor);
     expect((JSON.parse(returned[0]!.detail) as { toAnchor: string }).toAnchor).toBe(ev?.toAnchor);
     expect(handle.sqlite.prepare(`SELECT * FROM relic_returns WHERE space_id = 'holder'`).all()).toHaveLength(0);
-    // The freed harbor copy: release one holder properly, then a new find succeeds.
-    store().release("other-0", "harbor-nail");
+    // The freed harbor copy: one holder's brain ends (the Nail is a
+    // Keystone — release is refused; its copies return when a brain
+    // does), then a new find succeeds.
+    store().releaseAllForSpace("other-0");
     expect(store().claimFind("late", "harbor-nail", "great-station").ok).toBe(true);
   });
   it("A7b: a released counted relic's copy can be found by another space (the same copy changes hands)", () => {
     for (let i = 0; i < 7; i++) give(`other-${i}`, "harbor-nail");
     expect(store().poolAvailable("harbor-nail")).toBe(0);
-    store().release("other-3", "harbor-nail");
+    // The copy comes back via brain deletion (Keystone-honest return,
+    // as in A7) — it rests placed, exactly as a release left it.
+    store().releaseAllForSpace("other-3");
     // I-2 copy truth: the released copy still EXISTS (it rests, placed),
     // so the copy count never drops — what frees is the copy itself.
     expect(store().poolCount("harbor-nail")).toBe(7);
@@ -207,8 +215,11 @@ describe("owner scarcity switch (A10–A12)", () => {
     store().setScarcityOff("owner-space", false);
     const row = handle.sqlite.prepare(`SELECT test_only FROM relic_holdings WHERE space_id = 'owner-space' AND relic_id = 'harbor-nail'`).get() as { test_only: number };
     expect(row.test_only).toBe(1);
-    expect(store().claimFind("owner-space", "mooring-ring", "great-station").ok).toBe(true);
-    const row2 = handle.sqlite.prepare(`SELECT test_only FROM relic_holdings WHERE space_id = 'owner-space' AND relic_id = 'mooring-ring'`).get() as { test_only: number };
+    // A holdable subject (the Basin Stone): a Mooring Ring find
+    // writes no holding at all since the tier rulings — a Seed is
+    // consumed — so it cannot carry this test's holding-row readout.
+    expect(store().claimFind("owner-space", "basin-stone", "deep-past").ok).toBe(true);
+    const row2 = handle.sqlite.prepare(`SELECT test_only FROM relic_holdings WHERE space_id = 'owner-space' AND relic_id = 'basin-stone'`).get() as { test_only: number };
     expect(row2.test_only).toBe(0);
   });
 });
@@ -309,16 +320,28 @@ describe("buffs (A17–A23)", () => {
     s.unhold("s1", "harbor-nail");
     expect(new EconomyRepo(handle, "s1").toFuel().capacity).toBe(200);
   });
-  it("A18: review floor — Nail + Seal pays exactly 1; deltas add with the Shard", () => {
-    expect(computeRelicBuffs(["harbor-nail", "stillness-seal"]).reviewEarn).toBe(1);
-    expect(computeRelicBuffs(["harbor-nail", "stillness-seal", "first-light-shard"]).reviewEarn).toBe(2);
+  it("A18: review deltas add — Nail + Shard pays 3, the Shard alone 4, the Nail alone 2; the Seal's gift is its permanent regen, never a held set-point", () => {
+    // The pre-tier form of this test paired the Nail with the Seal's
+    // HELD −1 to reach the review floor exactly (3 − 1 − 1 = 1). The
+    // Seal is a Seed since the tier rulings: it has no held effect,
+    // and its held form's review cost does not become permanent — so
+    // that pairing no longer exists and the floor is not reachable
+    // from the held set. What remains true, and is pinned here: the
+    // deltas still add exactly.
+    expect(computeRelicBuffs(["harbor-nail", "first-light-shard"]).reviewEarn).toBe(3);
     expect(computeRelicBuffs(["first-light-shard"]).reviewEarn).toBe(4);
-    give("s1", "harbor-nail", { held: true }); give("s1", "stillness-seal", { held: true });
-    expect(buffsForSpace(handle, "s1").reviewEarn).toBe(1);
-    // Seal regen seam
-    expect(buffsForSpace(handle, "s1").fuelRegenPerHour).toBe(5.0);
+    expect(computeRelicBuffs(["harbor-nail"]).reviewEarn).toBe(2);
+    give("s1", "harbor-nail", { held: true }); give("s1", "first-light-shard", { held: true });
+    expect(buffsForSpace(handle, "s1").reviewEarn).toBe(3);
+    // Seal regen seam, in its ruled form: a "held" Seal contributes
+    // nothing (no held entry exists); its RECORDED consumption adds
+    // +0.5/hr over the base — 4.0, not the old held set-point's 5.0.
+    expect(computeRelicBuffs(["stillness-seal"]).fuelRegenPerHour).toBe(3.5);
+    expect(computeRelicBuffs([], ["stillness-seal"]).fuelRegenPerHour).toBe(4.0);
+    handle.sqlite.prepare(`INSERT INTO relic_seed_effects (space_id, relic_id, copy_id) VALUES ('s1', 'stillness-seal', 'rc_fixture')`).run();
+    expect(buffsForSpace(handle, "s1").fuelRegenPerHour).toBe(4.0);
   });
-  it("A19: drift — with the Ring the third drift pays 4 and a fourth pays nothing; without it the cap stays 2; arrival is never blocked", () => {
+  it("A19: drift — with the Ring's permanent gift the first two drifts pay 4 and the third pays nothing (the cap stays 2); without it drifts pay 3 with cap 2; arrival is never blocked", () => {
     const driftOnce = (space: string, key: string, at: number) => {
       const t = travelWith(space);
       const j = t.depart({ clientKey: key, kind: "drift", destination: "great-station" }, at);
@@ -327,7 +350,13 @@ describe("buffs (A17–A23)", () => {
       expect(arrived?.state).toBe("arrived");
       return t.bonusOutcome(j.id);
     };
-    give("ring", "mooring-ring", { held: true });
+    // Tier rulings: the Ring is a Seed — claiming it consumes the
+    // copy and records the permanent { driftDelta: 1 } gift. The
+    // daily cap does NOT rise with it (2, not the held form's 3),
+    // so the day's drift ceiling is 2 × 4 = 8, not 3 × 4 = 12.
+    // (The pre-tier held-form shape of this test — legs paying
+    // 4, 4, 4 under cap 3 — is exactly what the ruling ended.)
+    expect(store().claimFind("ring", "mooring-ring", "great-station").ok).toBe(true);
     // Each leg must start from where the ledger says the space stands; drift back home between legs.
     const leg = (space: string, tag: string, at: number) => {
       const out1 = driftOnce(space, `${tag}-out`, at);
@@ -342,7 +371,7 @@ describe("buffs (A17–A23)", () => {
     };
     expect(leg("ring", "r1", T0)?.amount).toBe(4);
     expect(leg("ring", "r2", T0 + 200_000)?.amount).toBe(4);
-    expect(leg("ring", "r3", T0 + 400_000)?.amount).toBe(4);
+    expect(leg("ring", "r3", T0 + 400_000)?.amount).toBe(0);
     const fourth = leg("ring", "r4", T0 + 600_000);
     expect(fourth?.amount).toBe(0);
     expect(fourth?.reason).toMatch(/drift bonuses are done/);
@@ -407,7 +436,7 @@ describe("buffs (A17–A23)", () => {
 });
 
 describe("migration (A24–A25)", () => {
-  it("A24: every codex_claims relic row becomes a holding; the one-time sync adds local finds once; nothing over-limit is revoked", () => {
+  it("A24: every codex_claims relic row becomes a holding — except a Seed's, whose codex record is a discovery, never a holding; the one-time sync adds local finds once; nothing over-limit is revoked", () => {
     handle.sqlite.prepare(`INSERT INTO codex_claims (space_id, reward_key) VALUES ('s1', 'relic-harbor-nail'), ('s1', 'relic-witness-without-a-name'), ('s1', 'relic-dawn-leaf')`).run();
     // P1 rework: the syncing space (s2) is a GENUINE pre-ship space — it
     // exists before the migration runs below, so the migration itself marks
@@ -416,23 +445,33 @@ describe("migration (A24–A25)", () => {
     // proved; that shape is now refused and pinned in the P1 tests below.)
     preShipSpace("s2");
     const s = store();
-    expect(s.migrateLegacyClaims()).toBe(3);
-    expect(s.foundIds("s1").sort()).toEqual(["dawn-leaf", "harbor-nail", "witness-without-a-name"]);
+    // Tier rulings (2026-10-30): the Dawn Leaf row does NOT become a
+    // holding — a Seed's codex claim is its discovery record, and
+    // fabricating a holding (or a consumption) from it would
+    // resurrect what the class rule ended. Two holdings, not three.
+    expect(s.migrateLegacyClaims()).toBe(2);
+    expect(s.foundIds("s1").sort()).toEqual(["harbor-nail", "witness-without-a-name"]);
     expect(s.migrateLegacyClaims()).toBe(0); // idempotent
     const sync1 = s.syncLegacy("s2", ["mooring-ring", "bogus-id"]);
     expect(sync1).toEqual({ synced: true, added: ["mooring-ring"] });
     const sync2 = s.syncLegacy("s2", ["harbor-nail"]);
     expect(sync2.synced).toBe(false);
-    expect(s.foundIds("s2")).toEqual(["mooring-ring"]);
+    // The synced Ring find banks as a CONSUMPTION (tier conversion
+    // runs inside the sync): no holding, the effect recorded.
+    expect(s.foundIds("s2")).toEqual([]);
+    expect(handle.sqlite.prepare(`SELECT 1 FROM relic_seed_effects WHERE space_id = 's2' AND relic_id = 'mooring-ring'`).get()).toBeTruthy();
     // Over-limit legacy: 8 legacy claims of a 7-copy relic all survive.
-    for (let i = 0; i < 8; i++) handle.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, 'relic-mooring-ring')`).run(`legacy-${i}`);
+    for (let i = 0; i < 8; i++) handle.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, 'relic-harbor-nail')`).run(`legacy-${i}`);
     s.migrateLegacyClaims();
-    expect((handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE relic_id = 'mooring-ring' AND test_only = 0`).get() as { n: number }).n).toBe(9); // 8 legacy + s2's sync
+    expect((handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE relic_id = 'harbor-nail' AND test_only = 0`).get() as { n: number }).n).toBe(9); // the 8 legacy spaces + s1's own migrated claim above
     // …and the limit binds NEW verified finds only.
-    expect(s.claimFind("newbie", "mooring-ring", "great-station").ok).toBe(false);
+    expect(s.claimFind("newbie", "harbor-nail", "great-station").ok).toBe(false);
   });
   it("A25: migrated holdings satisfy the gate exactly like new finds", () => {
-    handle.sqlite.prepare(`INSERT INTO codex_claims (space_id, reward_key) VALUES ('s1', 'relic-harbor-nail'), ('s1', 'relic-witness-without-a-name'), ('s1', 'relic-dawn-leaf')`).run();
+    // The third migrated find is the Basin Stone (the Dawn Leaf
+    // played this role pre-tier; a Seed's codex row is a discovery
+    // now, not a holding, so it cannot be one of the gate's two).
+    handle.sqlite.prepare(`INSERT INTO codex_claims (space_id, reward_key) VALUES ('s1', 'relic-harbor-nail'), ('s1', 'relic-witness-without-a-name'), ('s1', 'relic-basin-stone')`).run();
     const s = store();
     s.ensureMigrated();
     const t = travelWith("s1");
@@ -474,7 +513,10 @@ describe("legacy-sync eligibility (P1 fix — the sync is scoped to genuine pre-
     expect(first).toEqual({ synced: true, added: ["harbor-nail", "dawn-leaf"] });
     const second = s.syncLegacy("pre-ship", ["mooring-ring"]);
     expect(second).toEqual({ synced: false, added: [] });
-    expect(s.foundIds("pre-ship").sort()).toEqual(["dawn-leaf", "harbor-nail"]);
+    // The Nail is held; the Leaf — a Seed — banked as a consumption
+    // inside the sync (no holding; the find is still reported above).
+    expect(s.foundIds("pre-ship").sort()).toEqual(["harbor-nail"]);
+    expect(handle.sqlite.prepare(`SELECT 1 FROM relic_seed_effects WHERE space_id = 'pre-ship' AND relic_id = 'dawn-leaf'`).get()).toBeTruthy();
   });
   it("P1: a space registered after the migration is born already-synced and can never legacy-sync", () => {
     const s = store();
