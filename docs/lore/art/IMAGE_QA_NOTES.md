@@ -2,6 +2,10 @@
 
 *From Muse, 2026-10-30. Companion to `CONTINUITY_REPORT.md` (same folder). The owner uploads the image binaries into `docs/lore/art/` himself; filenames follow `NN-short-title-vK.png`. These notes record, per set, what I verified by eye, what I judge shaky, and what I need you to double-check when the images land — you can judge the images directly. Nothing here rewrites a prompt or the Bible; open questions are marked RULING.*
 
+## Current status (2026-10-30, post-audit — read this first)
+
+The status board below is Round 1 history and no longer describes the present. Current state: Rounds 1-2 complete (156 canon originals). Sheet 3 (King-authored, owner's takeover directive 2026-10-30) generated paintings for all 51 Book entries that had none; every set is QA'd in the King Sheet sections below with PROVISIONAL picks. Placement is verified complete on main: STORY_ART holds 87 entries, packages/web/public/lore holds 87 web copies, all 87 canon entries have art. ChatGPT's independent audit (2026-10-30) ACCEPTED the placement, the narration fix, and the voices console with corrections; its two lore findings (L-01 Sunward Compass, L-02 Doorkeeper's Nail) are answered in the correction sections at the foot of this file. Claude's visual ratification of the Sheet 3 picks is still pending. The 281 Sheet 3 originals are uploading to docs/lore/art in batches.
+
 ## Status board
 
 - Generated and kept so far: §§1, 2, 3 (2 keepers), 4, 5 (redone — see below), 6, 7 (3 variants), 8, 9, 10, 11, 12, 16, 17, 19, 21, 22, 26, 28, 31, 32, 33, 34, 36 — 93 keeper files.
@@ -451,3 +455,327 @@ The Voices console exists (owner-only, in the Book) and assignments are live per
 
 - `ROLE_LABEL` in packages/web/src/components/VoiceConsole.tsx names only 9 of the 15 `VOICE_ROLES`; **hesk, tamsin, ossian, ilsabet, pell and wim render as raw lowercase keys.**
 - No role shows the character's sex, age or personality. The cast data (CastMember, packages/shared/src/npcs.ts) carries a prose `voice` personality line but no structured sex/age; the Continuity Bible's identity table is the only complete source. The console needs a per-role character card (name, sex, age, personality) fed from canon, so the owner can cast by ear with the person in view.
+
+## King Sheet — set relic.witness-without-a-name (generated 2026-10-30, King's prompts, picks PROVISIONAL until Claude/owner rule)
+
+All four: a smooth, plain, opal-white ovoid resting at the edge of still basin water in a towering stratified canyon in the Deep Past — on-brief in every variant; no figure anywhere (the Unnamed is present only as her object, per the Bible). Caveat for the pick: the object reads egg-like in all four; the Bible fixes only "smooth, plain, opal-white", so an ovoid is a fair reading, but Claude should confirm the shape sits right beside the relic's 3D model. v1 (object right foreground, glow from within, strata and basin balanced) is King's provisional pick; v3 is the widest vista with the strongest first-light sky; v2's object is the most flattened; v4's glow pools in the water at the shore.
+
+## King Sheet — set relic.witness-seed (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the registry facts: a bare, matte, UNGLOWING seed-shaped relic at the witness tree's base, seedlings crowding the soil, terraced growing place, dawn through the canopy. v1 is King's provisional pick (seed centred between the roots, terraces balanced both sides). v3's seed is the most textured/pitted and reads the most egg-like; v4's is the flattest and quietest, nested in moss; v2 gives the tree the most grandeur. No figures, no glow violations.
+
+## King Sheet — set relic.first-light-shard (generated 2026-10-30, picks PROVISIONAL)
+
+All four: a translucent shard with warm-white light held inside it, resting on dark rock at a basin's rim, mirrored in the still water — the registry's transmission/glow description made visible. Scale note: in v1/v2 the shard stands monumental; the registry doesn't fix a size, and v3 (reclined, thin, most fragment-like) and v4 (long and low against a pale amphitheatre basin wall — the basin reads truest here) keep it smaller. King's provisional pick is v1 (strongest shard-and-reflection composition); v4 is the alternate if Claude wants the basin itself to carry the scene.
+
+## King Sheet — set relic.basin-stone (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the registry line exactly: one dark stone, bare and unglowing, its surface ringed with shallow waterline striations, alone on the floor of a vast empty basin with a thin skin of still water nearby. King's provisional pick is v1 (stone nearest, waterlines clearest, the pool mirroring the cliffs). v3's stone is the largest and most ovoid; v2 loses the stone a little in the basin's scale; v4's is the roundest, like a kept pebble at world scale.
+
+## King Sheet — set relic.lantern-of-keeping (generated 2026-10-30, picks PROVISIONAL)
+
+The cleanest relic set so far: all four place one small sealed lantern with a quiet warm light in a low stratum alcove above dark basin water, scrolls and plain vessels in the neighbouring alcoves, and exactly one soft reflection below — "keeping need not mean disturbing" in every frame. King's provisional pick is v1 (lantern hung in its rounded alcove, reflection directly beneath it). v2's alcoves read most built/architectural; v4 shrinks the lantern against a vast mirrored deep — beautiful, but the relic nearly leaves the frame.
+Addendum (lantern-of-keeping): v2 rendered at 2240×1120 (2:1) against the 2048×1152 (16:9) of v1/v3/v4 — a ratio miss on that one variant only.
+
+## King Sheet — set relic.hearth-ember (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the hard rule: the ember never burns — no flame anywhere, only a low amber light breathing in the cracks of one coal-like fragment in the ash, with cushions and plain clay vessels around a stone hearth under a low roof. King's provisional pick is v1 (ember centred in its ring of hearth stones, cushions left, vessels right, the room warmest). v4's ember is the smallest and its room the coldest blue — the relic nearly leaves the scene; v3's hearth reads as a floor scatter rather than a built hearth.
+
+## King Sheet — set relic.sunward-compass (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the canon refusal: the needle swings to the rising sun and the paintings say nothing more about what it points to. King's provisional pick is v1 (needle and sunrise in one line, chart folded plain beside the rope). Flags: v2 carries a tiny engraved "N" glyph at the needle's hub — a near-text artifact against the no-text line; v3's folded chart bears a glowing cyan diagram that reads like a display/UI rather than sail-cloth. v4's needle is an oversized rod — the clearest sunward geometry, the least compass-like object.
+Addendum (sunward-compass): v1 and v2 rendered at 2240×1120 (2:1); v3/v4 at 2048×1152 (16:9).
+
+## King Sheet — set relic.star-hanger (generated 2026-10-30, picks PROVISIONAL)
+
+All four: a chart-dome exhibit hall, rows of empty seats, dark instrument panels, and one warm navigation star hung low on a fine chain, brought down to touching height while everything keeps its distance — the registry's inversion of "a star is for distance" holds in every frame. King's provisional pick is v2 (dead-centre aisle, the star a small point of light at the chain's end, hall geometry strongest). Caution on v1 and v4: their hanging stars are textured golden spheres that read slightly ornamental, like baubles; v3's star is a pure spark under a glass constellation dome.
+
+## King Sheet — set relic.unopened-fold (generated 2026-10-30, picks PROVISIONAL) — RELICS COMPLETE (9 of 9)
+
+The set splits the registry's deliberate ambiguity both ways: v1's fold is brass and angular — a folded HULL; v3 and v4 are pale folios — a folded PAGE; nothing in any variant shows contents. King's provisional pick is v1 (the hull-reading, and the strongest composition), with v3 as the page-side alternate. One flag: v2's object lies spread flat like an open blank book — of the four it comes closest to breaking "unopened", and Claude may want it marked do-not-use on that ground.
+
+## King Sheet — set sight.unlooked-direction (generated 2026-10-30, picks PROVISIONAL) — 3 variants only
+
+Process note: one of the four generation calls was declined by the image tool, so this set has three variants (as §7 did in Round 1). Composition held in all three: Eternity entirely from behind above the basin, all white, no face, no hair, one hand slightly raised and NOT pointing; the subject is the direction of his attention. King's provisional pick is v2 (ring vertical behind his head, the gaze-line to the lit far shore strongest, raised hand clearest). Flags for Claude: v1 gives the figure mild anatomical definition, against the Bible's "no body detail"; v3 renders the ring HORIZONTAL, like a flat halo seen from behind, where canon is a thin ring behind the head — v3 is the weakest on canon.
+Addendum (unlooked-direction): v1 rendered at 1920×1280 (3:2); v2/v3 at 2048×1152 (16:9).
+
+## King Sheet — set obj.doorkeepers-nail (generated 2026-10-30, picks PROVISIONAL)
+
+Composition is right in all four: the nail hangs from a cord loop beside the gate, lamplight warm on it like a hearthstone, bells and harbour lights beyond. But the standing §37 flag repeats exactly — the prompt says headless and all four nails carry a flat round HEAD (disc cap in v1/v3, T-bar in v2, flat head in v4), and in v1/v3/v4 the nail is oversized, reading almost dagger-like. King's provisional pick is v2 (smallest, most nail-like, hung on the door-frame with the harbour framed beyond it). If Claude wants a true headless nail at hand scale, this set needs a redo with the head and size called out harder.
+Addendum (doorkeepers-nail): v4 rendered at 1920×1280 (3:2); v1–v3 at 2048×1152 (16:9).
+
+## King Sheet — set sight.uncrossed-threshold (generated 2026-10-30, picks PROVISIONAL)
+
+The cleanest singleton set: all four sit low across the sill with lamplight and lived-in clutter on this side and an unbroken pale dust floor beyond — not one footprint in any variant, which is the entire entry. King's provisional pick is v1 (sill running the full width, dust mirror-clean, lamp low). v4 makes the "door stands open and patient" most literal with its open double doors deep in the hall.
+Addendum (uncrossed-threshold): v1 and v3 rendered at 1920×1280 (3:2); v2/v4 at 2048×1152 (16:9).
+
+## OWNER SCALE RULING (2026-10-30 ~8:47 PM EDT) — Eternity is cosmic scale
+
+Owner's words, in substance: Eternity is cosmic scale. He can shrink if he wants, so smaller depictions are usable as variation — but he IS cosmic scale, the way he'd look down at a planet from the sky, the majority of the time. Consequences: (1) the sight.unlooked-direction set above is human-scale and so reads as a shrunk visit — permitted, but Claude/owner may prefer a cosmic-scale take for that entry; (2) all future Eternity depictions default to cosmic scale, including echo.first-light-basin later in this sheet (the Shape at the rim, distant over the basin).
+
+## King Sheet — set obj.mended-banner (generated 2026-10-30, picks PROVISIONAL)
+
+All four hang the banner whole again over an empty dawn muster field — no army, no legible emblem, and the mending carries the meaning in each. King's provisional pick is v2: dark cloth crossed by several seams of golden, plainly mismatched stitching, the repair visibly the most beautiful thing in the frame. v1's single long laced seam down pale cloth is the close alternate; v3 adds honest patch squares; v4's banner is narrowest and its field the wettest.
+
+## King Sheet — set sight.road-not-taken (generated 2026-10-30, picks PROVISIONAL) — SINGLETONS COMPLETE (5 of 5)
+
+All four hold both roads in one frame from the junction stone and judge neither: the walked road runs lamplit to the town, the unwalked climbs moss-green with its lamps long dark. King's provisional pick is v1 (junction stone in the foreground, the parting clearest, the unlit lamps on the climb most readable). Small note: the junction stones in v1/v2 carry carved abstract geometry — star and line patterns, no letters — which reads as waymark carving, not text.
+
+## King Sheet — set sight.ward-window (generated 2026-10-30, picks PROVISIONAL)
+
+The Ward opens gently, as its entries demand: all four are quiet faded rooms with one tall window open to a kind night sky, the curtain moving in mild air, and an empty resting-chair turned toward the sky rather than the room. Nothing frightening anywhere. King's provisional pick is v1 (chair nearest the window, curtain streaming furthest into the room, the night air visibly the clearest thing present). v3 adds a lit side lantern as a warm counter-note. The rooms lean derelict-peeling rather than infirmary-plain; the mood stays gentle, and "faded" covers it.
+
+## King Sheet — set sight.ward-plain-rooms (generated 2026-10-30, picks PROVISIONAL)
+
+The content is exact in all four: a corridor of plain rooms, every door open, and inside each the same kept kindness — made bed, folded blanket, chair, small table, cup — repeated like a held note. King's provisional pick is v2 (the repetition and the folded blankets read clearest, warmest lamplight). Styling note for Claude: the generator housed the Ward in a station corridor with space windows along one side rather than in a house interior; given the Ward's place in the worlds this reads as a setting choice, not an error — but it sets the visual register for the remaining Ward interiors, so he should confirm it once here. v4's cyan floor light-strips are the most tech-forward detail in the set.
+Addendum (ward-plain-rooms): v4 rendered at 2240×1120 (2:1); v1–v3 at 2048×1152 (16:9).
+
+## King Sheet — set sight.ward-counting-room (generated 2026-10-30, picks PROVISIONAL)
+
+All four deliver the room whole: shelves of counted linen piles, jars in careful rows, and the tall ledger open on the desk with ruled, patiently filled columns — the handwriting stays texture throughout; no name or number is legible in any variant (v3's tally-mark columns come closest to readable counting and still resolve to marks, not figures). King's provisional pick is v1 (ledger largest, lantern at its shoulder, the worn pencil on the desk). The Ward's station-register from the plain-rooms set continues here (space windows in v1/v3/v4).
+
+## King Sheet — set obj.ward-bell (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the bell what the entry says it was: a small brass hand-bell on its folded cloth on the sill, handle worn smooth, corridor quiet beyond the open door — gentle and domestic in every variant, never an alarm. King's provisional pick is v1 (bell, cloth, window light, and corridor in the best balance). v3 leans hardest into the station register (bulkhead corridor, a planet at its end); v2 shows the ward's made beds through the doorway.
+Addendum (ward-bell): ratio misses — v1/v3 at 1920×1280 (3:2), v2 at 2240×1120 (2:1); only v4 is true 2048×1152.
+
+## King Sheet — set sight.ward-chairs (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the arrangement intact, which is the painting: two worn chairs facing one another across the low table, two cups set down, a shawl over one chair's back — the conversation only paused. King's provisional pick is v1 (intact room, gentlest light). v3 is the outlier in mood: its room is half-ruined with cobwebs, leaning mournful where the entry's arrangement itself is not; usable, but it argues with the brief.
+
+## King Sheet — set obj.ward-lamp-stand (generated 2026-10-30, picks PROVISIONAL)
+
+The painting's whole point lands in all four: the lamp is cold, but the stand's post carries a band of polished brass at exactly hand height — care recorded as wear, unmistakable in every variant. King's provisional pick is v2 (stand closest, the bright band widest, the corridor of ajar doors behind). FLAG for Claude: v4 carries legible wall signage — "WARD 3 - RESTING" on the left wall and again over the corridor arch — actual rendered text against the sheet's no-text rule; v4 should be marked do-not-use or the signs cropped. v1–v3 are text-free.
+Addendum (ward-lamp-stand): ratios — v1 2240×1120 (2:1), v2/v3 1920×1280 (3:2), v4 2048×1152 (16:9).
+
+## King Sheet — set obj.ward-folded-blanket (generated 2026-10-30, picks PROVISIONAL)
+
+The refusal held in all four: the blanket is folded with deliberate, somebody-owns-this care at the bed's end, and in its corner sit two small stitched marks side by side — abstract thread crosses, never letters, never names. King's provisional pick is v2 (the two marks largest and clearest as a pair, the room plainest around the one deliberate fold). v1's marks are smallest; v3/v4 place them on the fold's top face.
+Addendum (ward-folded-blanket): v3 rendered at 1920×1280 (3:2); v1/v2/v4 at 2048×1152.
+
+## King Sheet — set echo.ward-night-rounds (generated 2026-10-30, picks PROVISIONAL) — THREE VARIANTS ONLY
+
+One of the four generation calls failed with a tool error and produced no file; per the standing rule it was not retried, so this set ships with three variants, like §7 and sight.unlooked-direction. All three show the travelling light paused at a door at walking height, no hand and no figure anywhere. King's provisional pick is v2 (the light hangs free in the air mid-pause, plainly un-carried; in v1 it sits close enough to the door frame to read as a wall lamp). Mood note: these corridors are the darkest of the Ward sets — the light itself stays warm and unhurried, but Claude should check the set against the Ward's not-frightening rule with his own eye.
+
+## King Sheet — set echo.sound-through-wall (generated 2026-10-30, picks PROVISIONAL)
+
+All four solve the hard composition the same faithful way: one frame split by the thin shared wall — music room on the left (empty chair, music stand, resting instrument case), listening bed on the right with its blanket turned down, and a lamp lit in each room, as if each kept a light on for the other. Nothing played, no one present. King's provisional pick is v1 (the wall most central, the two lamps most plainly mirrored). v2's instrument case stands open-shape against the wall as a cello case; all cases stay closed and resting.
+Addendum (sound-through-wall): ratios — v1 2240×1120 (2:1), v2 1920×1280 (3:2), v3/v4 2048×1152.
+
+## King Sheet — set echo.first-light-basin (generated 2026-10-30, picks PROVISIONAL) — WARD CLUSTER COMPLETE
+
+Painted under the owner's scale ruling given during this session (Eternity is cosmic scale by default; he can shrink, but the majority of depictions are cosmic): all four put the basin below him like a map and the Shape vast and distant on the horizon — all white, no face, no hair, thin ring of his own light behind his head. King's provisional pick is v2 (the basin the cleanest sheet of first light, the figure smallest, the ring thinnest). v3/v4 give him more stature and slight bodily definition (limbs readable at distance; still no face and no detail) — Claude's eye decides whether that stays inside "no body detail." This closes the Ward cluster (12 of 12).
+Addendum (first-light-basin): v3 rendered at 1920×1280 (3:2); v1/v2/v4 at 2048×1152.
+
+## King Sheet — set sight.road-first-mile (generated 2026-10-30, picks PROVISIONAL) — ROAD CLUSTER OPEN
+
+All four are the same true composition: cobbles in the foreground giving way to packed earth, the harbour town lamplit behind, the road running ahead into open dawn country, and the mile-marker stone blank-faced at the roadside. Departure without sorrow, as briefed. King's provisional pick is v1 (the cobble-to-earth transition, the town, and the stone all clearest in one frame). v4's stone shows its blank face most frontally.
+
+## King Sheet — set sight.road-carters-rest (generated 2026-10-30, picks PROVISIONAL)
+
+All four carry the full inventory — stone shelter, worn bench, trough full of water, hitching rail, and the cart parked with its shafts lowered to the ground — and the kept-not-abandoned difference reads: lamps lit, troughs full, nothing broken. King's provisional pick is v2 (trough nearest, cart and the road beyond both in frame). No people and no animals in any variant, as briefed.
+
+## King Sheet — set obj.road-waystones (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the row at a walker's interval with blank, weather-smooth faces, and the nearest stone holding the day's warmth as an amber afterglow in the rock. King's provisional pick is v1 (the afterglow softest — remembered heat rather than light — and the row longest). v4 runs hottest: its glow is a bright lit seam down the stone, closest to reading as magic rather than warmth; Claude's call.
+Addendum (road-waystones): v2 at 1920×1280 (3:2), v4 at 2240×1120 (2:1); v1/v3 at 2048×1152.
+
+## King Sheet — set sight.road-inn-porch (generated 2026-10-30, picks PROVISIONAL)
+
+All four give the full composition: long porch, lanterns lit along it, benches, the open door with the hearth's edge inside, and the road passing in front and going on into dusk — a pause, not an end. No sign or lettering anywhere on the inn in any variant. King's provisional pick is v1. Register note for Claude (like the Ward station question): the generator set this inn in arid canyon country with dust drifted against the porch boards, where the earlier Road sets are green country — the cluster now has two landscapes; bless or split with his eye.
+
+## King Sheet — set sight.road-ford (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the brief exactly: the road runs down one bank, through the shallows over flat stones between worn marker posts, and up the far bank without breaking stride — and no bridge appears in any variant. King's provisional pick is v1 (the crossing's line clearest end to end, the far bank already in morning sun). The landscape here is the green country of the earlier Road sets, not the inn porch's canyon.
+Addendum (road-ford): v3/v4 at 1920×1280 (3:2); v1/v2 at 2048×1152.
+
+## King Sheet — set sight.road-long-hill (generated 2026-10-30, picks PROVISIONAL)
+
+All four climb in switchbacks to a great skyline cairn, with the walkers' little stone piles lining the whole ascent — the census reads at a glance, and no person appears in any variant. King's provisional pick is v2 (the foreground piles read clearest as humble one-stone-each records against the summit cairn's height). v1's right side falls away into open star-space rather than valley — beautiful, but it moves the hill off the world; Claude's call.
+
+## King Sheet — set obj.road-shrine (generated 2026-10-30, picks PROVISIONAL)
+
+The hard rule held in all four: the niche is EMPTY — no figure, no icon, nothing carved — and the bowl at its foot holds exactly the small habit of offerings (pebbles, a dried sprig, a button readable in v1/v2/v4, a coin and folded cloth in v3), with the candle-lantern kept lit beside it. King's provisional pick is v2 (the crossing reads in four directions and the bowl sits front and centre). Setting note: these stand in the canyon country of the inn-porch set, not the green country — the Road cluster's two landscapes now have two sets each.
+Addendum (road-shrine): v1 at 1920×1280 (3:2); v2/v3/v4 at 2048×1152.
+
+## RECONCILIATION — 2026-10-30 late evening (King, self-audit before set 32)
+
+King stopped and checked the generated files against the Book's actual entry list on main (storyCanon ids minus STORY_ART placements, both re-fetched fresh). Findings, plainly:
+
+- Of the sets generated under Sheet 3, **11 match real unplaced entries** and are placeable as planned: the eight relics (witness-without-a-name, witness-seed, first-light-shard, basin-stone, lantern-of-keeping, hearth-ember, sunward-compass, unopened-fold), obj.doorkeepers-nail, sight.unlooked-direction, sight.ward-window.
+- **20 generated sets match NO entry in the Book** and cannot be placed: relic.star-hanger (a relic the Book has no entry for — the Book's ninth unplaced relic is the Unnumbered Fragment), echo.first-light-basin, echo.sound-through-wall, echo.ward-night-rounds, obj.mended-banner, obj.road-shrine, obj.road-waystones, obj.ward-bell, obj.ward-folded-blanket, obj.ward-lamp-stand, sight.road-carters-rest, sight.road-first-mile, sight.road-ford, sight.road-inn-porch, sight.road-long-hill, sight.road-not-taken, sight.uncrossed-threshold, sight.ward-chairs, sight.ward-counting-room, sight.ward-plain-rooms. These came from a working list used during this session that was NOT the sheet's — the sheet on disk (PROMPT_SHEET_KING.md, built from the canon extract) was right all along. The 20 sets are kept in the art folder as unattached paintings; whether any become gallery pieces or future entries is Claude's/owner's call. Their QA sections above stand as honest records of what they depict.
+- **41 real entries still need paintings** (the true remainder): relic.unnumbered-fragment; singletons sight.dead-bough, sight.open-alcove, sight.second-seam, sight.empty-chair, obj.tin-soldier, obj.faded-ticket, obj.vesh-paper-boat, obj.dissenters-chart; Ward sight.ward-door, sight.ward-long-hall, sight.ward-lanterns, sight.ward-blank-cot, obj.ward-bowl, obj.ward-soldier, obj.ward-button, obj.ward-wake, echo.ward-hum, echo.ward-far-breath, echo.ward-count; Road sight.road-mouth, sight.road-lamps, sight.road-chalk, sight.road-chalk-end, sight.road-post, sight.road-far, obj.road-nails, obj.road-doorframe, obj.road-oil, echo.road-steps; Village sight.village-gate, sight.village-windows, sight.village-chair, sight.village-hearth, sight.village-door, obj.village-well, obj.village-hooks, obj.village-bread, obj.village-thread-end, echo.village-count.
+- Count note: canon scan finds 86 entry ids and 34 placed ids (52 unplaced) vs the audit's 87/36 (51) — a two-id counting difference in the scans, not in the work; the per-id lists above are the verified ground truth.
+Correction to the reconciliation count: the still-to-generate remainder is 41 — the 40 named above plus relic.what-she-held-when-she-asked, a relic entry the original briefs extract missed (its text lives with the relic registry, like the other relics). Its prompt will be written from the registry lore when its turn comes.
+
+## King Sheet — set relic.unnumbered-fragment (generated 2026-10-30, picks PROVISIONAL) — first set on the corrected list
+
+All four hold the canon refusal: a small translucent fragment adrift in uncounted dark, pale glow held inside, one face covered in fine markings worn past all reading — in no variant does any marking resolve into legible text. King's provisional pick is v1 (the fragment smallest against the expanse, the markings visible but unreadable, the unclaimed rest most complete). v4's fragment is the flattest and most leaf-like; v2's the most tablet-like.
+
+## King Sheet — set sight.dead-bough (generated 2026-10-30, picks PROVISIONAL)
+
+All four are exact to the entry: the colossal tree over the terraced growing place, the canopy vast and green, and one great bough bare and pale pointing out over the unlooked direction — with a few small new leaves just greening at its very tip, as the entry promises for those who carry a Journey to its end. Tiny travellers pass on the path below. King's provisional pick is v1 (the bough longest against the dark, the greening tips clearest). This painting and sight.unlooked-direction are the same fact from two sides; Claude may want them hung as a pair.
+
+## King Sheet — set sight.open-alcove (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the entry: a long archive wall of sealed alcoves, every tag blank (no writing on any tag in any variant), exactly one alcove open and lamplit with the letter inside still folded — never unfolded — and the nightly watcher present only as a hooded back, face never shown. King's provisional pick is v2 (the open door swung widest, the envelope plainly a letter, the wall's sealed length most overwhelming). v3's alcove is grander, almost a doorway; v1's letter lies flattest.
+
+## King Sheet — set obj.tin-soldier (generated 2026-10-30, picks PROVISIONAL)
+
+All four give the store-room of kept belongings, the blank tags, the folded polishing cloth beside the soldier, and paint worn bright at the edges — treasured, not discarded, in every frame. Honest flag: the missing arm is plainly visible only in v1 (a stub at the shoulder) and v3 (a broken stump); in v2 and v4 the soldier reads two-armed at a glance. King's provisional pick is v3 (faces outward on guard over the room, the broken arm readable, the cloth at his side). The soldier's moulded toy face is a toy's, not a person's — no canon issue.
+
+## King Sheet — set sight.second-seam (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the brief: the immense curved harbour metal at night, the seam never opened, and the thin line of white lying along it like held breath — the brightest thing in every frame — with tiny lamp-lit workers giving the scale. King's provisional pick is v3 (the line sweeps the full curve and leads the eye out of the frame, the harbour floor and its lamps spread below). Note for Claude: the generator rendered the harbour structure as a vast hull-like curve; if the Second Seam belongs to the harbour ring rather than a hull, v2 (the ring seen from above) is the closest alternate.
+
+## King Sheet — set obj.faded-ticket (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the refusal: the old ticket lies face-up in harbour lamplight with every mark smudged soft into texture — nothing readable on any of them — the folded coat and the cup resting nearby, the ticket the warm centre. King's provisional pick is v3 (harbour lights beyond the table, the ticket's creases most handled-looking). Small notes: v1's cup steams faintly though the brief says cold; v4's cup lies tipped on its side.
+
+## King Sheet — set obj.vesh-paper-boat (generated 2026-10-30, picks PROVISIONAL)
+
+All four are gentle and exact: the little boat folded from archive paper on the stone basin's edge, dusk coming through the paper, and Vesh present only as the violet-grey edge of a hooded robe at the frame's edge, already turning away — no face, nothing shown that canon guards. The unfinished name stays unfinished: v2 and v4 carry a single faint pen-stroke on the inside fold, unreadable in both. King's provisional pick is v2 (the stroke present, the boat nearest the water, the robe barely in frame).
+
+## King Sheet — set sight.empty-chair (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the rule: the place is kept, not mourned — a modest lamplit home, the table laid for one more than the household holds, no one in the room, the evening harbour beyond the window. King's provisional pick is v1 (the kept chair drawn up in the foreground, its place set, the others pushed in). v2 and v4 pull the extra chair apart from the table entirely — a stronger absence, a slightly different sentence; Claude's call between them. Note: v3 moors a very large vessel directly outside the window, which pushes the harbour toward fleet spectacle.
+
+## King Sheet — set obj.dissenters-chart (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the chart's paradox: one perfect smooth circle with no coastline — the chart of the place no one has charted — ringed by margins of angry handwriting worn down to strokes and scribble; no word resolves into reading in any variant, the last lines are struck through, and a hand rests flat at the edge stilling the sheet. No face anywhere. King's provisional pick is v1 (the circle most perfect against the chaos of its margins, the stilling hand strongest).
+
+## King Sheet — set sight.ward-door (generated 2026-10-30, picks PROVISIONAL)
+
+All four give the ajar door, the hand's breadth of warm light on the threshold, the watercolour-soft figure slipping through, and the cots resting under trimmed lanterns. King's provisional pick is v2 (the gap narrowest, the figure mid-slip without widening it). Flags for Claude: in v3 and v4 the door stands well open rather than ajar; the slipping figure leans ghostly in all four and v1's hooded bowed form is the most defined — check against the Ward's hushed-not-frightening rule. The Ward again renders as a station corridor with space beyond the windows (same register question as sight.ward-plain-rooms).
+
+## King Sheet — set sight.ward-long-hall (generated 2026-10-30, picks PROVISIONAL)
+
+All four deliver the hall that goes on: crisp made-up cots in the near ground softening into pale fog that never resolves into an end, lanterns at even heights the whole way. Nobody says where the cots stop, and no variant shows it. King's provisional pick is v3 (the most symmetrical endlessness, the fog swallowing the rows dead centre). Same standing register note as the other Ward interiors: the hall reads as a station colonnade — Claude to rule once for the cluster.
+
+## King Sheet — set sight.ward-lanterns (generated 2026-10-30, picks PROVISIONAL)
+
+The sameness is the subject and all four deliver it: lantern after lantern at exactly the same height with the same even flame, down a hall with no visible end, over half-transparent resting figures in watercolour softness — care, repeated perfectly, by unseen hands. King's provisional pick is v3 (the lanterns closest and most identical, in a double row). Caution for Claude: the nearest resting figures in v1 and v4 show soft profile faces; they are unnamed shades, not cast members, so no faceless rule is breached, but the mood check (resting, never corpselike) is his to make.
+
+## King Sheet — set obj.ward-bowl (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the small mystery exactly: one bowl on a plain table in the aisle, a thin curl of steam rising whatever the hour, lantern light pooled on the table, the resting figures watercolour-pale on the cots either side. Nobody is eating; nobody has refilled it; it is simply warm. King's provisional pick is v1 (the steam curl strongest, the bowl dead centre between the two cots).
+
+## King Sheet — set obj.ward-soldier (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the bed watched over, not lost: the small made bed, the child's dent in the pillow, the cot-lantern burning low, and the soldier on guard with his paint worn through. King's provisional pick is v2 — the soldier is smallest and most toy-like there, standing between the bed and the open doorway, facing out as the brief asks (v4 turns him toward the bed instead). Honest notes: the generator scaled the soldier large in v1, v3 and v4 (knee-to-waist height against the bed rather than a hand's height); and he carries a toy rifle in most variants, where Hesk's soldier (obj.tin-soldier) is unarmed — Claude may want the two soldiers kept distinct, or may not mind.
+
+## King Sheet — set obj.ward-button (generated 2026-10-30, picks PROVISIONAL)
+
+All four give the healer as the entry has her: green apron, rolled sleeves, one weathered hand turning buttons over in the pocket — and the buttons are plainly a collection, brass, pearl, star-stamped, cloth-covered, no two from the same coat — while she talks with someone off-frame and the ward goes on behind her. King's provisional pick is v1 (the pocket fullest, the buttons most varied, her profile warmest). She is an unnamed ward healer, not a cast portrait; Claude to confirm her face is welcome here.
+
+## King Sheet — set sight.ward-blank-cot (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the entry's restraint: among the occupied cots, one cot made up fresh — blanket folded, pillow smooth — with a paper tag at its foot that is blank in every variant, and the plain coat on the hook above that belongs to no one in the ward. Whoever it is ready for is never said. King's provisional pick is v2 (the blank tag largest and plainest, the coat hanging directly above the cot). Mood note for Claude: v1 and v4 put oxygen masks on some occupants, which leans clinical against the Ward's resting-shade register; v2's sleepers are plain.
+
+## King Sheet — set echo.ward-hum (generated 2026-10-30, picks PROVISIONAL)
+
+A sound, painted: the healer stands still in the aisle, head tilted, listening — and one cot among the rows is quietly the source, its resting figure lit from within, the nearest lantern flames leaning toward it. The hum belongs to no one in the hall and nothing explains it. King's provisional pick is v1 (the source cot plainest, the listening clearest). Continuity flag for Claude: the generator rendered this healer as a bearded man in all four variants, where obj.ward-button's healer is a woman — the sheet's hum prompt does not pin the healer's sex, so this is only a conflict if the two are meant to be the same person.
+
+## King Sheet — set echo.ward-far-breath (generated 2026-10-30, picks PROVISIONAL)
+
+All four paint the second sound: the near hall still and lamplit, and at the far end the mist itself swelling slow and even, like a breath the hall is taking in its own time — not any one sleeper's. King's provisional pick is v3 (the swell biggest and most breath-like, curling up between the last cots). Note: this is ward fog, not the Hush — but v1 and v2 roll it almost like surf, and Claude may want the texture kept gentler.
+
+## King Sheet — set echo.ward-count (generated 2026-10-30, picks PROVISIONAL)
+
+The third Ward sound, and the fondest: she walks the rows at night with two fingers raised mid-count, lips just moving, the cots running on past any number she reaches — there is always one more, and she begins again without complaint. The healer here is a woman in the green apron, matching obj.ward-button (which makes echo.ward-hum's bearded healer the odd one out — see that set's flag). King's provisional pick is v2 (an indoor hall, the count and the endless rows both clearest). Register note: v1 and v3 drift the ward outdoors under open sky; v2 and v4 keep it a hall.
+
+## King Sheet — set obj.ward-wake (generated 2026-10-30, picks PROVISIONAL)
+
+The Ward cluster closes with its smallest picture: the polished tin soldier left on the sill by the door overnight, bright in the last lantern light, the dark hall resting behind him. By morning he'll be gone again, and nobody says where he goes. All four keep him palm-small against the door (the scale wobble from obj.ward-soldier does not repeat). King's provisional pick is v1 (closest and warmest, the soldier plainly on guard beside the lantern).
+
+## King Sheet — set sight.road-mouth (generated 2026-10-30, picks PROVISIONAL)
+
+The Road cluster opens where the road does: a plain stone arch in the harbour wall, no sign naming it, no berth listing it, the road dropping away into quiet dark while the harbour stays lit behind. Dockhands cross toward it on errands; the ones coming back walk quieter. King's provisional pick is v1 (the arch most massive and plainest, the descending dark road clearest). Note: v4 gives the wall two arches; the entry's mouth is singular, and v1 keeps it so.
+
+## King Sheet — set sight.road-lamps (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the road's discipline: lamps at the same height and the same distance along both walls, the hooded traveller small and seen from behind, no lighter anywhere. The entry's gradient — lit a little ahead of him, dimming behind, dark far on — is closest in King's provisional pick v1 (the pair directly ahead of him burn brightest, the far lamps hang dark). v4 inverts it (near lamps dark, far ones lit) and v3 lights everything evenly; both noted so Claude can judge the mechanic, not just the mood.
+
+## King Sheet — set obj.road-nails (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the fact: a nail at every stride along the right-hand wall, each head shimmering faintly amber as if just set, and the line of them running straighter than anything else on the road into the lamplit distance. King's provisional pick is v4 (the most nail-like — heads against the wall, the line straightest). Honest deviation for Claude: the generator renders them as long pins protruding from the wall rather than nails driven flush, most strongly in v1; v2's upright pegs read almost as a row of small torches. If flush-set matters, this set wants a redo with that worded harder.
+
+## King Sheet — set sight.road-chalk (generated 2026-10-30, picks PROVISIONAL)
+
+All four hold the small, devastating fact: tally strokes in groups of five, low on the wall at a child's height, never smudged, going on for a very long way beside an empty road — and the counter is not here now, and never once stopped to rest. King's provisional pick is v2 (the marks lowest and clearest, one lamp raking across them). Register note, same as the orphan Road sets: the road reads open-air under sky here, where the lamps and nails sets are underground — the cluster carries two landscapes, Claude's standing call.
+
+## King Sheet — set obj.road-doorframe (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the joke the road never laughs at: a door-frame against the wall with no door in it and nothing behind it but more wall — and its hinges polished brass-bright, freshly oiled, kept by someone who has never been seen to use them. King's provisional pick is v1 (the hinges largest and brightest, the emptiness of the frame plainest — rock straight through).
+
+## King Sheet — set sight.road-post (generated 2026-10-30, picks PROVISIONAL)
+
+All four keep the kept place: the iron post, the bench worn pale in exactly two places, the ground swept in clean arcs — and no warden, none for longer than the harbour keeps records. King's provisional pick is v1 (the wear on the seat where sitters sat, the swept ground clearest, the road curving past). Notes: the generator merges the post with a road-lamp in all four (the post carries the lantern — reads naturally, but Claude should know the entry's post is bare iron); v3 wears its two pale patches on the backrest rather than the seat.
+
+## King Sheet — set sight.road-chalk-end (generated 2026-10-30, picks PROVISIONAL)
+
+The companion to the chalk line: it runs, and then it simply stops, and past that point the wall is bare and the road goes on exactly as before — same lamps, same stone, same quiet. King's provisional pick is v4, the only variant that leaves one last short stroke hanging alone past the end of the line — the half-finished mark, the counter called away mid-count. Nothing in any variant explains it. The Book never does either.
+
+## King Sheet — set echo.road-steps (generated 2026-10-30, THREE variants, picks PROVISIONAL)
+
+One generation call failed outright and produced no file; per the standing rule it was not retried, so this set ships with three variants. The entry paints a sound — footsteps ahead that keep their distance exactly — and the generator found the device: prints with no feet making them. King's provisional pick is v3 (small prints walking ahead of the stopped traveller into the dark, the lamps burning steady, nothing there and something there). Caveat for Claude: v3's prints glow pale cyan, which leans toward visible magic; v1 keeps them plain dust prints if the glow is too much.
+
+## King Sheet — set obj.road-oil (generated 2026-10-30, picks PROVISIONAL)
+
+The road's smallest kindness: one can of lamp oil, lid screwed down, sides dry, not a drop spilled, set neatly against the wall exactly where it will be needed — left by someone, for the lamps nobody has seen lit. All four keep it plain and single. King's provisional pick is v3 (the can smallest against the wall, directly under a burning lamp, the road's even lamps running on behind it — the whole maintenance mystery in one frame).
+
+## King Sheet — set sight.road-far (generated 2026-10-30, picks PROVISIONAL)
+
+The Road cluster closes past its last lamp: the floor goes on level into fog, and the fog is lit from within — a soft glow with no source and no end — and nothing in any variant is afraid of that. King's provisional pick is v3 (the road most plainly level and endless, the last lamp small at the frame's edge, the glow warmest and most sourceless). The Road is complete: ten of ten.
+
+## King Sheet — set sight.village-gate (generated 2026-10-30, picks PROVISIONAL)
+
+The Village opens at its gate: a heavy wooden bar cut with notches — one for each who went through — recut more than once, so the rows do not agree, and nobody will say which cut is the true one. Amber window-light falls across it from the houses beyond. King's provisional pick is v1 (the bar fills the frame, the count itself the subject, the notches most hand-cut). Honest wobble for Claude: in all four the notches lean regular, almost saw-toothed — carved pattern more than tally; v1 is the least mechanical.
+
+## King Sheet — set sight.village-windows (generated 2026-10-30, picks PROVISIONAL)
+
+Every window in the village lit with the amber of an evening meal, at every hour a visitor has come — and no one at any of them. Street lamps unlit, street empty: warm, and quietly unpeopled. All four hold it. King's provisional pick is v2 (street-level, the unlit lamps standing dark between the lit houses — that contrast is the entry's whole point).
+
+## King Sheet — set obj.village-well (generated 2026-10-30, picks PROVISIONAL)
+
+Exact in all four: one stone well, one bucket, two ropes over the beam — one worn smooth and dark with use, the other pale, nearly new, never seen to be used. For whom is the second rope kept? The entry doesn't say and neither does any painting. King's provisional pick is v3 (the dark rope twisted with work, the pale coil hanging clean and full-length beside it, the well the still centre of the square).
+
+## King Sheet — set sight.village-chair (generated 2026-10-30, picks PROVISIONAL)
+
+The Book's first true morning: at first light, outside one village door, a plain chair set in the street facing the hill path — dusted this morning, a cloth over its back — and whoever sits in it gone before the village wakes. All four hold the kind light. King's provisional pick is v1 (the chair nearest, the morning freshness on its seat, the stepped path climbing empty into the sunrise). Note for the cluster: this set and sight.empty-chair are cousins — a chair kept for someone — but different worlds and different grammars (kept place at a table vs. a watcher already gone); no confusion in the paintings themselves.
+
+## King Sheet — set sight.village-hearth (generated 2026-10-30, picks PROVISIONAL)
+
+A hearth laid for the whole village: more stones than a hearth needs, a ring of plain seats around it, the ash still faintly alive — and no one ever sitting in them. The houses' windows burn amber around the square in all four. King's provisional pick is v1 (nearest to the hearth, the ember-light strongest in the ash, the empty ring of seats plainest). The seats are warm. Nobody asks why, in the paintings or the entry.
+
+## King Sheet — set obj.village-hooks (generated 2026-10-30, picks PROVISIONAL)
+
+Up the hill path out of the village, a line of small gold hooks at the height of a held hand, climbing toward the doorway at the top — and partway up, the line bends where something once pulled it taut. King's provisional pick is v1 (hooks carried on posts at the path's edge, the bend modest, the morning kind). Honest deviation for Claude: the generator hangs the hooks from a line in all four variants, where the sheet has them set along the path; the fact survives the reading, but if set-in-place matters this set wants a redo. v3's bend is the most dramatic — the line loops clean off the path — and may be the truest to "pulled it taut" despite the flourish.
+
+## King Sheet — set sight.village-door (generated 2026-10-30, picks PROVISIONAL)
+
+The Doorway at the Path's End: at the top of the hill path, a tall doorway of pale light that shows nothing through it — very bright, and kind; far down the path a small hooded figure, seen from behind, has stopped at a respectful distance, gold hooks glinting along the path behind them. King's provisional pick is v1 (the only variant keeping the doorway stone-framed, matching the doorway the hooks line rises toward in obj.village-hooks; the figure smallest and furthest, the hooks set in the rock at the path's edge). v2 and v3 drop the frame and let the light stand alone with rays — brighter, but a different doorway from the hooks painting; v4 warms the light amber and brings the figure close, and its hooks read more like crooks and anchors scattered on the path than a line set for hands. All four variants are 2048x1152.
+
+## King Sheet — set obj.village-bread (generated 2026-10-30, picks PROVISIONAL)
+
+Bread Still Warm: on a village window-sill in morning light, a loaf cools with the faintest breath of steam, knife beside it, slices set out in a careful row — one more than the household needs; inside, soft unpeopled warmth; outside, the quiet street. King's provisional pick is v1 (the row longest and most careful at seven slices, the steam faintest, the interior warmth plainest). v2 sets its last slice apart from the row, which reads as the extra slice made visible — a legitimate alternate if Claude prefers the surplus stated that way. Flag: v4's street drifts into domed sci-fi architecture, off the Village's stone-cottage register everywhere else in the cluster; Claude may mark it do-not-use for continuity. All four variants are 1920x1280.
+
+## King Sheet — set echo.village-count (generated 2026-10-30, picks PROVISIONAL)
+
+A Voice Counting Aloud: a sound painted — still evening at the village gate, the notched bar, the lit windows, the square beyond, and the whole scene listening; somewhere near the gate a child counts aloud, unseen; the count has reached its end, hesitated, and begun again; nothing in the frame moves, and the counter is unseen in all four variants, as the entry requires. King's provisional pick is v1 (framing closest to sight.village-gate — the bar across the gate, the village's windows listening beyond it). Flags for Claude: v2 chalks the count on the ground at the gate and its marks come close to readable numerals ("9... 10...") — the one variant that nearly breaks the no-text rule, and a candidate for do-not-use on that ground despite its wit; v4 carves tally groups into the gate post, marks rather than text, which reads as the count's trace and is offered as acceptable. v3 hangs the bar low across the frame's foot, the village still behind it. All four variants are 2048x1152.
+
+Correction note (2026-10-30, filed with the echo.village-count QA above): the set's four PNG conversions hit the known sandbox write flap (EPERM on image writes; small text writes still land). The four keeper originals are safe as webp in the local generated folder (media-generation-wide-16-9-composition-a-still-0-1c430466 / -1b7382fe / -81d6bac5 / -490afbfa, in pick order v1-v4). PNG copies for the art folder are deferred until the flap clears; do not mistake the absence for a lost set. The ChatGPT review loop should treat this set as generated-and-QA'd, conversion pending.
+
+## King Sheet — set obj.village-thread-end (generated 2026-10-30, picks PROVISIONAL)
+
+The Loose End of a Gold Thread — the Village cluster's last entry, and its closest painting: an older village woman's weathered hands give a short length of gold thread to a small hooded figure seen from behind, the square and its warm windows soft behind them; her family has kept the habit of holding things. King's provisional pick is v1 (the thread's two natures in a single span — fine clean gold at one end, the length worn soft and fibrous toward the other, as though held for a very long time). v2 is the cleaner alternate (both her hands together in the giving, the thread single and fine). Note: v3 puts a small gold rod in her lower hand, a prop the entry never mentions. Ratios: v2 is 1920x1280; v1, v3 and v4 are 2048x1152. The Village cluster is complete: 10 of 10.
+
+Follow-up to the echo.village-count correction note: the write flap cleared later the same evening and all four PNG conversions for echo.village-count have now landed in the art folder at full size. No Sheet 3 set remains unconverted.
+
+## Audit response — L-01 Sunward Compass CORRECTED (2026-10-30)
+
+ChatGPT's finding stands, and the fuller truth is worse than a bad pick: the prompt sheet was RIGHT (round instrument of bare metal on a stone plinth, no needle, centre fixed, points nowhere) and the relic registry agrees word for word — but the first generated set drifted to a ship's deck-plate compass rose WITH a needle, and King's QA rationalized the drift instead of catching it ("canon refusal held" — it was not). That is on King. The first set, relic-sunward-compass v1-v4, is SUPERSEDED — do not use; the needle contradicts the relic's defining property. A corrected set was generated from the sheet prompt verbatim: v5-v8, a round bare-metal instrument on a dark stone plinth beside the road of light, centre fixed, rim markings, no needle in any variant. King's provisional pick is v5 (road of light sweeping past, distant sun gilding one edge). The placed web copy and the STORY_ART alt text have been replaced to match. Claude ratifies or swaps as usual.
+
+## Audit response — L-02 Doorkeeper's Nail CORRECTED (2026-10-30)
+
+ChatGPT's second finding also stands, and goes deeper than King's original QA saw. The entry's first words are "Not a nail; the shape of one. It is warm. It is always warm." The sheet prompt said exactly that — a nail-shaped warmth, a faint amber shimmer with nothing inside it, above an open palm at a door on a night harbour pier. The first generated set drifted to a physical iron nail on a cord; King's QA flagged the head and the size but rationalized the set as usable, missing that the object itself was wrong. The first set, obj-doorkeepers-nail v1-v4, is SUPERSEDED — do not use. A corrected set was generated from the sheet prompt verbatim: v5-v8, the shape rendered as amber shimmer and ember-haze with nothing inside it, hovering over a weathered open palm, the tall door ajar with light along its edge (v7's background drifts sci-fi and is the weakest). King's provisional pick is v5. The placed web copy and the STORY_ART alt text have been replaced to match. Claude ratifies or swaps as usual.
