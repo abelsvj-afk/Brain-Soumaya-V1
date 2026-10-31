@@ -7,6 +7,7 @@ import * as sqliteVec from "sqlite-vec";
 import * as schema from "./schema.js";
 import { bootstrapVec, setVectorEnabled, type RawDb } from "./vec.js";
 import { bootstrapFts } from "./fts.js";
+import { registerDiscoveryCapability } from "../discovery/capability.js";
 import { BOOTSTRAP_SQL } from "./schemaSql.js";
 
 export type Schema = typeof schema;
@@ -2033,6 +2034,8 @@ export function migrateSchema(sqlite: RawDb): void {
  */
 export function createDb(path: string = process.env.DB_PATH ?? "./brain.db"): DbHandle {
   const sqlite = new BetterSqlite3(path);
+  // Unified discovery ledger, Phase 1 (spec §6.1): the application's capability functions. Inert until guard triggers exist (P6); registered first so every later statement can use them.
+  registerDiscoveryCapability(sqlite);
   try {
     const serverRoot = nodePath.resolve(fileURLToPath(import.meta.url), "../../../");
     const localVecPath = nodePath.join(serverRoot, "vec0.so");

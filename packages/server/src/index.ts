@@ -1,5 +1,6 @@
 import { narrationIssue } from "./story/narration.js";
 import { buildContext } from "./context.js";
+import { formatDiscoveryBootLine, readDiscoveryEnvironment } from "./discovery/mode.js";
 import { createApp } from "./api/server.js";
 import { NodesRepo } from "./repositories/nodes.repo.js";
 import { setTelegramWebhook, sendDailyDigests, tgSend, createTelegramSpaceSender, type TelegramSpaceSendReport } from "./telegram/bot.js";
@@ -41,6 +42,8 @@ import { spaceTimezone, localDay } from "./agent/notify/policy.js";
 const PORT = Number(process.env.PORT ?? 3001);
 
 const ctx = await buildContext();
+// Unified discovery ledger, Phase 1 (spec S3): one DIAGNOSTIC line — SQLite version, journal mode, trusted_schema. Read-only; it enforces, repairs and migrates nothing.
+console.log(formatDiscoveryBootLine(readDiscoveryEnvironment(ctx.handle.sqlite), process.env.DISCOVERY_ENFORCE));
 const app = createApp(ctx);
 // Eternity's own voice: the free Gemini key when one is configured, else the shared provider, else none (his own lines).
 const eternityVoice = await createEternityVoice(ctx);
