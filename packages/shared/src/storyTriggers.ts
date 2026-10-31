@@ -157,6 +157,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
   { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
   { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
+  // The Siege of the First Light (S-IV): answers only where she is parked on the field; the Dissenter gives one cup after enough meetings.
+  { entryId: "sight.siege-edges", how: "regard", world: "the-siege", hour: "first-light", spot: { place: "^siege-edges$", near: 0.7 } },
+  { entryId: "sight.siege-smile", how: "regard", world: "the-siege", hour: "measure", spot: { place: "^siege-smile$", near: 2.6 } },
+  { entryId: "obj.siege-cups", how: "regard", world: "the-siege", hour: "growing", spot: { place: "^siege-line$", near: 1.2 } },
+  { entryId: "sight.siege-first-light", how: "regard", world: "the-siege", hour: "standing", spot: { place: "^siege-first-light$", near: 3 } },
+  { entryId: "sight.siege-small", how: "regard", world: "the-siege", hour: "hearths", spot: { place: "^siege-small$", near: 2.2 } },
+  { entryId: "sight.siege-vast", how: "regard", world: "the-siege", hour: "threshold", spot: { place: "^siege-vast$", near: 0.7 } },
+  { entryId: "sight.siege-blur", how: "regard", world: "the-siege", hour: "rest", spot: { place: "^siege-blur$", near: 2 } },
+  { entryId: "obj.siege-cord", how: "regard", world: "the-siege", hour: "measure", spot: { place: "^siege-cord$", near: 2.4 } },
+  { entryId: "echo.siege-breath", how: "listen", world: "the-siege", hour: "standing", spot: { place: "^siege-edges$", near: 1.4 } },
+  { entryId: "obj.siege-empty-cup", how: "npc", world: "the-siege", npc: "dissenter", minMeetings: 5 },
   // The Unmade Hour (S-I): answers only where she is parked on the floor; the Archivist gives one leaf after enough meetings.
   { entryId: "sight.unmade-hollows", how: "regard", world: "the-unmade-hour", hour: "first-light", spot: { place: "^unmade-hollows$", near: 0.8 } },
   { entryId: "sight.unmade-ring", how: "regard", world: "the-unmade-hour", hour: "measure", spot: { place: "^unmade-ring$", near: 1.3 } },

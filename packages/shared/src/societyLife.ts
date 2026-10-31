@@ -31,6 +31,7 @@ export const WORLD_NAMES: Readonly<Record<string, string>> = {
   "road-to-the-seam": "the Road to the Seam",
   "the-village": "the Village",
   "the-unmade-hour": "the Unmade Hour",
+  "the-siege": "the Siege of the First Light",
   eternity: "Eternity's world",
 };
 

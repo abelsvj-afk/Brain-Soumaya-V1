@@ -58,6 +58,16 @@ export const PLACE_RULES: Record<string, Rule[]> = {
     { match: /^field-ground$/, label: "The field", icon: "i:meadow" },
     { match: /^backdrop-(?!.*-model$)/, label: "Planet", icon: "i:planet" },
   ],
+  "the-siege": [
+    { match: /^siege-edges$/, label: "The ranks", icon: "i:rise" },
+    { match: /^siege-smile$/, label: "The tall edge", icon: "i:regard" },
+    { match: /^siege-line$/, label: "The cups", icon: "i:meadow" },
+    { match: /^siege-first-light$/, label: "The bead of light", icon: "i:sun" },
+    { match: /^siege-small$/, label: "The small table", icon: "i:hangar" },
+    { match: /^siege-vast$/, label: "The far ranks", icon: "i:veil" },
+    { match: /^siege-blur$/, label: "The blur", icon: "i:calm" },
+    { match: /^siege-cord$/, label: "The cord", icon: "i:insights" },
+  ],
   "the-unmade-hour": [
     { match: /^unmade-hollows$/, label: "The hollows", icon: "i:veil" },
     { match: /^unmade-ring$/, label: "The ring", icon: "i:calm" },

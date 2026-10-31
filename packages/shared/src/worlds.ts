@@ -76,6 +76,13 @@ export const VILLAGE_GATE_ENTRY = "relic.thread-of-many";
 export const UNMADE_WORLD_KEY = "the-unmade-hour";
 export const UNMADE_GATE_ENTRY = "sight.lullaby-hollow";
 
+/**
+ * The Siege of the First Light (S-IV; docs/specs/seam-the-siege-2026-10-31.md): the battlefield made of pale edges, set beside the Deep Past. A door in the story — it opens for a traveller who has found
+ * Oru's Bead (the server checks the Book; the owner is exempt) and stays open. It must never say what the First Morning was defended from, and never Oru's real age.
+ */
+export const SIEGE_WORLD_KEY = "the-siege";
+export const SIEGE_GATE_ENTRY = "obj.orus-bead";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -130,6 +137,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   "road-to-the-seam": { x: 700, y: 120 },
   "the-village": { x: 240, y: 300 },
   "the-unmade-hour": { x: 110, y: 420 },
+  "the-siege": { x: 330, y: 40 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

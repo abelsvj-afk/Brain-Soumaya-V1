@@ -23,6 +23,7 @@ const WORLD_NAMES: Record<string, string> = {
   "road-to-the-seam": "the Road to the Seam",
   "the-village": "the Village",
   "the-unmade-hour": "the Unmade Hour",
+  "the-siege": "the Siege of the First Light",
   scale: "Scale",
   eternity: "Eternity's world",
 };

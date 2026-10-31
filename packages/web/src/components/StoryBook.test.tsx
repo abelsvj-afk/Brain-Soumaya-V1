@@ -95,12 +95,12 @@ describe("The Sixteenth's Book", () => {
 
 describe("The Book's pictures", () => {
   it("shows a painting only once its entry is found, and only for entries that have an approved one", async () => {
-    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("sight.blank-nameplate"), find("obj.doorkeepers-nail")], links: [], notes: [] });
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("sight.blank-nameplate"), find("sight.siege-edges")], links: [], notes: [] });
     const { container } = render(<StoryBook onClose={() => {}} />);
     await waitFor(() => expect(container.querySelectorAll(".book-point.is-found").length).toBe(2));
     fireEvent.click(screen.getByLabelText(/The Blank Nameplate/));
     expect(container.querySelector(".book-art")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText(/The Doorkeeper's Nail/));
+    fireEvent.click(screen.getByLabelText(/Edges in Ranks/));
     expect(container.querySelector(".book-art")).toBeNull(); // no approved picture for it: just words
   });
   it("never shows a picture for an entry that has not been found", async () => {

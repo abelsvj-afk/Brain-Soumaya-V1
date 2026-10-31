@@ -199,6 +199,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "She hums as far as the place it stops, and no further, and lets the quiet be the end of it.",
   },
+  {
+    id: "road.what-fit-in-the-basin", world: "the-siege", giver: "surveyor", title: "What Fit in the Basin",
+    offer: "Help me lay the cord beside the table. I would like two measures to agree, just once.",
+    steps: [
+      S("table", "Find the whole field on its small table.", find("sight.siege-small")),
+      S("cord", "Find the cord with its last knot untied.", find("obj.siege-cord")),
+    ],
+    gift: "She sets the cord down beside the table and does not say which one is the truer size.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

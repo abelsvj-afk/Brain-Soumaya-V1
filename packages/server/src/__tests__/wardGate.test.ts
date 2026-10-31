@@ -84,3 +84,20 @@ describe("the Unmade Hour gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).unmadeGateOpen).toBe(false);
   });
 });
+
+describe("the Siege of the First Light gate", () => {
+  it("opens once Oru's Bead is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).siegeGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "s1", kind: "drift", destination: "the-siege" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("SIEGE_GATE_CLOSED");
+    }
+    find("a", "obj.orus-bead");
+    expect(t.getState(T0).siegeGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "s2", kind: "drift", destination: "the-siege" }, T0).destination).toBe("the-siege");
+    expect(new TravelRepo(handle, "b").getState(T0).siegeGateOpen).toBe(false);
+  });
+});

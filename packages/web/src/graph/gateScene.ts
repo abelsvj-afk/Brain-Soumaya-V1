@@ -43,6 +43,7 @@ export const GATE_DRESSINGS: Record<string, GateDressing> = {
   // amber beads (grammar), pale cyan shimmer. Quiet, never bright.
   "quiet-archive": { ring: 0x2a3442, beads: 0xffb347, accent: 0x9fd8e0 },
   "the-village": { ring: 0x5a4a30, beads: 0xffd98a, accent: 0xe8c878 },
+  "the-siege": { ring: 0x8e8a7e, beads: 0xfff0c8, accent: 0xe6e0d0 },
   "the-unmade-hour": { ring: 0x6a6678, beads: 0xe4e0f2, accent: 0xb8b0d8 },
   "road-to-the-seam": { ring: 0x4a4038, beads: 0xffb070, accent: 0xd8b890 },
   "faded-ward": { ring: 0x3c5a4c, beads: 0xffd98a, accent: 0xbfe0cc },

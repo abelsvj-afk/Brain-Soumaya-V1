@@ -7,7 +7,7 @@ import type { StoryFindRow } from "../api/story.js";
 
 export const BOOK_W = 360;
 export const BOOK_H = 440;
-const SECTORS = ["great-station", "growing-place", "quiet-archive", "deep-past", "scale", "people", "faded-ward", "road-to-the-seam", "the-village", "the-unmade-hour", "eternity"];
+const SECTORS = ["great-station", "growing-place", "quiet-archive", "deep-past", "scale", "people", "faded-ward", "road-to-the-seam", "the-village", "the-unmade-hour", "the-siege", "eternity"];
 
 function hash(s: string): number {
   let x = 2166136261;

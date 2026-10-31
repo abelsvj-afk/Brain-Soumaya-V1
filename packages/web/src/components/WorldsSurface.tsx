@@ -90,6 +90,8 @@ import {
 import { createWardScene } from "../graph/wardScene.js";
 import { createRoadScene } from "../graph/roadScene.js";
 import { createVillageScene } from "../graph/villageScene.js";
+import { createSiegeScene } from "../graph/siegeScene.js";
+import { SIEGE_ORBIT_HEIGHT, SIEGE_ORBIT_RADIUS } from "../graph/siegeLayout.js";
 import { createUnmadeScene } from "../graph/unmadeScene.js";
 import { UNMADE_ORBIT_HEIGHT, UNMADE_ORBIT_RADIUS } from "../graph/unmadeLayout.js";
 import { VILLAGE_ORBIT_HEIGHT, VILLAGE_ORBIT_RADIUS } from "../graph/villageLayout.js";
@@ -611,6 +613,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   // The Village (a door in the story, opened by finding the Thread of Many): a hillside village at night, every window lit, a path of gold hooks climbing to a luminous doorway.
   // The Unmade Hour (a door in the story, opened by finding the Lullaby's Hollow): the first Sixth Hour — a wide pale floor that remembers nothing.
+  // The Siege of the First Light (a door in the story, opened by finding Oru's Bead): a broad pale field of crescent edges leaning toward a small bead of light.
+  "the-siege": {
+    title: "The Siege of the First Light",
+    light: { env: 0.8, hemi: { sky: 0xd8d4e8, ground: 0x4a4638, intensity: 1.0 }, key: { color: 0xfff0d0, intensity: 1.1, from: [-200, 420, 260] } },
+    background: 0x1a1620,
+    fogDensity: 0.0004,
+    orbitRadius: SIEGE_ORBIT_RADIUS,
+    orbitHeight: SIEGE_ORBIT_HEIGHT,
+    lookAtY: 24,
+    fallback: "The field needs graphics support on this device — your memories are unaffected.",
+    build: () => createSiegeScene(),
+  },
   "the-unmade-hour": {
     title: "The Unmade Hour",
     light: { env: 0.7, hemi: { sky: 0xb8b4d8, ground: 0x3a3648, intensity: 1.0 }, key: { color: 0xf0e8ff, intensity: 1.0, from: [-150, 400, 200] } },

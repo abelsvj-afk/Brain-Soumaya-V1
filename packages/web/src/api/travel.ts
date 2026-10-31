@@ -33,6 +33,8 @@ export interface TravelState {
   villageGateOpen?: boolean;
   /** Whether the way to the Unmade Hour stands open (the Lullaby's Hollow found) — the server's verdict; absent on an older server (read as closed). */
   unmadeGateOpen?: boolean;
+  /** Whether the way to the Siege of the First Light stands open (Oru's Bead found) — the server's verdict; absent on an older server (read as closed). */
+  siegeGateOpen?: boolean;
 }
 
 /**

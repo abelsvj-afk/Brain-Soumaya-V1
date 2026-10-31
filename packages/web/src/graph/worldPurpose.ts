@@ -9,6 +9,7 @@ export const WORLD_PURPOSE: Readonly<Record<string, string>> = {
   "deep-past": "The Deep Past holds your older memories, the oldest at the bottom. Use Descend to walk down through time.",
   people: "The People world shows the people in your life as warm lights. Tap one to see what you share.",
   "quiet-archive": "Quiet is where memories you set aside rest. Nothing here asks anything of you.",
+  "the-siege": "The Siege of the First Light is a broad pale field. Wander its ranks and its table; nothing here asks you to say who was right.",
   "the-unmade-hour": "The Unmade Hour is a wide, pale floor that keeps no marks of you. Stand where the steps stop; nothing here needs an answer.",
   "the-village": "The Village is a small hillside place at night, every window lit. Walk it slowly; nothing here asks you to decide.",
   "road-to-the-seam": "The Road to the Seam is a long way under the Station. Walk it as far as you like; it goes on, and nothing here is in a hurry.",

@@ -263,6 +263,7 @@ export const WORLD_GOVERNORS: Readonly<Record<string, FactionId>> = {
   "road-to-the-seam": "wardens",
   "the-village": "open-hand",
   "the-unmade-hour": "choir",
+  "the-siege": "wardens",
   eternity: "choir",
 };
 
