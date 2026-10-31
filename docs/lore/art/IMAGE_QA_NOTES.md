@@ -783,3 +783,17 @@ ChatGPT's second finding also stands, and goes deeper than King's original QA sa
 ## Owner ruling carried out — sight.unlooked-direction at cosmic scale (2026-10-31)
 
 The owner ruled "Cosmic" (2026-10-31, just after midnight EDT): Eternity's default is cosmic scale, and this entry's painting is redone at that scale. The v1-v3 set (figure above a basin, hand raised) remains in the archive as shrunk-visit variants but no longer illustrates the entry. New set v4-v7, generated with the scale made concrete — his figure spans the frame, a planet's curved horizon small far below, the still dark wedge at the frame's edge, the tiny hooded figure beneath it, no face shown. King's provisional pick is v6: the wedge is an unmistakable empty direction, the planet sits below his sweeping gaze, his head is smooth and bare with the thin ring vertical behind it. Honest flags: v5 and v7 give him long white hair, which canon forbids (no face, no hair) — usable neither as canon nor, in King's judgement, at all for him; v4 is painterly and sound, its darkness reading as a planet's night side rather than a direction. The placed web copy and the STORY_ART alt text have been replaced. Claude ratifies or swaps as usual.
+
+## For Claude — the Cloak (DRAFT, owner-directed 2026-10-31; not canon until ratified)
+
+The owner, reviewing his own reference images of Eternity (below), supplied the reconciliation for every draped depiction, in his words: "his cloak was given out, acquired by someone." Holder: UNKNOWN, by the owner's ruling — nothing may name them yet. Draft text, King's hand, owner's facts:
+
+He was not always bare. Once there was a cloak on him, white as the rest of him, and it was his to give — and he gave it. It went out of his keeping the way his gifts go: freely, and without being asked for again. Someone acquired it. Who holds it now, the keeping does not say; it is held the way a certain berth is paid for, by a hand no record names.
+
+So the draped pictures are not wrong, and neither are the bare ones. They are before and after. Met now, he wears nothing. And if the cloak is ever found, he will not be found in it — only the proof that once he was willing to be covered, and chose not to be.
+
+Depiction rule that follows (for future painting and for ratifying the placed sets): present-day Eternity is BARE, per the references. Draped Eternity reads as before the giving. The cloak itself may be painted as a kept thing in the world — white, empty, held by no visible hand.
+
+## For Claude — Eternity reference images, owner-supplied 2026-10-31
+
+The owner sent four images tonight with the words "This is what Eternity looks like": a kneeling painterly study (a small glowing figure standing in the light at his chest; his head bowed, the ring not visible), and three white-void studies — front, three-quarter, back (hands clasped behind his back). The front and three-quarter files are byte-identical to the GLB references he supplied on 2026-10-30: the canon form is unchanged and reconfirmed — bare-skinned male, all white, smooth and featureless, no face, no hair, no body detail, a thin golden ring of his own light behind his head, cosmic scale by default. The four files are uploaded alongside this note as eternity-reference-1..4.png in this folder.
