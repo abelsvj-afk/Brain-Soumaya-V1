@@ -7,7 +7,7 @@
  * (bucketed sqlite_master assertion, all-MUST production preflight,
  * three reconciliation tiers).
  *
- * THIS FILE is inventory **v4**. v2 was a version bump under the spec §2
+ * THIS FILE is inventory **v5**. v2 was a version bump under the spec §2
  * mechanism, made by increment B1 at its anchor main @ ea6260d
  * (PR #134). Changes from v1, all MAY-BE-EMPTY additions:
  *  - `relic_copies`, `relic_copy_events` — landed by Relics I-2 between
@@ -49,6 +49,31 @@
  * Totals at v4: 114 named tables, 113 included, 29 MUST-BE-NONEMPTY,
  * 1 excluded.
  *
+ * v5 (owner-authorized 2026-10-30): the amendment-B preflight open item
+ * is RESOLVED and MUST enforcement turns ON. A read-only investigation
+ * (2026-10-30) explained all three unexpectedly-empty MUST tables, and
+ * all three are reclassified MUST → MAY-BE-EMPTY, each with its cause:
+ *  - `fin_expense` (PERMANENT): the brain-side expense pipeline was fed
+ *    exactly once, with income only; the owner's real expense data
+ *    lives in the Money Tracker artifact's separate store and is never
+ *    written here. Zero rows is this table's legitimate state.
+ *  - `episodes_fts` + `vec_episodes` (PROVISIONAL): production holds
+ *    140 captured episodes, all enrichment_status='pending', because
+ *    the enrichment worker (agent/episodic.ts enrichEpisode /
+ *    claimEnrichment) has no production caller — the indexes are empty
+ *    by construction, not by data loss (vec_nodes = 255 proves the
+ *    vector infrastructure works). When the worker is wired and a
+ *    backfill populates both indexes, a future inventory version MUST
+ *    restore both to MUST-BE-NONEMPTY.
+ * The remaining 26 MUST tables are all CONFIRMED NONEMPTY in
+ * production, so the wiped-DB guard is now enforced by default on
+ * every path (see backup/runner.ts — the pipeline default flipped to
+ * enforce in this same change).
+ * Totals at v5: 115 named tables, 114 included, 26 MUST-BE-NONEMPTY,
+ * 88 MAY-BE-EMPTY, 1 excluded. (The v4 totals line above undercounts
+ * named/included by one — `story_roads` joined with the v3 group after
+ * that line was drafted; the pinned test's counts have always governed.)
+ *
  * Classes (spec §2): "must-be-nonempty" — zero rows in a snapshot means a
  * wiped/corrupt snapshot, reject; "may-be-empty" — count is recorded in
  * the manifest and compared, zero is legitimate; "excluded" — not counted
@@ -63,15 +88,14 @@
  * PREFLIGHT RESULT (B1, 2026-10-30, read-only counts on production
  * /data/brain.db @ app v349): 26 of 29 CONFIRMED NONEMPTY; 3 UNEXPECTEDLY
  * EMPTY — `episodes_fts` (0 while episodes = 133), `vec_episodes` (0),
- * `fin_expense` (0). MUST enforcement must therefore stay OFF in
- * production (callers pass enforceMustNonempty: false) until those three
- * are resolved by reclassification (a future inventory version) or
- * backfill. Do not
- * flip the default on the strength of this list alone.
+ * `fin_expense` (0). MUST enforcement therefore stayed OFF in
+ * production until those three were resolved — and v5 (above) IS that
+ * resolution: all three explained and reclassified with causes, the
+ * remaining 26 confirmed nonempty, enforcement now ON by default.
  */
 export type BackupTableClass = "must-be-nonempty" | "may-be-empty" | "excluded";
 
-export const BACKUP_INVENTORY_VERSION = 4;
+export const BACKUP_INVENTORY_VERSION = 5;
 
 export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> = {
   // ── Sources & content ──────────────────────────────────────────────
@@ -87,10 +111,10 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   edges: "must-be-nonempty",
   node_sources: "must-be-nonempty",
   episodes: "must-be-nonempty",
-  episodes_fts: "must-be-nonempty",
+  episodes_fts: "may-be-empty", // v5 PROVISIONAL: enrichment worker unwired — 140 prod episodes pending, index empty by construction; restore MUST after the backfill
   nodes_fts: "must-be-nonempty",
   vec_nodes: "must-be-nonempty",
-  vec_episodes: "must-be-nonempty",
+  vec_episodes: "may-be-empty", // v5 PROVISIONAL: same root cause as episodes_fts — enrichment unwired; restore MUST after the backfill
   vec_docs: "must-be-nonempty",
   vec_source_chunks: "must-be-nonempty",
   vec_profiles: "must-be-nonempty",
@@ -173,7 +197,7 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   // ── Finance (the user's real financial data — critical content) ────
   fin_account: "must-be-nonempty",
   fin_source: "must-be-nonempty",
-  fin_expense: "must-be-nonempty",
+  fin_expense: "may-be-empty", // v5: real expense data lives in the Money Tracker artifact store; the brain-side pipeline was fed once (income only) — zero here is legitimate
   fin_income: "must-be-nonempty",
   fin_bill: "must-be-nonempty",
   fin_bill_occurrence: "must-be-nonempty",

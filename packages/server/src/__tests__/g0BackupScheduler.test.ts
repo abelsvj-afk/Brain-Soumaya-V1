@@ -20,7 +20,8 @@ import express from "express";
 import type { AddressInfo } from "node:net";
 import BetterSqlite3 from "better-sqlite3";
 import { createDb, type DbHandle } from "../db/client.js";
-import { listBackupAttempts, type BackupTrigger } from "../backup/service.js";
+import { EMBED_DIM } from "../db/vec.js";
+import { listBackupAttempts, listVerifiedBackups, type BackupTrigger } from "../backup/service.js";
 import {
   decideBackupRun,
   nextScheduledRun,
@@ -45,20 +46,88 @@ let handle: DbHandle;
 let dir: string;
 let savedEnv: NodeJS.ProcessEnv;
 
-function seedMinimalBrain(h: DbHandle): void {
-  h.sqlite
+/**
+ * A minimal WORKING brain: one honest row in every MUST-BE-NONEMPTY
+ * table of inventory v5 (26 tables), inserted through the real schema.
+ * This fixture used to seed only `spaces` — enough while the pipeline
+ * held MUST enforcement OFF. Since inventory v5 the pipeline enforces
+ * by default, so a fixture that runs the real pipeline must be a brain
+ * that would legitimately pass the guard: every MUST table populated.
+ * (The three tables v5 reclassified — episodes_fts, vec_episodes,
+ * fin_expense — stay empty here, which v5 makes a legitimate state.)
+ */
+function seedWorkingBrain(h: DbHandle): void {
+  const s = h.sqlite;
+  const vec = Buffer.from(new Float32Array(EMBED_DIM).fill(0.5).buffer);
+  s.prepare(
+    `INSERT INTO spaces (id, name, gamer_tag, passcode_hash, passcode_salt)
+     VALUES ('space-test', 'Test Brain', 'tester', 'h', 's')`,
+  ).run();
+  s.prepare(`INSERT INTO settings (key, value) VALUES ('seed', '1')`).run();
+  s.prepare(`INSERT INTO space_meta (space_id) VALUES ('space-test')`).run();
+  s.prepare(`INSERT INTO user_persona (space_id, body) VALUES ('space-test', 'test persona')`).run();
+  const node = s
     .prepare(
-      `INSERT INTO spaces (id, name, gamer_tag, passcode_hash, passcode_salt)
-       VALUES ('space-test', 'Test Brain', 'tester', 'h', 's')`,
+      `INSERT INTO nodes (space_id, label, type, content)
+       VALUES ('space-test', 'A memory', 'note', 'something worth keeping')`,
     )
     .run();
+  const nodeId = Number(node.lastInsertRowid);
+  s.prepare(`INSERT INTO edges (space_id, source, target, relationship) VALUES ('space-test', ?, ?, 'relates')`).run(nodeId, nodeId);
+  const source = s
+    .prepare(
+      `INSERT INTO sources (space_id, kind, raw_bytes, content_hash, byte_length)
+       VALUES ('space-test', 'note', ?, 'seedhash', 4)`,
+    )
+    .run(Buffer.from("seed"));
+  const sourceId = Number(source.lastInsertRowid);
+  const schunk = s
+    .prepare(
+      `INSERT INTO source_chunks (space_id, source_id, ordinal, text, start_offset, end_offset)
+       VALUES ('space-test', ?, 0, 'seed text', 0, 9)`,
+    )
+    .run(sourceId);
+  const sourceChunkId = Number(schunk.lastInsertRowid);
+  s.prepare(`INSERT INTO sources_fts (rowid, text) VALUES (?, 'seed text')`).run(sourceChunkId);
+  s.prepare(`INSERT INTO node_sources (space_id, node_id, source_id, chunk_id) VALUES ('space-test', ?, ?, ?)`).run(nodeId, sourceId, sourceChunkId);
+  const doc = s.prepare(`INSERT INTO knowledge_docs (space_id, name) VALUES ('space-test', 'seed doc')`).run();
+  const docId = Number(doc.lastInsertRowid);
+  const kchunk = s
+    .prepare(`INSERT INTO knowledge_chunks (space_id, doc_id, ordinal, content) VALUES ('space-test', ?, 0, 'seed chunk')`)
+    .run(docId);
+  const knowledgeChunkId = Number(kchunk.lastInsertRowid);
+  s.prepare(
+    `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at)
+     VALUES ('space-test', 'session', 'seed episode', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+  ).run();
+  s.prepare(`INSERT INTO nodes_fts (rowid, label, content) VALUES (?, 'A memory', 'something worth keeping')`).run(nodeId);
+  s.prepare(`INSERT INTO vec_nodes (node_id, embedding) VALUES (?, ?)`).run(BigInt(nodeId), vec);
+  s.prepare(`INSERT INTO vec_docs (chunk_id, embedding) VALUES (?, ?)`).run(BigInt(knowledgeChunkId), vec);
+  s.prepare(`INSERT INTO vec_source_chunks (chunk_id, embedding) VALUES (?, ?)`).run(BigInt(sourceChunkId), vec);
+  const profile = s
+    .prepare(`INSERT INTO instruction_profiles (space_id, name, body) VALUES ('space-test', 'seed profile', 'be nice')`)
+    .run();
+  s.prepare(`INSERT INTO vec_profiles (profile_id, embedding) VALUES (?, ?)`).run(BigInt(Number(profile.lastInsertRowid)), vec);
+  s.prepare(
+    `INSERT INTO user_model (space_id, slot, content, confidence, valid_at, origin)
+     VALUES ('space-test', 'belief', 'seed belief', 0.9, '2026-01-01T00:00:00Z', 'stated')`,
+  ).run();
+  s.prepare(`INSERT INTO daily_logs (space_id, content) VALUES ('space-test', 'seed log')`).run();
+  s.prepare(`INSERT INTO fin_account (space_id) VALUES ('space-test')`).run();
+  s.prepare(`INSERT INTO fin_source (space_id) VALUES ('space-test')`).run();
+  s.prepare(`INSERT INTO fin_income (space_id, date) VALUES ('space-test', '2026-01-01')`).run();
+  const bill = s
+    .prepare(`INSERT INTO fin_bill (space_id, name, anchor_date) VALUES ('space-test', 'seed bill', '2026-01-01')`)
+    .run();
+  s.prepare(`INSERT INTO fin_bill_occurrence (space_id, bill_id, due_date) VALUES ('space-test', ?, '2026-01-01')`).run(Number(bill.lastInsertRowid));
+  s.prepare(`INSERT INTO fin_paystub (space_id, net_cents) VALUES ('space-test', 100)`).run();
 }
 
 beforeEach(() => {
   savedEnv = { ...process.env };
   delete process.env.BACKUP_ENCRYPTION_KEY;
   handle = createDb(":memory:");
-  seedMinimalBrain(handle);
+  seedWorkingBrain(handle);
   dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "g0-b3-"));
 });
 
@@ -394,6 +463,63 @@ describe("runBackupPipeline — one path for every trigger", () => {
     const third = await runBackupPipeline(handle, { dir, trigger: "manual", store });
     expect(third.offVolume).toBe("promoted");
     expect(listBackupAttempts(handle)).toHaveLength(2);
+  });
+});
+
+// ── MUST enforcement (inventory v5) — the pipeline default is ON ────
+
+describe("runBackupPipeline — MUST enforcement defaults ON (inventory v5)", () => {
+  function seedPartialBrain(h: DbHandle): void {
+    h.sqlite
+      .prepare(
+        `INSERT INTO spaces (id, name, gamer_tag, passcode_hash, passcode_salt)
+         VALUES ('space-partial', 'Partial Brain', 'partial', 'h', 's')`,
+      )
+      .run();
+  }
+
+  it("a partial brain fails at the verify stage BY DEFAULT, naming an empty MUST table, recorded as a failed attempt", async () => {
+    const partial = createDb(":memory:");
+    try {
+      seedPartialBrain(partial);
+      // No enforceMustNonempty passed: since v5 the pipeline default
+      // enforces, and this brain (nearly every MUST table empty) must
+      // NOT produce a backup.
+      const result = await runBackupPipeline(partial, { dir, trigger: "manual", store: null });
+      expect(result.offVolume).toBe("failed");
+      expect(result.failureStage).toBe("verify");
+      expect(result.failureDetail).toContain("must-be-nonempty table is empty in snapshot: sources");
+      expect(result.attempt.state).toBe("failed");
+      expect(result.attempt.failureStage).toBe("verify");
+      expect(listVerifiedBackups(partial)).toHaveLength(0);
+      expect(listBackupAttempts(partial)).toHaveLength(1);
+    } finally {
+      partial.sqlite.close();
+    }
+  });
+
+  it("the explicit opt-out remains available: the same partial brain verifies with enforceMustNonempty: false", async () => {
+    const partial = createDb(":memory:");
+    try {
+      seedPartialBrain(partial);
+      const result = await runBackupPipeline(partial, {
+        dir,
+        trigger: "manual",
+        store: null,
+        enforceMustNonempty: false,
+      });
+      expect(result.offVolume).toBe("not_configured");
+      expect(result.attempt.state).toBe("verified_local");
+    } finally {
+      partial.sqlite.close();
+    }
+  });
+
+  it("the standard working-brain fixture passes under the default (enforcement ON, no option passed)", async () => {
+    const result = await runBackupPipeline(handle, { dir, trigger: "manual", store: null });
+    expect(result.offVolume).toBe("not_configured");
+    expect(result.attempt.state).toBe("verified_local");
+    expect(result.failureStage).toBeNull();
   });
 });
 

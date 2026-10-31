@@ -1,3 +1,47 @@
+### 2026-10-30 (Claude): G0 inventory v5 — preflight resolved (3 reclassifications with causes) + MUST enforcement ON
+- [ ] Verified by Claude
+- Owner-authorized follow-up to the B0 amendment-B preflight hold. The
+  read-only production investigation (2026-10-30) explained all three
+  unexpectedly-empty MUST tables: `fin_expense` (the brain-side expense
+  pipeline was fed once, income only — the owner's real expense data
+  lives in the Money Tracker artifact's separate store; PERMANENT
+  cause) and `episodes_fts` + `vec_episodes` (140 production episodes
+  all sit enrichment_status='pending' because the enrichment worker in
+  agent/episodic.ts has no production caller — the indexes are empty
+  by construction; PROVISIONAL cause, restore MUST after a future
+  backfill wires the worker and populates them). `backup/inventory.ts`:
+  all three reclassified MUST → MAY-BE-EMPTY with inline causes,
+  BACKUP_INVENTORY_VERSION 4 → 5 with the full reasoning in the header
+  (including the note that the v4 header totals undercounted named /
+  included by one — the pinned test counts have always governed).
+  Final arithmetic: 115 named / 114 included / 26 MUST / 88 MAY /
+  1 excluded.
+- Enforcement ON: `backup/runner.ts` — the pipeline's
+  enforceMustNonempty default flips false → true (the one-line switch;
+  the option doc now records the v5 resolution). Every production entry
+  point (scheduler, backup routes) funnels through runBackupPipeline
+  and passes nothing, so scheduled, catch-up, manual and golden backups
+  all enforce: a snapshot with any of the 26 MUST tables empty fails
+  the attempt at stage 'verify', naming the table(s) — never a silent
+  pass. verifySnapshotFile's own default was already enforce=true;
+  `backup/manifest.ts` doc updated to match. Explicit opt-out remains
+  for tests. No schema, scheduler, B2 or B3 behavior changes.
+- Tests: `g0Backup.test.ts` — pins updated (MUST 29 → 26, version
+  4 → 5) and a v5 proof describe: the full working-brain fixture (every
+  MUST table honestly seeded, the three v5 tables empty) passes with
+  enforcement ON; a snapshot with exactly one MUST table (`settings`)
+  emptied fails verification naming that table as the ONLY failure, and
+  the same artifact verifies with the explicit opt-out.
+  `g0BackupScheduler.test.ts` — the shared fixture is now a full
+  working-brain seed (the real pipeline enforces by default, so its
+  fixture must be a brain that legitimately passes), plus a pipeline
+  describe pinning the default flip: a partial brain fails at 'verify'
+  BY DEFAULT naming `sources`, recorded as a failed attempt with zero
+  verified backups; the same brain verifies under the explicit opt-out.
+  Fail-before/pass-after demonstrated: the new/updated tests failed
+  against the pre-change code (5 failures, all in the new assertions)
+  and pass after.
+
 ### 2026-10-30 (Claude): G0 B3 — scheduler (daily 03:30 America/New_York + catch-up), manual/golden triggers, backup status surface
 - [ ] Verified by Claude
 - Third increment of the owner-approved G0 backup & restore plan (plan §4

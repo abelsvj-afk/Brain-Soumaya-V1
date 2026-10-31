@@ -168,9 +168,12 @@ export interface SnapshotVerification {
 
 export interface VerifyOptions {
   /**
-   * Enforce the MUST-BE-NONEMPTY wiped-DB guard. Defaults to true; the
-   * all-29 production preflight (amendment B) gates enforcement in
-   * production, so callers there pass the preflight outcome explicitly.
+   * Enforce the MUST-BE-NONEMPTY wiped-DB guard. Defaults to true. The
+   * amendment-B production preflight that once gated enforcement
+   * closed under inventory v5 (2026-10-30): the three legitimately
+   * empty tables were reclassified MAY-BE-EMPTY with causes, the
+   * remaining 26 MUST tables confirmed nonempty in production, and
+   * every production path now enforces by default.
    */
   enforceMustNonempty?: boolean;
 }

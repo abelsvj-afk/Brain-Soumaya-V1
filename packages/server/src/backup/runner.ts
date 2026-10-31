@@ -63,12 +63,16 @@ export interface BackupPipelineOptions {
   appCommit?: string;
   /**
    * MUST-BE-NONEMPTY guard enforcement for the B1 leg. Defaults to
-   * FALSE here — deliberately: the B0 amendment-B production preflight
-   * found MUST tables legitimately empty in production (episodes_fts,
-   * vec_episodes, fin_expense), so enforcement is held OFF until that
-   * open item resolves. B3 is the first production caller of the B1
-   * leg, and verifySnapshotFile's own default is enforce=true — this
-   * default is what keeps the hold real. Do not flip it here.
+   * TRUE since inventory v5 (2026-10-30): the B0 amendment-B preflight
+   * open item is RESOLVED — the three legitimately-empty MUST tables
+   * (episodes_fts, vec_episodes, fin_expense) were reclassified
+   * MAY-BE-EMPTY with their causes recorded in backup/inventory.ts,
+   * and the remaining 26 MUST tables are all confirmed nonempty in
+   * production. A snapshot with any MUST table empty now FAILS the
+   * attempt at the verify stage, naming the table(s). Callers may
+   * still pass false explicitly (partial-brain fixtures in tests do);
+   * production entry points (scheduler, backup routes) pass nothing
+   * and get enforcement.
    */
   enforceMustNonempty?: boolean;
   /** Environment the store config is read from. Default process.env. */
@@ -140,7 +144,7 @@ async function runBackupPipelineUnlocked(
   const tier: BackupTier = opts.trigger === "golden" ? "golden" : (opts.tier ?? "daily");
   const pinned = tier === "golden";
   const env = opts.env ?? process.env;
-  const enforceMustNonempty = opts.enforceMustNonempty ?? false;
+  const enforceMustNonempty = opts.enforceMustNonempty ?? true;
 
   let store: BackupObjectStore | null;
   if (opts.store !== undefined) {
