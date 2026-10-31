@@ -2,6 +2,10 @@
 
 *From Muse, 2026-10-30. Companion to `CONTINUITY_REPORT.md` (same folder). The owner uploads the image binaries into `docs/lore/art/` himself; filenames follow `NN-short-title-vK.png`. These notes record, per set, what I verified by eye, what I judge shaky, and what I need you to double-check when the images land — you can judge the images directly. Nothing here rewrites a prompt or the Bible; open questions are marked RULING.*
 
+## Current status (2026-10-30, post-audit — read this first)
+
+The status board below is Round 1 history and no longer describes the present. Current state: Rounds 1-2 complete (156 canon originals). Sheet 3 (King-authored, owner's takeover directive 2026-10-30) generated paintings for all 51 Book entries that had none; every set is QA'd in the King Sheet sections below with PROVISIONAL picks. Placement is verified complete on main: STORY_ART holds 87 entries, packages/web/public/lore holds 87 web copies, all 87 canon entries have art. ChatGPT's independent audit (2026-10-30) ACCEPTED the placement, the narration fix, and the voices console with corrections; its two lore findings (L-01 Sunward Compass, L-02 Doorkeeper's Nail) are answered in the correction sections at the foot of this file. Claude's visual ratification of the Sheet 3 picks is still pending. The 281 Sheet 3 originals are uploading to docs/lore/art in batches.
+
 ## Status board
 
 - Generated and kept so far: §§1, 2, 3 (2 keepers), 4, 5 (redone — see below), 6, 7 (3 variants), 8, 9, 10, 11, 12, 16, 17, 19, 21, 22, 26, 28, 31, 32, 33, 34, 36 — 93 keeper files.
@@ -767,3 +771,7 @@ Correction note (2026-10-30, filed with the echo.village-count QA above): the se
 The Loose End of a Gold Thread — the Village cluster's last entry, and its closest painting: an older village woman's weathered hands give a short length of gold thread to a small hooded figure seen from behind, the square and its warm windows soft behind them; her family has kept the habit of holding things. King's provisional pick is v1 (the thread's two natures in a single span — fine clean gold at one end, the length worn soft and fibrous toward the other, as though held for a very long time). v2 is the cleaner alternate (both her hands together in the giving, the thread single and fine). Note: v3 puts a small gold rod in her lower hand, a prop the entry never mentions. Ratios: v2 is 1920x1280; v1, v3 and v4 are 2048x1152. The Village cluster is complete: 10 of 10.
 
 Follow-up to the echo.village-count correction note: the write flap cleared later the same evening and all four PNG conversions for echo.village-count have now landed in the art folder at full size. No Sheet 3 set remains unconverted.
+
+## Audit response — L-01 Sunward Compass CORRECTED (2026-10-30)
+
+ChatGPT's finding stands, and the fuller truth is worse than a bad pick: the prompt sheet was RIGHT (round instrument of bare metal on a stone plinth, no needle, centre fixed, points nowhere) and the relic registry agrees word for word — but the first generated set drifted to a ship's deck-plate compass rose WITH a needle, and King's QA rationalized the drift instead of catching it ("canon refusal held" — it was not). That is on King. The first set, relic-sunward-compass v1-v4, is SUPERSEDED — do not use; the needle contradicts the relic's defining property. A corrected set was generated from the sheet prompt verbatim: v5-v8, a round bare-metal instrument on a dark stone plinth beside the road of light, centre fixed, rim markings, no needle in any variant. King's provisional pick is v5 (road of light sweeping past, distant sun gilding one edge). The placed web copy and the STORY_ART alt text have been replaced to match. Claude ratifies or swaps as usual.

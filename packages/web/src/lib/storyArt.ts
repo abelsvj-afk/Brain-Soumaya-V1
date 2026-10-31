@@ -1,7 +1,8 @@
 /**
  * The Book's pictures (docs/specs/living-worlds-dialogue-2026-10-31.md S5): a painting beside an entry, shown ONLY once the entry is found. Web-sized copies (1024 px WebP, a few
- * dozen KB each) of the canon picks in docs/lore/art/ — the originals stay in the repo, out of the Docker image. Only pictures the owner/Claude approved by eye are listed; an entry
- * with none simply shows words. `alt` describes what is painted, never what it means.
+ * dozen KB each) of the picks in docs/lore/art/ — the originals stay in the repo, out of the Docker image. Placement is not ratification: the Round 1-2 pictures were
+ * approved by the owner/Claude's eye; the Sheet 3 section at the foot is King's provisional picks, placed under the owner's takeover directive and marked inline,
+ * awaiting Claude's ratification. An entry with none simply shows words. `alt` describes what is painted, never what it means.
  */
 export const STORY_ART: Readonly<Record<string, { src: string; alt: string }>> = {
   "obj.sleepwalkers-lantern": { src: "/lore/obj.sleepwalkers-lantern.webp", alt: "A woman in a pale nightgown walks a misty harbor pier at dusk, holding a dark glass lantern in both hands." },
@@ -47,7 +48,7 @@ export const STORY_ART: Readonly<Record<string, { src: string; alt: string }>> =
   "relic.basin-stone": { src: "/lore/relic.basin-stone.webp", alt: "One dark stone ringed with shallow waterline marks sits alone on a vast empty basin floor." },
   "relic.lantern-of-keeping": { src: "/lore/relic.lantern-of-keeping.webp", alt: "A small sealed lantern with a quiet warm light stands in a low rock alcove above dark water, its light reflected once on the surface." },
   "relic.hearth-ember": { src: "/lore/relic.hearth-ember.webp", alt: "A single coal-like fragment with low amber light in its cracks lies in old ash inside a cold hearth; no flame burns." },
-  "relic.sunward-compass": { src: "/lore/relic.sunward-compass.webp", alt: "A brass compass rose set in a deck plate aboard a weathered ship, its needle swung toward a rising sun." },
+  "relic.sunward-compass": { src: "/lore/relic.sunward-compass.webp", alt: "A round instrument of bare metal with no needle rests on a dark stone plinth beside a vast bright road of light in open space; its centre is fixed, fine markings ring its rim, and a distant sun gilds one edge of the metal." },
   "relic.unopened-fold": { src: "/lore/relic.unopened-fold.webp", alt: "A folded object with brass fittings rests on a stone shelf in a vault of shelves; it is closed, and nothing of its contents shows." },
   "relic.unnumbered-fragment": { src: "/lore/relic.unnumbered-fragment.webp", alt: "A small translucent fragment drifts in dark open space, pale light held inside it, one face covered in fine markings worn past reading." },
   "sight.dead-bough": { src: "/lore/sight.dead-bough.webp", alt: "A colossal tree crowns a terraced hillside at dawn, its canopy green except for one great bare pale bough pointing outward, small new leaves at its tip; tiny travellers walk the path below." },
