@@ -252,6 +252,11 @@ export class RelicHoldingsStore {
       // lifecycle admits no owned state (idempotent, atomic per
       // space — see convertSeedHoldings).
       this.convertSeedHoldings();
+      // Canon-entry P2-1 (2026-10-31): the same lazy boot completes
+      // L3 threads for spaces whose personal discoveries of both
+      // members predate the discovery sweep (idempotent, atomic per
+      // space — see backfillDiscoveryThreadCompletions).
+      this.backfillDiscoveryThreadCompletions();
       migratedHandles.add(this.h.sqlite as object);
     } catch { /* tables may not exist in a bare unit handle */ }
   }
@@ -885,20 +890,100 @@ export class RelicHoldingsStore {
    */
   private sweepDiscoveryThreads(spaceId: string, discoveredRelicId: string): void {
     try {
-      const discovered = this.personalDiscoveryIds(spaceId);
-      if (!discovered.has(discoveredRelicId)) return;
-      for (const t of RELIC_THREADS) {
-        if (t.condition !== "discovery") continue;
-        if (t.relicA !== discoveredRelicId && t.relicB !== discoveredRelicId) continue;
-        if (t.approved !== true || typeof t.text !== "string" || t.text.length === 0) continue;
-        if (!discovered.has(t.relicA) || !discovered.has(t.relicB)) continue;
-        for (const member of [t.relicA, t.relicB]) {
-          this.h.sqlite.prepare(
-            `INSERT OR IGNORE INTO relic_codex_layers (space_id, relic_id, layer, thread_id, source) VALUES (?, ?, 'L3', ?, 'discovery')`,
-          ).run(spaceId, member, t.threadId);
-        }
-      }
+      this.completeDiscoveryThreads(spaceId, discoveredRelicId);
     } catch { /* bare handle without the I-4 table: no layers to complete */ }
+  }
+
+  /**
+   * The completion loop behind the sweep (and the P2-1 backfill
+   * below): every discovery-condition thread — restricted to the
+   * threads involving `onlyInvolving` when one is named, which is
+   * the sweep's incremental case — whose BOTH members stand in this
+   * space's personal discovery record unlocks from both members'
+   * Codex entries with source='discovery'. The reveal-rule guards
+   * (authored AND owner-approved) are the same ones codexViews
+   * reads. INSERT OR IGNORE against the layer primary key makes
+   * completion idempotent and monotonic: a row the lore exchange
+   * wrote first is never rewritten or duplicated. The caller owns
+   * the transaction and any error handling; this only writes.
+   * Returns the number of rows inserted.
+   */
+  private completeDiscoveryThreads(spaceId: string, onlyInvolving?: string): number {
+    const discovered = this.personalDiscoveryIds(spaceId);
+    if (onlyInvolving !== undefined && !discovered.has(onlyInvolving)) return 0;
+    let inserted = 0;
+    for (const t of RELIC_THREADS) {
+      if (t.condition !== "discovery") continue;
+      if (onlyInvolving !== undefined && t.relicA !== onlyInvolving && t.relicB !== onlyInvolving) continue;
+      if (t.approved !== true || typeof t.text !== "string" || t.text.length === 0) continue;
+      if (!discovered.has(t.relicA) || !discovered.has(t.relicB)) continue;
+      for (const member of [t.relicA, t.relicB]) {
+        const res = this.h.sqlite.prepare(
+          `INSERT OR IGNORE INTO relic_codex_layers (space_id, relic_id, layer, thread_id, source) VALUES (?, ?, 'L3', ?, 'discovery')`,
+        ).run(spaceId, member, t.threadId);
+        inserted += Number(res.changes ?? 0);
+      }
+    }
+    return inserted;
+  }
+
+  /**
+   * Canon-entry P2-1 (2026-10-31): the ONE-TIME completion pass for
+   * spaces whose discoveries predate the sweep. The sweep is
+   * incremental: it completes a thread only when a member is newly
+   * discovered, and the award core's "already" return means a
+   * re-claim of a long-held relic never reaches it — so a space that
+   * had personally discovered both members of a pair BEFORE the
+   * canon entry (the Basin Stone and the Lantern, say, both found
+   * under the old registry) held no L3 rows and could gain them only
+   * through a lore exchange. This pass closes that gap once: for
+   * every space with a personal discovery record, each entered
+   * discovery-condition thread whose both members stand in that
+   * record gains its both-members rows with source='discovery',
+   * exactly as the sweep would have written them at the second
+   * discovery. A consumed Seed's discovery record stands like any
+   * other's, so a pre-entry T2 pair completes too.
+   *
+   * One-time by the same discipline as the rest of ensureMigrated:
+   * it runs inside the lazy migration (at most once per handle) and
+   * is idempotent by construction — INSERT OR IGNORE against the
+   * layer primary key — so re-entry on a fresh handle, or a direct
+   * re-run, writes nothing, and no marker row or schema change is
+   * needed. Atomic per space: each space's completions run in one
+   * IMMEDIATE transaction (joining the caller's, when there is one),
+   * so a failure rolls that space back whole — and, like the Seed
+   * conversion's failures, it propagates rather than being swallowed
+   * here (only the bare-handle enumeration is caught, below), so a
+   * failed run leaves the handle unmigrated and the next touch
+   * retries the pass; spaces already completed keep their rows, and
+   * their retry inserts nothing. Monotonic against the exchange,
+   * like the sweep: an unlock a space already holds — from any
+   * source — is never overwritten, downgraded, or duplicated.
+   *
+   * NPC reach is the sweep's, exactly: the pass reads ONLY the
+   * personal discovery record (codex_claims), which NPC awards never
+   * write — an NPC resident's finds live in npc_relic_holdings and
+   * complete nothing for the space, here as at claim time.
+   * Public for the idempotency tests, like convertSeedHoldings.
+   * Returns the number of rows inserted.
+   */
+  backfillDiscoveryThreadCompletions(): number {
+    let spaces: { space_id: string }[];
+    try {
+      spaces = this.h.sqlite.prepare(
+        `SELECT DISTINCT space_id FROM codex_claims WHERE reward_key LIKE 'relic-%'`,
+      ).all() as { space_id: string }[];
+    } catch { return 0; /* bare handle without the codex tables: nothing to complete */ }
+    let inserted = 0;
+    for (const { space_id } of spaces) {
+      if ((this.h.sqlite as { inTransaction?: boolean }).inTransaction) {
+        inserted += this.completeDiscoveryThreads(space_id);
+      } else {
+        const run = this.h.sqlite.transaction(() => { inserted += this.completeDiscoveryThreads(space_id); });
+        run.immediate();
+      }
+    }
+    return inserted;
   }
 
   /**

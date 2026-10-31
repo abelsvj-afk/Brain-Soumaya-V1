@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createDb, type DbHandle } from "../db/client.js";
 import { RelicHoldingsStore } from "../relics/holdings.js";
 import { RelicClaimService } from "../relics/claims.js";
@@ -35,6 +38,15 @@ import {
  *    afterwards never rewrites a discovery row), idempotently, on
  *    the legacy-sync path too, and never for NPC awards (which write
  *    no personal-discovery record);
+ *  - the P2-1 completion pass: the lazy migration backfills
+ *    both-members discovery rows for pairs a space had fully
+ *    discovered BEFORE the sweep existed (a re-claim never reaches
+ *    the sweep — the award core returns "already") — monotonically
+ *    (rows an exchange already wrote keep their source — including
+ *    the half-exchanged pair, whose missing member alone is filled),
+ *    idempotently (a second pass, and a fresh handle's whole
+ *    migration re-run, insert nothing), for Seed pairs too, and
+ *    never from an NPC resident's finds;
  *  - the L1 place layer serves the approved place text (the first
  *    anchor's placeText), not the registry's short place phrase.
  */
@@ -154,6 +166,14 @@ const l3Rows = (spaceId: string): { relic_id: string; thread_id: string; source:
   handle.sqlite.prepare(
     `SELECT relic_id, thread_id, source FROM relic_codex_layers WHERE space_id = ? AND layer = 'L3' ORDER BY thread_id ASC, relic_id ASC`,
   ).all(spaceId) as { relic_id: string; thread_id: string; source: string }[];
+
+/** A personal discovery record written directly, bypassing every
+ *  claim path — the database state of a space that found the relic
+ *  BEFORE the canon entry, when no sweep existed to complete its
+ *  threads (P2-1). */
+const seedDiscovery = (spaceId: string, relicId: string): void => {
+  handle.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, `relic-${relicId}`);
+};
 
 const PLACED = Object.keys(CANON).filter((id) => (RELIC_ANCHOR_POINTS[id] ?? []).length > 0);
 const UNPLACED = Object.keys(CANON).filter((id) => (RELIC_ANCHOR_POINTS[id] ?? []).length === 0);
@@ -350,6 +370,153 @@ describe("the L3 discovery sweep (§5.6) — threads complete from personal disc
     const t1 = nail!.layers.threads.entries.find((e) => e.threadId === "harbor-nail--mooring-ring");
     expect(t1!.unlocked).toBe(false);
     expect(t1!.text).toBeUndefined();
+  });
+});
+
+describe("the one-time completion pass (P2-1) — pairs discovered before the sweep are backfilled by the lazy migration", () => {
+  const T4 = "basin-stone--lantern-of-keeping";
+  const T2 = "witness-seed--dawn-leaf";
+
+  it("both members discovered pre-entry, no L3 rows: the migration grants both-members discovery rows and the Codex thread reads unlocked", () => {
+    seedDiscovery("pre", "basin-stone");
+    seedDiscovery("pre", "lantern-of-keeping");
+    // The pre-entry state: discoveries on record, no thread rows —
+    // and nothing has run the migration yet.
+    expect(l3Rows("pre")).toEqual([]);
+    store().ensureMigrated();
+    expect(l3Rows("pre")).toEqual([
+      { relic_id: "basin-stone", thread_id: T4, source: "discovery" },
+      { relic_id: "lantern-of-keeping", thread_id: T4, source: "discovery" },
+    ]);
+    const lantern = store().state("pre").codex?.find((c) => c.relicId === "lantern-of-keeping");
+    const t4 = lantern!.layers.threads.entries.find((e) => e.threadId === T4);
+    expect(t4!.unlocked).toBe(true);
+    expect(t4!.text).toBe(ENTERED_THREADS.find((t) => t.threadId === T4)!.text);
+  });
+
+  it("only one member discovered pre-entry: the pass grants nothing", () => {
+    seedDiscovery("solo", "basin-stone");
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(0);
+    expect(l3Rows("solo")).toEqual([]);
+  });
+
+  it("a thread already unlocked via exchange keeps exactly its exchange rows — no duplicates, no source rewrite", () => {
+    seedDiscovery("xf", "basin-stone");
+    seedDiscovery("xf", "lantern-of-keeping");
+    const ins = handle.sqlite.prepare(
+      `INSERT INTO relic_codex_layers (space_id, relic_id, layer, thread_id, source) VALUES (?, ?, 'L3', ?, 'exchange')`,
+    );
+    ins.run("xf", "basin-stone", T4);
+    ins.run("xf", "lantern-of-keeping", T4);
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(0);
+    expect(l3Rows("xf")).toEqual([
+      { relic_id: "basin-stone", thread_id: T4, source: "exchange" },
+      { relic_id: "lantern-of-keeping", thread_id: T4, source: "exchange" },
+    ]);
+  });
+
+  it("idempotent: a second pass inserts nothing and the row set is unchanged", () => {
+    seedDiscovery("twice", "basin-stone");
+    seedDiscovery("twice", "lantern-of-keeping");
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(2);
+    const afterFirst = l3Rows("twice");
+    expect(afterFirst).toHaveLength(2);
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(0);
+    expect(l3Rows("twice")).toEqual(afterFirst);
+    // The migration entry point itself is equally safe to touch again.
+    store().ensureMigrated();
+    expect(l3Rows("twice")).toEqual(afterFirst);
+  });
+
+  it("the T2 Seed case: a consumed Seed's pre-entry discovery record completes the pair", () => {
+    // The Dawn Leaf's claim is a discovery record only — the Seed was
+    // consumed, never held — and it stands in codex_claims like any
+    // other's, so the pass completes T2 from the record alone.
+    seedDiscovery("seedpair", "dawn-leaf");
+    seedDiscovery("seedpair", "witness-seed");
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(2);
+    expect(l3Rows("seedpair")).toEqual([
+      { relic_id: "dawn-leaf", thread_id: T2, source: "discovery" },
+      { relic_id: "witness-seed", thread_id: T2, source: "discovery" },
+    ]);
+  });
+
+  it("NPC parity: an NPC resident's finds complete nothing for the space — and neither does a mixed pair", () => {
+    // Both members claimed by an NPC resident: NPC awards write no
+    // personal discovery record, so the pass has nothing to complete
+    // from — the same reach the sweep has at claim time. The setup
+    // proves itself: both claims report awarded for the named relic,
+    // and the NPC-side records genuinely exist — the Nail's
+    // npc_relic_holdings row and the consumed Ring's Seed effect
+    // against the space — so the empty completion below is measured
+    // against records that really landed, in every table a confused
+    // implementation might read instead of the personal record.
+    expect(svc().claimForNpc("npc-pre", "harbor-controller", "great-station", "harbor-nail"))
+      .toMatchObject({ status: "awarded", relicId: "harbor-nail" });
+    expect(svc().claimForNpc("npc-pre", "harbor-controller", "great-station", "mooring-ring"))
+      .toMatchObject({ status: "awarded", relicId: "mooring-ring" });
+    expect(handle.sqlite.prepare(`SELECT relic_id FROM npc_relic_holdings WHERE space_id = 'npc-pre'`).all())
+      .toEqual([{ relic_id: "harbor-nail" }]);
+    expect(handle.sqlite.prepare(`SELECT relic_id FROM relic_seed_effects WHERE space_id = 'npc-pre'`).all())
+      .toEqual([{ relic_id: "mooring-ring" }]);
+    store().ensureMigrated();
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(0);
+    expect(l3Rows("npc-pre")).toEqual([]);
+    // Mixed: the space personally discovered one member while an NPC
+    // resident holds the other. The pair still does not complete —
+    // completion reads the personal record only.
+    seedDiscovery("mixed", "harbor-nail");
+    expect(svc().claimForNpc("mixed", "harbor-controller", "great-station", "mooring-ring"))
+      .toMatchObject({ status: "awarded", relicId: "mooring-ring" });
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(0);
+    expect(l3Rows("mixed")).toEqual([]);
+  });
+
+  it("a partially exchanged thread: the pass inserts only the missing member, as 'discovery', and leaves the exchange row untouched", () => {
+    // One member's unlock arrived via a lore exchange before the
+    // pass ever ran; the other member has no row at all. Completion
+    // fills exactly the gap — INSERT OR IGNORE against the layer
+    // primary key — and reports the single row it wrote.
+    seedDiscovery("partial", "basin-stone");
+    seedDiscovery("partial", "lantern-of-keeping");
+    handle.sqlite.prepare(
+      `INSERT INTO relic_codex_layers (space_id, relic_id, layer, thread_id, source) VALUES (?, ?, 'L3', ?, 'exchange')`,
+    ).run("partial", "basin-stone", T4);
+    expect(store().backfillDiscoveryThreadCompletions()).toBe(1);
+    expect(l3Rows("partial")).toEqual([
+      { relic_id: "basin-stone", thread_id: T4, source: "exchange" },
+      { relic_id: "lantern-of-keeping", thread_id: T4, source: "discovery" },
+    ]);
+  });
+
+  it("re-entry on a fresh handle (a restart) completes nothing twice — the same rows, byte for byte", () => {
+    const dir = mkdtempSync(join(tmpdir(), "relic-canon-p21-"));
+    const dbPath = join(dir, "brain.db");
+    const rowsOn = (h: DbHandle): { relic_id: string; thread_id: string; source: string }[] =>
+      h.sqlite.prepare(
+        `SELECT relic_id, thread_id, source FROM relic_codex_layers WHERE space_id = 'restart' AND layer = 'L3' ORDER BY thread_id ASC, relic_id ASC`,
+      ).all() as { relic_id: string; thread_id: string; source: string }[];
+    try {
+      const h1 = createDb(dbPath);
+      h1.sqlite.prepare(`INSERT INTO codex_claims (space_id, reward_key) VALUES ('restart', 'relic-basin-stone')`).run();
+      h1.sqlite.prepare(`INSERT INTO codex_claims (space_id, reward_key) VALUES ('restart', 'relic-lantern-of-keeping')`).run();
+      new RelicHoldingsStore(h1).ensureMigrated();
+      const afterFirst = rowsOn(h1);
+      expect(afterFirst).toEqual([
+        { relic_id: "basin-stone", thread_id: T4, source: "discovery" },
+        { relic_id: "lantern-of-keeping", thread_id: T4, source: "discovery" },
+      ]);
+      h1.sqlite.close();
+      // A fresh handle re-runs the whole migration family (the
+      // WeakSet marker is per connection): the pass inserts nothing
+      // and the rows are byte-identical.
+      const h2 = createDb(dbPath);
+      const s2 = new RelicHoldingsStore(h2);
+      s2.ensureMigrated();
+      expect(s2.backfillDiscoveryThreadCompletions()).toBe(0);
+      expect(rowsOn(h2)).toEqual(afterFirst);
+      h2.sqlite.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
 
