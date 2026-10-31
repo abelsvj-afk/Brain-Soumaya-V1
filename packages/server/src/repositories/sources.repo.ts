@@ -292,6 +292,41 @@ export interface PersistResult {
   created: boolean;
 }
 
+/**
+ * The panel-facing channel of a source (Your Words panel, 2026-10-31).
+ * Capture channels are NOT a stored column: at capture time the channel
+ * SELECTED the kind (ingestion/pipeline.ts IngestMeta.channel —
+ * telegram -> 'telegram', chat -> 'chat', anything else -> 'note',
+ * with an explicit sourceKind override such as 'document' for file
+ * imports, whose citation class is 'imported_text'). The channel is
+ * therefore derived from the stored kind/citation class, in exactly
+ * the taxonomy the panel's filter chips use.
+ */
+export type SourceChannel = "typed" | "telegram" | "chat" | "imported";
+
+export function sourceChannelOf(s: { kind: string; citationClass: string }): SourceChannel {
+  if (s.kind === "telegram") return "telegram";
+  if (s.kind === "chat") return "chat";
+  if (s.kind === "document" || s.citationClass === "imported_text") return "imported";
+  return "typed";
+}
+
+/** SQL predicate equivalent of sourceChannelOf (same taxonomy, so a
+ *  channel filter runs inside the query — before LIMIT — instead of
+ *  post-filtering a page at a call site). */
+function sourceChannelPredicate(channel: SourceChannel): string {
+  switch (channel) {
+    case "telegram":
+      return `kind = 'telegram'`;
+    case "chat":
+      return `kind = 'chat'`;
+    case "imported":
+      return `(kind = 'document' OR (citation_class = 'imported_text' AND kind NOT IN ('telegram', 'chat')))`;
+    case "typed":
+      return `kind NOT IN ('telegram', 'chat', 'document') AND citation_class <> 'imported_text'`;
+  }
+}
+
 export class SourcesRepo {
   constructor(
     private readonly h: DbHandle,
@@ -403,6 +438,52 @@ export class SourcesRepo {
       .prepare(`SELECT COUNT(*) AS c FROM sources WHERE space_id = ?`)
       .get(this.spaceId) as { c: number };
     return r.c;
+  }
+
+  /**
+   * Your Words panel (additive, read-only): this space's sources,
+   * NEWEST first, with the space filter and every other filter inside
+   * the SQL — before LIMIT (12B). `before` is the id cursor (only
+   * ids < before); `channel` filters by the derived panel channel
+   * (see sourceChannelOf); `kind` by the stored kind.
+   */
+  listSources(opts: { channel?: SourceChannel; kind?: string; before?: number; limit?: number } = {}): SourceRow[] {
+    const limit = Math.min(Math.max(Math.floor(opts.limit ?? 25), 1), 100);
+    let sql = `SELECT ${SOURCE_COLS} FROM sources WHERE space_id = ?`;
+    const params: unknown[] = [this.spaceId];
+    if (opts.channel !== undefined) {
+      sql += ` AND ${sourceChannelPredicate(opts.channel)}`;
+    }
+    if (opts.kind !== undefined) {
+      sql += ` AND kind = ?`;
+      params.push(opts.kind);
+    }
+    if (opts.before !== undefined) {
+      sql += ` AND id < ?`;
+      params.push(opts.before);
+    }
+    sql += ` ORDER BY id DESC LIMIT ?`;
+    params.push(limit);
+    const rows = this.h.sqlite.prepare(sql).all(...params) as RawSourceRow[];
+    return rows.map(toSource);
+  }
+
+  /** Your Words panel (additive, read-only): per-channel source
+   *  counts for this space, aggregated through sourceChannelOf so the
+   *  counts can never diverge from the list filter's taxonomy. All
+   *  four channels are always present (0 when empty). */
+  countSourcesByChannel(): Record<SourceChannel, number> {
+    const counts: Record<SourceChannel, number> = { typed: 0, telegram: 0, chat: 0, imported: 0 };
+    const rows = this.h.sqlite
+      .prepare(
+        `SELECT kind, citation_class AS citationClass, COUNT(*) AS c
+         FROM sources WHERE space_id = ? GROUP BY kind, citation_class`,
+      )
+      .all(this.spaceId) as { kind: string; citationClass: string; c: number }[];
+    for (const r of rows) {
+      counts[sourceChannelOf({ kind: r.kind, citationClass: r.citationClass })] += r.c;
+    }
+    return counts;
   }
 
   chunksOf(sourceId: number): SourceChunkRow[] {

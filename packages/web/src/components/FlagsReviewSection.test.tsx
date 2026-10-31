@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 
-const currentSpace = vi.fn();
-const updateProfile = vi.fn();
-vi.mock("../api/client.js", () => ({
-  currentSpace: (...a: unknown[]) => currentSpace(...a),
-  updateProfile: (...a: unknown[]) => updateProfile(...a),
-}));
+// FlagsReviewSection tests — adapted from SettingsPanel.flags.test.tsx
+// (the section moved into the Your Words panel, owner settlement
+// 2026-10-31). Same assertions as the Settings-era suite; T-F numbering
+// preserved for traceability:
+//   T-F1 content-free descriptors (profile as #id, never its name)
+//   T-F2 mark reviewed moves the row under the Reviewed filter
+//   T-F3 delete is two-step, names table + row id, removes on confirm
+//   T-F4 a dangling flag offers dismiss instead of delete
+//   T-F5 fail-soft: an unreachable list says so, never pretends empty
+
 const pushToast = vi.fn();
 vi.mock("./Toasts.js", () => ({ pushToast: (...a: unknown[]) => pushToast(...a) }));
 
@@ -21,7 +25,7 @@ vi.mock("../api/forgetRequests.js", () => ({
   dismissUnresolvedFlag: (...a: unknown[]) => dismissUnresolvedFlag(...a),
 }));
 
-import { SettingsPanel } from "./SettingsPanel.js";
+import { FlagsReviewSection } from "./FlagsReviewSection.js";
 import type { UnresolvedFlagsList } from "../api/forgetRequests.js";
 
 const UM_FLAG = {
@@ -63,17 +67,17 @@ const INITIAL: UnresolvedFlagsList = { open: [UM_FLAG, PROF_FLAG], reviewed: [],
 
 beforeEach(() => {
   vi.resetAllMocks();
-  currentSpace.mockResolvedValue({ id: "s1", name: "Sam", gamerTag: "sam99" });
   localStorage.clear();
   (window as unknown as { confirm: () => boolean }).confirm = () => true;
 });
 
 afterEach(() => cleanup());
 
-describe("SettingsPanel — Forgotten words flagged for review", () => {
+describe("FlagsReviewSection — Forgotten words flagged for review", () => {
+  // T-F1
   it("lists open flags with content-free descriptors (profile renders as #id, never its name)", async () => {
     listUnresolvedFlags.mockResolvedValue(INITIAL);
-    render(<SettingsPanel onClose={() => {}} />);
+    render(<FlagsReviewSection />);
     await screen.findByText(/Forgotten words — flagged for review/);
     await screen.findByText("Your stated words");
     expect(screen.getByText("Instruction profile #3")).toBeTruthy();
@@ -84,12 +88,13 @@ describe("SettingsPanel — Forgotten words flagged for review", () => {
     expect(screen.queryByText(/my unique probe/)).toBeNull();
   });
 
+  // T-F2
   it("mark reviewed moves the row under the Reviewed filter", async () => {
     const reviewedUm = { ...UM_FLAG, status: "reviewed" as const, reviewedAt: "2026-10-26T01:00:00.000Z" };
     const after: UnresolvedFlagsList = { open: [PROF_FLAG], reviewed: [reviewedUm], reviewedCount: 1 };
     listUnresolvedFlags.mockResolvedValueOnce(INITIAL).mockResolvedValueOnce(after);
     reviewUnresolvedFlag.mockResolvedValue(reviewedUm);
-    render(<SettingsPanel onClose={() => {}} />);
+    render(<FlagsReviewSection />);
     await screen.findByText("Your stated words");
     const card = screen.getByText("Your stated words").parentElement!;
     fireEvent.click(within(card).getByText("Mark reviewed"));
@@ -102,11 +107,12 @@ describe("SettingsPanel — Forgotten words flagged for review", () => {
     expect(screen.queryByText("Instruction profile #3")).toBeNull();
   });
 
+  // T-F3
   it("delete is two-step, names table + row id, and removes the row on confirm", async () => {
     const after: UnresolvedFlagsList = { open: [UM_FLAG], reviewed: [], reviewedCount: 0 };
     listUnresolvedFlags.mockResolvedValueOnce(INITIAL).mockResolvedValueOnce(after);
     deleteUnresolvedFlagRow.mockResolvedValue({ ...PROF_FLAG, status: "resolved_deleted" as const });
-    render(<SettingsPanel onClose={() => {}} />);
+    render(<FlagsReviewSection />);
     await screen.findByText("Instruction profile #3");
     const card = screen.getByText("Instruction profile #3").parentElement!;
     fireEvent.click(within(card).getByText("Delete row"));
@@ -120,13 +126,14 @@ describe("SettingsPanel — Forgotten words flagged for review", () => {
     expect(pushToast).toHaveBeenCalledWith("Row deleted.", "✓", 3000);
   });
 
+  // T-F4
   it("a dangling flag offers dismiss instead of delete", async () => {
     const dangling = { ...PROF_FLAG, targetMissing: true };
     const initial: UnresolvedFlagsList = { open: [dangling], reviewed: [], reviewedCount: 0 };
     const after: UnresolvedFlagsList = { open: [], reviewed: [], reviewedCount: 0 };
     listUnresolvedFlags.mockResolvedValueOnce(initial).mockResolvedValueOnce(after);
     dismissUnresolvedFlag.mockResolvedValue({ ...dangling, status: "dismissed" as const });
-    render(<SettingsPanel onClose={() => {}} />);
+    render(<FlagsReviewSection />);
     await screen.findByText("This row is already gone.");
     expect(screen.queryByText("Delete row")).toBeNull();
     fireEvent.click(screen.getByText("Dismiss flag"));
@@ -134,9 +141,10 @@ describe("SettingsPanel — Forgotten words flagged for review", () => {
     expect(dismissUnresolvedFlag).toHaveBeenCalledWith(2);
   });
 
+  // T-F5
   it("fail-soft: an unreachable list says so instead of pretending nothing is flagged", async () => {
     listUnresolvedFlags.mockResolvedValue(null);
-    render(<SettingsPanel onClose={() => {}} />);
+    render(<FlagsReviewSection />);
     await screen.findByText(/Forgotten words — flagged for review/);
     expect(await screen.findByText(/Couldn't reach the server/)).toBeTruthy();
   });
