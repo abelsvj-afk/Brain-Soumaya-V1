@@ -19,8 +19,8 @@ describe("the Faded Ward scene", () => {
 
   it("holds every lantern and breath still under reduced motion, and moves them otherwise", () => {
     const s = createWardScene();
-    const glow = s.group.getObjectByName("ward-lantern-glows") as THREE.InstancedMesh;
-    const mat = glow.material as THREE.MeshBasicMaterial;
+    const glow = s.group.getObjectByName("ward-lantern-glows") as THREE.Points;
+    const mat = glow.material as THREE.PointsMaterial;
     s.update(0, { reducedMotion: true });
     const still = mat.opacity;
     s.update(7000, { reducedMotion: true });

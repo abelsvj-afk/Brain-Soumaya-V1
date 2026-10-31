@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { softGlowPoints } from "./softGlow.js";
 import { WARD_COT_WALL_X, WARD_HALL, WARD_VIEW_Z, specialCot, wardCots, wardLanternPositions, wardOccupied } from "./wardLayout.js";
 
 /**
@@ -114,19 +115,17 @@ export function createWardScene(): WardScene {
   // --- Lanterns: a warm core and a soft additive glow each, instanced. ---
   const lanterns = wardLanternPositions();
   const coreMat = new THREE.MeshBasicMaterial({ color: C.lantern, toneMapped: false });
-  const glowMat = new THREE.MeshBasicMaterial({ color: C.lantern, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const glows = softGlowPoints(lanterns, C.lantern, 48, 0.55, "ward-lantern-glows");
+  const glowMat = glows.material as THREE.PointsMaterial;
   const cores = new THREE.InstancedMesh(new THREE.SphereGeometry(2.6, 8, 6), coreMat, lanterns.length);
-  const glows = new THREE.InstancedMesh(new THREE.SphereGeometry(11, 10, 8), glowMat, lanterns.length);
   lanterns.forEach((l, i) => {
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, 1, 1);
     dummy.position.set(l.x, l.y, l.z);
     dummy.updateMatrix();
     cores.setMatrixAt(i, dummy.matrix);
-    glows.setMatrixAt(i, dummy.matrix);
   });
   cores.name = "ward-lantern-cores";
-  glows.name = "ward-lantern-glows";
   group.add(cores, glows);
 
   // --- Named holders: the places the lore and the Fly-to tiles anchor to. ---
@@ -228,13 +227,13 @@ export function createWardScene(): WardScene {
 
   const update = (ms: number, opts?: { reducedMotion?: boolean }) => {
     if (opts?.reducedMotion) {
-      glowMat.opacity = 0.18;
+      glowMat.opacity = 0.55;
       sleeperMat.opacity = 0.32;
       steam.position.y = 36;
       return;
     }
     const t = ms / 1000;
-    glowMat.opacity = 0.18 + Math.sin(t * 0.9) * 0.03; // the lanterns breathe, slowly, all together
+    glowMat.opacity = 0.55 + Math.sin(t * 0.9) * 0.08; // the lanterns breathe, slowly, all together
     sleeperMat.opacity = 0.32 + Math.sin(t * 0.55) * 0.04; // the sleepers breathe
     steam.position.y = 36 + ((t * 5) % 8);
   };

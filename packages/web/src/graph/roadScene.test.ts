@@ -23,8 +23,8 @@ describe("the Road to the Seam scene", () => {
   });
   it("holds the lamps still under reduced motion and breathes otherwise", () => {
     const s = createRoadScene();
-    const glow = s.group.getObjectByName("road-lamp-glows") as THREE.InstancedMesh;
-    const mat = glow.material as THREE.MeshBasicMaterial;
+    const glow = s.group.getObjectByName("road-lamp-glows") as THREE.Points;
+    const mat = glow.material as THREE.PointsMaterial;
     s.update(0, { reducedMotion: true });
     const a = mat.opacity;
     s.update(5000, { reducedMotion: true });

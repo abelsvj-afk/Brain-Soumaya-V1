@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { softGlowPoints } from "./softGlow.js";
 import {
   ROAD,
   ROAD_CHALK_END_Z,
@@ -57,17 +58,15 @@ export function createRoadScene(): RoadScene {
 
   // Lamps: a warm core and a soft glow, instanced.
   const lamps = roadLamps();
-  const lampGlowMat = new THREE.MeshBasicMaterial({ color: C.lamp, transparent: true, opacity: 0.17, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const glows = softGlowPoints(lamps, C.lamp, 70, 0.55, "road-lamp-glows");
+  const lampGlowMat = glows.material as THREE.PointsMaterial;
   const cores = new THREE.InstancedMesh(new THREE.SphereGeometry(4, 8, 6), new THREE.MeshBasicMaterial({ color: C.lamp, toneMapped: false }), lamps.length);
-  const glows = new THREE.InstancedMesh(new THREE.SphereGeometry(22, 10, 8), lampGlowMat, lamps.length);
   lamps.forEach((l, i) => {
     dummy.position.set(l.x, l.y, l.z);
     dummy.updateMatrix();
     cores.setMatrixAt(i, dummy.matrix);
-    glows.setMatrixAt(i, dummy.matrix);
   });
   cores.name = "road-lamp-cores";
-  glows.name = "road-lamp-glows";
   raw.add(cores, glows);
   raw.add(proxy("road-lamps", ROAD.halfWidth * 2, 8, 360, 0, 64, 60 + 180));
 
@@ -157,7 +156,7 @@ export function createRoadScene(): RoadScene {
   group.add(raw);
 
   const update = (ms: number, opts?: { reducedMotion?: boolean }) => {
-    lampGlowMat.opacity = opts?.reducedMotion ? 0.17 : 0.17 + Math.sin(ms / 1000 * 0.8) * 0.03;
+    lampGlowMat.opacity = opts?.reducedMotion ? 0.55 : 0.55 + Math.sin((ms / 1000) * 0.8) * 0.08;
   };
   return { group, update, dispose: () => disposeObject3D(group) };
 }
