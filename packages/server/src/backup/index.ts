@@ -51,19 +51,74 @@ export interface BackupPruneRecord {
   reason: string;
 }
 
+/**
+ * One restore, recorded (increment B4; spec §8 step 7, G0-AC-13).
+ * A restore with no record counts as unproven, so completed restores
+ * — successful AND failed — append one of these to the index. It
+ * identifies the backup, the operator, the start/finish times, and
+ * the verification outcome. It never carries secret values: the
+ * encryption key is named in the runbook, never written anywhere.
+ */
+export interface BackupRestoreRecord {
+  restoreId: string;
+  backupId: string;
+  operator: string;
+  /** The database path the restore targeted (a path, never a secret). */
+  target: string;
+  startedAt: string;
+  finishedAt: string;
+  outcome: "restored" | "failed";
+  failureStage: string | null;
+  failureDetail: string | null;
+  /** Standalone verification of the staged snapshot (spec §4, tiers 1+2). */
+  verification: {
+    countsChecked: number;
+    integrity: string;
+    foreignKeyViolations: number;
+  } | null;
+  /** The three reconciliation tiers, as separate verdicts (amendment C). */
+  reconciliation: { tier1Ok: boolean; tier2Ok: boolean; tier3Ok: boolean } | null;
+}
+
 export interface BackupIndex {
   version: 1;
   latestGoodId: string | null;
   entries: BackupIndexEntry[];
   pruneLog: BackupPruneRecord[];
+  /**
+   * Restore records (B4). Optional in the type because pre-B4 writers
+   * (and test fixtures) construct indexes without it; readers
+   * normalize an absent log to []. Note the honest limit: a pre-B4
+   * build WRITING the index drops this field — it round-trips only
+   * once every writer is B4 or later.
+   */
+  restoreLog?: BackupRestoreRecord[];
 }
 
 export function emptyBackupIndex(): BackupIndex {
-  return { version: 1, latestGoodId: null, entries: [], pruneLog: [] };
+  return { version: 1, latestGoodId: null, entries: [], pruneLog: [], restoreLog: [] };
 }
 
 function corrupt(detail: string): Error {
   return new Error(`backup index is corrupt (${detail})`);
+}
+
+/**
+ * Structural validation of one restore record (B4). Same rule as
+ * entries: a record that cannot name its restore, its backup, and
+ * its outcome is corruption, not data. An ABSENT restoreLog (a
+ * pre-B4 index) is not corruption — it normalizes to [].
+ */
+function validateRestoreRecord(raw: unknown, i: number): BackupRestoreRecord {
+  if (typeof raw !== "object" || raw === null) throw corrupt(`restore record ${i} is not an object`);
+  const r = raw as Record<string, unknown>;
+  for (const field of ["restoreId", "backupId", "operator", "target", "startedAt", "finishedAt", "outcome"] as const) {
+    if (typeof r[field] !== "string") throw corrupt(`restore record ${i} has no string ${field}`);
+  }
+  if (r["outcome"] !== "restored" && r["outcome"] !== "failed") {
+    throw corrupt(`restore record ${i} has an unknown outcome`);
+  }
+  return raw as BackupRestoreRecord;
 }
 
 /**
@@ -106,11 +161,15 @@ export async function readBackupIndex(store: BackupObjectStore): Promise<BackupI
   if (idx.latestGoodId !== null && idx.latestGoodId !== undefined && typeof idx.latestGoodId !== "string") {
     throw corrupt("latestGoodId is not a string");
   }
+  if (idx.restoreLog !== undefined && !Array.isArray(idx.restoreLog)) {
+    throw corrupt("restoreLog is not an array");
+  }
   return {
     version: 1,
     latestGoodId: typeof idx.latestGoodId === "string" ? idx.latestGoodId : null,
     entries: (idx.entries as unknown[]).map(validateEntry),
     pruneLog: idx.pruneLog as BackupPruneRecord[],
+    restoreLog: ((idx.restoreLog ?? []) as unknown[]).map(validateRestoreRecord),
   };
 }
 
@@ -190,4 +249,25 @@ export async function recoverLatestGood(
     );
   }
   return { entry, manifest };
+}
+
+/**
+ * Append one restore record to the index (B4; spec §8 step 7). Built
+ * on a FRESH index read, like promotion: the append preserves every
+ * entry, the latest-good pointer, and the prune log exactly as
+ * stored, and never moves latestGoodId — recording a restore is not
+ * a backup event. Throws on a corrupt index or a failed write; the
+ * caller (restore.ts) treats the append as best-effort-but-reported,
+ * because with read-only store credentials the record cannot land
+ * here and must land in the operator's local record file instead.
+ */
+export async function appendRestoreRecord(
+  store: BackupObjectStore,
+  record: BackupRestoreRecord,
+): Promise<void> {
+  const index = await readBackupIndex(store);
+  await writeBackupIndex(store, {
+    ...index,
+    restoreLog: [...(index.restoreLog ?? []), record],
+  });
 }
