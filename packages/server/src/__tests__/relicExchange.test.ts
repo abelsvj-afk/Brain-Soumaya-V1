@@ -71,6 +71,28 @@ function withThread<T>(t: RelicThreadDef, fn: () => T): T {
   try { return fn(); } finally { arr.splice(arr.indexOf(t), 1); }
 }
 
+/** Canon entry (2026-10-31): RELIC_THREADS now carries real canon
+ *  threads, so tests written against the empty registry isolate
+ *  themselves from the canon threads touching a relic by splicing
+ *  them OUT for the duration (the mirror of withThread) and restoring
+ *  them after. The eligibility LOGIC under test is unchanged — only
+ *  the fixture isolation accounts for real data. The live-canon
+ *  behavior itself is asserted in relicTiers.test.ts and
+ *  relicCanon.test.ts. */
+function withoutCanonThreadsFor<T>(relicId: string, fn: () => T): T {
+  const arr = RELIC_THREADS as unknown as RelicThreadDef[];
+  const removed: { idx: number; t: RelicThreadDef }[] = [];
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i]!.relicA === relicId || arr[i]!.relicB === relicId) {
+      removed.unshift({ idx: i, t: arr[i]! });
+      arr.splice(i, 1);
+    }
+  }
+  try { return fn(); } finally {
+    for (const { idx, t } of removed) arr.splice(idx, 0, t);
+  }
+}
+
 describe("Legacy exchange — the chart (§8.1 #14 eligibility, #9 replay)", () => {
   it("a chart exchange is one atomic outcome: holding consumed, chart stirring issued against a real copy, copy returned to a NEW anchor", () => {
     const copyId = giveEmber("s1");
@@ -179,12 +201,19 @@ describe("Legacy exchange — the chart (§8.1 #14 eligibility, #9 replay)", () 
 describe("Legacy exchange — lore and credits (R2-3, ruling 1)", () => {
   it("with no eligible thread, the lore option honestly reports itself unavailable — nothing is fabricated", () => {
     giveEmber("s1");
-    const view = store().state("s1").holdings.find((h) => h.relicId === EMBER)!;
-    expect(view.exchange?.eligible).toBe(true);
-    expect(view.exchange?.loreThreadIds).toEqual([]);
-    const out = xchg().exchange("s1", { relicId: EMBER, option: "lore", attemptKey: "ex-l0" }, STATION);
-    expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.kind).toBe("lore-unavailable");
+    // Canon entered: the Ember's real thread (T5) IS eligible, so the
+    // honest-unavailability case is exercised with the canon threads
+    // touching the Ember spliced out (fixture isolation — see
+    // withoutCanonThreadsFor). The live behavior is asserted in
+    // relicTiers.test.ts ("eligible, lore live with its canon threads").
+    withoutCanonThreadsFor(EMBER, () => {
+      const view = store().state("s1").holdings.find((h) => h.relicId === EMBER)!;
+      expect(view.exchange?.eligible).toBe(true);
+      expect(view.exchange?.loreThreadIds).toEqual([]);
+      const out = xchg().exchange("s1", { relicId: EMBER, option: "lore", attemptKey: "ex-l0" }, STATION);
+      expect(out.ok).toBe(false);
+      if (!out.ok) expect(out.kind).toBe("lore-unavailable");
+    });
     expect(holdingOf("s1", EMBER)).toBeTruthy();
     expect(attemptRow("s1", "ex-l0")).toBeUndefined();
   });
@@ -193,10 +222,13 @@ describe("Legacy exchange — lore and credits (R2-3, ruling 1)", () => {
     const copyId = giveEmber("s1");
     const thread: RelicThreadDef = { threadId: "fixture-ember-thread", relicA: EMBER, relicB: "thread-of-many", condition: "discovery", text: "Fixture words.", approved: true };
     withThread(thread, () => {
-      expect(store().state("s1").holdings.find((h) => h.relicId === EMBER)?.exchange?.loreThreadIds).toEqual(["fixture-ember-thread"]);
+      // Canon entry behavior change, asserted deliberately: the
+      // Ember's real canon thread (T5, hearth-ember--thread-of-many)
+      // is eligible alongside the fixture thread, in registry order.
+      expect(store().state("s1").holdings.find((h) => h.relicId === EMBER)?.exchange?.loreThreadIds).toEqual(["hearth-ember--thread-of-many", "fixture-ember-thread"]);
       const out = xchg().exchange("s1", { relicId: EMBER, option: "lore", attemptKey: "ex-l1" }, STATION);
       expect(out.ok).toBe(true);
-      if (out.ok) expect(out.unlockedThreadIds).toEqual(["fixture-ember-thread"]);
+      if (out.ok) expect(out.unlockedThreadIds).toEqual(["hearth-ember--thread-of-many", "fixture-ember-thread"]);
     });
     const layers = handle.sqlite.prepare(
       `SELECT relic_id, source FROM relic_codex_layers WHERE space_id = 's1' AND layer = 'L3' AND thread_id = 'fixture-ember-thread' ORDER BY relic_id ASC`,
@@ -217,13 +249,19 @@ describe("Legacy exchange — lore and credits (R2-3, ruling 1)", () => {
       { ...base, approved: true },
       { ...base, relicB: "star-hanger", text: "Words.", approved: true },
     ];
-    for (const v of variants) {
-      withThread(v, () => {
-        const out = xchg().exchange("s1", { relicId: EMBER, option: "lore", attemptKey: `ex-lx-${v.relicB}-${String(v.approved)}` }, STATION);
-        expect(out.ok).toBe(false);
-        if (!out.ok) expect(out.kind).toBe("lore-unavailable");
-      });
-    }
+    // Fixture isolation: with the Ember's canon thread (T5) live, the
+    // exchange would succeed through T5 no matter what the variants
+    // say — the variants' ineligibility is what is under test, so the
+    // canon threads touching the Ember are spliced out for the loop.
+    withoutCanonThreadsFor(EMBER, () => {
+      for (const v of variants) {
+        withThread(v, () => {
+          const out = xchg().exchange("s1", { relicId: EMBER, option: "lore", attemptKey: `ex-lx-${v.relicB}-${String(v.approved)}` }, STATION);
+          expect(out.ok).toBe(false);
+          if (!out.ok) expect(out.kind).toBe("lore-unavailable");
+        });
+      }
+    });
     expect(holdingOf("s1", EMBER)).toBeTruthy();
   });
 

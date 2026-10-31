@@ -819,6 +819,12 @@ export class RelicHoldingsStore {
     }
     const nowIso = new Date().toISOString();
     const claim = this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, relicCodexKey(relicId));
+    // Canon entry (§5.6): the discovery just recorded may complete a
+    // thread's pair for this space — the L3 completion sweep runs
+    // here, inside the award transaction, BEFORE the Seed branch, so
+    // a consumed Seed's discovery completes its threads like any
+    // other's (the Dawn Leaf's thread T2 is exactly that case).
+    this.sweepDiscoveryThreads(spaceId, relicId);
     const effectiveReward = Number(claim.changes ?? 0) > 0 ? rewardAmount : 0;
     // Relics I-6 (R2-1): a Seed's disposition is consumption, not
     // keeping — the copy bound above is spent inside this same
@@ -852,6 +858,47 @@ export class RelicHoldingsStore {
     // whatever happens to the holdings later.
     this.recordGateCompletionIfComplete(spaceId);
     return { status: "awarded", copyId: bound.copyId, anchorKey: bound.anchorKey, rewardAmount: effectiveReward, testOnly };
+  }
+
+  /**
+   * The L3 completion sweep (Relics canon entry, 2026-10-31;
+   * implementation design §5.6): called from the two personal-
+   * discovery write points (the award core above and the legacy
+   * sync) INSIDE the same transaction that recorded the discovery.
+   * For every discovery-condition thread involving the just-found
+   * relic whose other member this space has ALSO personally
+   * discovered (the codex_claims record — a consumed Seed's discovery
+   * stands there like any other's), the thread unlocks from BOTH
+   * members' Codex entries with source='discovery', mirroring the
+   * lore exchange's both-members grant. INSERT OR IGNORE against the
+   * layer primary key makes the sweep idempotent and monotonic: a
+   * row the exchange wrote first is never rewritten, and re-running
+   * the sweep (a repeat claim, a later sync) writes nothing twice.
+   * Only authored AND owner-approved threads can complete — the same
+   * reveal rule codexViews reads — and every thread in RELIC_THREADS
+   * has both members placed by construction (the NOT-YET threads are
+   * omitted until O-R6, design §3.3), so no sweep row can ever name
+   * an unplaced relic. NPC awards write no personal-discovery record
+   * (see awardCopyForNpcInTransaction), so they never reach this
+   * sweep; an NPC space's threads complete only through discoveries
+   * recorded for the space itself.
+   */
+  private sweepDiscoveryThreads(spaceId: string, discoveredRelicId: string): void {
+    try {
+      const discovered = this.personalDiscoveryIds(spaceId);
+      if (!discovered.has(discoveredRelicId)) return;
+      for (const t of RELIC_THREADS) {
+        if (t.condition !== "discovery") continue;
+        if (t.relicA !== discoveredRelicId && t.relicB !== discoveredRelicId) continue;
+        if (t.approved !== true || typeof t.text !== "string" || t.text.length === 0) continue;
+        if (!discovered.has(t.relicA) || !discovered.has(t.relicB)) continue;
+        for (const member of [t.relicA, t.relicB]) {
+          this.h.sqlite.prepare(
+            `INSERT OR IGNORE INTO relic_codex_layers (space_id, relic_id, layer, thread_id, source) VALUES (?, ?, 'L3', ?, 'discovery')`,
+          ).run(spaceId, member, t.threadId);
+        }
+      }
+    } catch { /* bare handle without the I-4 table: no layers to complete */ }
   }
 
   /**
@@ -984,6 +1031,9 @@ export class RelicHoldingsStore {
         if (Number(res.changes ?? 0) > 0) {
           added.push(id);
           this.h.sqlite.prepare(`INSERT OR IGNORE INTO codex_claims (space_id, reward_key) VALUES (?, ?)`).run(spaceId, relicCodexKey(id));
+          // Canon entry (§5.6): a synced discovery completes threads
+          // by the same sweep the award path runs.
+          this.sweepDiscoveryThreads(spaceId, id);
           // I-2: a legacy-synced holding is a physical copy like any other.
           try {
             this.mintCopyForHolding({ space_id: spaceId, relic_id: id, found_at: nowIso, test_only: 0, held: 0, held_at: null, anchor_key: anchor, copy_id: null, location: "carried" });
@@ -1270,8 +1320,8 @@ export class RelicHoldingsStore {
 
   /** Whether THIS viewer has unlocked the relic's place (L1) layer —
    *  the gate every place string in the payload answers to (§8.1 #12:
-   *  an anchor's placeName IS the L1 layer text for its relic, so it is
-   *  serialized only for viewers who hold the unlock; review P1-1). */
+   *  an anchor's placeName rides on the L1 unlock for its relic, so it
+   *  is serialized only for viewers who hold the unlock; review P1-1). */
   private placeUnlockedIds(spaceId: string): Set<string> {
     try {
       const rows = this.h.sqlite.prepare(
@@ -1363,7 +1413,7 @@ export class RelicHoldingsStore {
           ? { state: "unlocked", text: stirringText }
           : { state: "locked" };
       const placeLayer: RelicCodexView["layers"]["place"] = unlocked.has("L1:")
-        ? { state: "unlocked", text: def.place }
+        ? { state: "unlocked", text: RELIC_ANCHOR_POINTS[def.id]?.[0]?.placeText ?? def.place }
         : { state: "locked" };
       const descriptionLayer: RelicCodexView["layers"]["description"] = discovered
         ? { state: "unlocked", text: def.lore }
@@ -1401,9 +1451,9 @@ export class RelicHoldingsStore {
               if (s?.name) discovererName = s.name;
             } catch { /* the record stands without a resolvable name */ }
           }
-          // The record's place is the relic's L1 layer text: it rides
-          // ONLY for viewers holding the L1 unlock (review P1-1 —
-          // §8.1 #12 concealment governs every field, not just layers).
+          // The record's place rides ONLY for viewers holding the
+          // relic's L1 unlock (review P1-1 — §8.1 #12 concealment
+          // governs every field, not just layers).
           const placeName = unlocked.has("L1:") ? (anchorPlaceName(def.id, row.anchor_key) ?? def.place) : undefined;
           firstDiscovery = { discovererName, byViewer, ...(placeName !== undefined ? { placeName } : {}) };
         }

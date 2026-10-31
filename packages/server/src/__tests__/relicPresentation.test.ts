@@ -34,29 +34,43 @@ describe("Relics I-7 read model — layered Codex with server-side concealment (
     expect(nail!.layers.description.state).toBe("unlocked");
     expect(nail!.layers.description.text).toBe(RELIC_BY_ID.get(NAIL)!.lore);
     // L1 (place) still locked — its text is not serialized anywhere:
-    // an anchor's placeName IS the registry place text, so every field
-    // that could carry it (the layer, the first-discovery line, the
-    // held copy's provenance) answers to the same L1 unlock — proven
-    // whole-payload in the review round 1 regression below, in the
-    // two-space configuration where a record exists to leak through.
+    // the served place text is the first anchor's approved placeText
+    // (canon entry, Decision 1A), and an anchor's placeName rides on
+    // the same unlock, so every field that could carry place words
+    // (the layer, the first-discovery line, the held copy's
+    // provenance) answers to the same L1 unlock — proven whole-payload
+    // in the review round 1 regression below, in the two-space
+    // configuration where a record exists to leak through.
     expect(nail!.layers.place.state).toBe("locked");
     expect(nail!.layers.place.text).toBeUndefined();
-    // L0 (stirring fragment): no canon text exists — honestly unwritten.
-    expect(nail!.layers.stirring.state).toBe("unwritten");
+    expect(payload).not.toContain(RELIC_ANCHOR_POINTS[NAIL]![0]!.placeText!);
+    // L0 (stirring fragment): the canon text exists since the
+    // 2026-10-31 entry, but this viewer holds no L0 unlock — the
+    // layer reads locked and the words are absent from the payload.
+    expect(nail!.layers.stirring.state).toBe("locked");
     expect(nail!.layers.stirring.text).toBeUndefined();
-    // Undiscovered relics: every layer locked or unwritten, no text anywhere.
+    expect(payload).not.toContain(RELIC_BY_ID.get(NAIL)!.loreStirring!);
+    // Undiscovered relics: every layer locked, no text anywhere.
     const ring = state.codex?.find((c) => c.relicId === RING);
     expect(ring).toBeTruthy();
     expect(ring!.discovered).toBe(false);
     expect(ring!.layers.description.state).toBe("locked");
     expect(payload).not.toContain(RELIC_BY_ID.get(RING)!.lore);
     expect(payload).not.toContain(RELIC_BY_ID.get(RING)!.place);
-    // L3: no threads are authored — the layer reads unwritten, with no silhouettes.
-    expect(nail!.layers.threads.state).toBe("unwritten");
-    expect(nail!.layers.threads.entries).toEqual([]);
+    // L3: the Nail's two entered canon threads (T1, T6) read as
+    // locked silhouettes — partners named, words dark, none serialized.
+    expect(nail!.layers.threads.state).toBe("locked");
+    expect(nail!.layers.threads.entries.map((e) => e.threadId)).toEqual([
+      "harbor-nail--mooring-ring",
+      "harbor-nail--basin-stone",
+    ]);
+    for (const e of nail!.layers.threads.entries) {
+      expect(e.unlocked).toBe(false);
+      expect(e.text).toBeUndefined();
+    }
   });
 
-  it("an arrival (L1) unlock ships the place text; a stirring (L0) unlock with no authored fragment still ships no text", () => {
+  it("an arrival (L1) unlock ships the approved place text; a stirring (L0) unlock ships the approved stirring text", () => {
     expect(store().claimFind("s1", NAIL, "great-station").ok).toBe(true);
     handle.sqlite.prepare(
       `INSERT OR IGNORE INTO relic_codex_layers (space_id, relic_id, layer, thread_id, source) VALUES ('s1', ?, 'L1', '', 'arrival')`,
@@ -66,9 +80,11 @@ describe("Relics I-7 read model — layered Codex with server-side concealment (
     ).run(NAIL);
     const nail = store().state("s1").codex?.find((c) => c.relicId === NAIL);
     expect(nail!.layers.place.state).toBe("unlocked");
-    expect(nail!.layers.place.text).toBe(RELIC_BY_ID.get(NAIL)!.place);
-    expect(nail!.layers.stirring.state).toBe("unwritten");
-    expect(nail!.layers.stirring.text).toBeUndefined();
+    // Canon entry (Decision 1A): the served L1 text is the first
+    // anchor's approved placeText, not the short registry phrase.
+    expect(nail!.layers.place.text).toBe(RELIC_ANCHOR_POINTS[NAIL]![0]!.placeText);
+    expect(nail!.layers.stirring.state).toBe("unlocked");
+    expect(nail!.layers.stirring.text).toBe(RELIC_BY_ID.get(NAIL)!.loreStirring);
   });
 
   it("the three discovery records are distinct: first-in-world names the discoverer, personal discovery is the viewer's own, provenance is the held copy's chain", () => {

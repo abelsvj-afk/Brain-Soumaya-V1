@@ -155,12 +155,33 @@ describe("relic vocabulary (I-1)", () => {
     expect(RELIC_BY_ID.get("witness-seed")!.tierClass).toBe("keystone");
   });
 
-  it("carries no lore text in the new structures (structure only)", () => {
+  it("carries the entered canon in the lore structures (O-R1, entered 2026-10-31)", () => {
+    // The canon entry: every def now carries its approved L0 stirring
+    // and the approved L2 expansion. Character-exact parity against
+    // the owner's approvals ledger is pinned server-side in
+    // relicCanon.test.ts; this suite pins the structure and the ids.
     for (const r of RELICS) {
-      expect(r.loreStirring, r.id).toBeUndefined();
-      expect(r.lore.length, r.id).toBeGreaterThan(0); // L2 predates I-1
+      expect(typeof r.loreStirring, r.id).toBe("string");
+      expect(r.loreStirring!.length, r.id).toBeGreaterThan(0);
+      expect(r.lore.length, r.id).toBeGreaterThan(0);
     }
-    expect(RELIC_THREADS).toEqual([]);
+    // Exactly the seven fully-placed threads, under their permanent
+    // ids; the four NOT-YET threads (T8–T11) stay absent until O-R6
+    // placement (design §3.3).
+    expect(RELIC_THREADS.map((t) => t.threadId)).toEqual([
+      "harbor-nail--mooring-ring",
+      "witness-seed--dawn-leaf",
+      "first-light-shard--witness-without-a-name",
+      "basin-stone--lantern-of-keeping",
+      "hearth-ember--thread-of-many",
+      "harbor-nail--basin-stone",
+      "witness-seed--witness-without-a-name",
+    ]);
+    for (const t of RELIC_THREADS) {
+      expect(t.condition, t.threadId).toBe("discovery");
+      expect(t.approved, t.threadId).toBe(true);
+      expect(t.text!.length, t.threadId).toBeGreaterThan(0);
+    }
     const worlds = Object.keys(WORLD_BEARING_SECTORS).sort();
     expect(worlds).toEqual([
       "deep-past",
@@ -214,10 +235,14 @@ describe("relic vocabulary (I-1)", () => {
       expect(a.world).toBe(r.world);
       // The first anchor's placeName is the registry's own place words.
       expect(a.placeName).toBe(r.place);
+      // Canon entry (Decision 1A): the FIRST anchor carries the
+      // relic's approved L1 place text; later anchors carry none yet.
+      expect(typeof a.placeText, r.id).toBe("string");
+      expect(a.placeText!.length, r.id).toBeGreaterThan(0);
       for (const p of points!) {
         expect(p.world, r.id).toBe(r.world);
         expect(p.radius, r.id).toBe(RELIC_ANCHOR_RADIUS);
-        expect(p.placeText, r.id).toBeUndefined();
+        if (p !== a) expect(p.placeText, r.id).toBeUndefined();
         for (const v of p.position) expect(Number.isFinite(v)).toBe(true);
       }
       for (let i = 0; i < points!.length; i++) {
