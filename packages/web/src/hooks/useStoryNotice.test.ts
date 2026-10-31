@@ -106,7 +106,7 @@ describe("noticing", () => {
   });
 
   it("when everything here is already found, the world is simply as it was (no report, no failure)", async () => {
-    vi.spyOn(api, "getStoryBook").mockResolvedValue(book(["sight.missing-stratum", "obj.follower-ribbon"]));
+    vi.spyOn(api, "getStoryBook").mockResolvedValue(book(["sight.missing-stratum", "obj.follower-ribbon", "obj.orus-bead"]));
     const post = vi.spyOn(api, "postStoryFind");
     const { result } = renderHook(() => useStoryNotice({ active: true, world: "deep-past", notify: vi.fn(), reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));
@@ -120,7 +120,7 @@ describe("noticing", () => {
   });
 
   it("listen turns up echoes, not sights", async () => {
-    vi.spyOn(api, "getStoryBook").mockResolvedValue(book());
+    vi.spyOn(api, "getStoryBook").mockResolvedValue(book(["sight.ysmerels-hum"])); // the Archive's other listening spot, already kept
     const post = vi.spyOn(api, "postStoryFind").mockResolvedValue({ entryId: "x", foundAt: "t", isNew: true });
     const { result } = renderHook(() => useStoryNotice({ active: true, world: "quiet-archive", notify: vi.fn(), reach: anywhere }));
     await waitFor(() => expect(result.current.loaded).toBe(true));

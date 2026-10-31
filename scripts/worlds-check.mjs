@@ -45,7 +45,7 @@ try {
   }
 }
 
-const ALL = ["great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", "faded-ward", "eternity"];
+const ALL = ["great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", "faded-ward", "road-to-the-seam", "the-village", "eternity"];
 const worlds = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 const H = { "x-space-id": SPACE, "content-type": "application/json" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -91,11 +91,23 @@ for (const world of worlds) {
     if (r.status() >= 400) bad.push(`${r.status()} ${new URL(r.url()).pathname}`);
     if (ASSET.test(r.url())) bytes += Number(r.headers()["content-length"] ?? 0);
   });
-  await page.addInitScript((id) => localStorage.setItem("brain.spaceId", id), SPACE);
+  // First-run surfaces (welcome card, legend, look hint, purpose line) would otherwise cover the scene,
+  // and the app's own "settle me home" call on boot would pull the ledger out of the world under test.
+  await page.addInitScript(
+    ([id, w]) => {
+      localStorage.setItem("brain.spaceId", id);
+      localStorage.setItem(`brain.legendSeen.${id}`, "1");
+      localStorage.setItem("worlds.lookHintSeen", "1");
+      localStorage.setItem(`worlds.purposeSeen.${w}`, "1");
+    },
+    [SPACE, world],
+  );
+  await page.route("**/api/travel/recall-home", (r) => r.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.goto(BASE + "/");
   // The app opens into the home galaxy and wakes the world layer only on a traveller action. Ask for
   // the world the way the "Look around" button does (the same window event), once the app has booted.
   await page.waitForFunction(() => document.querySelector("canvas") !== null, null, { timeout: 60_000 }).catch(() => {});
+  await page.locator(".welcome-start").click({ timeout: 4000 }).catch(() => {});
   await page.evaluate(() => window.dispatchEvent(new Event("worlds:enter")));
   let canvasAt = null;
   let fallback = null;

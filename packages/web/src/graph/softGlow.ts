@@ -21,6 +21,9 @@ export function glowTexture(): THREE.DataTexture {
       data[i + 3] = v;
     }
   const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter; // a nearest-neighbour 64 px texture stretched over a big glow showed blocky steps in a real browser
+  t.minFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
   t.needsUpdate = true;
   cached = t;
   return t;

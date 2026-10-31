@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { softGlowPoints } from "./softGlow.js";
+import { glowTexture, softGlowPoints } from "./softGlow.js";
 import { VILLAGE, VILLAGE_CHAIR_Z, VILLAGE_DOOR_Z, VILLAGE_GATE_Z, VILLAGE_SQUARE_Z, VILLAGE_VIEW_Z, VILLAGE_WELL_Z, villageHooks, villageHouses } from "./villageLayout.js";
 
 /**
@@ -16,7 +16,7 @@ export interface VillageScene {
   dispose: () => void;
 }
 
-const C = { ground: 0x1c2a22, house: 0x3a3f4a, roof: 0x4a3a34, window: 0xffc86a, hook: 0xffd98a, stone: 0x6a6e76, wood: 0x6a4a30, door: 0xcfe6ff, ember: 0xff9a4a };
+const C = { ground: 0x1c2a22, house: 0x3a3f4a, roof: 0x4a3a34, window: 0xffc86a, hook: 0xffd98a, stone: 0x6a6e76, wood: 0x6a4a30, door: 0xcfe6ff, doorLight: 0xffeec0, ember: 0xff9a4a };
 
 const proxy = (name: string, w: number, h: number, d: number, x: number, y: number, z: number): THREE.Mesh => {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ visible: false }));
@@ -62,7 +62,7 @@ export function createVillageScene(): VillageScene {
   bodies.name = "village-houses";
   roofs.name = "village-roofs";
   raw.add(bodies, roofs);
-  const windows = softGlowPoints(windowPts, C.window, 22, 0.9, "village-window-glows");
+  const windows = softGlowPoints(windowPts, C.window, 46, 0.95, "village-window-glows");
   const windowMat = windows.material as THREE.PointsMaterial;
   raw.add(windows);
   raw.add(proxy("village-windows", 400, 30, 1100, 0, 18, 650));
@@ -174,9 +174,11 @@ export function createVillageScene(): VillageScene {
     post.position.set(sx * 34, 40, 0);
     door.add(post);
   }
-  const light = new THREE.Mesh(new THREE.PlaneGeometry(64, 80), new THREE.MeshBasicMaterial({ color: C.door, transparent: true, opacity: 0.4, side: THREE.DoubleSide, toneMapped: false }));
+  // The light in the doorway: an additive warm-white pane that fades to nothing at its edge (a flat, translucent grey slab read as a wall in a real browser), with a wide soft halo behind it.
+  const light = new THREE.Mesh(new THREE.PlaneGeometry(64, 80), new THREE.MeshBasicMaterial({ color: C.doorLight, map: glowTexture(), transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
   light.position.set(0, 40, 0);
   door.add(light);
+  door.add(softGlowPoints([{ x: 0, y: 40, z: -4 }], C.doorLight, 260, 0.7, "village-door-halo"));
   door.position.set(0, 90, VILLAGE_DOOR_Z);
   raw.add(door);
 
