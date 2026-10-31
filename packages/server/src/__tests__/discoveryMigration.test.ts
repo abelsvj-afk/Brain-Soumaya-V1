@@ -86,6 +86,26 @@ describe("P1-MIG: trust columns on story_finds", () => {
     third.sqlite.close();
   }, 60_000);
 
+  it("a VACUUM INTO copy (how backups are made) keeps the columns and every row", () => {
+    const file = tmpDb();
+    const snap = tmpDb();
+    const h = createDb(file);
+    h.sqlite
+      .prepare(`INSERT INTO story_finds (space_id, entry_id, found_at, source, trust, trust_at, trust_basis) VALUES ('s','relic.a','2026-10-01T00:00:00.000Z','relic','accepted','2026-10-01T00:00:00.000Z','live:v1'), ('s','relic.b','2026-10-02T00:00:00.000Z','import','imported','2026-10-02T00:00:00.000Z','client-report')`)
+      .run();
+    h.sqlite.prepare(`INSERT INTO story_finds (space_id, entry_id, found_at, source) VALUES ('s','sight.c','2026-10-03T00:00:00.000Z','regard')`).run();
+    h.sqlite.exec(`VACUUM INTO '${snap.replace(/'/g, "''")}'`);
+    h.sqlite.close();
+    const copy = new BetterSqlite3(snap, { readonly: true });
+    expect(cols(copy).map((c) => c.name)).toEqual(expect.arrayContaining(["trust", "trust_at", "trust_basis"]));
+    expect(copy.prepare(`SELECT entry_id, trust, trust_at, trust_basis FROM story_finds ORDER BY entry_id`).all()).toEqual([
+      { entry_id: "relic.a", trust: "accepted", trust_at: "2026-10-01T00:00:00.000Z", trust_basis: "live:v1" },
+      { entry_id: "relic.b", trust: "imported", trust_at: "2026-10-02T00:00:00.000Z", trust_basis: "client-report" },
+      { entry_id: "sight.c", trust: null, trust_at: null, trust_basis: null },
+    ]);
+    copy.close();
+  });
+
   it("the two copies of the story_finds DDL (schemaSql.ts and db/client.ts) are identical", () => {
     const ddl = (file: string) => {
       const src = fs.readFileSync(path.join(here, "..", "db", file), "utf8");

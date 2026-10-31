@@ -17,16 +17,13 @@
  * only third-party modules are symlinked from the repo's node_modules. Nothing in the repo is modified
  * except the output file, and the worktree is removed afterwards.
  */
-import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PINNED_BASELINE, withBaselineWorktree } from "./lib/baseline-worktree.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-/** The commit the code was at before Phase 1 (docs-only commits after it do not change code). */
-const PINNED_BASELINE = "257cdd244d0f6695d2bd9a2d03cbe211af3f1000";
 const DEFAULT_OUT = path.join(repo, "packages/server/src/__tests__/golden/discovery-parity.golden.json");
 const RUNNER = "packages/server/src/__tests__/fixtures/discoveryParity.ts";
 
@@ -39,43 +36,12 @@ const check = argv.includes("--check");
 const commit = flag("--commit") ?? PINNED_BASELINE;
 const out = path.resolve(flag("--out") ?? DEFAULT_OUT);
 
-const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
-
 function generate() {
-  const baselineCommit = git("rev-parse", "--verify", `${commit}^{commit}`);
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "discovery-golden-"));
-  const tree = path.join(tmp, "tree");
-  git("worktree", "add", "--detach", tree, baselineCommit);
-  try {
-    // Third-party modules from the repo's node_modules; the workspace packages from the WORKTREE.
-    const nm = path.join(tree, "node_modules");
-    fs.mkdirSync(nm);
-    for (const entry of fs.readdirSync(path.join(repo, "node_modules"))) {
-      if (entry === "@brain") continue;
-      fs.symlinkSync(path.join(repo, "node_modules", entry), path.join(nm, entry));
-    }
-    fs.mkdirSync(path.join(nm, "@brain"));
-    for (const pkg of ["server", "shared", "web"]) fs.symlinkSync(path.join(tree, "packages", pkg), path.join(nm, "@brain", pkg));
-
-    // The runner is copied in unchanged; the baseline does not have it.
-    const dest = path.join(tree, RUNNER);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(path.join(repo, RUNNER), dest);
-
-    const entry = path.join(tree, "packages/server/golden-entry.ts");
-    fs.writeFileSync(
-      entry,
+  return withBaselineWorktree(repo, commit, [RUNNER], ({ tree, baselineCommit, runTsx }) => {
+    const stdout = runTsx(
+      "golden-entry.ts",
       `import { runParityFixtures } from "./src/__tests__/fixtures/discoveryParity.ts";\nprocess.stdout.write(JSON.stringify(runParityFixtures()));\n`,
     );
-    const env = { ...process.env };
-    delete env.OWNER_SPACE_IDS;
-    const stdout = execFileSync(path.join(repo, "node_modules/.bin/tsx"), [entry], {
-      cwd: path.join(tree, "packages/server"),
-      env,
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "inherit"],
-    });
     const payload = JSON.parse(stdout);
     const payloadSha256 = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
     // Read statements the baseline issues against story_finds, extracted from the baseline's own source (used by the P1-SQL check).
@@ -88,19 +54,7 @@ function generate() {
       }
     }
     return { baselineCommit, payloadSha256, baselineReadSql: [...readSql].sort(), payload };
-  } finally {
-    try {
-      git("worktree", "remove", "--force", tree);
-    } catch {
-      /* the temp directory is removed below either way */
-    }
-    fs.rmSync(tmp, { recursive: true, force: true });
-    try {
-      git("worktree", "prune");
-    } catch {
-      /* nothing to prune */
-    }
-  }
+  });
 }
 
 /** One fixture per line so a diff of the golden file is readable. */

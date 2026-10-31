@@ -53,8 +53,11 @@ describe("P1-PAR: behaviour parity against the pinned baseline", () => {
     expect(imports.length).toBeGreaterThan(3);
     for (const spec of imports) expect(spec, `runner imports ${spec}`).not.toMatch(/discovery\//);
     expect(generator).not.toMatch(/from\s+["'][^"']*discovery\//);
-    // The generator runs the OLD code: it checks a commit out into a separate worktree.
-    expect(generator).toMatch(/git",?\s*\(?\s*"worktree"|"worktree",\s*"add"/);
+    // The generator runs the OLD code: it checks a commit out into a separate worktree (the shared helper does the checkout).
+    expect(generator).toMatch(/withBaselineWorktree/);
+    const helper = fs.readFileSync(path.join(here, "../../../../scripts/lib/baseline-worktree.mjs"), "utf8");
+    expect(helper).toMatch(/"worktree",\s*"add",\s*"--detach"/);
+    expect(helper).toMatch(/PINNED_BASELINE\s*=\s*"[0-9a-f]{40}"/);
   });
 
   it("falsification: a difference in the output is actually detected", () => {
