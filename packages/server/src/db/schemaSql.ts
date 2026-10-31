@@ -1383,6 +1383,10 @@ export const BOOTSTRAP_SQL = `
       source TEXT NOT NULL,
       last_recalled_at TEXT,
       recall_count INTEGER NOT NULL DEFAULT 0,
+      -- Unified discovery ledger (docs/specs/unified-discovery-architecture-2026-10-31.md §3). NULL = unclassified legacy; nothing here has a default that grants eligibility.
+      trust TEXT CHECK (trust IN ('accepted','imported')),
+      trust_at TEXT,
+      trust_basis TEXT,
       PRIMARY KEY (space_id, entry_id)
     );
     CREATE TABLE IF NOT EXISTS story_links (

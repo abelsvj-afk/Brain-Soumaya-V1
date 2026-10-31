@@ -1352,6 +1352,10 @@ export function migrateSchema(sqlite: RawDb): void {
       source TEXT NOT NULL,
       last_recalled_at TEXT,
       recall_count INTEGER NOT NULL DEFAULT 0,
+      -- Unified discovery ledger (docs/specs/unified-discovery-architecture-2026-10-31.md §3). NULL = unclassified legacy; nothing here has a default that grants eligibility.
+      trust TEXT CHECK (trust IN ('accepted','imported')),
+      trust_at TEXT,
+      trust_basis TEXT,
       PRIMARY KEY (space_id, entry_id)
     );
     CREATE TABLE IF NOT EXISTS story_links (
@@ -2010,6 +2014,16 @@ export function migrateSchema(sqlite: RawDb): void {
   const npcStateCols = sqlite.prepare(`PRAGMA table_info(npc_state)`).all() as { name: string }[];
   if (npcStateCols.length > 0 && !npcStateCols.some((c) => c.name === "contact_muted")) {
     sqlite.exec(`ALTER TABLE npc_state ADD COLUMN contact_muted INTEGER NOT NULL DEFAULT 0`);
+  }
+
+  // Unified discovery ledger, Phase 1 (docs/specs/unified-discovery-architecture-2026-10-31.md §3): provenance columns on story_finds. Additive, nullable and with NO default —
+  // existing rows read NULL ("unclassified legacy") and keep today's behaviour. PRAGMA-guarded so a repeated boot is a no-op; nothing is dropped or rewritten.
+  const storyFindsCols = sqlite.prepare(`PRAGMA table_info(story_finds)`).all() as { name: string }[];
+  if (storyFindsCols.length > 0) {
+    const have = new Set(storyFindsCols.map((c) => c.name));
+    if (!have.has("trust")) sqlite.exec(`ALTER TABLE story_finds ADD COLUMN trust TEXT CHECK (trust IN ('accepted','imported'))`);
+    if (!have.has("trust_at")) sqlite.exec(`ALTER TABLE story_finds ADD COLUMN trust_at TEXT`);
+    if (!have.has("trust_basis")) sqlite.exec(`ALTER TABLE story_finds ADD COLUMN trust_basis TEXT`);
   }
 }
 
