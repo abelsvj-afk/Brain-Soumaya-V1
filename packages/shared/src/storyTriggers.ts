@@ -157,6 +157,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
   { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
   { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
+  // The Long Morning (S-II): answers only where she is parked in the light; the Surveyor gives one rule after enough meetings.
+  { entryId: "sight.long-record", how: "regard", world: "the-long-morning", hour: "first-light", spot: { place: "^long-record$", near: 0.6 } },
+  { entryId: "obj.long-flake", how: "regard", world: "the-long-morning", hour: "growing", spot: { place: "^long-flake$", near: 3 } },
+  { entryId: "sight.long-people", how: "regard", world: "the-long-morning", hour: "hearths", spot: { place: "^long-people$", near: 1.2 } },
+  { entryId: "sight.long-home", how: "regard", world: "the-long-morning", hour: "rest", spot: { place: "^long-home$", near: 2.4 } },
+  { entryId: "sight.long-stroke", how: "regard", world: "the-long-morning", hour: "measure", spot: { place: "^long-stroke$", near: 1.2 } },
+  { entryId: "sight.long-pool", how: "regard", world: "the-long-morning", hour: "threshold", spot: { place: "^long-pool$", near: 2.6 } },
+  { entryId: "sight.long-fray", how: "regard", world: "the-long-morning", hour: "standing", spot: { place: "^long-fray$", near: 2 } },
+  { entryId: "sight.long-leaf", how: "regard", world: "the-long-morning", hour: "measure", spot: { place: "^long-leaf$", near: 2.4 } },
+  { entryId: "echo.long-voice", how: "listen", world: "the-long-morning", hour: "standing", spot: { place: "^long-people$", near: 1.6 } },
+  { entryId: "obj.long-measure", how: "npc", world: "the-long-morning", npc: "surveyor", minMeetings: 5 },
   // The Unlit Hulls (S-VI): answers only where she is parked in the yard; Wim gives one curl after enough meetings.
   { entryId: "sight.yard-six", how: "regard", world: "the-yard", hour: "first-light", spot: { place: "^yard-six$", near: 0.6 } },
   { entryId: "sight.yard-seventh", how: "regard", world: "the-yard", hour: "threshold", spot: { place: "^yard-seventh$", near: 2 } },

@@ -33,6 +33,7 @@ export const WORLD_NAMES: Readonly<Record<string, string>> = {
   "the-unmade-hour": "the Unmade Hour",
   "the-siege": "the Siege of the First Light",
   "the-yard": "the Unlit Hulls",
+  "the-long-morning": "the Long Morning",
   eternity: "Eternity's world",
 };
 

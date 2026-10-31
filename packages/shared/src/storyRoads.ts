@@ -217,6 +217,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "He squares the pen on the desk, and writes nothing, and seems for a moment to be at peace with it.",
   },
+  {
+    id: "road.where-the-light-begins", world: "the-long-morning", giver: "wayfarer", title: "Where the Light Begins",
+    offer: "Walk the line with me. I do not need us to find where it starts. I only need to not walk it alone.",
+    steps: [
+      S("stroke", "Find the groove that crosses the ground.", find("sight.long-stroke")),
+      S("home", "Find the home of four posts.", find("sight.long-home")),
+    ],
+    gift: "He puts a hand on the nearest post, and nods, and does not say who he thinks lives there.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

@@ -90,6 +90,13 @@ export const SIEGE_GATE_ENTRY = "obj.orus-bead";
 export const YARD_WORLD_KEY = "the-yard";
 export const YARD_GATE_ENTRY = "sight.blank-nameplate";
 
+/**
+ * The Long Morning (S-II; docs/specs/seam-the-long-morning-2026-10-31.md): a world of light with no horizon, from before the hole. A door in the story — it opens for a traveller who has found the Unnumbered
+ * Fragment (the server checks the Book; the owner is exempt) and stays open. It must never say whether the Uncounted is Eternity.
+ */
+export const LONG_MORNING_WORLD_KEY = "the-long-morning";
+export const LONG_MORNING_GATE_ENTRY = "relic.unnumbered-fragment";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -146,6 +153,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   "the-unmade-hour": { x: 110, y: 420 },
   "the-siege": { x: 330, y: 40 },
   "the-yard": { x: 640, y: 330 },
+  "the-long-morning": { x: 480, y: 690 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

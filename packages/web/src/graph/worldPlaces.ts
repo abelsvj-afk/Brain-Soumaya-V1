@@ -58,6 +58,16 @@ export const PLACE_RULES: Record<string, Rule[]> = {
     { match: /^field-ground$/, label: "The field", icon: "i:meadow" },
     { match: /^backdrop-(?!.*-model$)/, label: "Planet", icon: "i:planet" },
   ],
+  "the-long-morning": [
+    { match: /^long-record$/, label: "The ring of leaves", icon: "i:insights" },
+    { match: /^long-flake$/, label: "The flake", icon: "i:sun" },
+    { match: /^long-people$/, label: "The people", icon: "i:regard" },
+    { match: /^long-home$/, label: "The home", icon: "i:door" },
+    { match: /^long-stroke$/, label: "The first stroke", icon: "i:rise" },
+    { match: /^long-pool$/, label: "The basin", icon: "i:calm" },
+    { match: /^long-fray$/, label: "The line that stops", icon: "i:veil" },
+    { match: /^long-leaf$/, label: "The blank leaf", icon: "i:meadow" },
+  ],
   "the-yard": [
     { match: /^yard-six$/, label: "The six hulls", icon: "i:hangar" },
     { match: /^yard-seventh$/, label: "The seventh slip", icon: "i:rise" },

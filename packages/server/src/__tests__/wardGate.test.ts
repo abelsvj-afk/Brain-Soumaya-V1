@@ -118,3 +118,20 @@ describe("the Unlit Hulls gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).yardGateOpen).toBe(false);
   });
 });
+
+describe("the Long Morning gate", () => {
+  it("opens once the Unnumbered Fragment is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).longMorningGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "l1", kind: "drift", destination: "the-long-morning" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("LONG_MORNING_GATE_CLOSED");
+    }
+    find("a", "relic.unnumbered-fragment");
+    expect(t.getState(T0).longMorningGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "l2", kind: "drift", destination: "the-long-morning" }, T0).destination).toBe("the-long-morning");
+    expect(new TravelRepo(handle, "b").getState(T0).longMorningGateOpen).toBe(false);
+  });
+});

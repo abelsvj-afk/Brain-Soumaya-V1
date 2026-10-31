@@ -37,6 +37,8 @@ export interface TravelState {
   siegeGateOpen?: boolean;
   /** Whether the way to the Unlit Hulls stands open (the Blank Nameplate found) — the server's verdict; absent on an older server (read as closed). */
   yardGateOpen?: boolean;
+  /** Whether the way to the Long Morning stands open (the Unnumbered Fragment found) — the server's verdict; absent on an older server (read as closed). */
+  longMorningGateOpen?: boolean;
 }
 
 /**
