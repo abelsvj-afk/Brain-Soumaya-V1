@@ -90,6 +90,8 @@ import {
 import { createWardScene } from "../graph/wardScene.js";
 import { createRoadScene } from "../graph/roadScene.js";
 import { createVillageScene } from "../graph/villageScene.js";
+import { createUnmadeScene } from "../graph/unmadeScene.js";
+import { UNMADE_ORBIT_HEIGHT, UNMADE_ORBIT_RADIUS } from "../graph/unmadeLayout.js";
 import { VILLAGE_ORBIT_HEIGHT, VILLAGE_ORBIT_RADIUS } from "../graph/villageLayout.js";
 import { ROAD_ORBIT_HEIGHT, ROAD_ORBIT_RADIUS } from "../graph/roadLayout.js";
 import { WARD_ORBIT_HEIGHT, WARD_ORBIT_RADIUS } from "../graph/wardLayout.js";
@@ -608,6 +610,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     build: () => createRoadScene(),
   },
   // The Village (a door in the story, opened by finding the Thread of Many): a hillside village at night, every window lit, a path of gold hooks climbing to a luminous doorway.
+  // The Unmade Hour (a door in the story, opened by finding the Lullaby's Hollow): the first Sixth Hour — a wide pale floor that remembers nothing.
+  "the-unmade-hour": {
+    title: "The Unmade Hour",
+    light: { env: 0.7, hemi: { sky: 0xb8b4d8, ground: 0x3a3648, intensity: 1.0 }, key: { color: 0xf0e8ff, intensity: 1.0, from: [-150, 400, 200] } },
+    background: 0x14121e,
+    fogDensity: 0.0004,
+    orbitRadius: UNMADE_ORBIT_RADIUS,
+    orbitHeight: UNMADE_ORBIT_HEIGHT,
+    lookAtY: 30,
+    fallback: "The pale floor needs graphics support on this device — your memories are unaffected.",
+    build: () => createUnmadeScene(),
+  },
   "the-village": {
     title: "The Village",
     light: { env: 0.5, hemi: { sky: 0x9aaac8, ground: 0x1c2420, intensity: 0.9 }, key: { color: 0xffd9a0, intensity: 0.9, from: [-200, 420, 300] } },

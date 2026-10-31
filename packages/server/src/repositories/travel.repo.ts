@@ -15,6 +15,8 @@ import {
   ROAD_GATE_ENTRY,
   ROAD_WORLD_KEY,
   VILLAGE_GATE_ENTRY,
+  UNMADE_GATE_ENTRY,
+  UNMADE_WORLD_KEY,
   VILLAGE_WORLD_KEY,
   NO_ETERNITY_HOLDINGS,
   PEOPLE_GATE_MIN_MEMORIES_EACH,
@@ -69,7 +71,7 @@ import {
  *  Eternity's world joins the list as a GATED world (B-01): it is on the
  *  chart, but depart() admits it only through the gate below — the
  *  allow-list alone never opens the way there. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, VILLAGE_WORLD_KEY, ETERNITY_WORLD_KEY];
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, VILLAGE_WORLD_KEY, UNMADE_WORLD_KEY, ETERNITY_WORLD_KEY];
 export const HOME_WORLD = "home";
 
 /** Plain-language refusals for the Eternity gate (B-01): a closed gate
@@ -88,6 +90,7 @@ export type TravelErrorCode =
   | "WARD_GATE_CLOSED"
   | "ROAD_GATE_CLOSED"
   | "VILLAGE_GATE_CLOSED"
+  | "UNMADE_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
   | "JOURNEY_NOT_DEPARTED"
   | "ETERNITY_GATE_CLOSED"
@@ -433,6 +436,9 @@ export class TravelRepo implements JourneyBonusCreditor {
       // The Road to the Seam: a door in the story, opened by finding Teru's Harbor Nail.
       if (input.destination === ROAD_WORLD_KEY && !this.roadGateOpen())
         throw new TravelError("ROAD_GATE_CLOSED", "The Road isn't open yet — it appears once you have found the nail a traveller set in the harbor door.");
+      // The Unmade Hour: a door in the story, opened by finding the Lullaby's Hollow.
+      if (input.destination === UNMADE_WORLD_KEY && !this.unmadeGateOpen())
+        throw new TravelError("UNMADE_GATE_CLOSED", "The Unmade Hour isn't open yet — it appears once you have found the hollow along a certain hull.");
       // The Village: a door in the story, opened by finding the Thread of Many.
       if (input.destination === VILLAGE_WORLD_KEY && !this.villageGateOpen())
         throw new TravelError("VILLAGE_GATE_CLOSED", "The Village isn't open yet — it appears once you have found the thread that was passed hand to hand.");
@@ -705,6 +711,8 @@ export class TravelRepo implements JourneyBonusCreditor {
     roadGateOpen: boolean;
     /** Whether the way to the Village stands open (the Thread of Many found). */
     villageGateOpen: boolean;
+    /** Whether the way to the Unmade Hour stands open (the Lullaby's Hollow found). */
+    unmadeGateOpen: boolean;
     eternityReachable: boolean;
   } {
     this.settleActive(nowMs);
@@ -716,8 +724,18 @@ export class TravelRepo implements JourneyBonusCreditor {
       wardGateOpen: this.wardGateOpen(),
       roadGateOpen: this.roadGateOpen(),
       villageGateOpen: this.villageGateOpen(),
+      unmadeGateOpen: this.unmadeGateOpen(),
       eternityReachable: this.eternityGateReachable(),
     };
+  }
+
+  unmadeGateOpen(): boolean {
+    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+    try {
+      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, UNMADE_GATE_ENTRY);
+    } catch {
+      return false;
+    }
   }
 
   villageGateOpen(): boolean {

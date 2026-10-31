@@ -67,3 +67,20 @@ describe("the Village gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).villageGateOpen).toBe(false);
   });
 });
+
+describe("the Unmade Hour gate", () => {
+  it("opens once the Lullaby's Hollow is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).unmadeGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "u1", kind: "drift", destination: "the-unmade-hour" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("UNMADE_GATE_CLOSED");
+    }
+    find("a", "sight.lullaby-hollow");
+    expect(t.getState(T0).unmadeGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "u2", kind: "drift", destination: "the-unmade-hour" }, T0).destination).toBe("the-unmade-hour");
+    expect(new TravelRepo(handle, "b").getState(T0).unmadeGateOpen).toBe(false);
+  });
+});

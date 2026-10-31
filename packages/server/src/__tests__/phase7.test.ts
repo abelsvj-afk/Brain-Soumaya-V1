@@ -28,7 +28,15 @@ const kindOf = (id: number) => new GraphService(handle, "legacy").getNode(id)?.k
 
 describe("Cognitive Layer Phase 7 — future events, intentions, motivations", () => {
   it("lists upcoming events by date and rolls a past-due one into memory", async () => {
-    const soon = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    // +3 calendar days in the space zone: 72 h is only that when no DST change falls in the window (it read 2
+    // across the US fall-back), so shift by the zone's offset change.
+    const offsetMin = (t: number) => {
+      const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "longOffset" }).formatToParts(t).find((x) => x.type === "timeZoneName")!.value;
+      const m = /GMT([+-])(\d{2}):(\d{2})/.exec(p);
+      return m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+    };
+    const t3 = Date.now() + 3 * 86_400_000;
+    const soon = new Date(t3 - (offsetMin(t3) - offsetMin(Date.now())) * 60_000).toISOString();
     const past = new Date(Date.now() - 86_400_000).toISOString();
     const a = await createCognitive(ctx, "legacy", "future_event", "Dentist", "", { date: soon });
     const b = await createCognitive(ctx, "legacy", "future_event", "Deadline", "", { date: past });

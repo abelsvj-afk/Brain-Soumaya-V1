@@ -69,6 +69,13 @@ export const ROAD_GATE_ENTRY = "relic.harbor-nail";
 export const VILLAGE_WORLD_KEY = "the-village";
 export const VILLAGE_GATE_ENTRY = "relic.thread-of-many";
 
+/**
+ * The Unmade Hour (S-I; docs/specs/seam-the-unmade-hour-2026-10-31.md): the first Sixth Hour, before the second. A door in the story — it opens for a traveller who has found the Lullaby's Hollow
+ * (the server checks the Book; the owner is exempt) and stays open. It must never say why the hour was made twice.
+ */
+export const UNMADE_WORLD_KEY = "the-unmade-hour";
+export const UNMADE_GATE_ENTRY = "sight.lullaby-hollow";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -122,6 +129,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   "faded-ward": { x: 900, y: 420 },
   "road-to-the-seam": { x: 700, y: 120 },
   "the-village": { x: 240, y: 300 },
+  "the-unmade-hour": { x: 110, y: 420 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

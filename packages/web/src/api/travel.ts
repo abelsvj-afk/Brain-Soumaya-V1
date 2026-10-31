@@ -31,6 +31,8 @@ export interface TravelState {
   roadGateOpen?: boolean;
   /** Whether the way to the Village stands open (the Thread of Many found) — the server's verdict; absent on an older server (read as closed). */
   villageGateOpen?: boolean;
+  /** Whether the way to the Unmade Hour stands open (the Lullaby's Hollow found) — the server's verdict; absent on an older server (read as closed). */
+  unmadeGateOpen?: boolean;
 }
 
 /**

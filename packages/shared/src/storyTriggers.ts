@@ -157,6 +157,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
   { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
   { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
+  // The Unmade Hour (S-I): answers only where she is parked on the floor; the Archivist gives one leaf after enough meetings.
+  { entryId: "sight.unmade-hollows", how: "regard", world: "the-unmade-hour", hour: "first-light", spot: { place: "^unmade-hollows$", near: 0.8 } },
+  { entryId: "sight.unmade-ring", how: "regard", world: "the-unmade-hour", hour: "measure", spot: { place: "^unmade-ring$", near: 1.3 } },
+  { entryId: "sight.unmade-standing", how: "regard", world: "the-unmade-hour", hour: "rest", spot: { place: "^unmade-standing$", near: 3 } },
+  { entryId: "obj.unmade-hands", how: "regard", world: "the-unmade-hour", hour: "standing", spot: { place: "^unmade-hands$", near: 1.4 } },
+  { entryId: "sight.unmade-frame", how: "regard", world: "the-unmade-hour", hour: "threshold", spot: { place: "^unmade-frame$", near: 2.2 } },
+  { entryId: "obj.unmade-tally", how: "regard", world: "the-unmade-hour", hour: "hearths", spot: { place: "^unmade-tally$", near: 1.6 } },
+  { entryId: "sight.unmade-seam", how: "regard", world: "the-unmade-hour", hour: "growing", spot: { place: "^unmade-seam$", near: 1.2 } },
+  { entryId: "echo.unmade-note", how: "listen", world: "the-unmade-hour", hour: "standing", spot: { place: "^unmade-note$", near: 2.4 } },
+  { entryId: "sight.unmade-no-mark", how: "listen", world: "the-unmade-hour", hour: "rest", spot: { place: "^unmade-hollows$", near: 1.6 } },
+  { entryId: "obj.unmade-blank-leaf", how: "npc", world: "the-unmade-hour", npc: "archivist", minMeetings: 5 },
   // The Village (S-V): answers only where she is parked in the village; the Keeper gives one thread-end after enough meetings.
   { entryId: "sight.village-gate", how: "regard", world: "the-village", hour: "first-light", spot: { place: "^village-gate$", near: 1.4 } },
   { entryId: "sight.village-windows", how: "regard", world: "the-village", hour: "hearths", spot: { place: "^village-windows$", near: 0.8 } },

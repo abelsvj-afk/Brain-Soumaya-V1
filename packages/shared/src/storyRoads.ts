@@ -190,6 +190,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "She looks at the bar a while and at the chair, and says nothing about either, and puts the kettle on.",
   },
+  {
+    id: "road.what-the-floor-keeps", world: "the-unmade-hour", giver: "cantor", title: "What the Floor Keeps",
+    offer: "Stand with me a moment where the hollows end. I will hum, and you will not ask me to finish it.",
+    steps: [
+      S("hands", "Find the seven hands, six of them lit.", find("obj.unmade-hands")),
+      S("note", "Listen for the held note.", find("echo.unmade-note")),
+    ],
+    gift: "She hums as far as the place it stops, and no further, and lets the quiet be the end of it.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

@@ -6,6 +6,7 @@ import { PEOPLE_BACKDROP_PLANETS } from "./peopleAssets.js";
 import { STORY_TRIGGERS } from "@brain/shared";
 import { WARD_HOLDERS } from "./wardLayout.js";
 import { ROAD_HOLDERS } from "./roadLayout.js";
+import { UNMADE_HOLDERS } from "./unmadeLayout.js";
 import { VILLAGE_HOLDERS } from "./villageLayout.js";
 
 /**
@@ -38,6 +39,8 @@ function holderNames(world: string): string[] {
       return [...WARD_HOLDERS];
     case "road-to-the-seam":
       return [...ROAD_HOLDERS];
+    case "the-unmade-hour":
+      return [...UNMADE_HOLDERS];
     case "the-village":
       return [...VILLAGE_HOLDERS];
     default:
