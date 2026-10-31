@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import { createDb, type DbHandle } from "../db/client.js";
 import { RelicHoldingsStore } from "../relics/holdings.js";
 import { RelicClaimService } from "../relics/claims.js";
+import { buffsForSpace } from "../relics/buffs.js";
 import { EconomyRepo } from "../economy.js";
 import { SPACE_SCOPED_TABLES } from "../auth/spaces.js";
 import { RELIC_ANCHOR_POINTS, RELIC_SCAN_WIDEN_COST } from "@brain/shared";
@@ -523,11 +524,39 @@ describe("re-review round 2 (I-4): binding at every receipt site, private placed
       expect(loser.ok).toBe(false);
       expect(loser.kind).toBe("malformed");
       const h2 = createDb(dbPath);
-      const held = h2.sqlite.prepare(`SELECT relic_id FROM relic_holdings WHERE space_id = 's1'`).all() as { relic_id: string }[];
-      expect(held).toHaveLength(1);
+      // Exactly one COMMITTED award exists across the race — the
+      // atomicity P1-A proves: one attempt row under the shared key,
+      // naming the winner's relic. What the award left behind follows
+      // the winner's tier class (tier implementation, PR #150): the
+      // Nail is a Keystone and is HELD; the Ring is a Seed — a won
+      // claim is consumed, never held: no holding, exactly one
+      // recorded seed consumption, the copy consumed, its permanent
+      // effect live. (This test's pre-tier shape asserted a holding
+      // either way and failed whenever the Ring won the race.)
+      const winnerIdx = results.findIndex((r) => r.ok && r.awarded);
+      const winnerId = winnerIdx === 0 ? "harbor-nail" : "mooring-ring";
+      const winnerCopyId = results[winnerIdx]!.copyId!;
       const rows = h2.sqlite.prepare(`SELECT relic_id FROM relic_claim_attempts WHERE space_id = 's1' AND attempt_key = 'shared-key'`).all() as { relic_id: string }[];
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.relic_id).toBe(held[0]!.relic_id);
+      expect(rows[0]!.relic_id).toBe(winnerId);
+      const held = h2.sqlite.prepare(`SELECT relic_id FROM relic_holdings WHERE space_id = 's1'`).all() as { relic_id: string }[];
+      const seedEffects = h2.sqlite.prepare(`SELECT relic_id, copy_id FROM relic_seed_effects WHERE space_id = 's1'`).all() as { relic_id: string; copy_id: string }[];
+      const copyState = (h2.sqlite.prepare(`SELECT state FROM relic_copies WHERE copy_id = ?`).get(winnerCopyId) as { state: string }).state;
+      if (winnerId === "harbor-nail") {
+        expect(held.map((r) => r.relic_id)).toEqual(["harbor-nail"]);
+        expect(seedEffects).toEqual([]);
+        expect(copyState).toBe("held");
+      } else {
+        expect(held).toEqual([]);
+        expect(seedEffects).toEqual([{ relic_id: "mooring-ring", copy_id: winnerCopyId }]);
+        expect(copyState).toBe("consumed");
+        // The Seed's permanent effect is present — drift pays +1 —
+        // and the held form's daily-cap raise did NOT become
+        // permanent (the tier ruling: the cap stays 2, ceiling 8/day).
+        const buffs = buffsForSpace(h2, "s1");
+        expect(buffs.driftBonus).toBe(4);
+        expect(buffs.driftDailyCap).toBe(2);
+      }
       h2.sqlite.close();
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }, 60_000);
