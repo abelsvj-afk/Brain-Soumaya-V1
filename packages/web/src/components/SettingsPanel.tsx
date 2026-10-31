@@ -4,6 +4,7 @@ import EternityAutonomyPanel from "./EternityAutonomyPanel.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { currentSpace, updateProfile } from "../api/client.js";
 import { AccountSettings } from "./AccountSettings.js";
+import BackupPanel from "./BackupPanel.js";
 import { isVoiceEnabled, setVoiceEnabled, isVoiceSupported } from "../voice.js";
 import { sfxEnabled, setSfxEnabled } from "../graph/sfx.js";
 import { isColorblind, setColorblind } from "../graph/theme.js";
@@ -570,6 +571,10 @@ export function SettingsPanel({
         <OwnerAccess />
         <EternityAutonomyPanel />
         <AccountSettings gamerTag={gamerTag} onBrainDeleted={onBrainDeleted} />
+        {/* G0 backup status (B3): owner-only on the server; renders
+            nothing for anyone else. Latest-good vs latest attempt,
+            latest-good age, Back up now / Golden triggers. */}
+        <BackupPanel />
 
         <section className="settings-section" id="settings-audio">
           <h3>Preferences</h3>
