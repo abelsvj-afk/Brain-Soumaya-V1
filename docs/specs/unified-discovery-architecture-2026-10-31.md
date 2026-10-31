@@ -8,8 +8,9 @@
 
 This is the Architect-reviewed design for making `story_finds` the single, trust-graded
 discovery ledger, so that Codex, Book, TravelRepo, economy, roads and flavor stop keeping
-competing truths about what a player has found. It was produced design-only: no repository
-change, production access, census, classification, enforcement or deployment took place.
+competing truths about what a player has found. It was produced design-only: no
+implementation or code change, production access, census, classification, enforcement or
+deployment took place.
 Behaviours named "measured" were measured in throwaway scripts on a local SQLite 3.53.2
 build, not on production (see §18).
 
@@ -195,8 +196,21 @@ online-only stillness and gifts; a separate `accepted-late` grade; a rate cap pe
   ever. The server sets `source='import'`, `trust='imported'`, basis `client-report`,
   `found_at` = server time. Anything else is counted `skipped`; skipped ids are never echoed
   or logged.
-- **Limits.** 2 KB body (parsed before the global 8 MB parser — `api/server.ts:72`), 30 raw
-  items, a dedicated `rateLimit({max: 6})` per IP. The structural bound is the real control.
+- **Limits.** 2 KB body, 30 raw items, a dedicated `rateLimit({max: 6})` per IP. The structural
+  bound is the real control.
+- **Middleware order.** The global `express.json` (8 MB) is mounted at `api/server.ts:72`,
+  before the API routes are mounted (`:139`), so a parser placed inside the import route
+  cannot enforce the limit. Required arrangement: a path-scoped `express.json({ limit: '2kb' })`
+  for `/api/story/import` is mounted **before** the global parser, and the global parser is
+  wrapped in a small middleware that bypasses it for the exact import path (an exact-path
+  comparison on the request path), after the path-scoped 2 KB parser has run. `express.json`
+  has no native skip option and none is implied. The path-scoped parser and the global-parser
+  bypass must use the same route-matching predicate. That predicate must cover every path form
+  accepted by the import endpoint, including a trailing slash if the endpoint accepts one.
+  Alternatively, the endpoint must reject noncanonical path forms before body parsing. No
+  accepted import request may fall through to the global parser. The design does not rely on
+  body-parser skipping an already-parsed body. Test: a 3 KB body to the import route returns 413 from the
+  path-scoped parser, and an ordinary route still enforces the global limit (§17, IMP).
 - **Canonicalization.** Trim, NFC, `^[a-z0-9-]{1,40}$`, exact lookup, first occurrence wins.
 - **Transaction.** One `BEGIN IMMEDIATE` creates the rows and the `discovery_imports`
   completion record together. All-or-nothing. After completion, later calls write nothing and
@@ -215,6 +229,18 @@ online-only stillness and gifts; a separate `accepted-late` grade; a rate cap pe
 `deleteSpace` for that exact id holds its in-process window, cleared in `finally`). A
 connection lacking them fails at statement preparation (`no such function`). Backup
 connections are read-only and unaffected; `VACUUM INTO` still works (measured).
+
+**The deletion window.** `auth/spaces.ts` `deleteSpace` does not open a window today (the
+repository has no reference to one), so the guard set (G3) would block account deletion unless
+`deleteSpace` is changed. That change is part of the P6 enforcement work and must be in the
+running build before the guard set is installed. The window is opened for the one space id
+being deleted, inside the account-deletion transaction and before its table loop, and is closed
+in a `finally` block, so cleanup happens on success and on failure, including when the
+transaction rolls back. The deletion routine and capability window are synchronous. No `await`
+or other asynchronous yield is permitted between opening and closing the window; the window is
+scoped to the deleting connection and space id. Tests G-36/G-37 and the boot self-test (§8.4) exercise the real
+deletion path, not merely the flag. T38 (deferred, §16) also concerns `deleteSpace`; nothing
+here settles it.
 
 ### 6.2 The guard set (G0–G3), installed only at enforcement
 Capability (G0), insert validation (G1), update transitions (G2) and delete protection (G3)
@@ -409,8 +435,18 @@ trigger text hashes to the record's manifest hash; the live `NULL` count is 0. O
 effective mode is `shadow` with a reason (`guards-missing-or-altered`,
 `guards-without-record`, `enforcement-stale`, `null-rows`, …) in `/api/health`.
 **Nothing is repaired or reinstalled automatically.** A matching trigger hash alone does not
-establish currency. A boot self-test (a guarded write inside a rolled-back savepoint)
-refuses enforcement if triggers cannot call the functions.
+establish currency. A boot self-test refuses enforcement if triggers cannot call the
+functions: it performs a guarded write inside a rolled-back savepoint, and it also exercises
+the real account-deletion routine on a scratch space inside a rolled-back savepoint, asserting
+that the scratch space's `story_finds` rows are removed and that the deletion window is closed
+afterwards. **Mandatory P6 design requirement:** the self-test must exercise the same internal
+deletion operation that the authenticated public `deleteSpace` path uses. Authentication and
+passcode verification remain at the public boundary and are not bypassed or weakened. The
+self-test uses an isolated scratch identity and space, through its own explicit test-only
+invocation path, and must not expose an unauthenticated production deletion entry point. The P6
+design must also establish how the internal routine participates in the rolled-back savepoint
+without nesting or committing an independent transaction; that implementation detail is not
+decided here.
 
 ---
 
@@ -473,7 +509,7 @@ Every phase needs its own owner approval.
 | **P3** | Import (flag-gated; 404 unless G4 and F1 are present); the imported → accepted upgrade branch; `discovery_imports`. | Imported rows appear in the Book |
 | **P4** | Eligibility, `shadow` mode and logging (the relocation itself moved to P1); Eternity wiring inert. | None |
 | **P5** | Presentation code: server-driven Codex state, `standing`, the `latest` fix and the glimmer rule — these ship inert and are active only when the effective mode is `on`, which becomes available only after P6 enforcement is installed and verified (§9); plus find-then-claim ordering, which is mode-independent because F1 applies in every mode. | Claim ordering restored in all modes; everything else only under `on` (i.e. after P6) |
-| **P6** | Census → classification → `discovery:enforce`, each separately approved; completion/enforcement tables; the owner-visible enforcement signal (a design requirement, §16). | Doors and legacy discoveries change |
+| **P6** | Census → classification → `discovery:enforce`, each separately approved; completion/enforcement tables; the `deleteSpace` deletion window (§6.1); the owner-visible enforcement signal (a design requirement, §16). | Doors and legacy discoveries change |
 | **P7** | Relic enablement: close the generic-relic loophole; Scale, then Archive (each approved). | New relics appear |
 | (Eternity) | Separate, later, reversible release behind the T37 flag, after enforcement and Scale enablement. | Eternity reachable |
 
@@ -524,8 +560,13 @@ mutate (§14), so a historical `arrived` state is not treated as proof of a mean
 - Tier 1: spaces with at least one journey in state `arrived` to that world.
 - Tier 2: of Tier 1, spaces whose arrival has a `departed` event and an `arrived_at` later than
   `departed_at` (positive journey evidence).
-- Tier 3: of Tier 2, spaces with a later journey that leaves that world (its `origin` is that
-  world).
+- Tier 3: of Tier 2, spaces with a later journey whose `origin` is that world **and** which
+  actually departed (a `departed` event, or non-null `departed_at`). `origin` alone is not
+  enough: an `arming` journey cancelled before departure keeps its `origin`
+  (`travel.repo.ts:531–538`) but does not show that the player left. The later journey's actual
+  departure must also occur after the Tier 2 arrival: its `departed` event time, or
+  `departed_at`, must be later than that arrival's `arrived_at`. A journey with the correct
+  origin and departure evidence from before that arrival does not qualify.
 - Owner-exempt spaces are reported separately: they bypass the gates, so their arrivals do not
   show earned access. The exempt ids are supplied to the analysis at run time and are not stored
   in its output.
@@ -627,8 +668,9 @@ under `packages/shared`, the web app, or the routes; any feature flag beyond a r
   `ALTER` in `migrateSchema`; `createDb` :2020), `story/story.ts`, `story/flavor.ts` (:37),
   `story/roads.ts` (:41), `repositories/travel.repo.ts` (:764, `holdsAnySet` — read
   relocation only; Red Zone).
-- **Unchanged:** `auth/spaces.ts` (the delete loop is the documented exception),
-  `backup/inventory.ts`, the web app, `packages/shared`, all routes.
+- **Unchanged in P1:** `auth/spaces.ts` (the delete loop is the documented exception; it gains
+  the deletion window in P6, §6.1), `backup/inventory.ts`, the web app, `packages/shared`, all
+  routes.
 
 ### Behaviour in P1
 - `find` branches on existing state: absent → insert `accepted`/`live:v1`; any existing row →
@@ -754,6 +796,8 @@ D4 is recorded in the owner's words. Its mode- and Fuel-precise form is T4 (impo
 gate-eligible in any mode), F1 (T10–T12: relic Fuel requires an accepted discovery) and §9
 (unclassified rows keep gate eligibility under `off` and `shadow`).
 
+D16–D18 were adopted by the owner in the design conversation of 2026-10-31.
+
 ### Settled technically
 | ID | Decision |
 |---|---|
@@ -818,11 +862,11 @@ gate depends on memories and is unaffected.
 |---|---|
 | MIG | Column add on an existing database; idempotent; `VACUUM INTO` round-trip preserves columns and triggers |
 | P1-PAR / P1-SQL / P1-ARCH / P1-LEG / P1-ROLL / P1-CAP | §15 |
-| TRANS / G-series | Every transition row; the 28-case matrix; `REPLACE`/`IGNORE`/plain `INSERT` onto each trust state; delete-then-insert; capability on every insert/update/delete including recall columns singly and together; denied-connection ordering; one trigger per event; deletion window per space and cleared on error; guard-hash and self-test refusal; unauthorized recall updates |
+| TRANS / G-series | Every transition row; the 28-case matrix; `REPLACE`/`IGNORE`/plain `INSERT` onto each trust state; delete-then-insert; capability on every insert/update/delete including recall columns singly and together; denied-connection ordering; one trigger per event; deletion window per space, exercised through the real account-deletion path, and closed on success and on failure (G-36/G-37); guard-hash and self-test refusal; unauthorized recall updates |
 | D-series | Duplicate-key behaviour in all four states; duplicate import; duplicate classification |
 | NULL-1…4 | A new key with `NULL` trust aborts after enforcement; admit/import never write `NULL` pre-enforcement (property test); the installer refuses while a `NULL` row exists; `UPDATE … WHERE trust IS NULL` is the only code path changing a `NULL` row |
 | F-series | F1 route order; G4; paid keys unchanged (fixture balance proof and claim-set superset); outdated-client response; client tolerance; first-account claim and `deleteSpace` with G4 present |
-| IMP | Import validation, limits, one-shot, transaction rollback, 404 without G4/F1 |
+| IMP | Import validation, limits, one-shot, transaction rollback, 404 without G4/F1; parser order (a 3 KB body to the import route returns 413 from the path-scoped parser, and an ordinary route still enforces the global limit) |
 | RB | Rollback ladder; boot over a restored older database; G4 re-install; import off |
 | ACC / R2 / Z / ORD / ENF | Accounting over distinct discoveries; R2 outcomes (legacy always `indeterminate`); zero-null; governing-record scenarios; atomicity; enforce refuses without the census hash; enforcement transaction all-or-nothing; withdraw atomic; boot currency checks |
 | PAR | Behaviour parity under `off` on identical fixtures and on a copy of the census snapshot |

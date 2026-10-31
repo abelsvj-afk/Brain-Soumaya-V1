@@ -107,8 +107,8 @@ Always run `npm test` and `npm run typecheck` before committing. The web app mus
   earn Fuel, and relic Fuel claims require an accepted discovery under F1. Legacy NULL rows
   cannot claim relic Fuel until classified. Fuel stays in the separate
   `codex_claims` ledger. Do not add SQL on `story_finds` outside the ledger and reader once
-  they exist. Each phase and production action (census, classification, enforcement, relic
-  enablement) needs its own owner approval.
+  they exist. Each phase and production action (merging to `main`, the census, classification,
+  enforcement, the Eternity release, relic enablement) needs its own owner approval.
 
 ## Celestial mass model (the galaxy physics)
 
