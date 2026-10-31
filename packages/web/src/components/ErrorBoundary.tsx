@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { getDiagnosticSnapshot, logDiagnosticEvent } from "../diagnostics/buffer";
 import { isDiagnosticsEnabled } from "../diagnostics/config";
+import { maybeReloadForChunkError } from "../lib/chunkReload";
 
 interface Props {
   children: ReactNode;
@@ -34,6 +35,11 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error(`[app] render error${this.props.label ? ` (${this.props.label})` : ""}:`, error, info.componentStack);
     logDiagnosticEvent('error', this.props.label || 'boundary', { message: error.message, componentStack: info.componentStack });
+    // A lazy panel/chunk that no longer exists after a deploy (stale shell)
+    // recovers by reloading once into the fresh shell instead of dead-ending
+    // on this boundary's error UI. Guarded in chunkReload: if the fresh shell
+    // still fails, this boundary's error screen shows exactly as before.
+    maybeReloadForChunkError(error);
     if (isDiagnosticsEnabled()) {
       console.log("[diagnostics] Crash snapshot:", getDiagnosticSnapshot());
     }

@@ -1,3 +1,32 @@
+### 2026-10-31 (Claude): Stale-shell chunk fix — real 404s for missing files + one guarded auto-reload
+- [ ] Verified by Claude
+- Owner-reported dead-end: after a deploy, a phone holding the previous
+  build's shell requested hashed chunks that no longer exist
+  (`assets/SettingsPanel-….js`, MindPanel, StoryBook) and got the full-screen
+  "Failed to fetch dynamically imported module" error. Root cause (proven
+  against the live server + confirmed in code): the SPA fallback in
+  `packages/server/src/api/server.ts` answered EVERY non-API GET — including
+  missing `/assets/*` files — with the index HTML and HTTP 200, so the
+  browser tried to execute HTML as a JS module.
+- Server: the fallback now returns a real `404` for file requests that
+  `express.static` didn't match — any path under `/assets/`, and any path
+  whose last segment carries a file extension. Extensionless page routes
+  still receive the shell; API routes and real files are untouched.
+- Client: new `packages/web/src/lib/chunkReload.ts` recognizes chunk-load
+  failures (Chrome/Firefox/Safari message shapes + ChunkLoadError) and
+  forces ONE full reload so the client picks up the fresh shell.
+  Loop-guarded by a sessionStorage timestamp (at most one forced reload per
+  3 minutes); if the chunk still fails after the fresh shell, the existing
+  error screen shows as before. Wired in two places: `main.tsx`
+  (`vite:preloadError` listener, preventDefault only when a reload fires)
+  and `ErrorBoundary.componentDidCatch` (covers the lazy panel imports,
+  root + contained boundaries). No panel/world/content changes.
+- Tests: `packages/server/src/__tests__/staticFiles.test.ts` (bogus chunk →
+  404, extension path → 404, page route → 200 shell, real asset → 200,
+  /api/health untouched) and `packages/web/src/lib/chunkReload.test.ts`
+  (fires once, suppressed inside the guard window, allowed after it,
+  non-chunk errors never reload, storage-outage behavior pinned).
+
 ### 2026-10-30 (Claude): G0 inventory v5 — preflight resolved (3 reclassifications with causes) + MUST enforcement ON
 - [ ] Verified by Claude
 - Owner-authorized follow-up to the B0 amendment-B preflight hold. The
