@@ -2,7 +2,7 @@
  * The Road to the Seam (docs/specs/seam-road-to-the-seam-2026-10-31.md): pure layout numbers for one long road under the Station. No three.js, so it is unit-tested. The road runs
  * along +z from a mouth near the origin and goes on into fog — nothing in the scene ever shows where it ends.
  */
-export const ROAD = { halfWidth: 46, wallHalfWidth: 70, zStart: -120, zEnd: 2400, wallHeight: 130 } as const;
+export const ROAD = { halfWidth: 110, wallHalfWidth: 114, zStart: -120, zEnd: 2400, wallHeight: 190 } as const;
 /** How far along the road the world's origin (the host's orbit centre) stands. */
 export const ROAD_VIEW_Z = 320;
 /** The orbit must stay inside the walls even at the widest portrait back-off (MAX_PORTRAIT_FIT 2.2). */
@@ -11,9 +11,9 @@ export const ROAD_ORBIT_HEIGHT = 16;
 
 export const ROAD_LAMP_SPACING = 120;
 export const ROAD_NAIL_SPACING = 26;
-export const ROAD_NAIL_HEIGHT = 44;
+export const ROAD_NAIL_HEIGHT = 50;
 /** Chalk strokes are set at a child's height. */
-export const ROAD_CHALK_HEIGHT = 15;
+export const ROAD_CHALK_HEIGHT = 16;
 export const ROAD_CHALK_FROM_Z = 140;
 /** Where the chalk stops. */
 export const ROAD_CHALK_END_Z = 1300;
@@ -21,7 +21,7 @@ export const ROAD_CHALK_END_Z = 1300;
 /** Lamps hang on both walls at even spacing; every one the same height. */
 export function roadLamps(): { x: number; y: number; z: number }[] {
   const out: { x: number; y: number; z: number }[] = [];
-  for (let z = 60; z <= ROAD.zEnd - 100; z += ROAD_LAMP_SPACING) out.push({ x: -ROAD.halfWidth + 4, y: 56, z }, { x: ROAD.halfWidth - 4, y: 56, z });
+  for (let z = 60; z <= ROAD.zEnd - 100; z += ROAD_LAMP_SPACING) out.push({ x: -ROAD.halfWidth + 4, y: 64, z }, { x: ROAD.halfWidth - 4, y: 64, z });
   return out;
 }
 

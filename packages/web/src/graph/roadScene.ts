@@ -58,8 +58,8 @@ export function createRoadScene(): RoadScene {
   // Lamps: a warm core and a soft glow, instanced.
   const lamps = roadLamps();
   const lampGlowMat = new THREE.MeshBasicMaterial({ color: C.lamp, transparent: true, opacity: 0.17, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
-  const cores = new THREE.InstancedMesh(new THREE.SphereGeometry(3.4, 8, 6), new THREE.MeshBasicMaterial({ color: C.lamp, toneMapped: false }), lamps.length);
-  const glows = new THREE.InstancedMesh(new THREE.SphereGeometry(18, 10, 8), lampGlowMat, lamps.length);
+  const cores = new THREE.InstancedMesh(new THREE.SphereGeometry(4, 8, 6), new THREE.MeshBasicMaterial({ color: C.lamp, toneMapped: false }), lamps.length);
+  const glows = new THREE.InstancedMesh(new THREE.SphereGeometry(22, 10, 8), lampGlowMat, lamps.length);
   lamps.forEach((l, i) => {
     dummy.position.set(l.x, l.y, l.z);
     dummy.updateMatrix();
@@ -69,11 +69,11 @@ export function createRoadScene(): RoadScene {
   cores.name = "road-lamp-cores";
   glows.name = "road-lamp-glows";
   raw.add(cores, glows);
-  raw.add(proxy("road-lamps", ROAD.halfWidth * 2, 8, 360, 0, 56, 60 + 180));
+  raw.add(proxy("road-lamps", ROAD.halfWidth * 2, 8, 360, 0, 64, 60 + 180));
 
   // Nails: one every stride on the right wall, each faintly warm.
   const nails = roadNails();
-  const nailMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.1, 1.1, 6, 6), new THREE.MeshBasicMaterial({ color: C.nail, toneMapped: false }), nails.length);
+  const nailMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.8, 1.8, 9, 6), new THREE.MeshBasicMaterial({ color: C.nail, toneMapped: false }), nails.length);
   nails.forEach((n, i) => {
     dummy.position.set(n.x - 2, n.y, n.z);
     dummy.rotation.set(0, 0, Math.PI / 2);
@@ -83,11 +83,11 @@ export function createRoadScene(): RoadScene {
   dummy.rotation.set(0, 0, 0);
   nailMesh.name = "road-nail-heads";
   raw.add(nailMesh);
-  raw.add(proxy("road-nails", 6, 30, 240, ROAD.halfWidth - 3, 44, 40 + 120));
+  raw.add(proxy("road-nails", 6, 30, 240, ROAD.halfWidth - 3, 50, 40 + 120));
 
   // Chalk: short strokes low on the left wall, in groups; they stop at the chalk end.
   const chalk = roadChalk();
-  const strokes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 5, 0.5), new THREE.MeshBasicMaterial({ color: C.chalk, transparent: true, opacity: 0.8, toneMapped: false }), chalk.length);
+  const strokes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 7, 0.7), new THREE.MeshBasicMaterial({ color: C.chalk, transparent: true, opacity: 0.8, toneMapped: false }), chalk.length);
   chalk.forEach((m, i) => {
     dummy.position.set(-ROAD.halfWidth - 0.3, m.y, m.z);
     dummy.rotation.set(m.tilt, 0, 0);
@@ -123,7 +123,8 @@ export function createRoadScene(): RoadScene {
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(38, 4, 4), fm);
   lintel.position.set(0, 64, 0);
   frame.add(lintel);
-  frame.position.set(ROAD.halfWidth - 24, 0, ROAD_DOORFRAME_Z);
+  frame.scale.setScalar(1.8);
+  frame.position.set(ROAD.halfWidth - 50, 0, ROAD_DOORFRAME_Z);
   raw.add(frame);
 
   // The Wardens' post: an empty post and a worn bench.
@@ -138,7 +139,8 @@ export function createRoadScene(): RoadScene {
   const benchLeg = new THREE.Mesh(new THREE.BoxGeometry(30, 12, 3), new THREE.MeshStandardMaterial({ color: C.bench, roughness: 1 }));
   benchLeg.position.set(12, 7, -4);
   post.add(benchLeg);
-  post.position.set(-ROAD.halfWidth + 22, 0, ROAD_POST_Z);
+  post.scale.setScalar(1.8);
+  post.position.set(-ROAD.halfWidth + 50, 0, ROAD_POST_Z);
   raw.add(post);
 
   // The far end: a faint pale light the road leads toward and never reaches.
