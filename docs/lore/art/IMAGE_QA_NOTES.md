@@ -823,3 +823,31 @@ Method: sheet bodies verbatim + the standing Global style line. No figures anywh
 §124 A Student's Empty Cup (124-a-students-empty-cup-v1..v4.png): on brief exactly — a small plain cup, visibly empty, held in two gloved hands; hands and forearms only, no face, no body, no text, in all four. The gloves read as dark work gloves throughout, fitting the world's students. v3 is portrait (1280×1920); the rest landscape.
 
 Sheet 7 status (King, 2026-10-31): all 10 sets generated ×4 = 40 originals, archived in this folder. For Claude's ratification: §116 (the smiling one lifted into the sky in all four — composition call) and §118 (ranks rendered as people in all four — a breach of the sheet's no-figure rule; King's miss, the header's never-list should have been carried into the prompt; expect a redo) are the two sets needing rulings. Everything from §119 onward carried the sheet's no-figure rule inside the prompt and held. Recurring minor motif to rule on once: faint crescents in the sky haze (§115 v3, §120 v1/v4).
+
+---
+
+## Sheet 8 — The Unlit Hulls (§§125–134, generated 2026-10-31)
+
+Method: sheet bodies verbatim + the Global style line, with the sheet header's rules carried INSIDE every prompt (the Sheet 7 §118 lesson): no figure appears; no readable text or letters anywhere (plates carry strokes only); nothing is lit; never the name. §134 is hand-only, like §124. Claude picks canon by eye.
+
+§125 Six Hulls, Each an Answer (125-six-hulls-each-an-answer-v1..v4.png): all guards held — no figures, no letters, nothing lit, engines cold. One real divergence for Claude: v1 follows the sheet literally — six long hulls on slips, each skeletal except one finished part (gold prow, wing, engine). v2–v4 drop the hulls entirely and present the six finished PARTS alone on stands (prow, keel, fin, bloom wing, engine, flank). Evocative, and arguably truer to "each an answer," but not what the sheet's words say. Claude rules which read is canon.
+
+§126 A Seventh Slip, Ribs Only (126-a-seventh-slip-ribs-only-v1..v4.png): on brief — rib frames, no plating, no figures, no letters, nothing lit. v1 and v2 make "echoing the six" literal: six more rib-frames hang in the mist behind the seventh (note the small tension with §125, where the six carry finished parts — here all seven are ribs). v4 keeps the frame on its slip under scaffold poles, six distant silhouettes behind. v3 is the outlier: a lone frame adrift in nebula with no slip or yard under it at all.
+
+§127 Six Plates on a Rail (127-six-plates-on-a-rail-v1..v4.png): the strokes-only rule held — six brass plates on a rail in all four, cut marks are tallies, hatch groups and scores; no letters, no words, no name anywhere. Nuance: v2 is the closest to the sheet's "slow, even strokes" (neat grouped rows); v4 the sparsest and calmest; v1's marks are the wildest — deep scored slashes that read more violent than slow (its first plate's top cluster flirts with letter-shapes at a glance but resolves to plain tallies on inspection).
+
+§128 A Plate Left Smooth (128-a-plate-left-smooth-v1..v4.png): clean set — rectangular brass plate, surface completely smooth and blank in all four (no marks, no letters, no strokes), graver laid down square beside it, nothing lit. v3 sets the bench inside the yard with the gantry behind; v1's plate has a slight raised rim and sits propped; v2 and v4 are the purest still-lifes.
+
+§129 A Desk With No Ledger (129-a-desk-with-no-ledger-v1..v4.png): clean set — the pale ring where a book sat is legible on the desk in all four, a pen lies beside it, and there is no book, no paper and no writing anywhere; the ribbed seventh hull fills the view beyond. Two notes: v2 and v3 render the pen as a cut quill (a "trimmed pen" in the literal period sense — taste call), v1/v4 use a plain pen; v2 places the desk inside the frame looking down its length rather than facing the slip from outside.
+
+§130 Tools Laid Down Square (130-tools-laid-down-square-v1..v4.png): the set the entry deserves — rows of mallets, adzes, augers, planes and rules, and "no two grips alike" is true in every variant (twisted root, faceted, cord-wrapped, bone, gnarled branch). No hands, no figures, no letters; the rules carry notches only. v2 is the most systematic grid; v4 has fewer tools but the most sculptural grips. Sizes: v1/v3 1920×1280, v2/v4 square 1600×1600.
+
+§131 Lanterns Trimmed and Unlit (131-lanterns-trimmed-and-unlit-v1..v4.png): the unlit rule held completely — every lantern in all four is dark: black glass, unburned wicks and candle stubs visible in v1, oil reservoirs full in v2; the light in these pictures is sky, never lantern. v1 is the literal rack; v4 scales it up to a whole gantry field of hanging lanterns (grander than "a rack" — taste call).
+
+§132 A Crane With an Empty Hook (132-a-crane-with-an-empty-hook-v1..v4.png): clean set — tall crane over the ribbed seventh frame in all four, the hook visibly empty at about flank height; v2's hook reads clearest, silhouetted against the mist; v4 is the most minimal. The cranes are modern tower cranes (the sheet doesn't specify a kind; the yard already mixes eras — quill pens beside gantry cranes).
+
+§133 One Mallet, Far Off (133-one-mallet-far-off-v1..v4.png): the entry's point lands in all four — a vast, empty, still yard, and the mallet genuinely small on a beam: v1 hides it best (a tiny gold-lit mallet mid-right; there is also a speck of a distant bird silhouette — set dressing, Claude's call), v3 sets it over a hull frame, v2 and v4 bring it nearer on a beam end. No people, nothing lit.
+
+§134 A Curl of Bright Metal (134-a-curl-of-bright-metal-v1..v4.png): exactly the sheet — one hand only, a thin bright brass curl, no letters or marks in the metal in any variant. v1's curl is the most calligraphic (a neat spiral flourish — reads as a shaving's natural curl, not a letter); v2's loose ribbon is the plainest.
+
+Sheet 8 status: all 40 originals generated and QA'd above; uploaded to docs/lore/art/ on main (see commit list in the delivery note). No rule violations this sheet — the header rules were carried inside every prompt (the §118 lesson applied from the start). Open calls for Claude: the §125 hulls-vs-parts fork; §126 v1/v2's six rib-frames vs §125's finished parts; §133 v1's distant bird speck.
