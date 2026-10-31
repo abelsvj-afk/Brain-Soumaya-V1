@@ -165,16 +165,20 @@ describe("Relics I-7 read model — independent review round 1 regressions", () 
   });
 
   it("P1-2: discovery is permanent — releasing a relic keeps it discovered, its description unlocked, its words shipped", () => {
-    expect(store().claimFind("s1", NAIL, "great-station").ok).toBe(true);
+    // Subject relic: the Basin Stone since the tier rulings — the
+    // Harbor Nail played this role before, but a Keystone's release
+    // is refused now, so it can no longer demonstrate a release.
+    const RELIC = "basin-stone";
+    expect(store().claimFind("s1", RELIC, "deep-past").ok).toBe(true);
     // Production ordering: a state read settles the one-time ship
     // migration (codex_claims → holdings) before any release happens.
     store().state("s1");
-    expect(store().release("s1", NAIL)).toBeTruthy();
+    expect(store().release("s1", RELIC)).toBeTruthy();
     const state = store().state("s1");
-    expect(state.holdings.find((h) => h.relicId === NAIL)).toBeUndefined();
-    const nail = state.codex?.find((c) => c.relicId === NAIL);
-    expect(nail!.discovered).toBe(true);
-    expect(nail!.layers.description.state).toBe("unlocked");
-    expect(nail!.layers.description.text).toBe(RELIC_BY_ID.get(NAIL)!.lore);
+    expect(state.holdings.find((h) => h.relicId === RELIC)).toBeUndefined();
+    const entry = state.codex?.find((c) => c.relicId === RELIC);
+    expect(entry!.discovered).toBe(true);
+    expect(entry!.layers.description.state).toBe("unlocked");
+    expect(entry!.layers.description.text).toBe(RELIC_BY_ID.get(RELIC)!.lore);
   });
 });

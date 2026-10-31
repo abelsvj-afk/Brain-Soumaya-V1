@@ -28,20 +28,16 @@ import {
  * invented). Hold changes (hold/unhold/store/carry/exchange) happen
  * only at the Great Station (O-R7); reads and release are not gated.
  *
- * Fixture: hearth-ember is reclassed `legacy` for this file only (the
- * shipped registry is untouched; the original value is restored). The
- * one genuinely-legacy relic, the Unnumbered Fragment, is exercised
- * via a directly-seeded holding — it is undiscoverable and unplaced
+ * Subject relic: the Hearth Ember — reclassed `legacy` by fixture
+ * when this suite was written, and a REAL Legacy in the shipped
+ * registry since the tier rulings landed (2026-10-30), so no
+ * reclassing remains. The Unnumbered Fragment is exercised via a
+ * directly-seeded holding — it is undiscoverable and unplaced
  * by design, so its exchanged copy waits in the return pool.
  */
 let handle: DbHandle;
 beforeEach(() => { handle = createDb(":memory:"); });
 afterEach(() => { handle.sqlite.close(); delete process.env.RELIC_OWNER_SPACE_IDS; });
-
-const hearthDef = RELIC_BY_ID.get("hearth-ember")!;
-let hearthClass: RelicTierClass | null = null;
-beforeAll(() => { hearthClass = hearthDef.tierClass; hearthDef.tierClass = "legacy"; });
-afterAll(() => { hearthDef.tierClass = hearthClass; });
 
 const store = () => new RelicHoldingsStore(handle);
 const xchg = () => new RelicExchangeService(handle);
@@ -424,6 +420,10 @@ describe("HTTP surface — Hold changes happen only at the Great Station (O-R7)"
     const s = new RelicHoldingsStore(ctx.handle);
     expect(s.claimFind(space, "harbor-nail", "great-station").ok).toBe(true);
     expect(s.claimFind(space, EMBER, "people").ok).toBe(true);
+    // A releasable holding for the release step below: the Harbor
+    // Nail is a Keystone since the tier rulings (never released), so
+    // the never-gated-release proof rides a Legacy instead.
+    expect(s.claimFind(space, "basin-stone", "deep-past").ok).toBe(true);
 
     // Standing at home (no journey yet): every Hold change refuses.
     const holdRefused = await call("POST", "/api/relics/hold", space, { relicId: "harbor-nail" });
@@ -456,8 +456,8 @@ describe("HTTP surface — Hold changes happen only at the Great Station (O-R7)"
     const unholdRefused = await call("POST", "/api/relics/unhold", space, { relicId: "harbor-nail" });
     expect(unholdRefused.status).toBe(400);
     expect(unholdRefused.body.error).toMatch(/Great Station/);
-    const released = await call("POST", "/api/relics/release", space, { relicId: "harbor-nail" });
+    const released = await call("POST", "/api/relics/release", space, { relicId: "basin-stone" });
     expect(released.status).toBe(200);
-    expect(released.body.comet?.relicId).toBe("harbor-nail");
+    expect(released.body.comet?.relicId).toBe("basin-stone");
   });
 });

@@ -118,29 +118,41 @@ describe("relic registry", () => {
 /**
  * The I-1 vocabulary (implementation design §3): tier classes, lore-layer
  * structures, and server-known anchor points — data only, shipped dark.
- * Exactly two tier classes are committed by the approved design; the
- * other thirteen ship an explicit null (unassigned = today's behavior),
- * and NO lore text exists yet anywhere in the new structures (O-R1:
- * the owner approves every canon line before it becomes text).
+ * NO lore text exists yet anywhere in the new structures (O-R1: the
+ * owner approves every canon line before it becomes text). The tier
+ * classes themselves were ruled by the O-R5 worksheet session (tier
+ * decisions, 2026-10-30): all fifteen are assigned — 4 Keystones,
+ * 3 Seeds, 8 Legacies — and this parity test now pins the full map.
  */
 describe("relic vocabulary (I-1)", () => {
-  it("commits exactly two tier classes; the other thirteen are explicitly null", () => {
-    const assigned = RELICS.filter((r) => r.tierClass !== null);
-    expect(assigned.map((r) => `${r.id}:${r.tierClass}`)).toEqual([
+  it("assigns every relic its ruled tier class — the full O-R5 map, none null", () => {
+    expect(RELICS.map((r) => `${r.id}:${r.tierClass}`)).toEqual([
+      "harbor-nail:keystone",
+      "mooring-ring:seed",
+      "dawn-leaf:seed",
+      "witness-seed:keystone",
+      "first-light-shard:legacy",
+      "basin-stone:legacy",
+      "lantern-of-keeping:legacy",
       "witness-without-a-name:keystone",
+      "hearth-ember:legacy",
+      "thread-of-many:keystone",
+      "star-hanger:legacy",
+      "sunward-compass:legacy",
+      "stillness-seal:seed",
+      "unopened-fold:legacy",
       "unnumbered-fragment:legacy",
     ]);
     for (const r of RELICS) {
-      // The field is PRESENT on every def — null is a stated value,
-      // never a missing property a consumer could misread as a class.
+      // The field is PRESENT on every def — a stated value, never a
+      // missing property a consumer could misread as a class.
       expect("tierClass" in r, r.id).toBe(true);
-      if (r.id !== "witness-without-a-name" && r.id !== "unnumbered-fragment") {
-        expect(r.tierClass, r.id).toBeNull();
-      }
+      expect(r.tierClass, r.id).not.toBeNull();
     }
-    // The naming trap, pinned: the relic NAMED Witness Seed is not
-    // thereby a Seed — its class is the worksheet's to assign (null).
-    expect(RELIC_BY_ID.get("witness-seed")!.tierClass).toBeNull();
+    // The naming trap, ruled: class follows nature, not name — the
+    // relic NAMED Witness Seed is a Keystone, and no relic with
+    // "Seed" in its name is in the Seed class.
+    expect(RELIC_BY_ID.get("witness-seed")!.tierClass).toBe("keystone");
   });
 
   it("carries no lore text in the new structures (structure only)", () => {

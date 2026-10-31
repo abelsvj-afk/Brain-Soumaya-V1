@@ -1,8 +1,18 @@
 /**
  * Relic buff arithmetic (design note v2 §10) — a pure function of the held
- * set, computed fresh on every read. No buffed value is ever stored.
+ * set plus the space's recorded Seed effects, computed fresh on every
+ * read. No buffed value is ever stored.
  * Held order matters only for the Deep Past window: most recently held wins,
  * and the winner + overruled are named.
+ *
+ * §9 ITEM 7, RULED (tier decisions, 2026-10-30): location NEVER gates
+ * buffs. A relic's buffs depend on one thing only — whether it is in
+ * the held set (plus, for Seeds, whether its consumption is recorded).
+ * Whether a held relic is carried or stored at the Great Station is
+ * organization, not power: storage location is not an input to this
+ * function and must never become one. This was already the shipped
+ * behavior; the ruling settles it as law so no future change "fixes"
+ * it by accident. Pinned by test (relicTiers.test.ts, item-7 describe).
  */
 import {
   RELIC_BASE, RELIC_BY_ID, REVIEW_EARN_FLOOR, FUEL_REGEN_FLOOR_PER_HOUR,
@@ -15,25 +25,49 @@ interface RelicEffect {
   fuelCapDelta?: number; fuelRegenSet?: number; reviewDelta?: number;
   linkDouble?: boolean; discoveryDelta?: number; driftDelta?: number; driftCapDelta?: number;
   riseWindowDays?: number; growthSlower?: boolean; swingMultiplier?: number; risenHold?: boolean;
+  /** Tier implementation (2026-10-30): a PERMANENT regen contribution.
+   *  Additive by ruling — effective regen is (fuelRegenSet ?? base)
+   *  + Σ fuelRegenDelta, floored as today — because a permanent effect
+   *  must never be a set-point: set-points override each other
+   *  last-wins, and a permanent set would silently erase (or be
+   *  silently erased by) a held relic's set. A delta always counts. */
+  fuelRegenDelta?: number;
 }
 export const RELIC_EFFECTS: Readonly<Record<string, RelicEffect>> = {
   "harbor-nail": { fuelCapDelta: 25, reviewDelta: -1 },
-  "mooring-ring": { driftDelta: 1, driftCapDelta: 1 },
   "witness-seed": { riseWindowDays: 45, growthSlower: true },
   "first-light-shard": { reviewDelta: 1, swingMultiplier: 1.25 },
   "lantern-of-keeping": { riseWindowDays: 45, growthSlower: true, risenHold: true },
   "thread-of-many": { linkDouble: true, riseWindowDays: 20 },
-  "stillness-seal": { fuelRegenSet: 5.0, reviewDelta: -1 },
   "unopened-fold": { discoveryDelta: 2, growthSlower: true },
+  // The Mooring Ring's and Stillness Seal's held entries are REMOVED
+  // (tier decisions, 2026-10-30): both are Seeds now, a Seed is never
+  // held, and a held-effect entry for one would be dead code that lies
+  // about the object's behavior. Their permanent forms live in
+  // RELIC_SEED_EFFECTS below.
 };
 
 /** Relics I-6 (§4.5): the permanent effects of recorded Seeds, keyed
- *  by relic id — EMPTY. No Seed effect VALUES exist yet: the tier
- *  worksheet assigns Seed classes and O-R1 governs authored content,
- *  so today a recorded Seed contributes nothing but its record. The
- *  plumbing (computeRelicBuffs' second input) ships live so the day
- *  an effect is authored it applies with no further surgery. */
-export const RELIC_SEED_EFFECTS: Readonly<Record<string, RelicEffect>> = {};
+ *  by relic id. The tier decisions (2026-10-30) authored the values:
+ *  the Mooring Ring carries ONLY its per-journey half (+1 drift; the
+ *  held form's daily-cap raise does NOT become permanent — the ruled
+ *  ceiling is 2 × 4 = 8/day, not the held form's 12), and the
+ *  Stillness Seal is +0.5 fuel/hr as an additive delta (regen 4.0/hr
+ *  on the 3.5 base; its held form's review cost does NOT become
+ *  permanent — a Seed's effect is growth only).
+ *
+ *  The Dawn Leaf is DELIBERATELY ABSENT — debt D-1 in the tier
+ *  decisions' register: its effect acts on partial milestone
+ *  progress, and no partial-milestone progress feed exists yet, so no
+ *  honest value can be authored. The absence is the honest state,
+ *  not an omission: a recorded Dawn Leaf consumption contributes
+ *  nothing today, and the day a value is authored here, every
+ *  recorded consumption lights up with it automatically (the lookup
+ *  is by the live map at computation time — no migration). */
+export const RELIC_SEED_EFFECTS: Readonly<Record<string, RelicEffect>> = {
+  "mooring-ring": { driftDelta: 1 },
+  "stillness-seal": { fuelRegenDelta: 0.5 },
+};
 
 export function computeRelicBuffs(
   heldIdsInOrder: readonly string[],
@@ -70,7 +104,11 @@ export function computeRelicBuffs(
   const regenSet = effects.map((e) => e.fuelRegenSet).filter((v): v is number => v !== undefined).at(-1);
   return {
     fuelCap: RELIC_BASE.fuelCap + sum((e) => e.fuelCapDelta),
-    fuelRegenPerHour: Math.max(FUEL_REGEN_FLOOR_PER_HOUR, regenSet ?? RELIC_BASE.fuelRegenPerHour),
+    // Tier decisions (2026-10-30): regen = (the held set-point, or the
+    // base when none is held) + every permanent fuelRegenDelta, floored
+    // as always. The Seal's permanent +0.5 therefore always counts and
+    // stacks honestly on top of any held set-point.
+    fuelRegenPerHour: Math.max(FUEL_REGEN_FLOOR_PER_HOUR, (regenSet ?? RELIC_BASE.fuelRegenPerHour) + sum((e) => e.fuelRegenDelta)),
     reviewEarn: Math.max(REVIEW_EARN_FLOOR, RELIC_BASE.reviewEarn + sum((e) => e.reviewDelta)),
     linkEarn: effects.some((e) => e.linkDouble) ? RELIC_BASE.linkEarn * 2 : RELIC_BASE.linkEarn,
     discoveryEarn: RELIC_BASE.discoveryEarn + sum((e) => e.discoveryDelta),

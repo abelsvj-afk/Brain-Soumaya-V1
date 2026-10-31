@@ -123,9 +123,21 @@ describe("issuance (§4.6, §5.4): eligibility, the promised copy, L0, inbox", (
     const first = stir().issue("s3", "harbor-nail", "ambient");
     expect(first).not.toBeNull();
     expect(stir().issue("s3", "harbor-nail", "ambient")).toBeNull(); // one open per (space, relic)
-    fill("mooring-ring", 7, "great-station");
-    expect(stir().issue("s4", "mooring-ring", "ambient")).toBeNull(); // pool exhausted — nothing to promise
+    // Pool exhausted — nothing to promise: six more hunters take the
+    // Nail's remaining live copies (s2 holds one; s3's promised copy
+    // is bound by the first filler), leaving all 7 held.
+    fill("harbor-nail", 6, "great-station");
+    expect(store().poolAvailable("harbor-nail")).toBe(0);
+    expect(stir().issue("s4", "harbor-nail", "ambient")).toBeNull();
     expect(new NotificationsRepo(handle, "s4").list()).toHaveLength(0);
+  });
+
+  it("a Seed's pool is freed by consumption: seven consumed copies do not exhaust it — a stirring still issues (copy limits count LIVE copies)", () => {
+    fill("mooring-ring", 7, "great-station"); // every claim consumes its copy (tier rulings)
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_copies WHERE relic_id = 'mooring-ring' AND state = 'consumed'`).get()).toEqual({ n: 7 });
+    const s = stir().issue("s5", "mooring-ring", "ambient");
+    expect(s).not.toBeNull();
+    expect(copyRow(s!.copy_id)?.state).toBe("placed"); // a fresh copy rests for the promise
   });
 
   it("the ambient cap is one open stirring per (space, world); chart stirrings are exempt from the cap but never from eligibility", () => {
@@ -280,16 +292,36 @@ describe("NPC unification (§5.5, fix (d)): one pool, one core", () => {
     expect(new EconomyRepo(handle, "npc-space").get()).toBe(fuelBefore);
   });
 
-  it("an NPC that already holds a relic is told 'already' by the core and moves on to the next relic it lacks", () => {
+  it("an NPC that already holds a relic is told 'already' by the core and moves on to the next relic it lacks — and a Seed it lacks is consumed, never held, duplicates included (the residuals disposition)", () => {
     const first = svc().claimForNpc("npc-space", "harbor-controller", "great-station");
     expect(first.status).toBe("awarded");
     if (first.status === "awarded") expect(first.relicId).toBe("harbor-nail");
+    // The Nail is held now, so the walk moves on to the world's next
+    // relic: the Mooring Ring — a Seed since the tier rulings. The
+    // find is real (the loop is told "awarded"), but the class rule
+    // consumes the copy: no holding appears, and the permanent
+    // effect is recorded against the NPC's space. (Pre-tier this
+    // test expected the Ring HELD and a third hunt "empty"; a Seed
+    // is never held, so the walk can never move past it that way.)
     const second = svc().claimForNpc("npc-space", "harbor-controller", "great-station");
     expect(second.status).toBe("awarded");
     if (second.status === "awarded") expect(second.relicId).toBe("mooring-ring");
+    expect(new NpcRepo(handle, "npc-space").holdings("harbor-controller")).toEqual(["harbor-nail"]);
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_seed_effects WHERE space_id = 'npc-space' AND relic_id = 'mooring-ring'`).get()).toEqual({ n: 1 });
+    // A duplicate Seed claim follows the residuals disposition
+    // (R3-3 parity): the copy is consumed without effect and
+    // without returning to the world — so a third hunt finds the
+    // Ring again, the effect stays recorded exactly once, and two
+    // copies rest consumed.
     const third = svc().claimForNpc("npc-space", "harbor-controller", "great-station");
-    expect(third.status).toBe("empty"); // nothing left in its world that it lacks
-    expect(new NpcRepo(handle, "npc-space").holdings("harbor-controller")).toHaveLength(2);
+    expect(third.status).toBe("awarded");
+    if (third.status === "awarded") expect(third.relicId).toBe("mooring-ring");
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_seed_effects WHERE space_id = 'npc-space' AND relic_id = 'mooring-ring'`).get()).toEqual({ n: 1 });
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_copies WHERE relic_id = 'mooring-ring' AND state = 'consumed'`).get()).toEqual({ n: 2 });
+    expect(new NpcRepo(handle, "npc-space").holdings("harbor-controller")).toEqual(["harbor-nail"]);
+    // And the held relic itself, named directly, is refused by the
+    // core's "already" — the service reports nothing takeable.
+    expect(svc().claimForNpc("npc-space", "harbor-controller", "great-station", "harbor-nail").status).toBe("empty");
   });
 });
 
@@ -368,11 +400,18 @@ describe("the loop (§5.5): explore becomes a real attempt; issuance rides the d
     expect(new NpcRepo(handle, "loop-space").holdings("harbor-controller")).toEqual(["harbor-nail"]);
     const nextDay = runNpcTick(handle, "loop-space", "harbor-controller", T0 + 25 * 60 * 60 * 1000);
     expect(nextDay.entry?.kind).toBe("explore");
-    expect(new NpcRepo(handle, "loop-space").holdings("harbor-controller")).toEqual(["harbor-nail", "mooring-ring"]);
+    // The next day's find is the Mooring Ring — a Seed since the
+    // tier rulings: the find happens (it is the throttle's one find
+    // of the day), the copy is consumed, no holding appears, and
+    // the permanent effect is recorded against the NPC's space.
+    // (Pre-tier this expected the Ring among the NPC's holdings.)
+    expect(new NpcRepo(handle, "loop-space").holdings("harbor-controller")).toEqual(["harbor-nail"]);
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_seed_effects WHERE space_id = 'loop-space' AND relic_id = 'mooring-ring'`).get()).toEqual({ n: 1 });
     const npcCopies = handle.sqlite.prepare(
       `SELECT COUNT(*) AS n FROM relic_copies WHERE holder_kind = 'npc' AND holder_space_id = 'loop-space'`,
     ).get() as { n: number };
-    expect(npcCopies.n).toBe(2);
+    expect(npcCopies.n).toBe(1); // only the held Nail still names the NPC — a consumption clears the holder fields, as for a player's
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_copies WHERE relic_id = 'mooring-ring' AND state = 'consumed'`).get()).toEqual({ n: 1 });
   });
 
   it("arrival in a world evaluates issuance for the arrived space — one ambient stirring, delivered once", () => {

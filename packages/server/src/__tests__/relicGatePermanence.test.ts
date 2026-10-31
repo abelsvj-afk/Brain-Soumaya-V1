@@ -51,9 +51,14 @@ function refusedOf(out: unknown): string | null {
   return o.ok === false ? (o.reason ?? "") : null;
 }
 function findSet(space: string): void {
+  // The set's two "others" are Legacies since the tier rulings
+  // (2026-10-30): the original pair (Harbor Nail, Dawn Leaf) can no
+  // longer play the role — the Nail is a Keystone (never released,
+  // so it cannot star in a release test) and the Leaf is a Seed
+  // (consumed on claim, so it can never be a found-set member).
   expect(store().claimFind(space, "witness-without-a-name", "deep-past").ok).toBe(true);
-  expect(store().claimFind(space, "harbor-nail", "great-station").ok).toBe(true);
-  expect(store().claimFind(space, "dawn-leaf", "growing-place").ok).toBe(true);
+  expect(store().claimFind(space, "basin-stone", "deep-past").ok).toBe(true);
+  expect(store().claimFind(space, "lantern-of-keeping", "deep-past").ok).toBe(true);
 }
 
 describe("fix (a) — gate permanence anchors at set completion", () => {
@@ -61,8 +66,8 @@ describe("fix (a) — gate permanence anchors at set completion", () => {
     findSet("s1");
     // The record exists the moment the third find lands — before any travel.
     expect(gateRow("s1")).toBeTruthy();
-    expect(store().release("s1", "harbor-nail")).not.toBeNull();
-    expect(store().release("s1", "dawn-leaf")).not.toBeNull();
+    expect(store().release("s1", "basin-stone")).not.toBeNull();
+    expect(store().release("s1", "lantern-of-keeping")).not.toBeNull();
     expect(store().foundIds("s1")).toEqual(["witness-without-a-name"]);
     const view = store().gateView("s1");
     expect(view.open).toBe(true);
@@ -72,13 +77,13 @@ describe("fix (a) — gate permanence anchors at set completion", () => {
   });
 
   it("a set completed before this build (direct holdings, no record) records permanence inside the RELEASE transaction, before the release can endanger it", () => {
-    give("s2", "witness-without-a-name"); give("s2", "harbor-nail"); give("s2", "dawn-leaf");
+    give("s2", "witness-without-a-name"); give("s2", "basin-stone"); give("s2", "lantern-of-keeping");
     expect(gateRow("s2")).toBeUndefined();
-    expect(refusedOf(store().release("s2", "harbor-nail"))).toBeNull();
+    expect(refusedOf(store().release("s2", "basin-stone"))).toBeNull();
     // The recorder ran in that release's own transaction — the row exists
     // BEFORE the second release drops the found set below completion.
     expect(gateRow("s2")).toBeTruthy();
-    expect(refusedOf(store().release("s2", "dawn-leaf"))).toBeNull();
+    expect(refusedOf(store().release("s2", "lantern-of-keeping"))).toBeNull();
     expect(store().foundIds("s2")).toEqual(["witness-without-a-name"]);
     expect(store().gateView("s2").open).toBe(true);
     expect(travelWith("s2").eternityGateReachable()).toBe(true);
@@ -96,10 +101,10 @@ describe("fix (a) — gate permanence anchors at set completion", () => {
   });
 
   it("two-space isolation: one space's record never opens another space's gate; the table is in the deletion census", () => {
-    give("sA", "witness-without-a-name"); give("sA", "harbor-nail"); give("sA", "dawn-leaf");
-    expect(refusedOf(store().release("sA", "harbor-nail"))).toBeNull();
+    give("sA", "witness-without-a-name"); give("sA", "basin-stone"); give("sA", "lantern-of-keeping");
+    expect(refusedOf(store().release("sA", "basin-stone"))).toBeNull();
     expect(gateRow("sA")).toBeTruthy();
-    give("sB", "harbor-nail");
+    give("sB", "basin-stone");
     expect(gateRow("sB")).toBeUndefined();
     expect(store().gateView("sB").open).toBe(false);
     expect(travelWith("sB").eternityGateReachable()).toBe(false);
@@ -120,14 +125,14 @@ describe("fix (b) — release is class-aware", () => {
     expect(copy.holder_space_id).toBe("s5");
   });
 
-  it("non-Keystone releases behave exactly as before: a null-class relic and a Legacy both release with the return view", () => {
-    expect(store().claimFind("s6", "harbor-nail", "great-station").ok).toBe(true);
-    const nail = store().release("s6", "harbor-nail");
+  it("non-Keystone releases behave exactly as before: Legacies release with the return view (no null-class relics remain since the tier rulings)", () => {
+    expect(store().claimFind("s6", "basin-stone", "deep-past").ok).toBe(true);
+    const nail = store().release("s6", "basin-stone");
     expect(refusedOf(nail)).toBeNull();
     expect(eventOf(nail).fromAnchor).toBeTruthy();
     expect(eventOf(nail).toAnchor).toBeTruthy();
     expect(store().foundIds("s6")).toEqual([]);
-    const nailCopy = handle.sqlite.prepare(`SELECT state FROM relic_copies WHERE relic_id = 'harbor-nail'`).get() as { state: string };
+    const nailCopy = handle.sqlite.prepare(`SELECT state FROM relic_copies WHERE relic_id = 'basin-stone'`).get() as { state: string };
     expect(nailCopy.state).toBe("placed");
     // Legacies remain releasable in this increment — their exchange is I-6.
     give("s6", "unnumbered-fragment");
@@ -157,8 +162,8 @@ describe("NPC gate — the mirrored pattern is untouched", () => {
     expect(npc.gateOpen("harbor-controller")).toBe(true);
     // A player's set completion in the same space writes the PLAYER record
     // only; another space's NPC gate stays closed.
-    give("s8", "witness-without-a-name"); give("s8", "harbor-nail"); give("s8", "dawn-leaf");
-    expect(refusedOf(store().release("s8", "harbor-nail"))).toBeNull();
+    give("s8", "witness-without-a-name"); give("s8", "basin-stone"); give("s8", "lantern-of-keeping");
+    expect(refusedOf(store().release("s8", "basin-stone"))).toBeNull();
     expect(gateRow("s8")).toBeTruthy();
     const other = new NpcRepo(handle, "s9");
     expect(other.gateOpen("harbor-controller")).toBe(false);
@@ -188,14 +193,14 @@ describe("HTTP surface — POST /api/relics/release", () => {
     const space = await auth("relic-i3-http");
     const s = new RelicHoldingsStore(ctx.handle);
     expect(s.claimFind(space, "witness-without-a-name", "deep-past").ok).toBe(true);
-    expect(s.claimFind(space, "harbor-nail", "great-station").ok).toBe(true);
+    expect(s.claimFind(space, "basin-stone", "deep-past").ok).toBe(true);
     const refused = await call("POST", "/api/relics/release", space, { relicId: "witness-without-a-name" });
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/keystone/i);
     const stateAfter = await call("GET", "/api/relics", space);
     expect(stateAfter.body.found).toContain("witness-without-a-name");
-    const ok = await call("POST", "/api/relics/release", space, { relicId: "harbor-nail" });
+    const ok = await call("POST", "/api/relics/release", space, { relicId: "basin-stone" });
     expect(ok.status).toBe(200);
-    expect(ok.body.comet?.relicId).toBe("harbor-nail");
+    expect(ok.body.comet?.relicId).toBe("basin-stone");
   });
 });
