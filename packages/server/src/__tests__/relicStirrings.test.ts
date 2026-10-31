@@ -4,6 +4,7 @@ import { RelicHoldingsStore } from "../relics/holdings.js";
 import { RelicClaimService } from "../relics/claims.js";
 import { RelicStirringService, type StirringRow } from "../relics/stirrings.js";
 import { NpcRepo } from "../npcs/repo.js";
+import { EconomyRepo } from "../economy.js";
 import { runNpcTick } from "../npcs/loop.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
 import { NotificationsRepo } from "../repositories/notifications.repo.js";
@@ -150,6 +151,36 @@ describe("issuance (§4.6, §5.4): eligibility, the promised copy, L0, inbox", (
     const next = stir().evaluateAmbientForWorld("s1", "great-station");
     expect(next?.relic_id).toBe("mooring-ring");
   });
+
+  it("production ordering (I-5 P2-3, documented): the ambient entry expires ALL stirrings before any cap scan — a stale same-world stirring never blocks the next relic", () => {
+    // issueBody expires only the CANDIDATE relic's stirrings before
+    // its ambient cap scan, so read in isolation it could count a
+    // stale open stirring of ANOTHER relic in the same world as
+    // blocking. The production ordering makes that unreachable, and
+    // this test pins the ordering: the only production ambient
+    // entry, evaluateAmbientForWorld, runs the GLOBAL expiry pass
+    // before its first issueBody call; the only other issueBody
+    // caller, the chart path through issue(), never runs the
+    // ambient cap scan at all. Scenario: s1's harbor-nail stirring
+    // sits open-but-past-its-window (no read has evaluated it), and
+    // s1 has since discovered the Nail through a non-service grant
+    // (claimFind writes no stirring resolution — I-5's P2-5 path),
+    // so the Nail cannot re-issue. The world evaluation must expire
+    // the stale row and move on to mooring-ring.
+    const stale = stir().issue("s1", "harbor-nail", "ambient")!;
+    expect(stale.state).toBe("open");
+    handle.sqlite.prepare(`UPDATE relic_stirrings SET open_until = ? WHERE id = ?`)
+      .run(new Date(Date.now() - 1000).toISOString(), stale.id);
+    expect(store().claimFind("s1", "harbor-nail", "great-station").ok).toBe(true);
+    expect(stirringById(stale.id).state).toBe("open"); // still unevaluated — the stale row the cap scan would have counted
+    const next = stir().evaluateAmbientForWorld("s1", "great-station");
+    expect(next?.relic_id).toBe("mooring-ring");
+    expect(stirringById(stale.id).state).toBe("expired");
+    const openAmbient = handle.sqlite.prepare(
+      `SELECT COUNT(*) AS n FROM relic_stirrings WHERE space_id = 's1' AND source = 'ambient' AND state = 'open'`,
+    ).get() as { n: number };
+    expect(openAmbient.n).toBe(1); // exactly the new mooring-ring stirring — the cap held
+  });
 });
 
 describe("the stirring → claim loop (§8.1: a claim via a stirring awards exactly the stirred copy)", () => {
@@ -235,11 +266,18 @@ describe("NPC unification (§5.5, fix (d)): one pool, one core", () => {
   });
 
   it("the NPC claim writes none of the player records: no holding, no Codex claim, no first discovery, no Fuel", () => {
+    // Residuals sweep (I-5 review P2-3): this test's title always
+    // promised "no Fuel", but it asserted TABLES only — a Fuel
+    // payment writes no relic table, so the promise was never
+    // actually read. The balance below is the NPC space's actual
+    // Fuel, read through the economy layer before and after.
+    const fuelBefore = new EconomyRepo(handle, "npc-space").get();
     const r = svc().claimForNpc("npc-space", "harbor-controller", "great-station", "harbor-nail");
     expect(r.status).toBe("awarded");
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE space_id = 'npc-space'`).get()).toEqual({ n: 0 });
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM codex_claims WHERE space_id = 'npc-space'`).get()).toEqual({ n: 0 });
     expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_first_discoveries`).get()).toEqual({ n: 0 });
+    expect(new EconomyRepo(handle, "npc-space").get()).toBe(fuelBefore);
   });
 
   it("an NPC that already holds a relic is told 'already' by the core and moves on to the next relic it lacks", () => {
@@ -457,6 +495,7 @@ describe("P2-1 regression (I-5 review): courtesy supply reads backfill first —
   it("ensurePlacedCopyInScope converts first too: issuance on a fully-held dormant volume promises nothing", () => {
     // All seven copies held, unconverted — there is nothing to promise.
     for (let i = 0; i < 7; i++) giveUnconverted(`dormant-${i}`, "harbor-nail");
+    expect(copiesOf("harbor-nail")).toBe(0); // the dormant precondition its sibling tests state explicitly (P2-B, P2-1 fix review)
     expect(store().ensurePlacedCopyInScope("harbor-nail", null, "sP")).toBeNull();
     expect(copiesOf("harbor-nail")).toBe(7); // the converted truth — and no eighth copy minted over the limit
   });
@@ -520,5 +559,54 @@ describe("RACE — the unified core under two processes (§8.1 #1, both claimer 
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect(pool).toBe(7);
     expect(held).toBe(7);
+  }, 60_000);
+
+  it("courtesy under concurrency (I-5 P2-3): race + open stirring + last copy — the NPC never takes the promised copy; the stirring's player wins it", async () => {
+    // The races above run with no stirring open, so the courtesy is
+    // proven there only by composition (the sequential suite shows
+    // it engage). Here the whole §4.1 shape races at once: six
+    // copies held, the seventh resting placed as player-b's open
+    // stirring's promise, and an NPC claim and player-b's sampled
+    // claim released at the same barrier. Whichever serialization
+    // the race takes, the outcome is the courtesy's: if the NPC
+    // runs first it DEFERS (supply is 1 and the stirring is live);
+    // if the player runs first the NPC finds the pool empty. The
+    // NPC never holds the promised copy, and the player wins the
+    // very copy the stirring promised.
+    const dir = mkdtempSync(join(tmpdir(), "relic-i5-courtesy-race-"));
+    const dbPath = join(dir, "brain.db");
+    try {
+      const h = createDb(dbPath);
+      const s = new RelicHoldingsStore(h);
+      for (let i = 0; i < 6; i++) expect(s.claimFind(`seed-${i}`, "harbor-nail", "great-station").ok).toBe(true);
+      const stirring = new RelicStirringService(h).issue("player-b", "harbor-nail", "ambient")!;
+      expect(stirring.state).toBe("open");
+      // Isolate the NPC's candidate set to harbor-nail, as in the courtesy suite.
+      new NpcRepo(h, "npc-a").addHolding("harbor-controller", "mooring-ring", "great-station");
+      h.sqlite.close();
+      const tag = Math.random().toString(36).slice(2);
+      const goFile = join(dir, `go-${tag}`); const ready1 = join(dir, `ready-${tag}-1`); const ready2 = join(dir, `ready-${tag}-2`);
+      const pNpc = runRaceChild(dbPath, "npc", "npc-a", goFile, ready1);
+      const pPlayer = runRaceChild(dbPath, "player", "player-b", goFile, ready2);
+      const deadline = Date.now() + 20_000;
+      while (!(existsSync(ready1) && existsSync(ready2))) {
+        if (Date.now() > deadline) throw new Error("race children did not reach the barrier in time");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      writeFileSync(goFile, "go");
+      const [npc, player] = await Promise.all([pNpc, pPlayer]);
+      expect(player.ok).toBe(true);
+      expect(player.copyId).toBe(stirring.copy_id);
+      expect(npc.ok).toBe(false);
+      expect(["deferred", "empty"]).toContain(npc.status);
+      const h2 = createDb(dbPath);
+      expect(new RelicHoldingsStore(h2).poolCount("harbor-nail")).toBe(7);
+      const copy = h2.sqlite.prepare(`SELECT state, holder_kind, holder_id FROM relic_copies WHERE copy_id = ?`).get(stirring.copy_id) as
+        { state: string; holder_kind: string | null; holder_id: string | null };
+      expect(copy).toEqual({ state: "held", holder_kind: "space", holder_id: "player-b" });
+      expect(h2.sqlite.prepare(`SELECT state FROM relic_stirrings WHERE id = ?`).get(stirring.id)).toEqual({ state: "claimed" });
+      expect(new NpcRepo(h2, "npc-a").holdings("harbor-controller")).toEqual(["mooring-ring"]);
+      h2.sqlite.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   }, 60_000);
 });

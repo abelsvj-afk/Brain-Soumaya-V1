@@ -47,8 +47,21 @@ export function computeRelicBuffs(
   let riseWindowDays: number = RELIC_BASE.riseWindowDays;
   let riseWindowSetBy: string | null = null;
   const riseWindowOverruled: string[] = [];
-  for (const id of [...heldIdsInOrder, ...seedEffectIds]) {
-    const w = RELIC_EFFECTS[id]?.riseWindowDays ?? RELIC_SEED_EFFECTS[id]?.riseWindowDays;
+  // Each id's window is read from ITS OWN class's map (residuals
+  // sweep, closing the I-6 review's latent P2-1): a held relic's
+  // window is its held effect's; a consumed Seed's is its seed
+  // effect's. The previous shape read the HELD map first for every
+  // id, so a seed-class relic that also carries a held-map entry
+  // (witness-seed is the standing example) would take the held
+  // map's window over its authored Seed window the day one is
+  // written — and a held id's fallback into the seed map leaked
+  // the same way in reverse. Iteration order is unchanged (held
+  // ids in held order, then seed ids in recorded order; the last
+  // window named wins, the rest are overruled).
+  for (const [id, w] of [
+    ...heldIdsInOrder.map((id) => [id, RELIC_EFFECTS[id]?.riseWindowDays] as const),
+    ...seedEffectIds.map((id) => [id, RELIC_SEED_EFFECTS[id]?.riseWindowDays] as const),
+  ]) {
     if (w === undefined) continue;
     if (riseWindowSetBy !== null) riseWindowOverruled.push(riseWindowSetBy);
     riseWindowDays = w; riseWindowSetBy = id;

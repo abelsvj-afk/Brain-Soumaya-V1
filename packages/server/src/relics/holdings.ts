@@ -126,6 +126,12 @@ export type AwardResult =
 export type NpcAwardResult =
   | { status: "already" }
   | { status: "empty" }
+  /** Residuals sweep (I-6 review P2-2): a Seed-class copy claimed by
+   *  an NPC is consumed like any Seed claim — never held — and its
+   *  effect is recorded against the NPC's space. `duplicate` mirrors
+   *  the player core's R3-3 flag: the effect was already recorded,
+   *  so this copy was consumed without effect. */
+  | { status: "seed-consumed"; copyId: string; anchorKey: string; duplicate: boolean }
   | { status: "awarded"; copyId: string; anchorKey: string };
 
 /**
@@ -724,7 +730,10 @@ export class RelicHoldingsStore {
    * claim, no first discovery (that record names a discoverer
    * SPACE, resolvable to a display name — an NPC is a resident of a
    * space, not a space), and no Fuel reward (the discovery earn is
-   * the player's). Courtesy is not decided here — it is the claim
+   * the player's). One class rule binds this core exactly as it
+   * binds the player's: a Seed is consumed on claim, never held
+   * (residuals sweep, I-6 review P2-2 — see the disposition below).
+   * Courtesy is not decided here — it is the claim
    * service's pre-award check inside the same transaction
    * (relics/claims.ts, claimForNpc). The CALLER owns the transaction.
    */
@@ -747,6 +756,30 @@ export class RelicHoldingsStore {
       if (limit === null && this.copiesInScope(relicId, scope, false) >= 1) return { status: "empty" };
       bound = this.materializeAndBind(spaceId, relicId, scope, false, holder);
       if (!bound) return { status: "empty" };
+    }
+    // The Seed disposition (R2-1/R3-3) is a CLASS rule, not a player
+    // rule: a Seed is consumed on claim and never becomes a holding,
+    // whoever claims it — the approved design runs NPC claims
+    // through the same claim path with no NPC-only eligibility
+    // carve-out, and §5.5's unchanged NPC disposition governs
+    // holdable relics. So an NPC's Seed find consumes its copy in
+    // this same transaction, writes NO npc_relic_holdings row
+    // (nothing is held), and records the permanent effect against
+    // the NPC's space — the space the consumption happened in, the
+    // same key the player core records for a claiming space — with
+    // the same INSERT OR IGNORE idempotency: a later NPC Seed claim
+    // whose effect is already recorded consumes its copy without
+    // effect and without returning to the world.
+    if (RELIC_BY_ID.get(relicId)?.tierClass === "seed") {
+      const recorded = this.h.sqlite.prepare(
+        `INSERT OR IGNORE INTO relic_seed_effects (space_id, relic_id, copy_id) VALUES (?, ?, ?)`,
+      ).run(spaceId, relicId, bound.copyId);
+      const effectRecorded = Number(recorded.changes ?? 0) > 0;
+      this.h.sqlite.prepare(
+        `UPDATE relic_copies SET state = 'consumed', world = NULL, anchor_key = NULL, holder_kind = NULL, holder_id = NULL, holder_space_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE copy_id = ?`,
+      ).run(bound.copyId);
+      this.recordEvent(bound.copyId, "consumed", { spaceId, world: RELIC_BY_ID.get(relicId)?.world ?? null, detail: { effectRecorded, npcId } });
+      return { status: "seed-consumed", copyId: bound.copyId, anchorKey: bound.anchorKey, duplicate: !effectRecorded };
     }
     this.h.sqlite.prepare(
       `INSERT OR IGNORE INTO npc_relic_holdings (npc_id, space_id, relic_id, found_at, found_in_world) VALUES (?, ?, ?, ?, ?)`,
@@ -1026,7 +1059,19 @@ export class RelicHoldingsStore {
       for (const copy of npcCopies) {
         const counted = (RELIC_COPY_LIMITS[copy.relic_id]?.limit ?? null) !== null && copy.test_only === 0;
         const world = RELIC_BY_ID.get(copy.relic_id)?.world ?? null;
-        this.recordEvent(copy.copy_id, "brain-deleted", { spaceId, world, anchorKey: copy.anchor_key, detail: { reason: "brain-deleted", counted, npcId: copy.holder_id } });
+        // The anchor this copy was claimed at (residuals sweep, I-5
+        // review P2-4): the player loop above records its holding
+        // row's anchor, but a held copy's own row carries none —
+        // binding clears it, and "the claim event keeps it"
+        // (bindCopy). So the NPC path reads the anchor from the
+        // copy's most recent claim event, aligning the two paths'
+        // brain-deleted records. A copy with no claim event (a
+        // pre-unification backfill, whose genesis names no anchor)
+        // has no recorded anchor anywhere; NULL stays honest there.
+        const claimedEvent = this.h.sqlite.prepare(
+          `SELECT anchor_key FROM relic_copy_events WHERE copy_id = ? AND kind = 'claimed' AND anchor_key IS NOT NULL ORDER BY id DESC LIMIT 1`,
+        ).get(copy.copy_id) as { anchor_key: string } | undefined;
+        this.recordEvent(copy.copy_id, "brain-deleted", { spaceId, world, anchorKey: claimedEvent?.anchor_key ?? copy.anchor_key, detail: { reason: "brain-deleted", counted, npcId: copy.holder_id } });
         if (counted) {
           const toAnchor = this.chooseReturnAnchor(copy.copy_id);
           if (toAnchor) {

@@ -309,18 +309,33 @@ export class RelicClaimService {
    * never overwritten; a non-committed row is replaced by the newer
    * outcome — the row records the latest state of the attempt, and
    * only committed outcomes ever replay.
+   *
+   * The read-check-replace is ONE immediate transaction (residuals
+   * sweep, closing the I-4 re-review's P2): as separate autocommit
+   * statements, a racing claim could commit its award receipt
+   * between this read and this delete, and the delete would then
+   * remove the COMMITTED receipt and replace it with a
+   * non-committed refusal — an award whose receipt no longer says
+   * it committed. Under BEGIN IMMEDIATE the re-check sees the
+   * latest committed state and the replace is serialized with
+   * every other writer, so a committed row can never be the row
+   * this deletes.
    */
   private recordOutcome(spaceId: string, claimId: string, relicId: string, outcome: StoredOutcome): StoredOutcome {
-    const existing = this.receiptRow(spaceId, claimId);
-    // A receipt is bound to its relic at EVERY site that reads one
-    // (re-review P1-A): a row belonging to another relic is never
-    // replayed and never clobbered — this attempt's own outcome stands,
-    // unrecorded (the key is spent; a retry meets the step-2 conflict).
-    if (existing && existing.relicId !== relicId) return outcome;
-    if (existing && existing.outcome.committed) return existing.outcome;
-    if (existing) this.deleteReceipt(spaceId, claimId);
-    try { this.writeReceipt(spaceId, claimId, relicId, outcome); return outcome; }
-    catch { const row = this.receiptRow(spaceId, claimId); return row && row.relicId === relicId ? row.outcome : outcome; }
+    const body = (): StoredOutcome => {
+      const existing = this.receiptRow(spaceId, claimId);
+      // A receipt is bound to its relic at EVERY site that reads one
+      // (re-review P1-A): a row belonging to another relic is never
+      // replayed and never clobbered — this attempt's own outcome stands,
+      // unrecorded (the key is spent; a retry meets the step-2 conflict).
+      if (existing && existing.relicId !== relicId) return outcome;
+      if (existing && existing.outcome.committed) return existing.outcome;
+      if (existing) this.deleteReceipt(spaceId, claimId);
+      try { this.writeReceipt(spaceId, claimId, relicId, outcome); return outcome; }
+      catch { const row = this.receiptRow(spaceId, claimId); return row && row.relicId === relicId ? row.outcome : outcome; }
+    };
+    if ((this.h.sqlite as { inTransaction?: boolean }).inTransaction) return body();
+    return this.h.sqlite.transaction(body).immediate();
   }
 
   private outcomeToResult(outcome: StoredOutcome, replayed: boolean): ClaimResult {
@@ -409,19 +424,19 @@ export class RelicClaimService {
       const holding = this.store.rows(spaceId).find((r) => r.relic_id === relicId);
       return this.outcomeToResult(this.recordOutcome(spaceId, claimId, relicId, { ok: true, alreadyFound: true, awarded: false, copyId: holding?.copy_id ?? null, committed: true }), false);
     }
-    // Step 4 — presence. The claim itself is the claim-end sample,
-    // stamped on receipt; validation reads only server stamps.
-    this.insertSample(spaceId, def.world, position, "claim-end");
-    const endRow = this.h.sqlite.prepare(
-      `SELECT MAX(id) AS id FROM relic_position_samples WHERE space_id = ? AND world = ?`,
-    ).get(spaceId, def.world) as { id: number };
-    const presence = this.validatePresence(spaceId, relicId, endRow.id, position);
-    if (!presence) {
-      return this.outcomeToResult(this.recordOutcome(spaceId, claimId, relicId, { ok: false, kind: "no-presence", reason: NO_PRESENCE_MESSAGE, committed: false }), false);
-    }
-    // Step 5 — the atomic award: receipt re-checked inside, copy bound
-    // at the validated anchor, first-discovery + reward + receipt all
-    // written in the same transaction as the holding (D-02).
+    // Steps 4+5 — presence AND the award are one atomic unit
+    // (residuals sweep, closing the I-4 record's structural P2):
+    // the claim-end sample is stamped, presence is validated from
+    // server receipt stamps, and the award settles inside a single
+    // IMMEDIATE transaction, so the presence basis the award stands
+    // on is the basis that exists at commit. Before this closure,
+    // validation ran outside the transaction and a racing claim
+    // could prune or supersede the evidence window between the
+    // check and the award — the award decided on a basis that no
+    // longer existed. A presence refusal returns from inside the
+    // transaction like every other in-transaction refusal: its
+    // non-committed receipt and the claim-end sample commit with
+    // it, exactly the records the pre-closure path left behind.
     const run = this.h.sqlite.transaction((): ClaimResult => {
       const inner = this.receiptRow(spaceId, claimId);
       // The relic binding holds INSIDE the transaction too (re-review
@@ -435,6 +450,22 @@ export class RelicClaimService {
       // A non-committed row for this key (an earlier refusal) yields to
       // the committed outcome written below.
       if (inner) this.deleteReceipt(spaceId, claimId);
+      // Step 4 — presence (§5.2). The claim itself is the claim-end
+      // sample, stamped on receipt; validation reads only server
+      // stamps, over the window as it stands inside this transaction.
+      this.insertSample(spaceId, def.world, position, "claim-end");
+      const endRow = this.h.sqlite.prepare(
+        `SELECT MAX(id) AS id FROM relic_position_samples WHERE space_id = ? AND world = ?`,
+      ).get(spaceId, def.world) as { id: number };
+      const presence = this.validatePresence(spaceId, relicId, endRow.id, position);
+      if (!presence) {
+        const outcome: StoredOutcome = { ok: false, kind: "no-presence", reason: NO_PRESENCE_MESSAGE, committed: false };
+        this.writeReceipt(spaceId, claimId, relicId, outcome);
+        return this.outcomeToResult(outcome, false);
+      }
+      // Step 5 — the atomic award: copy bound at the validated
+      // anchor, first-discovery + reward + receipt all written in
+      // the same transaction as the holding (D-02).
       // The stirring's promise (approved design §3; I-5 bound it at
       // issuance, this follow-up enforces it at claim time): a claimer
       // WITH an open stirring for this relic is promised ONE specific
@@ -580,12 +611,18 @@ export class RelicClaimService {
           continue;
         }
         const award = this.store.awardCopyForNpcInTransaction(spaceId, npcId, def.id);
-        if (award.status === "awarded") {
+        if (award.status === "awarded" || award.status === "seed-consumed") {
           // The exact-copy promise (§3): the copy this NPC just took
           // may be the very copy a player's open stirring promises
           // (courtesy guards only the pool's LAST copy) — that
           // stirring resolves quiet inside this same transaction.
           // NPCs hold no stirrings of their own; none is spared.
+          // A Seed find answers "awarded" to the loop — the find is
+          // the loop's fact — though the award core consumed the
+          // copy by its class disposition (residuals sweep, I-6
+          // P2-2): nothing was held, so the gate read from holdings
+          // never counts it, exactly as a player's held set never
+          // contains a Seed.
           stirrings.resolveCopyClaimed(award.copyId, null);
           return { status: "awarded", relicId: def.id, copyId: award.copyId };
         }
