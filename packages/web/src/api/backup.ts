@@ -13,7 +13,7 @@ export interface BackupAttemptSummary {
   id: string;
   createdAt: string;
   finishedAt: string | null;
-  trigger: "schedule" | "catch_up" | "manual" | "golden";
+  trigger: "schedule" | "catch_up" | "manual" | "golden" | "pre_deploy";
   tier: string | null;
   pinned: boolean;
   state: "created" | "verified_local" | "uploaded" | "verified_stored" | "promoted" | "pruned" | "failed";

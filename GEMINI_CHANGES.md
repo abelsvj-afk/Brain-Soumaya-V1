@@ -1,3 +1,46 @@
+### 2026-10-31 (Claude): G0 B5 — deploy-gate wiring (spec §10) + the §9 exit gate run
+- [ ] Verified by Claude
+- The deploy gate (`packages/server/src/backup/deployGate.ts` + operator CLI
+  `deploy-gate-cli.ts`): an operator-run check that must PASS before a
+  production deploy. It reads the production backup status and refuses —
+  naming every failed condition, triggering nothing — unless a CURRENT
+  latest-good exists (off-volume configured; the off-volume index reads
+  cleanly and names the latest-good; the local record agrees; age within
+  the 24h `STALE_AFTER_MS` bound). Then it takes the fresh pre-deploy
+  backup through the B3 route surface and requires that it PROMOTED and
+  that the index advanced to it. Malformed status/run payloads become
+  named refusals, never thrown errors. Exit codes 0 pass / 1 refused /
+  2 config; the operator's space credential travels by environment only
+  and is never printed.
+- New backup trigger `pre_deploy`: `POST /api/backup/run { preDeploy: true }`
+  records it (daily tier, unpinned; `golden` still wins if both are sent);
+  the web trigger union + status-panel label know it ("pre-deploy — the
+  deploy gate's fresh backup"). A deploy's backup is now identifiable in
+  the attempt history instead of masquerading as a manual run.
+- `DEPLOYMENT.md` gains the current deploy checklist: gate first, then the
+  preserved V1 §18.4 manual safeguard (fresh export + brain.db backup +
+  owner downgrade acknowledgment — supplemented, never replaced), the
+  merge, machine-state verification, and the G0-AC-15 revalidation step
+  (material schema/storage/hosting change re-opens the drill). The stale
+  June framing (push does not deploy) is corrected to the 2026-10-28
+  reality (merge to `main` auto-deploys via Fly's native integration —
+  which is exactly why the gate sits before the merge: nothing in-repo
+  can intercept the auto-deploy after it).
+- Tests: `g0DeployGate.test.ts`, 37 tests — all five pre-checks, refusal
+  never triggers a backup (counting fake), per-half advancement pins,
+  pipeline-failure/local-only/busy/throw/wrong-trigger refusals,
+  malformed-payload refusals, HTTP client shapes, CLI arg contract, the
+  route's trigger recording. Fail-before at import, then exactly one
+  failure (`expected 'manual' to be 'pre_deploy'`) before the route edit;
+  independent review READY (no P1; its P2/P3 fixes each landed
+  fail-before/pass-after).
+- The §9 EXIT GATE was run end to end for this increment (production
+  read-only + the same day's B4 drill record): every item PASS, with the
+  drill's cited-chat / owner-status / galaxy-render sub-checks
+  dispositioned NOT-RUN (scratch app deliberately inert — owner-held
+  secrets absent there by design; the closing owner step is named in
+  the PR). **G0 is complete** (with PR #158, the restore half).
+
 ### 2026-10-31 (Claude): Stale-shell chunk fix — real 404s for missing files + one guarded auto-reload
 - [ ] Verified by Claude
 - Owner-reported dead-end: after a deploy, a phone holding the previous
