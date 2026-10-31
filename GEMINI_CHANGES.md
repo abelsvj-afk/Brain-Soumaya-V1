@@ -152,6 +152,40 @@
   invented inside this increment. New totals: 36 server + 8 web B3
   tests.
 
+### 2026-10-30 (Claude): Load gate + lag-offer fix — loader waits for the first rendered galaxy frame; lag detector rebuilt
+- [ ] Verified by Claude
+- Owner-reported (2026-10-30): (1) the loading screen lifted when graph DATA
+  arrived, so the home galaxy visibly streamed in behind the HUD; (2) the
+  "Soumaya noticed some lag" Performance Mode offer fired on ordinary loads.
+  Diagnosis + harness evidence: `~/workspace/worlds-vision/load-perf-build-record.md`
+  (kept outside the repo with the gate logs).
+- Load gate (App.tsx): the "Mapping your galaxy…" overlay now lifts on a
+  one-way `galaxyReady` latch fed by Graph3D's existing first-frame signal
+  (`onFirstFrame`, previously wired to an already-true flag), with a 0.35 s
+  fade. Safety: a 12 s fallback timeout from the moment the galaxy can mount
+  and the existing init-error path both lift the loader — it can never trap
+  the user; diagnostics record which path lifted it (`App.loadGate`). Lite
+  mode keeps the old data-arrival lift. HUD/top buttons unchanged.
+- Lag detector: the inline App.tsx FPS effect is replaced by
+  `packages/web/src/lib/perfMonitor.ts` (framework-free, injected deps,
+  9 unit tests). Proven defects of the old detector, each fixed: it armed
+  8 s after MOUNT (inside the load-in window — scene build/shader compile/
+  GLB streaming measured as "lag"); it had no visibility handling (hidden
+  time read ≈0 fps on return); dismissal was never remembered (re-armed
+  every load). The new monitor arms only when App signals boot settled
+  (galaxyReady / lite-loaded / init-error) + a 5 s settle, requires 3
+  consecutive 2 s windows under 24 fps of VISIBLE time, pauses on hidden
+  and restarts the window on return, is one-shot, and stays silent if the
+  offer was dismissed this session (sessionStorage `brain.perfOfferDismissed`,
+  wired to the banner's "Not now") or Performance Mode is already on.
+  A transient hidden flicker can neither count nor kill the sampler
+  (harness-found, unit-tested). Performance Mode itself is unchanged
+  (graphics preset: bloom off, 30 fps cap, pixel ratio 1).
+- No scene/content changes: home-scene cost characterized from the app's
+  own PerfHUD in the harness (193 draw calls / 425,138 tris for a 42-node
+  fixture — fixed scenery dominates); no provable per-frame hotspot was
+  found, so no rendering code was touched.
+
 ### 2026-10-30 (Claude): G0 B2 — encryption, off-volume upload, verified-stored, promotion, retention (no caller wired yet)
 - [ ] Verified by Claude
 - Second increment of the owner-approved G0 backup & restore plan; continues

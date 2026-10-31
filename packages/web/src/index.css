@@ -2304,6 +2304,13 @@ body,
   gap: 18px;
   background: var(--bg);
   color: var(--muted);
+  /* Load gate (2026-10-30): the overlay fades out once the galaxy behind it
+     has actually rendered, instead of cutting away at data-load. */
+  transition: opacity 0.35s ease;
+}
+.loading.loading-lifted {
+  opacity: 0;
+  pointer-events: none;
 }
 .loading p {
   font-size: 13px;
