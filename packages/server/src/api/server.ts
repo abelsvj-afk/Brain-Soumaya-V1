@@ -186,6 +186,20 @@ export function createApp(ctx: AppContext): Express {
     );
     app.use((req, res, next) => {
       if (req.method !== "GET" || req.path.startsWith("/api")) return next();
+      // A request for a FILE that express.static didn't match does not exist on
+      // this build: hashed /assets/* chunks are renamed on every deploy, so a
+      // shell cached from an older build asks for chunk names that are gone.
+      // Answering those with the SPA shell (HTTP 200, HTML) makes the browser
+      // execute HTML as a JS module and dead-ends the user on "Failed to fetch
+      // dynamically imported module". Real 404 instead: the client recognizes
+      // the chunk failure and reloads once into the fresh shell. Anything
+      // file-like counts — every path under /assets/, and any path whose last
+      // segment carries an extension (.js, .glb, .png, …). Extensionless page
+      // routes still fall through to the shell below.
+      const lastSegment = req.path.slice(req.path.lastIndexOf("/") + 1);
+      if (req.path.startsWith("/assets/") || /\.[A-Za-z0-9]+$/.test(lastSegment)) {
+        return res.status(404).type("text/plain").send("Not found");
+      }
       res.setHeader("Cache-Control", "no-cache, must-revalidate"); // SPA shell — always revalidate
       res.sendFile(path.join(dir, "index.html"));
     });

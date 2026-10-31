@@ -1,7 +1,20 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
+import { maybeReloadForChunkError } from "./lib/chunkReload.js";
 import "./index.css";
+
+// Stale-shell recovery (deploy renamed the hashed chunks; this shell is old):
+// Vite's preload helper dispatches `vite:preloadError` when a lazy chunk fails
+// to load. Reload once into the fresh shell (loop-guarded in chunkReload);
+// preventDefault only when a reload was actually triggered — inside the guard
+// window Vite's rethrow proceeds and the normal error path shows, as before.
+window.addEventListener("vite:preloadError", (event) => {
+  const payload = (event as Event & { payload?: unknown }).payload;
+  if (maybeReloadForChunkError(payload)) {
+    event.preventDefault();
+  }
+});
 
 // Global error visibility (vanilla DOM, not React — works even if React itself is
 // wedged). An uncaught error or promise rejection anywhere — a WebGL/three.js tick,
