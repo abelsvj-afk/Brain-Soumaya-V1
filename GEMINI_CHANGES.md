@@ -1,3 +1,387 @@
+### 2026-10-31 (Claude): G0 B4 — restore procedure + drill support (restore.ts / reconcile.ts / restore-cli.ts, index restoreLog)
+- [ ] Verified by Claude
+- Owner-authorized increment B4 of the G0 backup program (spec §8):
+  the restore half of "a backup is proven when it has been restored".
+  New `backup/restore.ts`: store-alone index read → select latest-good
+  (or a specified PROMOTED backup; anything else is refused) →
+  ciphertext download with SHA-256 verified against the manifest
+  before decryption → AES-256-GCM decrypt via B2's strict key loader
+  (missing/malformed key fails closed at the decrypt stage; no
+  plaintext path) → standalone verification of the staged snapshot
+  (tiers 1+2, MUST enforcement ON) → tier-3 staged digests → the
+  target's existing database moved aside as `brain.db.pre-restore-*`
+  → atomic same-directory rename swap → post-install proof (file
+  SHA-256 + tier-3 digests + ledger summaries) with rollback to the
+  safety copy on any divergence. Every failure stage (index / select
+  / download / decrypt / verify / reconcile / install) leaves the
+  target byte-for-byte untouched and is still recorded.
+- New `backup/reconcile.ts` (B0 amendment C tier 3 + K4): content
+  digests over canonical row serializations for the identity-
+  sensitive classes that exist at drill time (travel_journeys +
+  travel_journey_events, space_meta, npc_relic_holdings, codex_*,
+  notification outbox/dedup tables, the fin_* history) — same RECORDS,
+  not same counts — plus ledger reconciliation recomputed read-only
+  from the records: per-space current world derived by TravelRepo's
+  own rule (without its lazy-settle writes), fuel balances, finance
+  totals, and travel event-chain consistency.
+- `backup/index.ts`: the index gains `restoreLog` (G0-AC-13 records:
+  backup, operator, times, verification + per-tier outcome) with
+  strict validation on read, []-normalization for pre-B4 indexes, and
+  `appendRestoreRecord` (fresh-read append; never moves latest-good).
+  Pre-B4 writers spread the index, so the log survives their writes
+  only once all writers are B4+ — recorded honestly in the type doc.
+- New `backup/restore-cli.ts`: the operator's runnable form
+  (`--preflight` prints store-alone latest-good/manifest facts + key
+  PRESENCE only; a restore prints the full report and always writes
+  `<target dir>/restore-records/<id>.json`, the durable record when
+  the store credentials are read-only). New runbook
+  `docs/G0_BACKUP_RESTORE_RUNBOOK.md`: the §8 procedure as drilled,
+  secrets by NAME only (G0-AC-14), failure-stage table, AC-15
+  revalidation note. No schema changes; no changes to B1–B3 behavior.
+- Tests: `__tests__/g0BackupRestore.test.ts` (18 tests) mapping
+  G0-AC-06/07/08/10/13/14 + tier-3/K4 — flipped-byte and two
+  tampered-manifest cases rejected before install with the target
+  byte-identical; store-alone restore after the source directory is
+  destroyed; specified-id restore; safety-copy preservation;
+  same-count/different-records digest proof. The galaxy-render and
+  cited-chat halves of G0-AC-08 are exercised live in the drill
+  against the scratch app (see the B4 PR body), not in the gate.
+
+### 2026-10-31 (Claude): Stale-shell chunk fix — real 404s for missing files + one guarded auto-reload
+- [ ] Verified by Claude
+- Owner-reported dead-end: after a deploy, a phone holding the previous
+  build's shell requested hashed chunks that no longer exist
+  (`assets/SettingsPanel-….js`, MindPanel, StoryBook) and got the full-screen
+  "Failed to fetch dynamically imported module" error. Root cause (proven
+  against the live server + confirmed in code): the SPA fallback in
+  `packages/server/src/api/server.ts` answered EVERY non-API GET — including
+  missing `/assets/*` files — with the index HTML and HTTP 200, so the
+  browser tried to execute HTML as a JS module.
+- Server: the fallback now returns a real `404` for file requests that
+  `express.static` didn't match — any path under `/assets/`, and any path
+  whose last segment carries a file extension. Extensionless page routes
+  still receive the shell; API routes and real files are untouched.
+- Client: new `packages/web/src/lib/chunkReload.ts` recognizes chunk-load
+  failures (Chrome/Firefox/Safari message shapes + ChunkLoadError) and
+  forces ONE full reload so the client picks up the fresh shell.
+  Loop-guarded by a sessionStorage timestamp (at most one forced reload per
+  3 minutes); if the chunk still fails after the fresh shell, the existing
+  error screen shows as before. Wired in two places: `main.tsx`
+  (`vite:preloadError` listener, preventDefault only when a reload fires)
+  and `ErrorBoundary.componentDidCatch` (covers the lazy panel imports,
+  root + contained boundaries). No panel/world/content changes.
+- Tests: `packages/server/src/__tests__/staticFiles.test.ts` (bogus chunk →
+  404, extension path → 404, page route → 200 shell, real asset → 200,
+  /api/health untouched) and `packages/web/src/lib/chunkReload.test.ts`
+  (fires once, suppressed inside the guard window, allowed after it,
+  non-chunk errors never reload, storage-outage behavior pinned).
+
+### 2026-10-30 (Claude): G0 inventory v5 — preflight resolved (3 reclassifications with causes) + MUST enforcement ON
+- [ ] Verified by Claude
+- Owner-authorized follow-up to the B0 amendment-B preflight hold. The
+  read-only production investigation (2026-10-30) explained all three
+  unexpectedly-empty MUST tables: `fin_expense` (the brain-side expense
+  pipeline was fed once, income only — the owner's real expense data
+  lives in the Money Tracker artifact's separate store; PERMANENT
+  cause) and `episodes_fts` + `vec_episodes` (140 production episodes
+  all sit enrichment_status='pending' because the enrichment worker in
+  agent/episodic.ts has no production caller — the indexes are empty
+  by construction; PROVISIONAL cause, restore MUST after a future
+  backfill wires the worker and populates them). `backup/inventory.ts`:
+  all three reclassified MUST → MAY-BE-EMPTY with inline causes,
+  BACKUP_INVENTORY_VERSION 4 → 5 with the full reasoning in the header
+  (including the note that the v4 header totals undercounted named /
+  included by one — the pinned test counts have always governed).
+  Final arithmetic: 115 named / 114 included / 26 MUST / 88 MAY /
+  1 excluded.
+- Enforcement ON: `backup/runner.ts` — the pipeline's
+  enforceMustNonempty default flips false → true (the one-line switch;
+  the option doc now records the v5 resolution). Every production entry
+  point (scheduler, backup routes) funnels through runBackupPipeline
+  and passes nothing, so scheduled, catch-up, manual and golden backups
+  all enforce: a snapshot with any of the 26 MUST tables empty fails
+  the attempt at stage 'verify', naming the table(s) — never a silent
+  pass. verifySnapshotFile's own default was already enforce=true;
+  `backup/manifest.ts` doc updated to match. Explicit opt-out remains
+  for tests. No schema, scheduler, B2 or B3 behavior changes.
+- Tests: `g0Backup.test.ts` — pins updated (MUST 29 → 26, version
+  4 → 5) and a v5 proof describe: the full working-brain fixture (every
+  MUST table honestly seeded, the three v5 tables empty) passes with
+  enforcement ON; a snapshot with exactly one MUST table (`settings`)
+  emptied fails verification naming that table as the ONLY failure, and
+  the same artifact verifies with the explicit opt-out.
+  `g0BackupScheduler.test.ts` — the shared fixture is now a full
+  working-brain seed (the real pipeline enforces by default, so its
+  fixture must be a brain that legitimately passes), plus a pipeline
+  describe pinning the default flip: a partial brain fails at 'verify'
+  BY DEFAULT naming `sources`, recorded as a failed attempt with zero
+  verified backups; the same brain verifies under the explicit opt-out.
+  Fail-before/pass-after demonstrated: the new/updated tests failed
+  against the pre-change code (5 failures, all in the new assertions)
+  and pass after.
+
+### 2026-10-30 (Claude): G0 B3 — scheduler (daily 03:30 America/New_York + catch-up), manual/golden triggers, backup status surface
+- [ ] Verified by Claude
+- Third increment of the owner-approved G0 backup & restore plan (plan §4
+  B3 + the §K1 cadence decision); B1 made verified local snapshots and B2
+  the off-volume chain, but nothing ever RAN a backup and nobody could see
+  backup health. New modules in `packages/server/src/backup/`:
+  `schedule.ts` (pure New York wall-clock slot math via Intl — no offset
+  tables: most-recent 03:30 slot, next run, Sunday → weekly tier.
+  decideBackupRun reads ONLY the attempt record — a slot with no attempt
+  at/after its instant is due, 'schedule' within 15 min of the slot, else
+  'catch_up'. Deliberately NO purely age-based trigger: on the fall-back
+  day the slot interval is 25h, so an age > 24h rule would double-fire a
+  local day; latest-good age is a status signal. Both DST transition days
+  are pinned by tests against `date`-verified instants, plus week
+  simulations proving exactly one run per New York day across both
+  transitions), `runner.ts` (ONE pipeline for every trigger — B1 leg,
+  then B2's encrypt→upload→verify→promote when an object store is
+  configured; when it is not — production today — the attempt records the
+  distinct outcome NOT CONFIGURED in the new `offvolume_outcome` column:
+  not a failure, not a promotion, no plaintext ever leaves. Retention
+  runs after promotion and a retention error never fails the backup.
+  MUST-nonempty enforcement defaults OFF here: the runner is the first
+  production caller of B1's leg and the B0 amendment-B preflight hold is
+  still in force; explicit opt-in preserved), `scheduler.ts` (60 s tick +
+  immediate boot evaluation, overlap-guarded, deps-injected so it is
+  unit-tested, BACKUP_SCHEDULER=off kill switch, wired at boot in
+  src/index.ts; a pipeline throw is logged, never fatal), `status.ts`
+  (the spec §7 report, G0-AC-11: latest attempt, latest-good + age +
+  stale flag, schedule/next run/catch-up due, off-volume + index health.
+  The B2 ride-along: the index read here is defensive — a corrupt index
+  reports INDEX CORRUPT in status and never throws into the panel or the
+  scheduler; B2's recovery semantics untouched).
+- Schema (additive, flagged): `backup_attempts` gains `trigger` TEXT NOT
+  NULL DEFAULT 'manual' (honest for every pre-B3 row — B1/B2 only ever ran
+  on demand) and nullable `offvolume_outcome`, in BOTH schema locations
+  with byte-identical CREATE bodies (verified by extraction diff) plus
+  PRAGMA-guarded ALTERs for existing databases. `service.ts` writes
+  trigger/tier/pinned in the attempt's initial INSERT when the caller
+  supplies them, so a GOLDEN attempt is tier 'golden' + pinned AT
+  CREATION on every path; B2's bookkeeping UPDATE remains as a backstop
+  writing identical values. `offvolume.ts` passes trigger through.
+- API + web: owner-only `GET /api/backup/status` and
+  `POST /api/backup/run` ({golden} → trigger golden/manual) in
+  `api/routes/backup.ts`, mounted behind the standard space guard. Web:
+  `api/backup.ts` + `components/BackupPanel.tsx` — a "Backups (owner)"
+  panel in Settings beside Account settings, rendered only for the owner
+  (server enforces; the panel renders nothing otherwise). Latest-good and
+  latest-attempt are separate accent blocks so a failed attempt can never
+  read as a good backup; STALE warning past 24h; corrupt-index warning;
+  next-run line; Back up now / Golden buttons; every time rendered via
+  the viewer's local clock (never UTC — the status payload carries ISO
+  instants + an age duration only). `.env.example` documents
+  BACKUP_SCHEDULER / BACKUP_DIR names in the existing G0 block.
+- Tests: `__tests__/g0BackupScheduler.test.ts` (29 — DST pins both
+  transitions, once-per-local-day week simulations, catch-up rules,
+  trigger parity across schedule/catch_up/manual/golden, golden pinned
+  at creation, not-configured recording with zero store contact,
+  configured promotion through the same pipeline, status field
+  correctness incl. stale flags and attempt-vs-good distinction,
+  defensive corrupt/unreadable/missing index, owner gating incl. the
+  unconfigured-space refusal, scheduler tick behavior) and
+  `components/BackupPanel.test.tsx` (6 — non-owner absence, local-time
+  rendering, attempt-vs-good distinction, not-configured wording,
+  corrupt-index loudness, both buttons' triggers + status reload). The
+  B1/B2 suites (40 tests) pass unmodified on the changed tree. B4
+  (restore/drill) and B5 (deploy gate) are NOT in this increment; MUST
+  enforcement stays OFF; no R2 secrets are provisioned by this change.
+- Review round (independent review of the first B3 tree returned NOT
+  READY with one P1; fixed before landing, all fail-before/pass-after):
+  the scheduler's evaluate() read its facts OUTSIDE any try/catch while
+  its boot/interval calls are fire-and-forget — a throw there (locked
+  DB, missing table) would have escaped as an unhandled rejection and
+  could kill the server. evaluate() now guards its whole body, both
+  call sites carry .catch, and a regression test drops
+  backup_attempts under a live scheduler. Also from the review: a
+  process-wide in-flight lock in runBackupPipeline
+  (BackupRunBusyError — the pipeline's only throw) so scheduled,
+  manual, and golden runs can never interleave on the shared dir +
+  index; POST /run maps it to an honest 409 and the scheduler logs and
+  stands down. Panel: the attempt tier now renders as its meaning
+  ("weekly keeper (Sunday's run)") instead of the bare word, and a
+  fresh-good (non-stale) rendering test was added. New totals: 31
+  server + 7 web B3 tests.
+- Review round 2 (the full review text, dispositioned before landing):
+  P2-1 — decideBackupRun's tier now follows the OLDEST uncovered
+  slot: down across a Sunday and the next slot boundary, the single
+  coalesced catch-up run is still the weekly keeper, not a silently
+  downgraded daily (fail-before signature: expected 'daily' to be
+  'weekly'; missed slots still coalesce into exactly one run).
+  P2-5 — the decision's facts shrank to the newest attempt instant
+  (new latestBackupAttemptCreatedMs, one MAX query), so the
+  scheduler's per-minute evaluation no longer re-reads and re-parses
+  the whole attempt history. P2-6 — status carries
+  latestGoodIndexId + latestGoodDiverged: when the off-volume index
+  (what a store-only restore would use) names a different
+  latest-good than the local record, the divergence is explicit in
+  the report and loud in the panel, never silently resolved.
+  P2-4 — the panel's no-answer note no longer claims the run "could
+  not be started" (a slow run can outlast the connection; the
+  reloaded status is the source of truth). P2-7 — test pins added:
+  scheduler + REAL pipeline end-to-end, latest-good by promotedAt
+  (not createdAt), configured store with no index yet, panel renders
+  nothing while loading. P2-2 NOT fixed in B3, by decision: local
+  snapshot files are never deleted, so daily automatic runs grow the
+  volume slowly — a local-retention policy (delete-on-promotion plus
+  a keep-last-N rule for not-configured mode) is an owner decision,
+  flagged as the top fast-follow-up in the PR body rather than
+  invented inside this increment. New totals: 36 server + 8 web B3
+  tests.
+
+### 2026-10-30 (Claude): Load gate + lag-offer fix — loader waits for the first rendered galaxy frame; lag detector rebuilt
+- [ ] Verified by Claude
+- Owner-reported (2026-10-30): (1) the loading screen lifted when graph DATA
+  arrived, so the home galaxy visibly streamed in behind the HUD; (2) the
+  "Soumaya noticed some lag" Performance Mode offer fired on ordinary loads.
+  Diagnosis + harness evidence: `~/workspace/worlds-vision/load-perf-build-record.md`
+  (kept outside the repo with the gate logs).
+- Load gate (App.tsx): the "Mapping your galaxy…" overlay now lifts on a
+  one-way `galaxyReady` latch fed by Graph3D's existing first-frame signal
+  (`onFirstFrame`, previously wired to an already-true flag), with a 0.35 s
+  fade. Safety: a 12 s fallback timeout from the moment the galaxy can mount
+  and the existing init-error path both lift the loader — it can never trap
+  the user; diagnostics record which path lifted it (`App.loadGate`). Lite
+  mode keeps the old data-arrival lift. HUD/top buttons unchanged.
+- Lag detector: the inline App.tsx FPS effect is replaced by
+  `packages/web/src/lib/perfMonitor.ts` (framework-free, injected deps,
+  9 unit tests). Proven defects of the old detector, each fixed: it armed
+  8 s after MOUNT (inside the load-in window — scene build/shader compile/
+  GLB streaming measured as "lag"); it had no visibility handling (hidden
+  time read ≈0 fps on return); dismissal was never remembered (re-armed
+  every load). The new monitor arms only when App signals boot settled
+  (galaxyReady / lite-loaded / init-error) + a 5 s settle, requires 3
+  consecutive 2 s windows under 24 fps of VISIBLE time, pauses on hidden
+  and restarts the window on return, is one-shot, and stays silent if the
+  offer was dismissed this session (sessionStorage `brain.perfOfferDismissed`,
+  wired to the banner's "Not now") or Performance Mode is already on.
+  A transient hidden flicker can neither count nor kill the sampler
+  (harness-found, unit-tested). Performance Mode itself is unchanged
+  (graphics preset: bloom off, 30 fps cap, pixel ratio 1).
+- No scene/content changes: home-scene cost characterized from the app's
+  own PerfHUD in the harness (193 draw calls / 425,138 tris for a 42-node
+  fixture — fixed scenery dominates); no provable per-frame hotspot was
+  found, so no rendering code was touched.
+
+### 2026-10-30 (Claude): G0 B2 — encryption, off-volume upload, verified-stored, promotion, retention (no caller wired yet)
+- [ ] Verified by Claude
+- Second increment of the owner-approved G0 backup & restore plan; continues
+  B1's lifecycle in `packages/server/src/backup/` from VERIFIED-LOCAL to
+  PROMOTED (spec §5). New modules: `encryption.ts` (AES-256-GCM via Node's
+  built-in crypto, no new dependency; per-backup random nonce; auth tag
+  appended to the stored object; the manifest gains an `encryption` record —
+  algorithm, nonce, CIPHERTEXT SHA-256, ciphertext bytes — never key
+  material; key read from `BACKUP_ENCRYPTION_KEY` env, base64 or hex,
+  must decode to exactly 32 bytes, anything else yields null and the
+  attempt fails CLOSED at the encrypt stage — there is no plaintext upload
+  path), `store.ts` (one narrow `BackupObjectStore` interface;
+  `InMemoryBackupStore` fake for the gate; `S3BackupStore` — a minimal
+  SigV4-signed S3 client over global fetch for Cloudflare R2, config from
+  `BACKUP_R2_ENDPOINT`/`BACKUP_R2_BUCKET`/`BACKUP_R2_ACCESS_KEY_ID`/
+  `BACKUP_R2_SECRET_ACCESS_KEY`/`BACKUP_R2_REGION` env, null config unless
+  all are set), `index.ts` (the off-volume backup index stored IN the
+  bucket as `backup-index.json`; latest-good recovery reads index →
+  latestGoodId → manifest object with NO application database, G0-AC-05;
+  a corrupt index throws rather than silently resetting latest-good),
+  `retention.ts` (owner-decided policy: newest 14 daily + 8 weekly kept,
+  goldens pinned and never auto-deleted, current latest-good never
+  deleted; `planRetention` is a pure function = the dry-run/list mode;
+  `executeRetention` deletes only planned entries' objects, marks them
+  pruned in the index, and appends a prune-log record per removal),
+  `offvolume.ts` (`runOffVolumeBackup`: B1 leg → encrypt → upload
+  (ciphertext, manifest, index entry — index never points at missing
+  objects) → VERIFIED-STORED (both objects re-read, ciphertext re-hashed
+  against the manifest, G0-AC-03) → PROMOTED (one index write moves
+  latestGoodId + entry state together; any earlier failure leaves the
+  previous latest-good intact, G0-AC-09, and is recorded on the attempt
+  row with its stage — encrypt/upload/verify_stored/promote);
+  `retrieveSnapshotPlaintext` performs the full hash-chain + decrypt
+  round trip B4's restore will build on).
+- Schema: NO new tables. `backup_attempts` gains three bookkeeping
+  columns — `tier TEXT NOT NULL DEFAULT 'daily'`, `pinned INTEGER NOT
+  NULL DEFAULT 0`, `promoted_at TEXT` — added to the CREATE in BOTH
+  schema locations (DDL verified identical) plus PRAGMA-guarded ALTERs
+  in `db/client.ts` migrateSchema for existing volumes (with a
+  regression test upgrading a B1-shaped table in place). The B2
+  lifecycle states (uploaded/verified_stored/promoted/pruned) and
+  failure stages are plain TEXT — no DDL for those. MUST-BE-NONEMPTY
+  enforcement untouched (still OFF for production callers; the three
+  unexpectedly-empty MUST tables from B1's preflight remain an open
+  item).
+- Independent review rounds (same branch): first pass NOT READY —
+  2 P1 + 7 P2 in the complete report, all fixed here with
+  fail-before/pass-after regression tests: (P1) index recovery
+  now validates strictly — a non-string `latestGoodId` or a malformed
+  entry is corruption that throws, never coerced to "no backups";
+  latest-good must name a PROMOTED entry whose manifest agrees with
+  the entry's ciphertext hash; (P1) a promote-stage failure after the
+  index write restores latestGoodId to the previous latest-good — a
+  failed attempt never remains latest-good; verify/promote stages
+  re-read the index inside the stage instead of writing back the
+  upload-stage copy (an interleaved-runs test proves a backup promoted
+  mid-run is never erased); VERIFIED-STORED deep-compares the whole
+  stored manifest, not three fields; the decrypt helper accepts the
+  tag-only ciphertext of an empty plaintext; (P2) key loading requires
+  canonical base64/hex — Node's lenient decoder would otherwise accept
+  a corrupted secret as a wrong key until restore time; (P2) both SigV4 paths share one canonical
+  query construction; (P2) retention marks + records each entry in the
+  index BEFORE deleting its objects, so a crash mid-prune can only
+  orphan objects, never leave the index advertising deleted ones.
+- Tests: `src/__tests__/g0BackupOffVolume.test.ts`, 27 tests mapped to
+  G0-AC-03/05/09/12 — encrypt→store→re-download→decrypt byte-identical
+  round trip with the manifest hash chain and a standalone
+  verifySnapshotFile pass on the decrypted snapshot; store-only
+  latest-good recovery; missing-key fail-closed (store stays EMPTY);
+  corrupted-stored-copy and upload-outage failures leaving latest-good
+  untouched; retention plan/dry-run/real-prune exactness incl.
+  latest-good-outside-the-window protection; B1-era schema upgrade;
+  SigV4 shape + 404 mapping + ListObjectsV2 parsing against a stubbed
+  fetch. B1's 13 tests unchanged and green.
+- NOT live-verified, by design: no R2 bucket or API token exists yet
+  (owner-side Cloudflare step) and `BACKUP_ENCRYPTION_KEY` is not yet
+  set as a Fly secret (owner key-custody step). Everything is built and
+  gated against the transport interface + fake; the env names are
+  documented in `.env.example`. Scope stops at PROMOTED per the plan:
+  no scheduler/status UI (B3), no restore/drill (B4), no caller wired.
+
+### 2026-10-30 (Claude): G0 B1 — backup snapshot, manifest, local verification (no caller wired yet)
+- [ ] Verified by Claude
+- First increment of the owner-approved G0 backup & restore plan. New module
+  `packages/server/src/backup/`: `inventory.ts` (the B0 table inventory pinned
+  in-repo, bumped to v2: 109 named tables / 108 included / 29 MUST-BE-NONEMPTY;
+  v2 delta = `relic_copies` + `relic_copy_events` from Relics I-2 plus the new
+  `backup_attempts`), `manifest.ts` (manifest builder; bucketed live-object
+  assertion per B0 amendment A — included / excluded / FTS+vec shadows via a
+  FINITE suffix set / sqlite internals / unrecognized-fails-loudly; standalone
+  snapshot verification: SHA-256 + byte size, `integrity_check`,
+  `foreign_key_check`, per-table count reconciliation, MUST wiped-DB guard —
+  and it returns failures instead of throwing on missing/corrupt files),
+  `service.ts` (`runBackupAttempt`: attempt row → bucketed assertion →
+  `VACUUM INTO` snapshot → manifest built FROM the snapshot artifact → verify
+  → VERIFIED-LOCAL; every operational failure is recorded on the attempt row
+  with its stage — snapshot/manifest/verify — and a failed attempt is never
+  listed as a backup).
+- Schema: ONE additive table, `backup_attempts` (states are plain TEXT so B2's
+  UPLOADED/PROMOTED states need no migration), added with identical DDL to
+  BOTH schema locations (`db/schemaSql.ts` BOOTSTRAP_SQL and
+  `db/client.ts` migrateSchema).
+- Scope stops at VERIFIED-LOCAL per the plan: no upload, no encryption (B2),
+  no scheduler/status UI (B3), no restore (B4), no caller wired — the module
+  is exercised only by its tests (`src/__tests__/g0Backup.test.ts`, 13 tests
+  mapped to G0-AC-01/02/04, including the review-driven regressions:
+  virtual-parent-prefixed rogue table, FK-violation branch, unusable-dir
+  recording, missing/garbage snapshot handling).
+- Production preflight (B0 amendment B, read-only counts on the live brain):
+  26 of 29 MUST tables confirmed nonempty; `episodes_fts`, `vec_episodes`,
+  and `fin_expense` are EMPTY in production — MUST enforcement therefore
+  stays OFF for production callers (`enforceMustNonempty: false`, documented
+  in `inventory.ts`) until those three are resolved by reclassification or
+  backfill. Enforcement is not silently enabled by this increment.
+- Independent review: first pass BLOCKED on one P1 (classifier shadow-prefix
+  escape) + two P2s (unwrapped throw paths; test gaps) — all fixed in this
+  same branch with fail-before/pass-after tests.
+
 ### 2026-09-11 (Codex): Graph reliability and multi-tenant query hardening
 - [x] Verified by Claude
 - Fixed the graph client treating an HTTP error or malformed graph payload as a successful
