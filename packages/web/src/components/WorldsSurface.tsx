@@ -90,6 +90,7 @@ import {
 import { createWardScene } from "../graph/wardScene.js";
 import { createRoadScene } from "../graph/roadScene.js";
 import { createVillageScene } from "../graph/villageScene.js";
+import FoldChoice from "./FoldChoice.js";
 import { createFoldScene } from "../graph/foldScene.js";
 import { FOLD_ORBIT_HEIGHT, FOLD_ORBIT_RADIUS } from "../graph/foldLayout.js";
 import { createLongScene, LONG_SKY } from "../graph/longScene.js";
@@ -3511,6 +3512,7 @@ export default function WorldsSurface({
         <div className="place-card" role="dialog" aria-label={reading.title}>
           <strong>{reading.title}</strong>
           <p>{reading.text}</p>
+          {reading.id === "fold.letter" && <FoldChoice />}
           <button type="button" className="mini" onClick={() => setReading(null)}>
             Close
           </button>

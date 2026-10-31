@@ -10,20 +10,13 @@ import {
   ETERNITY_CHAIN_INTERMEDIATES,
   ETERNITY_CHAIN_LEGS,
   ETERNITY_WORLD_KEY,
-  FADED_WARD_GATE_ENTRY,
   FADED_WARD_WORLD_KEY,
-  ROAD_GATE_ENTRY,
   ROAD_WORLD_KEY,
-  VILLAGE_GATE_ENTRY,
-  SIEGE_GATE_ENTRY,
-  FOLDED_LETTER_GATE_ENTRY,
+  STORY_WORLD_GATES,
   FOLDED_LETTER_WORLD_KEY,
-  LONG_MORNING_GATE_ENTRY,
   LONG_MORNING_WORLD_KEY,
-  YARD_GATE_ENTRY,
   YARD_WORLD_KEY,
   SIEGE_WORLD_KEY,
-  UNMADE_GATE_ENTRY,
   UNMADE_WORLD_KEY,
   VILLAGE_WORLD_KEY,
   NO_ETERNITY_HOLDINGS,
@@ -765,76 +758,54 @@ export class TravelRepo implements JourneyBonusCreditor {
     };
   }
 
-  foldedLetterGateOpen(): boolean {
-    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+  /** Whether this brain's Book holds every entry of at least one of the sets (a story gate with more than one way in). */
+  private holdsAnySet(sets: readonly (readonly string[])[]): boolean {
     try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, FOLDED_LETTER_GATE_ENTRY);
+      const has = this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`);
+      return sets.some((set) => set.every((id) => !!has.get(this.spaceId, id)));
     } catch {
       return false;
     }
+  }
+
+  foldedLetterGateOpen(): boolean {
+    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+    return this.holdsAnySet(STORY_WORLD_GATES[FOLDED_LETTER_WORLD_KEY]!);
   }
 
   longMorningGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, LONG_MORNING_GATE_ENTRY);
-    } catch {
-      return false;
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[LONG_MORNING_WORLD_KEY]!);
   }
 
   yardGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, YARD_GATE_ENTRY);
-    } catch {
-      return false;
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[YARD_WORLD_KEY]!);
   }
 
   siegeGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, SIEGE_GATE_ENTRY);
-    } catch {
-      return false;
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[SIEGE_WORLD_KEY]!);
   }
 
   unmadeGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, UNMADE_GATE_ENTRY);
-    } catch {
-      return false;
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[UNMADE_WORLD_KEY]!);
   }
 
   villageGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, VILLAGE_GATE_ENTRY);
-    } catch {
-      return false;
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[VILLAGE_WORLD_KEY]!);
   }
 
   roadGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, ROAD_GATE_ENTRY);
-    } catch {
-      return false;
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[ROAD_WORLD_KEY]!);
   }
 
   wardGateOpen(): boolean {
     if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
-    try {
-      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, FADED_WARD_GATE_ENTRY);
-    } catch {
-      return false; // a brain with no Book yet simply has not found it
-    }
+    return this.holdsAnySet(STORY_WORLD_GATES[FADED_WARD_WORLD_KEY]!);
   }
 
   /**

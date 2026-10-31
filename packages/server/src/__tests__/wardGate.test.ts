@@ -152,3 +152,17 @@ describe("the Folded Letter gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).foldedLetterGateOpen).toBe(false);
   });
 });
+
+describe("story gates with more than one way in", () => {
+  it("opens the Long Morning for Orsolya's Shard too, and the Folded Letter for the open alcove together with Vesh's paper boat (never for only one of them)", () => {
+    const t = new TravelRepo(handle, "m");
+    expect(t.getState(T0).longMorningGateOpen).toBe(false);
+    find("m", "relic.first-light-shard");
+    expect(t.getState(T0).longMorningGateOpen).toBe(true);
+    expect(t.getState(T0).foldedLetterGateOpen).toBe(false);
+    find("m", "sight.open-alcove");
+    expect(t.getState(T0).foldedLetterGateOpen).toBe(false); // one of the pair is not enough
+    find("m", "obj.vesh-paper-boat");
+    expect(t.getState(T0).foldedLetterGateOpen).toBe(true);
+  });
+});

@@ -106,3 +106,14 @@ export async function getStoryRoads(): Promise<StoryRoadRow[] | null> {
   return d && Array.isArray(d.roads) ? d.roads : null;
 }
 export const putStoryRoad = (roadId: string, state: RoadState) => send<{ road: StoryRoadRow }>(`/roads/${encodeURIComponent(roadId)}`, "PUT", { state });
+
+/** The Folded Letter's choice: which, never what (the sentence is never shown or stored). null = not made yet (or the server is unreachable). */
+export type FoldChoice = "kept" | "opened";
+export async function getFoldChoice(): Promise<FoldChoice | null> {
+  const d = await send<{ foldLetter: FoldChoice | null }>("/choices", "GET");
+  return d?.foldLetter === "kept" || d?.foldLetter === "opened" ? d.foldLetter : null;
+}
+export async function putFoldChoice(value: FoldChoice): Promise<FoldChoice | null> {
+  const d = await send<{ foldLetter: FoldChoice }>("/choices/fold-letter", "PUT", { value });
+  return d?.foldLetter === "kept" || d?.foldLetter === "opened" ? d.foldLetter : null;
+}

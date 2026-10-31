@@ -96,6 +96,11 @@ export const YARD_GATE_ENTRY = "sight.blank-nameplate";
  */
 export const LONG_MORNING_WORLD_KEY = "the-long-morning";
 export const LONG_MORNING_GATE_ENTRY = "relic.unnumbered-fragment";
+/**
+ * Every way in (any one set opens the door; a set needs all of its entries). The Unnumbered Fragment lies in the Scale Space, whose relics are not yet discoverable in the app (docs/AUDIT_PLAYABILITY_2026-10-31.md,
+ * gap G1), so the door must not depend on it alone: Orsolya's Shard — the other half of the first record, found in the Deep Past — opens it too.
+ */
+export const LONG_MORNING_GATE_SETS: readonly (readonly string[])[] = [[LONG_MORNING_GATE_ENTRY], ["relic.first-light-shard"]];
 
 /**
  * The Folded Letter (S-VIII; docs/specs/seam-the-folded-letter-2026-10-31.md): the last room — an empty room with a letter on the floor, still folded. A door in the story that opens for a traveller who holds the
@@ -104,6 +109,11 @@ export const LONG_MORNING_GATE_ENTRY = "relic.unnumbered-fragment";
  */
 export const FOLDED_LETTER_WORLD_KEY = "the-folded-letter";
 export const FOLDED_LETTER_GATE_ENTRY = "relic.unopened-fold";
+/**
+ * The Unopened Fold lies in the Quiet/Archive, whose relics are not yet discoverable in the app (audit gap G1). The letter is also reachable by having seen the open alcove (where a letter lies unfolded-in-waiting) AND
+ * held Vesh's paper boat (the page that had to be set down): two things a brain only has by having spent time in the Archive and kept company with Vesh — still a choice, never a prize.
+ */
+export const FOLDED_LETTER_GATE_SETS: readonly (readonly string[])[] = [[FOLDED_LETTER_GATE_ENTRY], ["sight.open-alcove", "obj.vesh-paper-boat"]];
 
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
@@ -184,3 +194,18 @@ export function warpCost(from: string, to: string): number {
   const distance = Math.hypot(a.x - b.x, a.y - b.y);
   return Math.max(WARP_COST_MIN, Math.ceil(distance / WARP_UNITS_PER_FUEL) + 1);
 }
+
+/**
+ * Every STORY gate in one place (any one set opens the door; a set needs all of its entries). The server checks these against the brain's Book; the reachability test proves that a normal brain can actually
+ * satisfy each of them (docs/AUDIT_PLAYABILITY_2026-10-31.md) — a new door must be added here or it will not be tested.
+ */
+export const STORY_WORLD_GATES: Readonly<Record<string, readonly (readonly string[])[]>> = {
+  [FADED_WARD_WORLD_KEY]: [[FADED_WARD_GATE_ENTRY]],
+  [ROAD_WORLD_KEY]: [[ROAD_GATE_ENTRY]],
+  [VILLAGE_WORLD_KEY]: [[VILLAGE_GATE_ENTRY]],
+  [UNMADE_WORLD_KEY]: [[UNMADE_GATE_ENTRY]],
+  [SIEGE_WORLD_KEY]: [[SIEGE_GATE_ENTRY]],
+  [YARD_WORLD_KEY]: [[YARD_GATE_ENTRY]],
+  [LONG_MORNING_WORLD_KEY]: LONG_MORNING_GATE_SETS,
+  [FOLDED_LETTER_WORLD_KEY]: FOLDED_LETTER_GATE_SETS,
+};

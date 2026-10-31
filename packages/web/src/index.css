@@ -8043,3 +8043,14 @@ body.in-transit .perf-suggest { display: none; }
 .book-lines .is-dark { opacity: 0.6; }
 .book-line-people { font-size: 0.9em; opacity: 0.9; }
 .book-line-thread { font-size: 0.85em; font-style: italic; }
+
+/* The Folded Letter's choice (components/FoldChoice.tsx): two plain 44 px buttons inside the letter's card. No colour carries meaning; the words do. */
+.fold-choice { margin: 0.6rem 0 0.2rem; font-size: 0.85rem; line-height: 1.45; }
+.fold-choice p { margin: 0 0 0.5rem; }
+.fold-choice .fold-choice-keeper { font-style: italic; opacity: 0.9; }
+.fold-choice-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.fold-choice-btn {
+  min-height: 44px; padding: 0 16px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
+  border: 1px solid rgba(255, 233, 190, 0.6); background: rgba(255, 233, 190, 0.12); color: #fff4dc;
+}
+.fold-choice-btn:hover, .fold-choice-btn:focus-visible { background: rgba(255, 233, 190, 0.26); }

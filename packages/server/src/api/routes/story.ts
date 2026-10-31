@@ -6,6 +6,7 @@ import { VOICE_ROLES, reactionBetween, talkLine } from "@brain/shared";
 import { isOwnerSpace } from "../../auth/owner.js";
 import { StoryError, StoryRepo } from "../../story/story.js";
 import { RoadsRepo } from "../../story/roads.js";
+import { ChoicesRepo } from "../../story/choices.js";
 import { computeFlavor, setFlavorOn } from "../../story/flavor.js";
 import { createNarrator, isTide, narrationText, type Narrator } from "../../story/narration.js";
 import { dirname, join } from "node:path";
@@ -98,6 +99,20 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
     if (!parsed.success) return void res.status(400).json({ error: "Invalid road state." });
     try {
       res.json({ road: new RoadsRepo(ctx.handle, spaceOf(res)).set(id.parse(req.params.id), parsed.data.state) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  // The Folded Letter's one choice: which, never what. Stored privately; made only from inside the room.
+  r.get("/choices", (_req, res) => {
+    res.json({ foldLetter: new ChoicesRepo(ctx.handle, spaceOf(res)).foldLetter() });
+  });
+  r.put("/choices/fold-letter", (req, res) => {
+    const parsed = z.object({ value: z.enum(["kept", "opened"]) }).safeParse(req.body);
+    if (!parsed.success) return void res.status(400).json({ error: "Expected { value: \"kept\" | \"opened\" }." });
+    try {
+      res.json({ foldLetter: new ChoicesRepo(ctx.handle, spaceOf(res)).setFoldLetter(parsed.data.value) });
     } catch (e) {
       fail(res, e);
     }
