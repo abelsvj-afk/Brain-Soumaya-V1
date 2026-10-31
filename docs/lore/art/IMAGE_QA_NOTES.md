@@ -333,6 +333,8 @@ Files: `60-noor-asks-vesh-v1.png` … `v4.png`. Vesh is right in all four and co
 
 Verdict: a clean, consistent set with no flags. Your pick.
 
+- **Owner review, 2026-10-31** (from the Stillness Seal card on his phone; the variant shown reads as v4 — candle standing on the floor between them): the lore goes with the image — quiet alcove, the smooth dark seal, the paper boat, Noor, and the rest of it all match the entry. Two flags recorded at the owner's direction: (1) Vesh's face reads **feminine** to the owner, where canon wants androgynous (the §4 axis); (2) the hollow reads as a **framed spiral galaxy** — a small portal held in the chest — rather than a clean hollow showing what lies beyond. Neither flag breaks the entry; a retake is the owner's call, not yet ordered.
+
 ## §61 — Sethane's Cord (Sheet 2)
 
 Files: `61-sethanes-cord-v1.png` … `v4.png`. All four wide. The sheet's rule holds in every variant: Sethane is small and distant at the far end, tall, slim and dark-clad, with her back to us — the last place she was seen — standing at the edge of the vast pale gap with a ring of measuring arms around her. The long pale-gold cord crosses a wide field of planets from a tiny station, its knots tied along the way and its measure never closing.
