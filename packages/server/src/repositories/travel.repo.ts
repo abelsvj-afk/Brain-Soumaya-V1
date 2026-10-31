@@ -4,6 +4,7 @@ import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { EconomyRepo, type JourneyBonusCreditor, type JourneyBonusResult } from "../economy.js";
 import { spaceTimezone } from "../agent/notify/policy.js";
+import { DiscoveryReader } from "../discovery/reader.js";
 import {
   EARN_JOURNEY_COMPLETE,
   EARN_JOURNEY_DRIFT,
@@ -760,12 +761,7 @@ export class TravelRepo implements JourneyBonusCreditor {
 
   /** Whether this brain's Book holds every entry of at least one of the sets (a story gate with more than one way in). */
   private holdsAnySet(sets: readonly (readonly string[])[]): boolean {
-    try {
-      const has = this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`);
-      return sets.some((set) => set.every((id) => !!has.get(this.spaceId, id)));
-    } catch {
-      return false;
-    }
+    return new DiscoveryReader(this.h, this.spaceId).holdsAnySet(sets);
   }
 
   foldedLetterGateOpen(): boolean {

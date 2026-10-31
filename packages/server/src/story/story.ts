@@ -3,6 +3,8 @@ import { STORY_ENTRY_BY_ID, STORY_TRIGGERS, storyPairIsLit, triggerFor, worldAns
 import { localTime, spaceTimezone } from "../agent/notify/policy.js";
 import { localDateKey } from "../npcs/repo.js";
 import { TravelRepo } from "../repositories/travel.repo.js";
+import { DiscoveryLedger } from "../discovery/ledger.js";
+import { DiscoveryReader } from "../discovery/reader.js";
 
 /**
  * A brain's private progress through the story (docs/specs/lore-storage-2026-10-30.md). Content (what exists, how it connects) is shared code and is never stored here;
@@ -49,10 +51,16 @@ export interface StoryBook {
 }
 
 export class StoryRepo {
+  /** Every read and write of what a brain has found goes through the discovery ledger (docs/specs/unified-discovery-architecture-2026-10-31.md §2). */
+  private readonly reader: DiscoveryReader;
+  private readonly ledger: DiscoveryLedger;
   constructor(
     private h: DbHandle,
     private spaceId: string,
-  ) {}
+  ) {
+    this.reader = new DiscoveryReader(h, spaceId);
+    this.ledger = new DiscoveryLedger(h, spaceId);
+  }
 
   private requireEntry(entryId: string) {
     const entry = STORY_ENTRY_BY_ID.get(entryId);
@@ -62,17 +70,13 @@ export class StoryRepo {
 
   private requireFound(entryId: string): void {
     this.requireEntry(entryId);
-    const row = this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId);
-    if (!row) throw new StoryError("You have not found that yet.", 403);
+    if (!this.reader.has(entryId)) throw new StoryError("You have not found that yet.", 403);
   }
 
   book(): StoryBook {
     const db = this.h.sqlite;
-    const finds = (
-      db
-        .prepare(`SELECT entry_id, found_at, source, last_recalled_at, recall_count FROM story_finds WHERE space_id = ? ORDER BY found_at, entry_id`)
-        .all(this.spaceId) as { entry_id: string; found_at: string; source: string; last_recalled_at: string | null; recall_count: number }[]
-    )
+    const finds = this.reader
+      .list()
       .filter((r) => STORY_ENTRY_BY_ID.get(r.entry_id)?.retired !== true && STORY_ENTRY_BY_ID.has(r.entry_id)) // unknown/retired ids are ignored, never an error
       .map((r) => ({ entryId: r.entry_id, foundAt: r.found_at, source: r.source, lastRecalledAt: r.last_recalled_at, recallCount: r.recall_count }));
     const links = (db.prepare(`SELECT a, b, linked_at FROM story_links WHERE space_id = ? ORDER BY linked_at, a, b`).all(this.spaceId) as { a: string; b: string; linked_at: string }[]).map(
@@ -99,10 +103,8 @@ export class StoryRepo {
     const db = this.h.sqlite;
     if (how === "regard" || how === "listen") {
       // A replay of something already found is harmless and never refused.
-      if (db.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId)) {
-        const row = db.prepare(`SELECT found_at FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId) as { found_at: string };
-        return { entryId, foundAt: row.found_at, isNew: false };
-      }
+      const already = this.reader.foundAt(entryId);
+      if (already !== undefined) return { entryId, foundAt: already, isNew: false };
       // The world answers a visitor who stays, not one who taps: it speaks in its own Hour (otherwise only on its good days), and at most ONCE a day. Every refusal reads the same,
       // so nothing is learned from being turned away.
       const tz = spaceTimezone(db, this.spaceId);
@@ -111,20 +113,14 @@ export class StoryRepo {
       // First stillness ever kept in THIS world: the world always answers (the once-a-day rule below still holds).
       // (The world a stillness belongs to is its TRIGGER's world — several entries are "anywhere" in the canon but are only ever answered in one place.)
       const triggerWorld = (entry: string) => STORY_TRIGGERS.find((x) => x.entryId === entry && (x.how === "regard" || x.how === "listen"))?.world;
-      const keptHere = (db.prepare(`SELECT entry_id FROM story_finds WHERE space_id = ? AND source IN ('regard','listen')`).all(this.spaceId) as { entry_id: string }[]).some(
-        (r) => triggerWorld(r.entry_id) === trigger.world,
-      );
+      const keptHere = this.reader.noticedEntryIds().some((id) => triggerWorld(id) === trigger.world);
       if (!worldAnswers(trigger, localHour, this.spaceId, dayKey, !keptHere)) throw new StoryError("Nothing stirs.", 403);
-      const recent = db
-        .prepare(`SELECT entry_id, found_at FROM story_finds WHERE space_id = ? AND source IN ('regard','listen') AND found_at >= ?`)
-        .all(this.spaceId, new Date(nowMs - 36 * 3_600_000).toISOString()) as { entry_id: string; found_at: string }[];
+      const recent = this.reader.noticedSince(new Date(nowMs - 36 * 3_600_000).toISOString());
       const spokeToday = recent.some((r) => triggerWorld(r.entry_id) === trigger.world && localDateKey(tz, Date.parse(r.found_at)) === dayKey);
       if (spokeToday) throw new StoryError("Nothing stirs.", 403);
     }
-    const iso = new Date(nowMs).toISOString();
-    const res = db.prepare(`INSERT OR IGNORE INTO story_finds (space_id, entry_id, found_at, source) VALUES (?, ?, ?, ?)`).run(this.spaceId, entryId, iso, source);
-    const row = db.prepare(`SELECT found_at FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, entryId) as { found_at: string };
-    return { entryId, foundAt: row.found_at, isNew: res.changes > 0 };
+    // The ledger reads state first and branches: an absent entry is written as accepted/live:v1; an existing row (any trust) is left untouched.
+    return this.ledger.admit(entryId, source, nowMs);
   }
 
   /** A Concordance thread the player drew. Both ends must be things they have found; the pair is stored sorted, so a→b and b→a are one link. */
@@ -163,8 +159,6 @@ export class StoryRepo {
   /** Retrieval makes memory: bump the entry's recall so it relights in the Book. */
   recall(entryId: string, nowMs: number = Date.now()): void {
     this.requireFound(entryId);
-    this.h.sqlite
-      .prepare(`UPDATE story_finds SET last_recalled_at = ?, recall_count = recall_count + 1 WHERE space_id = ? AND entry_id = ?`)
-      .run(new Date(nowMs).toISOString(), this.spaceId, entryId);
+    this.ledger.markRecalled(entryId, nowMs);
   }
 }

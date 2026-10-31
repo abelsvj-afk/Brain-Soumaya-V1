@@ -3,6 +3,7 @@ import { LEANS, NEUTRAL_COUNTS, flavorKey, neutralFlavor, hourBand, type FlavorK
 import { spaceTimezone } from "../agent/notify/policy.js";
 import { localDateKey } from "../npcs/repo.js";
 import { computeSociety } from "../society/society.js";
+import { DiscoveryReader } from "../discovery/reader.js";
 
 /**
  * The Flavour key for a brain (docs/specs/story-flavor-engine-2026-10-30.md §4). It colours how the locked story is voiced and never changes what is there. Built from
@@ -34,7 +35,7 @@ export function playCounts(h: DbHandle, spaceId: string, nowMs: number): PlayCou
     captures: n(h, `SELECT COUNT(*) AS n FROM nodes WHERE space_id = ? AND created_at >= ?`, spaceId, since),
     closures: n(h, `SELECT COUNT(*) AS n FROM journey_mission_completions WHERE space_id = ? AND completed_at >= ?`, spaceId, since),
     noticings:
-      n(h, `SELECT COUNT(*) AS n FROM story_finds WHERE space_id = ? AND source IN ('regard','listen') AND found_at >= ?`, spaceId, since) +
+      new DiscoveryReader(h, spaceId).countNoticedSince(since) +
       n(h, `SELECT COUNT(*) AS n FROM story_links WHERE space_id = ? AND linked_at >= ?`, spaceId, since),
   };
 }

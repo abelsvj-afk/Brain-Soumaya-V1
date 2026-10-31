@@ -1,6 +1,7 @@
 import type { DbHandle } from "../db/client.js";
 import { STORY_ROAD_BY_ID, STORY_ROADS } from "@brain/shared";
 import { StoryError } from "./story.js";
+import { DiscoveryReader } from "../discovery/reader.js";
 
 /**
  * A brain's private side-road choices (docs/specs/story-roads-2026-10-31.md). Progress through a road is DERIVED from finds and meetings and never stored;
@@ -38,7 +39,7 @@ export class RoadsRepo {
     const current = db.prepare(`SELECT state FROM story_roads WHERE space_id = ? AND road_id = ?`).get(this.spaceId, roadId) as { state: RoadState } | undefined;
     if (current?.state === "done") return this.list().find((r) => r.roadId === roadId)!;
     if (state === "done") {
-      const finds = new Set((db.prepare(`SELECT entry_id FROM story_finds WHERE space_id = ?`).all(this.spaceId) as { entry_id: string }[]).map((r) => r.entry_id));
+      const finds = new DiscoveryReader(this.h, this.spaceId).allEntryIds();
       for (const step of road.steps) {
         if ("find" in step.signal && !finds.has(step.signal.find)) throw new StoryError("The road is not finished yet.", 403);
       }
