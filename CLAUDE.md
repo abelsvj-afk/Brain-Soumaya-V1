@@ -94,6 +94,21 @@ Always run `npm test` and `npm run typecheck` before committing. The web app mus
   volumes upgrade in place).
 - **zod schemas** in `shared/schema.ts` are reused as Gemini `responseSchema` —
   keep them flat (deep schemas are fragile with the API).
+- **Discovery ledger (design baseline — NOT yet implemented; see
+  `docs/specs/unified-discovery-architecture-2026-10-31.md`).** `story_finds` is the single
+  discovery ledger. Once Phase 1 lands, `DiscoveryLedger` is its only writer (sole exception:
+  whole-account deletion in `auth/spaces.ts`) and `DiscoveryReader` its only read boundary;
+  Codex, Book, TravelRepo, economy, roads and flavor must not keep their own discovery truth.
+  `trust` is `NULL` (unclassified legacy), `imported`, or `accepted`. **`accepted` means admitted
+  under the server-side rules in force for that method at the time. It does not mean physically
+  verified:** stillness, spot reach, glimmer taps and meetings are client-submitted. Imported
+  rows never open gates in any mode. Unclassified rows retain their existing gate eligibility
+  under `off` and `shadow`, but open no gates under enforcement-on. Imported discoveries never
+  earn Fuel, and relic Fuel claims require an accepted discovery under F1. Legacy NULL rows
+  cannot claim relic Fuel until classified. Fuel stays in the separate
+  `codex_claims` ledger. Do not add SQL on `story_finds` outside the ledger and reader once
+  they exist. Each phase and production action (census, classification, enforcement, relic
+  enablement) needs its own owner approval.
 
 ## Celestial mass model (the galaxy physics)
 
