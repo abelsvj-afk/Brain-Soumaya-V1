@@ -76,6 +76,7 @@ export const WORLD_NODE_COLORS: Record<string, string> = {
   "the-siege": "#e6e0d0",
   "the-yard": "#c8a860",
   "the-long-morning": "#f0d890",
+  "the-folded-letter": "#d8cdb4",
   // Eternity's world: whitish gold, his halo's colour.
   eternity: "#ffe6ad",
 };

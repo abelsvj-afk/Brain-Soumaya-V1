@@ -26,6 +26,7 @@ const WORLD_NAMES: Record<string, string> = {
   "the-siege": "the Siege of the First Light",
   "the-yard": "the Unlit Hulls",
   "the-long-morning": "the Long Morning",
+  "the-folded-letter": "the Folded Letter",
   scale: "Scale",
   eternity: "Eternity's world",
 };

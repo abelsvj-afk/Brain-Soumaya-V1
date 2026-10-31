@@ -226,6 +226,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "He puts a hand on the nearest post, and nods, and does not say who he thinks lives there.",
   },
+  {
+    id: "road.a-thing-kept-without-opening", world: "the-folded-letter", giver: "archivist", title: "A Thing Kept Without Opening",
+    offer: "Sit with me by the door a while. I will not ask what you decided. I only like not to be alone while I do not do it.",
+    steps: [
+      S("letter", "Find the letter on the floor, still folded.", find("sight.fold-letter")),
+      S("shelf", "Find the shelf of kept letters.", find("sight.fold-shelf")),
+    ],
+    gift: "She thanks you for the thing she needed most, and does not say what it was, and neither of you looks at the letter.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

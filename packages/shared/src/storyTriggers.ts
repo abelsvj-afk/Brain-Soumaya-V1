@@ -157,6 +157,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
   { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
   { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
+  // The Folded Letter (S-VIII): answers only where she is parked in the room; the Archivist gives one disc of wax after enough meetings. Nothing here records whether the letter is opened.
+  { entryId: "sight.fold-room", how: "regard", world: "the-folded-letter", hour: "first-light", spot: { place: "^fold-letter$", near: 5 } },
+  { entryId: "sight.fold-letter", how: "regard", world: "the-folded-letter", hour: "standing", spot: { place: "^fold-letter$", near: 4 } },
+  { entryId: "sight.fold-reader", how: "regard", world: "the-folded-letter", hour: "rest", spot: { place: "^fold-reader$", near: 3 } },
+  { entryId: "sight.fold-chair", how: "regard", world: "the-folded-letter", hour: "hearths", spot: { place: "^fold-chair$", near: 2.2 } },
+  { entryId: "sight.fold-shelf", how: "regard", world: "the-folded-letter", hour: "measure", spot: { place: "^fold-shelf$", near: 1.2 } },
+  { entryId: "sight.fold-lamp", how: "regard", world: "the-folded-letter", hour: "growing", spot: { place: "^fold-lamp$", near: 3 } },
+  { entryId: "sight.fold-door", how: "regard", world: "the-folded-letter", hour: "threshold", spot: { place: "^fold-door$", near: 2.2 } },
+  { entryId: "obj.fold-seat", how: "regard", world: "the-folded-letter", hour: "rest", spot: { place: "^fold-seat$", near: 3 } },
+  { entryId: "echo.fold-paper", how: "listen", world: "the-folded-letter", hour: "standing", spot: { place: "^fold-letter$", near: 3 } },
+  { entryId: "obj.fold-wax", how: "npc", world: "the-folded-letter", npc: "archivist", minMeetings: 5 },
   // The Long Morning (S-II): answers only where she is parked in the light; the Surveyor gives one rule after enough meetings.
   { entryId: "sight.long-record", how: "regard", world: "the-long-morning", hour: "first-light", spot: { place: "^long-record$", near: 0.6 } },
   { entryId: "obj.long-flake", how: "regard", world: "the-long-morning", hour: "growing", spot: { place: "^long-flake$", near: 3 } },

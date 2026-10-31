@@ -39,6 +39,8 @@ export interface TravelState {
   yardGateOpen?: boolean;
   /** Whether the way to the Long Morning stands open (the Unnumbered Fragment found) — the server's verdict; absent on an older server (read as closed). */
   longMorningGateOpen?: boolean;
+  /** Whether the way to the Folded Letter stands open (the Unopened Fold held) — the server's verdict; absent on an older server (read as closed). */
+  foldedLetterGateOpen?: boolean;
 }
 
 /**

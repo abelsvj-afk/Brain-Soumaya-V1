@@ -58,6 +58,16 @@ export const PLACE_RULES: Record<string, Rule[]> = {
     { match: /^field-ground$/, label: "The field", icon: "i:meadow" },
     { match: /^backdrop-(?!.*-model$)/, label: "Planet", icon: "i:planet" },
   ],
+  "the-folded-letter": [
+    { match: /^fold-letter$/, label: "The letter", icon: "i:regard" },
+    { match: /^fold-reader$/, label: "The reader's place", icon: "i:calm" },
+    { match: /^fold-chair$/, label: "The chair", icon: "i:veil" },
+    { match: /^fold-shelf$/, label: "The shelf", icon: "i:insights" },
+    { match: /^fold-lamp$/, label: "The lamp", icon: "i:sun" },
+    { match: /^fold-door$/, label: "The door", icon: "i:door" },
+    { match: /^fold-seat$/, label: "The seat", icon: "i:meadow" },
+    { match: /^fold-window$/, label: "The window", icon: "i:rise" },
+  ],
   "the-long-morning": [
     { match: /^long-record$/, label: "The ring of leaves", icon: "i:insights" },
     { match: /^long-flake$/, label: "The flake", icon: "i:sun" },

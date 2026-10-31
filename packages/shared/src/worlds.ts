@@ -97,6 +97,14 @@ export const YARD_GATE_ENTRY = "sight.blank-nameplate";
 export const LONG_MORNING_WORLD_KEY = "the-long-morning";
 export const LONG_MORNING_GATE_ENTRY = "relic.unnumbered-fragment";
 
+/**
+ * The Folded Letter (S-VIII; docs/specs/seam-the-folded-letter-2026-10-31.md): the last room — an empty room with a letter on the floor, still folded. A door in the story that opens for a traveller who holds the
+ * Unopened Fold (the server checks the Book; the owner is exempt). It is an ending reached only by choice: nothing leads here, nothing asks you to come, and nothing in it records whether the letter is opened.
+ * It must never show the sentence's words, and never say whether the sentence is kind.
+ */
+export const FOLDED_LETTER_WORLD_KEY = "the-folded-letter";
+export const FOLDED_LETTER_GATE_ENTRY = "relic.unopened-fold";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -154,6 +162,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   "the-siege": { x: 330, y: 40 },
   "the-yard": { x: 640, y: 330 },
   "the-long-morning": { x: 480, y: 690 },
+  "the-folded-letter": { x: 600, y: 760 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

@@ -135,3 +135,20 @@ describe("the Long Morning gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).longMorningGateOpen).toBe(false);
   });
 });
+
+describe("the Folded Letter gate", () => {
+  it("opens once the Unopened Fold is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).foldedLetterGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "f1", kind: "drift", destination: "the-folded-letter" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("FOLDED_LETTER_GATE_CLOSED");
+    }
+    find("a", "relic.unopened-fold");
+    expect(t.getState(T0).foldedLetterGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "f2", kind: "drift", destination: "the-folded-letter" }, T0).destination).toBe("the-folded-letter");
+    expect(new TravelRepo(handle, "b").getState(T0).foldedLetterGateOpen).toBe(false);
+  });
+});

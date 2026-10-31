@@ -6,6 +6,7 @@ import { PEOPLE_BACKDROP_PLANETS } from "./peopleAssets.js";
 import { STORY_TRIGGERS } from "@brain/shared";
 import { WARD_HOLDERS } from "./wardLayout.js";
 import { ROAD_HOLDERS } from "./roadLayout.js";
+import { FOLD_HOLDERS } from "./foldLayout.js";
 import { LONG_HOLDERS } from "./longLayout.js";
 import { YARD_HOLDERS } from "./yardLayout.js";
 import { SIEGE_HOLDERS } from "./siegeLayout.js";
@@ -42,6 +43,8 @@ function holderNames(world: string): string[] {
       return [...WARD_HOLDERS];
     case "road-to-the-seam":
       return [...ROAD_HOLDERS];
+    case "the-folded-letter":
+      return [...FOLD_HOLDERS];
     case "the-long-morning":
       return [...LONG_HOLDERS];
     case "the-yard":

@@ -16,6 +16,8 @@ import {
   ROAD_WORLD_KEY,
   VILLAGE_GATE_ENTRY,
   SIEGE_GATE_ENTRY,
+  FOLDED_LETTER_GATE_ENTRY,
+  FOLDED_LETTER_WORLD_KEY,
   LONG_MORNING_GATE_ENTRY,
   LONG_MORNING_WORLD_KEY,
   YARD_GATE_ENTRY,
@@ -77,7 +79,7 @@ import {
  *  Eternity's world joins the list as a GATED world (B-01): it is on the
  *  chart, but depart() admits it only through the gate below — the
  *  allow-list alone never opens the way there. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, VILLAGE_WORLD_KEY, UNMADE_WORLD_KEY, SIEGE_WORLD_KEY, YARD_WORLD_KEY, LONG_MORNING_WORLD_KEY, ETERNITY_WORLD_KEY];
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, VILLAGE_WORLD_KEY, UNMADE_WORLD_KEY, SIEGE_WORLD_KEY, YARD_WORLD_KEY, LONG_MORNING_WORLD_KEY, FOLDED_LETTER_WORLD_KEY, ETERNITY_WORLD_KEY];
 export const HOME_WORLD = "home";
 
 /** Plain-language refusals for the Eternity gate (B-01): a closed gate
@@ -100,6 +102,7 @@ export type TravelErrorCode =
   | "SIEGE_GATE_CLOSED"
   | "YARD_GATE_CLOSED"
   | "LONG_MORNING_GATE_CLOSED"
+  | "FOLDED_LETTER_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
   | "JOURNEY_NOT_DEPARTED"
   | "ETERNITY_GATE_CLOSED"
@@ -445,6 +448,9 @@ export class TravelRepo implements JourneyBonusCreditor {
       // The Road to the Seam: a door in the story, opened by finding Teru's Harbor Nail.
       if (input.destination === ROAD_WORLD_KEY && !this.roadGateOpen())
         throw new TravelError("ROAD_GATE_CLOSED", "The Road isn't open yet — it appears once you have found the nail a traveller set in the harbor door.");
+      // The Folded Letter: the last room, a door in the story opened by holding the Unopened Fold. Reached only by choice — nothing leads here.
+      if (input.destination === FOLDED_LETTER_WORLD_KEY && !this.foldedLetterGateOpen())
+        throw new TravelError("FOLDED_LETTER_GATE_CLOSED", "That room isn't open yet — it only opens to someone who is carrying a letter they have chosen not to open.");
       // The Long Morning: a door in the story, opened by finding the Unnumbered Fragment.
       if (input.destination === LONG_MORNING_WORLD_KEY && !this.longMorningGateOpen())
         throw new TravelError("LONG_MORNING_GATE_CLOSED", "The Long Morning isn't open yet — it appears once you have held a fragment of a record that struggles to describe what came before it.");
@@ -737,6 +743,8 @@ export class TravelRepo implements JourneyBonusCreditor {
     yardGateOpen: boolean;
     /** Whether the way to the Long Morning stands open (the Unnumbered Fragment found). */
     longMorningGateOpen: boolean;
+    /** Whether the way to the Folded Letter stands open (the Unopened Fold held). */
+    foldedLetterGateOpen: boolean;
     eternityReachable: boolean;
   } {
     this.settleActive(nowMs);
@@ -752,8 +760,18 @@ export class TravelRepo implements JourneyBonusCreditor {
       siegeGateOpen: this.siegeGateOpen(),
       yardGateOpen: this.yardGateOpen(),
       longMorningGateOpen: this.longMorningGateOpen(),
+      foldedLetterGateOpen: this.foldedLetterGateOpen(),
       eternityReachable: this.eternityGateReachable(),
     };
+  }
+
+  foldedLetterGateOpen(): boolean {
+    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+    try {
+      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, FOLDED_LETTER_GATE_ENTRY);
+    } catch {
+      return false;
+    }
   }
 
   longMorningGateOpen(): boolean {

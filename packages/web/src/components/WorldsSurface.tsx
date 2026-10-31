@@ -90,6 +90,8 @@ import {
 import { createWardScene } from "../graph/wardScene.js";
 import { createRoadScene } from "../graph/roadScene.js";
 import { createVillageScene } from "../graph/villageScene.js";
+import { createFoldScene } from "../graph/foldScene.js";
+import { FOLD_ORBIT_HEIGHT, FOLD_ORBIT_RADIUS } from "../graph/foldLayout.js";
 import { createLongScene, LONG_SKY } from "../graph/longScene.js";
 import { LONG_ORBIT_HEIGHT, LONG_ORBIT_RADIUS } from "../graph/longLayout.js";
 import { createYardScene } from "../graph/yardScene.js";
@@ -620,6 +622,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   // The Siege of the First Light (a door in the story, opened by finding Oru's Bead): a broad pale field of crescent edges leaning toward a small bead of light.
   // The Unlit Hulls (a door in the story, opened by finding the Blank Nameplate): a vast, dim shipyard of unlit hulls and a seventh slip of ribs.
   // The Long Morning (a door in the story, opened by finding the Unnumbered Fragment): warm light with no horizon, a ring of ruled leaves, faceless columns of light.
+  // The Folded Letter (the last room, a door in the story opened by holding the Unopened Fold; reached only by choice): a small bare room with a letter on the floor, still folded.
+  "the-folded-letter": {
+    title: "The Folded Letter",
+    light: { env: 0.4, hemi: { sky: 0x8890a8, ground: 0x4a3f34, intensity: 0.7 }, key: { color: 0xffd9a0, intensity: 0.8, from: [-60, 300, 120] } },
+    background: 0x0a0a10,
+    fogDensity: 0.0003,
+    orbitRadius: FOLD_ORBIT_RADIUS,
+    orbitHeight: FOLD_ORBIT_HEIGHT,
+    lookAtY: 14,
+    fallback: "The room needs graphics support on this device — your memories are unaffected.",
+    build: () => createFoldScene(),
+  },
   "the-long-morning": {
     title: "The Long Morning",
     light: { env: 1.0, hemi: { sky: 0xfff4d8, ground: 0xe8cc90, intensity: 1.0 }, key: { color: 0xfff6e0, intensity: 0.8, from: [-200, 400, 220] } },

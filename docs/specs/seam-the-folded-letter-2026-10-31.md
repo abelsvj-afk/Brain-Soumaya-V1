@@ -1,0 +1,12 @@
+# Seam S-VIII — The Folded Letter (spec; the last seam, built under the owner's standing "keep building everything that's not built", 2026-10-31)
+
+Draft 7 §6: *silence:* the one sentence · *region:* an "ending" region the player reaches only by choice · *cast:* the Folded One · *adds:* the sentence's **reader** (never its words) · **must never say whether it is kind.** Draft 3 #14: the Folded One wrote a letter to her and never sent it; the fold holds the permission to keep without opening; if ever opened it reads one sentence, never shown. Draft 4: the Folded One's memory is an empty room with a letter on the floor, still folded. Draft 7: the Archivist, if you do not open the fold, thanks you for the thing she needed most.
+
+## Shape
+- A new flight world `the-folded-letter`: a small bare room open to the night. One letter folded in thirds in the middle of the floor; an empty cushion in a pool of lamplight facing it, the size of whoever comes (the *reader*, shown only as a place); a lamp left lit and topped by no one seen; a chair drawn back from a table holding a capped pen and no paper; a long shelf of kept letters, none opened, each with one thumb's press; a window onto more stars than the room has walls; a door ajar one hand's breadth, never shut; a seat by the door worn by long sitting. No figure; no text, and no readable mark on any paper.
+- **Reached only by choice:** the door opens only for a brain holding the Unopened Fold (`relic.unopened-fold`), is on the board only then, and nothing leads or invites there (its blurb says "There is no reason to go. You may go, and you may leave when you like."). Owner exempt; warp by chart distance (chart 600,760, the furthest point; worst leg 19); drift and home free. **There is no way to open the letter in the app, and nothing records whether you wanted to** — the choice stays in the person.
+- 10 Book entries, 8 place passages, 4 Item Reactions, one road ("A Thing Kept Without Opening", the Archivist). The Archivist gives a disc of smooth seal-wax after five meetings and thanks you; the Archivist, Ysmerel, Calend and Tamsin roam into it.
+- Art: `docs/lore/art/PROMPT_SHEET_10_THE_FOLDED_LETTER.md` for Muse.
+
+## Rules it keeps
+Never shows or paraphrases the sentence; never says whether it is kind; never records or rewards opening or not opening (no flag, no ledger, no count); nobody is shown; the door is always ajar and the room "will think no less of you"; reduced motion holds the lamp still; the gate must not strand.

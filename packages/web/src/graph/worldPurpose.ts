@@ -9,6 +9,7 @@ export const WORLD_PURPOSE: Readonly<Record<string, string>> = {
   "deep-past": "The Deep Past holds your older memories, the oldest at the bottom. Use Descend to walk down through time.",
   people: "The People world shows the people in your life as warm lights. Tap one to see what you share.",
   "quiet-archive": "Quiet is where memories you set aside rest. Nothing here asks anything of you.",
+  "the-folded-letter": "The Folded Letter is a small bare room with a letter on its floor. You may open it or not; nothing here will say which was right, and the door is open.",
   "the-long-morning": "The Long Morning is a world of warm light with no horizon. Stand in the ring and be still; the light leans toward you.",
   "the-yard": "The Unlit Hulls is a vast, dim shipyard. Walk the slips and the desk; nothing here asks for a name.",
   "the-siege": "The Siege of the First Light is a broad pale field. Wander its ranks and its table; nothing here asks you to say who was right.",
