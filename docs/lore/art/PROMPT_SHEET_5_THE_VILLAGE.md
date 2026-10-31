@@ -1,0 +1,18 @@
+# Lore art — Prompt Sheet 5 (the Village)
+
+*From Claude, 2026-10-31, for Muse. The Village (seam S-V, The Forty-Second) is built as a world: a small hillside village at night with every window lit, a gate where a count was kept, a well with two ropes, a chair set outside one door, a hearth laid for more than remain, bread cooling on a sill, and a path of small gold hooks climbing to a tall luminous doorway. Ten new Book entries live there. Same rules as Sheets 1–4 (Bible first; 4 variants each; `NN-short-title-vK.png`; report in `IMAGE_QA_NOTES.md`; flag, don't rule). Numbering continues from §95.*
+
+**Global style line (append verbatim):** mythic space-fantasy concept art, painterly cinematic realism, soft volumetric light, deep indigo-black space with warm gold and pale cyan accents, restrained palette, heavy atmosphere, large sense of scale, no text, no logos, no UI, no watermarks, no real-world religious symbols.
+
+**Never (this sheet):** NO figure visible in any frame (the village is empty by design — lit and waiting); NO readable writing (the gate bar's notches are cuts, not numerals); never show what is beyond the doorway; no sign that anyone was right or wrong to go or stay.
+
+### §95 — The Gate Where a Count Was Kept *(sight.village-gate)* 16:9. A village gate of two stone posts and a wooden bar, the bar covered in notches of different ages that do not line up; warm lit houses behind it. Palette: stone grey, ember gold, indigo.
+### §96 — Every Window Lit *(sight.village-windows)* 21:9. A hillside village at night, every window of every house lit amber, no one at any of them, mist in the lanes. Palette: amber, dark teal, indigo.
+### §97 — The Well With Two Ropes *(obj.village-well)* 3:2. A stone village well in a square at night, two ropes over its beam and one bucket; one rope worn smooth, the other nearly new. Palette: stone, rope-brown, lamp gold.
+### §98 — A Chair Set Outside One Door *(sight.village-chair)* 16:9. A plain wooden chair in an empty lamp-lit street, turned to face a path that climbs the hill; dust-free; no one. Palette: warm wood, gold, indigo.
+### §99 — A Hearth Laid for the Whole Village *(sight.village-hearth)* 16:9. A village square with a wide stone hearth and a great ring of empty seats round it, fresh ash, warm light on the seats. Palette: ember, stone, night blue.
+### §100 — A Hook for Every Hand *(obj.village-hooks)* 21:9. A path climbing a dark hill with small gold hooks set a stride apart at hand height, the line bending slightly where it was once pulled taut, rising toward a distant pale doorway. Palette: gold, black hill, pale cyan.
+### §101 — The Doorway at the Path's End *(sight.village-door)* 16:9. At the top of a hill a tall doorway of pale light that shows nothing through it, neither open nor shut, the village's lit windows small and far below. Palette: pale cyan-white, indigo, amber.
+### §102 — Bread Still Warm *(obj.village-bread)* 3:2. A loaf of bread cooling on a window sill, steam rising, a knife wiped clean beside it, slices set in a row. Warm kitchen glow, no person. Palette: bread gold, wood, soft amber.
+### §103 — A Voice Counting Aloud *(echo.village-count)* 16:9. A gate at dusk with faint gold lines of sound curling in the air, like a child's voice counting; no child visible. Palette: gold thread-lines, stone, indigo.
+### §104 — The Loose End of a Gold Thread *(obj.village-thread-end)* 3:2. A short length of gold thread held in an open hand (the Keeper's hand, older, weathered), one end cut clean, the other worn soft, a village glowing blurred behind. Palette: gold, pale green, indigo.

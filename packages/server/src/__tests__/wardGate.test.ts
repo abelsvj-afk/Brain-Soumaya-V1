@@ -50,3 +50,20 @@ describe("the Road to the Seam gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).roadGateOpen).toBe(false);
   });
 });
+
+describe("the Village gate", () => {
+  it("opens once the Thread of Many is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).villageGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "v1", kind: "drift", destination: "the-village" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("VILLAGE_GATE_CLOSED");
+    }
+    find("a", "relic.thread-of-many");
+    expect(t.getState(T0).villageGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "v2", kind: "drift", destination: "the-village" }, T0).destination).toBe("the-village");
+    expect(new TravelRepo(handle, "b").getState(T0).villageGateOpen).toBe(false);
+  });
+});

@@ -181,6 +181,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "He looks at the unfinished group a while, and then at you, and goes on. He does not say what it counted.",
   },
+  {
+    id: "road.the-count-at-the-gate", world: "the-village", giver: "keeper", title: "The Count at the Gate",
+    offer: "Come and stand at the gate with me. Do not tell me which count is true.",
+    steps: [
+      S("gate", "Find the bar across the gate, cut with notches.", find("sight.village-gate")),
+      S("chair", "Find the chair set outside one door.", find("sight.village-chair")),
+    ],
+    gift: "She looks at the bar a while and at the chair, and says nothing about either, and puts the kettle on.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

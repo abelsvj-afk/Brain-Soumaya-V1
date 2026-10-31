@@ -21,6 +21,7 @@ const WORLD_NAMES: Record<string, string> = {
   "quiet-archive": "Quiet/Archive",
   "faded-ward": "the Faded Ward",
   "road-to-the-seam": "the Road to the Seam",
+  "the-village": "the Village",
   scale: "Scale",
   eternity: "Eternity's world",
 };

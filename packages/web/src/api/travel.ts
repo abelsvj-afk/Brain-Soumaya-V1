@@ -29,6 +29,8 @@ export interface TravelState {
   wardGateOpen?: boolean;
   /** Whether the way to the Road to the Seam stands open (Teru's Harbor Nail found) — the server's verdict; absent on an older server (read as closed). */
   roadGateOpen?: boolean;
+  /** Whether the way to the Village stands open (the Thread of Many found) — the server's verdict; absent on an older server (read as closed). */
+  villageGateOpen?: boolean;
 }
 
 /**

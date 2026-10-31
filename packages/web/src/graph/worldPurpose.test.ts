@@ -6,7 +6,7 @@ describe("worldPurpose (audit X4)", () => {
     for (const w of ["great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", "eternity"]) {
       expect(worldPurpose(w)!.length).toBeGreaterThan(30);
     }
-    expect(Object.keys(WORLD_PURPOSE)).toHaveLength(9);
+    expect(Object.keys(WORLD_PURPOSE)).toHaveLength(10);
   });
   it("home and unknown worlds say nothing", () => {
     expect(worldPurpose("home")).toBeNull();

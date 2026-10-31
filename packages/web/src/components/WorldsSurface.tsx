@@ -89,6 +89,8 @@ import {
 } from "../graph/quietArchiveLayout.js";
 import { createWardScene } from "../graph/wardScene.js";
 import { createRoadScene } from "../graph/roadScene.js";
+import { createVillageScene } from "../graph/villageScene.js";
+import { VILLAGE_ORBIT_HEIGHT, VILLAGE_ORBIT_RADIUS } from "../graph/villageLayout.js";
 import { ROAD_ORBIT_HEIGHT, ROAD_ORBIT_RADIUS } from "../graph/roadLayout.js";
 import { WARD_ORBIT_HEIGHT, WARD_ORBIT_RADIUS } from "../graph/wardLayout.js";
 import { attachWorldProps } from "../graph/worldProps.js";
@@ -604,6 +606,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
     lookAtY: 38, // eye level along the road, as measured in the Ward
     fallback: "The road view needs graphics support on this device — your memories are unaffected.",
     build: () => createRoadScene(),
+  },
+  // The Village (a door in the story, opened by finding the Thread of Many): a hillside village at night, every window lit, a path of gold hooks climbing to a luminous doorway.
+  "the-village": {
+    title: "The Village",
+    light: { env: 0.5, hemi: { sky: 0x9aaac8, ground: 0x1c2420, intensity: 0.9 }, key: { color: 0xffd9a0, intensity: 0.9, from: [-200, 420, 300] } },
+    background: 0x0a0e14,
+    fogDensity: 0.0003,
+    orbitRadius: VILLAGE_ORBIT_RADIUS,
+    orbitHeight: VILLAGE_ORBIT_HEIGHT,
+    lookAtY: 40,
+    fallback: "The village view needs graphics support on this device — your memories are unaffected.",
+    build: () => createVillageScene(),
   },
   scale: {
     title: "Scale",

@@ -29,6 +29,7 @@ export const WORLD_NAMES: Readonly<Record<string, string>> = {
   scale: "Scale",
   "faded-ward": "the Faded Ward",
   "road-to-the-seam": "the Road to the Seam",
+  "the-village": "the Village",
   eternity: "Eternity's world",
 };
 

@@ -157,6 +157,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
   { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
   { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
+  // The Village (S-V): answers only where she is parked in the village; the Keeper gives one thread-end after enough meetings.
+  { entryId: "sight.village-gate", how: "regard", world: "the-village", hour: "first-light", spot: { place: "^village-gate$", near: 1.4 } },
+  { entryId: "sight.village-windows", how: "regard", world: "the-village", hour: "hearths", spot: { place: "^village-windows$", near: 0.8 } },
+  { entryId: "obj.village-well", how: "regard", world: "the-village", hour: "measure", spot: { place: "^village-well$", near: 2.2 } },
+  { entryId: "sight.village-chair", how: "regard", world: "the-village", hour: "rest", spot: { place: "^village-chair$", near: 3 } },
+  { entryId: "sight.village-hearth", how: "regard", world: "the-village", hour: "hearths", spot: { place: "^village-hearth$", near: 2.4 } },
+  { entryId: "obj.village-hooks", how: "regard", world: "the-village", hour: "growing", spot: { place: "^village-hooks$", near: 0.7 } },
+  { entryId: "sight.village-door", how: "regard", world: "the-village", hour: "standing", spot: { place: "^village-door$", near: 1.8 } },
+  { entryId: "obj.village-bread", how: "regard", world: "the-village", hour: "first-light", spot: { place: "^village-bread$", near: 3 } },
+  { entryId: "echo.village-count", how: "listen", world: "the-village", hour: "rest", spot: { place: "^village-gate$", near: 2.4 } },
+  { entryId: "obj.village-thread-end", how: "npc", world: "the-village", npc: "keeper", minMeetings: 5 },
   { entryId: "sight.gatepost-lamp", how: "regard", world: "great-station", hour: "hearths", spot: { place: "^annex-(?!model)", at: [0.9, 0, 0], near: 1.1 } },
   { entryId: "obj.linnets-coat", how: "regard", world: "great-station", hour: "rest", spot: { place: "^annex-(?!model)", at: [0, 0.5, -0.4], near: 0.9 } },
   // Listen: stay still and hear (echoes).

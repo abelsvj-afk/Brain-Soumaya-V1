@@ -62,6 +62,13 @@ export const FADED_WARD_GATE_ENTRY = "sight.tamsins-ward";
 export const ROAD_WORLD_KEY = "road-to-the-seam";
 export const ROAD_GATE_ENTRY = "relic.harbor-nail";
 
+/**
+ * The Village (S-V, The Forty-Second; docs/specs/seam-the-forty-second-2026-10-31.md): the hillside village the Many-Handed left. A door in the story, not a wall: it opens for a
+ * traveller who has found the Thread of Many (the server checks the Book; the owner is exempt) and stays open. It must never say whether staying was right.
+ */
+export const VILLAGE_WORLD_KEY = "the-village";
+export const VILLAGE_GATE_ENTRY = "relic.thread-of-many";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -114,6 +121,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   eternity: { x: 905, y: 505 },
   "faded-ward": { x: 900, y: 420 },
   "road-to-the-seam": { x: 700, y: 120 },
+  "the-village": { x: 240, y: 300 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

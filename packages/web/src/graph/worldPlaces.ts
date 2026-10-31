@@ -58,6 +58,16 @@ export const PLACE_RULES: Record<string, Rule[]> = {
     { match: /^field-ground$/, label: "The field", icon: "i:meadow" },
     { match: /^backdrop-(?!.*-model$)/, label: "Planet", icon: "i:planet" },
   ],
+  "the-village": [
+    { match: /^village-gate$/, label: "The gate", icon: "i:door" },
+    { match: /^village-windows$/, label: "The windows", icon: "i:insights" },
+    { match: /^village-well$/, label: "The well", icon: "i:meadow" },
+    { match: /^village-chair$/, label: "The chair", icon: "i:veil" },
+    { match: /^village-hearth$/, label: "The hearth", icon: "i:meadow" },
+    { match: /^village-hooks$/, label: "The hooks", icon: "i:rise" },
+    { match: /^village-door$/, label: "The doorway", icon: "i:door" },
+    { match: /^village-bread$/, label: "The bread", icon: "i:meadow" },
+  ],
   "road-to-the-seam": [
     { match: /^road-mouth$/, label: "The mouth", icon: "i:door" },
     { match: /^road-lamps$/, label: "The lamps", icon: "i:insights" },
