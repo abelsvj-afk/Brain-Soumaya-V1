@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDb, type DbHandle } from "../db/client.js";
@@ -157,4 +159,87 @@ describe("P1-PAR falsification: breaking a relocated query is detected", () => {
       spy.mockRestore();
     }
   });
+});
+
+/**
+ * Concurrent admission across PROCESSES. Inside one process better-sqlite3 is synchronous, so two connections cannot interleave; the case that matters is another process (a script, a
+ * second writer) holding the write lock while it records the very same entry. The ledger reads state first inside an immediate transaction, so it must WAIT for that lock, then
+ * find the existing row and report it as not new — never raise a constraint error, never overwrite the first time, never create a second row.
+ */
+describe("P1-ADM: admission while another process holds the write lock", () => {
+  const FIRST = "2026-10-30T06:00:00.000Z";
+  // Plain JavaScript run by a second Node process: take the write lock, report it, hold it, record the same entry, release it.
+  const CHILD = [
+    'const D = require("better-sqlite3");',
+    "const db = new D(process.argv[1]);",
+    'db.pragma("busy_timeout = 5000");',
+    'db.exec("BEGIN IMMEDIATE");',
+    'process.stdout.write("LOCKED\\n");',
+    "setTimeout(() => {",
+    '  db.prepare("INSERT INTO story_finds (space_id, entry_id, found_at, source, trust, trust_at, trust_basis) VALUES (\'s\', \'relic.harbor-nail\', ?, \'relic\', \'accepted\', ?, \'live:v1\')").run(process.argv[2], process.argv[2]);',
+    '  db.exec("COMMIT");',
+    '  process.stdout.write("COMMITTED\\n");',
+    "  db.close();",
+    "}, 700);",
+  ].join("\n");
+
+  const files: string[] = [];
+  afterEach(() => {
+    for (const f of files.splice(0)) for (const sfx of ["", "-wal", "-shm"]) fs.rmSync(f + sfx, { force: true });
+  });
+
+  /** Start the lock-holding child; resolves once it reports LOCKED. `done` resolves with its exit code and everything it printed. */
+  function startChild(file: string): Promise<{ done: Promise<{ code: number | null; out: string }> }> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ["-e", CHILD, file, FIRST], { cwd: path.resolve(here, "../.."), stdio: ["ignore", "pipe", "inherit"] });
+      let out = "";
+      const done = new Promise<{ code: number | null; out: string }>((res) => child.on("close", (code) => res({ code, out })));
+      child.on("error", reject);
+      child.stdout.on("data", (d: Buffer) => {
+        out += d.toString();
+        if (out.includes("LOCKED")) resolve({ done });
+      });
+    });
+  }
+  const dbFile = () => {
+    const f = path.join(os.tmpdir(), `discovery-admit-${process.pid}-${Math.random().toString(36).slice(2)}.db`);
+    files.push(f);
+    return f;
+  };
+  const withDb = (file: string) => {
+    const handle = createDb(file);
+    handle.sqlite.prepare(`INSERT OR IGNORE INTO space_meta (space_id) VALUES ('s')`).run();
+    return handle;
+  };
+
+  it("waits for the lock, then reports the other process's row as existing: isNew false, first found_at kept, exactly one row, no error", async () => {
+    const file = dbFile();
+    const handle = withDb(file);
+    const { done } = await startChild(file);
+    const t0 = Date.now();
+    let result: ReturnType<DiscoveryLedger["admit"]> | undefined;
+    expect(() => {
+      result = new DiscoveryLedger(handle, "s").admit("relic.harbor-nail", "relic", T0); // blocks on the child's lock
+    }).not.toThrow();
+    const waited = Date.now() - t0;
+    const child = await done;
+    expect(child.code).toBe(0);
+    expect(child.out).toContain("COMMITTED");
+    expect(waited, "admit must have waited for the other process's lock").toBeGreaterThan(300);
+    expect(result).toEqual({ entryId: "relic.harbor-nail", foundAt: FIRST, isNew: false });
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM story_finds WHERE space_id = 's' AND entry_id = 'relic.harbor-nail'`).get()).toEqual({ n: 1 });
+    expect(handle.sqlite.prepare(`SELECT found_at, trust, trust_at, trust_basis FROM story_finds WHERE entry_id = 'relic.harbor-nail'`).get()).toEqual({ found_at: FIRST, trust: "accepted", trust_at: FIRST, trust_basis: "live:v1" });
+    handle.sqlite.close();
+  }, 30_000);
+
+  it("control: a naive plain INSERT in the same race fails with a constraint error — so this test would catch an implementation that is not state-first", async () => {
+    const file = dbFile();
+    const handle = withDb(file);
+    const { done } = await startChild(file);
+    expect(() =>
+      handle.sqlite.prepare(`INSERT INTO story_finds (space_id, entry_id, found_at, source) VALUES ('s','relic.harbor-nail',?, 'relic')`).run(new Date(T0).toISOString()),
+    ).toThrow(/UNIQUE|constraint/i);
+    expect((await done).code).toBe(0);
+    handle.sqlite.close();
+  }, 30_000);
 });

@@ -56,7 +56,7 @@ const LITERAL_ALLOWLIST: Record<string, string> = {
   "db/schemaSql.ts": "the table's DDL",
   "db/client.ts": "the table's DDL copy and its additive, PRAGMA-guarded migration",
 };
-/** Files that build SQL with a variable TABLE name. Each must be named and justified; a new one fails until reviewed. None of these names story_finds (the literal scan above proves it). */
+/** Files with dynamic SQL sites (SQL built by interpolation after an upper-case verb): eight interpolate a variable TABLE name; backup/service.ts interpolates the snapshot PATH in VACUUM INTO. Each must be named and justified; a new one fails until reviewed. None of these names story_finds (the literal scan above proves it). */
 const DYNAMIC_SQL_ALLOWLIST: Record<string, string> = {
   "auth/spaces.ts": "deleteSpace: loops over SPACE_SCOPED_TABLES (the documented exception) and cleans entity/index tables",
   "backup/manifest.ts": "table-level COUNT(*) over the backup inventory — aggregate only, no discovery content",
@@ -79,7 +79,7 @@ describe("P1-ARCH layer 1: static enumeration", () => {
     for (const f of Object.keys(LITERAL_ALLOWLIST)) expect(where, `${f} is on the allowlist but no longer mentions story_finds`).toContain(f);
   });
 
-  it("every file that builds SQL with a variable table name is named and justified", () => {
+  it("every file with a dynamic SQL site is named and justified", () => {
     const sites = files.filter((f) => f.code.split("\n").some((l) => DYNAMIC_SQL.test(l))).map((f) => f.file);
     for (const f of sites) expect(Object.keys(DYNAMIC_SQL_ALLOWLIST), `${f} builds SQL with a variable table name — review it and add it here with a justification`).toContain(f);
     for (const f of Object.keys(DYNAMIC_SQL_ALLOWLIST)) expect(sites, `${f} is on the dynamic-SQL allowlist but no longer builds such SQL`).toContain(f);
@@ -119,10 +119,39 @@ describe("P1-ARCH layer 1: static enumeration", () => {
 interface Hit {
   sql: string;
   context: boolean;
+  /** The src-relative module that issued the statement, or null when no frame inside packages/server/src can be identified. */
   file: string | null;
+  /** True only for a statement issued inside an explicit, labelled harness window (asHarness) — the test's own plumbing, never a code path under audit. */
+  harness: boolean;
 }
 const hits: Hit[] = [];
 let recording = false;
+let harness = false;
+/** An explicit, labelled harness window. A statement recorded inside it is the test harness's own and is the ONLY way an unattributed (file === null) statement is accepted. */
+function asHarness<T>(fn: () => T): T {
+  harness = true;
+  try {
+    return fn();
+  } finally {
+    harness = false;
+  }
+}
+
+/** Modules that may issue SQL against story_finds without the ledger/reader marker, and why (the documented exceptions). */
+const NAMED_EXCEPTIONS = new Set(["auth/spaces.ts", "backup/manifest.ts", "db/client.ts"]);
+
+/**
+ * The ONE classification used by the real audit and by the falsification test. Anything that is not (a) the ledger/reader carrying the marker, (b) a named exception without it, or
+ * (c) a labelled harness statement is a failure — including a statement whose caller cannot be identified at all.
+ */
+function classify(h: Hit): string | null {
+  if (h.harness) return null;
+  if (h.file === null) return `unrecognised caller issued SQL against story_finds: "${h.sql.slice(0, 100)}" — attribute it or label it as harness`;
+  if (h.file === "discovery/reader.ts" || h.file === "discovery/ledger.ts") return h.context ? null : `${h.file} issued "${h.sql.slice(0, 80)}" outside the discovery context`;
+  if (NAMED_EXCEPTIONS.has(h.file)) return h.context ? `${h.file} is a named exception, not a ledger/reader call, yet it carries the marker` : null;
+  return `${h.file} issued SQL against story_finds: "${h.sql.slice(0, 100)}" — an unreviewed access path`;
+}
+const audit = (list: Hit[]): string[] => list.map(classify).filter((r): r is string => r !== null);
 const proto = BetterSqlite3.prototype as unknown as { prepare: (sql: string, ...a: unknown[]) => unknown; exec: (sql: string, ...a: unknown[]) => unknown };
 const original = { prepare: proto.prepare, exec: proto.exec };
 
@@ -139,7 +168,7 @@ function callerFile(): string | null {
 function install(): void {
   const wrap = (fn: (sql: string, ...a: unknown[]) => unknown) =>
     function (this: unknown, sql: string, ...rest: unknown[]) {
-      if (recording && typeof sql === "string" && /story_finds/i.test(sql)) hits.push({ sql: norm(sql), context: isDiscoveryContextActive(), file: callerFile() });
+      if (recording && typeof sql === "string" && /story_finds/i.test(sql)) hits.push({ sql: norm(sql), context: isDiscoveryContextActive(), file: callerFile(), harness });
       return fn.call(this, sql, ...rest);
     };
   proto.prepare = wrap(original.prepare);
@@ -215,18 +244,10 @@ describe("P1-ARCH layer 2: runtime attribution while real flows run", () => {
     for (const f of tmp.splice(0)) for (const s of ["", "-wal", "-shm"]) fs.rmSync(f + s, { force: true });
   });
 
-  const NAMED_EXCEPTIONS = new Set(["auth/spaces.ts", "backup/manifest.ts", "db/client.ts"]);
-
   it("every statement that mentions story_finds came from the ledger/reader (with the marker) or a named exception", () => {
     expect(hits.length).toBeGreaterThan(20);
-    for (const h of hits) {
-      if (h.file === "discovery/reader.ts" || h.file === "discovery/ledger.ts") {
-        expect(h.context, `${h.file} issued "${h.sql.slice(0, 80)}" outside the discovery context`).toBe(true);
-      } else if (h.file !== null) {
-        expect(NAMED_EXCEPTIONS.has(h.file), `${h.file} issued SQL against story_finds: "${h.sql.slice(0, 100)}" — an unreviewed access path`).toBe(true);
-        expect(h.context, `${h.file} is an exception, not a ledger/reader call`).toBe(false);
-      }
-    }
+    expect(audit(hits)).toEqual([]); // an unrecognised caller is a failure too, unless it was issued inside a labelled harness window
+    expect(hits.filter((h) => h.harness)).toEqual([]); // the real flows use no harness window at all
   });
 
   it("no indirect helper reaches the table: story, flavor, roads and travel issue no such statement themselves", () => {
@@ -251,17 +272,30 @@ describe("P1-ARCH layer 2: runtime attribution while real flows run", () => {
     expect(hits.some((h) => h.file === "db/client.ts" && /PRAGMA table_info\(story_finds\)/.test(h.sql))).toBe(true);
   });
 
-  it("falsification: a statement issued outside the ledger/reader would be caught", () => {
+  it("falsification: the SAME classification rejects an unrecognised caller, an unmarked ledger/reader call and an unreviewed module", () => {
+    // A real statement issued from outside packages/server/src (this file), so no frame can be attributed to a module.
     const scratch = new BetterSqlite3(":memory:");
     scratch.exec(`CREATE TABLE story_finds (x)`);
     recording = true;
     const before = hits.length;
-    scratch.prepare(`SELECT * FROM story_finds`).all(); // issued from this test file (no src frame), so unattributed…
+    scratch.prepare(`SELECT * FROM story_finds`).all();
+    asHarness(() => scratch.prepare(`SELECT x FROM story_finds`).all());
     recording = false;
-    expect(hits.length).toBe(before + 1);
-    expect(hits[hits.length - 1]!.context).toBe(false); // …and certainly not carrying the marker
-    expect(hits[hits.length - 1]!.file).toBeNull();
+    const [rogue, labelled] = hits.splice(before);
     scratch.close();
-    hits.pop();
+    expect(rogue!.file).toBeNull();
+    expect(rogue!.harness).toBe(false);
+    expect(audit([rogue!])).toEqual([expect.stringMatching(/unrecognised caller/)]); // the old audit silently skipped this
+    expect(labelled!.harness).toBe(true);
+    expect(audit([labelled!])).toEqual([]); // only an explicit, labelled harness window is accepted
+    // One rogue statement among the real, otherwise-recognised ones fails the whole audit.
+    expect(audit([...hits, rogue!])).toHaveLength(1);
+    // Crafted hits, through the same function.
+    const base = { sql: "SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?", harness: false };
+    expect(audit([{ ...base, context: false, file: "discovery/reader.ts" }])).toHaveLength(1); // ledger/reader without the marker
+    expect(audit([{ ...base, context: true, file: "story/story.ts" }])).toHaveLength(1); // an unreviewed module, even carrying the marker
+    expect(audit([{ ...base, context: true, file: "auth/spaces.ts" }])).toHaveLength(1); // an exception claiming the ledger marker
+    expect(audit([{ ...base, context: false, file: "auth/spaces.ts" }])).toEqual([]); // a named exception, as designed
+    expect(audit([{ ...base, context: true, file: "discovery/ledger.ts" }])).toEqual([]);
   });
 });

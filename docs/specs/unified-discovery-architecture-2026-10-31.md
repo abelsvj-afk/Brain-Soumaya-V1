@@ -684,26 +684,66 @@ under `packages/shared`, the web app, or the routes; any feature flag beyond a r
   updating only when guards are installed (P6).
 
 ### P1-ARCH — two layers
-Allowlist (named, with justification): `discovery/ledger.ts`, `discovery/reader.ts`;
-`auth/spaces.ts` `deleteSpace` loop (the documented exception); `backup/manifest.ts:152`
-(table-level `COUNT(*)` over the backup inventory — aggregate only); `db/schemaSql.ts` and
-`db/client.ts` (DDL, `PRAGMA table_info`, `ALTER`); `VACUUM INTO` (whole-database copy).
-Dynamic table-name SQL elsewhere (`sources/forgetSource.ts`, `repositories/journeys.repo.ts`,
-`agent/userModel.ts`, `db/vec.ts`) uses fixed specs; no spec names `story_finds`.
+**Literal allowlist** — the only files that may contain the table name, each with its reason:
+`discovery/ledger.ts` (the only writer), `discovery/reader.ts` (the read boundary),
+`auth/spaces.ts` (the table is listed in `SPACE_SCOPED_TABLES` and `deleteSpace` loops over it —
+the documented exception), `backup/inventory.ts` (table-level classification only), and
+`db/schemaSql.ts` and `db/client.ts` (the DDL and its additive, PRAGMA-guarded migration).
 
-- **Layer 1 — static enumeration.** Scan non-test source for the literal `story_finds`
-  (including quoted forms) outside the allowlist, and for dynamic-SQL patterns
-  (`FROM|INTO|UPDATE|JOIN|DELETE FROM ${…}`); every dynamic site must be on a named allowlist
-  with a one-line justification. A new dynamic site fails until reviewed.
+**Dynamic-SQL inventory** — nine files build SQL by string interpolation after an upper-case SQL
+verb. Eight of them interpolate a variable **table name**. The ninth, `backup/service.ts`,
+interpolates a **file path**: `VACUUM INTO '${snapshotPath}'` writes a whole-database copy, so its
+match is a dynamic SQL site but is **not** evidence of a variable table name. Each file is named
+in the test with a justification; none of them contains the literal `story_finds` except the two
+that are already on the literal allowlist (`auth/spaces.ts`, `db/client.ts`):
+
+| File | What is interpolated | Why it is acceptable |
+|---|---|---|
+| `auth/spaces.ts` | table name | `deleteSpace`: loops over `SPACE_SCOPED_TABLES` (the documented exception) and cleans entity/index tables |
+| `backup/manifest.ts` | table name | table-level `COUNT(*)` over the backup inventory — aggregate only, no discovery content |
+| `backup/service.ts` | snapshot **path** | `VACUUM INTO` — a whole-database copy; no table is chosen |
+| `db/client.ts` | table name | schema migrations over fixed table lists |
+| `db/vec.ts` | table name | vector index tables chosen from a fixed pair |
+| `agent/userModel.ts` | table name | evidence tables from the fixed `EVIDENCE_TABLES` map |
+| `analysis/journeyLinking.ts` | table name | finance tables from fixed specs |
+| `repositories/journeys.repo.ts` | table name | journey link specs naming fixed tables |
+| `sources/forgetSource.ts` | table name | forget-flag tables from fixed specs |
+
+**Three backup files, three different roles** (checked against the source and against the test's
+allowlists):
+- `backup/inventory.ts` is the only backup file that contains the literal `story_finds`: it is a
+  static classification map (`story_finds: "may-be-empty"`), so it is on the **literal**
+  allowlist. It runs no SQL.
+- `backup/manifest.ts` contains no literal. `countIncludedTables` loops over `INCLUDED_TABLES`
+  (derived from that inventory) and prepares `SELECT COUNT(*) AS n FROM "${table}"`; at runtime
+  that statement names `story_finds`, issued from `manifest.ts`. It is therefore a **dynamic-SQL**
+  site and one of the three **runtime named exceptions** (with `auth/spaces.ts` and
+  `db/client.ts`).
+- `backup/service.ts` has neither the literal nor a table-name interpolation; it appears only for
+  the `VACUUM INTO` path interpolation above.
+
+- **Layer 1 — static enumeration.** Scan non-test source (comments stripped) for the literal
+  `story_finds` outside the literal allowlist, and for SQL built by interpolation after an
+  upper-case SQL verb (`SELECT … FROM`, `DELETE FROM`, `INSERT INTO`, `ALTER TABLE`, `UPDATE`,
+  `VACUUM INTO`) followed by `${…}` — normally a variable table name. `VACUUM INTO` is matched
+  too, but what follows it is a file path, so that match is not evidence of a variable table name.
+  English prose such as "from ${x}" is not SQL and is not matched. Both allowlists must be
+  exact, so a stale entry fails as well as a missing one; a new dynamic site fails until it is
+  reviewed and justified.
 - **Layer 2 — runtime attribution.** A test-only wrapper on the connection records every
   statement; any statement mentioning `story_finds` must carry the discovery context marker set
   by the Ledger/Reader entry points, apart from the named exceptions. The test drives every
   story route, the travel gate reads, flavor, roads, `book()`, `deleteSpace`, a backup
   create-and-verify, and the migration. **Coverage-by-enumeration:** every access site layer 1
   finds must be exercised by at least one test, or the test fails with "unexercised access
-  site".
-- **Stated limit.** Neither layer proves that a never-exercised dynamic path cannot reach the
-  table; the allowlist-review rule is the control for new sites.
+  site". The real audit and its falsification test use the **same** classification function: a
+  statement whose caller cannot be identified fails, unless it was issued inside an explicit,
+  labelled harness window (which the real flows never use).
+- **Stated limits.** An allowlist is not proof of exhaustive detection. The static scan sees only
+  SQL written with an upper-case verb followed by a `${…}` interpolation; SQL assembled another way (for
+  example by concatenation) is invisible to it and can be caught only by layer 2, and only on
+  paths the tests exercise. Neither layer proves that a never-exercised dynamic path cannot
+  reach the table; the allowlist-review rule is the control for new sites.
 - The marker is a test aid, not a security boundary (§2).
 
 ### P1-PAR — pinned, independent golden master
