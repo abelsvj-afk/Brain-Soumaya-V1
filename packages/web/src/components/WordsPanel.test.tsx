@@ -205,3 +205,72 @@ describe("WordsPanel", () => {
     expect(screen.getByText(/Captured via Typed/)).toBeTruthy();
   });
 });
+
+describe("WordsPanel — pitfall-hunt fixes", () => {
+  // W-P6 (H1): a Load-more page that resolves after a channel switch
+  // must not overwrite the new channel's list (rows or hasMore).
+  it("drops a stale load-more page that lands after a channel switch", async () => {
+    const page1 = Array.from({ length: 25 }, (_, i) => summary(100 - i));
+    let resolveMore: (v: { sources: WordSourceSummary[] }) => void = () => {};
+    const morePromise = new Promise<{ sources: WordSourceSummary[] }>((r) => {
+      resolveMore = r;
+    });
+    listWordSources
+      .mockResolvedValueOnce({ sources: page1 })
+      .mockReturnValueOnce(morePromise)
+      .mockResolvedValue({ sources: [summary(7, { channel: "telegram", preview: "telegram row" })] });
+    render(<WordsPanel />);
+    await screen.findByText(/3 captures preserved/);
+    fireEvent.click(screen.getByText(/Browse/));
+    await screen.findByText("capture number 100");
+
+    fireEvent.click(screen.getByText("Load more"));
+    fireEvent.click(screen.getByText("Telegram"));
+    await screen.findByText("telegram row");
+
+    resolveMore({ sources: [summary(50, { preview: "stale all row" })] });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.queryByText("stale all row")).toBeNull();
+    expect(screen.getByText("telegram row")).toBeTruthy();
+    // hasMore also came from the live list only: 1 telegram row, no pager.
+    expect(screen.queryByText("Load more")).toBeNull();
+  });
+
+  // W-P7 (H5): an empty TEXT capture is empty, not "binary" — the
+  // binary copy belongs only to a null reading (a true binary capture).
+  it("describes an empty text capture as empty, and only a null reading as binary", async () => {
+    getWordSource.mockResolvedValue({
+      source: { ...summary(11), capturedVia: "typed" },
+      reading: "",
+      corrections: [],
+      derivedNodes: [],
+    });
+    render(<WordsPanel />);
+    await screen.findByText(/3 captures preserved/);
+    fireEvent.click(screen.getByText(/my exact words about the harbour/));
+    expect(await screen.findByText(/This capture is empty/)).toBeTruthy();
+    expect(screen.queryByText(/binary data/)).toBeNull();
+    cleanup();
+
+    getWordSource.mockResolvedValue({
+      source: { ...summary(11), capturedVia: "typed" },
+      reading: null,
+      corrections: [],
+      derivedNodes: [],
+    });
+    render(<WordsPanel />);
+    await screen.findByText(/3 captures preserved/);
+    fireEvent.click(screen.getByText(/my exact words about the harbour/));
+    expect(await screen.findByText(/preserved as binary data/)).toBeTruthy();
+  });
+
+  // W-P8 (H6): a whitespace-only preview renders the "(no text)"
+  // fallback, not a blank row.
+  it("shows (no text) for a whitespace-only capture in Browse", async () => {
+    listWordSources.mockResolvedValue({ sources: [summary(31, { preview: "   \n\t  ", wordCount: 0 })] });
+    render(<WordsPanel />);
+    await screen.findByText(/3 captures preserved/);
+    fireEvent.click(screen.getByText(/Browse/));
+    expect(await screen.findByText("(no text)")).toBeTruthy();
+  });
+});

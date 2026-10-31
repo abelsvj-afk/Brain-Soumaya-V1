@@ -64,6 +64,24 @@ function stripConflictMarkers(text: string): string {
   return text.split(CONFLICT_OPEN).join("").split(CONFLICT_CLOSE).join("");
 }
 
+/** A text cut can land inside a surrogate pair (the 140-unit preview
+ *  slice; a 1000-unit chunk excerpt): the dangling half renders as �.
+ *  Drop a lone half-pair at either edge of a cut surface. The words
+ *  are untouched — the full reading in the Source view keeps the
+ *  whole character (pitfall hunt H3). */
+function trimLoneSurrogates(text: string): string {
+  let out = text;
+  if (out.length > 0) {
+    const first = out.charCodeAt(0);
+    if (first >= 0xdc00 && first <= 0xdfff) out = out.slice(1);
+  }
+  if (out.length > 0) {
+    const last = out.charCodeAt(out.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) out = out.slice(0, -1);
+  }
+  return out;
+}
+
 function wordCountOf(text: string): number {
   const trimmed = text.trim();
   return trimmed ? trimmed.split(/\s+/).length : 0;
@@ -82,7 +100,7 @@ function summarize(repo: SourcesRepo, s: SourceRow): SourceSummary {
     channel: sourceChannelOf(s),
     citationClass: reading?.readingCitationClass ?? s.citationClass,
     createdAt: s.createdAt,
-    preview: text.slice(0, PREVIEW_CHARS),
+    preview: trimLoneSurrogates(text.slice(0, PREVIEW_CHARS)),
     wordCount: wordCountOf(text),
   };
 }
@@ -247,7 +265,7 @@ export function wordsRoutes(ctx: AppContext): Router {
       return {
         chunkId: chunk.id,
         sourceId: source.id,
-        excerpt: stripConflictMarkers(slice?.text ?? chunk.text),
+        excerpt: trimLoneSurrogates(stripConflictMarkers(slice?.text ?? chunk.text)),
         citationClass: slice?.readingCitationClass ?? source.citationClass,
         channel: sourceChannelOf(source),
         createdAt: source.createdAt,

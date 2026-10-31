@@ -307,3 +307,30 @@ describe("re-review D2 — channel taxonomy edge cell (telegram × imported_text
     expect(telegram.body.sources.map((s: { id: number }) => s.id)).toContain(source.id);
   });
 });
+
+describe("pitfall H3 — cuts never split a character", () => {
+  const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+  it("trims a dangling surrogate half from the 140-char preview", async () => {
+    const a = freshSpace();
+    const text = `${"a".repeat(139)}😀 tail words`;
+    const { source } = repo(a).persistText({ kind: "note", citationClass: "verbatim_typed", text });
+    const list = await get("/api/words/sources", a);
+    const row = list.body.sources.find((s: { id: number }) => s.id === source.id);
+    expect(row).toBeDefined();
+    expect(row.preview).toBe("a".repeat(139));
+    expect(LONE.test(row.preview)).toBe(false);
+  });
+
+  it("trims a dangling surrogate half from a chunk-boundary search excerpt", async () => {
+    const a = freshSpace();
+    // Emoji straddles the 1000-unit chunk cut (units 999-1000).
+    const text = `zanzibar ${"b".repeat(990)}😀 afterward`;
+    repo(a).persistText({ kind: "note", citationClass: "verbatim_typed", text });
+    const res = await get("/api/words/search?q=zanzibar", a);
+    expect(res.body.results.length).toBeGreaterThan(0);
+    for (const hit of res.body.results) {
+      expect(LONE.test(hit.excerpt)).toBe(false);
+    }
+  });
+});

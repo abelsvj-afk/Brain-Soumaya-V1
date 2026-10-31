@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   getWordsOverview,
   listWordSources,
@@ -187,7 +187,7 @@ function SourceRow({ s, onOpen }: { s: WordSourceSummary; onOpen: (id: number) =
         cursor: "pointer",
       }}
     >
-      <div style={{ fontSize: "13px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{s.preview || "(no text)"}</div>
+      <div style={{ fontSize: "13px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{s.preview.trim() ? s.preview : "(no text)"}</div>
       <div className="settings-note" style={{ fontSize: "12px", opacity: 0.65, marginTop: "4px" }}>
         {CHANNEL_LABELS[s.channel]} · {formatLocalDate(s.createdAt)} · {citationClassLabel(s.citationClass)} · {s.wordCount}{" "}
         {s.wordCount === 1 ? "word" : "words"}
@@ -274,8 +274,13 @@ function WordsBrowse({ onOpenSource }: { onOpenSource: (id: number) => void }) {
   const [failed, setFailed] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Bumped by the channel effect on every (re)load; loadMore captures
+  // it so a page fetched for a list that has since been reset (channel
+  // switch) can be dropped instead of landing on the new list (H1).
+  const listGen = useRef(0);
 
   useEffect(() => {
+    listGen.current += 1;
     let cancelled = false;
     setLoaded(false);
     setFailed(false);
@@ -299,15 +304,21 @@ function WordsBrowse({ onOpenSource }: { onOpenSource: (id: number) => void }) {
 
   const loadMore = async () => {
     if (!sources || sources.length === 0) return;
+    const gen = listGen.current;
+    const base = sources;
     setLoadingMore(true);
     try {
       const res = await listWordSources({
         channel: channel ?? undefined,
         limit: PAGE_SIZE,
-        before: sources[sources.length - 1]!.id,
+        before: base[base.length - 1]!.id,
       }).catch(() => null);
+      // The list was reset while this page was in flight (the channel
+      // changed): the effect's own fetch owns the screen now — drop
+      // the stale page, rows and hasMore alike (pitfall hunt H1).
+      if (listGen.current !== gen) return;
       if (res) {
-        setSources([...sources, ...res.sources]);
+        setSources([...base, ...res.sources]);
         setHasMore(res.sources.length === PAGE_SIZE);
       } else {
         pushToast("Couldn't load more — try again.", "⚠️", 4000);
@@ -531,9 +542,11 @@ function SourceView({ sourceId, onBack }: { sourceId: number; onBack: () => void
               marginBottom: "10px",
             }}
           >
-            {detail.reading
-              ? renderReading(detail.reading, detail.corrections.map((c) => c.correctedText))
-              : "(This capture has no text — it was preserved as binary data.)"}
+            {detail.reading === null
+              ? "(This capture has no text — it was preserved as binary data.)"
+              : detail.reading.trim() === ""
+                ? "(This capture is empty — no words were recorded in it.)"
+                : renderReading(detail.reading, detail.corrections.map((c) => c.correctedText))}
           </div>
           <p className="settings-note" style={{ fontSize: "12px", opacity: 0.7, margin: "0 0 10px" }}>
             Captured via {CHANNEL_LABELS[detail.source.capturedVia]} · {detail.source.kind} ·{" "}
