@@ -21,7 +21,7 @@ export const ROAD_CHALK_END_Z = 1300;
 /** Lamps hang on both walls at even spacing; every one the same height. */
 export function roadLamps(): { x: number; y: number; z: number }[] {
   const out: { x: number; y: number; z: number }[] = [];
-  for (let z = 60; z <= ROAD.zEnd - 100; z += ROAD_LAMP_SPACING) out.push({ x: -ROAD.halfWidth + 4, y: 70, z }, { x: ROAD.halfWidth - 4, y: 70, z });
+  for (let z = 60; z <= ROAD.zEnd - 100; z += ROAD_LAMP_SPACING) out.push({ x: -ROAD.halfWidth + 4, y: 56, z }, { x: ROAD.halfWidth - 4, y: 56, z });
   return out;
 }
 

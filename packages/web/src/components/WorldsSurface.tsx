@@ -596,7 +596,7 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   // The Road to the Seam (a door in the story, opened by finding Teru's Harbor Nail): one long road under the Station, lamps and nails and chalk, going on into fog.
   "road-to-the-seam": {
     title: "The Road to the Seam",
-    light: { env: 0.3, hemi: { sky: 0x8a9ab8, ground: 0x12141a, intensity: 0.55 }, key: { color: 0xffd9a0, intensity: 0.7, from: [-100, 380, 260] } },
+    light: { env: 0.5, hemi: { sky: 0x9aaac8, ground: 0x2a2e38, intensity: 1.0 }, key: { color: 0xffd9a0, intensity: 1.0, from: [-100, 380, 260] } },
     background: 0x0a0c10,
     fogDensity: 0.00045,
     orbitRadius: ROAD_ORBIT_RADIUS,
