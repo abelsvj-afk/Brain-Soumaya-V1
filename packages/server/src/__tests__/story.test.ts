@@ -378,3 +378,37 @@ describe("the owner's Voices console", () => {
     expect(((await r.json()) as { error: string }).error).toMatch(/API key|narrator voice/);
   });
 });
+
+describe("the owner's dev view: narration of unfound entries", () => {
+  let ctx: AppContext;
+  let server: Server;
+  let base: string;
+  let ownerId: string;
+  let guestId: string;
+  const saved = process.env.OWNER_SPACE_IDS;
+  const get = (path: string, space: string) => fetch(`${base}/api/story${path}`, { headers: { "x-space-id": space } });
+  beforeAll(async () => {
+    ctx = await buildContext({ dbPath: ":memory:", embeddings: new HashEmbeddingProvider(EMBED_DIM), llm: new HeuristicProvider() });
+    const app = createApp(ctx);
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => resolve());
+    });
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const reg = async (tag: string) =>
+      ((await (await fetch(`${base}/api/space/auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gamerTag: tag, passcode: "secret123", name: tag }) })).json()) as { id: string }).id;
+    ownerId = await reg("devlistener");
+    guestId = await reg("guestlistener");
+    process.env.OWNER_SPACE_IDS = ownerId;
+  });
+  afterAll(() => {
+    if (saved === undefined) delete process.env.OWNER_SPACE_IDS;
+    else process.env.OWNER_SPACE_IDS = saved;
+    server?.close();
+    ctx.handle.sqlite.close();
+  });
+
+  it("lets the owner's space hear an entry it has not found, while any other space still gets 403 for the same entry", async () => {
+    expect((await get("/narration/obj.kiths-drawing", guestId)).status).toBe(403); // unfound, not the owner: the discovery rule holds
+    expect((await get("/narration/obj.kiths-drawing", ownerId)).status).toBe(204); // owner dev view: past the gate; 204 = no studio key in tests, read it yourself
+  });
+});

@@ -47,4 +47,17 @@ describe("the owner's Voices console", () => {
     fireEvent.click(screen.getAllByText("Test")[0]!);
     await waitFor(() => expect(container.textContent).toMatch(/HTTP 401/));
   });
+
+  it("shows all fifteen roles with their names and character cards, saying plainly where an age is not pinned", async () => {
+    const roles = ["narrator", "eternity", "calend", "ysmerel", "dorrow", "dissenter", "surveyor", "archivist", "keeper", "hesk", "tamsin", "ossian", "ilsabet", "pell", "wim"];
+    vi.spyOn(api, "getVoiceConsole").mockResolvedValue(data({ roles }));
+    const { container } = render(<VoiceConsole />);
+    await waitFor(() => expect(container.textContent).toMatch(/The Narrator \(everything not spoken by a person\)/));
+    const labels = ["Eternity", "Calend, the Doorkeeper", "Ysmerel, the Choirmaster", "Dorrow Quint", "The Dissenter", "The Surveyor", "The Archivist", "The Keeper", "Hesk, the Warden-General", "Tamsin of the Open Hand", "Ossian Reed, the Last Honest Liar", "Ilsabet Marrow, the Cartographer", "Pell, the Follower", "Wim Ostler, Brannoch's clerk"];
+    for (const label of labels) expect(container.textContent).toContain(label);
+    const cards = ["reads every entry", "vast, calm, radiant", "wiry, travel-worn", "a voice caught mid-breath", "a smile that doesn't reach his eyes", "honest to the point of rudeness", "quietly delighted by numbers", "never rushes a thought", "Maren's heir", "guarding, not enforcing", "healer of the Open Hand", "a storyteller's grin", "ink-stained", "her face is never seen", "painfully neat"];
+    for (const card of cards) expect(container.textContent).toContain(card);
+    expect(container.textContent!.match(/age not yet pinned in the Bible/g)).toHaveLength(3); // Ysmerel, Dorrow, Hesk: sex pinned, age not
+    expect(container.textContent!.match(/Sex and age not yet pinned in the Bible/g)).toHaveLength(4); // Dissenter, Surveyor, Archivist, Keeper
+  });
 });
