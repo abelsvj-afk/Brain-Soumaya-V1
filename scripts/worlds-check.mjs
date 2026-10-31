@@ -45,7 +45,7 @@ try {
   }
 }
 
-const ALL = ["great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", "faded-ward", "road-to-the-seam", "the-village", "the-unmade-hour", "the-siege", "eternity"];
+const ALL = ["great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", "faded-ward", "road-to-the-seam", "the-village", "the-unmade-hour", "the-siege", "the-yard", "eternity"];
 const worlds = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 const H = { "x-space-id": SPACE, "content-type": "application/json" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

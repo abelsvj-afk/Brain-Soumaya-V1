@@ -101,3 +101,20 @@ describe("the Siege of the First Light gate", () => {
     expect(new TravelRepo(handle, "b").getState(T0).siegeGateOpen).toBe(false);
   });
 });
+
+describe("the Unlit Hulls gate", () => {
+  it("opens once the Blank Nameplate is in this brain's Book, and refuses with a plain reason until then", () => {
+    const t = new TravelRepo(handle, "a");
+    expect(t.getState(T0).yardGateOpen).toBe(false);
+    try {
+      t.depart({ clientKey: "y1", kind: "drift", destination: "the-yard" }, T0);
+      throw new Error("should refuse");
+    } catch (e) {
+      expect((e as TravelError).code).toBe("YARD_GATE_CLOSED");
+    }
+    find("a", "sight.blank-nameplate");
+    expect(t.getState(T0).yardGateOpen).toBe(true);
+    expect(t.depart({ clientKey: "y2", kind: "drift", destination: "the-yard" }, T0).destination).toBe("the-yard");
+    expect(new TravelRepo(handle, "b").getState(T0).yardGateOpen).toBe(false);
+  });
+});

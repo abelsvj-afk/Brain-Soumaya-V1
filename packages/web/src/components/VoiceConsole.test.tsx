@@ -57,7 +57,7 @@ describe("the owner's Voices console", () => {
     for (const label of labels) expect(container.textContent).toContain(label);
     const cards = ["reads every entry", "vast, calm, radiant", "wiry, travel-worn", "a voice caught mid-breath", "a smile that doesn't reach his eyes", "honest to the point of rudeness", "quietly delighted by numbers", "never rushes a thought", "Maren's heir", "guarding, not enforcing", "healer of the Open Hand", "a storyteller's grin", "ink-stained", "her face is never seen", "painfully neat"];
     for (const card of cards) expect(container.textContent).toContain(card);
-    expect(container.textContent!.match(/age not yet pinned in the Bible/g)).toHaveLength(3); // Ysmerel, Dorrow, Hesk: sex pinned, age not
+    expect(container.textContent!.match(/(?<!Sex and )age not yet pinned in the Bible/g)).toHaveLength(3); // Ysmerel, Dorrow, Hesk: sex pinned, age not
     expect(container.textContent!.match(/Sex and age not yet pinned in the Bible/g)).toHaveLength(4); // Dissenter, Surveyor, Archivist, Keeper
   });
 });

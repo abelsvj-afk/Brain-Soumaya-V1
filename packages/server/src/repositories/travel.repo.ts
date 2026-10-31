@@ -16,6 +16,8 @@ import {
   ROAD_WORLD_KEY,
   VILLAGE_GATE_ENTRY,
   SIEGE_GATE_ENTRY,
+  YARD_GATE_ENTRY,
+  YARD_WORLD_KEY,
   SIEGE_WORLD_KEY,
   UNMADE_GATE_ENTRY,
   UNMADE_WORLD_KEY,
@@ -73,7 +75,7 @@ import {
  *  Eternity's world joins the list as a GATED world (B-01): it is on the
  *  chart, but depart() admits it only through the gate below — the
  *  allow-list alone never opens the way there. */
-export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, VILLAGE_WORLD_KEY, UNMADE_WORLD_KEY, SIEGE_WORLD_KEY, ETERNITY_WORLD_KEY];
+export const TRAVEL_WORLD_KEYS: readonly string[] = ["home", "great-station", "growing-place", "deep-past", "people", "quiet-archive", "scale", FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, VILLAGE_WORLD_KEY, UNMADE_WORLD_KEY, SIEGE_WORLD_KEY, YARD_WORLD_KEY, ETERNITY_WORLD_KEY];
 export const HOME_WORLD = "home";
 
 /** Plain-language refusals for the Eternity gate (B-01): a closed gate
@@ -94,6 +96,7 @@ export type TravelErrorCode =
   | "VILLAGE_GATE_CLOSED"
   | "UNMADE_GATE_CLOSED"
   | "SIEGE_GATE_CLOSED"
+  | "YARD_GATE_CLOSED"
   | "ACTIVE_JOURNEY_EXISTS"
   | "JOURNEY_NOT_DEPARTED"
   | "ETERNITY_GATE_CLOSED"
@@ -439,6 +442,9 @@ export class TravelRepo implements JourneyBonusCreditor {
       // The Road to the Seam: a door in the story, opened by finding Teru's Harbor Nail.
       if (input.destination === ROAD_WORLD_KEY && !this.roadGateOpen())
         throw new TravelError("ROAD_GATE_CLOSED", "The Road isn't open yet — it appears once you have found the nail a traveller set in the harbor door.");
+      // The Unlit Hulls: a door in the story, opened by finding the Blank Nameplate.
+      if (input.destination === YARD_WORLD_KEY && !this.yardGateOpen())
+        throw new TravelError("YARD_GATE_CLOSED", "The Unlit Hulls isn't open yet — it appears once you have seen the plate on a certain ship's flank that carries no name.");
       // The Siege of the First Light: a door in the story, opened by finding Oru's Bead.
       if (input.destination === SIEGE_WORLD_KEY && !this.siegeGateOpen())
         throw new TravelError("SIEGE_GATE_CLOSED", "The Siege of the First Light isn't open yet — it appears once you have been given a bead of the first morning.");
@@ -721,6 +727,8 @@ export class TravelRepo implements JourneyBonusCreditor {
     unmadeGateOpen: boolean;
     /** Whether the way to the Siege of the First Light stands open (Oru's Bead found). */
     siegeGateOpen: boolean;
+    /** Whether the way to the Unlit Hulls stands open (the Blank Nameplate found). */
+    yardGateOpen: boolean;
     eternityReachable: boolean;
   } {
     this.settleActive(nowMs);
@@ -734,8 +742,18 @@ export class TravelRepo implements JourneyBonusCreditor {
       villageGateOpen: this.villageGateOpen(),
       unmadeGateOpen: this.unmadeGateOpen(),
       siegeGateOpen: this.siegeGateOpen(),
+      yardGateOpen: this.yardGateOpen(),
       eternityReachable: this.eternityGateReachable(),
     };
+  }
+
+  yardGateOpen(): boolean {
+    if (isOwnerSpace(this.spaceId)) return true; // Owner access (auth/owner.ts), like every gate
+    try {
+      return !!this.h.sqlite.prepare(`SELECT 1 AS x FROM story_finds WHERE space_id = ? AND entry_id = ?`).get(this.spaceId, YARD_GATE_ENTRY);
+    } catch {
+      return false;
+    }
   }
 
   siegeGateOpen(): boolean {

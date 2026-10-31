@@ -208,6 +208,15 @@ export const STORY_ROADS: readonly StoryRoad[] = [
     ],
     gift: "She sets the cord down beside the table and does not say which one is the truer size.",
   },
+  {
+    id: "road.a-book-that-was-not-there", world: "the-yard", giver: "wim", title: "A Book That Was Not There",
+    offer: "Would you help me look at a desk? I would like to be sure there is nothing to find.",
+    steps: [
+      S("desk", "Find the desk that faces the seventh slip.", find("obj.yard-ledger")),
+      S("plate", "Find the plate that was never cut.", find("sight.yard-blank-plate")),
+    ],
+    gift: "He squares the pen on the desk, and writes nothing, and seems for a moment to be at peace with it.",
+  },
 ];
 
 export const STORY_ROAD_BY_ID: ReadonlyMap<string, StoryRoad> = new Map(STORY_ROADS.map((r) => [r.id, r]));

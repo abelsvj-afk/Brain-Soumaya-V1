@@ -157,6 +157,17 @@ export const STORY_TRIGGERS: readonly StoryTrigger[] = [
   { entryId: "echo.road-steps", how: "listen", world: "road-to-the-seam", hour: "standing", spot: { place: "^road-far$", near: 3 } },
   { entryId: "sight.road-far", how: "regard", world: "road-to-the-seam", hour: "first-light", spot: { place: "^road-far$", near: 2.4 } },
   { entryId: "obj.road-oil", how: "npc", world: "road-to-the-seam", npc: "wayfarer", minMeetings: 5 },
+  // The Unlit Hulls (S-VI): answers only where she is parked in the yard; Wim gives one curl after enough meetings.
+  { entryId: "sight.yard-six", how: "regard", world: "the-yard", hour: "first-light", spot: { place: "^yard-six$", near: 0.6 } },
+  { entryId: "sight.yard-seventh", how: "regard", world: "the-yard", hour: "threshold", spot: { place: "^yard-seventh$", near: 2 } },
+  { entryId: "obj.yard-plates", how: "regard", world: "the-yard", hour: "growing", spot: { place: "^yard-plates$", near: 1.6 } },
+  { entryId: "sight.yard-blank-plate", how: "regard", world: "the-yard", hour: "rest", spot: { place: "^yard-blank$", near: 3 } },
+  { entryId: "obj.yard-ledger", how: "regard", world: "the-yard", hour: "measure", spot: { place: "^yard-desk$", near: 2.6 } },
+  { entryId: "obj.yard-tools", how: "regard", world: "the-yard", hour: "hearths", spot: { place: "^yard-tools$", near: 1.4 } },
+  { entryId: "sight.yard-lamps", how: "regard", world: "the-yard", hour: "standing", spot: { place: "^yard-lamps$", near: 0.9 } },
+  { entryId: "sight.yard-crane", how: "regard", world: "the-yard", hour: "measure", spot: { place: "^yard-crane$", near: 2.2 } },
+  { entryId: "echo.yard-mallet", how: "listen", world: "the-yard", hour: "standing", spot: { place: "^yard-six$", near: 1.2 } },
+  { entryId: "obj.yard-curl", how: "npc", world: "the-yard", npc: "wim", minMeetings: 5 },
   // The Siege of the First Light (S-IV): answers only where she is parked on the field; the Dissenter gives one cup after enough meetings.
   { entryId: "sight.siege-edges", how: "regard", world: "the-siege", hour: "first-light", spot: { place: "^siege-edges$", near: 0.7 } },
   { entryId: "sight.siege-smile", how: "regard", world: "the-siege", hour: "measure", spot: { place: "^siege-smile$", near: 2.6 } },

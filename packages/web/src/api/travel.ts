@@ -35,6 +35,8 @@ export interface TravelState {
   unmadeGateOpen?: boolean;
   /** Whether the way to the Siege of the First Light stands open (Oru's Bead found) — the server's verdict; absent on an older server (read as closed). */
   siegeGateOpen?: boolean;
+  /** Whether the way to the Unlit Hulls stands open (the Blank Nameplate found) — the server's verdict; absent on an older server (read as closed). */
+  yardGateOpen?: boolean;
 }
 
 /**

@@ -83,6 +83,13 @@ export const UNMADE_GATE_ENTRY = "sight.lullaby-hollow";
 export const SIEGE_WORLD_KEY = "the-siege";
 export const SIEGE_GATE_ENTRY = "obj.orus-bead";
 
+/**
+ * The Unlit Hulls (S-VI; docs/specs/seam-the-unlit-hulls-2026-10-31.md): the yard where the seventh hull was laid, beside the Station. A door in the story — it opens for a traveller who has found the Blank Nameplate
+ * (the server checks the Book; the owner is exempt) and stays open. It must never say the name that goes on the seventh plate.
+ */
+export const YARD_WORLD_KEY = "the-yard";
+export const YARD_GATE_ENTRY = "sight.blank-nameplate";
+
 /** The gate's key relic (lore §6): the Witness Without a Name. */
 export const ETERNITY_GATE_KEY_RELIC = "witness-without-a-name";
 
@@ -138,6 +145,7 @@ export const WORLD_COORDS: Readonly<Record<string, { x: number; y: number }>> = 
   "the-village": { x: 240, y: 300 },
   "the-unmade-hour": { x: 110, y: 420 },
   "the-siege": { x: 330, y: 40 },
+  "the-yard": { x: 640, y: 330 },
 };
 
 /** Chart units one fuel flies, and the cheapest warp. */

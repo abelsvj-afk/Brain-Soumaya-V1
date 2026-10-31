@@ -1,4 +1,4 @@
-import { ETERNITY_WORLD_KEY, FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, SIEGE_WORLD_KEY, UNMADE_WORLD_KEY, VILLAGE_WORLD_KEY, warpCost, type TravelKind } from "@brain/shared";
+import { ETERNITY_WORLD_KEY, FADED_WARD_WORLD_KEY, ROAD_WORLD_KEY, SIEGE_WORLD_KEY, UNMADE_WORLD_KEY, YARD_WORLD_KEY, VILLAGE_WORLD_KEY, warpCost, type TravelKind } from "@brain/shared";
 import type { TravelState } from "../api/travel.js";
 
 /**
@@ -54,6 +54,11 @@ export const WORLD_CHART: readonly {
     key: VILLAGE_WORLD_KEY,
     name: "The Village",
     blurb: "A hillside village at night with every window lit, and a path of small gold hooks climbing to a tall doorway. It opens for those who have found the thread that was passed hand to hand.",
+  },
+  {
+    key: YARD_WORLD_KEY,
+    name: "The Unlit Hulls",
+    blurb: "A vast, dim shipyard where six long hulls lie unlit on their slips and a seventh stands as ribs. It opens for those who have seen a plate that carries no name.",
   },
   {
     key: SIEGE_WORLD_KEY,
@@ -134,6 +139,7 @@ export function buildRouteBoard(state: TravelState): RouteEntry[] {
   // never offers a journey the server would refuse.
   const chart = WORLD_CHART.filter((w) => {
     if (w.key === "people") return state.peopleGateOpen === true || state.currentWorld === "people";
+    if (w.key === YARD_WORLD_KEY) return state.yardGateOpen === true || state.currentWorld === YARD_WORLD_KEY;
     if (w.key === SIEGE_WORLD_KEY) return state.siegeGateOpen === true || state.currentWorld === SIEGE_WORLD_KEY;
     if (w.key === UNMADE_WORLD_KEY) return state.unmadeGateOpen === true || state.currentWorld === UNMADE_WORLD_KEY;
     if (w.key === VILLAGE_WORLD_KEY) return state.villageGateOpen === true || state.currentWorld === VILLAGE_WORLD_KEY;
