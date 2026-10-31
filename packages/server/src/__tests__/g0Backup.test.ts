@@ -7,11 +7,13 @@
  * to v2 by this increment (see backup/inventory.ts header).
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import BetterSqlite3 from "better-sqlite3";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as nodePath from "node:path";
 import { createHash } from "node:crypto";
 import { createDb, type DbHandle } from "../db/client.js";
+import { EMBED_DIM } from "../db/vec.js";
 import {
   runBackupAttempt,
   listBackupAttempts,
@@ -42,6 +44,82 @@ function seedMinimalBrain(h: DbHandle): void {
     .run();
 }
 
+/**
+ * A minimal WORKING brain: one honest row in every MUST-BE-NONEMPTY
+ * table of inventory v5 (26 tables), each inserted through the real
+ * schema (vec0 rows carry a real 384-dim embedding blob; FTS rows are
+ * real index rows keyed by their entity's rowid). The three tables v5
+ * reclassified to MAY-BE-EMPTY (episodes_fts, vec_episodes, fin_expense)
+ * deliberately stay empty — under v5 that is a legitimate state, and
+ * the enforcement tests below pin that it verifies.
+ */
+function seedFullBrain(h: DbHandle): void {
+  const s = h.sqlite;
+  const vec = Buffer.from(new Float32Array(EMBED_DIM).fill(0.5).buffer);
+  s.prepare(
+    `INSERT INTO spaces (id, name, gamer_tag, passcode_hash, passcode_salt)
+     VALUES ('space-test', 'Test Brain', 'tester', 'h', 's')`,
+  ).run();
+  s.prepare(`INSERT INTO settings (key, value) VALUES ('seed', '1')`).run();
+  s.prepare(`INSERT INTO space_meta (space_id) VALUES ('space-test')`).run();
+  s.prepare(`INSERT INTO user_persona (space_id, body) VALUES ('space-test', 'test persona')`).run();
+  const node = s
+    .prepare(
+      `INSERT INTO nodes (space_id, label, type, content)
+       VALUES ('space-test', 'A memory', 'note', 'something worth keeping')`,
+    )
+    .run();
+  const nodeId = Number(node.lastInsertRowid);
+  s.prepare(`INSERT INTO edges (space_id, source, target, relationship) VALUES ('space-test', ?, ?, 'relates')`).run(nodeId, nodeId);
+  const source = s
+    .prepare(
+      `INSERT INTO sources (space_id, kind, raw_bytes, content_hash, byte_length)
+       VALUES ('space-test', 'note', ?, 'seedhash', 4)`,
+    )
+    .run(Buffer.from("seed"));
+  const sourceId = Number(source.lastInsertRowid);
+  const schunk = s
+    .prepare(
+      `INSERT INTO source_chunks (space_id, source_id, ordinal, text, start_offset, end_offset)
+       VALUES ('space-test', ?, 0, 'seed text', 0, 9)`,
+    )
+    .run(sourceId);
+  const sourceChunkId = Number(schunk.lastInsertRowid);
+  s.prepare(`INSERT INTO sources_fts (rowid, text) VALUES (?, 'seed text')`).run(sourceChunkId);
+  s.prepare(`INSERT INTO node_sources (space_id, node_id, source_id, chunk_id) VALUES ('space-test', ?, ?, ?)`).run(nodeId, sourceId, sourceChunkId);
+  const doc = s.prepare(`INSERT INTO knowledge_docs (space_id, name) VALUES ('space-test', 'seed doc')`).run();
+  const docId = Number(doc.lastInsertRowid);
+  const kchunk = s
+    .prepare(`INSERT INTO knowledge_chunks (space_id, doc_id, ordinal, content) VALUES ('space-test', ?, 0, 'seed chunk')`)
+    .run(docId);
+  const knowledgeChunkId = Number(kchunk.lastInsertRowid);
+  s.prepare(
+    `INSERT INTO episodes (space_id, kind, summary, occurred_at, recorded_at)
+     VALUES ('space-test', 'session', 'seed episode', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+  ).run();
+  s.prepare(`INSERT INTO nodes_fts (rowid, label, content) VALUES (?, 'A memory', 'something worth keeping')`).run(nodeId);
+  s.prepare(`INSERT INTO vec_nodes (node_id, embedding) VALUES (?, ?)`).run(BigInt(nodeId), vec);
+  s.prepare(`INSERT INTO vec_docs (chunk_id, embedding) VALUES (?, ?)`).run(BigInt(knowledgeChunkId), vec);
+  s.prepare(`INSERT INTO vec_source_chunks (chunk_id, embedding) VALUES (?, ?)`).run(BigInt(sourceChunkId), vec);
+  const profile = s
+    .prepare(`INSERT INTO instruction_profiles (space_id, name, body) VALUES ('space-test', 'seed profile', 'be nice')`)
+    .run();
+  s.prepare(`INSERT INTO vec_profiles (profile_id, embedding) VALUES (?, ?)`).run(BigInt(Number(profile.lastInsertRowid)), vec);
+  s.prepare(
+    `INSERT INTO user_model (space_id, slot, content, confidence, valid_at, origin)
+     VALUES ('space-test', 'belief', 'seed belief', 0.9, '2026-01-01T00:00:00Z', 'stated')`,
+  ).run();
+  s.prepare(`INSERT INTO daily_logs (space_id, content) VALUES ('space-test', 'seed log')`).run();
+  s.prepare(`INSERT INTO fin_account (space_id) VALUES ('space-test')`).run();
+  s.prepare(`INSERT INTO fin_source (space_id) VALUES ('space-test')`).run();
+  s.prepare(`INSERT INTO fin_income (space_id, date) VALUES ('space-test', '2026-01-01')`).run();
+  const bill = s
+    .prepare(`INSERT INTO fin_bill (space_id, name, anchor_date) VALUES ('space-test', 'seed bill', '2026-01-01')`)
+    .run();
+  s.prepare(`INSERT INTO fin_bill_occurrence (space_id, bill_id, due_date) VALUES ('space-test', ?, '2026-01-01')`).run(Number(bill.lastInsertRowid));
+  s.prepare(`INSERT INTO fin_paystub (space_id, net_cents) VALUES ('space-test', 100)`).run();
+}
+
 beforeEach(() => {
   handle = createDb(":memory:");
   dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "g0-b1-"));
@@ -59,7 +137,17 @@ describe("G0 B1 inventory", () => {
     expect(INCLUDED_TABLES.length).toBe(114);
     expect(INCLUDED_TABLES).not.toContain("tts_audio_cache");
     expect(BACKUP_TABLE_INVENTORY["tts_audio_cache"]).toBe("excluded");
-    expect(MUST_BE_NONEMPTY_TABLES.length).toBe(29);
+    expect(MUST_BE_NONEMPTY_TABLES.length).toBe(26);
+    // v5 reclassifications (owner-authorized 2026-10-30, causes in the
+    // inventory header): fin_expense — real expense data lives in the
+    // Money Tracker artifact store, never in this table; episodes_fts +
+    // vec_episodes — PROVISIONAL, the enrichment worker was never wired
+    // so the indexes are empty by construction (restore MUST after a
+    // backfill populates them).
+    for (const t of ["fin_expense", "episodes_fts", "vec_episodes"]) {
+      expect(BACKUP_TABLE_INVENTORY[t]).toBe("may-be-empty");
+      expect(MUST_BE_NONEMPTY_TABLES).not.toContain(t);
+    }
     // This increment's own lifecycle table.
     expect(BACKUP_TABLE_INVENTORY["backup_attempts"]).toBe("may-be-empty");
     // v4 removals (owner-authorized 2026-10-30): the deploy-line relic
@@ -103,7 +191,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     // Manifest basics (spec §1).
     expect(res.manifest.backupId).toBe(res.attempt.id);
     expect(res.manifest.appCommit).toBe("test-commit");
-    expect(res.manifest.inventoryVersion).toBe(4);
+    expect(res.manifest.inventoryVersion).toBe(5);
     expect(typeof res.manifest.schemaVersion).toBe("number");
     // SHA-256 in the manifest is the hash of the actual snapshot file.
     const fileBytes = fs.readFileSync(res.attempt.snapshotPath!);
@@ -276,5 +364,61 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     const garbage = verifySnapshotFile(garbagePath, res.manifest, { enforceMustNonempty: false });
     expect(garbage.ok).toBe(false);
     expect(garbage.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe("G0 v5 — MUST enforcement on the resolved preflight", () => {
+  it("the standard full fixture passes with enforcement ON — including the three v5 tables legitimately empty", () => {
+    seedFullBrain(handle);
+    const res = runBackupAttempt(handle, { dir, enforceMustNonempty: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.attempt.state).toBe("verified_local");
+    // The three tables v5 reclassified are empty in this fixture, and
+    // that is now a legitimate state: the manifest records 0 for them
+    // and the guard does not fire.
+    expect(res.manifest.tableCounts["episodes_fts"]).toBe(0);
+    expect(res.manifest.tableCounts["vec_episodes"]).toBe(0);
+    expect(res.manifest.tableCounts["fin_expense"]).toBe(0);
+    // Every one of the 26 remaining MUST tables carries its seeded row.
+    for (const t of MUST_BE_NONEMPTY_TABLES) {
+      expect(res.manifest.tableCounts[t]).toBeGreaterThan(0);
+    }
+    // The attempt-level default enforces too (no option passed).
+    const resDefault = runBackupAttempt(handle, { dir });
+    expect(resDefault.ok).toBe(true);
+  });
+
+  it("a snapshot with ONE MUST table emptied fails verification naming that table — and only that table", () => {
+    seedFullBrain(handle);
+    const res = runBackupAttempt(handle, { dir, enforceMustNonempty: false });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // Build a second snapshot artifact that is identical except that
+    // `settings` (a MUST table) has been emptied, with a manifest that
+    // honestly describes the modified file — so count reconciliation,
+    // hash, and integrity all pass and ONLY the wiped-DB guard can fail.
+    const emptiedPath = nodePath.join(dir, "emptied-settings.db");
+    fs.copyFileSync(res.attempt.snapshotPath!, emptiedPath);
+    const raw = new BetterSqlite3(emptiedPath);
+    raw.exec(`DELETE FROM settings`);
+    raw.close();
+    const bytes = fs.readFileSync(emptiedPath);
+    const manifest = {
+      ...res.manifest,
+      snapshotSha256: createHash("sha256").update(bytes).digest("hex"),
+      snapshotBytes: bytes.length,
+      tableCounts: { ...res.manifest.tableCounts, settings: 0 },
+    };
+    // Enforcement ON (the verify-level default): fails, naming settings,
+    // and the must-be-nonempty failure is the ONLY failure.
+    const on = verifySnapshotFile(emptiedPath, manifest);
+    expect(on.ok).toBe(false);
+    expect(on.failures).toEqual(["must-be-nonempty table is empty in snapshot: settings"]);
+    // Enforcement OFF (the legacy explicit opt-out): the same artifact
+    // verifies — the switch, not the artifact, decides.
+    const off = verifySnapshotFile(emptiedPath, manifest, { enforceMustNonempty: false });
+    expect(off.ok).toBe(true);
+    expect(off.integrity).toBe("ok");
   });
 });
