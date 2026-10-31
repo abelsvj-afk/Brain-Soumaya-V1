@@ -1913,6 +1913,8 @@ export function migrateSchema(sqlite: RawDb): void {
   // PRAGMA-guarded ALTERs below (the established additive pattern —
   // nothing in BOOTSTRAP_SQL references these columns, so the
   // bootstrap-references-migration-column crash pattern cannot arise).
+  // Increment B3: two more columns the same way (trigger /
+  // offvolume_outcome) for the scheduler + status surface.
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS backup_attempts (
       id TEXT PRIMARY KEY,
@@ -1927,7 +1929,9 @@ export function migrateSchema(sqlite: RawDb): void {
       finished_at TEXT,
       tier TEXT NOT NULL DEFAULT 'daily',
       pinned INTEGER NOT NULL DEFAULT 0,
-      promoted_at TEXT
+      promoted_at TEXT,
+      trigger TEXT NOT NULL DEFAULT 'manual',
+      offvolume_outcome TEXT
     );
   `);
   const backupAttemptCols = sqlite
@@ -1941,6 +1945,12 @@ export function migrateSchema(sqlite: RawDb): void {
   }
   if (!backupAttemptCols.some((c) => c.name === "promoted_at")) {
     sqlite.exec(`ALTER TABLE backup_attempts ADD COLUMN promoted_at TEXT`);
+  }
+  if (!backupAttemptCols.some((c) => c.name === "trigger")) {
+    sqlite.exec(`ALTER TABLE backup_attempts ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'`);
+  }
+  if (!backupAttemptCols.some((c) => c.name === "offvolume_outcome")) {
+    sqlite.exec(`ALTER TABLE backup_attempts ADD COLUMN offvolume_outcome TEXT`);
   }
 
   // daily_quests reconciliation (G0 inventory v4, 2026-10-30):

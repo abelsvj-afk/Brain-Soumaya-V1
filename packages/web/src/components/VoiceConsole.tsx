@@ -11,6 +11,35 @@ const ROLE_LABEL: Record<string, string> = {
   surveyor: "The Surveyor",
   archivist: "The Archivist",
   keeper: "The Keeper",
+  hesk: "Hesk, the Warden-General",
+  tamsin: "Tamsin of the Open Hand",
+  ossian: "Ossian Reed, the Last Honest Liar",
+  ilsabet: "Ilsabet Marrow, the Cartographer",
+  pell: "Pell, the Follower",
+  wim: "Wim Ostler, Brannoch's clerk",
+};
+
+/**
+ * Who each role IS, so a voice is chosen for a person, not a name (the owner's standing rule: wherever a voice is assigned, the character's sex, age and personality
+ * show at that spot). Sourced from the Continuity Bible's identity table and the cast's voice notes. Where the Bible has not pinned a sex or an age, the line says
+ * so plainly rather than guessing.
+ */
+const ROLE_WHO: Record<string, string> = {
+  narrator: "Not a person — reads every entry, and any line whose speaker has no voice of their own.",
+  eternity: "He/him · ageless · the Maker: vast, calm, radiant; brief, warm words with cosmic weight.",
+  calend: "He/him · older — grey, lined, never young · the Doorkeeper: wiry, travel-worn, wry, ancient-eyed.",
+  ysmerel: "She/her · tall and weathered · the Last Choirmaster: grave and precise; a voice caught mid-breath.",
+  dorrow: "He/him · heavy, impeccably dressed · the Ledger's Grandmaster: shrewd and smooth, a smile that doesn't reach his eyes.",
+  dissenter: "Sex and age not yet pinned in the Bible · sharp, dry, restless; honest to the point of rudeness, never cruel.",
+  surveyor: "Sex and age not yet pinned in the Bible · Sethane's apprentice: precise, curious, quietly delighted by numbers.",
+  archivist: "Sex and age not yet pinned in the Bible · Vesh's penitent: quiet, exact, a touch wistful; never rushes a thought.",
+  keeper: "Sex and age not yet pinned in the Bible · Maren's heir at the Growing Place: patient, gentle, a little earthy.",
+  hesk: "He/him · big and stern · the Warden-General: guarding, not enforcing; keeps the Faded's belongings.",
+  tamsin: "She/her · middle-aged · healer of the Open Hand: patient, warm, unhurried.",
+  ossian: "He/him · middle-aged — dark untidy hair, short stubble · the Last Honest Liar: a storyteller's grin with truth underneath.",
+  ilsabet: "She/her · middle-aged — dark hair in a loose bun · the Cartographer: patient, ink-stained, exact.",
+  pell: "She/her · young and slight · the Follower: always a little behind; her face is never seen.",
+  wim: "He/him · young and tidy · Brannoch's clerk: careful, by-the-book, painfully neat.",
 };
 
 /**
@@ -63,6 +92,12 @@ export default function VoiceConsole() {
               <b>{ROLE_LABEL[role] ?? role}</b>
               <br />
               <small>{data.assigned[role] ? nameOf(data.assigned[role]!) : role === "narrator" ? "not chosen yet" : "the Narrator"}</small>
+              {ROLE_WHO[role] && (
+                <>
+                  <br />
+                  <small>{ROLE_WHO[role]}</small>
+                </>
+              )}
             </span>
             <span className="voice-btns">
               <button type="button" onClick={() => void test(role)}>Test</button>

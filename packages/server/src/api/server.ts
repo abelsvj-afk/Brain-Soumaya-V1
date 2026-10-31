@@ -18,6 +18,7 @@ import { storyRoutes } from "./routes/story.js";
 import { fleetDefenseRoutes } from "./routes/fleetDefense.js";
 import { missionsRoutes } from "./routes/missions.js";
 import { usageRoutes } from "./routes/usage.js";
+import { backupRoutes } from "./routes/backup.js";
 import { constellationRoutes } from "./routes/constellations.js";
 import { loreRoutes } from "./routes/lore.js";
 import { instructionsRoutes } from "./routes/instructions.js";
@@ -120,6 +121,9 @@ export function createApp(ctx: AppContext): Express {
   // Usage/budget is deployment-wide (shared API budget). Guarded so it can't be
   // tampered with anonymously; the mutating routes additionally honor ADMIN_TOKEN.
   app.use("/api/usage", guard, usageRoutes(ctx));
+  // G0 backup status + triggers (B3). Owner-gated inside the router:
+  // backups describe the whole deployment's database.
+  app.use("/api/backup", guard, backupRoutes(ctx));
   app.use("/api/ingest", guard, llmLimiter, ingestRoutes(ctx));
   app.use("/api/graph", guard, graphRoutes(ctx));
   app.use("/api/nodes", guard, nodesRoutes(ctx));

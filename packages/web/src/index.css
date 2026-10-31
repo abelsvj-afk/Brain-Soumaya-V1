@@ -7922,6 +7922,20 @@ body.in-transit .perf-suggest { display: none; }
 .voice-console button:disabled { opacity: 0.5; cursor: default; }
 .voice-console select { color: #e6eefc; background: rgba(8, 12, 28, 0.95); }
 
+/* The owner's backup panel (G0 B3, spec §7): latest-good and latest attempt are separate blocks with different accents, so a failure can never read as a success. */
+.backup-panel { margin: 16px 0 0; padding-top: 10px; border-top: 1px solid rgba(140, 220, 160, 0.25); color: #b8c6e4; font-size: 0.8rem; }
+.backup-panel h3 { margin: 0 0 4px; font-size: 0.95rem; color: #a8e6b8; }
+.backup-panel h4 { margin: 0 0 4px; font-size: 0.82rem; color: #cfe0ff; }
+.backup-panel p { margin: 4px 0; }
+.backup-block { margin: 8px 0; padding: 8px 10px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; }
+.backup-good { border-left: 4px solid rgba(90, 200, 120, 0.8); }
+.backup-attempt { border-left: 4px solid rgba(120, 160, 255, 0.8); }
+.backup-note { margin: 6px 0; color: #8fa0c4; }
+.backup-stale { color: #ff9b9b; }
+.backup-btns { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.backup-panel button { min-height: 44px; padding: 0 12px; border: 1px solid rgba(140, 220, 160, 0.5); border-radius: 999px; background: rgba(140, 220, 160, 0.08); color: #a8e6b8; font: inherit; cursor: pointer; }
+.backup-panel button:disabled { opacity: 0.5; cursor: default; }
+
 /* Talking to a person (docs/specs/living-worlds-dialogue-2026-10-31.md S3): a sheet in the lower part of the screen, clear of the header/dock, never taller than 55% of the view. */
 .npc-talk {
   position: absolute;

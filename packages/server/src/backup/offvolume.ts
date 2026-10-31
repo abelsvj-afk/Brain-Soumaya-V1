@@ -26,6 +26,7 @@ import {
   runBackupAttempt,
   type BackupAttemptRow,
   type BackupFailureStage,
+  type BackupTrigger,
 } from "./service.js";
 import type { BackupManifest } from "./manifest.js";
 import {
@@ -77,6 +78,8 @@ export interface RunOffVolumeOptions {
   tier?: BackupTier;
   /** Pin against retention; default: tier === "golden". */
   pinned?: boolean;
+  /** How this attempt was started (B3); recorded on the row at creation. */
+  trigger?: BackupTrigger;
   appCommit?: string;
   /** MUST-BE-NONEMPTY guard enforcement for the B1 stage (see service.ts). */
   enforceMustNonempty?: boolean;
@@ -105,6 +108,12 @@ export async function runOffVolumeBackup(
     dir: opts.dir,
     appCommit: opts.appCommit,
     enforceMustNonempty: opts.enforceMustNonempty,
+    // B3: trigger/tier/pinned land at creation (a golden is pinned
+    // from its first moment); the bookkeeping UPDATE below re-writes
+    // the same tier/pinned values and stays as the backstop.
+    trigger: opts.trigger,
+    tier,
+    pinned,
   });
   if (!local.ok) {
     return { ok: false, attempt: local.attempt, failureStage: local.failureStage, failureDetail: local.failureDetail };

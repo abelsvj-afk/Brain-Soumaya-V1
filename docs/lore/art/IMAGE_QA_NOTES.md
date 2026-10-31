@@ -425,3 +425,29 @@ Files: `42-hesks-room-and-tamsins-ward-v1.png` … `v4.png`. All four wide, all 
 - One near-miss for Claude's eye: v4's shelf tags carry the closest-to-legible pseudo-writing of the round — still no readable word at full size, but the nearest the generator came.
 
 Verdict: two halves of one grief, delivered as written. The sheet is complete. Your pick.
+
+## Owner findings — 2026-10-30 evening (from King, at the owner's direction)
+
+The owner reviewed the Book in dev view and raised three things. All three checked against main's code tonight; findings and fix shapes below. He wants all of it solved.
+
+### 1. Art: 41 of 77 Book entries have no painting anywhere
+
+`STORY_ENTRIES` (packages/shared/src/storyCanon.ts) holds **77 entries**. `STORY_ART` (packages/web/src/lib/storyArt.ts) places **36**, and all 36 web copies are verified present in `packages/web/public/lore/`. The other **41 entries have no painting in existence** — they were never in any prompt sheet, so there is nothing to place until a Sheet 3 round is written and generated:
+
+- **Faded Ward cluster (12):** sight.ward-door, sight.ward-long-hall, sight.ward-lanterns, sight.ward-window, sight.ward-blank-cot, obj.ward-bowl, obj.ward-soldier, obj.ward-button, obj.ward-wake, echo.ward-hum, echo.ward-far-breath, echo.ward-count
+- **Road cluster (10):** sight.road-mouth, sight.road-lamps, sight.road-chalk, sight.road-chalk-end, sight.road-post, sight.road-far, obj.road-nails, obj.road-doorframe, obj.road-oil, echo.road-steps
+- **Relic cluster (9):** relic.witness-without-a-name, relic.witness-seed, relic.first-light-shard, relic.basin-stone, relic.lantern-of-keeping, relic.hearth-ember, relic.sunward-compass, relic.unopened-fold, relic.unnumbered-fragment
+- **Singletons (10):** sight.dead-bough, sight.open-alcove, sight.second-seam, sight.empty-chair, sight.unlooked-direction, obj.tin-soldier, obj.faded-ticket, obj.vesh-paper-boat, obj.doorkeepers-nail, obj.dissenters-chart
+
+Also: the §37 (Seven Kept), §39 (Sixth Account) and §42 (diptych) paintings sit in docs/lore/art but match no unplaced entry id King can find (the seventh hull is covered by sight.blank-nameplate; Hesk's room and Tamsin's ward are already placed from earlier picks). Claude to say where those three belong, or confirm they are gallery-only.
+
+### 2. Narration: the dev-view fallback is the server's discovery rule, proven in code
+
+`GET /story/narration/:entryId` (packages/server/src/api/routes/story.ts) refuses any entry not in the brain's finds — `403 "You have not found that yet."` — and the client (packages/web/src/lib/narration.ts) treats any non-200 as "no clip" and falls back to the browser's own voice. The dev view shows unfound entries, but the route still gates them, so the owner hears Chrome's TTS for everything he hasn't discovered. His guess was exactly right. **Fix shape:** exempt owner spaces on that route (the same `isOwnerSpace` check the Voices console already uses) so the owner can hear every entry in dev view, while real players keep the discovery rule. Found entries are unaffected either way; clips are voiced once and cached on the volume.
+
+### 3. Voices: the console works, but the labeling the owner asked for isn't there
+
+The Voices console exists (owner-only, in the Book) and assignments are live per role — a character's voice is heard when one of their reaction/talk lines plays; ordinary entry narration is always the Narrator. Two gaps against the owner's standing requirement (wherever a voice is assigned, the character's sex, age and personality must show at that spot):
+
+- `ROLE_LABEL` in packages/web/src/components/VoiceConsole.tsx names only 9 of the 15 `VOICE_ROLES`; **hesk, tamsin, ossian, ilsabet, pell and wim render as raw lowercase keys.**
+- No role shows the character's sex, age or personality. The cast data (CastMember, packages/shared/src/npcs.ts) carries a prose `voice` personality line but no structured sex/age; the Continuity Bible's identity table is the only complete source. The console needs a per-role character card (name, sex, age, personality) fed from canon, so the owner can cast by ear with the person in view.

@@ -115,7 +115,8 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
   });
 
   // Narration: the clip for an entry the brain has FOUND. The server speaks canon text only — the request names an entry, never words. 204 = no audio (the client reads it
-  // with captions and the browser's own voice).
+  // with captions and the browser's own voice). The owner's own spaces are exempt from the found check, so in the owner's dev view every entry can be heard in the studio
+  // voice; the discovery rule still binds every player brain.
   // --- The owner's Voices console: see the account's voices, pick one per role, hear a test. Owner brains only (OWNER_SPACE_IDS); everyone else gets 403. ---
   const ownerOnly = (res: import("express").Response): boolean => {
     if (isOwnerSpace(spaceOf(res))) return true;
@@ -205,7 +206,7 @@ export function storyRoutes(ctx: AppContext, deps: { narrator?: Narrator } = {})
     const tide = isTide(req.query.tide) ? req.query.tide : undefined;
     const book = repo(res).book();
     const found = new Set(book.finds.map((f) => f.entryId));
-    if (!found.has(entryId)) {
+    if (!found.has(entryId) && !isOwnerSpace(spaceOf(res))) {
       res.status(403).json({ error: "You have not found that yet." });
       return;
     }

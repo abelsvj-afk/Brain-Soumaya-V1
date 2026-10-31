@@ -1,3 +1,113 @@
+### 2026-10-30 (Claude): G0 B3 — scheduler (daily 03:30 America/New_York + catch-up), manual/golden triggers, backup status surface
+- [ ] Verified by Claude
+- Third increment of the owner-approved G0 backup & restore plan (plan §4
+  B3 + the §K1 cadence decision); B1 made verified local snapshots and B2
+  the off-volume chain, but nothing ever RAN a backup and nobody could see
+  backup health. New modules in `packages/server/src/backup/`:
+  `schedule.ts` (pure New York wall-clock slot math via Intl — no offset
+  tables: most-recent 03:30 slot, next run, Sunday → weekly tier.
+  decideBackupRun reads ONLY the attempt record — a slot with no attempt
+  at/after its instant is due, 'schedule' within 15 min of the slot, else
+  'catch_up'. Deliberately NO purely age-based trigger: on the fall-back
+  day the slot interval is 25h, so an age > 24h rule would double-fire a
+  local day; latest-good age is a status signal. Both DST transition days
+  are pinned by tests against `date`-verified instants, plus week
+  simulations proving exactly one run per New York day across both
+  transitions), `runner.ts` (ONE pipeline for every trigger — B1 leg,
+  then B2's encrypt→upload→verify→promote when an object store is
+  configured; when it is not — production today — the attempt records the
+  distinct outcome NOT CONFIGURED in the new `offvolume_outcome` column:
+  not a failure, not a promotion, no plaintext ever leaves. Retention
+  runs after promotion and a retention error never fails the backup.
+  MUST-nonempty enforcement defaults OFF here: the runner is the first
+  production caller of B1's leg and the B0 amendment-B preflight hold is
+  still in force; explicit opt-in preserved), `scheduler.ts` (60 s tick +
+  immediate boot evaluation, overlap-guarded, deps-injected so it is
+  unit-tested, BACKUP_SCHEDULER=off kill switch, wired at boot in
+  src/index.ts; a pipeline throw is logged, never fatal), `status.ts`
+  (the spec §7 report, G0-AC-11: latest attempt, latest-good + age +
+  stale flag, schedule/next run/catch-up due, off-volume + index health.
+  The B2 ride-along: the index read here is defensive — a corrupt index
+  reports INDEX CORRUPT in status and never throws into the panel or the
+  scheduler; B2's recovery semantics untouched).
+- Schema (additive, flagged): `backup_attempts` gains `trigger` TEXT NOT
+  NULL DEFAULT 'manual' (honest for every pre-B3 row — B1/B2 only ever ran
+  on demand) and nullable `offvolume_outcome`, in BOTH schema locations
+  with byte-identical CREATE bodies (verified by extraction diff) plus
+  PRAGMA-guarded ALTERs for existing databases. `service.ts` writes
+  trigger/tier/pinned in the attempt's initial INSERT when the caller
+  supplies them, so a GOLDEN attempt is tier 'golden' + pinned AT
+  CREATION on every path; B2's bookkeeping UPDATE remains as a backstop
+  writing identical values. `offvolume.ts` passes trigger through.
+- API + web: owner-only `GET /api/backup/status` and
+  `POST /api/backup/run` ({golden} → trigger golden/manual) in
+  `api/routes/backup.ts`, mounted behind the standard space guard. Web:
+  `api/backup.ts` + `components/BackupPanel.tsx` — a "Backups (owner)"
+  panel in Settings beside Account settings, rendered only for the owner
+  (server enforces; the panel renders nothing otherwise). Latest-good and
+  latest-attempt are separate accent blocks so a failed attempt can never
+  read as a good backup; STALE warning past 24h; corrupt-index warning;
+  next-run line; Back up now / Golden buttons; every time rendered via
+  the viewer's local clock (never UTC — the status payload carries ISO
+  instants + an age duration only). `.env.example` documents
+  BACKUP_SCHEDULER / BACKUP_DIR names in the existing G0 block.
+- Tests: `__tests__/g0BackupScheduler.test.ts` (29 — DST pins both
+  transitions, once-per-local-day week simulations, catch-up rules,
+  trigger parity across schedule/catch_up/manual/golden, golden pinned
+  at creation, not-configured recording with zero store contact,
+  configured promotion through the same pipeline, status field
+  correctness incl. stale flags and attempt-vs-good distinction,
+  defensive corrupt/unreadable/missing index, owner gating incl. the
+  unconfigured-space refusal, scheduler tick behavior) and
+  `components/BackupPanel.test.tsx` (6 — non-owner absence, local-time
+  rendering, attempt-vs-good distinction, not-configured wording,
+  corrupt-index loudness, both buttons' triggers + status reload). The
+  B1/B2 suites (40 tests) pass unmodified on the changed tree. B4
+  (restore/drill) and B5 (deploy gate) are NOT in this increment; MUST
+  enforcement stays OFF; no R2 secrets are provisioned by this change.
+- Review round (independent review of the first B3 tree returned NOT
+  READY with one P1; fixed before landing, all fail-before/pass-after):
+  the scheduler's evaluate() read its facts OUTSIDE any try/catch while
+  its boot/interval calls are fire-and-forget — a throw there (locked
+  DB, missing table) would have escaped as an unhandled rejection and
+  could kill the server. evaluate() now guards its whole body, both
+  call sites carry .catch, and a regression test drops
+  backup_attempts under a live scheduler. Also from the review: a
+  process-wide in-flight lock in runBackupPipeline
+  (BackupRunBusyError — the pipeline's only throw) so scheduled,
+  manual, and golden runs can never interleave on the shared dir +
+  index; POST /run maps it to an honest 409 and the scheduler logs and
+  stands down. Panel: the attempt tier now renders as its meaning
+  ("weekly keeper (Sunday's run)") instead of the bare word, and a
+  fresh-good (non-stale) rendering test was added. New totals: 31
+  server + 7 web B3 tests.
+- Review round 2 (the full review text, dispositioned before landing):
+  P2-1 — decideBackupRun's tier now follows the OLDEST uncovered
+  slot: down across a Sunday and the next slot boundary, the single
+  coalesced catch-up run is still the weekly keeper, not a silently
+  downgraded daily (fail-before signature: expected 'daily' to be
+  'weekly'; missed slots still coalesce into exactly one run).
+  P2-5 — the decision's facts shrank to the newest attempt instant
+  (new latestBackupAttemptCreatedMs, one MAX query), so the
+  scheduler's per-minute evaluation no longer re-reads and re-parses
+  the whole attempt history. P2-6 — status carries
+  latestGoodIndexId + latestGoodDiverged: when the off-volume index
+  (what a store-only restore would use) names a different
+  latest-good than the local record, the divergence is explicit in
+  the report and loud in the panel, never silently resolved.
+  P2-4 — the panel's no-answer note no longer claims the run "could
+  not be started" (a slow run can outlast the connection; the
+  reloaded status is the source of truth). P2-7 — test pins added:
+  scheduler + REAL pipeline end-to-end, latest-good by promotedAt
+  (not createdAt), configured store with no index yet, panel renders
+  nothing while loading. P2-2 NOT fixed in B3, by decision: local
+  snapshot files are never deleted, so daily automatic runs grow the
+  volume slowly — a local-retention policy (delete-on-promotion plus
+  a keep-last-N rule for not-configured mode) is an owner decision,
+  flagged as the top fast-follow-up in the PR body rather than
+  invented inside this increment. New totals: 36 server + 8 web B3
+  tests.
+
 ### 2026-10-30 (Claude): G0 B2 — encryption, off-volume upload, verified-stored, promotion, retention (no caller wired yet)
 - [ ] Verified by Claude
 - Second increment of the owner-approved G0 backup & restore plan; continues
