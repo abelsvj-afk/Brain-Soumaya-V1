@@ -119,6 +119,15 @@ export function relicsRoutes(ctx: AppContext): Router {
    * (currentWorldOf), never client-supplied; a refusal mutates
    * nothing. Release is deliberately NOT gated (§5.7 enumerates
    * hold/unhold/store/carry/exchange only), and reads never are.
+   *
+   * P2-7 (I-7 review round 2): hold, store and carry READ the
+   * holdings snapshot, so each settles the one-time legacy migration
+   * first, like every other handler that operates on holdings —
+   * otherwise a legacy-only discovery reads as "not found" until the
+   * response's own state() runs the conversion. Unhold is the one
+   * deliberate exception: it is a bare UPDATE whose target state is
+   * the migration's own insert default (held = 0), so it cannot
+   * disagree with the settled snapshot.
    */
   const atStation = (res: import("express").Response, s: RelicHoldingsStore) => currentWorldOf(res, s) === "great-station";
   const refuseOffStation = (res: import("express").Response, s: RelicHoldingsStore, spaceId: string) => {
@@ -127,6 +136,7 @@ export function relicsRoutes(ctx: AppContext): Router {
 
   r.post("/hold", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
+    s.ensureMigrated();
     if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
     const out = s.hold(spaceId, String(req.body?.relicId ?? ""));
     if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
@@ -141,6 +151,7 @@ export function relicsRoutes(ctx: AppContext): Router {
   });
   r.post("/store", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
+    s.ensureMigrated();
     if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
     const out = s.setLocation(spaceId, String(req.body?.relicId ?? ""), "station");
     if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
@@ -148,6 +159,7 @@ export function relicsRoutes(ctx: AppContext): Router {
   });
   r.post("/carry", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
+    s.ensureMigrated();
     if (!atStation(res, s)) { refuseOffStation(res, s, spaceId); return; }
     const out = s.setLocation(spaceId, String(req.body?.relicId ?? ""), "carried");
     if (!out.ok) { res.status(400).json({ error: out.reason, state: s.state(spaceId) }); return; }
@@ -179,6 +191,14 @@ export function relicsRoutes(ctx: AppContext): Router {
   });
   r.post("/release", (req, res) => {
     const spaceId = spaceOf(res); const s = store(res);
+    // P2-7 (I-7 review round 2): settle the one-time legacy migration
+    // BEFORE the gate read and the release itself, like every sibling
+    // handler. Without this, a release that is the first relic
+    // operation on a fresh handle is evaluated against the
+    // pre-migration snapshot, and the response's own trailing state()
+    // runs the conversion afterwards — resurrecting the holding in
+    // the very state that reports it released.
+    s.ensureMigrated();
     const relicId = String(req.body?.relicId ?? "");
     // Gate warning data is the client's two-step concern; the endpoint returns
     // whether this relic is part of the space's still-uncrossed gate set.
