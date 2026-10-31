@@ -114,6 +114,7 @@ import {
   type ProactiveContextSource,
 } from "./api/client.js";
 import { lazyPanel } from "./lib/lazyPanel.js";
+import { createPerfMonitor, browserPerfMonitorDeps, perfOfferDismissed, dismissPerfOffer } from "./lib/perfMonitor.js";
 import { Icon } from "./components/icons/Icon.js";
 
 // Loaded on demand (speed audit S2): rarely opened panels and the whole worlds layer stay out of the entry bundle.
@@ -389,6 +390,24 @@ export default function App() {
 
   const [panel, setPanel] = useState<Panel>(null);
   const [loaded, setLoaded] = useState(false);
+  // LOAD GATE (2026-10-30): the "Mapping your galaxy…" overlay used to lift the
+  // moment the graph DATA arrived (`loaded`) — so the HUD popped up while the
+  // 3D scene was still building and streaming in behind it. The overlay now
+  // lifts only when the galaxy has actually RENDERED (Graph3D's onFirstFrame,
+  // via liftLoadGate), with an absolute fallback timeout so it can never trap
+  // the pilot. `loaded` keeps its old meaning (data arrived; it mounts the
+  // galaxy) — only the overlay's dismissal moved.
+  const [galaxyReady, setGalaxyReady] = useState(false);
+  const loadGatePathRef = useRef<null | "first-frame" | "timeout">(null);
+  const liftLoadGate = useCallback((path: "first-frame" | "timeout") => {
+    if (loadGatePathRef.current) return; // one-way latch, first path wins
+    loadGatePathRef.current = path;
+    logDiagnosticEvent("state", "App.loadGate", { path });
+    setGalaxyReady(true);
+  }, []);
+  // The lifted overlay fades (~0.35 s, see .loading-lifted in index.css) and
+  // then unmounts; loaderGone flips at the end of the fade.
+  const [loaderGone, setLoaderGone] = useState(false);
   // IM-142: ⌘K command palette visibility (global keydown effect below).
   const [showPalette, setShowPalette] = useState(false);
   // IM-141: one-shot Ingest prefill from a PWA share-target landing. `nonce`
@@ -1114,30 +1133,27 @@ export default function App() {
     }
   }, [authChecked]);
 
-  // FPS monitor: after a warm-up, sample the frame rate; if it stays rough and the
-  // pilot isn't already in Performance Mode, OFFER (never force) a downgrade. Auto
-  // Mode already picks a sane tier — this catches devices that still struggle.
+  // Sustained-lag monitor (lib/perfMonitor.ts): if the frame rate stays rough
+  // and the pilot isn't already in Performance Mode, OFFER (never force) a
+  // downgrade. Auto Mode already picks a sane tier — this catches devices that
+  // still struggle. It arms only once boot has settled — the galaxy rendered
+  // (load gate lifted), lite mode got its data, or startup errored — plus a
+  // settle window inside the monitor, so load-in jank (scene build, shader
+  // compiles, asset streaming) is never measured as "lag". Sampling is
+  // visibility-correct (hidden time never counts) and a "Not now" dismissal
+  // silences it for the rest of the session. The previous inline version
+  // armed 8 s after mount regardless of readiness, counted hidden time as
+  // ≈0 fps, and re-armed on every load — why the offer cried wolf.
+  const perfArmReady = lite ? loaded : galaxyReady || initError !== null;
   useEffect(() => {
-    let frames = 0, t0 = performance.now(), lowStreak = 0, raf = 0, stopped = false;
-    const sample = () => {
-      frames++;
-      const now = performance.now();
-      if (now - t0 >= 2000) {
-        const fps = (frames * 1000) / (now - t0);
-        frames = 0;
-        t0 = now;
-        lowStreak = fps < 24 ? lowStreak + 1 : 0;
-        if (lowStreak >= 3 && getGraphics().mode !== "performance") {
-          setPerfSuggest(true);
-          stopped = true;
-          return;
-        }
-      }
-      if (!stopped) raf = requestAnimationFrame(sample);
-    };
-    const warm = window.setTimeout(() => { raf = requestAnimationFrame(sample); }, 8000);
-    return () => { window.clearTimeout(warm); cancelAnimationFrame(raf); };
-  }, []);
+    if (!perfArmReady) return;
+    const monitor = createPerfMonitor(browserPerfMonitorDeps(), {
+      isSuppressed: () => perfOfferDismissed() || getGraphics().mode === "performance",
+      onOffer: () => setPerfSuggest(true),
+    });
+    monitor.arm();
+    return () => monitor.dispose();
+  }, [perfArmReady]);
 
   // Resolve the stored brain (if any) on first load.
   useEffect(() => {
@@ -1160,6 +1176,27 @@ export default function App() {
   // Whether the 3D galaxy is about to mount this render (mirrors the JSX gate below).
   const galaxyWillMount = loaded && !lite;
   console.log("[App] galaxyWillMount:", galaxyWillMount, { loaded, lite });
+
+  // LOAD GATE — absolute fallback + fade-out. If the galaxy becomes mountable
+  // but no first frame has arrived within 12 s (a stalled renderer, a zero-node
+  // brain — onFirstFrame requires nodes — or a scene error the boundary caught),
+  // the overlay lifts anyway via the "timeout" path and the lift is recorded in
+  // diagnostics. 12 s matches the boot watchdog convention in index.html. The
+  // loader can never trap the pilot: first frame, timeout, initError (the
+  // recovery screen replaces it), or the overlay's own lite escape hatch.
+  useEffect(() => {
+    if (!galaxyWillMount || galaxyReady) return;
+    const t = window.setTimeout(() => liftLoadGate("timeout"), 12_000);
+    return () => window.clearTimeout(t);
+  }, [galaxyWillMount, galaxyReady, liftLoadGate]);
+  // The overlay lifts when the galaxy has rendered — or, in lite mode (no
+  // galaxy to wait for), when its data arrived, exactly as before.
+  const loadGateLifted = lite ? loaded : galaxyReady;
+  useEffect(() => {
+    if (!loadGateLifted || loaderGone) return;
+    const t = window.setTimeout(() => setLoaderGone(true), 400);
+    return () => window.clearTimeout(t);
+  }, [loadGateLifted, loaderGone]);
   // Heal any stale "galaxy stuck" flag left by the earlier crash-loop breaker. That
   // safeguard existed only to survive the achievement-DFS freeze (now fixed at the
   // source); with the freeze gone it was misfiring on ordinary lag and hiding a
@@ -2213,6 +2250,7 @@ export default function App() {
         onFirstFrame={() => {
           clearGalaxyStuck();
           setLoaded(true);
+          liftLoadGate("first-frame");
           console.info("[BOOT] Galaxy rendered — loading complete");
         }}
         onFuelBurn={(amount) => {
@@ -2297,8 +2335,8 @@ export default function App() {
       </ErrorBoundary>
       )}
 
-      {!loaded && !initError && (
-        <div className="loading">
+      {!loaderGone && !initError && (
+        <div className={`loading${loadGateLifted ? " loading-lifted" : ""}`}>
           <div className="loader-orb" />
           <p>Mapping your galaxy…</p>
           <button
@@ -2405,7 +2443,14 @@ export default function App() {
           >
             Switch
           </button>
-          <button onClick={() => setPerfSuggest(false)}>Not now</button>
+          <button
+            onClick={() => {
+              dismissPerfOffer();
+              setPerfSuggest(false);
+            }}
+          >
+            Not now
+          </button>
         </div>
       )}
 
