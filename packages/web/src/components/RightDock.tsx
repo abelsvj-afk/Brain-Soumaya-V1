@@ -6,6 +6,7 @@ import { ActionsPanel } from "./ActionsPanel.js";
 import { SectorView } from "./SectorView.js";
 import { DigestPanel } from "./DigestPanel.js";
 import { SoumayaPanel } from "./SoumayaPanel.js";
+import { WordsPanel } from "./WordsPanel.js";
 import { FleetPanel } from "./FleetPanel.js";
 import FleetMissionsPanel from "./FleetMissionsPanel.js";
 import FleetDefensePanel from "./FleetDefensePanel.js";
@@ -46,6 +47,7 @@ export type DockTab =
   | "details"
   | "list"
   | "mind"
+  | "words"
   | "actions"
   | "insights"
   | "soumaya"
@@ -171,6 +173,7 @@ const TABS: { id: DockTab; label: string; name: string }[] = [
   { id: "details", label: "ⓘ", name: "Details" },
   { id: "list", label: "📚", name: "Browse" },
   { id: "mind", label: "🧠", name: "Mind" },
+  { id: "words", label: "🗣️", name: "Your Words" },
   { id: "actions", label: "✅", name: "Agenda" },
   { id: "insights", label: "✨", name: "Insights" },
   { id: "soumaya", label: "🛰️", name: "Soumaya" },
@@ -407,6 +410,7 @@ export function RightDock({
           </div>
         )}
         {tab === "mind" && <MindPanel onFocus={onFocus} onChanged={() => onChanged?.(-1)} />}
+        {tab === "words" && <WordsPanel onClose={onClose} />}
         {tab === "actions" && (
           <ActionsPanel nodes={graph.nodes} onFocus={onFocus} onChanged={onDeleted} />
         )}
