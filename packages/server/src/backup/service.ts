@@ -45,12 +45,14 @@ export type BackupAttemptState =
   | "pruned"
   | "failed";
 /**
- * How an attempt was started (increment B3). Every trigger — the daily
- * schedule, a missed-run catch-up, the manual "back up now", a manual
- * golden — runs the SAME pipeline (runner.ts); the trigger is recorded
- * on the row at creation so status can say what started an attempt.
+ * How an attempt was started (increment B3; 'pre_deploy' added by
+ * B5). Every trigger — the daily schedule, a missed-run catch-up, the
+ * manual "back up now", a manual golden, the deploy gate's fresh
+ * pre-deploy backup (spec §10) — runs the SAME pipeline (runner.ts);
+ * the trigger is recorded on the row at creation so status can say
+ * what started an attempt.
  */
-export type BackupTrigger = "schedule" | "catch_up" | "manual" | "golden";
+export type BackupTrigger = "schedule" | "catch_up" | "manual" | "golden" | "pre_deploy";
 /**
  * Recorded outcome of the off-volume leg when it deliberately did not
  * run (increment B3): the local stages completed and the attempt is a

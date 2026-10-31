@@ -10,11 +10,16 @@
  *      attempt vs latest-good as separate fields, latest-good age,
  *      next scheduled run, off-volume/index health. All times are ISO
  *      instants — the panel renders them in the viewer's local time.
- * POST /api/backup/run { golden?: boolean } → run one attempt through
- *      the shared pipeline NOW: golden ⇒ trigger 'golden' (tier
- *      golden, pinned at creation); otherwise trigger 'manual'. This
- *      is the "back up now" surface the status panel's buttons call,
- *      and the trigger surface B5's deploy gate will use.
+ * POST /api/backup/run { golden?: boolean, preDeploy?: boolean } →
+ *      run one attempt through the shared pipeline NOW: golden ⇒
+ *      trigger 'golden' (tier golden, pinned at creation; golden
+ *      wins if both flags are sent); preDeploy ⇒ trigger
+ *      'pre_deploy' (the deploy gate's fresh pre-deploy backup,
+ *      spec §10, increment B5 — recorded distinctly so status can
+ *      show a deploy was preceded by its own backup); otherwise
+ *      trigger 'manual'. This is the "back up now" surface the
+ *      status panel's buttons call, and the trigger surface B5's
+ *      deploy gate uses (backup/deployGate.ts).
  */
 import { Router } from "express";
 import { z } from "zod";
@@ -24,7 +29,7 @@ import { isOwnerSpace } from "../../auth/owner.js";
 import { BackupRunBusyError, resolveBackupDir, runBackupPipeline } from "../../backup/runner.js";
 import { buildBackupStatus } from "../../backup/status.js";
 
-const RunBody = z.object({ golden: z.boolean().optional() });
+const RunBody = z.object({ golden: z.boolean().optional(), preDeploy: z.boolean().optional() });
 
 export function backupRoutes(ctx: AppContext): Router {
   const r = Router();
@@ -54,14 +59,15 @@ export function backupRoutes(ctx: AppContext): Router {
     if (!requireOwner(res)) return;
     const parsed = RunBody.safeParse(req.body ?? {});
     if (!parsed.success) {
-      res.status(400).json({ error: "Body must be { golden?: boolean }" });
+      res.status(400).json({ error: "Body must be { golden?: boolean, preDeploy?: boolean }" });
       return;
     }
     const golden = parsed.data.golden === true;
+    const preDeploy = parsed.data.preDeploy === true;
     try {
       const result = await runBackupPipeline(ctx.handle, {
         dir: resolveBackupDir(),
-        trigger: golden ? "golden" : "manual",
+        trigger: golden ? "golden" : preDeploy ? "pre_deploy" : "manual",
         appCommit: process.env.GIT_COMMIT,
       });
       res.json({

@@ -35,6 +35,7 @@ const TRIGGER_LABEL: Record<BackupAttemptSummary["trigger"], string> = {
   catch_up: "catch-up — a missed run",
   manual: "manual — Back up now",
   golden: "golden — manual, pinned forever",
+  pre_deploy: "pre-deploy — the deploy gate's fresh backup",
 };
 
 /** What an attempt's tier MEANS, in words — the bare tier name alone doesn't say it. */
