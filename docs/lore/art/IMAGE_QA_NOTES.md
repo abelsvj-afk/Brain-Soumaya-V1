@@ -853,3 +853,30 @@ Method: sheet bodies verbatim + the Global style line, with the sheet header's r
 §134 A Curl of Bright Metal (134-a-curl-of-bright-metal-v1..v4.png): exactly the sheet — one hand only, a thin bright brass curl, no letters or marks in the metal in any variant. v1's curl is the most calligraphic (a neat spiral flourish — reads as a shaving's natural curl, not a letter); v2's loose ribbon is the plainest.
 
 Sheet 8 status: all 40 originals generated and QA'd above; uploaded to docs/lore/art/ on main (see commit list in the delivery note). No rule violations this sheet — the header rules were carried inside every prompt (the §118 lesson applied from the start). Open calls for Claude: the §125 hulls-vs-parts fork; §126 v1/v2's six rib-frames vs §125's finished parts; §133 v1's distant bird speck.
+
+## Sheet 9 — The Long Morning (§§135–144)
+
+Sheet rules (from PROMPT_SHEET_9_THE_LONG_MORNING.md): same style, identity cards and never-list as Sheets 2–8; four variants each; NO faces; NO figure; NO readable text (leaves carry ruled lines only); nothing says whether the Uncounted is Eternity; warm pearl-gold light; NO horizon line. Method as Sheet 8: header rules carried inside every prompt. §144 is the hand-only exception; §137's "people" are columns of light, not bodies. Palette note: this sheet's own direction (warm pearl-gold, horizonless) replaces the usual deep indigo-black ground in the style line.
+
+§135 A Ring of Leaves, Unbroken (135-a-ring-of-leaves-unbroken-v1..v4.png): clean set — tall pale leaves with ruled lines only (no letters anywhere) standing in a ring on a horizonless gold plain, warm pearl-gold throughout. v2 and v3 make "the lines run on from leaf to leaf" literal — a fine line threads the whole ring; v3's circle is the most complete; v1's leaves are the tallest and most blade-like.
+
+§136 A Flake of the First Light (136-a-flake-of-the-first-light-v1..v4.png): clean set — one small bright flake of light on a plain round stone stand in all four, warm pearl-gold, horizonless. v3 is the most minimal; v2's flake stands upright like a shard; v4's has a gentle crescent curve.
+
+§137 The People Who Are Light (137-the-people-who-are-light-v1..v4.png): the no-figure guard held — in all four the "people" are pure columns of light: no bodies, heads, faces or limbs; they lean slightly and vary in height. v1 and v4 keep the columns soft and smoky (closest to the sheet's "soft"); v2 renders them as faceted crystal bars and v3 as smooth matte tubes — more mineral than soft. v1/v4 also let dark indigo creep in at the edges, against the sheet's all-warm direction. Sizes: v1/v4 1920×1280, v2/v3 portrait 1280×1920.
+
+§138 A Home of Four Posts (138-a-home-of-four-posts-v1..v4.png): clean set — exactly the sheet in all four: four plain posts, roof beams, a lantern lit beneath (as this sheet specifies), and the ground visibly swept — raked arcs around the posts carry the "swept threshold" in every variant; v2 and v4 clearest. No people, no text, no horizon.
+
+§139 The First Stroke (139-the-first-stroke-v1..v4.png): clean set — a single straight groove crossing the plain out of sight both ways, warm along its length, in all four. Depth note: v1 and v3 give the groove real depth (v1 nearly a trench); v2 and v4 are shallower, closer to a drawn stroke. Claude's call on how deep a "stroke" should cut.
+
+§140 The Basin the Record Was Written From (140-the-basin-the-record-was-written-from-v1..v4.png): clean set — a perfectly still shallow basin of liquid light in all four, glass-calm luminous surfaces, no ripples. Scale note: all four read large (landscape pools rather than a vessel); the sheet gives no size, so no violation — v1 is the most contained basin, v3/v4 set theirs on floating rock shelves.
+
+§141 A Line That Stops (141-a-line-that-stops-v1..v4.png): flagged set — TONAL MISS against the sheet. The curve-of-light idea lands (v2 best: the line ends in a spark-burst with a fainter wavering line beyond; v3's arc dissolves into a broad river of light; v1's line breaks rather than ends; v4's curve never clearly stops, merging into general glow), BUT all four backgrounds went dark indigo-charcoal murk instead of the sheet's defining warm pearl-gold field (§§135–140 all sit in gold). The lines are gold; the world is not. Claude: accept for the contrast, or redo in the gold field.
+
+§142 A Leaf Not Yet Written (142-a-leaf-not-yet-written-v1..v4.png): clean set — one great pale leaf, ruled lines only, utterly blank, centered in pearl-gold light in all four; no writing anywhere. v2 and v4 lie flattest (table-like, matching "table-sized"); v1 hangs more like a portrait of a single leaf.
+
+§143 A Voice Not Quite Spoken (143-a-voice-not-quite-spoken-v1..v3.png — THREE variants only: one generation call failed and was not retried, per standing rule): abstract bowed fields of light; no faces, mouths or text anywhere. v3 is the truest — an all-gold field bowed gently, like a held breath. v1 and v2 let dark indigo in at the edges again (milder than §141); v2's light-sheet bows like a dipping veil; v1's diagonal sweep shows the bow least.
+
+§144 A Measure With No Marks (144-a-measure-with-no-marks-v1..v4.png): clean closer — the rule is utterly blank in all four (no numbers, ticks or letters), held in one traveller's hand only. v4 holds it level and light; v1 is portrait.
+
+### Sheet 9 status (2026-10-31)
+All 10 sets generated and QA'd: 39 originals (§143 has 3 — one call failed, not retried). Open calls for Claude: §141's dark-field tonal miss (accept or redo in the gold); §137 v2/v3's mineral columns vs the sheet's "soft"; §139's groove depth in v1/v3; §140's basin scale. Everything else clean; no rule violations on the sheet (no faces, no figures beyond the §144 hand, no readable text anywhere).
