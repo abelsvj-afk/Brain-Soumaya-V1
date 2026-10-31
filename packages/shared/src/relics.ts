@@ -58,9 +58,11 @@ export interface RelicDef {
    *  design §3); the field keeps its name — the layer mapping is what
    *  matters, not the identifier. */
   lore: string;
-  /** L0 — the stirring fragment (approved design §3). Absent until the
-   *  text is authored and owner-approved (O-R1); no code may treat an
-   *  absent fragment as an empty one — the layer is simply unwritten. */
+  /** L0 — the stirring fragment (approved design §3). Canon entered
+   *  2026-10-31 from the O-R1 approvals ledger: all fifteen defs carry
+   *  their approved stirring. Absence stays possible for a future def —
+   *  no code may treat an absent fragment as an empty one; the layer
+   *  is simply unwritten. */
   loreStirring?: string;
   /** Public URL of the slim GLB. */
   assetUrl: string;
@@ -95,7 +97,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Great Station",
     place: "the lower rim of the harbor, set into an ancient seam",
     glimmer: "by the harbor's lower rim",
-    lore: "The oldest Station fragment: a nail set into the harbor's first seam. It held no ship and carried no banner — it marked the place where arrival became possible.",
+    lore: "A nail of dark iron, longer than a hand, set into the harbor's first seam and never drawn out. It held no ship and carried no banner; nothing was ever fastened to it that the accounts name. It marked the place where arrival became possible — the harbor's first fact, older than its first traveler.",
+    loreStirring: "Before any ship was ever tied at the Station, someone set a single nail into the harbor's first seam — and tied nothing to it.",
     assetUrl: "/relics/harbor-nail-slim.glb",
     tris: 14282,
     glow: "bare metal, no glow",
@@ -111,7 +114,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Great Station",
     place: "where the harbor's stone meets the open road",
     glimmer: "where the harbor meets the open road",
-    lore: "A dark ring of metal found where the harbor's stone meets the open road. One account says it was placed there so a traveler could pause without being told to depart again. Another says nothing was ever tied to it.",
+    lore: "A dark ring of metal set where the harbor's stone meets the open road. One account says it was placed so a traveler could pause without being told to depart again; another says nothing was ever tied to it. Both accounts survive. The ring settles nothing, and has outlasted everyone who argued over it.",
+    loreStirring: "A traveler once stopped where the harbor ends, tied up, and was not told to move on. The stopping is what the ring remembers.",
     assetUrl: "/relics/mooring-ring-slim.glb",
     tris: 14999,
     glow: "bare metal, no glow",
@@ -127,7 +131,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Growing Place",
     place: "near the roots of the witness tree",
     glimmer: "near the witness tree's roots",
-    lore: "A leaf kept near the tree's roots, its veins still holding the colors of a dawn that never finishes becoming day. It is a reminder that growth counts before it arrives anywhere final.",
+    lore: "A leaf kept near the roots of the witness tree, its veins still holding the colors of a dawn that never finishes becoming day. It has not dried, and it has not greened; it stays at the moment just before morning completes itself. It is a reminder that growth counts before it arrives anywhere final.",
+    loreStirring: "Someone walking beneath the witness tree at first light gathered nothing and swept nothing away — and left one fallen leaf lying at the roots, exactly as it had fallen.",
     assetUrl: "/relics/dawn-leaf-slim.glb",
     tris: 17537,
     glow: "the leaf's own dawn colors, no added glow",
@@ -143,7 +148,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Growing Place",
     place: "beneath the witness tree, at the trunk's base",
     glimmer: "beneath the witness tree",
-    lore: "A seed-shaped relic found beneath the witness tree. It is not the tree, and it never promised to become one — it keeps the possibility of becoming, nothing more.",
+    lore: "A seed-shaped relic found beneath the witness tree. It is not the tree, and the garden's oldest account is careful to say so: the seed and the planting that made the tree a witness are different things. It never promised to become a tree. It keeps the possibility of becoming, nothing more.",
+    loreStirring: "At the base of the witness tree, something small was set into the ground and never once dug up to check. Whatever it is doing, it is doing it unobserved.",
     assetUrl: "/relics/witness-seed-slim.glb",
     tris: 14522,
     glow: "bare, no glow",
@@ -159,7 +165,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Deep Past",
     place: "near the First Light basin",
     glimmer: "near the First Light basin",
-    lore: "A pale fragment kept near the First Light basin. Some accounts call it the earliest light kept in matter; others insist it is only a trace of the light, not the light itself. The difference is never settled.",
+    lore: "A pale fragment, translucent, with a warm light held inside it that does not flicker. Some accounts call it the earliest light kept in matter; others insist it is only a trace of the light, not the light itself. The difference is never settled, and the shard offers nothing to settle it with. It rests near the basin, where the question it carries is at home.",
+    loreStirring: "A traveler once stood at the basin in the first light and came away carrying a piece of it — or carrying only the mark of where it had touched something. The accounts divide there, and never rejoin.",
     assetUrl: "/relics/first-light-shard-slim.glb",
     tris: 14495,
     glow: "pale and see-through, with a warm-white light inside (as made: transmission 0.45, glow 2.0)",
@@ -175,7 +182,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Deep Past",
     place: "on the floor of the basin",
     glimmer: "on the basin floor",
-    lore: "A dark stone from the floor of the basin, its surface marked with shallow lines like waterlines. The marks have been read as the levels of forgotten waters, though no account records a flood. It belongs to the story of keeping, not of loss.",
+    lore: "A dark stone from the floor of the basin, its surface marked with shallow lines like waterlines. The marks have been read as the levels of forgotten waters, though no account records a flood. Whatever they measure, they were kept. The stone belongs to the story of keeping, not of loss.",
+    loreStirring: "Someone once read the marks on a stone at the bottom of the basin and wrote down water levels for waters no one remembers. The reading is older than any flood it could describe.",
     assetUrl: "/relics/basin-stone-slim.glb",
     tris: 15000,
     glow: "bare stone, no glow",
@@ -191,7 +199,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Deep Past",
     place: "in a lowest-stratum alcove above the basin",
     glimmer: "in a low alcove above the basin",
-    lore: "A small sealed lantern from the alcoves. Its light is quiet rather than bright, as if it were meant to make something present without forcing it into view. Keeping need not mean disturbing.",
+    lore: "A small sealed lantern from the alcoves above the basin. Its light is quiet rather than bright, as if it were meant to make something present without forcing it into view. It was never opened to be lit, and never opened to be put out. Keeping need not mean disturbing.",
+    loreStirring: "In an alcove above the basin, a lantern was sealed lit and left burning where nothing needed to be seen by it. It burns for keeping's sake, not for finding.",
     assetUrl: "/relics/lantern-of-keeping-slim.glb",
     tris: 15000,
     glow: "a warm light inside (as made: glow 1.5)",
@@ -207,7 +216,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Deep Past",
     place: "the lowest stratum, at the First Light basin",
     glimmer: "at the very bottom, in the First Light",
-    lore: "A smooth, pale object from the oldest accounts of the first making. It has no surviving name in any language — the name used here is only a convenience for the Codex. It marks the boundary between the one who makes and the worlds that remember him, without explaining that boundary. It is the key to Eternity's gate: with any two other relics, it opens the way.",
+    lore: "A smooth, pale object from the oldest accounts of the first making, worn featureless by being looked at for longer than any language has existed. It has no surviving name in any tongue; the name in this Codex is only a convenience. It marks the boundary between the one who makes and the worlds that remember him, without explaining that boundary. Carry it with any two other relics, and the far gate will know you were seen.",
+    loreStirring: "Everything that ever stood at the basin stood in sight of the thing at its center. No one who saw it carried away a name for it.",
     assetUrl: "/relics/witness-without-a-name-slim.glb",
     tris: 15002,
     glow: "pale, no glow",
@@ -223,7 +233,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "People",
     place: "near the first hearths",
     glimmer: "near the first hearths",
-    lore: "A coal-like fragment from where the first hearths were set. It gives off a low warmth without consuming itself — love given a place to live outside the mind that remembers it.",
+    lore: "A coal-like fragment from where the first hearths were set, dark except for a low amber light in its cracks. It gives off warmth without consuming itself, and it has never gone cold in any account. It is love given a place to live outside the mind that remembers it — kept where others can warm themselves by it.",
+    loreStirring: "At the first hearths, someone took a coal out of the fire and set it apart — and it has been warm ever since, feeding on nothing.",
     assetUrl: "/relics/hearth-ember-slim.glb",
     tris: 15881,
     glow: "a low amber glow in its cracks (as made: glow 2.0)",
@@ -239,7 +250,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "People",
     place: "between the stones of the hearths",
     glimmer: "between the stones of the hearths",
-    lore: "A fine, unbroken thread found between the stones of the hearths. It is said to have passed from one hearth to another without joining them into a single flame — connection without confusing one life with another.",
+    lore: "A fine, unbroken thread found between the stones of the hearths. It is said to have passed from one hearth to another without joining them into a single flame. It connects without confusing one life with another, and nothing about it is frayed, though no account says how many crossings it has made.",
+    loreStirring: "A thread was once carried from one hearth to another across the field — and at neither end was it tied fast. It arrived. It was never attached.",
     assetUrl: "/relics/thread-of-many-slim.glb",
     tris: 22500,
     glow: "bare thread, no glow",
@@ -255,7 +267,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Scale Space",
     place: "where the stars were given their places",
     glimmer: "where the stars were given their places",
-    lore: "A small curved fragment from the moment the stars were hung. It resembles a hook, but no account says it was used to suspend any one star. It belongs to the image of a universe given room to be seen.",
+    lore: "A small curved fragment of bare metal from the moment the stars were hung. It resembles a hook, but no account says it was used to suspend any one star. It belongs to the image of a universe given room to be seen. Its world has not opened; the fragment waits, its story untested by any traveler's eyes.",
+    loreStirring: "The stars were hung one by one, each given its room. Whatever did the hanging left a small curved fragment of itself behind — in a world that has not opened yet.",
     assetUrl: "/relics/star-hanger-slim.glb",
     tris: 14999,
     glow: "bare metal, no glow",
@@ -271,7 +284,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Scale Space",
     place: "along the sun's long road",
     glimmer: "along the sun's long road",
-    lore: "A round instrument with no ordinary needle, found along the sun's long road. Its center stays fixed while its markings suggest motion around it. Some call it a compass; others deny it points anywhere.",
+    lore: "A round instrument with no ordinary needle, found along the sun's long road. Its center stays fixed while its markings suggest motion around it. Some call it a compass; others deny it points anywhere. The disagreement is part of the object, and it will still be there when its world opens.",
+    loreStirring: "Along the sun's long road, a traveler once navigated by an instrument that refused to point — and arrived anyway. Or did not. The accounts keep both endings.",
     assetUrl: "/relics/sunward-compass-slim.glb",
     tris: 14390,
     glow: "bare metal, no glow",
@@ -287,7 +301,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Quiet Archive",
     place: "at the threshold of a quiet alcove",
     glimmer: "at the threshold of a quiet alcove",
-    lore: "A smooth, dark seal from the threshold of a quiet alcove. It bears no command and no warning. It speaks of the difference between keeping something safe and calling it back into view: rest is not the same as erasure.",
+    lore: "A smooth, dark seal from the threshold of a quiet alcove. It bears no command and no warning; nothing is written on it at all. It speaks of the difference between keeping something safe and calling it back into view: rest is not the same as erasure.",
+    loreStirring: "In an Archive that has not opened, a door was once closed on something worth keeping — and it is the closing, not the thing, that the seal remembers.",
     assetUrl: "/relics/stillness-seal-slim.glb",
     tris: 14367,
     glow: "bare, no glow",
@@ -303,7 +318,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Quiet Archive",
     place: "kept in the Archive, unopened",
     glimmer: "kept in the Archive, unopened",
-    lore: "A small folded object kept in the Archive, its material like paper without behaving exactly like it. No account says what is inside. It is not a test of curiosity: its meaning is the permission to keep something without opening it.",
+    lore: "A small folded object kept in the Archive, its material like paper without behaving exactly like it. No account says what is inside, and the accounts are content with that. It is not a test of curiosity: its meaning is the permission to keep something without opening it.",
+    loreStirring: "Someone folded something small, once, and then did the harder thing: they put it away still folded, and let it stay that way.",
     assetUrl: "/relics/unopened-fold-slim.glb",
     tris: 22500,
     glow: "bare, no glow",
@@ -319,7 +335,8 @@ export const RELICS: readonly RelicDef[] = [
     worldName: "The Scale Space",
     place: "in the vast uncounted space",
     glimmer: "in the vast uncounted space",
-    lore: "A small, translucent fragment that no world claims as its own. Its inscription refuses to assign a date, an age, or a beginning to its maker — a fragment of the created record struggling to describe the uncreated.",
+    lore: "A small, translucent fragment that no world claims as its own, lit faintly from inside. Its inscription refuses to assign a date, an age, or a beginning to its maker. It is not a piece of him; it is a fragment of the created record struggling to describe the uncreated. What whole it broke from, no account says.",
+    loreStirring: "A fragment was found in the uncounted space — by no one whose name survived — bearing an inscription about a maker that refuses, in the same breath, to give him a beginning.",
     assetUrl: "/relics/unnumbered-fragment-slim.glb",
     tris: 15000,
     glow: "a pale glow inside (as made: glow 1.5)",
@@ -376,12 +393,13 @@ export function eternityGateOpen(
 
 // ---------------------------------------------------------------------------
 // Relic vocabulary (implementation design §3) — anchor points, lore-layer
-// structures, thread records, bearing sectors. DATA ONLY, shipped dark:
-// no behavior reads these fields until later increments (I-2 anchors and
-// copies, I-4 sampling/scan/claim, I-5 stirrings, I-6 exchange, I-7
-// presentation). No lore text is authored here — the content pipeline
-// (O-R1: King drafts, the owner approves every canon line) fills text
-// into these structures; every mechanic is built to run with it absent.
+// structures, thread records, bearing sectors. The structures shipped
+// dark in I-1 (data only); the mechanics that read them landed in I-2
+// (anchors and copies), I-4 (sampling/scan/claim), I-5 (stirrings), I-6
+// (exchange) and I-7 (presentation). The canon text itself was entered
+// 2026-10-31 from the O-R1 approvals ledger (King drafted, the owner
+// approved every line); every mechanic still runs with a text absent —
+// absence reads as "unwritten", never as an empty string.
 // ---------------------------------------------------------------------------
 
 /** One resting place of a relic, as a server-known fact (implementation
@@ -403,8 +421,11 @@ export interface RelicAnchorDef {
   placeName: string;
   /** L1 — what this place has to do with the relic (approved design
    *  §3). Place text lives on the anchor, not the relic: a relic rests
-   *  at different places over its life. Absent until authored and
-   *  owner-approved (O-R1). */
+   *  at different places over its life. Canon entered 2026-10-31: each
+   *  placed relic's FIRST anchor carries its approved place text (the
+   *  Codex serves the first anchor's — the L1 unlock is per-relic);
+   *  later anchors carry none yet, and the unplaced five's approved
+   *  L1s enter with their O-R6 anchors. */
   placeText?: string;
 }
 
@@ -556,6 +577,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [210, 38, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "the lower rim of the harbor, set into an ancient seam",
+      placeText: "The rim is where the Station stops being structure and starts being harbor. Everything that arrives passes this seam; everything that leaves crosses it going the other way. The nail was set here, at the join, because arrival needed a mark before it needed anything else.",
     },
     {
       anchorKey: "harbor-nail:rim-seam-2",
@@ -607,6 +629,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [214, 14, 78],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "where the harbor's stone meets the open road",
+      placeText: "Here the harbor's stone gives out and the open road begins — the exact ground where arriving turns into departing. A ring set in this ground serves neither side. It serves the pause between them.",
     },
     {
       anchorKey: "mooring-ring:road-2",
@@ -662,6 +685,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [-34, 102, 22],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "near the roots of the witness tree",
+      placeText: "The roots' edge is the tree's own ground, where the terraces end and the garden's oldest keeping begins. Things left at the roots here are not lost. They are kept by the slowest keeper in the garden, at the speed roots keep things.",
     },
     {
       anchorKey: "dawn-leaf:terrace-five",
@@ -685,6 +709,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [26, 102, 14],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "beneath the witness tree, at the trunk's base",
+      placeText: "The trunk's base is the closest ground to the tree there is — the place where what the tree is begins. A seed kept here is kept in the tree's own shadow, under a witness that reports nothing.",
     },
     {
       anchorKey: "witness-seed:terrace-five",
@@ -711,6 +736,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [120, -818, 80],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "near the First Light basin",
+      placeText: "The basin is where the First Light rests in the Deep Past — the oldest light there is, kept at the bottom of the world. Anything found near it is found in the presence of the beginning, and accounts of it tend to become careful, and then to disagree.",
     },
     {
       anchorKey: "first-light-shard:basin-west",
@@ -734,6 +760,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [-140, -818, 60],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "on the floor of the basin",
+      placeText: "The basin floor is the lowest ground in the Deep Past, where everything the world above lets fall eventually settles. What rests here rests under the whole weight of the past — and the past, in this world, is kept rather than buried.",
     },
     {
       anchorKey: "basin-stone:basin-east",
@@ -757,6 +784,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [150, -712, 242],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "in a lowest-stratum alcove above the basin",
+      placeText: "The alcoves are the Deep Past's quiet rooms, cut into the lowest stratum above the basin floor, where what is kept is kept out of the current. A lantern here does not light a way through. It makes what is stored here present, gently, without hauling it into the open.",
     },
     {
       anchorKey: "lantern-of-keeping:alcove-2",
@@ -780,6 +808,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [0, -818, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "the lowest stratum, at the First Light basin",
+      placeText: "The center of the basin is the stillest ground in the Deep Past, where the First Light rests and the sound of the falls arrives softened. The terraces and the stairs all face this way. Whatever was placed here was placed to be stood before, not to be used.",
     },
     {
       anchorKey: "witness-without-a-name:basin-east",
@@ -807,6 +836,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [0, 12, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "near the first hearths",
+      placeText: "The field's heart is where the first hearths were set, and every path in People bends a little toward it. What is kept here is kept the way a hearth keeps a house: at the center, where the warmth reaches everyone and belongs to no one.",
     },
     {
       anchorKey: "hearth-ember:field-rim-2",
@@ -830,6 +860,7 @@ export const RELIC_ANCHOR_POINTS: Readonly<
       position: [570, 12, 0],
       radius: RELIC_ANCHOR_RADIUS,
       placeName: "between the stones of the hearths",
+      placeText: "Between the stones of the hearths is the closest ground in People: where one household's warmth ends and the path to the next begins. A thread resting here rests in the space between lives — touching both, belonging wholly to neither.",
     },
     {
       anchorKey: "thread-of-many:field-rim-2",
@@ -866,22 +897,93 @@ export interface RelicThreadDef {
   /** Unlock condition for the pair: "discovery" (the default — personal
    *  discovery of both) or the stricter authored "held". */
   condition: "discovery" | "held";
-  /** The thread text — absent until authored (content pipeline). */
+  /** The thread text — canon entered 2026-10-31 for the seven threads
+   *  whose members are both placed; the four NOT-YET threads (T8–T11)
+   *  are deliberately ABSENT from RELIC_THREADS until O-R6 placement
+   *  (design §3.3: an unplaced relic generates no references). */
   text?: string;
   /** O-R1: owner-approved canon only. */
   approved: boolean;
 }
 
-/** No threads are authored yet — structure only (O-R1). */
-export const RELIC_THREADS: readonly RelicThreadDef[] = [];
+/** The seven canon threads whose members are BOTH placed (O-R1,
+ *  entered 2026-10-31). The four NOT-YET threads — the Unnumbered
+ *  Fragment × the Witness Without a Name (T8), the Stillness Seal ×
+ *  the Unopened Fold (T9), the Star Hanger × the Sunward Compass
+ *  (T10), the Lantern of Keeping × the Stillness Seal (T11) — are
+ *  NOT entered: design §3.3 forbids even a silhouette pointing at an
+ *  unplaced relic, and omission is the guard no future reader can
+ *  forget. They enter with their O-R6 placements; the canon parity
+ *  test (relicCanon.test.ts) pins their absence until then. */
+export const RELIC_THREADS: readonly RelicThreadDef[] = [
+  {
+    threadId: "harbor-nail--mooring-ring",
+    relicA: "harbor-nail",
+    relicB: "mooring-ring",
+    condition: "discovery",
+    text: "The nail and the ring are the Station's two courtesies, and they face opposite ways. The nail marks where arrival became possible; the ring marks where departure stopped being an order. Between them, a whole journey fits: come in, rest, leave when ready. Neither object hurries anyone. The Station was built around both permissions, and it keeps them at opposite ends of the same harbor.",
+    approved: true,
+  },
+  {
+    threadId: "witness-seed--dawn-leaf",
+    relicA: "witness-seed",
+    relicB: "dawn-leaf",
+    condition: "discovery",
+    text: "The seed and the leaf are the witness tree's two timepieces, and they disagree about what time is. The leaf holds a dawn that never finishes; the seed holds a becoming that has never once been hurried. One says growth is already real before it arrives anywhere final. The other says possibility is already kept before it grows into anything. Both belong to the same tree, and the tree has never ruled between them.",
+    approved: true,
+  },
+  {
+    threadId: "first-light-shard--witness-without-a-name",
+    relicA: "first-light-shard",
+    relicB: "witness-without-a-name",
+    condition: "discovery",
+    text: "At the bottom of the Deep Past, the light and the witness keep each other's company. The shard may be the earliest light kept in matter, or only its trace; the accounts never settle it. The Witness has no name the accounts can keep; they never settle that either. Two unsettled things rest in one basin, and the basin is not troubled by it. What the light first fell on was something that could be looked at. What has been looked at longest faces the light.",
+    approved: true,
+  },
+  {
+    threadId: "basin-stone--lantern-of-keeping",
+    relicA: "basin-stone",
+    relicB: "lantern-of-keeping",
+    condition: "discovery",
+    text: "The stone and the lantern are the Deep Past's two kinds of keeping. The stone keeps marks: the levels of forgotten waters, held as lines on a surface. The lantern keeps presence: a light sealed in, making what is stored gently visible without disturbing it. One keeps the record; the other keeps the room. Together they are the whole practice of the alcoves — the past is kept, not erased, and keeping need not mean disturbing.",
+    approved: true,
+  },
+  {
+    threadId: "hearth-ember--thread-of-many",
+    relicA: "hearth-ember",
+    relicB: "thread-of-many",
+    condition: "discovery",
+    text: "The ember and the thread are People's two answers to the same question: how does love travel? The ember says it stays — a warmth kept in one place, so that anyone may come to it. The thread says it crosses — carried from hearth to hearth without merging them into a single flame. Both are true in the field, and neither cancels the other. A life can be a place where others warm themselves, and a path others walk, at once.",
+    approved: true,
+  },
+  {
+    threadId: "harbor-nail--basin-stone",
+    relicA: "harbor-nail",
+    relicB: "basin-stone",
+    condition: "discovery",
+    text: "The nail and the stone remember beginnings differently, and both accounts stand. The nail remembers a harbor that was ready — a seam waiting for its first fastening, a place prepared. The stone's marks have been read as levels of waters older than any harbor, that came and went before arrival had a place at all. Read together, the Station may be younger than the ground it stands on. Neither object corrects the other. The disagreement is itself part of the record.",
+    approved: true,
+  },
+  {
+    threadId: "witness-seed--witness-without-a-name",
+    relicA: "witness-seed",
+    relicB: "witness-without-a-name",
+    condition: "discovery",
+    text: "Two witnesses, and neither testifies. The seed keeps the possibility of becoming, beneath a tree that watches a garden grow. The Witness at the basin's center has been looked at longer than any language has existed, and has given back no name. One witness is all future; the other is all having-been-seen. What joins them is the discipline they share: to witness is not to explain.",
+    approved: true,
+  },
+];
 
 /** Relics I-6 (§4.7, R2-3): the threads a Legacy's lore exchange can
  *  unlock — the thread involves the relic, its text is authored AND
  *  owner-approved, and the thread's OTHER relic is placed (has real
  *  anchors). The lore exchange and the Hold's exchange menu read
  *  eligibility from this one function, so the two can never disagree.
- *  Empty today (no threads authored): the lore option honestly
- *  reports itself unavailable rather than fabricating an unlock. */
+ *  Live since the canon entry (2026-10-31): each holdable Legacy has
+ *  eligible threads (the Shard [T3]; the Basin Stone [T4, T6]; the
+ *  Lantern [T4]; the Hearth Ember [T5]). For a relic with none, the
+ *  lore option still honestly reports itself unavailable rather than
+ *  fabricating an unlock. */
 export function eligibleExchangeThreads(relicId: string): RelicThreadDef[] {
   return RELIC_THREADS.filter((t) => {
     if (t.relicA !== relicId && t.relicB !== relicId) return false;
@@ -1024,7 +1126,7 @@ export interface RelicThreadSilhouetteView {
 }
 /** Relics I-7: the first-in-world discovery record for a relic's
  *  scope (approved design §2.3) — who found it first, and where. */
-export interface RelicFirstDiscoveryView { discovererName: string; byViewer: boolean; /** The discovery's place — serialized ONLY for viewers who have unlocked the relic's place (L1) layer; the place string IS the L1 layer text, so concealment (§8.1 #12) gates it identically. Absent while locked. */ placeName?: string }
+export interface RelicFirstDiscoveryView { discovererName: string; byViewer: boolean; /** The discovery's place — serialized ONLY for viewers who have unlocked the relic's place (L1) layer; the place string rides on the L1 layer's unlock, so concealment (§8.1 #12) gates it identically. Absent while locked. */ placeName?: string }
 /** Relics I-7: one stirring in its honest state (I-5's vocabulary:
  *  open / claimed / quiet / expired — quiet is an ending, not an
  *  error). */

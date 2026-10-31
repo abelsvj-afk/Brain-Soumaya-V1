@@ -259,33 +259,69 @@ describe("the new Legacies — exchange eligibility is real, and every option st
     ["lantern-of-keeping", "deep-past"],
     ["hearth-ember", "people"],
   ];
+  // Canon entry (2026-10-31) behavior change, signed off here: with
+  // the seven placed threads entered, each holdable Legacy's lore
+  // exchange is LIVE with exactly its canon threads (the plan's §(d)
+  // table) — this loop is the behavior-change sign-off, not churn.
+  const LORE_THREADS: Record<string, string[]> = {
+    "first-light-shard": ["first-light-shard--witness-without-a-name"],
+    "basin-stone": ["basin-stone--lantern-of-keeping", "harbor-nail--basin-stone"],
+    "lantern-of-keeping": ["basin-stone--lantern-of-keeping"],
+    "hearth-ember": ["hearth-ember--thread-of-many"],
+  };
   for (const [relicId, world] of CLAIMABLE) {
-    it(`${relicId}: the read model offers the exchange — eligible, lore honestly empty, Credits not offered`, () => {
+    it(`${relicId}: the read model offers the exchange — eligible, lore live with its canon threads, Credits not offered`, () => {
       expect(store().claimFind("s1", relicId, world).ok).toBe(true);
       const view = store().state("s1").holdings.find((h) => h.relicId === relicId)!;
       expect(view.tierClass).toBe("legacy");
-      expect(view.exchange).toEqual({ eligible: true, loreThreadIds: [], creditsOffered: false, creditsValue: null });
+      expect(view.exchange).toEqual({ eligible: true, loreThreadIds: LORE_THREADS[relicId], creditsOffered: false, creditsValue: null });
     });
   }
 
-  it("a new Legacy exchanges end-to-end for a chart: holding ends, copy returns by its own history, stirring is issued", () => {
+  it("a new Legacy exchanges end-to-end: lore first (canon live — T4+T6 granted, T11 NOT), then a chart on a fresh holding", () => {
     expect(store().claimFind("s1", "basin-stone", "deep-past").ok).toBe(true);
+    // LORE — the canon entry made this real (R2-3): the Basin Stone's
+    // two entered threads unlock from BOTH members' Codex entries.
     const lore = xchg().exchange("s1", { relicId: "basin-stone", option: "lore", attemptKey: "tx-lore" }, "great-station");
-    expect(lore).toEqual({ ok: false, reason: expect.any(String), kind: "lore-unavailable" });
+    expect(lore.ok).toBe(true);
+    if (lore.ok) expect([...lore.unlockedThreadIds].sort()).toEqual(["basin-stone--lantern-of-keeping", "harbor-nail--basin-stone"]);
+    const l3 = handle.sqlite.prepare(
+      `SELECT relic_id, thread_id, source FROM relic_codex_layers WHERE space_id = 's1' AND layer = 'L3' ORDER BY thread_id ASC, relic_id ASC`,
+    ).all() as { relic_id: string; thread_id: string; source: string }[];
+    expect(l3).toEqual([
+      { relic_id: "basin-stone", thread_id: "basin-stone--lantern-of-keeping", source: "exchange" },
+      { relic_id: "lantern-of-keeping", thread_id: "basin-stone--lantern-of-keeping", source: "exchange" },
+      { relic_id: "basin-stone", thread_id: "harbor-nail--basin-stone", source: "exchange" },
+      { relic_id: "harbor-nail", thread_id: "harbor-nail--basin-stone", source: "exchange" },
+    ]);
+    // §3.3's bound, proven against real canon data: T11 (the Lantern ×
+    // the unplaced Stillness Seal) is NOT granted — no L3 row names
+    // the Seal, because the thread was never entered.
+    expect(l3.some((r) => r.relic_id === "stillness-seal")).toBe(false);
+    expect(store().foundIds("s1")).not.toContain("basin-stone");
+    // CREDITS — still honestly not offered; proven on a fresh holding,
+    // and the refusal spends nothing.
+    expect(store().claimFind("s1", "basin-stone", "deep-past").ok).toBe(true);
     const credits = xchg().exchange("s1", { relicId: "basin-stone", option: "credits", attemptKey: "tx-credits" }, "great-station");
     expect(credits).toEqual({ ok: false, reason: expect.any(String), kind: "credits-not-offered" });
-    // The refusals spent nothing: the Legacy is still held.
     expect(store().foundIds("s1")).toContain("basin-stone");
+    // CHART — on that fresh holding: holding ends, the copy returns by
+    // its own history, a stirring is issued.
     const out = xchg().exchange("s1", { relicId: "basin-stone", option: "chart", chartTargetRelicId: "dawn-leaf", attemptKey: "tx-chart" }, "great-station");
     expect(out.ok).toBe(true);
     if (out.ok) {
       expect(out.returnState).toBe("placed");
-      expect(out.returnAnchor).toBe(RELIC_ANCHOR_POINTS["basin-stone"]![1]!.anchorKey);
+      // The copy's own history: genesis at anchor[0], the lore
+      // exchange's return at anchor[1] — a copy never rests twice at
+      // one anchor, so the chart return lands at anchor[2].
+      expect(out.returnAnchor).toBe(RELIC_ANCHOR_POINTS["basin-stone"]![2]!.anchorKey);
       expect(out.chartStirringId).not.toBeNull();
     }
     expect(store().foundIds("s1")).not.toContain("basin-stone");
     const stirring = handle.sqlite.prepare(`SELECT relic_id, state FROM relic_stirrings WHERE space_id = 's1'`).get() as { relic_id: string; state: string };
     expect(stirring).toEqual({ relic_id: "dawn-leaf", state: "open" });
+    // The lore unlock is permanent: all four rows survive both exchanges.
+    expect(handle.sqlite.prepare(`SELECT COUNT(*) AS n FROM relic_codex_layers WHERE space_id = 's1' AND layer = 'L3'`).get()).toEqual({ n: 4 });
   });
 
   it("a Keystone refuses the exchange by class; a Seed holding (constructible only by direct insert) refuses by class too", () => {
