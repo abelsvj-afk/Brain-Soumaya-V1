@@ -16,6 +16,7 @@ import { toursRoutes } from "./routes/tours.js";
 import { npcsRoutes } from "./routes/npcs.js";
 import { societyRoutes } from "./routes/society.js";
 import { storyRoutes } from "./routes/story.js";
+import { captainsRoutes } from "./routes/captains.js";
 import { fleetDefenseRoutes } from "./routes/fleetDefense.js";
 import { missionsRoutes } from "./routes/missions.js";
 import { usageRoutes } from "./routes/usage.js";
@@ -140,6 +141,7 @@ export function createApp(ctx: AppContext): Express {
   app.use("/api/npcs", guard, npcsRoutes(ctx));
   app.use("/api/society", guard, societyRoutes(ctx));
   app.use("/api/story", guard, storyRoutes(ctx));
+  app.use("/api/captains", guard, captainsRoutes(ctx));
   app.use("/api/fleet-defense", guard, fleetDefenseRoutes(ctx));
   app.use("/api/missions", guard, missionsRoutes(ctx));
   app.use("/api/constellations", guard, constellationRoutes(ctx));

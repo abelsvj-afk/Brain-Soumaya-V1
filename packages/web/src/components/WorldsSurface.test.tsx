@@ -6,11 +6,13 @@ import WorldsSurface, { WORLD_DATA_GRACE_MS } from "./WorldsSurface.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { useTravel, type UseTravel } from "../hooks/useTravel.js";
 import { useHarborController, type UseHarborController } from "../hooks/useHarborController.js";
+import { useCaptains, type UseCaptains } from "../hooks/useCaptains.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
 import { getArchivedNodesStrict, getIncidentEdges } from "../api/client.js";
 
 vi.mock("../hooks/useTravel.js", () => ({ useTravel: vi.fn() }));
 vi.mock("../hooks/useHarborController.js", () => ({ useHarborController: vi.fn() }));
+vi.mock("../hooks/useCaptains.js", () => ({ useCaptains: vi.fn() }));
 vi.mock("../api/journeys.js", () => ({
   getJourneys: vi.fn(async () => []),
   journeyLinks: vi.fn(async () => null),
@@ -35,6 +37,7 @@ function mountEngaged(ui: ReactElement) {
   return r;
 }
 const mockUseHarborController = vi.mocked(useHarborController);
+const mockUseCaptains = vi.mocked(useCaptains);
 const mockGetJourneys = vi.mocked(getJourneys);
 const mockJourneyLinks = vi.mocked(journeyLinks);
 const mockGetArchivedNodesStrict = vi.mocked(getArchivedNodesStrict);
@@ -104,6 +107,48 @@ function fakeController(over: Partial<UseHarborController> = {}): UseHarborContr
     ask: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
+    ...over,
+  };
+}
+
+function fakeCaptains(over: Partial<UseCaptains> = {}): UseCaptains {
+  return {
+    captains: [
+      {
+        id: "bex",
+        name: "Bex",
+        role: "Regular",
+        pronouns: "she",
+        ageBand: "late 20s",
+        personality: "Warm, sociable, always at the Station.",
+        traits: ["Sociable", "Generous", "Cautious"],
+        active: true,
+        present: true,
+        homeWorld: "great-station",
+        currentWorld: "great-station",
+        sessionState: "visiting",
+        doingLine: "Visiting the Great Station.",
+        fuel: 60,
+        credits: 120,
+        stopped: false,
+        actsToday: 1,
+        speaksToday: 0,
+        meetingsRemembered: 0,
+        firstMetAt: null,
+        recentLog: [],
+        barks: [],
+      },
+    ],
+    chronicle: [],
+    answers: new Map(),
+    loading: false,
+    failed: false,
+    error: null,
+    refresh: vi.fn(async () => {}),
+    ask: vi.fn(async () => {}),
+    stop: vi.fn(async () => {}),
+    resume: vi.fn(async () => {}),
+    wipeMeetings: vi.fn(async () => {}),
     ...over,
   };
 }
@@ -364,6 +409,19 @@ describe("WorldsSurface (P2-4 — the F-01 mount)", () => {
     expect(screen.getByRole("button", { name: "Routes from here" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Hide the harbor controller" }));
     expect(screen.queryByText(/Help you arrive/)).toBeNull();
+  });
+
+  it("at the Station the Captains button opens the captains panel, Chronicle included (NPC-Player L1)", async () => {
+    mockUseCaptains.mockReturnValue(fakeCaptains());
+    mockUseTravel.mockReturnValue(atStation());
+    mountEngaged(<WorldsSurface enabled />);
+    expect(screen.getByRole("dialog", { name: "The Great Station" })).toBeTruthy();
+    expect(screen.queryByText(/Bex — Regular/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Captains" }));
+    expect(await screen.findByText(/Bex — Regular/)).toBeTruthy();
+    expect(screen.getByText(/The Chronicle/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hide the captains" }));
+    expect(screen.queryByText(/Bex — Regular/)).toBeNull();
   });
 });
 
@@ -634,6 +692,23 @@ describe("WorldsSurface — Scale (Phase 3)", () => {
     // No loading line: Scale's layout builds without the graph.
     expect(screen.queryByText(/coming into view/)).toBeNull();
     expect(await screen.findByText(/needs graphics support/)).toBeTruthy();
+  });
+
+  it("at Scale the Captains button opens the panel — without the Chronicle (NPC-Player L1)", async () => {
+    mockUseCaptains.mockReturnValue(fakeCaptains());
+    mockUseTravel.mockReturnValue(atScale());
+    mountEngaged(<WorldsSurface enabled graph={null} />);
+    expect(screen.getByRole("dialog", { name: "Scale" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Captains" }));
+    expect(await screen.findByText(/Bex — Regular/)).toBeTruthy();
+    expect(screen.queryByText(/The Chronicle/)).toBeNull();
+  });
+
+  it("in the garden there is no Captains button (NPC-Player L1)", () => {
+    mockUseTravel.mockReturnValue(atGarden());
+    mountEngaged(<WorldsSurface enabled graph={gardenGraph} />);
+    expect(screen.getByRole("dialog", { name: "The Growing Place" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Captains" })).toBeNull();
   });
 });
 

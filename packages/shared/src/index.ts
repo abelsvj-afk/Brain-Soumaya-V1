@@ -16,6 +16,7 @@ export * from "./npcDialogue.js";
 export * from "./placeLore.js";
 export * from "./society.js";
 export * from "./societyLife.js";
+export * from "./captains.js";
 export * from "./tours.js";
 export * from "./fleetDefense.js";
 export * from "./fleetDefenseEngine.js";
