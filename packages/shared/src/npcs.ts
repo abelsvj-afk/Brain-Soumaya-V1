@@ -25,8 +25,11 @@
 export const NPC_ROSTER_ORDER: readonly string[] = ["harbor-controller"] as const;
 
 /** NPC identity. One NPC per id, ever — the id is the stable key in
- *  the log, the state row, and the holdings table. */
-export type NpcId = "harbor-controller";
+ *  the log, the state row, and the holdings table. The roster id is
+ *  the harbor controller; the captain ids are the player NPCs of the
+ *  NPC-Player Layer (definitions in `captains.ts` — they carry home
+ *  and current worlds, so they are not `NpcDefinition`s). */
+export type NpcId = "harbor-controller" | "dain" | "veyra" | "bex";
 
 /** The world an NPC belongs to. An NPC never acts outside its own
  *  world (note §3) — the executor checks this on every act. */
@@ -43,6 +46,14 @@ export type NpcWorld = "great-station";
  *   the note's remaining allow-listed kinds; no roster NPC uses them
  *   yet, so they are named here as the fence's vocabulary and stay
  *   unassigned until an NPC's design claims one.
+ * - travel / arrive / depart / greet are the player-NPC (captain)
+ *   kinds of the NPC-Player Layer (L1): travel moves a captain
+ *   between the public worlds on the chart, arrive opens one of its
+ *   seeded sessions there, depart ends a session (it leaves the
+ *   public worlds until its next visit), greet is a captain speaking
+ *   a hello to a visitor it shares a world with. They are on NO
+ *   roster NPC's allow-list — the harbor controller's fence refuses
+ *   them exactly like any other unlisted kind.
  */
 export type NpcActKind =
   | "speak"
@@ -53,7 +64,11 @@ export type NpcActKind =
   | "move"
   | "reorder-light"
   | "summon-ship"
-  | "dismiss-ship";
+  | "dismiss-ship"
+  | "travel"
+  | "arrive"
+  | "depart"
+  | "greet";
 
 /** The kinds the framework knows. Anything outside this list is not
  *  a tool — it cannot happen, and the executor rejects it. */
@@ -67,6 +82,10 @@ export const NPC_ACT_KINDS: readonly NpcActKind[] = [
   "reorder-light",
   "summon-ship",
   "dismiss-ship",
+  "travel",
+  "arrive",
+  "depart",
+  "greet",
 ] as const;
 
 /**

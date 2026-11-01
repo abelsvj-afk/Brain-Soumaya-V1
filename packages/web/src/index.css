@@ -6683,6 +6683,75 @@ button.mindspace-more { cursor: pointer; }
   color: #ffb4a2;
 }
 
+/* Captains panel (NPC-Player Layer L1): the same card pattern as
+   the harbor controller — a readable overlay card at the Great
+   Station and at Scale. The Chronicle rides inside it at the
+   Station only. */
+.captains {
+  position: absolute;
+  left: 1rem;
+  bottom: 4rem;
+  max-width: min(28rem, calc(100% - 2rem));
+  max-height: calc(100% - 9rem);
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  background: rgba(11, 16, 38, 0.88);
+  border: 1px solid rgba(232, 230, 223, 0.25);
+  border-radius: 8px;
+  color: #e8e6df;
+  font-size: 0.9rem;
+}
+.captains-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.captains-bar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.captains-card {
+  border-top: 1px solid rgba(232, 230, 223, 0.18);
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+.captains-card h4 {
+  margin: 0.25rem 0;
+  font-size: 0.95rem;
+}
+.captains-card h5 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.85rem;
+}
+.captains-answer {
+  white-space: pre-line;
+}
+.captains-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.captains-log {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.captains-error {
+  color: #ffb4a2;
+}
+.chronicle-feed {
+  border-top: 1px solid rgba(232, 230, 223, 0.18);
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+}
+.chronicle-feed h4 {
+  margin: 0.25rem 0;
+  font-size: 0.95rem;
+}
+.chronicle-feed ul {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
 /* Fleet missions panel (fleet missions): a readable card inside the
    dock's Fleet section — functional layout only, no absolute
    positioning (it is dock content, not a scene overlay). */

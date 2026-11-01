@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   APPROACH_STAGES,
+  BEX_BERTH,
   DOCKING_ARM,
   HARBOR_CONTROLLER_BERTH,
   HERO_MOORING,
@@ -23,6 +24,7 @@ import {
   beaconRing,
   clusterModelOffset,
   dockedPoseAt,
+  bexBerthPose,
   dockingMooringPose,
   harborControllerBerthPose,
   heroMooringPose,
@@ -129,8 +131,11 @@ describe("stationLayout", () => {
     // before the 72-call internal target. EVE-style backdrop planets:
     // +3 calls, +10,522 tris — the lava planet (2) and a Quaternius
     // planet (1), as-is; 70 planned leaves 2 of headroom.
-    expect(plannedDrawCalls()).toBe(70);
-    expect(plannedVisibleTris()).toBe(269_832);
+    // NPC-Player L1: Bex's ship (the bob, an existing traffic hull
+    // riding its own lane's load): +1 call, +938 tris — 71 planned
+    // leaves 1 of headroom before the 72-call internal target.
+    expect(plannedDrawCalls()).toBe(71);
+    expect(plannedVisibleTris()).toBe(270_770);
   });
 
   it("the three annex clusters sit outside the dressing band, far apart, and clear of the drydock", () => {
@@ -172,6 +177,26 @@ describe("stationLayout", () => {
     }
     // No two models share a spot.
     expect(new Set(a.map(([x, z]) => `${x.toFixed(5)},${z.toFixed(5)}`)).size).toBe(27);
+  });
+
+  it("Bex's berth mirrors the harbor controller's — same radius, opposite side (NPC-Player L1)", () => {
+    expect(BEX_BERTH.radius).toBe(222);
+    expect(BEX_BERTH.angle).toBeCloseTo((Math.PI * 5) / 4, 10);
+    const pose = bexBerthPose();
+    // Radius 222, angle 5π/4: x and z are both negative, equal magnitude.
+    expect(pose.position[0]).toBeCloseTo(-222 * Math.SQRT1_2, 5);
+    expect(pose.position[2]).toBeCloseTo(-222 * Math.SQRT1_2, 5);
+    // Nose outward, away from the Station.
+    const rot = pose.rotationY;
+    expect(-Math.sin(rot)).toBeCloseTo(Math.cos(BEX_BERTH.angle), 5);
+    expect(-Math.cos(rot)).toBeCloseTo(Math.sin(BEX_BERTH.angle), 5);
+    // π/2 of arc from the harbor controller's berth at this radius
+    // (~349 units) — the two named ships never share water.
+    const gap = (Math.PI / 2) * BEX_BERTH.radius;
+    expect(gap).toBeGreaterThan(300);
+    // Inside the dressing band's inner edge and the innermost lane.
+    expect(BEX_BERTH.radius).toBeLessThan(232);
+    expect(BEX_BERTH.radius).toBeLessThan(255);
   });
 
   it("the harbor controller's berth sits between arms 1 and 2, clear of docked ships and dressing", () => {

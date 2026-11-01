@@ -1548,6 +1548,62 @@ export const BOOTSTRAP_SQL = `
       PRIMARY KEY (space_id, npc_id)
     );
 
+    -- NPC-Player Layer (L1 — Presence): the captains' own tables.
+    -- npc_player_state carries a captain's life: home/current world
+    -- (fields, not hardcodes), the live session, its own fuel and
+    -- credits ledgers, the kill switch, and last_advanced_at — the
+    -- lazy fast-forward cursor (design §3). npc_player_memory is the
+    -- captain's OWN memory stream (design §6) — its meetings and
+    -- observations, never the player's brain. npc_player_barks
+    -- stores spoken lines with their source (design §13: always
+    -- 'template' until a separately-authorized source exists).
+    -- All three are per-space rows and die with the brain
+    -- (SPACE_SCOPED_TABLES). NOTE for the main-landing lane: these
+    -- three tables are owed a backup-census amendment when this
+    -- increment lands to main (see the L1 build record §0.1).
+    CREATE TABLE IF NOT EXISTS npc_player_state (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      home_world TEXT NOT NULL,
+      current_world TEXT,
+      session_key TEXT,
+      session_world TEXT,
+      session_started_at TEXT,
+      session_ends_at TEXT,
+      last_meeting_visit_key TEXT,
+      last_greet_visit_key TEXT,
+      fuel REAL NOT NULL DEFAULT 60,
+      credits REAL NOT NULL DEFAULT 120,
+      stopped INTEGER NOT NULL DEFAULT 0,
+      last_advanced_at TEXT,
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_player_memory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      importance INTEGER NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_player_memory_space_npc
+      ON npc_player_memory(space_id, npc_id, id);
+    CREATE TABLE IF NOT EXISTS npc_player_barks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      context TEXT NOT NULL,
+      text TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'template',
+      based_on TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_player_barks_space_npc_day
+      ON npc_player_barks(space_id, npc_id, day_key);
+
     -- Guided tours (Wave 2, N7): a saved Chronicle route with a voice.
     -- tours is the read model (the route + its stops, snapshotted at
     -- creation); tour_log is the §17 rail — append-only, one entry per

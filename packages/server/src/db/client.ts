@@ -1536,6 +1536,55 @@ export function migrateSchema(sqlite: RawDb): void {
       PRIMARY KEY (space_id, npc_id)
     );
 
+    -- NPC-Player Layer (L1 — Presence): the captains' state, their
+    -- own memory stream, and their stored bark lines. Identical DDL
+    -- to BOOTSTRAP_SQL in db/schemaSql.ts (fresh DBs already have
+    -- them; this is a no-op there). All three are per-space rows
+    -- (SPACE_SCOPED_TABLES) and are owed a backup-census amendment
+    -- when this increment lands to main (L1 build record §0.1).
+    CREATE TABLE IF NOT EXISTS npc_player_state (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      home_world TEXT NOT NULL,
+      current_world TEXT,
+      session_key TEXT,
+      session_world TEXT,
+      session_started_at TEXT,
+      session_ends_at TEXT,
+      last_meeting_visit_key TEXT,
+      last_greet_visit_key TEXT,
+      fuel REAL NOT NULL DEFAULT 60,
+      credits REAL NOT NULL DEFAULT 120,
+      stopped INTEGER NOT NULL DEFAULT 0,
+      last_advanced_at TEXT,
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_player_memory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      importance INTEGER NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_player_memory_space_npc
+      ON npc_player_memory(space_id, npc_id, id);
+    CREATE TABLE IF NOT EXISTS npc_player_barks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      context TEXT NOT NULL,
+      text TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'template',
+      based_on TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_player_barks_space_npc_day
+      ON npc_player_barks(space_id, npc_id, day_key);
+
     -- Fleet defense (Wave 2): the releases, the defenses, and the
     -- append-only log. Identical DDL to BOOTSTRAP_SQL in
     -- db/schemaSql.ts (fresh DBs already have them; this is a no-op
