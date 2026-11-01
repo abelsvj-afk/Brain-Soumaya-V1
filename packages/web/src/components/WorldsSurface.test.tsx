@@ -139,6 +139,7 @@ function fakeCaptains(over: Partial<UseCaptains> = {}): UseCaptains {
     stop: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
     wipeMeetings: vi.fn(async () => {}),
+    reset: vi.fn(async () => {}),
     ...over,
   };
 }

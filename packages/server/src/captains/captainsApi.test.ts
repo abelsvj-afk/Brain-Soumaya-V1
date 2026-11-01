@@ -56,7 +56,7 @@ describe("Captain routes", () => {
     ctx.handle.sqlite.close();
   });
 
-  it("lists all eight captains; Bex and Junia are active and carry their own ledgers (P1)", async () => {
+  it("lists all eight captains; Bex and Junia are active and carry their own ledgers (P1; Veyra flies from P2)", async () => {
     const list = await call("GET", "/api/captains", spaceId);
     expect(list.status).toBe(200);
     const captains = list.body.captains as {
@@ -87,7 +87,10 @@ describe("Captain routes", () => {
     const junia = captains.find((c) => c.id === "junia");
     expect(junia?.active).toBe(true);
     expect(junia?.homeWorld).toBe("growing-place");
-    for (const other of captains.filter((c) => c.id !== "bex" && c.id !== "junia")) {
+    const veyra = captains.find((c) => c.id === "veyra");
+    expect(veyra?.active).toBe(true);
+    expect(veyra?.homeWorld).toBe("scale");
+    for (const other of captains.filter((c) => c.id !== "bex" && c.id !== "junia" && c.id !== "veyra")) {
       expect(other.active).toBe(false);
       expect(other.present).toBe(false);
     }

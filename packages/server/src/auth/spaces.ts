@@ -230,6 +230,21 @@ export const SPACE_SCOPED_TABLES = [
   "npc_player_state",
   "npc_player_memory",
   "npc_player_barks",
+  // P2 (Purpose & the Long Arc): the seeker's own stores — plans,
+  // mismatches, her stirring record, simulated brain, simulated
+  // board, knowledge, gate decisions. All captain-namespaced
+  // per-space rows; brain erasure erases the layer completely.
+  "npc_plans",
+  "npc_plan_steps",
+  "npc_mismatches",
+  "npc_stirrings",
+  "npc_sim_nodes",
+  "npc_sim_edges",
+  "npc_sim_journey",
+  "npc_sim_inbox",
+  "npc_commissions",
+  "npc_knowledge",
+  "npc_gate_decisions",
   // Guided tours (Wave 2, N7): the saved route, its rail log, and its
   // playback sessions are per-space rows — brain deletion removes them.
   "tours",
