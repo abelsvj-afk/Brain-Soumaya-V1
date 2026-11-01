@@ -1,0 +1,414 @@
+{
+ "rimseg": {
+  "name": "rimseg",
+  "anchor": "station-rotating",
+  "res": 1024,
+  "tris": 1136,
+  "material": "BAKED_rimseg",
+  "emissive_map": true
+ },
+ "wheel_rest": {
+  "name": "wheel_rest",
+  "anchor": "station-rotating",
+  "res": 1024,
+  "tris": 6404,
+  "material": "BAKED_wheel_rest",
+  "emissive_map": false
+ },
+ "wheel_emissives": {
+  "amber_merged": 47,
+  "cyan_merged": 6
+ },
+ "gantry": {
+  "name": "gantry",
+  "anchor": "witness-drydock-gantry",
+  "res": 1024,
+  "tris": 804,
+  "material": "BAKED_gantry",
+  "emissive_map": false
+ },
+ "drydock_main": {
+  "name": "drydock_main",
+  "anchor": "drydock-main",
+  "res": 512,
+  "tris": 560,
+  "material": "BAKED_drydock_main",
+  "emissive_map": false
+ },
+ "drydock_witness": {
+  "name": "drydock_witness",
+  "anchor": "drydock-witness",
+  "res": 512,
+  "tris": 240,
+  "material": "BAKED_drydock_witness",
+  "emissive_map": false
+ },
+ "dressing_drydock": {
+  "name": "dressing_drydock",
+  "anchor": "dressing-drydock",
+  "res": 512,
+  "tris": 1532,
+  "material": "BAKED_dressing_drydock",
+  "emissive_map": false
+ },
+ "exterior_draw_after_A": {
+  "raw": 299,
+  "sets": 252
+ },
+ "lunar": {
+  "name": "lunar",
+  "anchor": "annex-lunar-annex",
+  "res": 1024,
+  "tris": 2248,
+  "material": "BAKED_lunar",
+  "emissive_map": false
+ },
+ "colony": {
+  "name": "colony",
+  "anchor": "annex-colony-ring",
+  "res": 512,
+  "tris": 1264,
+  "material": "BAKED_colony",
+  "emissive_map": false
+ },
+ "stores": {
+  "name": "stores",
+  "anchor": "annex-station-stores",
+  "res": 512,
+  "tris": 1704,
+  "material": "BAKED_stores",
+  "emissive_map": false
+ },
+ "model_lunar": {
+  "name": "model_lunar",
+  "anchor": "annex-model-lunar-annex",
+  "res": 512,
+  "tris": 284,
+  "material": "BAKED_model_lunar",
+  "emissive_map": false
+ },
+ "model_colony": {
+  "name": "model_colony",
+  "anchor": "annex-model-colony-ring",
+  "res": 512,
+  "tris": 276,
+  "material": "BAKED_model_colony",
+  "emissive_map": false
+ },
+ "model_stores": {
+  "name": "model_stores",
+  "anchor": "annex-model-station-stores",
+  "res": 512,
+  "tris": 100,
+  "material": "BAKED_model_stores",
+  "emissive_map": false
+ },
+ "dressing_annex": {
+  "name": "dressing_annex",
+  "anchor": "dressing-annex",
+  "res": 512,
+  "tris": 324,
+  "material": "BAKED_dressing_annex",
+  "emissive_map": false
+ },
+ "relic_mounts": {
+  "name": "relic_mounts",
+  "anchor": "relic-mounts",
+  "res": 512,
+  "tris": 356,
+  "material": "BAKED_relic_mounts",
+  "emissive_map": false
+ },
+ "fallback": {
+  "name": "fallback",
+  "anchor": "station-traffic-fallback",
+  "res": 256,
+  "tris": 34,
+  "material": "BAKED_fallback",
+  "emissive_map": false
+ },
+ "worklight_poles": {
+  "name": "worklight_poles",
+  "anchor": "station-work-lights",
+  "res": 512,
+  "tris": 112,
+  "material": "BAKED_worklight_poles",
+  "emissive_map": false
+ },
+ "hero_ship": {
+  "name": "hero_ship",
+  "anchor": "hero-ship",
+  "res": 512,
+  "tris": 166,
+  "material": "BAKED_hero_ship",
+  "emissive_map": false
+ },
+ "traffic_01": {
+  "name": "traffic_01",
+  "anchor": "traffic-01",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_traffic_01",
+  "emissive_map": false
+ },
+ "traffic_02": {
+  "name": "traffic_02",
+  "anchor": "traffic-02",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_traffic_02",
+  "emissive_map": false
+ },
+ "traffic_03": {
+  "name": "traffic_03",
+  "anchor": "traffic-03",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_traffic_03",
+  "emissive_map": false
+ },
+ "traffic_04": {
+  "name": "traffic_04",
+  "anchor": "traffic-04",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_traffic_04",
+  "emissive_map": false
+ },
+ "traffic_05": {
+  "name": "traffic_05",
+  "anchor": "traffic-05",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_traffic_05",
+  "emissive_map": false
+ },
+ "traffic_06": {
+  "name": "traffic_06",
+  "anchor": "traffic-06",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_traffic_06",
+  "emissive_map": false
+ },
+ "docked_01": {
+  "name": "docked_01",
+  "anchor": "docked-01",
+  "res": 512,
+  "tris": 94,
+  "material": "BAKED_docked_01",
+  "emissive_map": false
+ },
+ "docked_02": {
+  "name": "docked_02",
+  "anchor": "docked-02",
+  "res": 512,
+  "tris": 94,
+  "material": "BAKED_docked_02",
+  "emissive_map": false
+ },
+ "docked_03": {
+  "name": "docked_03",
+  "anchor": "docked-03",
+  "res": 512,
+  "tris": 94,
+  "material": "BAKED_docked_03",
+  "emissive_map": false
+ },
+ "hauler": {
+  "name": "hauler",
+  "anchor": "witness-hauler",
+  "res": 512,
+  "tris": 130,
+  "material": "BAKED_hauler",
+  "emissive_map": false
+ },
+ "controller": {
+  "name": "controller",
+  "anchor": "harbor-controller-ship",
+  "res": 512,
+  "tris": 94,
+  "material": "BAKED_controller",
+  "emissive_map": false
+ },
+ "shuttle": {
+  "name": "shuttle",
+  "anchor": "docking-shuttle",
+  "res": 512,
+  "tris": 82,
+  "material": "BAKED_shuttle",
+  "emissive_map": false
+ },
+ "hangar": {
+  "name": "hangar",
+  "anchor": "hangar-bay",
+  "res": 1024,
+  "tris": 392,
+  "material": "BAKED_hangar",
+  "emissive_map": false
+ },
+ "commission": {
+  "name": "commission",
+  "anchor": "commission-board",
+  "res": 1024,
+  "tris": 336,
+  "material": "BAKED_commission",
+  "emissive_map": false
+ },
+ "fleet": {
+  "name": "fleet",
+  "anchor": "fleet-deck",
+  "res": 512,
+  "tris": 644,
+  "material": "BAKED_fleet",
+  "emissive_map": false
+ },
+ "observation": {
+  "name": "observation",
+  "anchor": "observation-deck",
+  "res": 1024,
+  "tris": 1424,
+  "material": "BAKED_observation",
+  "emissive_map": false
+ },
+ "floor_hangar": {
+  "name": "floor_hangar",
+  "anchor": "interior-floor-hangar-bay",
+  "res": 1024,
+  "tris": 228,
+  "material": "BAKED_floor_hangar",
+  "emissive_map": false
+ },
+ "floor_commission": {
+  "name": "floor_commission",
+  "anchor": "interior-floor-commission-board",
+  "res": 512,
+  "tris": 36,
+  "material": "BAKED_floor_commission",
+  "emissive_map": false
+ },
+ "floor_fleet": {
+  "name": "floor_fleet",
+  "anchor": "interior-floor-fleet-deck",
+  "res": 512,
+  "tris": 36,
+  "material": "BAKED_floor_fleet",
+  "emissive_map": false
+ },
+ "floor_observation": {
+  "name": "floor_observation",
+  "anchor": "interior-floor-observation-deck",
+  "res": 512,
+  "tris": 36,
+  "material": "BAKED_floor_observation",
+  "emissive_map": false
+ },
+ "ceiling_hangar": {
+  "name": "ceiling_hangar",
+  "anchor": "interior-ceiling-hangar-bay",
+  "res": 512,
+  "tris": 60,
+  "material": "BAKED_ceiling_hangar",
+  "emissive_map": false
+ },
+ "ceiling_commission": {
+  "name": "ceiling_commission",
+  "anchor": "interior-ceiling-commission-board",
+  "res": 512,
+  "tris": 12,
+  "material": "BAKED_ceiling_commission",
+  "emissive_map": false
+ },
+ "ceiling_fleet": {
+  "name": "ceiling_fleet",
+  "anchor": "interior-ceiling-fleet-deck",
+  "res": 512,
+  "tris": 12,
+  "material": "BAKED_ceiling_fleet",
+  "emissive_map": false
+ },
+ "ceiling_observation": {
+  "name": "ceiling_observation",
+  "anchor": "interior-ceiling-observation-deck",
+  "res": 512,
+  "tris": 12,
+  "material": "BAKED_ceiling_observation",
+  "emissive_map": false
+ },
+ "viewport_lintel": {
+  "name": "viewport_lintel",
+  "anchor": "interior-deck-viewport-lintel",
+  "res": 512,
+  "tris": 120,
+  "material": "BAKED_viewport_lintel",
+  "emissive_map": false
+ },
+ "gate_lintel": {
+  "name": "gate_lintel",
+  "anchor": "interior-gate-lintel",
+  "res": 512,
+  "tris": 48,
+  "material": "BAKED_gate_lintel",
+  "emissive_map": false
+ },
+ "baydoor_lintel": {
+  "name": "baydoor_lintel",
+  "anchor": "interior-bay-door-lintel",
+  "res": 512,
+  "tris": 36,
+  "material": "BAKED_baydoor_lintel",
+  "emissive_map": false
+ },
+ "rim_arc": {
+  "name": "rim_arc",
+  "anchor": "interior-rim-arc",
+  "res": 512,
+  "tris": 640,
+  "material": "BAKED_rim_arc",
+  "emissive_map": false
+ },
+ "bay_ship": {
+  "name": "bay_ship",
+  "anchor": "interior-bay-ship",
+  "res": 512,
+  "tris": 154,
+  "material": "BAKED_bay_ship",
+  "emissive_map": false
+ },
+ "user_ship": {
+  "name": "user_ship",
+  "anchor": "interior-user-ship",
+  "res": 512,
+  "tris": 94,
+  "material": "BAKED_user_ship",
+  "emissive_map": false
+ },
+ "fleet_model_1": {
+  "name": "fleet_model_1",
+  "anchor": "interior-model-fleet-1",
+  "res": 512,
+  "tris": 70,
+  "material": "BAKED_fleet_model_1",
+  "emissive_map": false
+ },
+ "fleet_model_2": {
+  "name": "fleet_model_2",
+  "anchor": "interior-model-fleet-2",
+  "res": 512,
+  "tris": 70,
+  "material": "BAKED_fleet_model_2",
+  "emissive_map": false
+ },
+ "gate_lights_amber": {
+  "merged": 8
+ },
+ "light_strips_amber": {
+  "merged": 7
+ },
+ "work_lights_amber": {
+  "merged": 2
+ },
+ "nav_markers_cyan": {
+  "merged": 8
+ }
+}

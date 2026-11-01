@@ -1,0 +1,2564 @@
+{
+ "exterior": {
+  "path": "/home/hatch/workspace/Soumaya-Environment-Production/exports/great-station-pilot.glb",
+  "bytes": 19865564,
+  "tris": 83536,
+  "nodes": 132,
+  "primitives": 104,
+  "anchors_missing": [],
+  "forbidden_present": [],
+  "textures": [
+   {
+    "name": "colony_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 375795
+   },
+   {
+    "name": "colony_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 190741
+   },
+   {
+    "name": "colony_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 217696
+   },
+   {
+    "name": "lunar_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1039446
+   },
+   {
+    "name": "lunar_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 542713
+   },
+   {
+    "name": "lunar_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 731561
+   },
+   {
+    "name": "model_colony_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 169728
+   },
+   {
+    "name": "model_colony_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 94704
+   },
+   {
+    "name": "model_colony_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 122807
+   },
+   {
+    "name": "model_lunar_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 182618
+   },
+   {
+    "name": "model_lunar_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 102426
+   },
+   {
+    "name": "model_lunar_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 151701
+   },
+   {
+    "name": "model_stores_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 161939
+   },
+   {
+    "name": "model_stores_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 99884
+   },
+   {
+    "name": "model_stores_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 137008
+   },
+   {
+    "name": "stores_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 351509
+   },
+   {
+    "name": "stores_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 185131
+   },
+   {
+    "name": "stores_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 219723
+   },
+   {
+    "name": "docked_01_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 127745
+   },
+   {
+    "name": "docked_01_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 84402
+   },
+   {
+    "name": "docked_01_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 103376
+   },
+   {
+    "name": "docked_02_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 124907
+   },
+   {
+    "name": "docked_02_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 84276
+   },
+   {
+    "name": "docked_02_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 102789
+   },
+   {
+    "name": "docked_03_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 127987
+   },
+   {
+    "name": "docked_03_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 88298
+   },
+   {
+    "name": "docked_03_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 106439
+   },
+   {
+    "name": "shuttle_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 102986
+   },
+   {
+    "name": "shuttle_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 54494
+   },
+   {
+    "name": "shuttle_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 95798
+   },
+   {
+    "name": "dressing_annex_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 131092
+   },
+   {
+    "name": "dressing_annex_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 72102
+   },
+   {
+    "name": "dressing_annex_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 94440
+   },
+   {
+    "name": "dressing_drydock_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 284726
+   },
+   {
+    "name": "dressing_drydock_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 168649
+   },
+   {
+    "name": "dressing_drydock_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 187605
+   },
+   {
+    "name": "drydock_main_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 357158
+   },
+   {
+    "name": "drydock_main_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 193200
+   },
+   {
+    "name": "drydock_main_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 217452
+   },
+   {
+    "name": "drydock_witness_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 265163
+   },
+   {
+    "name": "drydock_witness_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 159229
+   },
+   {
+    "name": "drydock_witness_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 186434
+   },
+   {
+    "name": "controller_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 129184
+   },
+   {
+    "name": "controller_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 72662
+   },
+   {
+    "name": "controller_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 117511
+   },
+   {
+    "name": "hero_ship_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 171432
+   },
+   {
+    "name": "hero_ship_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 120472
+   },
+   {
+    "name": "hero_ship_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 129594
+   },
+   {
+    "name": "relic_mounts_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 178899
+   },
+   {
+    "name": "relic_mounts_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 104675
+   },
+   {
+    "name": "relic_mounts_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 145486
+   },
+   {
+    "name": "TEX_stars",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 512,
+    "bytes": 7115
+   },
+   {
+    "name": "rimseg_emit",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 13988
+   },
+   {
+    "name": "rimseg_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1019727
+   },
+   {
+    "name": "rimseg_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 535189
+   },
+   {
+    "name": "rimseg_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 698230
+   },
+   {
+    "name": "wheel_rest_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 650702
+   },
+   {
+    "name": "wheel_rest_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 398931
+   },
+   {
+    "name": "wheel_rest_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 312623
+   },
+   {
+    "name": "fallback_nrm",
+    "mime": "image/png",
+    "w": 256,
+    "h": 256,
+    "bytes": 46960
+   },
+   {
+    "name": "fallback_diff",
+    "mime": "image/png",
+    "w": 256,
+    "h": 256,
+    "bytes": 31136
+   },
+   {
+    "name": "fallback_rough",
+    "mime": "image/png",
+    "w": 256,
+    "h": 256,
+    "bytes": 33896
+   },
+   {
+    "name": "worklight_poles_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 105041
+   },
+   {
+    "name": "worklight_poles_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 71690
+   },
+   {
+    "name": "worklight_poles_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 94903
+   },
+   {
+    "name": "traffic_01_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 142804
+   },
+   {
+    "name": "traffic_01_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 94306
+   },
+   {
+    "name": "traffic_01_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 125717
+   },
+   {
+    "name": "traffic_02_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 114383
+   },
+   {
+    "name": "traffic_02_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 58568
+   },
+   {
+    "name": "traffic_02_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 108051
+   },
+   {
+    "name": "traffic_03_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 132128
+   },
+   {
+    "name": "traffic_03_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 82349
+   },
+   {
+    "name": "traffic_03_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 120251
+   },
+   {
+    "name": "traffic_04_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 104675
+   },
+   {
+    "name": "traffic_04_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 51270
+   },
+   {
+    "name": "traffic_04_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 95516
+   },
+   {
+    "name": "traffic_05_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 145526
+   },
+   {
+    "name": "traffic_05_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 103222
+   },
+   {
+    "name": "traffic_05_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 115824
+   },
+   {
+    "name": "traffic_06_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 123769
+   },
+   {
+    "name": "traffic_06_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 74966
+   },
+   {
+    "name": "traffic_06_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 108064
+   },
+   {
+    "name": "gantry_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 924839
+   },
+   {
+    "name": "gantry_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 527338
+   },
+   {
+    "name": "gantry_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 699527
+   },
+   {
+    "name": "hauler_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 210225
+   },
+   {
+    "name": "hauler_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 113443
+   },
+   {
+    "name": "hauler_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 158906
+   }
+  ],
+  "bbox_station-rotating": {
+   "min": [
+    -210.3,
+    -12.0,
+    -210.3
+   ],
+   "max": [
+    210.3,
+    27.1,
+    210.3
+   ],
+   "size": [
+    420.7,
+    39.1,
+    420.7
+   ],
+   "centre": [
+    0.0,
+    7.5,
+    0.0
+   ]
+  },
+  "bbox_hero-ship": {
+   "min": [
+    73.7,
+    1.8,
+    210.3
+   ],
+   "max": [
+    86.9,
+    6.2,
+    218.2
+   ],
+   "size": [
+    13.2,
+    4.3,
+    7.9
+   ],
+   "centre": [
+    80.3,
+    4.0,
+    214.2
+   ]
+  },
+  "bbox_witness-drydock-gantry": {
+   "min": [
+    63.6,
+    0.0,
+    174.0
+   ],
+   "max": [
+    122.4,
+    37.8,
+    216.0
+   ],
+   "size": [
+    58.8,
+    37.8,
+    42.0
+   ],
+   "centre": [
+    93.0,
+    18.9,
+    195.0
+   ]
+  },
+  "bbox_backdrop-lava": {
+   "min": [
+    -3060.0,
+    940.0,
+    -2660.0
+   ],
+   "max": [
+    -2540.0,
+    1460.0,
+    -2140.0
+   ],
+   "size": [
+    520.0,
+    520.0,
+    520.0
+   ],
+   "centre": [
+    -2800.0,
+    1200.0,
+    -2400.0
+   ]
+  },
+  "mesh_objects_live": 101,
+  "draw_estimate_instanced": 54
+ },
+ "interior": {
+  "path": "/home/hatch/workspace/Soumaya-Environment-Production/exports/great-station-interior-pilot.glb",
+  "bytes": 16914344,
+  "tris": 6800,
+  "nodes": 58,
+  "primitives": 34,
+  "anchors_missing": [],
+  "textures": [
+   {
+    "name": "commission_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1020341
+   },
+   {
+    "name": "commission_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 628321
+   },
+   {
+    "name": "commission_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 705433
+   },
+   {
+    "name": "fleet_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 350567
+   },
+   {
+    "name": "fleet_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 206019
+   },
+   {
+    "name": "fleet_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 206892
+   },
+   {
+    "name": "hangar_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1230954
+   },
+   {
+    "name": "hangar_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 711496
+   },
+   {
+    "name": "hangar_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 781176
+   },
+   {
+    "name": "baydoor_lintel_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 146005
+   },
+   {
+    "name": "baydoor_lintel_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 81346
+   },
+   {
+    "name": "baydoor_lintel_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 118913
+   },
+   {
+    "name": "bay_ship_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 154376
+   },
+   {
+    "name": "bay_ship_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 99130
+   },
+   {
+    "name": "bay_ship_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 121773
+   },
+   {
+    "name": "ceiling_commission_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 242549
+   },
+   {
+    "name": "ceiling_commission_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 149603
+   },
+   {
+    "name": "ceiling_commission_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 160836
+   },
+   {
+    "name": "ceiling_fleet_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 254186
+   },
+   {
+    "name": "ceiling_fleet_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 151737
+   },
+   {
+    "name": "ceiling_fleet_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 165067
+   },
+   {
+    "name": "ceiling_hangar_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 353327
+   },
+   {
+    "name": "ceiling_hangar_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 204785
+   },
+   {
+    "name": "ceiling_hangar_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 211096
+   },
+   {
+    "name": "ceiling_observation_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 227205
+   },
+   {
+    "name": "ceiling_observation_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 139129
+   },
+   {
+    "name": "ceiling_observation_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 155279
+   },
+   {
+    "name": "viewport_lintel_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 187547
+   },
+   {
+    "name": "viewport_lintel_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 109068
+   },
+   {
+    "name": "viewport_lintel_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 138619
+   },
+   {
+    "name": "floor_commission_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 290110
+   },
+   {
+    "name": "floor_commission_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 159049
+   },
+   {
+    "name": "floor_commission_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 172814
+   },
+   {
+    "name": "floor_fleet_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 307816
+   },
+   {
+    "name": "floor_fleet_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 166417
+   },
+   {
+    "name": "floor_fleet_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 177987
+   },
+   {
+    "name": "floor_hangar_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1039500
+   },
+   {
+    "name": "floor_hangar_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 582928
+   },
+   {
+    "name": "floor_hangar_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 695376
+   },
+   {
+    "name": "floor_observation_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 274558
+   },
+   {
+    "name": "floor_observation_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 151126
+   },
+   {
+    "name": "floor_observation_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 167689
+   },
+   {
+    "name": "gate_lintel_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 133563
+   },
+   {
+    "name": "gate_lintel_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 76428
+   },
+   {
+    "name": "gate_lintel_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 106136
+   },
+   {
+    "name": "fleet_model_1_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 120255
+   },
+   {
+    "name": "fleet_model_1_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 67339
+   },
+   {
+    "name": "fleet_model_1_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 107092
+   },
+   {
+    "name": "fleet_model_2_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 115175
+   },
+   {
+    "name": "fleet_model_2_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 59690
+   },
+   {
+    "name": "fleet_model_2_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 109689
+   },
+   {
+    "name": "rim_arc_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 188593
+   },
+   {
+    "name": "rim_arc_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 104885
+   },
+   {
+    "name": "rim_arc_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 103254
+   },
+   {
+    "name": "user_ship_nrm",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 135012
+   },
+   {
+    "name": "user_ship_diff",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 87454
+   },
+   {
+    "name": "user_ship_rough",
+    "mime": "image/png",
+    "w": 512,
+    "h": 512,
+    "bytes": 119995
+   },
+   {
+    "name": "observation_nrm",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 553148
+   },
+   {
+    "name": "observation_diff",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 359942
+   },
+   {
+    "name": "observation_rough",
+    "mime": "image/png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 293522
+   }
+  ],
+  "bbox_interior-bay-ship": {
+   "centre": [
+    -0.6,
+    8.5,
+    -0.1
+   ],
+   "size": [
+    13.3,
+    4.3,
+    3.8
+   ]
+  },
+  "mesh_objects_live": 33,
+  "draw_estimate_instanced": 33
+ },
+ "cyan_objects": [
+  "controller_nav_marker",
+  "nav_markers_cyan",
+  "wheel_cyan_emit"
+ ],
+ "text_objects": [],
+ "blend_images": [
+  {
+   "name": "TEX_bay_ship_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_bay_ship_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_bay_ship_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_bay_ship_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_baydoor_lintel_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_baydoor_lintel_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_baydoor_lintel_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_baydoor_lintel_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_commission_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_commission_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_commission_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_commission_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_fleet_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_fleet_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_fleet_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_fleet_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_hangar_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_hangar_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_hangar_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_hangar_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_observation_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_observation_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_observation_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_ceiling_observation_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_colony_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_colony_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_colony_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_colony_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_commission_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_commission_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_commission_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_commission_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_controller_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_controller_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_controller_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_controller_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_01_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_01_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_01_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_01_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_02_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_02_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_02_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_02_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_03_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_03_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_03_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_docked_03_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_annex_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_annex_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_annex_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_annex_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_drydock_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_drydock_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_drydock_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_dressing_drydock_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_main_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_main_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_main_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_main_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_witness_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_witness_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_witness_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_drydock_witness_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fallback_diff",
+   "size": [
+    256,
+    256
+   ]
+  },
+  {
+   "name": "TEX_fallback_hgt",
+   "size": [
+    256,
+    256
+   ]
+  },
+  {
+   "name": "TEX_fallback_nrm",
+   "size": [
+    256,
+    256
+   ]
+  },
+  {
+   "name": "TEX_fallback_rough",
+   "size": [
+    256,
+    256
+   ]
+  },
+  {
+   "name": "TEX_fleet_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_1_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_1_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_1_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_1_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_2_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_2_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_2_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_model_2_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_fleet_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_commission_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_commission_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_commission_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_commission_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_fleet_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_fleet_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_fleet_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_fleet_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_hangar_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_floor_hangar_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_floor_hangar_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_floor_hangar_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_floor_observation_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_observation_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_observation_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_floor_observation_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_gantry_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_gantry_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_gantry_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_gantry_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_gate_lintel_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_gate_lintel_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_gate_lintel_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_gate_lintel_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hangar_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_hangar_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_hangar_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_hangar_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_hauler_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hauler_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hauler_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hauler_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hero_ship_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hero_ship_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hero_ship_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_hero_ship_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_lunar_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_lunar_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_lunar_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_lunar_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_model_colony_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_colony_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_colony_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_colony_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_lunar_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_lunar_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_lunar_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_lunar_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_stores_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_stores_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_stores_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_model_stores_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_observation_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_observation_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_observation_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_observation_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_relic_mounts_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_relic_mounts_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_relic_mounts_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_relic_mounts_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_rim_arc_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_rim_arc_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_rim_arc_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_rim_arc_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_rimseg_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_rimseg_emit",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_rimseg_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_rimseg_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_rimseg_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_shuttle_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_shuttle_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_shuttle_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_shuttle_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_stars",
+   "size": [
+    1024,
+    512
+   ]
+  },
+  {
+   "name": "TEX_stores_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_stores_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_stores_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_stores_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_01_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_01_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_01_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_01_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_02_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_02_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_02_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_02_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_03_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_03_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_03_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_03_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_04_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_04_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_04_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_04_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_05_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_05_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_05_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_05_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_06_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_06_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_06_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_traffic_06_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_user_ship_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_user_ship_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_user_ship_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_user_ship_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_viewport_lintel_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_viewport_lintel_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_viewport_lintel_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_viewport_lintel_rough",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_wheel_rest_diff",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_wheel_rest_hgt",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_wheel_rest_nrm",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_wheel_rest_rough",
+   "size": [
+    1024,
+    1024
+   ]
+  },
+  {
+   "name": "TEX_worklight_poles_diff",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_worklight_poles_hgt",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_worklight_poles_nrm",
+   "size": [
+    512,
+    512
+   ]
+  },
+  {
+   "name": "TEX_worklight_poles_rough",
+   "size": [
+    512,
+    512
+   ]
+  }
+ ]
+}

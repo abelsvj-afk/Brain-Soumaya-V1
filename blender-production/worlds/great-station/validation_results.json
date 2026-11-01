@@ -1,0 +1,138 @@
+{
+ "exterior": {
+  "path": "/home/hatch/workspace/Soumaya-Environment-Production/exports/great-station-pilot.glb",
+  "bytes": 755056,
+  "tris": 21832,
+  "nodes": 300,
+  "anchors_missing": [],
+  "forbidden_present": [],
+  "bbox_station-rotating": {
+   "min": [
+    -225.1,
+    -12.0,
+    -225.1
+   ],
+   "max": [
+    225.1,
+    19.0,
+    225.1
+   ],
+   "size": [
+    450.2,
+    31.0,
+    450.2
+   ],
+   "centre": [
+    0.0,
+    3.5,
+    0.0
+   ]
+  },
+  "bbox_hero-ship": {
+   "min": [
+    73.7,
+    2.6,
+    210.3
+   ],
+   "max": [
+    86.5,
+    5.7,
+    217.7
+   ],
+   "size": [
+    12.7,
+    3.1,
+    7.5
+   ],
+   "centre": [
+    80.1,
+    4.1,
+    214.0
+   ]
+  },
+  "bbox_witness-drydock-gantry": {
+   "min": [
+    79.5,
+    0.0,
+    184.0
+   ],
+   "max": [
+    104.3,
+    37.8,
+    198.0
+   ],
+   "size": [
+    24.8,
+    37.8,
+    14.0
+   ],
+   "centre": [
+    91.9,
+    18.9,
+    191.0
+   ]
+  },
+  "bbox_backdrop-lava": {
+   "min": [
+    -3060.0,
+    940.0,
+    -2660.0
+   ],
+   "max": [
+    -2540.0,
+    1460.0,
+    -2140.0
+   ],
+   "size": [
+    520.0,
+    520.0,
+    520.0
+   ],
+   "centre": [
+    -2800.0,
+    1200.0,
+    -2400.0
+   ]
+  },
+  "mesh_objects": 269,
+  "draw_estimate_instanced": 176
+ },
+ "interior": {
+  "path": "/home/hatch/workspace/Soumaya-Environment-Production/exports/great-station-interior-pilot.glb",
+  "bytes": 357392,
+  "tris": 4500,
+  "nodes": 147,
+  "anchors_missing": [],
+  "bbox_interior-bay-ship": {
+   "centre": [
+    -0.6,
+    8.6,
+    -0.1
+   ],
+   "size": [
+    13.2,
+    3.1,
+    3.8
+   ]
+  },
+  "mesh_objects": 122,
+  "draw_estimate_instanced": 122
+ },
+ "cyan_objects": [
+  "beacon_00",
+  "beacon_08",
+  "beacon_16",
+  "beacon_24",
+  "beacon_32",
+  "beacon_40",
+  "controller_nav_marker",
+  "navmarker_commission-board_-1",
+  "navmarker_commission-board_1",
+  "navmarker_fleet-deck_-1",
+  "navmarker_fleet-deck_1",
+  "navmarker_hangar-bay_-1",
+  "navmarker_hangar-bay_1",
+  "navmarker_observation-deck_-1",
+  "navmarker_observation-deck_1"
+ ]
+}

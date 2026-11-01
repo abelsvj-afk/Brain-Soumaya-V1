@@ -1,0 +1,117 @@
+17:35:29 | INFO: Data are loaded, start creating Blender stuff
+17:35:29 | INFO: Blender create Mesh node Cylinder.136
+17:35:29 | INFO: Blender create Mesh node Cube.106
+17:35:29 | INFO: Blender create Mesh node Cylinder.130
+17:35:29 | INFO: Blender create Mesh node Cube.091
+17:35:29 | INFO: Blender create Mesh node Cube.110
+17:35:29 | INFO: Blender create Mesh node Cube.372
+17:35:29 | INFO: Blender create Mesh node Sphere.005
+17:35:29 | INFO: Blender create Mesh node Cube.369
+17:35:29 | INFO: Blender create Mesh node Cube.375
+17:35:29 | INFO: Blender create Mesh node Cube.374
+17:35:29 | INFO: Blender create Mesh node Cylinder.141
+17:35:29 | INFO: Blender create Mesh node Cube.118
+17:35:29 | INFO: Blender create Mesh node Sphere.012
+17:35:29 | INFO: Blender create Mesh node Sphere.013
+17:35:29 | INFO: Blender create Mesh node Cube.413
+17:35:29 | INFO: Blender create Mesh node Cube.418
+17:35:30 | INFO: Blender create Mesh node Cube.423
+17:35:30 | INFO: Blender create Mesh node shuttle_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cylinder.021
+17:35:30 | INFO: Blender create Mesh node Cube.310
+17:35:30 | INFO: Blender create Mesh node Cube.068
+17:35:30 | INFO: Blender create Mesh node Cube.260
+17:35:30 | INFO: Blender create Mesh node Cube.060
+17:35:30 | INFO: Blender create Mesh node Cube.066
+17:35:30 | INFO: Blender create Mesh node controller_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Sphere.011
+17:35:30 | INFO: Blender create Mesh node Cube.140
+17:35:30 | INFO: Blender create Mesh node Cube.142
+17:35:30 | INFO: Blender create Mesh node hero_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.032
+17:35:30 | INFO: Blender create Mesh node Sphere.014
+17:35:30 | INFO: Blender create Mesh node rim_segment_mesh_v2
+17:35:30 | INFO: Blender create Mesh node Sphere.008
+17:35:30 | INFO: Blender create Mesh node Sphere.002
+17:35:30 | INFO: Blender create Mesh node Cylinder.026
+17:35:30 | INFO: Blender create Mesh node fallback_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.083
+17:35:30 | INFO: Blender create Mesh node Cylinder.012
+17:35:30 | INFO: Blender create Mesh node Cube.147
+17:35:30 | INFO: Blender create Mesh node traffic-01_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.148
+17:35:30 | INFO: Blender create Mesh node traffic-02_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.149
+17:35:30 | INFO: Blender create Mesh node traffic-03_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.150
+17:35:30 | INFO: Blender create Mesh node traffic-04_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.151
+17:35:30 | INFO: Blender create Mesh node traffic-05_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.152
+17:35:30 | INFO: Blender create Mesh node traffic-06_hull_mesh.001
+17:35:30 | INFO: Blender create Mesh node Cube.128
+17:35:30 | INFO: Blender create Mesh node Cube.131
+17:35:30 | INFO: Blender create Mesh node Cube.144
+17:35:30 | INFO: Blender create Mesh node Cube.146
+17:35:30 | INFO: glTF import finished in 1.03s
+Blender 4.2.23 LTS (hash d0cbe84903e8 built 2026-07-21 01:31:03)
+Fra:1 Mem:211.13M (Peak 213.41M) | Time:01:13.43 | Rendering 1 / 8 samples
+Fra:1 Mem:211.13M (Peak 213.41M) | Time:01:20.71 | Rendering 8 / 8 samples
+Saved: '/home/hatch/workspace/Soumaya-Environment-Production/worlds/great-station/pass2/reimport_ext_overview.png'
+Time: 01:21.54 (Saving: 00:00.72)
+
+Fra:1 Mem:211.13M (Peak 211.13M) | Time:00:05.49 | Rendering 1 / 8 samples
+Fra:1 Mem:211.13M (Peak 211.13M) | Time:00:08.80 | Rendering 8 / 8 samples
+Saved: '/home/hatch/workspace/Soumaya-Environment-Production/worlds/great-station/pass2/reimport_ext_closeup.png'
+Time: 00:09.71 (Saving: 00:00.77)
+
+REIMPORT exterior renders done; objects: 134 images: [('colony_diff', (512, 512)), ('colony_nrm', (512, 512)), ('colony_rough', (512, 512)), ('controller_diff', (512, 512)), ('controller_nrm', (512, 512)), ('controller_rough', (512, 512)), ('docked_01_diff', (512, 512)), ('docked_01_nrm', (512, 512)), ('docked_01_rough', (512, 512)), ('docked_02_diff', (512, 512)), ('docked_02_nrm', (512, 512)), ('docked_02_rough', (512, 512)), ('docked_03_diff', (512, 512)), ('docked_03_nrm', (512, 512)), ('docked_03_rough', (512, 512)), ('dressing_annex_diff', (512, 512)), ('dressing_annex_nrm', (512, 512)), ('dressing_annex_rough', (512, 512)), ('dressing_drydock_diff', (512, 512)), ('dressing_drydock_nrm', (512, 512)), ('dressing_drydock_rough', (512, 512)), ('drydock_main_diff', (512, 512)), ('drydock_main_nrm', (512, 512)), ('drydock_main_rough', (512, 512)), ('drydock_witness_diff', (512, 512)), ('drydock_witness_nrm', (512, 512)), ('drydock_witness_rough', (512, 512)), ('fallback_diff', (256, 256)), ('fallback_nrm', (256, 256)), ('fallback_rough', (256, 256)), ('gantry_diff', (1024, 1024)), ('gantry_nrm', (1024, 1024)), ('gantry_rough', (1024, 1024)), ('hauler_diff', (512, 512)), ('hauler_nrm', (512, 512)), ('hauler_rough', (512, 512)), ('hero_ship_diff', (512, 512)), ('hero_ship_nrm', (512, 512)), ('hero_ship_rough', (512, 512)), ('lunar_diff', (1024, 1024))]
+17:37:03 | INFO: Data are loaded, start creating Blender stuff
+17:37:03 | INFO: Blender create Mesh node Cube.211
+17:37:03 | INFO: Blender create Mesh node Cube.205
+17:37:03 | INFO: Blender create Mesh node Cube.175
+17:37:03 | INFO: Blender create Mesh node Cylinder.151
+17:37:03 | INFO: Blender create Mesh node Cube.155
+17:37:03 | INFO: Blender create Mesh node Cube.470
+17:37:03 | INFO: Blender create Mesh node Cube.200
+17:37:03 | INFO: Blender create Mesh node Cylinder.143
+17:37:03 | INFO: Blender create Mesh node Cube.193
+17:37:03 | INFO: Blender create Mesh node Cube.194
+17:37:03 | INFO: Blender create Mesh node Cube.164
+17:37:03 | INFO: Blender create Mesh node Cube.174
+17:37:03 | INFO: Blender create Mesh node Cube.154
+17:37:03 | INFO: Blender create Mesh node Cube.184
+17:37:03 | INFO: Blender create Mesh node Cube.245
+17:37:03 | INFO: Blender create Mesh node Cube.163
+17:37:03 | INFO: Blender create Mesh node Cube.173
+17:37:03 | INFO: Blender create Mesh node Cube.153
+17:37:03 | INFO: Blender create Mesh node Cube.479
+17:37:03 | INFO: Blender create Mesh node Cube.561
+17:37:03 | INFO: Blender create Mesh node Cube.171
+17:37:03 | INFO: Blender create Mesh node Cube.170
+17:37:03 | INFO: Blender create Mesh node Cube.196
+17:37:03 | INFO: Blender create Mesh node fleet_model_1_mesh
+17:37:03 | INFO: Blender create Mesh node fleet_model_2_mesh
+17:37:03 | INFO: Blender create Mesh node Sphere.017
+17:37:03 | INFO: Blender create Mesh node Torus.005
+17:37:03 | INFO: Blender create Mesh node Cube.198
+17:37:03 | INFO: Blender create Mesh node Cube.232
+17:37:03 | INFO: Blender create Mesh node Cube.553
+17:37:03 | INFO: Blender create Mesh node Cube.558
+17:37:03 | INFO: Blender create Mesh node Sphere.023
+17:37:03 | INFO: Blender create Mesh node Cube.242
+17:37:03 | INFO: glTF import finished in 0.40s
+Fra:1 Mem:166.37M (Peak 166.37M) | Time:00:10.60 | Rendering 1 / 8 samples
+Fra:1 Mem:166.37M (Peak 166.37M) | Time:00:18.21 | Rendering 8 / 8 samples
+Saved: '/home/hatch/workspace/Soumaya-Environment-Production/worlds/great-station/pass2/reimport_int_hangar.png'
+Time: 00:18.58 (Saving: 00:00.30)
+
+Fra:1 Mem:166.40M (Peak 166.40M) | Time:00:05.57 | Rendering 1 / 8 samples
+Fra:1 Mem:166.40M (Peak 166.40M) | Time:00:16.36 | Rendering 8 / 8 samples
+Saved: '/home/hatch/workspace/Soumaya-Environment-Production/worlds/great-station/pass2/reimport_int_obs.png'
+Time: 00:16.68 (Saving: 00:00.23)
+
+REIMPORT interior renders done; objects: 63
+REIMPORT CHECK COMPLETE
+
+Blender quit

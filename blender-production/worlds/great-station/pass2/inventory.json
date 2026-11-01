@@ -1,0 +1,11460 @@
+{
+ "file": "/home/hatch/workspace/Soumaya-Environment-Production/source/soumaya_worlds_master.blend",
+ "scenes": {
+  "STATION_EXTERIOR": {
+   "objects": [
+    {
+     "name": "SUN_cold_key",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      500.0
+     ],
+     "hidden": false,
+     "energy": 3.0999999046325684,
+     "ltype": "SUN"
+    },
+    {
+     "name": "SUN_cold_key.001",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      500.0
+     ],
+     "hidden": false,
+     "energy": 2.5999999046325684,
+     "ltype": "SUN"
+    },
+    {
+     "name": "SUN_cold_key.002",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      500.0
+     ],
+     "hidden": false,
+     "energy": 2.5999999046325684,
+     "ltype": "SUN"
+    },
+    {
+     "name": "SUN_indigo_fill",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "energy": 0.550000011920929,
+     "ltype": "SUN"
+    },
+    {
+     "name": "station-world",
+     "type": "EMPTY",
+     "parent": null,
+     "colls": [
+      "station-world"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "star_dome",
+     "type": "MESH",
+     "parent": "station-world",
+     "colls": [
+      "station-world"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 1216,
+     "verts": 610,
+     "mesh": "Sphere.014",
+     "mats": [
+      "MAT_stardome"
+     ],
+     "has_uv": true,
+     "dims": [
+      11999.99,
+      11999.99,
+      12000.0
+     ]
+    },
+    {
+     "name": "station-rotating",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "rim_segment_00",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      210.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_01",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      208.2,
+      27.41,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_02",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      202.84,
+      54.35,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_03",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      194.01,
+      80.36,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_04",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      181.87,
+      105.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_05",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      166.6,
+      127.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_06",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      148.49,
+      148.49,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_07",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      127.84,
+      166.6,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_08",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      105.0,
+      181.87,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_09",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      80.36,
+      194.01,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_10",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      54.35,
+      202.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_11",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      27.41,
+      208.2,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_12",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      0.0,
+      210.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_13",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -27.41,
+      208.2,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_14",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -54.35,
+      202.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_15",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -80.36,
+      194.01,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_16",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -105.0,
+      181.87,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_17",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -127.84,
+      166.6,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_18",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -148.49,
+      148.49,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_19",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -166.6,
+      127.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_20",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -181.87,
+      105.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_21",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -194.01,
+      80.36,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_22",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -202.84,
+      54.35,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_23",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -208.2,
+      27.41,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_24",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -210.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_25",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -208.2,
+      -27.41,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_26",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -202.84,
+      -54.35,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_27",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -194.01,
+      -80.36,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_28",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -181.87,
+      -105.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_29",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -166.6,
+      -127.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_30",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -148.49,
+      -148.49,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_31",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -127.84,
+      -166.6,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_32",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -105.0,
+      -181.87,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_33",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -80.36,
+      -194.01,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_34",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -54.35,
+      -202.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_35",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -27.41,
+      -208.2,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_36",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -0.0,
+      -210.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_37",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      27.41,
+      -208.2,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_38",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      54.35,
+      -202.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_39",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      80.36,
+      -194.01,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_40",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      105.0,
+      -181.87,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_41",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      127.84,
+      -166.6,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_42",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      148.49,
+      -148.49,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_43",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      166.6,
+      -127.84,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_44",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      181.87,
+      -105.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_45",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      194.01,
+      -80.36,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_46",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      202.84,
+      -54.35,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "rim_segment_47",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      208.2,
+      -27.41,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 40,
+     "mesh": "Cube.012",
+     "mats": [
+      "MAT_basalt",
+      "MAT_gunmetal",
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.1,
+      26.5,
+      23.3
+     ]
+    },
+    {
+     "name": "beacon_00",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      209.55,
+      13.73,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_cyan_mesh",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_01",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      205.96,
+      40.97,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_02",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      198.86,
+      67.5,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_03",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      188.34,
+      92.88,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_04",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      174.61,
+      116.67,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_05",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      157.89,
+      138.46,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_06",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      138.46,
+      157.89,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_07",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      116.67,
+      174.61,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_08",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      92.88,
+      188.34,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_cyan_mesh",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_09",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      67.5,
+      198.86,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_10",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      40.97,
+      205.96,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_11",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      13.73,
+      209.55,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_12",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -13.73,
+      209.55,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_13",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -40.97,
+      205.96,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_14",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -67.5,
+      198.86,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_15",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -92.88,
+      188.34,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_16",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -116.67,
+      174.61,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_cyan_mesh",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_17",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -138.46,
+      157.89,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_18",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -157.89,
+      138.46,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_19",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -174.61,
+      116.67,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_20",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -188.34,
+      92.88,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_21",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -198.86,
+      67.5,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_22",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -205.96,
+      40.97,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_23",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -209.55,
+      13.73,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_24",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -209.55,
+      -13.73,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_cyan_mesh",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_25",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -205.96,
+      -40.97,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_26",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -198.86,
+      -67.5,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_27",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -188.34,
+      -92.88,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_28",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -174.61,
+      -116.67,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_29",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -157.89,
+      -138.46,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_30",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -138.46,
+      -157.89,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_31",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -116.67,
+      -174.61,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_32",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -92.88,
+      -188.34,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_cyan_mesh",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_33",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -67.5,
+      -198.86,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_34",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -40.97,
+      -205.96,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_35",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -13.73,
+      -209.55,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_36",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      13.73,
+      -209.55,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_37",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      40.97,
+      -205.96,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_38",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      67.5,
+      -198.86,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_39",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      92.88,
+      -188.34,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_40",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      116.67,
+      -174.61,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_cyan_mesh",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_41",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      138.46,
+      -157.89,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_42",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      157.89,
+      -138.46,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_43",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      174.61,
+      -116.67,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_44",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      188.34,
+      -92.88,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_45",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      198.86,
+      -67.5,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_46",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      205.96,
+      -40.97,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "beacon_47",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      209.55,
+      -13.73,
+      12.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "beacon_amber_mesh",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.19,
+      2.3,
+      2.3
+     ]
+    },
+    {
+     "name": "hub_core",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 92,
+     "verts": 48,
+     "mesh": "Cylinder.002",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      52.0,
+      52.0,
+      24.0
+     ]
+    },
+    {
+     "name": "hub_cap",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      15.0
+     ],
+     "hidden": false,
+     "tris": 92,
+     "verts": 48,
+     "mesh": "Cylinder.003",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      34.0,
+      34.0,
+      8.0
+     ]
+    },
+    {
+     "name": "hub_light_ring",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      8.0
+     ],
+     "hidden": false,
+     "tris": 384,
+     "verts": 192,
+     "mesh": "Torus",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      55.2,
+      55.2,
+      1.91
+     ]
+    },
+    {
+     "name": "spoke_0",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      111.5,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.017",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      171.0,
+      7.0,
+      9.0
+     ]
+    },
+    {
+     "name": "spoke_truss_0",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      104.48,
+      10.48,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.018",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      150.0,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "spoke_1",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      55.75,
+      96.56,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.019",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      171.0,
+      7.0,
+      9.0
+     ]
+    },
+    {
+     "name": "spoke_truss_1",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      43.16,
+      95.72,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.020",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      150.0,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "spoke_2",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -55.75,
+      96.56,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.021",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      171.0,
+      7.0,
+      9.0
+     ]
+    },
+    {
+     "name": "spoke_truss_2",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -61.32,
+      85.24,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.022",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      150.0,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "spoke_3",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -111.5,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.023",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      171.0,
+      7.0,
+      9.0
+     ]
+    },
+    {
+     "name": "spoke_truss_3",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -104.48,
+      -10.48,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.024",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      150.0,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "spoke_4",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -55.75,
+      -96.56,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.025",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      171.0,
+      7.0,
+      9.0
+     ]
+    },
+    {
+     "name": "spoke_truss_4",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -43.16,
+      -95.72,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.026",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      150.0,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "spoke_5",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      55.75,
+      -96.56,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.027",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      171.0,
+      7.0,
+      9.0
+     ]
+    },
+    {
+     "name": "spoke_truss_5",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      61.32,
+      -85.24,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.028",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      150.0,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "inner_band",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 1024,
+     "verts": 512,
+     "mesh": "Torus.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      382.4,
+      382.4,
+      6.4
+     ]
+    },
+    {
+     "name": "second_seam_band",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -190.32,
+      -88.75,
+      -10.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.029",
+     "mats": [
+      "MAT_seam_old"
+     ],
+     "has_uv": true,
+     "dims": [
+      27.5,
+      13.0,
+      1.4
+     ]
+    },
+    {
+     "name": "second_seam_groove_a",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -192.1,
+      -84.94,
+      -10.9
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.030",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      27.5,
+      0.7,
+      0.5
+     ]
+    },
+    {
+     "name": "second_seam_groove_b",
+     "type": "MESH",
+     "parent": "station-rotating",
+     "colls": [
+      "station-rotating"
+     ],
+     "loc": [
+      -188.55,
+      -92.56,
+      -10.9
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.031",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      27.5,
+      0.7,
+      0.5
+     ]
+    },
+    {
+     "name": "station-work-lights",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "worklight_pole_0",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      70.0,
+      -150.0,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 28,
+     "verts": 16,
+     "mesh": "Cylinder.012",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.56,
+      0.56,
+      9.0
+     ]
+    },
+    {
+     "name": "worklight_head_0",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      70.0,
+      -150.0,
+      9.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.083",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      1.5,
+      0.8
+     ]
+    },
+    {
+     "name": "worklight_pole_1",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      120.0,
+      -160.0,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 28,
+     "verts": 16,
+     "mesh": "Cylinder.013",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.56,
+      0.56,
+      9.0
+     ]
+    },
+    {
+     "name": "worklight_head_1",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      120.0,
+      -160.0,
+      9.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.084",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      1.5,
+      0.8
+     ]
+    },
+    {
+     "name": "worklight_pole_2",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      40.0,
+      -190.0,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 28,
+     "verts": 16,
+     "mesh": "Cylinder.014",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.56,
+      0.56,
+      9.0
+     ]
+    },
+    {
+     "name": "worklight_head_2",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      40.0,
+      -190.0,
+      9.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.085",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      1.5,
+      0.8
+     ]
+    },
+    {
+     "name": "worklight_pole_3",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      118.0,
+      -196.0,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 28,
+     "verts": 16,
+     "mesh": "Cylinder.015",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.56,
+      0.56,
+      9.0
+     ]
+    },
+    {
+     "name": "worklight_head_3",
+     "type": "MESH",
+     "parent": "station-work-lights",
+     "colls": [
+      "station-work-lights"
+     ],
+     "loc": [
+      118.0,
+      -196.0,
+      9.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.086",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      1.5,
+      0.8
+     ]
+    },
+    {
+     "name": "station-traffic-fallback",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "station-traffic-fallback"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "fallback_hull",
+     "type": "MESH",
+     "parent": "station-traffic-fallback",
+     "colls": [
+      "station-traffic-fallback"
+     ],
+     "loc": [
+      150.0,
+      244.0,
+      -22.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "fallback_hull_mesh.001",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": false,
+     "dims": [
+      9.0,
+      2.7,
+      2.16
+     ]
+    },
+    {
+     "name": "witness-drydock-gantry",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "gantry_leg_a",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      82.0,
+      -195.0,
+      17.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.033",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      3.2,
+      34.0
+     ]
+    },
+    {
+     "name": "gantry_leg_b",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      94.0,
+      -195.0,
+      17.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.034",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      3.2,
+      34.0
+     ]
+    },
+    {
+     "name": "gantry_beam",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      88.0,
+      -195.0,
+      35.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.035",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      17.0,
+      4.0,
+      3.2
+     ]
+    },
+    {
+     "name": "gantry_hoist",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      88.0,
+      -195.0,
+      31.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.036",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.4,
+      4.5
+     ]
+    },
+    {
+     "name": "gantry_cable",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      88.0,
+      -195.0,
+      24.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.037",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.35,
+      0.35,
+      9.0
+     ]
+    },
+    {
+     "name": "gantry_hook",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      88.0,
+      -195.0,
+      19.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.038",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.6,
+      1.6,
+      1.2
+     ]
+    },
+    {
+     "name": "gantry_cabin",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      94.0,
+      -195.0,
+      30.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.039",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.5,
+      3.6,
+      3.4
+     ]
+    },
+    {
+     "name": "gantry_cabin_glass",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      91.7,
+      -195.0,
+      30.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.040",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.3,
+      2.6,
+      1.4
+     ]
+    },
+    {
+     "name": "gantry_worklight_82",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      82.0,
+      -195.0,
+      37.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.041",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.1,
+      1.1,
+      0.7
+     ]
+    },
+    {
+     "name": "gantry_worklight_94",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      94.0,
+      -195.0,
+      37.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.042",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.1,
+      1.1,
+      0.7
+     ]
+    },
+    {
+     "name": "gantry_base_a",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      82.0,
+      -195.0,
+      1.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.043",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.0,
+      6.0,
+      2.0
+     ]
+    },
+    {
+     "name": "gantry_base_b",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      94.0,
+      -195.0,
+      1.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.044",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.0,
+      6.0,
+      2.0
+     ]
+    },
+    {
+     "name": "berthboard_post",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      99.0,
+      -186.0,
+      3.75
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.045",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.9,
+      0.9,
+      7.5
+     ]
+    },
+    {
+     "name": "berthboard_panel",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      99.0,
+      -186.0,
+      9.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.046",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      11.0,
+      0.7,
+      6.0
+     ]
+    },
+    {
+     "name": "berthboard_slot_00",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      95.15,
+      -186.55,
+      11.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.047",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_01",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      96.69,
+      -186.55,
+      11.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.048",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_02",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      98.23,
+      -186.55,
+      11.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.049",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_03",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      99.77,
+      -186.55,
+      11.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.050",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_04",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      101.31,
+      -186.55,
+      11.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.051",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_05",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      102.85,
+      -186.55,
+      11.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.052",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_06",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      95.15,
+      -186.55,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.053",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_07",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      96.69,
+      -186.55,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.054",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_08",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      98.23,
+      -186.55,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.055",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_09",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      99.77,
+      -186.55,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.056",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_10",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      101.31,
+      -186.55,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.057",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "berthboard_slot_11",
+     "type": "MESH",
+     "parent": "witness-drydock-gantry",
+     "colls": [
+      "witness-drydock-gantry"
+     ],
+     "loc": [
+      102.85,
+      -186.55,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.058",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.25,
+      0.18,
+      1.9
+     ]
+    },
+    {
+     "name": "witness-hauler",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "witness-hauler"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hauler_hull",
+     "type": "MESH",
+     "parent": "witness-hauler",
+     "colls": [
+      "witness-hauler"
+     ],
+     "loc": [
+      30.0,
+      -220.0,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "hauler_hull_mesh.001",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      22.0,
+      6.6,
+      5.28
+     ]
+    },
+    {
+     "name": "hauler_cargo_a",
+     "type": "MESH",
+     "parent": "witness-hauler",
+     "colls": [
+      "witness-hauler"
+     ],
+     "loc": [
+      30.0,
+      -223.0,
+      13.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.144",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.0,
+      5.0,
+      3.4
+     ]
+    },
+    {
+     "name": "hauler_cargo_b",
+     "type": "MESH",
+     "parent": "witness-hauler",
+     "colls": [
+      "witness-hauler"
+     ],
+     "loc": [
+      30.0,
+      -215.5,
+      13.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.145",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.0,
+      4.4,
+      2.8
+     ]
+    },
+    {
+     "name": "hauler_glow",
+     "type": "MESH",
+     "parent": "witness-hauler",
+     "colls": [
+      "witness-hauler"
+     ],
+     "loc": [
+      30.0,
+      -231.4,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.146",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.2,
+      0.5,
+      1.4
+     ]
+    },
+    {
+     "name": "annex-lunar-annex",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "lunar_dome_a",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -170.0,
+      120.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 728,
+     "verts": 366,
+     "mesh": "Sphere.003",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      26.0,
+      26.0,
+      26.0
+     ]
+    },
+    {
+     "name": "lunar_dome_b",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -152.0,
+      132.0,
+      0.0
+     ],
+     "hidden": false,
+     "tris": 528,
+     "verts": 266,
+     "mesh": "Sphere.004",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      18.0,
+      18.0,
+      18.0
+     ]
+    },
+    {
+     "name": "lunar_module",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -186.0,
+      108.0,
+      4.0
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 32,
+     "mesh": "Cylinder.016",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      8.0,
+      8.0,
+      15.0
+     ]
+    },
+    {
+     "name": "lunar_tunnel",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -160.0,
+      124.0,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.087",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      12.0,
+      4.0,
+      4.5
+     ]
+    },
+    {
+     "name": "lunar_base",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -170.0,
+      120.0,
+      1.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.088",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      44.0,
+      36.0,
+      2.0
+     ]
+    },
+    {
+     "name": "lunar_door",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -170.0,
+      101.6,
+      2.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.089",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      0.5,
+      5.2
+     ]
+    },
+    {
+     "name": "lunar_faded_ticket",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -167.6,
+      101.4,
+      3.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.090",
+     "mats": [
+      "MAT_paper_pale"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      0.12,
+      1.5
+     ]
+    },
+    {
+     "name": "annex-lunar-annex_win_0",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -174.8,
+      106.5,
+      5.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.091",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-lunar-annex_win_1",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -171.6,
+      106.5,
+      5.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.092",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-lunar-annex_win_2",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -168.4,
+      106.5,
+      5.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.093",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-lunar-annex_win_3",
+     "type": "MESH",
+     "parent": "annex-lunar-annex",
+     "colls": [
+      "annex-lunar-annex"
+     ],
+     "loc": [
+      -165.2,
+      106.5,
+      5.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.094",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-colony-ring",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "colony_ring_torus",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -235.0,
+      30.0,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 720,
+     "verts": 360,
+     "mesh": "Torus.003",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.2,
+      40.2,
+      5.9
+     ]
+    },
+    {
+     "name": "colony_core",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -235.0,
+      30.0,
+      10.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.096",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      10.0,
+      10.0,
+      9.0
+     ]
+    },
+    {
+     "name": "colony_leg_0",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -225.81,
+      39.19,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.097",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      9.0
+     ]
+    },
+    {
+     "name": "colony_spoke_0",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -228.99,
+      36.01,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.098",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      11.0,
+      1.6,
+      1.6
+     ]
+    },
+    {
+     "name": "colony_leg_1",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -244.19,
+      39.19,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.099",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      9.0
+     ]
+    },
+    {
+     "name": "colony_spoke_1",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -241.01,
+      36.01,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.100",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      11.0,
+      1.6,
+      1.6
+     ]
+    },
+    {
+     "name": "colony_leg_2",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -244.19,
+      20.81,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.101",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      9.0
+     ]
+    },
+    {
+     "name": "colony_spoke_2",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -241.01,
+      23.99,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.102",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      11.0,
+      1.6,
+      1.6
+     ]
+    },
+    {
+     "name": "colony_leg_3",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -225.81,
+      20.81,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.103",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      9.0
+     ]
+    },
+    {
+     "name": "colony_spoke_3",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -228.99,
+      23.99,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.104",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      11.0,
+      1.6,
+      1.6
+     ]
+    },
+    {
+     "name": "colony_door",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -235.0,
+      19.6,
+      2.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.105",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.2,
+      0.5,
+      5.0
+     ]
+    },
+    {
+     "name": "annex-colony-ring_win_0",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -238.2,
+      24.6,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.106",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-colony-ring_win_1",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -235.0,
+      24.6,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.107",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-colony-ring_win_2",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -231.8,
+      24.6,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.108",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "colony_base",
+     "type": "MESH",
+     "parent": "annex-colony-ring",
+     "colls": [
+      "annex-colony-ring"
+     ],
+     "loc": [
+      -235.0,
+      30.0,
+      0.8
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.109",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      46.0,
+      40.0,
+      1.6
+     ]
+    },
+    {
+     "name": "annex-station-stores",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "stores_slab_a",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -138.0,
+      185.0,
+      5.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.111",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      26.0,
+      16.0,
+      11.0
+     ]
+    },
+    {
+     "name": "stores_slab_b",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -116.0,
+      178.0,
+      4.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.112",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      18.0,
+      13.0,
+      8.0
+     ]
+    },
+    {
+     "name": "stores_slab_c",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -146.0,
+      196.0,
+      7.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.113",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      14.0,
+      12.0,
+      14.0
+     ]
+    },
+    {
+     "name": "stores_tank_0",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -108.0,
+      196.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 68,
+     "verts": 36,
+     "mesh": "Cylinder.018",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.09,
+      7.2,
+      12.0
+     ]
+    },
+    {
+     "name": "stores_tank_cap_0",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -108.0,
+      196.0,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 252,
+     "verts": 128,
+     "mesh": "Sphere.006",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.09,
+      7.2,
+      7.2
+     ]
+    },
+    {
+     "name": "stores_tank_1",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -102.0,
+      190.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 68,
+     "verts": 36,
+     "mesh": "Cylinder.019",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.09,
+      7.2,
+      12.0
+     ]
+    },
+    {
+     "name": "stores_tank_cap_1",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -102.0,
+      190.0,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 252,
+     "verts": 128,
+     "mesh": "Sphere.007",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.09,
+      7.2,
+      7.2
+     ]
+    },
+    {
+     "name": "stores_dock",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -130.0,
+      175.5,
+      0.7
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.114",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      16.0,
+      3.0,
+      1.4
+     ]
+    },
+    {
+     "name": "stores_locked_door",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -130.0,
+      176.9,
+      3.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.115",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.5,
+      6.4
+     ]
+    },
+    {
+     "name": "stores_locked_bar_a",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -130.0,
+      176.5,
+      4.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.116",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.8,
+      0.7,
+      0.7
+     ]
+    },
+    {
+     "name": "stores_locked_bar_b",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -130.0,
+      176.5,
+      2.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.117",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.8,
+      0.7,
+      0.7
+     ]
+    },
+    {
+     "name": "annex-station-stores_win_0",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -142.8,
+      176.7,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.118",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-station-stores_win_1",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -139.6,
+      176.7,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.119",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-station-stores_win_2",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -136.4,
+      176.7,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.120",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-station-stores_win_3",
+     "type": "MESH",
+     "parent": "annex-station-stores",
+     "colls": [
+      "annex-station-stores"
+     ],
+     "loc": [
+      -133.2,
+      176.7,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.121",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.5,
+      0.25,
+      0.8
+     ]
+    },
+    {
+     "name": "annex-model-lunar-annex",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "annex-model-lunar-annex"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "lunar_model_module",
+     "type": "MESH",
+     "parent": "annex-model-lunar-annex",
+     "colls": [
+      "annex-model-lunar-annex"
+     ],
+     "loc": [
+      -138.0,
+      100.0,
+      3.4
+     ],
+     "hidden": false,
+     "tris": 52,
+     "verts": 28,
+     "mesh": "Cylinder.017",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.07,
+      5.2,
+      9.0
+     ]
+    },
+    {
+     "name": "lunar_model_cap",
+     "type": "MESH",
+     "parent": "annex-model-lunar-annex",
+     "colls": [
+      "annex-model-lunar-annex"
+     ],
+     "loc": [
+      -138.0,
+      95.6,
+      3.4
+     ],
+     "hidden": false,
+     "tris": 196,
+     "verts": 100,
+     "mesh": "Sphere.005",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.07,
+      5.2,
+      5.2
+     ]
+    },
+    {
+     "name": "lunar_model_plinth",
+     "type": "MESH",
+     "parent": "annex-model-lunar-annex",
+     "colls": [
+      "annex-model-lunar-annex"
+     ],
+     "loc": [
+      -138.0,
+      100.0,
+      0.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.095",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      8.0,
+      8.0,
+      1.2
+     ]
+    },
+    {
+     "name": "annex-model-colony-ring",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "annex-model-colony-ring"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "colony_model_ring",
+     "type": "MESH",
+     "parent": "annex-model-colony-ring",
+     "colls": [
+      "annex-model-colony-ring"
+     ],
+     "loc": [
+      -208.0,
+      52.0,
+      4.5
+     ],
+     "hidden": false,
+     "tris": 240,
+     "verts": 120,
+     "mesh": "Torus.004",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      14.4,
+      14.4,
+      2.08
+     ]
+    },
+    {
+     "name": "colony_model_plinth",
+     "type": "MESH",
+     "parent": "annex-model-colony-ring",
+     "colls": [
+      "annex-model-colony-ring"
+     ],
+     "loc": [
+      -208.0,
+      52.0,
+      0.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.110",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      10.0,
+      10.0,
+      1.2
+     ]
+    },
+    {
+     "name": "annex-model-station-stores",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "annex-model-station-stores"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "stores_model_crate_a",
+     "type": "MESH",
+     "parent": "annex-model-station-stores",
+     "colls": [
+      "annex-model-station-stores"
+     ],
+     "loc": [
+      -104.0,
+      168.0,
+      2.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.122",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.0,
+      4.0,
+      4.0
+     ]
+    },
+    {
+     "name": "stores_model_crate_b",
+     "type": "MESH",
+     "parent": "annex-model-station-stores",
+     "colls": [
+      "annex-model-station-stores"
+     ],
+     "loc": [
+      -104.5,
+      168.0,
+      5.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.123",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.0,
+      3.0,
+      3.0
+     ]
+    },
+    {
+     "name": "stores_model_tank",
+     "type": "MESH",
+     "parent": "annex-model-station-stores",
+     "colls": [
+      "annex-model-station-stores"
+     ],
+     "loc": [
+      -98.0,
+      172.0,
+      3.5
+     ],
+     "hidden": false,
+     "tris": 52,
+     "verts": 28,
+     "mesh": "Cylinder.020",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.29,
+      4.4,
+      7.0
+     ]
+    },
+    {
+     "name": "hero-ship",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "hero-ship"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hero_hull",
+     "type": "MESH",
+     "parent": "hero-ship",
+     "colls": [
+      "hero-ship"
+     ],
+     "loc": [
+      80.0,
+      -214.0,
+      4.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "hero_hull_mesh.001",
+     "mats": [
+      "MAT_hull_pale"
+     ],
+     "has_uv": false,
+     "dims": [
+      12.0,
+      3.6,
+      2.88
+     ]
+    },
+    {
+     "name": "hero_canopy",
+     "type": "MESH",
+     "parent": "hero-ship",
+     "colls": [
+      "hero-ship"
+     ],
+     "loc": [
+      77.74,
+      -213.18,
+      5.25
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.140",
+     "mats": [
+      "MAT_glass"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      1.7,
+      0.9
+     ]
+    },
+    {
+     "name": "hero_spine",
+     "type": "MESH",
+     "parent": "hero-ship",
+     "colls": [
+      "hero-ship"
+     ],
+     "loc": [
+      81.41,
+      -214.51,
+      5.15
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.141",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.5,
+      0.9,
+      0.7
+     ]
+    },
+    {
+     "name": "hero_engine_glow",
+     "type": "MESH",
+     "parent": "hero-ship",
+     "colls": [
+      "hero-ship"
+     ],
+     "loc": [
+      85.92,
+      -216.15,
+      4.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.142",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.5,
+      1.9,
+      1.3
+     ]
+    },
+    {
+     "name": "hero_nameplate_BLANK",
+     "type": "MESH",
+     "parent": "hero-ship",
+     "colls": [
+      "hero-ship"
+     ],
+     "loc": [
+      78.77,
+      -215.63,
+      4.25
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.143",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.4,
+      0.14,
+      0.85
+     ]
+    },
+    {
+     "name": "backdrop-lava",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "backdrop-lava"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "planet_lava",
+     "type": "MESH",
+     "parent": "backdrop-lava",
+     "colls": [
+      "backdrop-lava"
+     ],
+     "loc": [
+      -2800.0,
+      2400.0,
+      1200.0
+     ],
+     "hidden": false,
+     "tris": 2000,
+     "verts": 1002,
+     "mesh": "Sphere.012",
+     "mats": [
+      "MAT_planet_lava"
+     ],
+     "has_uv": true,
+     "dims": [
+      520.0,
+      520.0,
+      520.0
+     ]
+    },
+    {
+     "name": "backdrop-quaternius-planet-1",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "backdrop-quaternius-planet-1"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "planet_q1",
+     "type": "MESH",
+     "parent": "backdrop-quaternius-planet-1",
+     "colls": [
+      "backdrop-quaternius-planet-1"
+     ],
+     "loc": [
+      3400.0,
+      -1600.0,
+      -600.0
+     ],
+     "hidden": false,
+     "tris": 2000,
+     "verts": 1002,
+     "mesh": "Sphere.013",
+     "mats": [
+      "MAT_planet_q1"
+     ],
+     "has_uv": true,
+     "dims": [
+      400.0,
+      400.0,
+      400.0
+     ]
+    },
+    {
+     "name": "docking-shuttle",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "docking-shuttle"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "shuttle_hull",
+     "type": "MESH",
+     "parent": "docking-shuttle",
+     "colls": [
+      "docking-shuttle"
+     ],
+     "loc": [
+      112.0,
+      -206.0,
+      15.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "shuttle_hull_mesh.001",
+     "mats": [
+      "MAT_hull_pale"
+     ],
+     "has_uv": false,
+     "dims": [
+      6.0,
+      1.8,
+      1.44
+     ]
+    },
+    {
+     "name": "harbor-controller-ship",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "harbor-controller-ship"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "controller_hull",
+     "type": "MESH",
+     "parent": "harbor-controller-ship",
+     "colls": [
+      "harbor-controller-ship"
+     ],
+     "loc": [
+      -40.0,
+      -246.0,
+      18.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "controller_hull_mesh.001",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      10.0,
+      3.0,
+      2.4
+     ]
+    },
+    {
+     "name": "controller_nav_marker",
+     "type": "MESH",
+     "parent": "harbor-controller-ship",
+     "colls": [
+      "harbor-controller-ship"
+     ],
+     "loc": [
+      -40.0,
+      -246.0,
+      21.6
+     ],
+     "hidden": false,
+     "tris": 100,
+     "verts": 52,
+     "mesh": "Sphere.011",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.52,
+      1.6,
+      1.6
+     ]
+    },
+    {
+     "name": "traffic-01",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "traffic-01"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "traffic-01_hull",
+     "type": "MESH",
+     "parent": "traffic-01",
+     "colls": [
+      "traffic-01"
+     ],
+     "loc": [
+      277.71,
+      90.23,
+      26.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "traffic-01_hull_mesh.001",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      13.0,
+      3.9,
+      3.12
+     ]
+    },
+    {
+     "name": "traffic-01_glow",
+     "type": "MESH",
+     "parent": "traffic-01",
+     "colls": [
+      "traffic-01"
+     ],
+     "loc": [
+      279.81,
+      83.77,
+      26.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.147",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.4,
+      1.4,
+      0.9
+     ]
+    },
+    {
+     "name": "traffic-02",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "traffic-02"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "traffic-02_hull",
+     "type": "MESH",
+     "parent": "traffic-02",
+     "colls": [
+      "traffic-02"
+     ],
+     "loc": [
+      -33.24,
+      316.26,
+      -14.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "traffic-02_hull_mesh.001",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      9.0,
+      2.7,
+      2.16
+     ]
+    },
+    {
+     "name": "traffic-02_glow",
+     "type": "MESH",
+     "parent": "traffic-02",
+     "colls": [
+      "traffic-02"
+     ],
+     "loc": [
+      -38.01,
+      315.76,
+      -14.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.148",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.4,
+      1.4,
+      0.9
+     ]
+    },
+    {
+     "name": "traffic-03",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "traffic-03"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "traffic-03_hull",
+     "type": "MESH",
+     "parent": "traffic-03",
+     "colls": [
+      "traffic-03"
+     ],
+     "loc": [
+      -293.44,
+      62.37,
+      42.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "traffic-03_hull_mesh.001",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      11.0,
+      3.3,
+      2.64
+     ]
+    },
+    {
+     "name": "traffic-03_glow",
+     "type": "MESH",
+     "parent": "traffic-03",
+     "colls": [
+      "traffic-03"
+     ],
+     "loc": [
+      -292.24,
+      68.05,
+      42.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.149",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.4,
+      1.4,
+      0.9
+     ]
+    },
+    {
+     "name": "traffic-04",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "traffic-04"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "traffic-04_hull",
+     "type": "MESH",
+     "parent": "traffic-04",
+     "colls": [
+      "traffic-04"
+     ],
+     "loc": [
+      -203.17,
+      -260.04,
+      -30.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "traffic-04_hull_mesh.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      8.0,
+      2.4,
+      1.92
+     ]
+    },
+    {
+     "name": "traffic-04_glow",
+     "type": "MESH",
+     "parent": "traffic-04",
+     "colls": [
+      "traffic-04"
+     ],
+     "loc": [
+      -206.56,
+      -257.4,
+      -30.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.150",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.4,
+      1.4,
+      0.9
+     ]
+    },
+    {
+     "name": "traffic-05",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "traffic-05"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "traffic-05_hull",
+     "type": "MESH",
+     "parent": "traffic-05",
+     "colls": [
+      "traffic-05"
+     ],
+     "loc": [
+      89.0,
+      -273.9,
+      16.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "traffic-05_hull_mesh.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      14.0,
+      4.2,
+      3.36
+     ]
+    },
+    {
+     "name": "traffic-05_glow",
+     "type": "MESH",
+     "parent": "traffic-05",
+     "colls": [
+      "traffic-05"
+     ],
+     "loc": [
+      95.94,
+      -271.65,
+      16.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.151",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.4,
+      1.4,
+      0.9
+     ]
+    },
+    {
+     "name": "traffic-06",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "traffic-06"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "traffic-06_hull",
+     "type": "MESH",
+     "parent": "traffic-06",
+     "colls": [
+      "traffic-06"
+     ],
+     "loc": [
+      278.86,
+      -161.0,
+      -46.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "traffic-06_hull_mesh.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      10.0,
+      3.0,
+      2.4
+     ]
+    },
+    {
+     "name": "traffic-06_glow",
+     "type": "MESH",
+     "parent": "traffic-06",
+     "colls": [
+      "traffic-06"
+     ],
+     "loc": [
+      276.21,
+      -165.59,
+      -46.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.152",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.4,
+      1.4,
+      0.9
+     ]
+    },
+    {
+     "name": "docked-01",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "docked-01"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "docked-01_hull",
+     "type": "MESH",
+     "parent": "docked-01",
+     "colls": [
+      "docked-01"
+     ],
+     "loc": [
+      -151.45,
+      193.85,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "docked-01_hull_mesh.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      10.0,
+      3.0,
+      2.4
+     ]
+    },
+    {
+     "name": "docked-02",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "docked-02"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "docked-02_hull",
+     "type": "MESH",
+     "parent": "docked-02",
+     "colls": [
+      "docked-02"
+     ],
+     "loc": [
+      -211.91,
+      112.67,
+      -4.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "docked-02_hull_mesh.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      8.0,
+      2.4,
+      1.92
+     ]
+    },
+    {
+     "name": "docked-03",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "docked-03"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "docked-03_hull",
+     "type": "MESH",
+     "parent": "docked-03",
+     "colls": [
+      "docked-03"
+     ],
+     "loc": [
+      -77.87,
+      239.67,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "docked-03_hull_mesh.001",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      9.0,
+      2.7,
+      2.16
+     ]
+    },
+    {
+     "name": "drydock-main",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "main_pad",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -168.0,
+      1.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.067",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      44.0,
+      26.0,
+      3.0
+     ]
+    },
+    {
+     "name": "main_cradle_a",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      39.0,
+      -168.0,
+      7.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.068",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      20.0,
+      9.0
+     ]
+    },
+    {
+     "name": "main_rail_a",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -179.5,
+      3.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.069",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      1.1,
+      0.8
+     ]
+    },
+    {
+     "name": "main_cradle_b",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      65.0,
+      -168.0,
+      7.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.070",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      20.0,
+      9.0
+     ]
+    },
+    {
+     "name": "main_rail_b",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -156.5,
+      3.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.071",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      1.1,
+      0.8
+     ]
+    },
+    {
+     "name": "main_keel_0",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -176.0,
+      4.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.072",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.6,
+      2.6,
+      2.6
+     ]
+    },
+    {
+     "name": "main_keel_1",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -171.8,
+      4.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.073",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.6,
+      2.6,
+      2.6
+     ]
+    },
+    {
+     "name": "main_keel_2",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -167.6,
+      4.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.074",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.6,
+      2.6,
+      2.6
+     ]
+    },
+    {
+     "name": "main_keel_3",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -163.4,
+      4.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.075",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.6,
+      2.6,
+      2.6
+     ]
+    },
+    {
+     "name": "main_keel_4",
+     "type": "MESH",
+     "parent": "drydock-main",
+     "colls": [
+      "drydock-main"
+     ],
+     "loc": [
+      52.0,
+      -159.2,
+      4.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.076",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.6,
+      2.6,
+      2.6
+     ]
+    },
+    {
+     "name": "drydock-witness",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "witness_pad",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      105.0,
+      -177.0,
+      1.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.059",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      30.0,
+      22.0,
+      3.0
+     ]
+    },
+    {
+     "name": "witness_cradle_a",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      96.0,
+      -177.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.060",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.2,
+      16.0,
+      7.0
+     ]
+    },
+    {
+     "name": "witness_cradle_b",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      114.0,
+      -177.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.061",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.2,
+      16.0,
+      7.0
+     ]
+    },
+    {
+     "name": "witness_keel_0",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      105.0,
+      -184.0,
+      4.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.062",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.2,
+      2.4,
+      2.2
+     ]
+    },
+    {
+     "name": "witness_keel_1",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      105.0,
+      -179.4,
+      4.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.063",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.2,
+      2.4,
+      2.2
+     ]
+    },
+    {
+     "name": "witness_keel_2",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      105.0,
+      -174.8,
+      4.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.064",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.2,
+      2.4,
+      2.2
+     ]
+    },
+    {
+     "name": "witness_keel_3",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      105.0,
+      -170.2,
+      4.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.065",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.2,
+      2.4,
+      2.2
+     ]
+    },
+    {
+     "name": "witness_apron_light",
+     "type": "MESH",
+     "parent": "drydock-witness",
+     "colls": [
+      "drydock-witness"
+     ],
+     "loc": [
+      105.0,
+      -165.2,
+      3.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.066",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      30.0,
+      0.8,
+      0.5
+     ]
+    },
+    {
+     "name": "dressing-drydock",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "dressing_container_0",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      30.0,
+      -150.0,
+      3.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.077",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      8.0,
+      4.5,
+      5.6
+     ]
+    },
+    {
+     "name": "dressing_container_1",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      38.5,
+      -150.0,
+      3.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.078",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      8.0,
+      4.5,
+      5.6
+     ]
+    },
+    {
+     "name": "dressing_container_2",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      34.0,
+      -150.0,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.079",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      8.0,
+      4.5,
+      5.6
+     ]
+    },
+    {
+     "name": "dressing_container_3",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      70.0,
+      -152.0,
+      3.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.080",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      8.0,
+      4.5,
+      5.6
+     ]
+    },
+    {
+     "name": "dressing_pipe_0",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      24.0,
+      -158.0,
+      1.0
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.006",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.7,
+      1.7,
+      20.0
+     ]
+    },
+    {
+     "name": "dressing_pipe_1",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      24.0,
+      -156.1,
+      1.4
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.007",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.7,
+      1.7,
+      20.0
+     ]
+    },
+    {
+     "name": "dressing_pipe_2",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      24.0,
+      -154.2,
+      1.8
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.008",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.7,
+      1.7,
+      20.0
+     ]
+    },
+    {
+     "name": "dressing_drum_0",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      66.0,
+      -184.0,
+      1.55
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.009",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      2.6,
+      3.1
+     ]
+    },
+    {
+     "name": "dressing_drum_1",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      69.0,
+      -184.0,
+      1.55
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.010",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      2.6,
+      3.1
+     ]
+    },
+    {
+     "name": "dressing_drum_2",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      67.5,
+      -181.5,
+      1.55
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.011",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      2.6,
+      3.1
+     ]
+    },
+    {
+     "name": "dressing_crate_a",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      74.0,
+      -160.0,
+      1.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.081",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.0,
+      3.0,
+      3.0
+     ]
+    },
+    {
+     "name": "dressing_crate_b",
+     "type": "MESH",
+     "parent": "dressing-drydock",
+     "colls": [
+      "dressing-drydock"
+     ],
+     "loc": [
+      74.5,
+      -160.0,
+      4.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.082",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.2,
+      2.2,
+      2.2
+     ]
+    },
+    {
+     "name": "dressing-annex",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "annex_crate_0",
+     "type": "MESH",
+     "parent": "dressing-annex",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      -186.0,
+      158.0,
+      1.7
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.124",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.4,
+      3.4
+     ]
+    },
+    {
+     "name": "annex_crate_1",
+     "type": "MESH",
+     "parent": "dressing-annex",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      -181.0,
+      160.0,
+      1.7
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.125",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.4,
+      3.4
+     ]
+    },
+    {
+     "name": "annex_crate_2",
+     "type": "MESH",
+     "parent": "dressing-annex",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      -183.5,
+      158.0,
+      5.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.126",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.4,
+      3.4
+     ]
+    },
+    {
+     "name": "annex_barrel_0",
+     "type": "MESH",
+     "parent": "dressing-annex",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      -196.0,
+      148.0,
+      1.4
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Cylinder.021",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.09,
+      2.2,
+      2.8
+     ]
+    },
+    {
+     "name": "annex_barrel_1",
+     "type": "MESH",
+     "parent": "dressing-annex",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      -193.4,
+      148.0,
+      1.4
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Cylinder.022",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.09,
+      2.2,
+      2.8
+     ]
+    },
+    {
+     "name": "annex_barrel_2",
+     "type": "MESH",
+     "parent": "dressing-annex",
+     "colls": [
+      "dressing-annex"
+     ],
+     "loc": [
+      -190.8,
+      148.0,
+      1.4
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Cylinder.023",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.09,
+      2.2,
+      2.8
+     ]
+    },
+    {
+     "name": "relic-mounts",
+     "type": "EMPTY",
+     "parent": "station-world",
+     "colls": [
+      "relic-mounts"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "nail_mount_plinth",
+     "type": "MESH",
+     "parent": "relic-mounts",
+     "colls": [
+      "relic-mounts"
+     ],
+     "loc": [
+      -197.34,
+      71.82,
+      -10.6
+     ],
+     "hidden": false,
+     "tris": 60,
+     "verts": 32,
+     "mesh": "Cylinder.004",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      6.4,
+      6.4,
+      1.6
+     ]
+    },
+    {
+     "name": "nail_mount_head",
+     "type": "MESH",
+     "parent": "relic-mounts",
+     "colls": [
+      "relic-mounts"
+     ],
+     "loc": [
+      -197.34,
+      71.82,
+      -11.8
+     ],
+     "hidden": false,
+     "tris": 44,
+     "verts": 24,
+     "mesh": "Cylinder.005",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      1.4
+     ]
+    },
+    {
+     "name": "mooring_ring_mount",
+     "type": "MESH",
+     "parent": "relic-mounts",
+     "colls": [
+      "relic-mounts"
+     ],
+     "loc": [
+      64.0,
+      -186.0,
+      0.8
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.032",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      6.0,
+      6.0,
+      1.6
+     ]
+    },
+    {
+     "name": "mooring_ring_mount_ring",
+     "type": "MESH",
+     "parent": "relic-mounts",
+     "colls": [
+      "relic-mounts"
+     ],
+     "loc": [
+      64.0,
+      -186.0,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 240,
+     "verts": 120,
+     "mesh": "Torus.002",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.3,
+      5.3,
+      0.78
+     ]
+    }
+   ],
+   "collections": [
+    "station-world",
+    "station-rotating",
+    "station-work-lights",
+    "station-traffic-fallback",
+    "witness-drydock-gantry",
+    "witness-hauler",
+    "annex-lunar-annex",
+    "annex-colony-ring",
+    "annex-station-stores",
+    "annex-model-lunar-annex",
+    "annex-model-colony-ring",
+    "annex-model-station-stores",
+    "hero-ship",
+    "backdrop-lava",
+    "backdrop-quaternius-planet-1",
+    "docking-shuttle",
+    "harbor-controller-ship",
+    "traffic-01",
+    "traffic-02",
+    "traffic-03",
+    "traffic-04",
+    "traffic-05",
+    "traffic-06",
+    "docked-01",
+    "docked-02",
+    "docked-03",
+    "drydock-main",
+    "drydock-witness",
+    "dressing-drydock",
+    "dressing-annex",
+    "relic-mounts",
+    "REF_locked"
+   ],
+   "render_engine": "BLENDER_EEVEE_NEXT",
+   "cam": "cam04_annexes"
+  },
+  "STATION_INTERIOR": {
+   "objects": [
+    {
+     "name": "PT_hangar_key",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      0.0,
+      -6.0,
+      16.5
+     ],
+     "hidden": false,
+     "energy": 15000.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "PT_hangar_fill",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      -20.0,
+      12.0,
+      10.0
+     ],
+     "hidden": false,
+     "energy": 5000.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "PT_commission",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      110.0,
+      0.0,
+      10.0
+     ],
+     "hidden": false,
+     "energy": 7000.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "PT_fleet",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      200.0,
+      0.0,
+      11.0
+     ],
+     "hidden": false,
+     "energy": 8500.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "PT_observation_warm",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      300.0,
+      5.0,
+      9.0
+     ],
+     "hidden": false,
+     "energy": 5500.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "PT_observation_cool",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      300.0,
+      -5.0,
+      8.5
+     ],
+     "hidden": false,
+     "energy": 3200.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "PT_view_cool",
+     "type": "LIGHT",
+     "parent": null,
+     "colls": [
+      "Scene Collection"
+     ],
+     "loc": [
+      308.0,
+      -42.0,
+      12.0
+     ],
+     "hidden": false,
+     "energy": 26000.0,
+     "ltype": "POINT"
+    },
+    {
+     "name": "station-interior",
+     "type": "EMPTY",
+     "parent": null,
+     "colls": [
+      "station-interior"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hangar-bay",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "hangar-bay"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hangar-bay_wall_back",
+     "type": "MESH",
+     "parent": "hangar-bay",
+     "colls": [
+      "hangar-bay"
+     ],
+     "loc": [
+      0.0,
+      20.0,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.155",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      70.0,
+      1.0,
+      20.0
+     ]
+    },
+    {
+     "name": "hangar-bay_wall_l",
+     "type": "MESH",
+     "parent": "hangar-bay",
+     "colls": [
+      "hangar-bay"
+     ],
+     "loc": [
+      -35.0,
+      0.0,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.156",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      40.0,
+      20.0
+     ]
+    },
+    {
+     "name": "hangar-bay_wall_r",
+     "type": "MESH",
+     "parent": "hangar-bay",
+     "colls": [
+      "hangar-bay"
+     ],
+     "loc": [
+      35.0,
+      0.0,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.157",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      40.0,
+      20.0
+     ]
+    },
+    {
+     "name": "hangar-bay_wall_f1",
+     "type": "MESH",
+     "parent": "hangar-bay",
+     "colls": [
+      "hangar-bay"
+     ],
+     "loc": [
+      -21.0,
+      -20.0,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.158",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.0,
+      1.0,
+      20.0
+     ]
+    },
+    {
+     "name": "hangar-bay_wall_f2",
+     "type": "MESH",
+     "parent": "hangar-bay",
+     "colls": [
+      "hangar-bay"
+     ],
+     "loc": [
+      21.0,
+      -20.0,
+      10.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.159",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      28.0,
+      1.0,
+      20.0
+     ]
+    },
+    {
+     "name": "commission-board",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "commission-board_wall_back",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      110.0,
+      13.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.165",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      44.0,
+      1.0,
+      12.0
+     ]
+    },
+    {
+     "name": "commission-board_wall_l",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      88.0,
+      0.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.166",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      26.0,
+      12.0
+     ]
+    },
+    {
+     "name": "commission-board_wall_r",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      132.0,
+      0.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.167",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      26.0,
+      12.0
+     ]
+    },
+    {
+     "name": "commission-board_wall_f1",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      95.5,
+      -13.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.168",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      15.0,
+      1.0,
+      12.0
+     ]
+    },
+    {
+     "name": "commission-board_wall_f2",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      124.5,
+      -13.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.169",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      15.0,
+      1.0,
+      12.0
+     ]
+    },
+    {
+     "name": "board_panel",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      110.0,
+      12.4,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.204",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      32.0,
+      0.7,
+      7.5
+     ]
+    },
+    {
+     "name": "board_cell_00",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      96.8,
+      11.95,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.205",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_01",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      102.1,
+      11.95,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.206",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_02",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      107.4,
+      11.95,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.207",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_03",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      112.7,
+      11.95,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.208",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_04",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      118.0,
+      11.95,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.209",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_05",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      123.3,
+      11.95,
+      8.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.210",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_06",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      96.8,
+      11.95,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.211",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_07",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      102.1,
+      11.95,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.212",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_08",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      107.4,
+      11.95,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.213",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_09",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      112.7,
+      11.95,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.214",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_10",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      118.0,
+      11.95,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.215",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_11",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      123.3,
+      11.95,
+      6.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.216",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_12",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      96.8,
+      11.95,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.217",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_13",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      102.1,
+      11.95,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.218",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_14",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      107.4,
+      11.95,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.219",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_15",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      112.7,
+      11.95,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.220",
+     "mats": [
+      "MAT_dark_unlit"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_16",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      118.0,
+      11.95,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.221",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_cell_17",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      123.3,
+      11.95,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.222",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      4.2,
+      0.25,
+      1.7
+     ]
+    },
+    {
+     "name": "board_desk_0",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      100.0,
+      4.0,
+      1.55
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.223",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.0,
+      2.6,
+      1.1
+     ]
+    },
+    {
+     "name": "board_desk_screen_0",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      100.0,
+      4.8,
+      2.9
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.224",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      0.2,
+      1.5
+     ]
+    },
+    {
+     "name": "board_chair_0",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      100.0,
+      0.8,
+      1.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.225",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.6,
+      1.6,
+      2.2
+     ]
+    },
+    {
+     "name": "board_desk_1",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      110.0,
+      4.0,
+      1.55
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.226",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.0,
+      2.6,
+      1.1
+     ]
+    },
+    {
+     "name": "board_desk_screen_1",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      110.0,
+      4.8,
+      2.9
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.227",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      0.2,
+      1.5
+     ]
+    },
+    {
+     "name": "board_chair_1",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      110.0,
+      0.8,
+      1.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.228",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.6,
+      1.6,
+      2.2
+     ]
+    },
+    {
+     "name": "board_desk_2",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      120.0,
+      4.0,
+      1.55
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.229",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      7.0,
+      2.6,
+      1.1
+     ]
+    },
+    {
+     "name": "board_desk_screen_2",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      120.0,
+      4.8,
+      2.9
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.230",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      0.2,
+      1.5
+     ]
+    },
+    {
+     "name": "board_chair_2",
+     "type": "MESH",
+     "parent": "commission-board",
+     "colls": [
+      "commission-board"
+     ],
+     "loc": [
+      120.0,
+      0.8,
+      1.1
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.231",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.6,
+      1.6,
+      2.2
+     ]
+    },
+    {
+     "name": "fleet-deck",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "fleet-deck_wall_back",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      200.0,
+      15.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.175",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      50.0,
+      1.0,
+      13.0
+     ]
+    },
+    {
+     "name": "fleet-deck_wall_l",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      175.0,
+      0.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.176",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      30.0,
+      13.0
+     ]
+    },
+    {
+     "name": "fleet-deck_wall_r",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      225.0,
+      0.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.177",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      30.0,
+      13.0
+     ]
+    },
+    {
+     "name": "fleet-deck_wall_f1",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      184.0,
+      -15.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.178",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      18.0,
+      1.0,
+      13.0
+     ]
+    },
+    {
+     "name": "fleet-deck_wall_f2",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      216.0,
+      -15.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.179",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      18.0,
+      1.0,
+      13.0
+     ]
+    },
+    {
+     "name": "fleet_crate_0",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      184.0,
+      -12.5,
+      1.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.235",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.0,
+      2.6
+     ]
+    },
+    {
+     "name": "fleet_crate_1",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      194.0,
+      -12.5,
+      1.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.236",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.0,
+      2.6
+     ]
+    },
+    {
+     "name": "fleet_crate_2",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      206.0,
+      -12.5,
+      1.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.237",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.0,
+      2.6
+     ]
+    },
+    {
+     "name": "fleet_crate_3",
+     "type": "MESH",
+     "parent": "fleet-deck",
+     "colls": [
+      "fleet-deck"
+     ],
+     "loc": [
+      216.0,
+      -12.5,
+      1.3
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.238",
+     "mats": [
+      "MAT_basalt"
+     ],
+     "has_uv": true,
+     "dims": [
+      3.4,
+      3.0,
+      2.6
+     ]
+    },
+    {
+     "name": "observation-deck",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "observation-deck_wall_back",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      300.0,
+      12.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.185",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      1.0,
+      12.0
+     ]
+    },
+    {
+     "name": "observation-deck_wall_l",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      280.0,
+      0.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.186",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      24.0,
+      12.0
+     ]
+    },
+    {
+     "name": "observation-deck_wall_r",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      320.0,
+      0.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.187",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.0,
+      24.0,
+      12.0
+     ]
+    },
+    {
+     "name": "observation-deck_wall_f1",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      286.5,
+      -12.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.188",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      13.0,
+      1.0,
+      12.0
+     ]
+    },
+    {
+     "name": "observation-deck_wall_f2",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      313.5,
+      -12.0,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.189",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      13.0,
+      1.0,
+      12.0
+     ]
+    },
+    {
+     "name": "viewport_glass",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      300.0,
+      -12.2,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.242",
+     "mats": [
+      "MAT_glass"
+     ],
+     "has_uv": true,
+     "dims": [
+      34.0,
+      0.4,
+      8.5
+     ]
+    },
+    {
+     "name": "view_wheel_arc",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      292.0,
+      -100.0,
+      4.0
+     ],
+     "hidden": false,
+     "tris": 960,
+     "verts": 480,
+     "mesh": "Torus.006",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      180.0,
+      180.0,
+      9.51
+     ]
+    },
+    {
+     "name": "view_planet",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      320.0,
+      -72.0,
+      13.0
+     ],
+     "hidden": false,
+     "tris": 720,
+     "verts": 362,
+     "mesh": "Sphere.023",
+     "mats": [
+      "MAT_planet_q1"
+     ],
+     "has_uv": true,
+     "dims": [
+      64.0,
+      64.0,
+      64.0
+     ]
+    },
+    {
+     "name": "view_star_0",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      270.0,
+      -60.0,
+      26.0
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Sphere.024",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.95,
+      1.1,
+      1.1
+     ]
+    },
+    {
+     "name": "view_star_1",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      315.0,
+      -70.0,
+      34.0
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Sphere.025",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.95,
+      1.1,
+      1.1
+     ]
+    },
+    {
+     "name": "view_star_2",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      348.0,
+      -55.0,
+      8.0
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Sphere.026",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.95,
+      1.1,
+      1.1
+     ]
+    },
+    {
+     "name": "view_star_3",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      248.0,
+      -80.0,
+      12.0
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Sphere.027",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.95,
+      1.1,
+      1.1
+     ]
+    },
+    {
+     "name": "view_star_4",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      305.0,
+      -50.0,
+      -2.0
+     ],
+     "hidden": false,
+     "tris": 36,
+     "verts": 20,
+     "mesh": "Sphere.028",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.95,
+      1.1,
+      1.1
+     ]
+    },
+    {
+     "name": "obs_console",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      300.0,
+      -8.0,
+      1.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.250",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      14.0,
+      2.2,
+      1.2
+     ]
+    },
+    {
+     "name": "obs_console_glow",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      300.0,
+      -8.6,
+      2.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.251",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      13.0,
+      0.3,
+      0.9
+     ]
+    },
+    {
+     "name": "obs_seat_0",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      296.0,
+      -4.5,
+      1.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.252",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.0,
+      2.0,
+      2.4
+     ]
+    },
+    {
+     "name": "obs_seat_1",
+     "type": "MESH",
+     "parent": "observation-deck",
+     "colls": [
+      "observation-deck"
+     ],
+     "loc": [
+      304.0,
+      -4.5,
+      1.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.253",
+     "mats": [
+      "MAT_wood_warm"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.0,
+      2.0,
+      2.4
+     ]
+    },
+    {
+     "name": "interior-bay-ship",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-bay-ship"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "bay_ship_hull",
+     "type": "MESH",
+     "parent": "interior-bay-ship",
+     "colls": [
+      "interior-bay-ship"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "bay_ship_hull_mesh",
+     "mats": [
+      "MAT_hull_pale"
+     ],
+     "has_uv": false,
+     "dims": [
+      12.0,
+      3.6,
+      2.88
+     ]
+    },
+    {
+     "name": "bay_ship_canopy",
+     "type": "MESH",
+     "parent": "interior-bay-ship",
+     "colls": [
+      "interior-bay-ship"
+     ],
+     "loc": [
+      2.4,
+      0.0,
+      9.75
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.193",
+     "mats": [
+      "MAT_glass"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.6,
+      1.7,
+      0.9
+     ]
+    },
+    {
+     "name": "bay_ship_glow",
+     "type": "MESH",
+     "parent": "interior-bay-ship",
+     "colls": [
+      "interior-bay-ship"
+     ],
+     "loc": [
+      -6.3,
+      0.0,
+      8.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.194",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.9,
+      0.5,
+      1.3
+     ]
+    },
+    {
+     "name": "bay_ship_nameplate_BLANK",
+     "type": "MESH",
+     "parent": "interior-bay-ship",
+     "colls": [
+      "interior-bay-ship"
+     ],
+     "loc": [
+      0.6,
+      1.95,
+      8.75
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.195",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": true,
+     "dims": [
+      2.4,
+      0.14,
+      0.85
+     ]
+    },
+    {
+     "name": "interior-user-ship",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-user-ship"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "user_ship_hull",
+     "type": "MESH",
+     "parent": "interior-user-ship",
+     "colls": [
+      "interior-user-ship"
+     ],
+     "loc": [
+      24.0,
+      11.0,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "user_ship_hull_mesh",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      6.5,
+      1.95,
+      1.56
+     ]
+    },
+    {
+     "name": "user_ship_cradle",
+     "type": "MESH",
+     "parent": "interior-user-ship",
+     "colls": [
+      "interior-user-ship"
+     ],
+     "loc": [
+      24.0,
+      11.0,
+      1.8
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.198",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.0,
+      3.0,
+      2.6
+     ]
+    },
+    {
+     "name": "interior-bay-door-lintel",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-bay-door-lintel"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "bay_door_lintel_beam",
+     "type": "MESH",
+     "parent": "interior-bay-door-lintel",
+     "colls": [
+      "interior-bay-door-lintel"
+     ],
+     "loc": [
+      0.0,
+      -20.0,
+      15.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.199",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      30.0,
+      1.8,
+      3.0
+     ]
+    },
+    {
+     "name": "bay_door_frame_l",
+     "type": "MESH",
+     "parent": "interior-bay-door-lintel",
+     "colls": [
+      "interior-bay-door-lintel"
+     ],
+     "loc": [
+      -15.0,
+      -20.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.200",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      13.0
+     ]
+    },
+    {
+     "name": "bay_door_frame_r",
+     "type": "MESH",
+     "parent": "interior-bay-door-lintel",
+     "colls": [
+      "interior-bay-door-lintel"
+     ],
+     "loc": [
+      15.0,
+      -20.0,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.201",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.8,
+      1.8,
+      13.0
+     ]
+    },
+    {
+     "name": "interior-deck-viewport-lintel",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "viewport_frame_t",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      300.0,
+      -12.2,
+      10.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.243",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      36.0,
+      1.2,
+      1.2
+     ]
+    },
+    {
+     "name": "viewport_frame_b",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      300.0,
+      -12.2,
+      1.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.244",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      36.0,
+      1.2,
+      1.2
+     ]
+    },
+    {
+     "name": "viewport_frame_-1",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      282.5,
+      -12.2,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.245",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.2,
+      1.2,
+      10.4
+     ]
+    },
+    {
+     "name": "viewport_frame_1",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      317.5,
+      -12.2,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.246",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      1.2,
+      1.2,
+      10.4
+     ]
+    },
+    {
+     "name": "viewport_mullion_0",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      292.0,
+      -12.2,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.247",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.9,
+      9.2
+     ]
+    },
+    {
+     "name": "viewport_mullion_1",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      300.0,
+      -12.2,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.248",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.9,
+      9.2
+     ]
+    },
+    {
+     "name": "viewport_mullion_2",
+     "type": "MESH",
+     "parent": "interior-deck-viewport-lintel",
+     "colls": [
+      "interior-deck-viewport-lintel"
+     ],
+     "loc": [
+      308.0,
+      -12.2,
+      6.0
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.249",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.9,
+      9.2
+     ]
+    },
+    {
+     "name": "interior-gate-lintel",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-gate-lintel"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "lintel_hangar-bay",
+     "type": "MESH",
+     "parent": "interior-gate-lintel",
+     "colls": [
+      "interior-gate-lintel"
+     ],
+     "loc": [
+      0.0,
+      -20.0,
+      17.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.160",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      15.0,
+      1.4,
+      2.2
+     ]
+    },
+    {
+     "name": "lintel_commission-board",
+     "type": "MESH",
+     "parent": "interior-gate-lintel",
+     "colls": [
+      "interior-gate-lintel"
+     ],
+     "loc": [
+      110.0,
+      -13.0,
+      9.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.170",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      15.0,
+      1.4,
+      2.2
+     ]
+    },
+    {
+     "name": "lintel_fleet-deck",
+     "type": "MESH",
+     "parent": "interior-gate-lintel",
+     "colls": [
+      "interior-gate-lintel"
+     ],
+     "loc": [
+      200.0,
+      -15.0,
+      10.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.180",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      15.0,
+      1.4,
+      2.2
+     ]
+    },
+    {
+     "name": "lintel_observation-deck",
+     "type": "MESH",
+     "parent": "interior-gate-lintel",
+     "colls": [
+      "interior-gate-lintel"
+     ],
+     "loc": [
+      300.0,
+      -12.0,
+      9.4
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.190",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      15.0,
+      1.4,
+      2.2
+     ]
+    },
+    {
+     "name": "interior-gate-lights",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "gatelight_hangar-bay_-1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      -7.6,
+      -20.2,
+      14.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.161",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_hangar-bay_1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      7.6,
+      -20.2,
+      14.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.162",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_commission-board_-1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      102.4,
+      -13.2,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.171",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_commission-board_1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      117.6,
+      -13.2,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.172",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_fleet-deck_-1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      192.4,
+      -15.2,
+      7.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.181",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_fleet-deck_1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      207.6,
+      -15.2,
+      7.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.182",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_observation-deck_-1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      292.4,
+      -12.2,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.191",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "gatelight_observation-deck_1",
+     "type": "MESH",
+     "parent": "interior-gate-lights",
+     "colls": [
+      "interior-gate-lights"
+     ],
+     "loc": [
+      307.6,
+      -12.2,
+      6.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.192",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.7,
+      0.5,
+      1.6
+     ]
+    },
+    {
+     "name": "interior-rim-arc",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-rim-arc"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hangar_rim_arc",
+     "type": "MESH",
+     "parent": "interior-rim-arc",
+     "colls": [
+      "interior-rim-arc"
+     ],
+     "loc": [
+      0.0,
+      19.0,
+      2.0
+     ],
+     "hidden": false,
+     "tris": 640,
+     "verts": 320,
+     "mesh": "Torus.005",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": true,
+     "dims": [
+      62.6,
+      62.6,
+      2.6
+     ]
+    },
+    {
+     "name": "interior-nav-markers",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "navmarker_hangar-bay_-1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      -7.6,
+      -20.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.015",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_hangar-bay_1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      7.6,
+      -20.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.016",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_commission-board_-1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      102.4,
+      -13.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.017",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_commission-board_1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      117.6,
+      -13.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.018",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_fleet-deck_-1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      192.4,
+      -15.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.019",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_fleet-deck_1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      207.6,
+      -15.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.020",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_observation-deck_-1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      292.4,
+      -12.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.021",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "navmarker_observation-deck_1",
+     "type": "MESH",
+     "parent": "interior-nav-markers",
+     "colls": [
+      "interior-nav-markers"
+     ],
+     "loc": [
+      307.6,
+      -12.4,
+      2.2
+     ],
+     "hidden": false,
+     "tris": 80,
+     "verts": 42,
+     "mesh": "Sphere.022",
+     "mats": [
+      "MAT_cyan_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      0.84,
+      0.84,
+      0.84
+     ]
+    },
+    {
+     "name": "interior-work-lights",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-work-lights"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "commission_worklight",
+     "type": "MESH",
+     "parent": "interior-work-lights",
+     "colls": [
+      "interior-work-lights"
+     ],
+     "loc": [
+      110.0,
+      0.0,
+      11.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.232",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      20.0,
+      3.0,
+      0.4
+     ]
+    },
+    {
+     "name": "fleet_worklight",
+     "type": "MESH",
+     "parent": "interior-work-lights",
+     "colls": [
+      "interior-work-lights"
+     ],
+     "loc": [
+      200.0,
+      0.0,
+      12.2
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.239",
+     "mats": [
+      "MAT_amber_emit"
+     ],
+     "has_uv": true,
+     "dims": [
+      24.0,
+      3.0,
+      0.4
+     ]
+    },
+    {
+     "name": "interior-light-strips",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "bay_guide_-1",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      0.0,
+      -5.0,
+      1.05
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.196",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      16.0,
+      0.7,
+      0.15
+     ]
+    },
+    {
+     "name": "bay_guide_1",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      0.0,
+      5.0,
+      1.05
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.197",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      16.0,
+      0.7,
+      0.15
+     ]
+    },
+    {
+     "name": "hangar_strip_-1",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      0.0,
+      -18.5,
+      18.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.202",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      60.0,
+      0.6,
+      0.5
+     ]
+    },
+    {
+     "name": "hangar_strip_1",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      0.0,
+      18.5,
+      18.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.203",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      60.0,
+      0.6,
+      0.5
+     ]
+    },
+    {
+     "name": "fleet_strip_-1",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      200.0,
+      -13.5,
+      11.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.240",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      0.6,
+      0.5
+     ]
+    },
+    {
+     "name": "fleet_strip_1",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      200.0,
+      13.5,
+      11.6
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.241",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      0.6,
+      0.5
+     ]
+    },
+    {
+     "name": "obs_strip",
+     "type": "MESH",
+     "parent": "interior-light-strips",
+     "colls": [
+      "interior-light-strips"
+     ],
+     "loc": [
+      300.0,
+      10.5,
+      10.8
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.254",
+     "mats": [
+      "MAT_amber_emit_soft"
+     ],
+     "has_uv": true,
+     "dims": [
+      30.0,
+      0.6,
+      0.5
+     ]
+    },
+    {
+     "name": "interior-model-fleet-1",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-model-fleet-1"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "fleet_model_1",
+     "type": "MESH",
+     "parent": "interior-model-fleet-1",
+     "colls": [
+      "interior-model-fleet-1"
+     ],
+     "loc": [
+      191.0,
+      0.0,
+      4.6
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "fleet_model_1_mesh",
+     "mats": [
+      "MAT_basalt_light"
+     ],
+     "has_uv": false,
+     "dims": [
+      9.0,
+      2.7,
+      2.16
+     ]
+    },
+    {
+     "name": "fleet_stand_1",
+     "type": "MESH",
+     "parent": "interior-model-fleet-1",
+     "colls": [
+      "interior-model-fleet-1"
+     ],
+     "loc": [
+      191.0,
+      0.0,
+      1.7
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.233",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      6.0,
+      3.0,
+      3.4
+     ]
+    },
+    {
+     "name": "interior-model-fleet-2",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-model-fleet-2"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "fleet_model_2",
+     "type": "MESH",
+     "parent": "interior-model-fleet-2",
+     "colls": [
+      "interior-model-fleet-2"
+     ],
+     "loc": [
+      210.0,
+      3.0,
+      4.2
+     ],
+     "hidden": false,
+     "tris": 34,
+     "verts": 20,
+     "mesh": "fleet_model_2_mesh",
+     "mats": [
+      "MAT_gunmetal"
+     ],
+     "has_uv": false,
+     "dims": [
+      7.0,
+      2.1,
+      1.68
+     ]
+    },
+    {
+     "name": "fleet_stand_2",
+     "type": "MESH",
+     "parent": "interior-model-fleet-2",
+     "colls": [
+      "interior-model-fleet-2"
+     ],
+     "loc": [
+      210.0,
+      3.0,
+      1.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.234",
+     "mats": [
+      "MAT_gunmetal_dark"
+     ],
+     "has_uv": true,
+     "dims": [
+      5.0,
+      2.6,
+      3.0
+     ]
+    },
+    {
+     "name": "interior-floor-hangar-bay",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-floor-hangar-bay"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hangar-bay_floor",
+     "type": "MESH",
+     "parent": "interior-floor-hangar-bay",
+     "colls": [
+      "interior-floor-hangar-bay"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.153",
+     "mats": [
+      "MAT_interior_floor"
+     ],
+     "has_uv": true,
+     "dims": [
+      70.0,
+      40.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-floor-commission-board",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-floor-commission-board"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "commission-board_floor",
+     "type": "MESH",
+     "parent": "interior-floor-commission-board",
+     "colls": [
+      "interior-floor-commission-board"
+     ],
+     "loc": [
+      110.0,
+      0.0,
+      0.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.163",
+     "mats": [
+      "MAT_interior_floor"
+     ],
+     "has_uv": true,
+     "dims": [
+      44.0,
+      26.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-floor-fleet-deck",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-floor-fleet-deck"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "fleet-deck_floor",
+     "type": "MESH",
+     "parent": "interior-floor-fleet-deck",
+     "colls": [
+      "interior-floor-fleet-deck"
+     ],
+     "loc": [
+      200.0,
+      0.0,
+      0.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.173",
+     "mats": [
+      "MAT_interior_floor"
+     ],
+     "has_uv": true,
+     "dims": [
+      50.0,
+      30.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-floor-observation-deck",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-floor-observation-deck"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "observation-deck_floor",
+     "type": "MESH",
+     "parent": "interior-floor-observation-deck",
+     "colls": [
+      "interior-floor-observation-deck"
+     ],
+     "loc": [
+      300.0,
+      0.0,
+      0.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.183",
+     "mats": [
+      "MAT_interior_floor"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      24.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-ceiling-hangar-bay",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-ceiling-hangar-bay"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "hangar-bay_ceiling",
+     "type": "MESH",
+     "parent": "interior-ceiling-hangar-bay",
+     "colls": [
+      "interior-ceiling-hangar-bay"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      19.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.154",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      70.0,
+      40.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-ceiling-commission-board",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-ceiling-commission-board"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "commission-board_ceiling",
+     "type": "MESH",
+     "parent": "interior-ceiling-commission-board",
+     "colls": [
+      "interior-ceiling-commission-board"
+     ],
+     "loc": [
+      110.0,
+      0.0,
+      11.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.164",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      44.0,
+      26.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-ceiling-fleet-deck",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-ceiling-fleet-deck"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "fleet-deck_ceiling",
+     "type": "MESH",
+     "parent": "interior-ceiling-fleet-deck",
+     "colls": [
+      "interior-ceiling-fleet-deck"
+     ],
+     "loc": [
+      200.0,
+      0.0,
+      12.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.174",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      50.0,
+      30.0,
+      1.0
+     ]
+    },
+    {
+     "name": "interior-ceiling-observation-deck",
+     "type": "EMPTY",
+     "parent": "station-interior",
+     "colls": [
+      "interior-ceiling-observation-deck"
+     ],
+     "loc": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "hidden": false
+    },
+    {
+     "name": "observation-deck_ceiling",
+     "type": "MESH",
+     "parent": "interior-ceiling-observation-deck",
+     "colls": [
+      "interior-ceiling-observation-deck"
+     ],
+     "loc": [
+      300.0,
+      0.0,
+      11.5
+     ],
+     "hidden": false,
+     "tris": 12,
+     "verts": 8,
+     "mesh": "Cube.184",
+     "mats": [
+      "MAT_interior_wall"
+     ],
+     "has_uv": true,
+     "dims": [
+      40.0,
+      24.0,
+      1.0
+     ]
+    },
+    {
+     "name": "cam01_exterior_overview",
+     "type": "CAMERA",
+     "parent": null,
+     "colls": [
+      "CAMERAS_pilot"
+     ],
+     "loc": [
+      430.0,
+      -430.0,
+      250.0
+     ],
+     "hidden": false,
+     "lens": 32.0,
+     "rot": [
+      1.181,
+      -0.0,
+      0.785
+     ]
+    },
+    {
+     "name": "cam02_ring_harbor_closeup",
+     "type": "CAMERA",
+     "parent": null,
+     "colls": [
+      "CAMERAS_pilot"
+     ],
+     "loc": [
+      268.0,
+      30.0,
+      30.0
+     ],
+     "hidden": false,
+     "lens": 40.0,
+     "rot": [
+      1.424,
+      -0.0,
+      0.818
+     ]
+    },
+    {
+     "name": "cam03_drydock_and_ships",
+     "type": "CAMERA",
+     "parent": null,
+     "colls": [
+      "CAMERAS_pilot"
+     ],
+     "loc": [
+      142.0,
+      -292.0,
+      40.0
+     ],
+     "hidden": false,
+     "lens": 38.0,
+     "rot": [
+      1.358,
+      0.0,
+      0.464
+     ]
+    },
+    {
+     "name": "cam04_annexes",
+     "type": "CAMERA",
+     "parent": null,
+     "colls": [
+      "CAMERAS_pilot"
+     ],
+     "loc": [
+      -322.0,
+      262.0,
+      118.0
+     ],
+     "hidden": false,
+     "lens": 38.0,
+     "rot": [
+      1.047,
+      0.0,
+      -2.37
+     ]
+    },
+    {
+     "name": "cam05_interior_hangar",
+     "type": "CAMERA",
+     "parent": null,
+     "colls": [
+      "CAMERAS_pilot"
+     ],
+     "loc": [
+      -19.0,
+      -10.5,
+      8.4
+     ],
+     "hidden": false,
+     "lens": 30.0,
+     "rot": [
+      1.571,
+      -0.0,
+      -1.071
+     ]
+    },
+    {
+     "name": "cam06_interior_observation",
+     "type": "CAMERA",
+     "parent": null,
+     "colls": [
+      "CAMERAS_pilot"
+     ],
+     "loc": [
+      300.0,
+      9.0,
+      6.2
+     ],
+     "hidden": false,
+     "lens": 30.0,
+     "rot": [
+      1.555,
+      -0.0,
+      3.102
+     ]
+    }
+   ],
+   "collections": [
+    "station-interior",
+    "hangar-bay",
+    "commission-board",
+    "fleet-deck",
+    "observation-deck",
+    "interior-bay-ship",
+    "interior-user-ship",
+    "interior-bay-door-lintel",
+    "interior-deck-viewport-lintel",
+    "interior-gate-lintel",
+    "interior-gate-lights",
+    "interior-rim-arc",
+    "interior-nav-markers",
+    "interior-work-lights",
+    "interior-light-strips",
+    "interior-model-fleet-1",
+    "interior-model-fleet-2",
+    "interior-floor-hangar-bay",
+    "interior-floor-commission-board",
+    "interior-floor-fleet-deck",
+    "interior-floor-observation-deck",
+    "interior-ceiling-hangar-bay",
+    "interior-ceiling-commission-board",
+    "interior-ceiling-fleet-deck",
+    "interior-ceiling-observation-deck",
+    "CAMERAS_pilot"
+   ],
+   "render_engine": "BLENDER_EEVEE_NEXT",
+   "cam": "cam06_interior_observation"
+  }
+ },
+ "materials": [
+  "Dots Stroke",
+  "MAT_amber_emit",
+  "MAT_amber_emit_soft",
+  "MAT_basalt",
+  "MAT_basalt_light",
+  "MAT_cyan_emit",
+  "MAT_dark_unlit",
+  "MAT_glass",
+  "MAT_gunmetal",
+  "MAT_gunmetal_dark",
+  "MAT_hull_pale",
+  "MAT_interior_floor",
+  "MAT_interior_wall",
+  "MAT_paper_pale",
+  "MAT_planet_lava",
+  "MAT_planet_q1",
+  "MAT_seam_old",
+  "MAT_stardome",
+  "MAT_wood_warm"
+ ],
+ "images": [
+  {
+   "name": "Render Result",
+   "size": [
+    0,
+    0
+   ],
+   "filepath": ""
+  },
+  {
+   "name": "TEX_stars",
+   "size": [
+    1024,
+    512
+   ],
+   "filepath": ""
+  }
+ ]
+}

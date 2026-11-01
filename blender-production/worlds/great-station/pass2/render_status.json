@@ -1,0 +1,32 @@
+{
+ "01": {
+  "file": "great-station-01-exterior-overview.png",
+  "bytes": 949466,
+  "camera": "cam01_exterior_overview"
+ },
+ "02": {
+  "file": "great-station-02-ring-harbor-closeup.png",
+  "bytes": 930196,
+  "camera": "cam02_ring_harbor_closeup"
+ },
+ "03": {
+  "file": "great-station-03-drydock-and-ships.png",
+  "bytes": 1018926,
+  "camera": "cam03_drydock_and_ships"
+ },
+ "04": {
+  "file": "great-station-04-annexes.png",
+  "bytes": 991267,
+  "camera": "cam04_annexes"
+ },
+ "05": {
+  "file": "great-station-05-interior-hangar.png",
+  "bytes": 1107057,
+  "camera": "cam05_interior_hangar"
+ },
+ "06": {
+  "file": "great-station-06-interior-observation-deck.png",
+  "bytes": 1152461,
+  "camera": "cam06_interior_observation"
+ }
+}

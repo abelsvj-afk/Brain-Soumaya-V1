@@ -1,0 +1,92 @@
+rim seg meshes: 1 unique datablocks
+rim_segment_00: mesh=Cube.012 rot=[0.0, 0.0, 0.0] scale=[1.0, 1.0, 1.0] parent=station-rotating
+rim_segment_01: mesh=Cube.012 rot=[0.0, 0.0, 0.131] scale=[1.0, 1.0, 1.0] parent=station-rotating
+rim_segment_12: mesh=Cube.012 rot=[0.0, 0.0, 1.571] scale=[1.0, 1.0, 1.0] parent=station-rotating
+rim_segment_24: mesh=Cube.012 rot=[0.0, 0.0, 3.142] scale=[1.0, 1.0, 1.0] parent=station-rotating
+traffic meshes: [('traffic-01_glow', 'Cube.147'), ('traffic-01_hull', 'traffic-01_hull_mesh.001'), ('traffic-02_glow', 'Cube.148'), ('traffic-02_hull', 'traffic-02_hull_mesh.001'), ('traffic-03_glow', 'Cube.149'), ('traffic-03_hull', 'traffic-03_hull_mesh.001'), ('traffic-04_glow', 'Cube.150'), ('traffic-04_hull', 'traffic-04_hull_mesh.001'), ('traffic-05_glow', 'Cube.151'), ('traffic-05_hull', 'traffic-05_hull_mesh.001'), ('traffic-06_glow', 'Cube.152'), ('traffic-06_hull', 'traffic-06_hull_mesh.001')]
+docked meshes: [('docked-01_hull', 'docked-01_hull_mesh.001'), ('docked-02_hull', 'docked-02_hull_mesh.001'), ('docked-03_hull', 'docked-03_hull_mesh.001')]
+LIGHTS: [('PT_commission', 'POINT', 7000.0, None, 'Scene Collection'), ('PT_fleet', 'POINT', 8500.0, None, 'Scene Collection'), ('PT_hangar_fill', 'POINT', 5000.0, None, 'Scene Collection'), ('PT_hangar_key', 'POINT', 15000.0, None, 'Scene Collection'), ('PT_observation_cool', 'POINT', 3200.0, None, 'Scene Collection'), ('PT_observation_warm', 'POINT', 5500.0, None, 'Scene Collection'), ('PT_view_cool', 'POINT', 26000.0, None, 'Scene Collection'), ('SUN_cold_key', 'SUN', 3.0999999046325684, None, 'Scene Collection'), ('SUN_cold_key.001', 'SUN', 2.5999999046325684, None, 'Scene Collection'), ('SUN_cold_key.002', 'SUN', 2.5999999046325684, None, 'Scene Collection'), ('SUN_indigo_fill', 'SUN', 0.550000011920929, None, 'Scene Collection')]
+STATION_EXTERIOR: world=WORLD_space engine=BLENDER_EEVEE_NEXT res=1280x720
+  view: AgX/AgX - Medium High Contrast exposure=1.0800000429153442
+  eevee taa=48 bloom_attr=True
+STATION_INTERIOR: world=WORLD_interior engine=BLENDER_EEVEE_NEXT res=1280x720
+  view: AgX/AgX - Medium High Contrast exposure=0.949999988079071
+  eevee taa=48 bloom_attr=True
+HOLDER hangar-bay:
+   hangar-bay_wall_back                   tris=   12 mats=['MAT_interior_wall'] dims=[70.0, 1.0, 20.0] loc=[0.0, 20.0, 10.0]
+   hangar-bay_wall_f1                     tris=   12 mats=['MAT_interior_wall'] dims=[28.0, 1.0, 20.0] loc=[-21.0, -20.0, 10.0]
+   hangar-bay_wall_f2                     tris=   12 mats=['MAT_interior_wall'] dims=[28.0, 1.0, 20.0] loc=[21.0, -20.0, 10.0]
+   hangar-bay_wall_l                      tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 40.0, 20.0] loc=[-35.0, 0.0, 10.0]
+   hangar-bay_wall_r                      tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 40.0, 20.0] loc=[35.0, 0.0, 10.0]
+HOLDER commission-board:
+   board_cell_00                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[96.8, 11.9, 8.6]
+   board_cell_01                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[102.1, 11.9, 8.6]
+   board_cell_02                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[107.4, 11.9, 8.6]
+   board_cell_03                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[112.7, 11.9, 8.6]
+   board_cell_04                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[118.0, 11.9, 8.6]
+   board_cell_05                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[123.3, 11.9, 8.6]
+   board_cell_06                          tris=   12 mats=['MAT_dark_unlit'] dims=[4.2, 0.2, 1.7] loc=[96.8, 11.9, 6.4]
+   board_cell_07                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[102.1, 11.9, 6.4]
+   board_cell_08                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[107.4, 11.9, 6.4]
+   board_cell_09                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[112.7, 11.9, 6.4]
+   board_cell_10                          tris=   12 mats=['MAT_dark_unlit'] dims=[4.2, 0.2, 1.7] loc=[118.0, 11.9, 6.4]
+   board_cell_11                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[123.3, 11.9, 6.4]
+   board_cell_12                          tris=   12 mats=['MAT_dark_unlit'] dims=[4.2, 0.2, 1.7] loc=[96.8, 11.9, 4.2]
+   board_cell_13                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[102.1, 11.9, 4.2]
+   board_cell_14                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[107.4, 11.9, 4.2]
+   board_cell_15                          tris=   12 mats=['MAT_dark_unlit'] dims=[4.2, 0.2, 1.7] loc=[112.7, 11.9, 4.2]
+   board_cell_16                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[118.0, 11.9, 4.2]
+   board_cell_17                          tris=   12 mats=['MAT_amber_emit_soft'] dims=[4.2, 0.2, 1.7] loc=[123.3, 11.9, 4.2]
+   board_chair_0                          tris=   12 mats=['MAT_gunmetal_dark'] dims=[1.6, 1.6, 2.2] loc=[100.0, 0.8, 1.1]
+   board_chair_1                          tris=   12 mats=['MAT_gunmetal_dark'] dims=[1.6, 1.6, 2.2] loc=[110.0, 0.8, 1.1]
+   board_chair_2                          tris=   12 mats=['MAT_gunmetal_dark'] dims=[1.6, 1.6, 2.2] loc=[120.0, 0.8, 1.1]
+   board_desk_0                           tris=   12 mats=['MAT_wood_warm'] dims=[7.0, 2.6, 1.1] loc=[100.0, 4.0, 1.5]
+   board_desk_1                           tris=   12 mats=['MAT_wood_warm'] dims=[7.0, 2.6, 1.1] loc=[110.0, 4.0, 1.5]
+   board_desk_2                           tris=   12 mats=['MAT_wood_warm'] dims=[7.0, 2.6, 1.1] loc=[120.0, 4.0, 1.5]
+   board_desk_screen_0                    tris=   12 mats=['MAT_amber_emit_soft'] dims=[2.6, 0.2, 1.5] loc=[100.0, 4.8, 2.9]
+   board_desk_screen_1                    tris=   12 mats=['MAT_amber_emit_soft'] dims=[2.6, 0.2, 1.5] loc=[110.0, 4.8, 2.9]
+   board_desk_screen_2                    tris=   12 mats=['MAT_amber_emit_soft'] dims=[2.6, 0.2, 1.5] loc=[120.0, 4.8, 2.9]
+   board_panel                            tris=   12 mats=['MAT_gunmetal_dark'] dims=[32.0, 0.7, 7.5] loc=[110.0, 12.4, 6.4]
+   commission-board_wall_back             tris=   12 mats=['MAT_interior_wall'] dims=[44.0, 1.0, 12.0] loc=[110.0, 13.0, 6.0]
+   commission-board_wall_f1               tris=   12 mats=['MAT_interior_wall'] dims=[15.0, 1.0, 12.0] loc=[95.5, -13.0, 6.0]
+   commission-board_wall_f2               tris=   12 mats=['MAT_interior_wall'] dims=[15.0, 1.0, 12.0] loc=[124.5, -13.0, 6.0]
+   commission-board_wall_l                tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 26.0, 12.0] loc=[88.0, 0.0, 6.0]
+   commission-board_wall_r                tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 26.0, 12.0] loc=[132.0, 0.0, 6.0]
+HOLDER fleet-deck:
+   fleet-deck_wall_back                   tris=   12 mats=['MAT_interior_wall'] dims=[50.0, 1.0, 13.0] loc=[200.0, 15.0, 6.5]
+   fleet-deck_wall_f1                     tris=   12 mats=['MAT_interior_wall'] dims=[18.0, 1.0, 13.0] loc=[184.0, -15.0, 6.5]
+   fleet-deck_wall_f2                     tris=   12 mats=['MAT_interior_wall'] dims=[18.0, 1.0, 13.0] loc=[216.0, -15.0, 6.5]
+   fleet-deck_wall_l                      tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 30.0, 13.0] loc=[175.0, 0.0, 6.5]
+   fleet-deck_wall_r                      tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 30.0, 13.0] loc=[225.0, 0.0, 6.5]
+   fleet_crate_0                          tris=   12 mats=['MAT_basalt_light'] dims=[3.4, 3.0, 2.6] loc=[184.0, -12.5, 1.3]
+   fleet_crate_1                          tris=   12 mats=['MAT_basalt'] dims=[3.4, 3.0, 2.6] loc=[194.0, -12.5, 1.3]
+   fleet_crate_2                          tris=   12 mats=['MAT_basalt_light'] dims=[3.4, 3.0, 2.6] loc=[206.0, -12.5, 1.3]
+   fleet_crate_3                          tris=   12 mats=['MAT_basalt'] dims=[3.4, 3.0, 2.6] loc=[216.0, -12.5, 1.3]
+HOLDER interior-deck-viewport-lintel:
+   viewport_frame_-1                      tris=   12 mats=['MAT_gunmetal'] dims=[1.2, 1.2, 10.4] loc=[282.5, -12.2, 6.0]
+   viewport_frame_1                       tris=   12 mats=['MAT_gunmetal'] dims=[1.2, 1.2, 10.4] loc=[317.5, -12.2, 6.0]
+   viewport_frame_b                       tris=   12 mats=['MAT_gunmetal'] dims=[36.0, 1.2, 1.2] loc=[300.0, -12.2, 1.4]
+   viewport_frame_t                       tris=   12 mats=['MAT_gunmetal'] dims=[36.0, 1.2, 1.2] loc=[300.0, -12.2, 10.6]
+   viewport_mullion_0                     tris=   12 mats=['MAT_gunmetal_dark'] dims=[0.7, 0.9, 9.2] loc=[292.0, -12.2, 6.0]
+   viewport_mullion_1                     tris=   12 mats=['MAT_gunmetal_dark'] dims=[0.7, 0.9, 9.2] loc=[300.0, -12.2, 6.0]
+   viewport_mullion_2                     tris=   12 mats=['MAT_gunmetal_dark'] dims=[0.7, 0.9, 9.2] loc=[308.0, -12.2, 6.0]
+HOLDER interior-rim-arc:
+   hangar_rim_arc                         tris=  640 mats=['MAT_gunmetal'] dims=[62.6, 62.6, 2.6] loc=[0.0, 19.0, 2.0]
+HOLDER observation-deck:
+   obs_console                            tris=   12 mats=['MAT_gunmetal_dark'] dims=[14.0, 2.2, 1.2] loc=[300.0, -8.0, 1.6]
+   obs_console_glow                       tris=   12 mats=['MAT_amber_emit_soft'] dims=[13.0, 0.3, 0.9] loc=[300.0, -8.6, 2.4]
+   obs_seat_0                             tris=   12 mats=['MAT_wood_warm'] dims=[2.0, 2.0, 2.4] loc=[296.0, -4.5, 1.2]
+   obs_seat_1                             tris=   12 mats=['MAT_wood_warm'] dims=[2.0, 2.0, 2.4] loc=[304.0, -4.5, 1.2]
+   observation-deck_wall_back             tris=   12 mats=['MAT_interior_wall'] dims=[40.0, 1.0, 12.0] loc=[300.0, 12.0, 6.0]
+   observation-deck_wall_f1               tris=   12 mats=['MAT_interior_wall'] dims=[13.0, 1.0, 12.0] loc=[286.5, -12.0, 6.0]
+   observation-deck_wall_f2               tris=   12 mats=['MAT_interior_wall'] dims=[13.0, 1.0, 12.0] loc=[313.5, -12.0, 6.0]
+   observation-deck_wall_l                tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 24.0, 12.0] loc=[280.0, 0.0, 6.0]
+   observation-deck_wall_r                tris=   12 mats=['MAT_interior_wall'] dims=[1.0, 24.0, 12.0] loc=[320.0, 0.0, 6.0]
+   view_planet                            tris=  720 mats=['MAT_planet_q1'] dims=[64.0, 64.0, 64.0] loc=[320.0, -72.0, 13.0]
+   view_star_0                            tris=   36 mats=['MAT_amber_emit_soft'] dims=[1.0, 1.1, 1.1] loc=[270.0, -60.0, 26.0]
+   view_star_1                            tris=   36 mats=['MAT_amber_emit_soft'] dims=[1.0, 1.1, 1.1] loc=[315.0, -70.0, 34.0]
+   view_star_2                            tris=   36 mats=['MAT_amber_emit_soft'] dims=[1.0, 1.1, 1.1] loc=[348.0, -55.0, 8.0]
+   view_star_3                            tris=   36 mats=['MAT_amber_emit_soft'] dims=[1.0, 1.1, 1.1] loc=[248.0, -80.0, 12.0]
+   view_star_4                            tris=   36 mats=['MAT_amber_emit_soft'] dims=[1.0, 1.1, 1.1] loc=[305.0, -50.0, -2.0]
+   view_wheel_arc                         tris=  960 mats=['MAT_basalt_light'] dims=[180.0, 180.0, 9.5] loc=[292.0, -100.0, 4.0]
+   viewport_glass                         tris=   12 mats=['MAT_glass'] dims=[34.0, 0.4, 8.5] loc=[300.0, -12.2, 6.0]

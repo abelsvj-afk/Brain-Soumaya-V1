@@ -1,0 +1,225 @@
+{
+ "lawn_t0": {
+  "material": "GP_lawn_t0",
+  "size": 1024,
+  "objects": [
+   "terrace_t0_top",
+   "terrace_t0_top"
+  ]
+ },
+ "lawn_t1": {
+  "material": "GP_lawn_t1",
+  "size": 512,
+  "objects": [
+   "terrace_t1_top",
+   "terrace_t1_top"
+  ]
+ },
+ "lawn_t2": {
+  "material": "GP_lawn_t2",
+  "size": 512,
+  "objects": [
+   "terrace_t2_top",
+   "terrace_t2_top"
+  ]
+ },
+ "lawn_t3": {
+  "material": "GP_lawn_t3",
+  "size": 512,
+  "objects": [
+   "terrace_t3_top",
+   "terrace_t3_top"
+  ]
+ },
+ "lawn_t4": {
+  "material": "GP_lawn_t4",
+  "size": 512,
+  "objects": [
+   "terrace_t4_top",
+   "terrace_t4_top"
+  ]
+ },
+ "lawn_t5": {
+  "material": "GP_lawn_t5",
+  "size": 512,
+  "objects": [
+   "terrace_t5_top",
+   "terrace_t5_top"
+  ]
+ },
+ "stone_r0": {
+  "material": "GP_stone_r0",
+  "size": 512,
+  "objects": [
+   "terrace_riser0",
+   "terrace_riser0"
+  ]
+ },
+ "stone_r1": {
+  "material": "GP_stone_r1",
+  "size": 512,
+  "objects": [
+   "terrace_riser1",
+   "terrace_riser1"
+  ]
+ },
+ "stone_r2": {
+  "material": "GP_stone_r2",
+  "size": 512,
+  "objects": [
+   "terrace_riser2",
+   "terrace_riser2"
+  ]
+ },
+ "stone_r3": {
+  "material": "GP_stone_r3",
+  "size": 512,
+  "objects": [
+   "terrace_riser3",
+   "terrace_riser3"
+  ]
+ },
+ "stone_r4": {
+  "material": "GP_stone_r4",
+  "size": 512,
+  "objects": [
+   "terrace_riser4",
+   "terrace_riser4"
+  ]
+ },
+ "stone_r5": {
+  "material": "GP_stone_r5",
+  "size": 512,
+  "objects": [
+   "terrace_riser5",
+   "terrace_riser5"
+  ]
+ },
+ "stone_under": {
+  "material": "GP_stone_under",
+  "size": 512,
+  "objects": [
+   "underside_skirt",
+   "underside_cap",
+   "underside_skirt",
+   "underside_cap"
+  ]
+ },
+ "path": {
+  "material": "GP_path",
+  "size": 1024,
+  "objects": [
+   "paths_earth",
+   "paths_earth"
+  ]
+ },
+ "trail": {
+  "material": "GP_trail",
+  "size": 512,
+  "objects": [
+   "grove_trails"
+  ]
+ },
+ "stone_edge": {
+  "material": "GP_stone_edge",
+  "size": 512,
+  "objects": [
+   "paths_edging",
+   "paths_edging"
+  ]
+ },
+ "lawn_grove": {
+  "material": "GP_lawn_grove",
+  "size": 1024,
+  "objects": [
+   "grove_lawns"
+  ]
+ },
+ "foliage_grove": {
+  "material": "GP_foliage_grove",
+  "size": 1024,
+  "objects": [
+   "grove_trees"
+  ]
+ },
+ "bark_grove": {
+  "material": "GP_bark_grove",
+  "size": 512,
+  "objects": [
+   "grove_trunks"
+  ]
+ },
+ "foliage_veg": {
+  "material": "GP_foliage_veg",
+  "size": 512,
+  "objects": [
+   "vegetation",
+   "plots_wild"
+  ]
+ },
+ "stone_gather": {
+  "material": "GP_stone_gather",
+  "size": 512,
+  "objects": [
+   "plots_gathering"
+  ]
+ },
+ "stone_stand": {
+  "material": "GP_stone_stand",
+  "size": 512,
+  "objects": [
+   "plots_stone"
+  ]
+ },
+ "soil": {
+  "material": "GP_soil",
+  "size": 512,
+  "objects": [
+   "plots_sprout_soil",
+   "plots_base_discs"
+  ]
+ },
+ "pod": {
+  "material": "GP_pod",
+  "size": 512,
+  "objects": [
+   "seed_pods"
+  ]
+ },
+ "bark_witness": {
+  "material": "GP_bark_witness",
+  "size": 1024,
+  "objects": [
+   "witness_tree_bark"
+  ]
+ },
+ "foliage_witness": {
+  "material": "GP_foliage_witness",
+  "size": 1024,
+  "objects": [
+   "witness_tree_canopy"
+  ]
+ },
+ "deadwood": {
+  "material": "GP_deadwood",
+  "size": 512,
+  "objects": [
+   "witness_dead_bough"
+  ]
+ },
+ "stone_witness": {
+  "material": "GP_stone_witness",
+  "size": 512,
+  "objects": [
+   "seed_stone",
+   "relic_witness_seed"
+  ]
+ },
+ "hull": {
+  "material": "GP_hull",
+  "size": 512,
+  "objects": [
+   "garden_avatar_ship"
+  ]
+ }
+}
