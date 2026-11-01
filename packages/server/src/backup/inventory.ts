@@ -7,7 +7,7 @@
  * (bucketed sqlite_master assertion, all-MUST production preflight,
  * three reconciliation tiers).
  *
- * THIS FILE is inventory **v7**. v2 was a version bump under the spec §2
+ * THIS FILE is inventory **v8**. v2 was a version bump under the spec §2
  * mechanism, made by increment B1 at its anchor main @ ea6260d
  * (PR #134). Changes from v1, all MAY-BE-EMPTY additions:
  *  - `relic_copies`, `relic_copy_events` — landed by Relics I-2 between
@@ -113,6 +113,27 @@
  * Totals at v7: 130 named tables, 129 included, 26 MUST-BE-NONEMPTY,
  * 103 MAY-BE-EMPTY, 1 excluded.
  *
+ * v8 (owner-authorized 2026-11-01): the civilization program's G1
+ * ("The Hold" economy) and P1 (Presence, Galaxy-Wide) land on main.
+ * G1's schema creates 9 tables the v7 census does not name — and the
+ * manifest stage fails loudly by design on any unnamed application
+ * table, so backups would break the moment the landing deployed.
+ * All 9 are added INCLUDED + MAY-BE-EMPTY: `game_action_results`,
+ * `game_cargo`, `game_credits`, `game_demand`, `game_dock_state`,
+ * `game_ledger`, `game_periods`, `game_resource_nodes`, `game_storage`.
+ * INCLUDED because exclusion would silently drop the player's
+ * Credits balance, cargo/storage, and the append-only economy ledger
+ * from every backup; MAY-BE-EMPTY because a fresh brain legitimately
+ * holds zero economy rows. The table list was cross-checked
+ * mechanically against the union DDL in BOTH schema locations
+ * (db/schemaSql.ts + db/client.ts): exactly these 9, none missing,
+ * none extra, none misspelled. P1 creates no new tables; it adds
+ * COLUMNS to `npc_player_state` (home_anchor_* + leg_*), and the v7
+ * entry for that table pins only its name and class — no DDL — so
+ * no entry change is owed for P1.
+ * Totals at v8: 139 named tables, 138 included, 26 MUST-BE-NONEMPTY,
+ * 112 MAY-BE-EMPTY, 1 excluded.
+ *
  * Classes (spec §2): "must-be-nonempty" — zero rows in a snapshot means a
  * wiped/corrupt snapshot, reject; "may-be-empty" — count is recorded in
  * the manifest and compared, zero is legitimate; "excluded" — not counted
@@ -134,7 +155,7 @@
  */
 export type BackupTableClass = "must-be-nonempty" | "may-be-empty" | "excluded";
 
-export const BACKUP_INVENTORY_VERSION = 7;
+export const BACKUP_INVENTORY_VERSION = 8;
 
 export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> = {
   // ── Sources & content ──────────────────────────────────────────────
@@ -226,6 +247,17 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   npc_player_barks: "may-be-empty",
   npc_player_memory: "may-be-empty",
   npc_player_state: "may-be-empty",
+  // v8: G1 "The Hold" economy's 9 tables — all INCLUDED + MAY-BE-EMPTY
+  // (see the header's v8 note).
+  game_action_results: "may-be-empty",
+  game_cargo: "may-be-empty",
+  game_credits: "may-be-empty",
+  game_demand: "may-be-empty",
+  game_dock_state: "may-be-empty",
+  game_ledger: "may-be-empty",
+  game_periods: "may-be-empty",
+  game_resource_nodes: "may-be-empty",
+  game_storage: "may-be-empty",
   garden_tends: "may-be-empty",
   review_grade_attempts: "may-be-empty",
   fleet_defense_defenses: "may-be-empty",

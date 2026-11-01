@@ -3,14 +3,17 @@ import { useCaptains } from "../hooks/useCaptains.js";
 import ChronicleFeed, { localTime } from "./ChronicleFeed.js";
 
 /**
- * The Captains panel (NPC-Player Layer L1 — Presence), mounted at
- * the Great Station and at Scale. Bex is the one flying in L1: the
- * panel shows where she is, what she's doing, her session state,
- * her own ledgers, the three questions she answers, the owner's
- * stop/resume and forget-our-meetings controls, and her "why" log —
- * every line the server's words, rendered verbatim. Dain and Veyra
- * are listed honestly as not flying yet. At the Station the panel
- * also carries the Chronicle.
+ * The Captains panel (NPC-Player Layer L1 — Presence; P1 —
+ * Galaxy-Wide), mounted at the Great Station and at Scale. P1 flies
+ * two captains — Bex, and Junia resident at the Growing Place: the
+ * panel shows where each captain is (including honestly in
+ * transit, with the leg's destination and kind), the home anchor
+ * by its specific name, the captain's own ledgers, the three
+ * questions, the owner's stop/resume and forget-our-meetings
+ * controls, and the "why" log — every line the server's words,
+ * rendered verbatim. The other six captains are listed honestly
+ * as not flying yet, with their anchors named. At the Station the
+ * panel also carries the Chronicle.
  *
  * Her ship flies the bob (an existing traffic hull) and moors at
  * her berth only while she is Present at the Station — the scene
@@ -37,6 +40,9 @@ const KIND_VERB: Record<string, string> = {
 const WORLD_PLAIN: Record<string, string> = {
   "great-station": "the Great Station",
   scale: "Scale",
+  "growing-place": "the Growing Place",
+  "deep-past": "the Deep Past",
+  "quiet-archive": "the Quiet Archive",
 };
 
 function worldPlain(key: string | null): string {
@@ -68,7 +74,7 @@ function CaptainCard({
       <p>
         {c.personality} {c.ageBand}, {c.pronouns}. {c.traits.join(" · ")}.
       </p>
-      {!c.active && <p>Not flying yet — her runs begin in a later increment.</p>}
+      {!c.active && <p>Not flying yet — runs begin in a later increment. Home: {c.homeAnchor}.</p>}
       {c.active && (
         <>
           <p>
@@ -76,12 +82,14 @@ function CaptainCard({
               ? `Here now — visiting ${worldPlain(c.currentWorld)}.`
               : c.stopped
                 ? "Stopped by the owner."
-                : `Away just now — home is ${worldPlain(c.homeWorld)}.`}
+                : c.transitState !== "none"
+                  ? `In transit — bound for ${worldPlain(c.legTo)} (${c.legKind ?? "drift"}).`
+                  : `Away just now — home is ${c.homeAnchor}.`}
           </p>
           <p>{c.doingLine}</p>
           <p>
-            Her own ledgers: {Math.floor(c.fuel)} fuel · {Math.floor(c.credits)} credits. Meetings she
-            remembers: {c.meetingsRemembered}
+            Home anchor: {c.homeAnchor}. Own ledgers: {Math.floor(c.fuel)} fuel · {Math.floor(c.credits)}{" "}
+            credits. Meetings remembered: {c.meetingsRemembered}
             {c.firstMetAt ? ` (first met ${localTime(c.firstMetAt)})` : ""}. Today: {c.actsToday} acts,{" "}
             {c.speaksToday} spoken.
           </p>
@@ -98,9 +106,9 @@ function CaptainCard({
 
           {c.stopped ? (
             <p>
-              Stopped — she does nothing while stopped.{" "}
+              Stopped — nothing happens while stopped.{" "}
               <button type="button" onClick={() => void resume(c.id)}>
-                Start her again
+                Start again
               </button>
             </p>
           ) : (
@@ -116,7 +124,7 @@ function CaptainCard({
 
           {c.recentLog.length > 0 && (
             <>
-              <h5>Why she did what she did</h5>
+              <h5>Why {c.name} did what {c.name} did</h5>
               <ul className="captains-log">
                 {c.recentLog.map((e) => (
                   <li key={e.id}>

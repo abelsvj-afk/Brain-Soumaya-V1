@@ -7,6 +7,7 @@ export * from "./unlockables.js";
 export * from "./dramatize.js";
 export * from "./cognitiveTuning.js";
 export * from "./economy.js";
+export * from "./gameEconomy.js";
 export * from "./lifeVision.js";
 export * from "./temporal.js";
 export * from "./intelligence.js";

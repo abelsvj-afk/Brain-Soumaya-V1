@@ -131,10 +131,10 @@ afterEach(() => {
 });
 
 describe("G0 B1 inventory", () => {
-  it("pins 130 named tables: 129 included + tts_audio_cache excluded", () => {
+  it("pins 139 named tables: 138 included + tts_audio_cache excluded", () => {
     const names = Object.keys(BACKUP_TABLE_INVENTORY);
-    expect(names.length).toBe(130);
-    expect(INCLUDED_TABLES.length).toBe(129);
+    expect(names.length).toBe(139);
+    expect(INCLUDED_TABLES.length).toBe(138);
     expect(INCLUDED_TABLES).not.toContain("tts_audio_cache");
     expect(BACKUP_TABLE_INVENTORY["tts_audio_cache"]).toBe("excluded");
     expect(MUST_BE_NONEMPTY_TABLES.length).toBe(26);
@@ -190,6 +190,29 @@ describe("G0 B1 inventory", () => {
       expect(BACKUP_TABLE_INVENTORY[t]).toBe("may-be-empty");
       expect(INCLUDED_TABLES).toContain(t);
     }
+    // v8 additions (owner-authorized 2026-11-01): the civilization
+    // program's G1 "The Hold" economy landed on main — all 9 game_*
+    // tables its schema creates (cross-checked against the DDL in
+    // both schema locations), INCLUDED + MAY-BE-EMPTY: exclusion
+    // would silently drop the Credits balance, cargo/storage, and
+    // the append-only economy ledger from backups; a MUST would
+    // break every fresh brain. (P1, landing alongside, creates no
+    // tables — only columns on npc_player_state, whose entry pins
+    // no DDL.)
+    for (const t of [
+      "game_action_results",
+      "game_cargo",
+      "game_credits",
+      "game_demand",
+      "game_dock_state",
+      "game_ledger",
+      "game_periods",
+      "game_resource_nodes",
+      "game_storage",
+    ]) {
+      expect(BACKUP_TABLE_INVENTORY[t]).toBe("may-be-empty");
+      expect(INCLUDED_TABLES).toContain(t);
+    }
     // v4 addition: daily_quests — production carries the table (3 rows)
     // though main's schema never created it; its DDL is now reconciled
     // into both schema locations, mirroring production's definition.
@@ -224,7 +247,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     // Manifest basics (spec §1).
     expect(res.manifest.backupId).toBe(res.attempt.id);
     expect(res.manifest.appCommit).toBe("test-commit");
-    expect(res.manifest.inventoryVersion).toBe(7);
+    expect(res.manifest.inventoryVersion).toBe(8);
     expect(typeof res.manifest.schemaVersion).toBe("number");
     // SHA-256 in the manifest is the hash of the actual snapshot file.
     const fileBytes = fs.readFileSync(res.attempt.snapshotPath!);
@@ -232,10 +255,10 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     expect(res.manifest.snapshotSha256).toBe(sha);
     expect(res.manifest.snapshotBytes).toBe(fileBytes.length);
     // Per-table counts for every included table; excluded table absent.
-    // (129 = inventory v7's included count: 126 at v6 + the 3
-    // npc_player_* tables the L1 landing added — see the census pin
+    // (138 = inventory v8's included count: 129 at v7 + the 9
+    // game_* tables the G1 landing added — see the census pin
     // above.)
-    expect(Object.keys(res.manifest.tableCounts).length).toBe(129);
+    expect(Object.keys(res.manifest.tableCounts).length).toBe(138);
     expect(res.manifest.tableCounts["spaces"]).toBe(1);
     expect(res.manifest.tableCounts["nodes"]).toBe(1);
     expect(res.manifest.tableCounts["travel_journeys"]).toBe(0);
@@ -254,7 +277,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     expect(v.ok).toBe(true);
     expect(v.integrity).toBe("ok");
     expect(v.foreignKeyViolations).toBe(0);
-    expect(v.countsChecked).toBe(129);
+    expect(v.countsChecked).toBe(138);
   });
 
   it("G0-AC-04 wiped-DB guard: an empty brain fails verification at the verify stage when enforcement is on", () => {
