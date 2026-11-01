@@ -27,16 +27,31 @@ import { rngFor } from "./seed.js";
  * trait-weighted exponent — aggregated MULTIPLICATIVELY, so a hard
  * zero (fuel below a warp's price) kills an act outright. Drift is
  * always available, so a captain is never stranded.
+ *
+ * P1: perception carries the DESTINATION SET for the captain's
+ * current world (the D-1 travel set minus here) plus the open leg,
+ * if any — L1's binary `otherWorld` is deleted (spec §5.1, C6). A
+ * travel decision names a destination from that set or it does not
+ * happen; the engine owns the facts and turns the decision into a
+ * leg (spec §5.2).
  */
 
 export interface CaptainPerception {
   /** The step being decided (seeded determinism keys off its start). */
   stepStartMs: number;
-  /** The world the captain is in, and the other public world. */
+  /** The world the captain is in. */
   world: CaptainWorld;
-  otherWorld: CaptainWorld;
-  /** The other world's plain name, for cause lines. */
-  otherWorldName: string;
+  /** The travel-set destinations reachable from here (every
+   *  travel-open world except the current one), in travel-set
+   *  order. A travel decision must name one of these. */
+  destinations: readonly CaptainWorld[];
+  /** Plain names for the destinations, keyed by world key. */
+  destinationNames: Readonly<Record<string, string>>;
+  /** The open leg, when one is open (the decider is only consulted
+   *  inside live sessions in P1, so this is normally null — it is
+   *  carried so the perception shape is complete for later
+   *  increments). */
+  openLeg: { to: CaptainWorld; kind: "warp" | "drift" | "home" } | null;
   /** 0 at session start, 1 at the planned end. */
   sessionAgeRatio: number;
   /** Whole advance steps remaining in this session, including this one. */
@@ -44,7 +59,7 @@ export interface CaptainPerception {
   fuel: number;
   /** The visitor is in the captain's world, not in transit. */
   playerPresent: boolean;
-  /** She has already greeted this player visit. */
+  /** The captain has already greeted this player visit. */
   greetedThisVisit: boolean;
   /** Drive inputs (0..1), computed by the engine's perception. */
   curiosity: number;
@@ -100,8 +115,8 @@ export const utilityDecider: CaptainDecider = {
     const rng = rngFor(def.id, "decide", p.stepStartMs);
     const rest = quadratic(p.sessionAgeRatio);
     // Duty and ambition have no L1 instruments (commissions are L2,
-    // the economy L3) — they enter honestly as mild constants: her
-    // duty in L1 is to finish the visit she started.
+    // the economy L3) — they enter honestly as mild constants: the
+    // captain's duty in L1/P1 is to finish the visit underway.
     const duty = 0.5;
 
     const candidates: { decision: CaptainDecision; value: number }[] = [];
@@ -125,7 +140,7 @@ export const utilityDecider: CaptainDecider = {
         {
           value: logistic(p.sociability),
           weight: 1.5 * (has(def, "Sociable") ? 1.3 : 1),
-          plain: "sociability ran high — you were here and she hadn't said hello this visit",
+          plain: "sociability ran high — you were here and no hello had been said this visit",
         },
         { value: 1 - rest, weight: 0.5, plain: "rest was still low" },
       ];
@@ -135,11 +150,17 @@ export const utilityDecider: CaptainDecider = {
       });
     }
 
-    if (p.stepsLeftInSession >= 1) {
+    if (p.stepsLeftInSession >= 1 && p.destinations.length > 0) {
+      // One travel candidate per destination would drown the day in
+      // legs; the decider weighs ONE seeded destination — the draw
+      // is part of the perception step's seed, so the life stays
+      // deterministic — against staying.
+      const dest = p.destinations[Math.floor(rng() * p.destinations.length) % p.destinations.length]!;
+      const destName = p.destinationNames[dest] ?? dest;
       const curiosityConsideration: Consideration = {
         value: linear(p.curiosity),
         weight: 1.0 * (has(def, "Restless") ? 1.3 : 1),
-        plain: `curiosity pulled toward ${p.otherWorldName}`,
+        plain: `curiosity pulled toward ${destName}`,
       };
       const restInverse: Consideration = {
         value: 1 - rest * 0.8,
@@ -153,15 +174,15 @@ export const utilityDecider: CaptainDecider = {
           {
             value: logistic(p.fuel / 60),
             weight: 0.4,
-            plain: "her own fuel comfortably covered a warp",
+            plain: "the captain's own fuel comfortably covered a warp",
           },
         ];
         candidates.push({
           decision: {
             act: "travel",
             travelKind: "warp",
-            toWorld: p.otherWorld,
-            cause: causeOf(considerations, "The other world called louder than this one."),
+            toWorld: dest,
+            cause: causeOf(considerations, "Another world called louder than this one."),
           },
           value: score(considerations, rng()),
         });
@@ -172,7 +193,7 @@ export const utilityDecider: CaptainDecider = {
           decision: {
             act: "travel",
             travelKind: "drift",
-            toWorld: p.otherWorld,
+            toWorld: dest,
             cause: causeOf(considerations, "The slow way over was time enough."),
           },
           value: score(considerations, rng()) * 0.9,
@@ -183,7 +204,7 @@ export const utilityDecider: CaptainDecider = {
     if (p.sessionAgeRatio >= 0.45) {
       const considerations: Consideration[] = [
         { value: rest, weight: 1.7, plain: "rest was winning — the visit had run its course" },
-        { value: 1 - duty * 0.5, weight: 0.4, plain: "nothing unfinished held her here" },
+        { value: 1 - duty * 0.5, weight: 0.4, plain: "nothing unfinished held the captain here" },
       ];
       candidates.push({
         decision: { act: "depart", cause: causeOf(considerations, "It was time to head out.") },

@@ -8,6 +8,7 @@ import {
   type CaptainBark,
   type CaptainDefinition,
   type CaptainId,
+  type CaptainLegKind,
   type CaptainMemoryEntry,
   type CaptainMemoryKind,
   type CaptainWorld,
@@ -25,11 +26,24 @@ import {
  * Everything here is space-scoped: another space's captain rows are
  * invisible, and brain deletion removes them (SPACE_SCOPED_TABLES).
  * Counts are per space-local day — never a UTC boundary.
+ *
+ * P1 adds, in the same space-scoped row (no new table — spec §1
+ * F04/F23, so erasure completeness is unchanged in shape):
+ *  - the home anchor (kind + label), written ONCE at row creation
+ *    from the definition and carried byte-identical through every
+ *    whole-row patch forever after (write-once — A8-1);
+ *  - the open leg's fields, all set together at departure or all
+ *    null together at arrival (spec §5.1). `legTo` is only ever
+ *    written by the engine's departure transaction, copied from a
+ *    held plan — that rule is A7 made structural.
  */
 
 export interface CaptainStateRow {
   captainId: CaptainId;
   homeWorld: CaptainWorld;
+  /** The stored home anchor (write-once from the definition). */
+  homeAnchorKind: CaptainDefinition["homeAnchor"]["kind"];
+  homeAnchorLabel: string;
   currentWorld: CaptainWorld | null;
   sessionKey: string | null;
   sessionWorld: CaptainWorld | null;
@@ -41,10 +55,25 @@ export interface CaptainStateRow {
   credits: number;
   stopped: boolean;
   lastAdvancedAt: string | null;
+  /** The open leg (all fields set together or all null together). */
+  legFrom: CaptainWorld | null;
+  legTo: CaptainWorld | null;
+  legKind: CaptainLegKind | null;
+  /** Advance-step start instants (epoch ms) of departure/arrival. */
+  legDepartedStepMs: number | null;
+  legArrivesStepMs: number | null;
+  /** Advance steps the leg takes (its pace, fixed at creation). */
+  legSteps: number | null;
+  /** The session this leg is travelling to (sessionKey of the
+   *  planned visit at the destination), when the leg was opened
+   *  from a day plan; null for decider legs. */
+  legVisitKey: string | null;
 }
 
 interface StateDbRow {
   home_world: string;
+  home_anchor_kind: string;
+  home_anchor_label: string;
   current_world: string | null;
   session_key: string | null;
   session_world: string | null;
@@ -56,12 +85,21 @@ interface StateDbRow {
   credits: number;
   stopped: number;
   last_advanced_at: string | null;
+  leg_from: string | null;
+  leg_to: string | null;
+  leg_kind: string | null;
+  leg_departed_step: string | null;
+  leg_arrives_step: string | null;
+  leg_steps: number | null;
+  leg_visit_key: string | null;
 }
 
 function toRow(captainId: CaptainId, r: StateDbRow): CaptainStateRow {
   return {
     captainId,
     homeWorld: r.home_world as CaptainWorld,
+    homeAnchorKind: r.home_anchor_kind as CaptainStateRow["homeAnchorKind"],
+    homeAnchorLabel: r.home_anchor_label,
     currentWorld: (r.current_world as CaptainWorld | null) ?? null,
     sessionKey: r.session_key,
     sessionWorld: (r.session_world as CaptainWorld | null) ?? null,
@@ -73,8 +111,20 @@ function toRow(captainId: CaptainId, r: StateDbRow): CaptainStateRow {
     credits: r.credits,
     stopped: r.stopped === 1,
     lastAdvancedAt: r.last_advanced_at,
+    legFrom: (r.leg_from as CaptainWorld | null) ?? null,
+    legTo: (r.leg_to as CaptainWorld | null) ?? null,
+    legKind: (r.leg_kind as CaptainLegKind | null) ?? null,
+    legDepartedStepMs: r.leg_departed_step ? Date.parse(r.leg_departed_step) : null,
+    legArrivesStepMs: r.leg_arrives_step ? Date.parse(r.leg_arrives_step) : null,
+    legSteps: r.leg_steps,
+    legVisitKey: r.leg_visit_key,
   };
 }
+
+const STATE_COLUMNS = `home_world, home_anchor_kind, home_anchor_label, current_world, session_key,
+  session_world, session_started_at, session_ends_at, last_meeting_visit_key,
+  last_greet_visit_key, fuel, credits, stopped, last_advanced_at,
+  leg_from, leg_to, leg_kind, leg_departed_step, leg_arrives_step, leg_steps, leg_visit_key`;
 
 const CAPTAIN_SPEAK_KINDS: readonly NpcActKind[] = ["speak", "greet"] as const;
 
@@ -89,9 +139,7 @@ export class CaptainRepo {
   state(captainId: CaptainId): CaptainStateRow | null {
     const row = this.h.sqlite
       .prepare(
-        `SELECT home_world, current_world, session_key, session_world, session_started_at,
-                session_ends_at, last_meeting_visit_key, last_greet_visit_key, fuel, credits,
-                stopped, last_advanced_at
+        `SELECT ${STATE_COLUMNS}
          FROM npc_player_state WHERE space_id = ? AND npc_id = ?`,
       )
       .get(this.spaceId, captainId) as StateDbRow | undefined;
@@ -100,17 +148,29 @@ export class CaptainRepo {
 
   /** Create the state row on first touch: at home in fiction, away
    *  from the public worlds in fact, cursor at now — a captain's life
-   *  starts when someone first looks, and its past is not backfilled. */
+   *  starts when someone first looks, and its past is not backfilled.
+   *  The anchor is written here, once, from the definition — the
+   *  residence fence (spec §4): a row's home is its definition's
+   *  anchor world, never a caller's say-so. */
   ensureState(def: CaptainDefinition, nowMs: number): CaptainStateRow {
     const existing = this.state(def.id);
     if (existing) return existing;
     this.h.sqlite
       .prepare(
         `INSERT OR IGNORE INTO npc_player_state
-           (npc_id, space_id, home_world, fuel, credits, last_advanced_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+           (npc_id, space_id, home_world, home_anchor_kind, home_anchor_label, fuel, credits, last_advanced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(def.id, this.spaceId, def.homeWorld, CAPTAIN_START_FUEL, CAPTAIN_START_CREDITS, new Date(nowMs).toISOString());
+      .run(
+        def.id,
+        this.spaceId,
+        def.homeWorld,
+        def.homeAnchor.kind,
+        def.homeAnchor.label,
+        CAPTAIN_START_FUEL,
+        CAPTAIN_START_CREDITS,
+        new Date(nowMs).toISOString(),
+      );
     const created = this.state(def.id);
     if (!created) throw new Error(`Captain state for ${def.id} did not persist.`);
     return created;
@@ -120,16 +180,28 @@ export class CaptainRepo {
     const cur = this.state(captainId);
     if (!cur) throw new Error(`No captain state row for ${captainId} to patch.`);
     const next = { ...cur, ...fields };
+    // The anchor is write-once (A8-1): no patch may move it. The
+    // merge above starts from the stored row, and the anchor fields
+    // are forced back to the stored values here, so even a caller
+    // that passes different anchor fields cannot move home.
+    next.homeAnchorKind = cur.homeAnchorKind;
+    next.homeAnchorLabel = cur.homeAnchorLabel;
+    next.homeWorld = cur.homeWorld;
     this.h.sqlite
       .prepare(
         `UPDATE npc_player_state SET
-           home_world = ?, current_world = ?, session_key = ?, session_world = ?,
+           home_world = ?, home_anchor_kind = ?, home_anchor_label = ?,
+           current_world = ?, session_key = ?, session_world = ?,
            session_started_at = ?, session_ends_at = ?, last_meeting_visit_key = ?,
-           last_greet_visit_key = ?, fuel = ?, credits = ?, stopped = ?, last_advanced_at = ?
+           last_greet_visit_key = ?, fuel = ?, credits = ?, stopped = ?, last_advanced_at = ?,
+           leg_from = ?, leg_to = ?, leg_kind = ?, leg_departed_step = ?, leg_arrives_step = ?,
+           leg_steps = ?, leg_visit_key = ?
          WHERE space_id = ? AND npc_id = ?`,
       )
       .run(
         next.homeWorld,
+        next.homeAnchorKind,
+        next.homeAnchorLabel,
         next.currentWorld,
         next.sessionKey,
         next.sessionWorld,
@@ -141,6 +213,13 @@ export class CaptainRepo {
         next.credits,
         next.stopped ? 1 : 0,
         next.lastAdvancedAt,
+        next.legFrom,
+        next.legTo,
+        next.legKind,
+        next.legDepartedStepMs !== null ? new Date(next.legDepartedStepMs).toISOString() : null,
+        next.legArrivesStepMs !== null ? new Date(next.legArrivesStepMs).toISOString() : null,
+        next.legSteps,
+        next.legVisitKey,
         this.spaceId,
         captainId,
       );
