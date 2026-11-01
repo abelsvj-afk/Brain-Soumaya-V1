@@ -1565,6 +1565,8 @@ export const BOOTSTRAP_SQL = `
       npc_id TEXT NOT NULL,
       space_id TEXT NOT NULL,
       home_world TEXT NOT NULL,
+      home_anchor_kind TEXT NOT NULL DEFAULT 'berth',
+      home_anchor_label TEXT NOT NULL DEFAULT '',
       current_world TEXT,
       session_key TEXT,
       session_world TEXT,
@@ -1576,6 +1578,13 @@ export const BOOTSTRAP_SQL = `
       credits REAL NOT NULL DEFAULT 120,
       stopped INTEGER NOT NULL DEFAULT 0,
       last_advanced_at TEXT,
+      leg_from TEXT,
+      leg_to TEXT,
+      leg_kind TEXT,
+      leg_departed_step TEXT,
+      leg_arrives_step TEXT,
+      leg_steps INTEGER,
+      leg_visit_key TEXT,
       PRIMARY KEY (space_id, npc_id)
     );
     CREATE TABLE IF NOT EXISTS npc_player_memory (

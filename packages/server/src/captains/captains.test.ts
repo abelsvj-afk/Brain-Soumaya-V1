@@ -25,7 +25,12 @@ import {
 import type { CaptainDecider } from "./decider.js";
 
 /**
- * NPC-Player Layer L1 — Presence (design §10 L1, acceptance §11).
+ * NPC-Player Layer L1 — Presence (design §10 L1, acceptance §11),
+ * as widened by P1 — Presence, Galaxy-Wide (spec §8: the world set
+ * is the five D-1 travel worlds, travel is leg-based, Junia is a
+ * second active captain — her own proofs live in
+ * juniaResident.test.ts; transit in transit.test.ts; anchors in
+ * anchors.test.ts; the registry in captainsRegistry.test.ts).
  * Time is INJECTED everywhere — no test sleeps. The space timezone
  * defaults to America/New_York, so day plans are computed in NY
  * local days regardless of the process timezone the gate runs in.
@@ -53,22 +58,34 @@ const captains = (space = SPACE) => new CaptainRepo(handle, space);
 const npcLog = (space = SPACE) => new NpcRepo(handle, space);
 const bexLog = (space = SPACE) => npcLog(space).recentLog("bex", 500);
 
-/** Today's (2026-10-22, NY) plan for Bex and its first visit. */
+/** The first Bex visit that provably begins in place: a home-world
+ *  visit the plan chains from home (no leg), so a first touch at its
+ *  start opens its session on the very next step. P1: the visit must
+ *  run ≥2h — a 1h visit ends on the arrive step itself, leaving no
+ *  live-session step for the decider/fence tests that act inside the
+ *  session's second hour. */
 function firstVisit() {
-  const plan = dayPlan("bex", "2026-10-22", TZ, "great-station");
-  const v = plan[0];
-  if (!v) throw new Error("plan must have visits");
-  return v;
+  for (let d = 20; d <= 31; d++) {
+    const v = dayPlan("bex", `2026-10-${d}`, TZ, "great-station").find(
+      (x) => x.world === "great-station" && x.legKind === null && x.endMs - x.startMs >= 2 * H,
+    );
+    if (v) return v;
+  }
+  throw new Error("the test fortnight needs a home visit for Bex");
 }
 
 /** Chronological visits of ≥2h across the test week, skipping any
  *  that overlap an already-picked one — the meeting/greet tests
- *  need a session long enough for a begin step plus a later step. */
+ *  need a session long enough for a begin step plus a later step.
+ *  P1: only visits that open NO leg (the plan chains them from the
+ *  world she is already at — for Bex's early visits, home) qualify:
+ *  their sessions provably begin in place at the visit's start. */
 function longVisits() {
   const picked: { startMs: number; endMs: number; world: string; sessionKey: string }[] = [];
-  for (const key of ["2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"]) {
-    for (const v of dayPlan("bex", key, TZ, "great-station")) {
+  for (let d = 20; d <= 31; d++) {
+    for (const v of dayPlan("bex", `2026-10-${d}`, TZ, "great-station")) {
       if (v.endMs - v.startMs < 2 * H) continue;
+      if (v.legKind !== null || v.world !== "great-station") continue;
       if (picked.some((p) => v.startMs < p.endMs && v.endMs > p.startMs)) continue;
       picked.push(v);
     }
@@ -103,19 +120,35 @@ function arrivePlayer(world: string, nowMs: number, space = SPACE): string {
 }
 
 describe("seed — the day plan (design §8.5 rhythm)", () => {
-  it("is deterministic, 2–4 visits a day, 1–3 hours each, public worlds only", () => {
+  it("is deterministic, 2–4 visits a day, 1–3 hours each, travel-set worlds only, legs chained (P1)", () => {
     for (let d = 20; d <= 31; d++) {
       const key = `2026-10-${d}`;
       const a = dayPlan("bex", key, TZ, "great-station");
       const b = dayPlan("bex", key, TZ, "great-station");
-      expect(a).toEqual(b);
+      expect(a).toEqual(b); // identical visits AND legs, twice (A2 with legs)
       expect(a.length).toBeGreaterThanOrEqual(2);
       expect(a.length).toBeLessThanOrEqual(4);
+      let origin = "great-station";
       for (const v of a) {
-        expect(["great-station", "scale"]).toContain(v.world);
+        expect(["great-station", "scale", "growing-place", "deep-past", "quiet-archive"]).toContain(v.world);
+        expect(v.world).not.toBe("people");
         const hours = (v.endMs - v.startMs) / H;
         expect(hours).toBeGreaterThanOrEqual(1);
         expect(hours).toBeLessThanOrEqual(3);
+        // The leg chain: each visit's journey departs from the
+        // previous visit's world (home for the first), and a plan
+        // never names the captain's current world as its own leg
+        // destination with a leg attached.
+        expect(v.originWorld).toBe(origin);
+        if (v.originWorld === v.world) {
+          expect(v.legKind).toBeNull();
+          expect(v.legSteps).toBe(0);
+        } else {
+          expect(v.legKind).not.toBeNull();
+          expect(v.legSteps).toBeGreaterThanOrEqual(1);
+          if (v.world === "great-station") expect(v.legKind).toBe("home");
+        }
+        origin = v.world;
       }
     }
   });
@@ -148,10 +181,13 @@ describe("advance — sessions, determinism, the summarized jump", () => {
     const arrives = bexLog().filter((e) => e.kind === "arrive");
     expect(arrives).toHaveLength(1);
     expect(arrives[0]?.cause.length).toBeGreaterThan(10);
-    // Advance past the visit end: a depart closes it.
+    // Advance past the visit end: a depart closes it. In P1 she may
+    // then be resting, on an onward leg, or in the next planned
+    // session — but the finished visit's session is closed and its
+    // depart is on the log.
     advanceCaptain(handle, SPACE, "bex", v.endMs + 2 * H);
     const after = captains().state("bex");
-    expect(after?.sessionKey).toBeNull();
+    expect(after?.sessionKey).not.toBe(v.sessionKey);
     expect(bexLog().some((e) => e.kind === "depart")).toBe(true);
     // Session memories were written to HER stream.
     const sessions = captains().memory("bex", "session");
@@ -243,27 +279,38 @@ describe("A1 — isolation: her life never touches the player's anything", () =>
   });
 });
 
-describe("travel — her own fuel, the chart's prices", () => {
+describe("travel — her own fuel, the chart's prices, as legs (P1)", () => {
   const warpDecider: CaptainDecider = {
     decide: (_def, p) => ({
       act: "travel",
       travelKind: "warp",
-      toWorld: p.otherWorld,
+      toWorld: p.destinations[0]!,
       cause: "Test decider: warp.",
     }),
   };
 
-  it("a warp charges HER exactly 10 and lands her in the other public world", () => {
+  it("a warp opens a leg, charges HER exactly 10 at departure, and lands her at the destination", () => {
     const { world } = beginFirstSession();
     const st0 = captains().state("bex");
     expect(st0?.fuel).toBe(CAPTAIN_START_FUEL);
     const v = firstVisit();
     advanceCaptain(handle, SPACE, "bex", v.startMs + 2 * H, { decider: warpDecider });
     const st1 = captains().state("bex");
+    // The leg is open: fuel charged once, at departure; she is
+    // present at NEITHER world while it is open (A7).
     expect(st1?.fuel).toBe(CAPTAIN_START_FUEL - WARP_COST);
-    expect(st1?.currentWorld).toBe(world === "great-station" ? "scale" : "great-station");
-    const travel = bexLog().find((e) => e.kind === "travel");
-    expect(travel?.act).toContain("her own");
+    expect(st1?.legKind).toBe("warp");
+    expect(st1?.legTo).not.toBe(world);
+    expect(st1?.currentWorld).toBeNull();
+    const depart = bexLog().find((e) => e.kind === "depart");
+    expect(depart?.act).toContain("by warp");
+    // Warp = 1 step: the next advance resolves the arrival, and the
+    // fuel is NOT charged a second time.
+    advanceCaptain(handle, SPACE, "bex", v.startMs + 3 * H);
+    const st2 = captains().state("bex");
+    expect(st2?.legTo).toBeNull();
+    expect(st2?.currentWorld).toBe(st1?.legTo);
+    expect(st2?.fuel).toBe(CAPTAIN_START_FUEL - WARP_COST);
   });
 
   it("below a warp's price the engine refuses the burn — fuel never goes negative", () => {
@@ -273,15 +320,15 @@ describe("travel — her own fuel, the chart's prices", () => {
     advanceCaptain(handle, SPACE, "bex", v.startMs + 2 * H, { decider: warpDecider });
     const st = captains().state("bex");
     expect(st?.fuel).toBe(5);
-    expect(bexLog().some((e) => e.kind === "travel")).toBe(false);
-    expect(bexLog()[0]?.cause).toContain("her own ledger said no");
+    expect(st?.legTo).toBeNull(); // no leg opened
+    expect(bexLog()[0]?.cause).toContain("the ledger said no");
   });
 
-  it("the fence refuses a decider that reaches outside the public worlds — and rolls back", () => {
+  it("the fence refuses a decider that reaches outside the travel set — and rolls back", () => {
     const v = firstVisit();
     beginFirstSession();
     const rogue: CaptainDecider = {
-      decide: (_def, p) => ({
+      decide: () => ({
         act: "travel",
         travelKind: "drift",
         // A private world, smuggled past the type system.
@@ -296,9 +343,52 @@ describe("travel — her own fuel, the chart's prices", () => {
     expect(bexLog()).toHaveLength(before); // the transaction rolled back
     void rogue;
   });
+
+  it("the fence also refuses `people` by name (spec §4, I-1)", () => {
+    const v = firstVisit();
+    beginFirstSession();
+    const rogue: CaptainDecider = {
+      decide: () => ({
+        act: "travel",
+        travelKind: "drift",
+        toWorld: "people" as never,
+        cause: "rogue",
+      }),
+    };
+    expect(() => advanceCaptain(handle, SPACE, "bex", v.startMs + 2 * H, { decider: rogue })).toThrowError(
+      /not a world a captain may enter/,
+    );
+  });
+
+  it("the fence also refuses an Eternity destination by name (spec §4, I-5)", () => {
+    const v = firstVisit();
+    beginFirstSession();
+    const rogue: CaptainDecider = {
+      decide: () => ({
+        act: "travel",
+        travelKind: "drift",
+        toWorld: "eternity" as never,
+        cause: "rogue",
+      }),
+    };
+    expect(() => advanceCaptain(handle, SPACE, "bex", v.startMs + 2 * H, { decider: rogue })).toThrowError(
+      /not a world a captain may enter/,
+    );
+  });
 });
 
 describe("meetings (A5) and greetings", () => {
+  /** A stay-put decider: P1's utility decider may open a mid-session
+   *  leg (her 16:00 warp on 2026-10-21), which honestly moves her out
+   *  of a later same-day visit — a confound for the meeting mechanic
+   *  under test here, so the later phases hold her in place. */
+  const stayDecider: CaptainDecider = {
+    decide: () => ({
+      act: "wait",
+      cause: "Test decider: staying put for the meeting proofs.",
+    }),
+  };
+
   it("first meeting importance 8, the wipe makes the next one a first again", () => {
     const [v, v2, v3] = longVisits();
     if (!v || !v2 || !v3) throw new Error("the test week needs three long visits");
@@ -324,7 +414,7 @@ describe("meetings (A5) and greetings", () => {
     // A NEW visit by the visitor (a fresh arrival) during a later
     // session of hers records a second meeting at importance 6.
     revisitPlayer(v2.world, v2.startMs);
-    advanceCaptain(handle, SPACE, "bex", v2.startMs + 3 * H);
+    advanceCaptain(handle, SPACE, "bex", v2.startMs + 3 * H, { decider: stayDecider });
     const meetings2 = captains().meetings("bex");
     expect(meetings2).toHaveLength(2);
     expect(meetings2[1]?.importance).toBe(6);
@@ -338,12 +428,16 @@ describe("meetings (A5) and greetings", () => {
 
     // And the next meeting is a FIRST meeting again (importance 8).
     // The visitor waits at home (a private world she never enters)
-    // while time catches up, so nothing can be recorded early.
-    arrivePlayer("home", v2.startMs + 4 * H);
-    advanceCaptain(handle, SPACE, "bex", v3.startMs);
+    // while time catches up, so nothing can be recorded early. The
+    // home trip leaves right after the wipe reads: any later and its
+    // arrival would postdate the visitor's return below, and the
+    // travel ledger would still show the visitor at home during the
+    // visit (P1 plan times put the two journeys minutes apart).
+    arrivePlayer("home", v2.startMs + 3 * H + 120_000);
+    advanceCaptain(handle, SPACE, "bex", v3.startMs, { decider: stayDecider });
     expect(captains().meetings("bex")).toHaveLength(0);
     revisitPlayer(v3.world, v3.startMs);
-    advanceCaptain(handle, SPACE, "bex", v3.startMs + 3 * H);
+    advanceCaptain(handle, SPACE, "bex", v3.startMs + 3 * H, { decider: stayDecider });
     const meetings3 = captains().meetings("bex");
     expect(meetings3).toHaveLength(1);
     expect(meetings3[0]?.importance).toBe(8);
@@ -408,19 +502,30 @@ describe("owner controls (A4): stop, budgets, inactive captains", () => {
     expect(bexLog().filter((e) => e.act !== "Filler.")).toHaveLength(0);
   });
 
-  it("Dain and Veyra are defined but not flying: no state rows, plain refusals", () => {
+  it("six captains are defined but not flying: no state rows for them, plain refusals (P1)", () => {
     const list = listCaptainStates(handle, SPACE, T0);
-    expect(list.map((c) => c.id)).toEqual(["dain", "veyra", "bex"]);
+    expect(list.map((c) => c.id)).toEqual([
+      "dain",
+      "veyra",
+      "bex",
+      "junia",
+      "hollis",
+      "sorrel",
+      "yara",
+      "felix",
+    ]);
     const dain = list.find((c) => c.id === "dain");
     expect(dain?.active).toBe(false);
     expect(dain?.present).toBe(false);
     expect(dain?.doingLine).toContain("Not flying yet");
     const rows = handle.sqlite
-      .prepare(`SELECT npc_id FROM npc_player_state WHERE space_id = ?`)
+      .prepare(`SELECT npc_id FROM npc_player_state WHERE space_id = ? ORDER BY npc_id`)
       .all(SPACE) as { npc_id: string }[];
-    expect(rows.map((r) => r.npc_id)).toEqual(["bex"]); // only the active captain persists
+    // Only the two ACTIVE captains persist rows in P1.
+    expect(rows.map((r) => r.npc_id)).toEqual(["bex", "junia"]);
     expect(() => askCaptain(handle, SPACE, "dain", "doing", T0)).toThrowError(/isn't flying yet/);
     expect(() => stopCaptain(handle, SPACE, "veyra", T0)).toThrowError(/isn't flying yet/);
+    expect(() => askCaptain(handle, SPACE, "sorrel", "doing", T0)).toThrowError(/isn't flying yet/);
     expect(() => getCaptainState(handle, SPACE, "nobody" as never, T0)).toThrowError(CaptainError);
   });
 

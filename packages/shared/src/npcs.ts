@@ -29,7 +29,16 @@ export const NPC_ROSTER_ORDER: readonly string[] = ["harbor-controller"] as cons
  *  the harbor controller; the captain ids are the player NPCs of the
  *  NPC-Player Layer (definitions in `captains.ts` — they carry home
  *  and current worlds, so they are not `NpcDefinition`s). */
-export type NpcId = "harbor-controller" | "dain" | "veyra" | "bex";
+export type NpcId =
+  | "harbor-controller"
+  | "dain"
+  | "veyra"
+  | "bex"
+  | "junia"
+  | "hollis"
+  | "sorrel"
+  | "yara"
+  | "felix";
 
 /** The world an NPC belongs to. An NPC never acts outside its own
  *  world (note §3) — the executor checks this on every act. */
