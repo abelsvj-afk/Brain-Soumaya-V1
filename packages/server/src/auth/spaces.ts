@@ -233,6 +233,12 @@ export const SPACE_SCOPED_TABLES = [
   "story_flavor_day",
   "npc_relic_holdings",
   "npc_gate",
+  // NPC-Player Layer (L1): a captain's state row, its own memory
+  // stream, and its stored bark lines are per-space rows — brain
+  // deletion must remove them too.
+  "npc_player_state",
+  "npc_player_memory",
+  "npc_player_barks",
   // Guided tours (Wave 2, N7): the saved route, its rail log, and its
   // playback sessions are per-space rows — brain deletion removes them.
   "tours",

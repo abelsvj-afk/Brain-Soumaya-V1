@@ -7,7 +7,7 @@
  * (bucketed sqlite_master assertion, all-MUST production preflight,
  * three reconciliation tiers).
  *
- * THIS FILE is inventory **v6**. v2 was a version bump under the spec §2
+ * THIS FILE is inventory **v7**. v2 was a version bump under the spec §2
  * mechanism, made by increment B1 at its anchor main @ ea6260d
  * (PR #134). Changes from v1, all MAY-BE-EMPTY additions:
  *  - `relic_copies`, `relic_copy_events` — landed by Relics I-2 between
@@ -98,6 +98,21 @@
  * Totals at v6: 127 named tables, 126 included, 26 MUST-BE-NONEMPTY,
  * 100 MAY-BE-EMPTY, 1 excluded.
  *
+ * v7 (owner-authorized 2026-11-01): the NPC-Player Layer L1 lands on
+ * main. Its schema creates 3 tables the v6 census does not name —
+ * and the manifest stage fails loudly by design on any unnamed
+ * application table, so backups would break the moment the landing
+ * deployed. All 3 are added INCLUDED + MAY-BE-EMPTY:
+ * `npc_player_barks`, `npc_player_memory`, `npc_player_state`.
+ * INCLUDED because exclusion would silently drop the captains'
+ * state, meeting memory, and barks from every backup; MAY-BE-EMPTY
+ * because a fresh brain legitimately holds zero captain rows. The
+ * table list was cross-checked mechanically against the union DDL
+ * in BOTH schema locations (db/schemaSql.ts + db/client.ts):
+ * exactly these 3, none missing, none extra, none misspelled.
+ * Totals at v7: 130 named tables, 129 included, 26 MUST-BE-NONEMPTY,
+ * 103 MAY-BE-EMPTY, 1 excluded.
+ *
  * Classes (spec §2): "must-be-nonempty" — zero rows in a snapshot means a
  * wiped/corrupt snapshot, reject; "may-be-empty" — count is recorded in
  * the manifest and compared, zero is legitimate; "excluded" — not counted
@@ -119,7 +134,7 @@
  */
 export type BackupTableClass = "must-be-nonempty" | "may-be-empty" | "excluded";
 
-export const BACKUP_INVENTORY_VERSION = 6;
+export const BACKUP_INVENTORY_VERSION = 7;
 
 export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> = {
   // ── Sources & content ──────────────────────────────────────────────
@@ -206,6 +221,11 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   npc_state: "may-be-empty",
   npc_gate: "may-be-empty",
   npc_log: "may-be-empty",
+  // v7: the NPC-Player Layer's 3 tables — all INCLUDED + MAY-BE-EMPTY
+  // (see the header's v7 note).
+  npc_player_barks: "may-be-empty",
+  npc_player_memory: "may-be-empty",
+  npc_player_state: "may-be-empty",
   garden_tends: "may-be-empty",
   review_grade_attempts: "may-be-empty",
   fleet_defense_defenses: "may-be-empty",

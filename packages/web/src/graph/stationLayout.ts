@@ -222,6 +222,24 @@ export function harborControllerBerthPose(): { position: [number, number, number
 }
 
 /**
+ * Bex's berth (NPC-Player Layer L1): the captain Bex flies the bob
+ * (TRAFFIC_MODELS[0] — an existing traffic hull, one load, no second
+ * fetch) and moors it at the mirror of the harbor controller's berth
+ * — same docked-ship radius 222, angle 5π/4: π/4 from either
+ * neighboring arm, and π/2 of arc (~349 units at this radius) from
+ * the controller's berth across arm 2. Her ship is attached to the
+ * Station and rides its turn; it is visible only while her server
+ * state says Present at the Station. The berth stays empty until
+ * the bob GLB lands.
+ */
+export const BEX_BERTH = { radius: 222, angle: (Math.PI * 5) / 4, y: 0 } as const;
+
+/** Bex's berth pose. */
+export function bexBerthPose(): { position: [number, number, number]; rotationY: number } {
+  return mooringPose(BEX_BERTH.radius, BEX_BERTH.angle, BEX_BERTH.y);
+}
+
+/**
  * The docking arm (Q3): arm 2 (angle π/2) is where the docking shuttle
  * eases in. The mooring radius matches the hero's — the arm tip is the
  * same 207, the ship the same 12 long.
@@ -392,6 +410,7 @@ export const STATION_DRAW_CALL_PLAN: readonly { part: string; calls: number }[] 
   { part: "work lights (instanced)", calls: 1 },
   { part: "hero ship (docked)", calls: 10 },
   { part: "harbor controller's ship (dispatcher, single mesh)", calls: 1 },
+  { part: "Bex's ship (bob, single mesh)", calls: 1 },
   { part: "traffic — Quaternius lanes (instanced, 1/model)", calls: 11 },
   { part: "traffic — WATO regular (merged by material)", calls: 7 },
   { part: "docking shuttle (single mesh)", calls: 1 },
@@ -419,7 +438,9 @@ export const STATION_DRAW_CALL_PLAN: readonly { part: string; calls: number }[] 
  * 272 + 200), low-poly dressing 884 (192 + 128 + 216 + 128 + 220),
  * drydock gantry 332. Annex clusters 10,410 (lunar 3,582 + colony
  * 3,200 + stores 3,628). Backdrop planets 10,522 (lava 7,936 +
- * Quaternius-1 2,586). Total 269,832 — 54% of the internal target.
+ * Quaternius-1 2,586). Bex's ship 938 (the bob, moored at her berth
+ * while she is Present — NPC-Player L1). Total 270,770 — 54% of the
+ * internal target.
  * The route costs no triangles: it lives in the TravelPanel.
  */
 export const STATION_TRI_PLAN: readonly { part: string; tris: number }[] = [
@@ -428,6 +449,7 @@ export const STATION_TRI_PLAN: readonly { part: string; tris: number }[] = [
   { part: "work lights (instanced)", tris: 1_536 },
   { part: "hero ship (docked)", tris: 37_026 },
   { part: "harbor controller's ship (dispatcher, single mesh)", tris: 748 },
+  { part: "Bex's ship (bob, single mesh)", tris: 938 },
   { part: "traffic — Quaternius lanes (instanced, 1/model)", tris: 64_128 },
   { part: "traffic — WATO regular (merged by material)", tris: 730 },
   { part: "docking shuttle (single mesh)", tris: 748 },
