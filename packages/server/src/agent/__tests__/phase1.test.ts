@@ -540,16 +540,22 @@ describe("agent_logs append-only", () => {
 // per-tool, not per-args, so the tool is a write in the pin's terms. It
 // never edits a belief (INV-KC-1).
 //
+// DELIBERATE CHANGE (Verbatim-Recall V2, owner decision — "Implement"
+// in the recall chat, 2026-10-29): search_my_words joins as a READ tool.
+// It searches the user's preserved sources (verbatim excerpts only) and
+// writes nothing; the write pin is unchanged.
+//
 // FINAL COMBINED PIN (coordinator reconciliation at integration, ALL
-// phases merged): the approved conversational set is 27 tools — the 19
+// phases merged): the approved conversational set is 28 tools — the 19
 // above + brief_me + relationship_radar + on_this_day + prepare_me
 // (Phase 5-A) + memory_quiz + constellation_tour (Phase 5-B) + story_time
-// + dream_playback (Phase 5-C). Writes are exactly fire_reminder +
-// create_task + capture_memory + dream_playback.
+// + dream_playback (Phase 5-C) + search_my_words (Verbatim-Recall V2).
+// Writes are exactly fire_reminder + create_task + capture_memory +
+// dream_playback.
 // ---------------------------------------------------------------------------
 
 describe("agent tool set", () => {
-  it("AGENT_TOOLS is exactly the 27 approved tools (19 through Phase 4 + 8 Phase 5 extras, by owner decision)", () => {
+  it("AGENT_TOOLS is exactly the 28 approved tools (19 through Phase 4 + 8 Phase 5 extras + search_my_words, by owner decision)", () => {
     const names = AGENT_TOOLS.map((e) => e.tool.name).sort();
     expect(names).toEqual(
       [
@@ -576,6 +582,7 @@ describe("agent tool set", () => {
         "prepare_me",
         "relationship_radar",
         "review_nudge",
+        "search_my_words",
         "story_time",
         "surface_orphan",
         "web_lookup",

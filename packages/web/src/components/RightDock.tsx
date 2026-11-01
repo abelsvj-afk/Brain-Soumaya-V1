@@ -22,6 +22,7 @@ const AchievementsPanel = lazyPanel(() => import("./AchievementsPanel.js").then(
 const LibraryPanel = lazyPanel(() => import("./LibraryPanel.js").then((m) => m.LibraryPanel));
 const CodexPanel = lazyPanel(() => import("./CodexPanel.js").then((m) => m.CodexPanel));
 const MindPanel = lazyPanel(() => import("./MindPanel.js").then((m) => m.MindPanel));
+const WordsPanel = lazyPanel(() => import("./WordsPanel.js").then((m) => m.WordsPanel));
 const FinancePanel = lazyPanel(() => import("./FinancePanel.js").then((m) => m.FinancePanel));
 const JourneysPanel = lazyPanel(() => import("./JourneysPanel.js").then((m) => m.JourneysPanel));
 const FleetMissionsPanel = lazyPanel(() => import("./FleetMissionsPanel.js").then((m) => m.default));
@@ -50,6 +51,7 @@ export type DockTab =
   | "details"
   | "list"
   | "mind"
+  | "words"
   | "actions"
   | "insights"
   | "soumaya"
@@ -176,6 +178,7 @@ const TABS: { id: DockTab; label: string; name: string }[] = [
   { id: "details", label: "i:details", name: "Details" },
   { id: "list", label: "i:browse", name: "Browse" },
   { id: "mind", label: "i:mind", name: "Mind" },
+  { id: "words", label: "🗣️", name: "Your Words" },
   { id: "actions", label: "i:agenda", name: "Agenda" },
   { id: "insights", label: "i:insights", name: "Insights" },
   { id: "soumaya", label: "i:soumaya", name: "Soumaya" },
@@ -412,6 +415,7 @@ export function RightDock({
           </div>
         )}
         {tab === "mind" && <MindPanel onFocus={onFocus} onChanged={() => onChanged?.(-1)} />}
+        {tab === "words" && <WordsPanel onClose={onClose} />}
         {tab === "actions" && (
           <ActionsPanel nodes={graph.nodes} onFocus={onFocus} onChanged={onDeleted} />
         )}

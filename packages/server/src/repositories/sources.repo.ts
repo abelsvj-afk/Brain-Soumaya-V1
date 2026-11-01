@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE } from "../db/schema.js";
 import { isVectorEnabled, type RawDb } from "../db/vec.js";
+import { parseTolerantMs } from "../lib/time.js";
 import { NotificationsRepo } from "./notifications.repo.js";
 
 /**
@@ -291,6 +292,41 @@ export interface PersistResult {
   created: boolean;
 }
 
+/**
+ * The panel-facing channel of a source (Your Words panel, 2026-10-31).
+ * Capture channels are NOT a stored column: at capture time the channel
+ * SELECTED the kind (ingestion/pipeline.ts IngestMeta.channel —
+ * telegram -> 'telegram', chat -> 'chat', anything else -> 'note',
+ * with an explicit sourceKind override such as 'document' for file
+ * imports, whose citation class is 'imported_text'). The channel is
+ * therefore derived from the stored kind/citation class, in exactly
+ * the taxonomy the panel's filter chips use.
+ */
+export type SourceChannel = "typed" | "telegram" | "chat" | "imported";
+
+export function sourceChannelOf(s: { kind: string; citationClass: string }): SourceChannel {
+  if (s.kind === "telegram") return "telegram";
+  if (s.kind === "chat") return "chat";
+  if (s.kind === "document" || s.citationClass === "imported_text") return "imported";
+  return "typed";
+}
+
+/** SQL predicate equivalent of sourceChannelOf (same taxonomy, so a
+ *  channel filter runs inside the query — before LIMIT — instead of
+ *  post-filtering a page at a call site). */
+function sourceChannelPredicate(channel: SourceChannel): string {
+  switch (channel) {
+    case "telegram":
+      return `kind = 'telegram'`;
+    case "chat":
+      return `kind = 'chat'`;
+    case "imported":
+      return `(kind = 'document' OR (citation_class = 'imported_text' AND kind NOT IN ('telegram', 'chat')))`;
+    case "typed":
+      return `kind NOT IN ('telegram', 'chat', 'document') AND citation_class <> 'imported_text'`;
+  }
+}
+
 export class SourcesRepo {
   constructor(
     private readonly h: DbHandle,
@@ -402,6 +438,52 @@ export class SourcesRepo {
       .prepare(`SELECT COUNT(*) AS c FROM sources WHERE space_id = ?`)
       .get(this.spaceId) as { c: number };
     return r.c;
+  }
+
+  /**
+   * Your Words panel (additive, read-only): this space's sources,
+   * NEWEST first, with the space filter and every other filter inside
+   * the SQL — before LIMIT (12B). `before` is the id cursor (only
+   * ids < before); `channel` filters by the derived panel channel
+   * (see sourceChannelOf); `kind` by the stored kind.
+   */
+  listSources(opts: { channel?: SourceChannel; kind?: string; before?: number; limit?: number } = {}): SourceRow[] {
+    const limit = Math.min(Math.max(Math.floor(opts.limit ?? 25), 1), 100);
+    let sql = `SELECT ${SOURCE_COLS} FROM sources WHERE space_id = ?`;
+    const params: unknown[] = [this.spaceId];
+    if (opts.channel !== undefined) {
+      sql += ` AND ${sourceChannelPredicate(opts.channel)}`;
+    }
+    if (opts.kind !== undefined) {
+      sql += ` AND kind = ?`;
+      params.push(opts.kind);
+    }
+    if (opts.before !== undefined) {
+      sql += ` AND id < ?`;
+      params.push(opts.before);
+    }
+    sql += ` ORDER BY id DESC LIMIT ?`;
+    params.push(limit);
+    const rows = this.h.sqlite.prepare(sql).all(...params) as RawSourceRow[];
+    return rows.map(toSource);
+  }
+
+  /** Your Words panel (additive, read-only): per-channel source
+   *  counts for this space, aggregated through sourceChannelOf so the
+   *  counts can never diverge from the list filter's taxonomy. All
+   *  four channels are always present (0 when empty). */
+  countSourcesByChannel(): Record<SourceChannel, number> {
+    const counts: Record<SourceChannel, number> = { typed: 0, telegram: 0, chat: 0, imported: 0 };
+    const rows = this.h.sqlite
+      .prepare(
+        `SELECT kind, citation_class AS citationClass, COUNT(*) AS c
+         FROM sources WHERE space_id = ? GROUP BY kind, citation_class`,
+      )
+      .all(this.spaceId) as { kind: string; citationClass: string; c: number }[];
+    for (const r of rows) {
+      counts[sourceChannelOf({ kind: r.kind, citationClass: r.citationClass })] += r.c;
+    }
+    return counts;
   }
 
   chunksOf(sourceId: number): SourceChunkRow[] {
@@ -752,38 +834,43 @@ export class SourcesRepo {
   }
 
   /**
-   * Current reading = original + corrections replayed in ascending seq
-   * (18.2). Corrections anchor to ORIGINAL character offsets and never
-   * chain. Overlapping corrections: the later seq wins the overlap and
-   * its text is wrapped in a conflict marker. The original is never
-   * modified — getById().rawText always returns it untouched.
+   * The reading model behind currentReading (18.2), factored out so
+   * readingSlice (V2, D1) renders the SAME replay over a span — one
+   * implementation, two views, so a span-sliced excerpt can never
+   * diverge from the whole-source reading.
+   *
+   * Deterministic replay model: the reading is a list of atoms, one
+   * per output character, each mapped to an ORIGINAL offset (a
+   * correction's characters map uniformly across its original range).
+   * Applying a correction removes every atom whose original offset
+   * falls in its [start, end) range and inserts its text at that
+   * point — so a later seq literally wins the overlap, and any atom
+   * it displaces that belonged to an earlier correction marks that
+   * correction's surviving text as conflicted.
    */
-  currentReading(sourceId: number): {
-    text: string | null;
+  private readingModel(sourceId: number): {
+    src: SourceRow;
+    original: string | null;
+    atoms: { ch: string; orig: number; seq: number | null }[];
+    conflictedSeqs: Set<number>;
     hasConflicts: boolean;
-    correctionsApplied: number;
-    originalCitationClass: string;
-    readingCitationClass: string;
+    corrections: SourceCorrectionRow[];
+    readingClass: string;
   } | undefined {
     const src = this.getById(sourceId);
     if (!src) return undefined;
     const original = src.rawText;
+    const corrections = this.correctionsOf(sourceId);
     const readingClass =
-      this.correctionsOf(sourceId).length > 0 && src.citationClass === "transcript_machine"
+      corrections.length > 0 && src.citationClass === "transcript_machine"
         ? "transcript_corrected"
         : src.citationClass;
     if (original === null) {
-      return { text: null, hasConflicts: false, correctionsApplied: 0, originalCitationClass: src.citationClass, readingCitationClass: readingClass };
+      return {
+        src, original, atoms: [], conflictedSeqs: new Set(), hasConflicts: false,
+        corrections, readingClass,
+      };
     }
-    const corrections = this.correctionsOf(sourceId);
-    // Deterministic replay model: the reading is a list of atoms, one
-    // per output character, each mapped to an ORIGINAL offset (a
-    // correction's characters map uniformly across its original range).
-    // Applying a correction removes every atom whose original offset
-    // falls in its [start, end) range and inserts its text at that
-    // point — so a later seq literally wins the overlap, and any atom
-    // it displaces that belonged to an earlier correction marks that
-    // correction's surviving text as conflicted.
     interface Atom { ch: string; orig: number; seq: number | null }
     // Atoms are per CODE UNIT so offsets stay aligned with slice().
     let atoms: Atom[] = original.split("").map((ch, i) => ({ ch, orig: i, seq: null }));
@@ -809,8 +896,15 @@ export class SourcesRepo {
       }));
       atoms.splice(insertAt, 0, ...newAtoms);
     }
-    // Render: group consecutive atoms of a conflicted correction and
-    // wrap each group in the conflict marker.
+    return { src, original, atoms, conflictedSeqs, hasConflicts, corrections, readingClass };
+  }
+
+  /** Render atoms to text: group consecutive atoms of a conflicted
+   *  correction and wrap each group in the conflict marker. */
+  private renderReadingAtoms(
+    atoms: { ch: string; orig: number; seq: number | null }[],
+    conflictedSeqs: Set<number>,
+  ): string {
     let text = "";
     let openSeq: number | null = null;
     for (const a of atoms) {
@@ -826,18 +920,107 @@ export class SourcesRepo {
       text += a.ch;
     }
     if (openSeq !== null) text += CONFLICT_CLOSE;
+    return text;
+  }
+
+  /**
+   * Current reading = original + corrections replayed in ascending seq
+   * (18.2). Corrections anchor to ORIGINAL character offsets and never
+   * chain. Overlapping corrections: the later seq wins the overlap and
+   * its text is wrapped in a conflict marker. The original is never
+   * modified — getById().rawText always returns it untouched.
+   */
+  currentReading(sourceId: number): {
+    text: string | null;
+    hasConflicts: boolean;
+    correctionsApplied: number;
+    originalCitationClass: string;
+    readingCitationClass: string;
+  } | undefined {
+    const model = this.readingModel(sourceId);
+    if (!model) return undefined;
+    if (model.original === null) {
+      return {
+        text: null, hasConflicts: false, correctionsApplied: 0,
+        originalCitationClass: model.src.citationClass, readingCitationClass: model.readingClass,
+      };
+    }
     return {
-      text,
-      hasConflicts,
-      correctionsApplied: corrections.length,
-      originalCitationClass: src.citationClass,
-      readingCitationClass: readingClass,
+      text: this.renderReadingAtoms(model.atoms, model.conflictedSeqs),
+      hasConflicts: model.hasConflicts,
+      correctionsApplied: model.corrections.length,
+      originalCitationClass: model.src.citationClass,
+      readingCitationClass: model.readingClass,
+    };
+  }
+
+  /**
+   * V2 (D1 — the one additive read-only export the fence bends for):
+   * the current reading sliced to the ORIGINAL-offset span
+   * [startOffset, endOffset). Read-only: it computes from the same
+   * replay model as currentReading and writes nothing.
+   *
+   * Inclusion rule (design §2.1): an atom belongs to the span iff its
+   * anchored original offset satisfies startOffset <= orig < endOffset.
+   * A correction's replacement text is attributed per-atom, so a
+   * correction crossing a span boundary contributes exactly its
+   * anchored portion to each side (the §2.1 worked example is pinned
+   * by test). An insertion-only correction (start == end) attributes
+   * its atoms to offset `start`, so the span ENDING at that offset
+   * stays uncorrected and the span STARTING there carries the text.
+   *
+   * `corrected`: a correction touches this span — its clamped range
+   * intersects the span, or it is an insertion anchored inside it
+   * (startOffset <= at < endOffset). `conflicted`: a sliced atom
+   * belongs to a correction the replay marked conflicted.
+   */
+  readingSlice(
+    sourceId: number,
+    startOffset: number,
+    endOffset: number,
+  ): {
+    text: string | null;
+    corrected: boolean;
+    conflicted: boolean;
+    originalCitationClass: string;
+    readingCitationClass: string;
+  } | undefined {
+    const model = this.readingModel(sourceId);
+    if (!model) return undefined;
+    const classes = {
+      originalCitationClass: model.src.citationClass,
+      readingCitationClass: model.readingClass,
+    };
+    if (model.original === null) {
+      return { text: null, corrected: false, conflicted: false, ...classes };
+    }
+    const originalLength = model.original.length;
+    const sliced = model.atoms.filter((a) => a.orig >= startOffset && a.orig < endOffset);
+    let corrected = false;
+    for (const c of model.corrections) {
+      const s = Math.max(0, Math.min(c.startOffset, originalLength));
+      const e = Math.max(s, Math.min(c.endOffset, originalLength));
+      if (e > s) {
+        if (s < endOffset && e > startOffset) { corrected = true; break; }
+      } else if (s >= startOffset && s < endOffset) {
+        corrected = true; break;
+      }
+    }
+    const conflicted = sliced.some(
+      (a) => a.seq !== null && model.conflictedSeqs.has(a.seq),
+    );
+    return {
+      text: this.renderReadingAtoms(sliced, model.conflictedSeqs),
+      corrected,
+      conflicted,
+      ...classes,
     };
   }
 
   // ---------------------------------------------------------------------
   // Chunk search (12B / 12E) — the repo-level retrieval primitive.
-  // The agent-facing search_my_words tool is V2 and is NOT built here.
+  // The agent-facing search_my_words tool (V2) wraps this primitive
+  // with filters and the reading-slice view: agent/tools/searchMyWords.ts.
   // ---------------------------------------------------------------------
 
   /**
@@ -849,27 +1032,44 @@ export class SourcesRepo {
   searchChunksFts(
     query: string,
     k: number = 10,
-    opts: { phrase?: boolean } = {},
+    opts: { phrase?: boolean; filters?: SourceSearchFilters } = {},
   ): { chunk: SourceChunkRow; source: SourceRow }[] {
     const match = toFtsMatch(query, opts.phrase ?? false);
     if (!match) return [];
+    const filters = opts.filters;
+    const hasDateFilter =
+      filters !== undefined && (filters.fromMs !== undefined || filters.toMs !== undefined);
     try {
-      const rows = this.h.sqlite
-        .prepare(
-          `SELECT c.id AS cid FROM sources_fts f
-           JOIN source_chunks c ON c.id = f.rowid
-           JOIN sources s ON s.id = c.source_id
-           WHERE sources_fts MATCH ? AND s.space_id = ? AND c.space_id = ?
-           ORDER BY bm25(sources_fts) LIMIT ?`,
-        )
-        .all(match, this.spaceId, this.spaceId, k) as { cid: number }[];
+      // kind/speaker are predicates on the joined sources row, so they
+      // ride in the WHERE clause — filtered by the engine BEFORE the
+      // LIMIT cut, exactly like the space filter (12B).
+      let sql =
+        `SELECT c.id AS cid FROM sources_fts f
+         JOIN source_chunks c ON c.id = f.rowid
+         JOIN sources s ON s.id = c.source_id
+         WHERE sources_fts MATCH ? AND s.space_id = ? AND c.space_id = ?`;
+      const params: unknown[] = [match, this.spaceId, this.spaceId];
+      if (filters?.kind !== undefined) { sql += ` AND s.kind = ?`; params.push(filters.kind); }
+      if (filters?.speaker !== undefined) { sql += ` AND s.speaker = ?`; params.push(filters.speaker); }
+      sql += ` ORDER BY bm25(sources_fts)`;
+      // Date bounds compare the source's representative instant via
+      // parseTolerantMs (see sourcePassesFilters) — that comparison
+      // cannot be expressed in SQL without diverging from the app's
+      // canonical timestamp parsing, so with a date filter active the
+      // matches are fetched unbounded and the JS predicate runs BEFORE
+      // the k slice below. Still inside this method, still before the
+      // cut — never a post-LIMIT filter at a call site.
+      if (!hasDateFilter) { sql += ` LIMIT ?`; params.push(k); }
+      const rows = this.h.sqlite.prepare(sql).all(...params) as { cid: number }[];
       const out: { chunk: SourceChunkRow; source: SourceRow }[] = [];
       for (const r of rows) {
         const chunk = this.chunkById(r.cid);
         if (!chunk) continue;
         const source = this.getById(chunk.sourceId);
         if (!source) continue;
+        if (!sourcePassesFilters(source, filters)) continue;
         out.push({ chunk, source });
+        if (out.length >= k) break;
       }
       return out;
     } catch {
@@ -905,24 +1105,39 @@ export class SourcesRepo {
   searchChunksVector(
     queryVec: Float32Array,
     k: number = 10,
+    opts: { filters?: SourceSearchFilters } = {},
   ): { chunk: SourceChunkRow; source: SourceRow; distance: number }[] {
     if (!isVectorEnabled(this.h.sqlite)) return [];
     try {
       const blob = Buffer.from(queryVec.buffer, queryVec.byteOffset, queryVec.byteLength);
-      const rows = this.h.sqlite
-        .prepare(
-          `SELECT chunk_id AS cid, distance FROM vec_source_chunks
-           WHERE embedding MATCH ? AND k = ? ORDER BY distance`,
-        )
-        .all(blob, Math.max(k * 4, k)) as { cid: number | bigint; distance: number }[];
+      const stmt = this.h.sqlite.prepare(
+        `SELECT chunk_id AS cid, distance FROM vec_source_chunks
+         WHERE embedding MATCH ? AND k = ? ORDER BY distance`,
+      );
       const out: { chunk: SourceChunkRow; source: SourceRow; distance: number }[] = [];
-      for (const r of rows) {
-        const chunk = this.chunkById(Number(r.cid));
-        if (!chunk) continue; // not this space (or gone): never a candidate
-        const source = this.getById(chunk.sourceId);
-        if (!source || source.spaceId !== this.spaceId) continue;
-        out.push({ chunk, source, distance: r.distance });
-        if (out.length >= k) break;
+      // V2 (K1, audit note N1): candidates are verified one by one
+      // (space, then filters) — a rejected candidate must not consume
+      // one of the k result slots, so the KNN window widens in
+      // doubling batches until k candidates PASS or the pool is
+      // exhausted. Without filters this is exactly the old single
+      // max(k*4, k) window: the first batch suffices by construction.
+      let window = Math.max(k * 4, k);
+      let scanned = 0;
+      for (;;) {
+        const rows = stmt.all(blob, window) as { cid: number | bigint; distance: number }[];
+        for (let i = scanned; i < rows.length; i++) {
+          const r = rows[i]!;
+          const chunk = this.chunkById(Number(r.cid));
+          if (!chunk) continue; // not this space (or gone): never a candidate
+          const source = this.getById(chunk.sourceId);
+          if (!source || source.spaceId !== this.spaceId) continue;
+          if (!sourcePassesFilters(source, opts.filters)) continue;
+          out.push({ chunk, source, distance: r.distance });
+          if (out.length >= k) return out;
+        }
+        scanned = rows.length;
+        if (rows.length < window) break; // candidate pool exhausted
+        window *= 2;
       }
       return out;
     } catch {
@@ -970,6 +1185,41 @@ function toFtsMatch(raw: string, phrase: boolean): string {
   return terms.map(esc).join(" ");
 }
 
+/**
+ * V2 (K1) — filters for the chunk-search methods. Every filter is
+ * applied INSIDE the repo methods, before the k cut — never by a
+ * caller after the fact. Date bounds are half-open [fromMs, toMs)
+ * over the source's representative instant.
+ */
+export interface SourceSearchFilters {
+  fromMs?: number;
+  toMs?: number;
+  kind?: string;
+  speaker?: string;
+}
+
+/**
+ * Does a source pass the active filters? Date semantics are pinned to
+ * parseTolerantMs — the app's canonical stored-timestamp parser —
+ * applied to (occurredAt ?? createdAt). SQL unixepoch() is
+ * deliberately NOT used: it truncates fractional seconds, so it would
+ * disagree with the rest of the app about which side of a boundary an
+ * instant falls on. An unparseable timestamp fails any active date
+ * filter (an honest miss over a silent wrong inclusion).
+ */
+function sourcePassesFilters(source: SourceRow, filters?: SourceSearchFilters): boolean {
+  if (!filters) return true;
+  if (filters.kind !== undefined && source.kind !== filters.kind) return false;
+  if (filters.speaker !== undefined && source.speaker !== filters.speaker) return false;
+  if (filters.fromMs !== undefined || filters.toMs !== undefined) {
+    const ms = parseTolerantMs(source.occurredAt ?? source.createdAt);
+    if (Number.isNaN(ms)) return false;
+    if (filters.fromMs !== undefined && ms < filters.fromMs) return false;
+    if (filters.toMs !== undefined && ms >= filters.toMs) return false;
+  }
+  return true;
+}
+
 export interface ChunkSearchResult {
   hits: { chunk: SourceChunkRow; source: SourceRow }[];
   /** 12E degradation signal: true when vector search contributed
@@ -999,17 +1249,17 @@ export interface ChunkSearchResult {
 export function searchSourceChunks(
   repo: SourcesRepo,
   query: string,
-  opts: { k?: number; phrase?: boolean; queryVec?: Float32Array } = {},
+  opts: { k?: number; phrase?: boolean; queryVec?: Float32Array; filters?: SourceSearchFilters } = {},
 ): ChunkSearchResult {
   const k = opts.k ?? 10;
-  const ftsHits = repo.searchChunksFts(query, k, { phrase: opts.phrase });
+  const ftsHits = repo.searchChunksFts(query, k, { phrase: opts.phrase, filters: opts.filters });
   const vecLag = repo.unindexedChunks(1).length > 0;
   let degraded = true;
   let mode: ChunkSearchResult["mode"] = "fts_only";
   const byChunk = new Map<number, { chunk: SourceChunkRow; source: SourceRow }>();
   for (const h of ftsHits) byChunk.set(h.chunk.id, h);
   if (opts.queryVec) {
-    const vecHits = repo.searchChunksVector(opts.queryVec, k);
+    const vecHits = repo.searchChunksVector(opts.queryVec, k, { filters: opts.filters });
     if (vecHits.length > 0) {
       degraded = false;
       // Report only the paths that actually contributed: "fts+vec"
