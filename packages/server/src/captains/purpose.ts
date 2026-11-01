@@ -24,6 +24,7 @@ import {
   type NpcActKind,
 } from "@brain/shared";
 import { CaptainRepo, type CaptainStateRow } from "./repo.js";
+import { NpcEconomy } from "./npcEconomy.js";
 import { rngFor } from "./seed.js";
 import {
   GATE_GOAL_ID,
@@ -996,9 +997,17 @@ export class PurposeStore {
               nowMs,
             );
             if (payment > 0) {
-              const repo = this.captains();
-              const st = repo.state(captainId);
-              if (st) repo.update(captainId, { credits: st.credits + payment });
+              // P3-R1: the payment goes through her NPC ledger
+              // (NpcEconomy.recordCommissionPayment) — credit and
+              // `commission` row together — so reconcile() stays
+              // exact after genesis. A zero payment writes no
+              // row: nothing the ledger tracks has moved, and the
+              // completion is recorded below in npc_log.
+              new NpcEconomy(this.h, this.spaceId, captainId).recordCommissionPayment(
+                payment,
+                `${captainId}:commission:${c.id}:${event.logId}`,
+                nowMs,
+              );
             }
             this.npc().appendLog(
               captainId,

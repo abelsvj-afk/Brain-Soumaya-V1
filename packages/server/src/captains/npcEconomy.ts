@@ -250,6 +250,40 @@ export class NpcEconomy {
     );
   }
 
+  /** P3-R1: a commission payment (the P2 board, purpose.ts) is a
+   *  Credits movement like any other, so it lands HERE — credit
+   *  and ledger row together, inside the caller's transaction —
+   *  never by a direct balance update that would leave reconcile()
+   *  false from that day forward. The caller gates payment > 0:
+   *  a zero payment moves neither Credits nor cargo, so it writes
+   *  no row (ledger rows accompany a tracked movement, or the
+   *  genesis anchor; the zero completion itself is already
+   *  recorded in npc_log and npc_commissions.payment). Returns
+   *  the post-credit balance, which is the row's balanceAfter. */
+  recordCommissionPayment(payment: number, stepKey: string, nowMs: number): number {
+    // Same guard as the old direct credit: no state row, no payment.
+    if (!this.captains.state(this.captainId)) return this.credits();
+    this.ensureGenesis(nowMs);
+    const balance = this.credits() + payment;
+    this.setCredits(balance);
+    this.appendLedger(
+      {
+        kind: "commission",
+        good: null,
+        qtyDelta: 0,
+        creditsDelta: payment,
+        balanceAfter: balance,
+        buyerId: null,
+        unitPrice: null,
+        recipeId: null,
+        nodeId: null,
+        stepKey,
+      },
+      nowMs,
+    );
+    return balance;
+  }
+
   private appendLedger(
     e: {
       kind: string;
