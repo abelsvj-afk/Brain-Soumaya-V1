@@ -502,7 +502,7 @@ describe("owner controls (A4): stop, budgets, inactive captains", () => {
     expect(bexLog().filter((e) => e.act !== "Filler.")).toHaveLength(0);
   });
 
-  it("six captains are defined but not flying: no state rows for them, plain refusals (P1)", () => {
+  it("five captains are defined but not flying: no state rows for them, plain refusals (P1; Veyra flies from P2)", () => {
     const list = listCaptainStates(handle, SPACE, T0);
     expect(list.map((c) => c.id)).toEqual([
       "dain",
@@ -521,10 +521,11 @@ describe("owner controls (A4): stop, budgets, inactive captains", () => {
     const rows = handle.sqlite
       .prepare(`SELECT npc_id FROM npc_player_state WHERE space_id = ? ORDER BY npc_id`)
       .all(SPACE) as { npc_id: string }[];
-    // Only the two ACTIVE captains persist rows in P1.
-    expect(rows.map((r) => r.npc_id)).toEqual(["bex", "junia"]);
+    // Only the ACTIVE captains persist rows (Bex + Junia from P1,
+    // Veyra from P2).
+    expect(rows.map((r) => r.npc_id)).toEqual(["bex", "junia", "veyra"]);
     expect(() => askCaptain(handle, SPACE, "dain", "doing", T0)).toThrowError(/isn't flying yet/);
-    expect(() => stopCaptain(handle, SPACE, "veyra", T0)).toThrowError(/isn't flying yet/);
+    expect(() => stopCaptain(handle, SPACE, "hollis", T0)).toThrowError(/isn't flying yet/);
     expect(() => askCaptain(handle, SPACE, "sorrel", "doing", T0)).toThrowError(/isn't flying yet/);
     expect(() => getCaptainState(handle, SPACE, "nobody" as never, T0)).toThrowError(CaptainError);
   });

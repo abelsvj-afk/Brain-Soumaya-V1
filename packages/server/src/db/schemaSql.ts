@@ -1656,6 +1656,9 @@ export const BOOTSTRAP_SQL = `
       text TEXT NOT NULL,
       importance INTEGER NOT NULL,
       tags TEXT NOT NULL DEFAULT '[]',
+      origin_log_id INTEGER,
+      source TEXT NOT NULL DEFAULT 'firsthand',
+      experienced INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     CREATE INDEX IF NOT EXISTS idx_npc_player_memory_space_npc
@@ -1673,6 +1676,153 @@ export const BOOTSTRAP_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_npc_player_barks_space_npc_day
       ON npc_player_barks(space_id, npc_id, day_key);
+
+    -- NPC-Player Layer P2 (Purpose & the Long Arc): the seeker's
+    -- own stores — plans (immutable version chains), mismatches,
+    -- her NPC stirring record (C13 — a SEPARATE record from the
+    -- player's relic_stirrings, which captains never write), her
+    -- simulated brain (C4 — no path to any real brain), her
+    -- simulated commission board (C5), her knowledge store (C14),
+    -- and her gate decision records (C9, beside the npc_gate
+    -- permanence). Every table is captain-namespaced and
+    -- space-scoped (SPACE_SCOPED_TABLES): brain erasure erases
+    -- this layer with it. NOTE for the main-landing lane: these
+    -- eleven tables are owed a G0 backup-census amendment when
+    -- this increment lands to main (P2 build record, census flag).
+    CREATE TABLE IF NOT EXISTS npc_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      goal_id TEXT NOT NULL,
+      goal_text TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      supersedes_id INTEGER,
+      mismatch_id INTEGER,
+      state TEXT NOT NULL DEFAULT 'active',
+      created_log_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_plans_space_npc
+      ON npc_plans(space_id, npc_id, goal_id, version);
+    CREATE TABLE IF NOT EXISTS npc_plan_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id INTEGER NOT NULL,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      step_index INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      label TEXT NOT NULL,
+      params TEXT NOT NULL DEFAULT '{}',
+      expected TEXT NOT NULL,
+      observed TEXT,
+      observed_log_id INTEGER,
+      state TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_plan_steps_plan
+      ON npc_plan_steps(plan_id, step_index);
+    CREATE TABLE IF NOT EXISTS npc_mismatches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      plan_id INTEGER NOT NULL,
+      step_id INTEGER NOT NULL,
+      expected TEXT NOT NULL,
+      observed TEXT NOT NULL,
+      expected_log_id INTEGER,
+      observed_log_id INTEGER,
+      cause TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE TABLE IF NOT EXISTS npc_stirrings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      world TEXT NOT NULL,
+      source_log_id INTEGER,
+      state TEXT NOT NULL DEFAULT 'active',
+      outcome TEXT,
+      relic_id TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      resolved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_stirrings_space_npc
+      ON npc_stirrings(space_id, npc_id, state);
+    CREATE TABLE IF NOT EXISTS npc_sim_nodes (
+      id TEXT NOT NULL,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      theme TEXT NOT NULL,
+      title TEXT NOT NULL,
+      points_to TEXT NOT NULL,
+      age_days INTEGER NOT NULL DEFAULT 0,
+      due INTEGER NOT NULL DEFAULT 0,
+      reviews INTEGER NOT NULL DEFAULT 0,
+      resurfaces INTEGER NOT NULL DEFAULT 0,
+      tended INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, npc_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_sim_edges (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      a TEXT NOT NULL,
+      b TEXT NOT NULL,
+      PRIMARY KEY (space_id, npc_id, a, b)
+    );
+    CREATE TABLE IF NOT EXISTS npc_sim_journey (
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      step_index INTEGER NOT NULL DEFAULT 0,
+      progress INTEGER NOT NULL DEFAULT 0,
+      steps TEXT NOT NULL DEFAULT '[]',
+      PRIMARY KEY (space_id, npc_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_sim_inbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      processed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE TABLE IF NOT EXISTS npc_commissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'offered',
+      steps TEXT NOT NULL DEFAULT '[]',
+      current_step INTEGER NOT NULL DEFAULT 0,
+      payment INTEGER NOT NULL DEFAULT 0,
+      created_log_id INTEGER,
+      completed_log_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_commissions_space_npc
+      ON npc_commissions(space_id, npc_id, state);
+    CREATE TABLE IF NOT EXISTS npc_knowledge (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      claim TEXT NOT NULL,
+      provenance TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      origin_log_id INTEGER,
+      superseded_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE TABLE IF NOT EXISTS npc_gate_decisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      npc_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      decision TEXT NOT NULL,
+      holding_ids TEXT NOT NULL DEFAULT '[]',
+      missing TEXT,
+      log_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
 
     -- Guided tours (Wave 2, N7): a saved Chronicle route with a voice.
     -- tours is the read model (the route + its stops, snapshotted at
