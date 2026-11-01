@@ -1,5 +1,60 @@
 # Deployment
 
+## Deploy checklist (current — read this first)
+
+**Update 2026-10-31 (G0 increment B5):** how this app ships changed on
+2026-10-28 — Fly's native GitHub auto-deploy is ON and the deploy
+branch is `main` (see CLAUDE.md's Deployment section, "Update
+2026-10-28"). Merging to `main` IS the deploy: Fly builds the
+Dockerfile and ships it with no further step. The June account below
+(push does not deploy; manual `fly deploy` by hand) is kept as
+history and as the fallback path, not as the current flow.
+
+Because the merge itself ships, the checks below run **before** the
+merge. Nothing in the repo can intercept Fly's auto-deploy after a
+merge lands — this checklist is where a deploy can honestly be
+refused.
+
+1. **Run the G0 deploy gate — a REFUSED verdict stops the deploy.**
+   The gate (spec §10: *deploy refuses without a current
+   latest-good*) verifies, against the live production app, that a
+   current latest-good off-volume backup exists — the off-volume
+   index reads cleanly, names the same latest-good as the app's
+   record, and is no older than 24h — and then takes a **fresh
+   pre-deploy backup** (trigger `pre_deploy`) and verifies it
+   promoted and became the index's latest-good. Any failed condition
+   is named, and the deploy does not proceed:
+
+   ```bash
+   DEPLOY_GATE_SPACE_ID=<owner space id> \
+     npx tsx packages/server/src/backup/deploy-gate-cli.ts
+   # exit 0 = PASS (deploy may proceed) · 1 = REFUSED (named conditions) · 2 = config error
+   ```
+
+   The space id is the operator's own credential (the backup routes
+   are owner-gated); it comes from the environment only and is never
+   committed or printed.
+2. **The preserved manual safeguard (§10) still applies** — the
+   automatic system supplements it, never replaces it. Its home is
+   the V1 §18.4 deploy checklist (`docs/specs/v1-implementation-ask-2026-10-23.md`,
+   `docs/specs/v1-implementation-gates-checklist.md`): a fresh
+   export taken, a brain.db backup copy in hand, and the owner's
+   downgrade acknowledgment made explicitly (downgrading past a
+   release makes newer-format data invisible — not lost — until a
+   current build returns; proceeding means accepting that).
+3. **Merge to `main`** (or, on the fallback path, `fly deploy
+   --remote-only` after pushing). Then verify the machine actually
+   came up on the new release: Fly release complete, machine
+   `started`, health checks passing — a deploy that leaves the
+   machine stopped is not done (this has bitten before, 2026-10-30).
+4. **G0-AC-15 revalidation:** any material change to schema,
+   storage, or hosting re-opens the backup drill requirement — the
+   restore drill (per the G0 Backup Restore Runbook,
+   `docs/G0_BACKUP_RESTORE_RUNBOOK.md` — added by the B4 restore
+   increment, PR #158) must be re-run end to end and recorded before
+   backups are treated as proven again, and this checklist re-read
+   against the change.
+
 ## How this app ships (the important part)
 
 **STATUS (verified 2026-06-20, still current — see CLAUDE.md's Deployment
