@@ -43,6 +43,10 @@ const state = (over: Partial<CaptainState> = {}): CaptainState => ({
   active: true,
   present: true,
   homeWorld: "great-station",
+  homeAnchor: "her Station quarter",
+  transitState: "none",
+  legTo: null,
+  legKind: null,
   currentWorld: "great-station",
   sessionState: "visiting",
   doingLine: "Warped to Scale — 10 fuel of her own, the fast way.",
@@ -76,7 +80,7 @@ const inactive = (id: "dain" | "veyra", name: string, role: string): CaptainStat
     present: false,
     currentWorld: null,
     sessionState: "away",
-    doingLine: "Not flying yet — her runs begin in a later increment.",
+    doingLine: "Not flying yet — runs begin in a later increment.",
     meetingsRemembered: 0,
     firstMetAt: null,
     recentLog: [],
@@ -139,8 +143,10 @@ describe("CaptainsPanel", () => {
     await waitFor(() => expect(mockWipe).toHaveBeenCalledWith("bex"));
     fireEvent.click(screen.getByRole("button", { name: "Stop Bex" }));
     await waitFor(() => expect(mockStop).toHaveBeenCalledWith("bex"));
-    // The stopped state offers resume instead.
-    fireEvent.click(await screen.findByRole("button", { name: "Start her again" }));
+    // The stopped state offers resume instead. P1: the label is
+    // pronoun-neutral panel copy ("Start again") — the old
+    // hard-coded "Start her again" assumed every captain is a she.
+    fireEvent.click(await screen.findByRole("button", { name: "Start again" }));
     await waitFor(() => expect(mockResume).toHaveBeenCalledWith("bex"));
   });
 
@@ -163,5 +169,24 @@ describe("CaptainsPanel", () => {
     render(<CaptainsPanel world="great-station" />);
     expect(await screen.findByText(/couldn't be reached/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("P1: an underway captain renders in transit with destination, kind, and home anchor named", async () => {
+    mockGetCaptains.mockResolvedValue([
+      state({
+        present: false,
+        currentWorld: null,
+        sessionState: "away",
+        transitState: "underway",
+        legTo: "growing-place",
+        legKind: "drift",
+        doingLine: "Underway to the Growing Place — drift, due later today. Last seen at the Great Station.",
+      }),
+    ]);
+    render(<CaptainsPanel world="great-station" />);
+    expect(await screen.findByRole("heading", { name: "Bex — Regular" })).toBeTruthy();
+    expect(screen.getByText(/In transit — bound for the Growing Place \(drift\)/)).toBeTruthy();
+    expect(screen.getByText(/Home anchor: her Station quarter/)).toBeTruthy();
+    expect(screen.getByText(/Underway to the Growing Place/)).toBeTruthy();
   });
 });

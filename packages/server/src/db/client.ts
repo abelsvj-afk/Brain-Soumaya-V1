@@ -847,6 +847,23 @@ export function migrateSchema(sqlite: RawDb): void {
       UNIQUE (space_id, attempt_key)
     );
   `);
+  // P1 (Presence, Galaxy-Wide): npc_player_state gains the home
+  // anchor (write-once) and the open-leg fields on volumes whose
+  // table predates them (guarded, the space_meta pattern). Fresh
+  // DBs already carry them in the CREATE above.
+  const npcPlayerCols = sqlite.prepare(`PRAGMA table_info(npc_player_state)`).all() as { name: string }[];
+  if (npcPlayerCols.length > 0) {
+    const haveNpcCol = (n: string) => npcPlayerCols.some((c) => c.name === n);
+    if (!haveNpcCol("home_anchor_kind")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN home_anchor_kind TEXT NOT NULL DEFAULT 'berth'`);
+    if (!haveNpcCol("home_anchor_label")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN home_anchor_label TEXT NOT NULL DEFAULT ''`);
+    if (!haveNpcCol("leg_from")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_from TEXT`);
+    if (!haveNpcCol("leg_to")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_to TEXT`);
+    if (!haveNpcCol("leg_kind")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_kind TEXT`);
+    if (!haveNpcCol("leg_departed_step")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_departed_step TEXT`);
+    if (!haveNpcCol("leg_arrives_step")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_arrives_step TEXT`);
+    if (!haveNpcCol("leg_steps")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_steps INTEGER`);
+    if (!haveNpcCol("leg_visit_key")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_visit_key TEXT`);
+  }
   // Relics I-2: relic_holdings gains copy_id + location on volumes whose
   // relic_holdings table predates them (guarded, the space_meta pattern).
   const relicHoldingCols = sqlite.prepare(`PRAGMA table_info(relic_holdings)`).all() as { name: string }[];
@@ -1546,6 +1563,8 @@ export function migrateSchema(sqlite: RawDb): void {
       npc_id TEXT NOT NULL,
       space_id TEXT NOT NULL,
       home_world TEXT NOT NULL,
+      home_anchor_kind TEXT NOT NULL DEFAULT 'berth',
+      home_anchor_label TEXT NOT NULL DEFAULT '',
       current_world TEXT,
       session_key TEXT,
       session_world TEXT,
@@ -1557,6 +1576,13 @@ export function migrateSchema(sqlite: RawDb): void {
       credits REAL NOT NULL DEFAULT 120,
       stopped INTEGER NOT NULL DEFAULT 0,
       last_advanced_at TEXT,
+      leg_from TEXT,
+      leg_to TEXT,
+      leg_kind TEXT,
+      leg_departed_step TEXT,
+      leg_arrives_step TEXT,
+      leg_steps INTEGER,
+      leg_visit_key TEXT,
       PRIMARY KEY (space_id, npc_id)
     );
     CREATE TABLE IF NOT EXISTS npc_player_memory (
