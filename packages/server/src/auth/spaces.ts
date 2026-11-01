@@ -258,6 +258,21 @@ export const SPACE_SCOPED_TABLES = [
   "source_corrections",
   "source_chunks",
   "sources",
+  // G1 "The Hold" economy: the Credits ledger, goods, demand, periods,
+  // nodes, dock state, and idempotency receipts are per-space rows —
+  // brain deletion erases the space's whole economy with it (the
+  // owner's erasure ruling: deletion erases that brain's records
+  // completely). No game table is a world object; all nine carry
+  // space_id and die with the brain.
+  "game_credits",
+  "game_cargo",
+  "game_storage",
+  "game_ledger",
+  "game_action_results",
+  "game_resource_nodes",
+  "game_periods",
+  "game_demand",
+  "game_dock_state",
 ] as const;
 
 /**
