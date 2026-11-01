@@ -24,10 +24,12 @@ import type { NpcActKind, NpcId, NpcLogEntry } from "./npcs.js";
  * the geography to the galaxy D-1 ruled (five travel-open worlds),
  * registers all EIGHT named captains with a specific home anchor
  * each, and flies exactly TWO of them — Bex, and Junia resident at
- * the Growing Place (owner ruling 2026-10-31, spec C2). The other
- * six are defined in full — traits, voice profiles, ships, anchors —
- * with `active: false`; they fly in later increments, one at a time,
- * never as a crowd.
+ * the Growing Place (owner ruling 2026-10-31, spec C2). P2 —
+ * Purpose & the Long Arc — activates ONE more: Veyra, the Seeker,
+ * whose full arc (plans, deeds, search, the gate) is that
+ * increment's whole subject. The other five are defined in full —
+ * traits, voice profiles, ships, anchors — with `active: false`;
+ * they fly in later increments, one at a time, never as a crowd.
  */
 
 /** The captain ids (the non-roster half of `NpcId`). */
@@ -187,6 +189,30 @@ const CAPTAIN_L1_ALLOW_LIST: readonly NpcActKind[] = [
   "speak",
 ] as const;
 
+/** The P2 allow-list (Purpose & the Long Arc): the L1 verbs plus
+ *  the P2 catalog's executable kinds — deeds on her simulated
+ *  brain, search against her own stirring record, plan bookkeeping,
+ *  her simulated commission board, and the B-01 gate wiring. Only
+ *  the seeker flies it in P2. Gather / Sell / Refine are NOT here
+ *  and are not kinds at all in P2 — they are P3-locked (spec §4),
+ *  refused by the fence with a phase-lock cause. */
+const CAPTAIN_P2_ALLOW_LIST: readonly NpcActKind[] = [
+  ...CAPTAIN_L1_ALLOW_LIST,
+  "deed",
+  "search",
+  "plan",
+  "commission",
+  "gate-check",
+  "gate-passage",
+] as const;
+
+/** The P3-locked verbs, named ONLY so the fence can refuse them
+ *  with a phase-lock cause (P2-B1.9). They are not act kinds, they
+ *  are on no allow-list, and the P2 planner's action set excludes
+ *  them — the list exists so "locked until P3" is a distinct,
+ *  testable refusal from "never allowed". */
+export const CAPTAIN_PHASE_LOCKED_VERBS: readonly string[] = ["gather", "sell", "refine"] as const;
+
 /** Dain — the Hauler (settled 2026-10-31, owner's tap, Set A).
  *  Defined in L1; flies in a later increment. */
 export const DAIN: CaptainDefinition = {
@@ -219,8 +245,11 @@ export const DAIN: CaptainDefinition = {
 } as const;
 
 /** Veyra — the Seeker (settled 2026-10-31, owner's tap, Set A).
- *  Defined in L1; flies in a later increment. Ship-homed: Scale is
- *  her berthing and plan-bias world, not her residence (spec C3). */
+ *  Defined in L1; P2 ACTIVATES her — she is the one captain whose
+ *  full seeker arc this increment flies (P2 spec §3). Ship-homed:
+ *  Scale is her berthing and plan-bias world, not her residence
+ *  (spec C3). Her allow-list is the P2 list: deeds, search, plans,
+ *  commissions, and the gate wiring are hers to use. */
 export const VEYRA: CaptainDefinition = {
   id: "veyra",
   name: "Veyra",
@@ -232,8 +261,8 @@ export const VEYRA: CaptainDefinition = {
   homeWorld: "scale",
   homeAnchor: { kind: "ship", world: "scale", label: "her ship" },
   shipModelKey: "omen",
-  allowList: CAPTAIN_L1_ALLOW_LIST,
-  active: false,
+  allowList: CAPTAIN_P2_ALLOW_LIST,
+  active: true,
   voice: {
     pronouns: "she",
     register: "Terse, low-volume, long silences; short lines about the search and the far side of things; never chatty.",
@@ -514,13 +543,59 @@ export const CAPTAIN_QUESTION_KINDS: readonly CaptainQuestionKind[] = [
 
 /** The memory stream (design §6.2): in L1 a captain writes meetings,
  *  observations, and session markers only. Importance is a fixed
- *  rubric in shared constants (§6.2), never a model call. */
-export type CaptainMemoryKind = "meeting" | "observation" | "session";
+ *  rubric in shared constants (§6.2), never a model call. P2
+ *  completes the stream (spec §6.2): outcomes of her acts, social
+ *  events, milestones (a find, a gate decision), and her own
+ *  template-built reflection summaries join the kinds, and every
+ *  entry carries provenance (Architecture §5.6). */
+export type CaptainMemoryKind =
+  | "meeting"
+  | "observation"
+  | "session"
+  | "outcome"
+  | "social"
+  | "milestone"
+  | "summary";
 
 export const CAPTAIN_MEETING_IMPORTANCE_FIRST = 8;
 export const CAPTAIN_MEETING_IMPORTANCE = 6;
 export const CAPTAIN_OBSERVATION_IMPORTANCE = 3;
 export const CAPTAIN_SESSION_IMPORTANCE = 4;
+/** The P2 rubric rows (spec §6.2): a routine act is 2, a find is 9,
+ *  a gate decision is 10 — deterministic, never a model call. */
+export const CAPTAIN_ROUTINE_IMPORTANCE = 2;
+export const CAPTAIN_FIND_IMPORTANCE = 9;
+export const CAPTAIN_GATE_IMPORTANCE = 10;
+
+/** Stream retention (spec §6.2): the newest 500 entries plus every
+ *  entry with importance ≥ 8, forever, per captain. The cap governs
+ *  recall detail only — the append-only log keeps everything. */
+export const CAPTAIN_MEMORY_RETENTION = 500;
+export const CAPTAIN_MEMORY_KEEP_IMPORTANCE = 8;
+/** Reflection-lite trigger (spec §6.2): when the importance written
+ *  since her last summary sums to ~150, she summarizes her own acts
+ *  in template words. */
+export const CAPTAIN_REFLECTION_TRIGGER = 150;
+
+/**
+ * D-SEARCH-PROB (coordinator ruling, derived at P2 build time from
+ * the P2 spec's worked arc, §3): the arc resolves three searches —
+ * Station (no find), Scale attempt 1 (no find), Scale attempt 2
+ * (find) — one find in three searches, over four days. A per-search
+ * find probability of 1/3 is the constant that arc embodies: high
+ * enough that a seeker's arc resolves in days, low enough that an
+ * honest no-find is the ordinary outcome, exactly as the arc shows
+ * (§3.3: "an honest failure before any success"). One named tunable
+ * constant; the scripted arc never samples it (its outcomes are
+ * seeded), and the probabilistic path is band-tested against it.
+ */
+export const CAPTAIN_SEARCH_FIND_PROBABILITY = 1 / 3;
+
+/** Warp pace rule for PLANNED legs (P2 planner): a plan warps only
+ *  when her tank is comfortable — at least three warps in hand —
+ *  and drifts otherwise. Access never depends on it: drift and the
+ *  home route are always free (fuel buys speed, never access). */
+export const CAPTAIN_PLAN_WARP_MIN_FUEL = 30;
 
 export interface CaptainMemoryEntry {
   id: number;
@@ -532,6 +607,14 @@ export interface CaptainMemoryEntry {
   /** Retrieval tags (design §6.3): world keys, people, topics. */
   tags: string[];
   createdAt: string;
+  /** Provenance (Architecture §5.6): the npc_log event this entry
+   *  rests on, when the act that caused it was logged; null for
+   *  entries whose cause predates the wiring or has no log event. */
+  originLogId: number | null;
+  /** Where the memory came from, in plain words ("firsthand"). */
+  source: string;
+  /** True when she lived it herself (not told, not inferred). */
+  experienced: boolean;
 }
 
 /** One stored bark (design §13): a spoken line and its provenance.
@@ -550,6 +633,43 @@ export interface CaptainBark {
   createdAt: string;
 }
 
+/** One step of a captain's stored plan, as the panel shows it
+ *  (P2 spec §4/§5): the act, its label, the outcome the plan
+ *  EXPECTED at plan time (immutable), and — once executed — what
+ *  was actually observed, copied from the act's log event. */
+export interface CaptainPlanStepView {
+  kind: string;
+  label: string;
+  expected: string;
+  state: "open" | "completed" | "failed";
+  observed: string | null;
+}
+
+/** A captain's active plan, panel-readable (P2-B1.1): the goal, the
+ *  version in the immutable chain, and its steps. Null on the wire
+ *  for captains without a plan (everyone but the seeker in P2). */
+export interface CaptainPlanView {
+  goalId: string;
+  goalText: string;
+  version: number;
+  state: string;
+  steps: CaptainPlanStepView[];
+}
+
+/** Her gate progress, computed from her own NPC-pool holdings only
+ *  (P2-B1.7): the B-01 shape — the Witness plus any two — with the
+ *  latest recorded decision when she has asked the question. */
+export interface CaptainGateView {
+  heldCount: number;
+  hasWitness: boolean;
+  /** The latest gate decision she has on record, if any. */
+  decision: "open" | "unmet" | null;
+  /** What an unmet decision is missing, in plain words. */
+  missing: string | null;
+  /** The panel line, plain: "2 of the gate's shape held; …". */
+  line: string;
+}
+
 /** One captain's state as the client sees it. */
 export interface CaptainState {
   id: CaptainId;
@@ -559,7 +679,7 @@ export interface CaptainState {
   ageBand: string;
   personality: string;
   traits: readonly string[];
-  /** Defined but not flying yet (six of the eight in P1). */
+  /** Defined but not flying yet (five of the eight in P2). */
   active: boolean;
   /** In a public world right now (false while away between visits
    *  and false while a leg is open — underway is present nowhere). */
@@ -598,6 +718,13 @@ export interface CaptainState {
   recentLog: NpcLogEntry[];
   /** Her stored template lines for today, newest first. */
   barks: CaptainBark[];
+  /** P2 (purpose captains only): the relic ids she holds from the
+   *  NPC-scoped supply — never a copy from the player's pool. */
+  relicsHeld?: string[];
+  /** P2 (purpose captains only): her active stored plan, or null. */
+  plan?: CaptainPlanView | null;
+  /** P2 (purpose captains only): her B-01 progress, or null. */
+  gateView?: CaptainGateView | null;
 }
 
 /** One Chronicle line (design §8.1): a read model over the shared

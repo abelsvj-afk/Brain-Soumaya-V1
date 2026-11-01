@@ -21,8 +21,9 @@ import {
  * P1 registry (spec §8 T3 done-test, features F01–F03):
  *  - all 8 definitions match the approved sources field-by-field;
  *  - Sorrel is they/them in BOTH pronoun fields (spec C4 done-test);
- *  - active flags are EXACTLY { bex: true, junia: true } — a third active
- *    captain fails here even if every other test passes (spec §7);
+ *  - active flags were EXACTLY { bex: true, junia: true } in P1 (spec
+ *    §7); P2 activates Veyra by the P2 spec's own ruling, so the set
+ *    is now { bex, junia, veyra } — a FOURTH active captain fails here;
  *  - every captain holds a real fleet ship key, unique across the cohort (F03);
  *  - Dain/Veyra/Bex are byte-unchanged from L1 except the anchor field (T5).
  */
@@ -53,7 +54,7 @@ const EXPECTED: readonly ExpectedDef[] = [
     traits: ["Restless", "Private", "Bold"],
     homeWorld: "scale", // berthing world — her anchor is the ship (spec C3)
     anchor: { kind: "ship", world: "scale", label: "her ship" },
-    active: false, sampleLine: "Nothing at Scale. The stirring was wrong, or I was.",
+    active: true, sampleLine: "Nothing at Scale. The stirring was wrong, or I was.",
   },
   {
     id: "bex", name: "Bex", role: "Regular", pronouns: "she", ageBand: "late 20s",
@@ -140,9 +141,9 @@ describe("P1 registry — the cohort of eight (F01, spec §8 T3)", () => {
     expect(sorrel?.voice.pronouns).toBe("they");
   });
 
-  it("active flags are exactly BEX and JUNIA true, the other six false", () => {
+  it("active flags are exactly BEX, JUNIA and VEYRA true, the other five false", () => {
     const active = CAPTAIN_DEFINITIONS.filter((d) => d.active).map((d) => d.id);
-    expect(active.sort()).toEqual(["bex", "junia"]);
+    expect(active.sort()).toEqual(["bex", "junia", "veyra"]);
     for (const e of EXPECTED) expect(captainDefinition(e.id)?.active, e.id).toBe(e.active);
   });
 
@@ -161,11 +162,20 @@ describe("P1 registry — the cohort of eight (F01, spec §8 T3)", () => {
     expect(captainDefinition("bex")?.shipModelKey).toBe("bob");
   });
 
-  it("no captain's allow-list leaves the six L1 kinds — no work verbs in P1 (spec §7)", () => {
+  it("allow-lists: the six L1 kinds for seven captains; Veyra adds exactly the P2 kinds (P1 spec §7, widened by the P2 spec)", () => {
     for (const def of CAPTAIN_DEFINITIONS) {
-      expect([...def.allowList].sort(), def.id).toEqual(
-        ["arrive", "depart", "greet", "speak", "travel", "wait"],
-      );
+      if (def.id === "veyra") {
+        // P2 (Purpose): the seeker's list is the L1 six plus the
+        // six P2 kinds — and nothing else. The P3 economy verbs
+        // (gather/sell/refine) are on NO captain's list.
+        expect([...def.allowList].sort(), def.id).toEqual(
+          ["arrive", "commission", "deed", "depart", "gate-check", "gate-passage", "greet", "plan", "search", "speak", "travel", "wait"],
+        );
+      } else {
+        expect([...def.allowList].sort(), def.id).toEqual(
+          ["arrive", "depart", "greet", "speak", "travel", "wait"],
+        );
+      }
     }
   });
 });

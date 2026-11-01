@@ -7,7 +7,7 @@
  * (bucketed sqlite_master assertion, all-MUST production preflight,
  * three reconciliation tiers).
  *
- * THIS FILE is inventory **v8**. v2 was a version bump under the spec §2
+ * THIS FILE is inventory **v9**. v2 was a version bump under the spec §2
  * mechanism, made by increment B1 at its anchor main @ ea6260d
  * (PR #134). Changes from v1, all MAY-BE-EMPTY additions:
  *  - `relic_copies`, `relic_copy_events` — landed by Relics I-2 between
@@ -134,6 +134,31 @@
  * Totals at v8: 139 named tables, 138 included, 26 MUST-BE-NONEMPTY,
  * 112 MAY-BE-EMPTY, 1 excluded.
  *
+ * v9 (owner-authorized 2026-11-01): the civilization program's P2
+ * ("Purpose & the Long Arc") lands on main. Its schema creates 11
+ * tables the v8 census does not name — and the manifest stage fails
+ * loudly by design on any unnamed application table, so backups
+ * would break the moment the landing deployed. All 11 are added
+ * INCLUDED + MAY-BE-EMPTY: `npc_plans`, `npc_plan_steps`,
+ * `npc_mismatches`, `npc_stirrings`, `npc_sim_nodes`,
+ * `npc_sim_edges`, `npc_sim_journey`, `npc_sim_inbox`,
+ * `npc_commissions`, `npc_knowledge`, `npc_gate_decisions`.
+ * INCLUDED because exclusion would silently drop Veyra's plans,
+ * simulated brain, commission board, and gate record from every
+ * backup; MAY-BE-EMPTY because a fresh brain legitimately holds
+ * zero P2 rows. The table list was cross-checked mechanically
+ * against the union DDL in BOTH schema locations
+ * (db/schemaSql.ts + db/client.ts): exactly these 11, none missing,
+ * none extra, none misspelled. P2 also adds provenance COLUMNS to
+ * `npc_player_memory` (origin_log_id, source, experienced — in the
+ * fresh-DB DDL in both schema locations, and as PRAGMA-guarded
+ * ALTERs in db/client.ts migrateSchema for existing volumes), and
+ * the v8 entry for that table pins only its name and class — no
+ * DDL — so no entry change is owed for those columns (re-verified
+ * for v8: no DDL pin exists anywhere in backup code or its tests).
+ * Totals at v9: 150 named tables, 149 included, 26 MUST-BE-NONEMPTY,
+ * 123 MAY-BE-EMPTY, 1 excluded.
+ *
  * Classes (spec §2): "must-be-nonempty" — zero rows in a snapshot means a
  * wiped/corrupt snapshot, reject; "may-be-empty" — count is recorded in
  * the manifest and compared, zero is legitimate; "excluded" — not counted
@@ -155,7 +180,7 @@
  */
 export type BackupTableClass = "must-be-nonempty" | "may-be-empty" | "excluded";
 
-export const BACKUP_INVENTORY_VERSION = 8;
+export const BACKUP_INVENTORY_VERSION = 9;
 
 export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> = {
   // ── Sources & content ──────────────────────────────────────────────
@@ -258,6 +283,19 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   game_periods: "may-be-empty",
   game_resource_nodes: "may-be-empty",
   game_storage: "may-be-empty",
+  // v9: P2 "Purpose & the Long Arc"'s 11 tables — all INCLUDED +
+  // MAY-BE-EMPTY (see the header's v9 note).
+  npc_plans: "may-be-empty",
+  npc_plan_steps: "may-be-empty",
+  npc_mismatches: "may-be-empty",
+  npc_stirrings: "may-be-empty",
+  npc_sim_nodes: "may-be-empty",
+  npc_sim_edges: "may-be-empty",
+  npc_sim_journey: "may-be-empty",
+  npc_sim_inbox: "may-be-empty",
+  npc_commissions: "may-be-empty",
+  npc_knowledge: "may-be-empty",
+  npc_gate_decisions: "may-be-empty",
   garden_tends: "may-be-empty",
   review_grade_attempts: "may-be-empty",
   fleet_defense_defenses: "may-be-empty",

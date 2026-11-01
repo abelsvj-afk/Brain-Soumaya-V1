@@ -247,14 +247,29 @@ export class CaptainRepo {
     importance: number,
     tags: string[],
     nowMs: number = Date.now(),
+    provenance?: { originLogId?: number | null; source?: string; experienced?: boolean },
   ): CaptainMemoryEntry {
     const createdAt = new Date(nowMs).toISOString();
+    const originLogId = provenance?.originLogId ?? null;
+    const source = provenance?.source ?? "firsthand";
+    const experienced = provenance?.experienced ?? true;
     const res = this.h.sqlite
       .prepare(
-        `INSERT INTO npc_player_memory (npc_id, space_id, kind, text, importance, tags, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO npc_player_memory (npc_id, space_id, kind, text, importance, tags, origin_log_id, source, experienced, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(captainId, this.spaceId, kind, text, importance, JSON.stringify(tags), createdAt);
+      .run(
+        captainId,
+        this.spaceId,
+        kind,
+        text,
+        importance,
+        JSON.stringify(tags),
+        originLogId,
+        source,
+        experienced ? 1 : 0,
+        createdAt,
+      );
     return {
       id: Number(res.lastInsertRowid),
       captainId,
@@ -263,13 +278,16 @@ export class CaptainRepo {
       importance,
       tags,
       createdAt,
+      originLogId,
+      source,
+      experienced,
     };
   }
 
   memory(captainId: CaptainId, kind?: CaptainMemoryKind, limit = 500): CaptainMemoryEntry[] {
     const rows = this.h.sqlite
       .prepare(
-        `SELECT id, kind, text, importance, tags, created_at FROM npc_player_memory
+        `SELECT id, kind, text, importance, tags, origin_log_id, source, experienced, created_at FROM npc_player_memory
          WHERE space_id = ? AND npc_id = ?${kind ? " AND kind = ?" : ""} ORDER BY id ASC LIMIT ?`,
       )
       .all(this.spaceId, captainId, ...(kind ? [kind] : []), limit) as {
@@ -278,6 +296,9 @@ export class CaptainRepo {
       text: string;
       importance: number;
       tags: string;
+      origin_log_id: number | null;
+      source: string;
+      experienced: number;
       created_at: string;
     }[];
     return rows.map((r) => ({
@@ -288,6 +309,9 @@ export class CaptainRepo {
       importance: r.importance,
       tags: JSON.parse(r.tags) as string[],
       createdAt: r.created_at,
+      originLogId: r.origin_log_id,
+      source: r.source ?? "firsthand",
+      experienced: r.experienced === 1,
     }));
   }
 

@@ -8,6 +8,7 @@ import {
   getCaptainState,
   getChronicle,
   listCaptainStates,
+  resetCaptain,
   resumeCaptain,
   stopCaptain,
   wipeCaptainMeetings,
@@ -20,7 +21,9 @@ import {
  * advance lazily here, on read, never on a timer. GET / advances
  * the active captains and returns the roster; POST /:id/ask answers
  * from live state and her own memory; stop/resume/wipe-meetings are
- * the owner's controls, each logged as an owner act.
+ * the owner's controls, each logged as an owner act. P2 adds
+ * POST /:id/reset — the targeted reset of a purpose captain's own
+ * stores (§6.2), also an owner act.
  */
 export function captainsRoutes(ctx: AppContext): Router {
   const r = Router();
@@ -105,6 +108,15 @@ export function captainsRoutes(ctx: AppContext): Router {
     try {
       const spaceId = spaceOf(res);
       res.json({ captain: resumeCaptain(ctx.handle, spaceId, captainId(String(req.params.id ?? "")), Date.now()) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  r.post("/:id/reset", (req, res) => {
+    try {
+      const spaceId = spaceOf(res);
+      res.json({ captain: resetCaptain(ctx.handle, spaceId, captainId(String(req.params.id ?? "")), Date.now()) });
     } catch (e) {
       fail(res, e);
     }

@@ -5,6 +5,7 @@ import {
   askCaptain,
   getCaptains,
   getChronicle,
+  resetCaptain,
   resumeCaptain,
   stopCaptain,
   wipeCaptainMeetings,
@@ -37,6 +38,7 @@ export interface UseCaptains {
   stop: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   wipeMeetings: (id: string) => Promise<void>;
+  reset: (id: string) => Promise<void>;
 }
 
 export function useCaptains(enabled: boolean, withChronicle: boolean): UseCaptains {
@@ -126,5 +128,12 @@ export function useCaptains(enabled: boolean, withChronicle: boolean): UseCaptai
     [run, adopt],
   );
 
-  return { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings };
+  const reset = useCallback(
+    async (id: string) => {
+      await run(async () => adopt(await resetCaptain(id)));
+    },
+    [run, adopt],
+  );
+
+  return { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings, reset };
 }
