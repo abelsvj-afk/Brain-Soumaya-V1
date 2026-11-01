@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getRelicsState, syncLegacyRelics } from "../api/relics.js";
 
 /**
  * Found relics — the per-space record of which relics the traveler has
@@ -62,6 +63,7 @@ export function useFoundRelics(spaceId: string | undefined | null): Set<string> 
   );
   useEffect(() => {
     if (!spaceId) return;
+    void refreshFoundRelicsFromServer(spaceId);
     // Reload after mount (another surface may have found one since this
     // hook's initializer ran), but keep the old reference when nothing
     // changed — no re-render, no claim-loop cancellation.
@@ -78,4 +80,34 @@ export function useFoundRelics(spaceId: string | undefined | null): Set<string> 
     return () => window.removeEventListener("brain-relic-found", onFound);
   }, [spaceId]);
   return found;
+}
+
+/** Replace the local cache with the server's found set (server is the record now). */
+export function replaceFoundRelics(spaceId: string, keys: readonly string[]): void {
+  try { localStorage.setItem(`relics.found.${spaceId}`, JSON.stringify([...keys])); } catch { /* cache only */ }
+  try { window.dispatchEvent(new CustomEvent("brain-relic-found", { detail: { key: null } })); } catch { /* tests */ }
+}
+
+const serverSyncedSpaces = new Set<string>();
+/**
+ * One-time legacy sync + cache refresh (§8): offer local finds the server
+ * lacks (the server accepts them once, as legacy), then cache the server's
+ * found set. Any failure keeps the local cache untouched.
+ */
+export async function refreshFoundRelicsFromServer(spaceId: string): Promise<void> {
+  if (serverSyncedSpaces.has(spaceId)) return;
+  serverSyncedSpaces.add(spaceId);
+  try {
+    const before = await getRelicsState();
+    if (!before) return;
+    const local = loadFoundRelics(spaceId);
+    const serverKeys = new Set(before.found.map((id) => `relic-${id}`));
+    const missing = [...local].filter((k) => !serverKeys.has(k)).map((k) => k.replace(/^relic-/, ""));
+    let state = before;
+    if (missing.length > 0) {
+      const out = await syncLegacyRelics(missing);
+      if (out.state) state = out.state;
+    }
+    replaceFoundRelics(spaceId, state.found.map((id) => `relic-${id}`));
+  } catch { /* cache stays as-is */ }
 }

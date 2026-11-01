@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import type { AppContext } from "../../context.js";
 import { EconomyRepo } from "../../economy.js";
 import { TravelRepo, TravelError } from "../../repositories/travel.repo.js";
+import { RelicHoldingsStore } from "../../relics/holdings.js";
 import { spaceOf } from "../middleware.js";
 
 /**
@@ -13,7 +14,7 @@ import { spaceOf } from "../middleware.js";
  */
 export function travelRoutes(ctx: AppContext): Router {
   const r = Router();
-  const repo = (res: Response) => new TravelRepo(ctx.handle, spaceOf(res));
+  const repo = (res: Response) => { const spaceId = spaceOf(res); const store = new RelicHoldingsStore(ctx.handle); return new TravelRepo(ctx.handle, spaceId, () => store.gateHoldings(spaceId)); };
 
   function fail(res: Response, e: unknown): void {
     if (e instanceof TravelError) {
@@ -83,7 +84,7 @@ export function travelRoutes(ctx: AppContext): Router {
 
   r.get("/state", (req, res) => {
     const spaceId = spaceOf(res);
-    const state = new TravelRepo(ctx.handle, spaceId).getState();
+    const store = new RelicHoldingsStore(ctx.handle); const state = new TravelRepo(ctx.handle, spaceId, () => store.gateHoldings(spaceId)).getState();
     res.json({ ...state, fuel: new EconomyRepo(ctx.handle, spaceId).toFuel() });
   });
 

@@ -4,7 +4,8 @@ import type { AppContext } from "../../context.js";
 import { ingest, ingestWithContext, processActionCapture } from "../../ingestion/pipeline.js";
 import { NodesRepo } from "../../repositories/nodes.repo.js";
 import { SourcesRepo } from "../../repositories/sources.repo.js";
-import { EconomyRepo, EARN_MEMORY, EARN_LINK } from "../../economy.js";
+import { EconomyRepo, EARN_MEMORY } from "../../economy.js";
+import { buffsForSpace } from "../../relics/buffs.js";
 import { StreakRepo, STREAK_DAY_BONUS } from "../../streak.js";
 import { applyCognitiveGravity } from "../../analysis/cognitive.js";
 import { generateInquiry } from "../../analysis/inquiry.js";
@@ -120,7 +121,7 @@ export function ingestRoutes(ctx: AppContext): Router {
     // Earn fuel for tending the galaxy: a memory + each association it forged,
     // plus the once-per-day streak bonus when a new day was counted.
     const fuelEarned =
-      EARN_MEMORY + EARN_LINK * result.associativeEdges.length + (advanced ? STREAK_DAY_BONUS : 0);
+      EARN_MEMORY + buffsForSpace(ctx.handle, spaceId).linkEarn * result.associativeEdges.length + (advanced ? STREAK_DAY_BONUS : 0);
     const econ = new EconomyRepo(ctx.handle, spaceId);
     econ.add(fuelEarned);
     // A fresh memory may support an existing Mind anchor (goal/person/…) — pull it

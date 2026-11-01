@@ -7,7 +7,7 @@
  * (bucketed sqlite_master assertion, all-MUST production preflight,
  * three reconciliation tiers).
  *
- * THIS FILE is inventory **v5**. v2 was a version bump under the spec §2
+ * THIS FILE is inventory **v6**. v2 was a version bump under the spec §2
  * mechanism, made by increment B1 at its anchor main @ ea6260d
  * (PR #134). Changes from v1, all MAY-BE-EMPTY additions:
  *  - `relic_copies`, `relic_copy_events` — landed by Relics I-2 between
@@ -74,6 +74,30 @@
  * named/included by one — `story_roads` joined with the v3 group after
  * that line was drafted; the pinned test's counts have always governed.)
  *
+ * v6 (owner-authorized 2026-10-31): the Relics program lands on main.
+ * Its union schema creates 12 `relic_*` tables (Relics I-1…I-7 + the
+ * canon entry), none of which the v5 census named — and the manifest
+ * stage fails loudly by design on any unnamed application table, so
+ * backups would have broken the moment the landing deployed (the
+ * landing's combined-tree gate caught exactly this: 42 deterministic
+ * backup failures). All 12 are added INCLUDED + MAY-BE-EMPTY:
+ * `relic_claim_attempts`, `relic_codex_layers`, `relic_copies`,
+ * `relic_copy_events`, `relic_exchange_attempts`,
+ * `relic_first_discoveries`, `relic_gate_opened`, `relic_holdings`,
+ * `relic_position_samples`, `relic_returns`, `relic_seed_effects`,
+ * `relic_stirrings`. INCLUDED because exclusion would silently drop
+ * the user's whole relic collection from every backup; MAY-BE-EMPTY
+ * because a fresh brain legitimately holds zero relic rows. Four of
+ * the twelve (`relic_holdings`, `relic_returns`, `relic_copies`,
+ * `relic_copy_events`) are the very tables v4 removed as
+ * deploy-line-only — they return now that the relics increments have
+ * landed, exactly as the v4 note foresaw. The table list was
+ * cross-checked mechanically against the union DDL in BOTH schema
+ * locations (db/schemaSql.ts + db/client.ts): exactly these 12,
+ * none missing, none extra, none misspelled.
+ * Totals at v6: 127 named tables, 126 included, 26 MUST-BE-NONEMPTY,
+ * 100 MAY-BE-EMPTY, 1 excluded.
+ *
  * Classes (spec §2): "must-be-nonempty" — zero rows in a snapshot means a
  * wiped/corrupt snapshot, reject; "may-be-empty" — count is recorded in
  * the manifest and compared, zero is legitimate; "excluded" — not counted
@@ -95,7 +119,7 @@
  */
 export type BackupTableClass = "must-be-nonempty" | "may-be-empty" | "excluded";
 
-export const BACKUP_INVENTORY_VERSION = 5;
+export const BACKUP_INVENTORY_VERSION = 6;
 
 export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> = {
   // ── Sources & content ──────────────────────────────────────────────
@@ -161,8 +185,23 @@ export const BACKUP_TABLE_INVENTORY: Readonly<Record<string, BackupTableClass>> 
   // ── Game progress (all MAY-BE-EMPTY: progress state, counted always) ─
   codex_discoveries: "may-be-empty",
   codex_claims: "may-be-empty",
-  // v4: relic_holdings / relic_returns / relic_copies / relic_copy_events
-  // removed — deploy-line only, absent from main AND production (see header).
+  // v6: the Relics program's 12 tables — all INCLUDED + MAY-BE-EMPTY
+  // (see the header's v6 note). Four of them (relic_holdings,
+  // relic_returns, relic_copies, relic_copy_events) are the tables v4
+  // removed as deploy-line-only; they return now that the relics
+  // increments have landed on main.
+  relic_claim_attempts: "may-be-empty",
+  relic_codex_layers: "may-be-empty",
+  relic_copies: "may-be-empty",
+  relic_copy_events: "may-be-empty",
+  relic_exchange_attempts: "may-be-empty",
+  relic_first_discoveries: "may-be-empty",
+  relic_gate_opened: "may-be-empty",
+  relic_holdings: "may-be-empty",
+  relic_position_samples: "may-be-empty",
+  relic_returns: "may-be-empty",
+  relic_seed_effects: "may-be-empty",
+  relic_stirrings: "may-be-empty",
   npc_relic_holdings: "may-be-empty",
   npc_state: "may-be-empty",
   npc_gate: "may-be-empty",

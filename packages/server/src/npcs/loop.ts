@@ -16,6 +16,9 @@ import { checkNpcEternityGate } from "./gate.js";
 import { decide, exploreOutcome, perceive } from "./harbor.js";
 import { decideEternity, perceiveEternity } from "./eternity.js";
 import { spaceTimezone } from "../agent/notify/policy.js";
+import { RELIC_BY_ID } from "@brain/shared";
+import { RelicClaimService } from "../relics/claims.js";
+import { RelicStirringService } from "../relics/stirrings.js";
 
 /**
  * The autonomy loop (design note §2): Perceive → Decide → Act → Log.
@@ -40,6 +43,16 @@ import { spaceTimezone } from "../agent/notify/policy.js";
  * constructed — no structural kind exists in the shared vocabulary —
  * and the propose→decide rail (§17) is a Phase 4 build; until it
  * exists, no NPC can propose structure at all.
+ *
+ * Relics I-5 widened exactly one lane, deliberately: the explore act
+ * now attempts a real relic claim through the unified claim core
+ * (relics/claims.ts — one copy pool shared with players, the
+ * last-copy courtesy inside the same transaction), and every tick
+ * evaluates stirring issuance for the world the space stands in
+ * (relics/stirrings.ts). Those writes touch only relic, npc_* and
+ * inbox records — brain content (nodes/edges) stays read-only to
+ * this module, and the loop's brain-purity test still proves ticks
+ * leave it byte-identical.
  *
  * Ticks are LAZY: the loop runs when the client reads an NPC (or asks
  * it a question), never on a timer. A question always gets an answer
@@ -209,12 +222,38 @@ export function runNpcTick(
       entry = repo.appendLog(def.id, "speak", decision.text, decision.cause, nowMs);
       if (decision.welcomeJourneyId) repo.markWelcome(def.id, decision.welcomeJourneyId);
     } else if (decision.act === "explore") {
-      entry = repo.appendLog(def.id, "explore", exploreOutcome(p), decision.cause, nowMs);
+      // Relics I-5 (§5.5): the explore is a REAL find attempt through
+      // the unified claim core — the same pool, the same award, the
+      // last-copy courtesy inside this transaction. A find names what
+      // was found; a deferral or an empty pool logs as finding
+      // nothing, which is the courtesy's designed invisibility (the
+      // NPC simply waits, and its world stays honest).
+      const claim = new RelicClaimService(h).claimForNpc(spaceId, def.id, def.world);
+      if (claim.status === "awarded") {
+        const foundName = RELIC_BY_ID.get(claim.relicId)?.name ?? claim.relicId;
+        entry = repo.appendLog(def.id, "explore", `Looked for a way onward in my own world — and found the ${foundName} resting here.`, decision.cause, nowMs);
+        // The find may have completed this NPC's gate set: the gate
+        // record is marked in this same tick, not left for the next.
+        const holdingsNow = repo.holdings(def.id);
+        if (checkNpcEternityGate(holdingsNow, repo.gateOpen(def.id)).open && !repo.gateOpen(def.id)) {
+          repo.markGateOpen(def.id, nowMs);
+        }
+      } else {
+        entry = repo.appendLog(def.id, "explore", exploreOutcome(p), decision.cause, nowMs);
+      }
       const tz = spaceTimezone(h.sqlite, spaceId);
       repo.markExploreDay(def.id, localDateKey(tz, nowMs));
     } else {
       entry = repo.appendLog(def.id, "wait", "Waited.", decision.cause, nowMs);
     }
+    // Relics I-5 (§5.4): stirring issuance is evaluated inside the
+    // daily loop, for the world the space currently stands in —
+    // arrival there is what makes the world reachable to the space.
+    // At most one ambient stirring per (space, world); the evaluation
+    // is inert when one is already open, when the pool cannot
+    // furnish a copy to promise, or when nothing there is
+    // undiscovered by this space.
+    new RelicStirringService(h).evaluateAmbientForWorld(spaceId, p.currentWorld, nowMs);
     repo.markTick(def.id, nowMs);
     return { acted: true, entry, reason: null, reasonCode: null };
   });
