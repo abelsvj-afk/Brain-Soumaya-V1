@@ -66,16 +66,16 @@ function juniaHomeVisit() {
 }
 
 describe("F25 — Junia is a second LIVING captain, resident at the Growing Place", () => {
-  it("the panel lists eight captains; exactly Bex and Junia fly, and only they persist rows", () => {
+  it("the panel lists eight captains; Bex, Junia and (from P2) Veyra fly, and only they persist rows", () => {
     const list = listCaptainStates(handle, SPACE, T0);
     expect(list.map((c) => c.id)).toEqual(
       ["dain", "veyra", "bex", "junia", "hollis", "sorrel", "yara", "felix"],
     );
-    expect(list.filter((c) => c.active).map((c) => c.id).sort()).toEqual(["bex", "junia"]);
+    expect(list.filter((c) => c.active).map((c) => c.id).sort()).toEqual(["bex", "junia", "veyra"]);
     const rows = handle.sqlite
       .prepare(`SELECT npc_id FROM npc_player_state WHERE space_id = ? ORDER BY npc_id`)
       .all(SPACE) as { npc_id: string }[];
-    expect(rows.map((r) => r.npc_id)).toEqual(["bex", "junia"]);
+    expect(rows.map((r) => r.npc_id)).toEqual(["bex", "junia", "veyra"]);
     // Junia's row is born at HER home, with HER anchor.
     const junia = captains().state("junia");
     expect(junia?.homeWorld).toBe("growing-place");

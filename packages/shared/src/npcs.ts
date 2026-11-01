@@ -77,10 +77,28 @@ export type NpcActKind =
   | "travel"
   | "arrive"
   | "depart"
-  | "greet";
+  | "greet"
+  | "deed"
+  | "search"
+  | "plan"
+  | "commission"
+  | "gate-check"
+  | "gate-passage";
 
 /** The kinds the framework knows. Anything outside this list is not
- *  a tool — it cannot happen, and the executor rejects it. */
+ *  a tool — it cannot happen, and the executor rejects it.
+ *
+ *  The P2 kinds (deed / search / plan / commission / gate-check /
+ *  gate-passage) are the Purpose increment's vocabulary (P2 spec
+ *  §4): deed acts run on a captain's SIMULATED brain only, search
+ *  resolves against her own NPC stirring record, plan lines are the
+ *  planner's bookkeeping, commission acts are her simulated board,
+ *  and the two gate kinds are the B-01 wiring. They sit on NO
+ *  roster NPC's allow-list and on exactly one captain's (the
+ *  seeker's) in P2. The P3 economy verbs (gather / sell / refine)
+ *  are deliberately ABSENT — not kinds at all in P2, so no code
+ *  path can log or execute them; the fence names them only as a
+ *  phase-lock refusal (P2-B1.9). */
 export const NPC_ACT_KINDS: readonly NpcActKind[] = [
   "speak",
   "announce-route",
@@ -95,6 +113,12 @@ export const NPC_ACT_KINDS: readonly NpcActKind[] = [
   "arrive",
   "depart",
   "greet",
+  "deed",
+  "search",
+  "plan",
+  "commission",
+  "gate-check",
+  "gate-passage",
 ] as const;
 
 /**

@@ -170,14 +170,22 @@ describe("I-6b — fuel buys speed, never access; home is free; drift always exi
 });
 
 describe("I-6c — the two economy separations (VACUITY proof, honestly labelled)", () => {
-  it("no gather/sell/refine kind exists on any captain allow-list — there is nothing to separate in P1", () => {
+  it("the P3 economy verbs exist on NO captain allow-list; P2's one work kind (search) is the seeker's alone", () => {
     for (const def of CAPTAIN_DEFINITIONS) {
-      for (const kind of ["gather", "sell", "refine", "tend", "search", "delve", "keep"]) {
+      // gather/sell/refine stay phase-locked until P3 — they are
+      // not act kinds at all in P2, and no list carries them (nor
+      // the deed verbs tend/delve/keep as kinds: deeds ride the
+      // single "deed" kind). In P1 this proof was vacuous (no work
+      // kinds existed); P2 gives it one real edge: "search" exists,
+      // on Veyra's list only, fenced to her NPC-scoped supply —
+      // the live pool-isolation proof is purposeSearchGate's P-1
+      // byte-identity suite, and P3 inherits the soak (spec §9).
+      for (const kind of ["gather", "sell", "refine", "tend", "delve", "keep"]) {
         expect(def.allowList as readonly string[], `${def.id}:${kind}`).not.toContain(kind);
       }
+      if (def.id !== "veyra") {
+        expect(def.allowList as readonly string[], `${def.id}:search`).not.toContain("search");
+      }
     }
-    // The live pool-isolation soak is inherited by P3 (spec §9);
-    // P1's A1 player-state byte-identity soak runs in
-    // captains.test.ts and would catch accidental coupling.
   });
 });

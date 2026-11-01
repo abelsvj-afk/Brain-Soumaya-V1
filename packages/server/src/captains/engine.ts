@@ -10,6 +10,7 @@ import {
   CAPTAIN_LEG_WARP_STEPS,
   CAPTAIN_MAX_ACTS_PER_DAY,
   CAPTAIN_MAX_SPEAKS_PER_DAY,
+  CAPTAIN_PHASE_LOCKED_VERBS,
   CAPTAIN_START_CREDITS,
   CAPTAIN_START_FUEL,
   CAPTAIN_TRAVEL_WORLDS,
@@ -31,6 +32,15 @@ import { CaptainRepo, type CaptainStateRow } from "./repo.js";
 import { dayPlan, nextVisit, rngFor, zonedTimeMs, type CaptainVisit } from "./seed.js";
 import { utilityDecider, type CaptainDecider, type CaptainDecision } from "./decider.js";
 import { templateBarkSource, type BarkSource } from "./barks.js";
+import {
+  captainGateView,
+  captainPlanView,
+  isPurposeCaptain,
+  onPurposeArrival,
+  resetCaptainPurpose,
+  runPurposeDecisionPoint,
+  type PurposeExec,
+} from "./purpose.js";
 
 /**
  * The captain engine (NPC-Player Layer L1 — Presence; P1 —
@@ -117,9 +127,27 @@ function legKindPlain(kind: CaptainLegKind): string {
   return kind === "warp" ? "by warp" : kind === "home" ? "on the home route" : "by drift";
 }
 
+/** A purpose captain's fallback when the purpose driver declines
+ *  a decision point: greet a present visitor once per visit, else
+ *  wait. The utility decider's travel/depart choices would fight
+ *  her plan — her travel belongs to the planner and the board
+ *  (Arch §4.3), never to idle utility. */
+export const purposeFallbackDecider: CaptainDecider = {
+  decide(def, p) {
+    if (p.playerPresent && !p.greetedThisVisit) {
+      return { act: "greet", cause: "A visitor is here and unmet this visit — a purpose captain still keeps company." };
+    }
+    return { act: "wait", cause: `${def.name} waits — the purpose driver holds her course this step.` };
+  },
+};
+
 export interface CaptainWorldDeps {
   decider?: CaptainDecider;
   barks?: BarkSource;
+  /** P2: scripted search outcomes for tests. Production omits it
+   *  and the seeded draw discipline (purpose.ts searchDrawFor)
+   *  decides — never a wall clock, never Math.random. */
+  searchDraw?: (captainId: CaptainId, stirringId: number) => number;
 }
 
 interface StepCtx {
@@ -133,6 +161,7 @@ interface StepCtx {
   tz: string;
   decider: CaptainDecider;
   barkSource: BarkSource;
+  searchDraw?: (captainId: CaptainId, stirringId: number) => number;
   state: CaptainStateRow;
   playerWorld: string | null;
   playerEnRoute: boolean;
@@ -159,8 +188,9 @@ function makeCtx(
     log: new NpcRepo(h, spaceId),
     travel: new TravelRepo(h, spaceId),
     tz: spaceTimezone(h.sqlite, spaceId),
-    decider: deps.decider ?? utilityDecider,
+    decider: deps.decider ?? (isPurposeCaptain(def) ? purposeFallbackDecider : utilityDecider),
     barkSource: deps.barks ?? templateBarkSource,
+    searchDraw: deps.searchDraw,
     // Placeholder — advance() replaces this with the live row.
     state: null as unknown as CaptainStateRow,
     playerWorld: travelState.currentWorld,
@@ -195,6 +225,16 @@ function playerVisitKey(ctx: StepCtx, world: CaptainWorld, nowMs: number): strin
  *  private world are refused here by absence from the travel set —
  *  for residence, travel, and anchor alike, spec §4.) */
 function fenceCheck(ctx: StepCtx, kind: NpcActKind, world?: CaptainWorld): void {
+  // Phase-lock first (P2-B1.9): the P3 economy verbs are refused
+  // with their own cause, distinct from a plain allow-list miss —
+  // they are not "not allowed for her", they are not open yet.
+  if ((CAPTAIN_PHASE_LOCKED_VERBS as readonly string[]).includes(kind)) {
+    throw new CaptainError(
+      "PHASE_LOCKED",
+      403,
+      `"${kind}" is locked until P3 — the economy verbs open with the Waking Market, not in P2.`,
+    );
+  }
   if (!ctx.def.allowList.includes(kind)) {
     throw new CaptainError(
       "FENCE_REFUSAL",
@@ -490,6 +530,14 @@ function resolveArrival(ctx: StepCtx, stepMs: number, summarized: boolean): void
     );
     ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
   }
+  if (isPurposeCaptain(ctx.def)) {
+    // Her arrival is an act event like any other (Arch §4.3): it
+    // closes the plan step the leg served and completes her open
+    // board step — keyed to the arrival's own log event.
+    const arrival = ctx.log.recentLog(ctx.captainId, 5).find((e) => e.kind === "arrive");
+    onPurposeArrival(ctx.h, ctx.spaceId, ctx.captainId, to, arrival?.id ?? null, stepMs);
+    ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
+  }
 }
 
 /** The planned visit an open leg is travelling to: the recorded
@@ -505,6 +553,40 @@ function findLegVisit(ctx: StepCtx, st: CaptainStateRow, stepMs: number): Captai
     if (v) return v;
   }
   return plan.find((x) => x.world === to && stepMs >= x.startMs && stepMs < x.endMs) ?? null;
+}
+
+// --- P2: the purpose driver's executor surface ---
+
+/** The PurposeExec the engine hands the P2 driver inside a step:
+ *  budgeted acts and bookkeeping through this module's own fence +
+ *  budget functions (never around them), legs through the leg
+ *  machinery (departure line, fuel at departure, arrival resolved
+ *  in the step loop per A7), live state by reference (openLeg
+ *  refreshes ctx.state in place). */
+function purposeExec(ctx: StepCtx): PurposeExec {
+  return {
+    logAct: (kind, act, cause, ms) => logAct(ctx, kind, act, cause, ms),
+    logBookkeeping: (kind, act, cause, ms) => logActUnbudgeted(ctx, kind, act, cause, ms),
+    openLeg: (to, kind, cause, ms) => {
+      const from = ctx.state.currentWorld;
+      if (!from) return false;
+      return openLeg(
+        ctx,
+        {
+          from,
+          to,
+          kind,
+          steps: kind === "warp" ? CAPTAIN_LEG_WARP_STEPS : CAPTAIN_LEG_DRIFT_STEPS,
+          visitKey: null,
+          cause,
+          endLiveSession: true,
+        },
+        ms,
+      );
+    },
+    state: () => ctx.state,
+    searchDraw: ctx.searchDraw,
+  };
 }
 
 // --- one hourly step of a live session ---
@@ -538,6 +620,17 @@ function stepSession(ctx: StepCtx, stepStartMs: number, stepEndMs: number): void
       );
       ctx.captains.update(ctx.captainId, { lastMeetingVisitKey: visitKey });
       st.lastMeetingVisitKey = visitKey;
+    }
+  }
+
+  // P2 decision points (Arch §4.3): a purpose captain's step is
+  // driven by her plan, her board, and her Duty — the generic
+  // decider only ever sees the points the driver declines (and for
+  // her the default decider is the plan-coherent fallback above).
+  if (isPurposeCaptain(ctx.def)) {
+    if (runPurposeDecisionPoint(ctx.h, ctx.spaceId, ctx.captainId, stepStartMs, purposeExec(ctx))) {
+      ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
+      return;
     }
   }
 
@@ -735,7 +828,7 @@ export function advanceCaptain(
         });
         ctx.state = captains.state(captainId) ?? ctx.state;
         const homecoming = legTo === ctx.state.homeWorld;
-        logActUnbudgeted(
+        const arrivalEntry = logActUnbudgeted(
           ctx,
           "arrive",
           homecoming
@@ -744,6 +837,10 @@ export function advanceCaptain(
           "The leg finished while you were away — long absences summarize; they do not fabricate an hourly life.",
           nowMs,
         );
+        if (isPurposeCaptain(ctx.def)) {
+          onPurposeArrival(ctx.h, ctx.spaceId, ctx.captainId, legTo, arrivalEntry.id, nowMs);
+          ctx.state = captains.state(captainId) ?? ctx.state;
+        }
         ctx.captains.addMemory(
           ctx.captainId,
           "session",
@@ -1013,6 +1110,13 @@ function toWireState(h: DbHandle, spaceId: string, st: CaptainStateRow, nowMs: n
     firstMetAt: meetings[0]?.createdAt ?? null,
     recentLog: recent,
     barks: captains.barksForDay(st.captainId, localDateKey(tz, nowMs)),
+    ...(isPurposeCaptain(def)
+      ? {
+          relicsHeld: log.holdings(st.captainId),
+          plan: captainPlanView(h, spaceId, st.captainId),
+          gateView: captainGateView(h, spaceId, st.captainId),
+        }
+      : {}),
   };
 }
 
@@ -1196,6 +1300,27 @@ export function wipeCaptainMeetings(
     nowMs,
   );
   return toWireState(h, spaceId, captains.state(captainId)!, nowMs);
+}
+
+export function resetCaptain(
+  h: DbHandle,
+  spaceId: string,
+  captainId: CaptainId,
+  nowMs: number = Date.now(),
+): CaptainState {
+  const def = captainDefinition(captainId);
+  if (!def) throw new CaptainError("UNKNOWN_CAPTAIN", 404, `There is no captain named "${captainId}".`);
+  if (!def.active) {
+    throw new CaptainError("CAPTAIN_NOT_ACTIVE", 409, `${def.name} isn't flying yet — there is nothing to reset.`);
+  }
+  // The wipe itself (purpose.ts) removes ONLY her rows and leaves
+  // the reset line on the shared log; a fresh state row starts her
+  // over, exactly as a player's reset starts a new brain (§6.2).
+  resetCaptainPurpose(h, spaceId, captainId, nowMs);
+  const captains = new CaptainRepo(h, spaceId);
+  const st = captains.ensureState(def, nowMs);
+  captains.setCursor(captainId, nowMs);
+  return toWireState(h, spaceId, st, nowMs);
 }
 
 // --- Chronicle v1 (design §8.1): a read model over the shared log ---

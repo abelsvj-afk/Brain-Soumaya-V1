@@ -107,7 +107,7 @@ export async function askCaptain(id: string, question: CaptainQuestionKind): Pro
   return { captain: data.state, answer: data.answer };
 }
 
-async function captainAction(id: string, action: "stop" | "resume" | "wipe-meetings"): Promise<CaptainState> {
+async function captainAction(id: string, action: "stop" | "resume" | "wipe-meetings" | "reset"): Promise<CaptainState> {
   const res = await afetch(`${API}/captains/${encodeURIComponent(id)}/${action}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -131,4 +131,11 @@ export async function resumeCaptain(id: string): Promise<CaptainState> {
 /** Wipe her memory of meeting you — the next meeting is a first. */
 export async function wipeCaptainMeetings(id: string): Promise<CaptainState> {
   return captainAction(id, "wipe-meetings");
+}
+
+/** Reset a purpose captain entirely (P2 §6.2): her P2 stores,
+ *  holdings, gate record, memory, and state are wiped; her next
+ *  advance starts her fresh. */
+export async function resetCaptain(id: string): Promise<CaptainState> {
+  return captainAction(id, "reset");
 }

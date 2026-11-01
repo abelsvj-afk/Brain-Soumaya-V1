@@ -5,7 +5,11 @@ import ChronicleFeed, { localTime } from "./ChronicleFeed.js";
 /**
  * The Captains panel (NPC-Player Layer L1 — Presence; P1 —
  * Galaxy-Wide), mounted at the Great Station and at Scale. P1 flies
- * two captains — Bex, and Junia resident at the Growing Place: the
+ * two captains — Bex, and Junia resident at the Growing Place; P2
+ * wakes Veyra the Seeker, whose card also carries her stored plan
+ * (goal, version, steps with expected outcomes), her gate progress
+ * in plain words, and her own-pool relic count — all rendered from
+ * the wire state the server derived from her stores. The
  * panel shows where each captain is (including honestly in
  * transit, with the leg's destination and kind), the home anchor
  * by its specific name, the captain's own ledgers, the three
@@ -35,6 +39,12 @@ const KIND_VERB: Record<string, string> = {
   depart: "Departed",
   travel: "Travelled",
   wait: "Waited",
+  deed: "Did a deed",
+  search: "Searched",
+  plan: "Planned",
+  commission: "Commission",
+  "gate-check": "Asked the gate",
+  "gate-passage": "Gate passage",
 };
 
 const WORLD_PLAIN: Record<string, string> = {
@@ -57,6 +67,7 @@ function CaptainCard({
   stop,
   resume,
   wipeMeetings,
+  reset,
 }: {
   captain: CaptainState;
   answer: string | null;
@@ -64,6 +75,7 @@ function CaptainCard({
   stop: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   wipeMeetings: (id: string) => Promise<void>;
+  reset: (id: string) => Promise<void>;
 }) {
   const c = captain;
   return (
@@ -94,6 +106,28 @@ function CaptainCard({
             {c.speaksToday} spoken.
           </p>
 
+          {(c.plan || c.gateView) && (
+            <>
+              {c.gateView && <p>{c.gateView.line}</p>}
+              {c.relicsHeld && <p>Relics held from her own pool: {c.relicsHeld.length}</p>}
+              {c.plan && (
+                <>
+                  <p>
+                    Plan v{c.plan.version} — {c.plan.goalText} ({c.plan.state}).
+                  </p>
+                  <ul className="captains-plan">
+                    {c.plan.steps.map((s, i) => (
+                      <li key={i}>
+                        {s.label} — expected: {s.expected} [{s.state}
+                        {s.observed ? `: ${s.observed}` : ""}]
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
+
           {answer && <p className="captains-answer">{answer}</p>}
 
           <div className="captains-questions">
@@ -118,7 +152,12 @@ function CaptainCard({
               </button>{" "}
               <button type="button" onClick={() => void wipeMeetings(c.id)}>
                 Forget our meetings
-              </button>
+              </button>{" "}
+              {(c.plan || c.gateView) && (
+                <button type="button" onClick={() => void reset(c.id)}>
+                  Reset {c.name} entirely
+                </button>
+              )}
             </p>
           )}
 
@@ -152,7 +191,7 @@ export default function CaptainsPanel({
   onClose?: () => void;
 }) {
   const atStation = world === "great-station";
-  const { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings } =
+  const { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings, reset } =
     useCaptains(enabled, atStation);
 
   return (
@@ -192,6 +231,7 @@ export default function CaptainsPanel({
               stop={stop}
               resume={resume}
               wipeMeetings={wipeMeetings}
+              reset={reset}
             />
           ))}
           {error && <p className="captains-error">{error}</p>}
