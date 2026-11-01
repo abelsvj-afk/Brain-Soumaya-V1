@@ -369,6 +369,82 @@ describe("P2 phase exit — the scripted seeker arc (B1.10)", () => {
     expect(playerUniverse(handle)).toBe(universe0);
   });
 
+  it("P1-1 regression — a spent act budget on gate-check day ends the day quietly: no throw, no decision, plan intact; the next local day records the decision", () => {
+    const handle = createDb(":memory:");
+    handles.push(handle);
+    const captains = new CaptainRepo(handle, SPACE);
+    const store = new PurposeStore(handle, SPACE);
+    const npc = new NpcRepo(handle, SPACE);
+    captains.ensureState(captainDefinition("veyra")!, T0);
+    store.seedSimBrainFixture(
+      "veyra",
+      [{ id: "n-a", theme: "people", title: "A face at the dock", pointsTo: "great-station", ageDays: 90, due: 0 }],
+      [],
+      [],
+    );
+    // An active plan whose next (only) open step is the gate check.
+    const plan = store.createPlan(
+      "veyra",
+      GATE_GOAL_ID,
+      "hold Witness + any two",
+      [{ kind: "gate-check", label: "Ask the gate question", expected: "a gate decision", branch: "find-branch" }],
+      null,
+      null,
+      T0,
+      null,
+    );
+    captains.update("veyra", {
+      currentWorld: "great-station",
+      sessionKey: "gate-budget",
+      sessionWorld: "great-station",
+      sessionStartedAt: new Date(T0).toISOString(),
+      sessionEndsAt: new Date(T0 + 6 * H).toISOString(),
+    });
+    captains.setCursor("veyra", T0);
+    const universe0 = playerUniverse(handle);
+    // Fill her space-local day to the act cap (A4b's fill shape).
+    for (let i = 0; i < CAPTAIN_MAX_ACTS_PER_DAY; i++) {
+      npc.appendLog("veyra", "wait", "Filler.", "Gate-budget test fill.", T0 + 60_000);
+    }
+    expect(captains.actsToday("veyra", T0 + 2 * H)).toBe(CAPTAIN_MAX_ACTS_PER_DAY);
+    // The advance must complete QUIETLY — budgets end the day
+    // quietly, never an error mid-life (engine contract, §8.2).
+    expect(() =>
+      advanceCaptain(handle, SPACE, "veyra", T0 + 2 * H, { decider: waitDecider }),
+    ).not.toThrow();
+    // No gate decision recorded; the plan is intact and still open,
+    // its gate-check step not completed, no next version built.
+    expect(store.gateDecisionsOf("veyra")).toHaveLength(0);
+    const still = store.activePlan("veyra");
+    expect(still?.id).toBe(plan.id);
+    expect(still?.state).toBe("active");
+    expect(store.planVersionsOf("veyra", GATE_GOAL_ID)).toHaveLength(1);
+    expect(store.stepsOf(plan.id)[0]?.state).toBe("open");
+    expect(playerUniverse(handle)).toBe(universe0);
+
+    // Companion: on the NEXT space-local day (same wall clock,
+    // America/New_York default zone), the budget is fresh and the
+    // waiting gate question is asked and recorded normally.
+    const D2 = T0 + 24 * H;
+    captains.update("veyra", {
+      currentWorld: "great-station",
+      sessionKey: "gate-budget-next-day",
+      sessionWorld: "great-station",
+      sessionStartedAt: new Date(D2).toISOString(),
+      sessionEndsAt: new Date(D2 + 6 * H).toISOString(),
+      legFrom: null, legTo: null, legKind: null,
+      legDepartedStepMs: null, legArrivesStepMs: null, legSteps: null, legVisitKey: null,
+    });
+    captains.setCursor("veyra", D2);
+    advanceCaptain(handle, SPACE, "veyra", D2 + 2 * H, { decider: waitDecider });
+    const decisions = store.gateDecisionsOf("veyra");
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision).toBe("unmet");
+    expect(decisions[0]?.missing).toBe("the Witness");
+    expect(store.stepsOf(plan.id)[0]?.state).toBe("completed");
+    expect(playerUniverse(handle)).toBe(universe0);
+  });
+
   it("invariant 6 — nothing decays: 30 local days with no decision points leave holdings, gate progress, and plan goal identical", () => {
     const handle = createDb(":memory:");
     handles.push(handle);

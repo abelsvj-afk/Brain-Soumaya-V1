@@ -1293,14 +1293,18 @@ export function executeSearchAct(
 /** Ask the gate question from HER holdings, via the one B-01
  *  composition rule. An open decision marks the durable npc_gate
  *  row (permanent, per P1); the decision itself is recorded either
- *  way, with its missing computed by the same rule. */
+ *  way, with its missing computed by the same rule. A spent act
+ *  budget is a quiet block, exactly as for the sibling executors —
+ *  budgets end the day quietly, never an error mid-life (§8.2):
+ *  no decision is recorded and the question waits for a day with
+ *  budget. */
 export function executeGateCheck(
   h: DbHandle,
   spaceId: string,
   captainId: CaptainId,
   nowMs: number,
   exec: PurposeExec,
-): GateDecisionRow {
+): GateDecisionRow | { blocked: string } {
   const def = captainDefinition(captainId);
   if (!def) throw new PurposeError("UNKNOWN_CAPTAIN", 404, "unknown captain");
   admitPurposeAct(def, "gate-check");
@@ -1322,7 +1326,7 @@ export function executeGateCheck(
   const cause =
     "The gate rule is the player's own composition rule — the Witness plus any two — computed from her holdings and nothing else.";
   const entry = exec.logAct("gate-check", act, cause, nowMs);
-  if (!entry) throw new PurposeError("BUDGET", 429, "The day's act budget is spent; the gate question waits.");
+  if (!entry) return { blocked: "the day's act budget is spent" };
   if (check.open && !alreadyOpen) npc.markGateOpen(captainId);
   const decision = store.recordGateDecision(captainId, check.open ? "open" : "unmet", holdingIds, missing, entry.id, nowMs);
   store.writePurposeMemory(
@@ -1861,6 +1865,7 @@ function followPlanStep(
 
   if (kind === "gate-check") {
     const out = executeGateCheck(h, spaceId, captainId, nowMs, exec);
+    if ("blocked" in out) return true; // budget spent: the day ends quietly — the step stays open, the plan stays active, no decision is recorded, no next version is built; the gate question waits
     store.completeStep(
       step.id,
       out.decision === "open" ? "the gate answered open" : `the gate answered unmet — missing ${out.missing}`,

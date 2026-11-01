@@ -229,6 +229,7 @@ describe("P2 gate record (B1.7)", () => {
     npc().addHolding("veyra", "harbor-nail", "great-station", T0);
     npc().addHolding("veyra", "star-hanger", "scale", T0);
     const decision = executeGateCheck(handle, SPACE, "veyra", T0 + H, testExec());
+    if ("blocked" in decision) throw new Error("gate check unexpectedly blocked");
     expect(decision.decision).toBe("unmet");
     expect(decision.missing).toBe("the Witness");
     expect([...decision.holdingIds].sort()).toEqual(["harbor-nail", "star-hanger"]);
@@ -245,6 +246,7 @@ describe("P2 gate record (B1.7)", () => {
     npc().addHolding("veyra", "harbor-nail", "great-station", T0);
     npc().addHolding("veyra", "star-hanger", "scale", T0);
     const decision = executeGateCheck(handle, SPACE, "veyra", T0 + H, testExec());
+    if ("blocked" in decision) throw new Error("gate check unexpectedly blocked");
     expect(decision.decision).toBe("open");
     expect(decision.holdingIds).toHaveLength(3);
     expect(npc().gateOpen("veyra")).toBe(true);
@@ -256,6 +258,7 @@ describe("P2 gate record (B1.7)", () => {
     npc().addHolding("veyra", "star-hanger", "scale", T0);
     store().addKnowledge("veyra", "I hold the Witness Without a Name.", "told", "likely", null, T0);
     const decision = executeGateCheck(handle, SPACE, "veyra", T0 + H, testExec());
+    if ("blocked" in decision) throw new Error("gate check unexpectedly blocked");
     expect(decision.decision).toBe("unmet");
     expect(decision.missing).toBe("the Witness");
   });
