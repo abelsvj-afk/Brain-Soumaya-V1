@@ -8,12 +8,20 @@ import {
   CAPTAIN_DEFINITIONS,
   CAPTAIN_LEG_DRIFT_STEPS,
   CAPTAIN_LEG_WARP_STEPS,
+  CAPTAIN_AFFINITY_CONVOY,
+  CAPTAIN_AFFINITY_ENCOUNTER,
   CAPTAIN_MAX_ACTS_PER_DAY,
   CAPTAIN_MAX_SPEAKS_PER_DAY,
-  CAPTAIN_PHASE_LOCKED_VERBS,
+  CAPTAIN_ROUTINE_IMPORTANCE,
   CAPTAIN_START_CREDITS,
   CAPTAIN_START_FUEL,
   CAPTAIN_TRAVEL_WORLDS,
+  GAME_GOOD_LABELS,
+  HOLD_CAPACITY,
+  RECIPES,
+  buyerById,
+  captainSavingsTarget,
+  postedPrice,
   CAPTAIN_MEETING_IMPORTANCE,
   CAPTAIN_MEETING_IMPORTANCE_FIRST,
   CAPTAIN_SESSION_IMPORTANCE,
@@ -29,6 +37,17 @@ import {
   type NpcActKind,
 } from "@brain/shared";
 import { CaptainRepo, type CaptainStateRow } from "./repo.js";
+import { NpcEconomy } from "./npcEconomy.js";
+import {
+  isEconomyCaptain,
+  maybeLogSavingsMilestone,
+  onEconomyArrival,
+  runEconomyDecisionPoint,
+} from "./economyDriver.js";
+import { addAffinity, affinitiesOf, affinityLabel, coolAffinities, getAffinity, recordPremiumTaken } from "./affinity.js";
+import { evaluateDirector, getDirectorState, laneClosureFor } from "./director.js";
+import { PurposeStore } from "./purpose.js";
+import type { CaptainEconomyPerception } from "./decider.js";
 import { dayPlan, nextVisit, rngFor, zonedTimeMs, type CaptainVisit } from "./seed.js";
 import { utilityDecider, type CaptainDecider, type CaptainDecision } from "./decider.js";
 import { templateBarkSource, type BarkSource } from "./barks.js";
@@ -160,6 +179,11 @@ interface StepCtx {
   travel: TravelRepo;
   tz: string;
   decider: CaptainDecider;
+  /** True when the caller injected a decider for this advance: the
+   *  injection is the advance's steering authority, and the P3
+   *  economy driver yields to it (production callers never inject;
+   *  scripted control and tests do). */
+  deciderInjected: boolean;
   barkSource: BarkSource;
   searchDraw?: (captainId: CaptainId, stirringId: number) => number;
   state: CaptainStateRow;
@@ -189,6 +213,7 @@ function makeCtx(
     travel: new TravelRepo(h, spaceId),
     tz: spaceTimezone(h.sqlite, spaceId),
     decider: deps.decider ?? (isPurposeCaptain(def) ? purposeFallbackDecider : utilityDecider),
+    deciderInjected: deps.decider !== undefined,
     barkSource: deps.barks ?? templateBarkSource,
     searchDraw: deps.searchDraw,
     // Placeholder — advance() replaces this with the live row.
@@ -225,16 +250,9 @@ function playerVisitKey(ctx: StepCtx, world: CaptainWorld, nowMs: number): strin
  *  private world are refused here by absence from the travel set —
  *  for residence, travel, and anchor alike, spec §4.) */
 function fenceCheck(ctx: StepCtx, kind: NpcActKind, world?: CaptainWorld): void {
-  // Phase-lock first (P2-B1.9): the P3 economy verbs are refused
-  // with their own cause, distinct from a plain allow-list miss —
-  // they are not "not allowed for her", they are not open yet.
-  if ((CAPTAIN_PHASE_LOCKED_VERBS as readonly string[]).includes(kind)) {
-    throw new CaptainError(
-      "PHASE_LOCKED",
-      403,
-      `"${kind}" is locked until P3 — the economy verbs open with the Waking Market, not in P2.`,
-    );
-  }
+  // P3 (T1): the economy verbs' phase lock is gone — admission is
+  // the allow-list alone, which carries gather/sell/refine for
+  // exactly the captains R5 names, via the separate economy list.
   if (!ctx.def.allowList.includes(kind)) {
     throw new CaptainError(
       "FENCE_REFUSAL",
@@ -340,6 +358,21 @@ function beginSession(
     [world],
     stepMs,
   );
+  // P3 (T7): a Station encounter — two captains live in a session
+  // at the Great Station at once warm the pair by the ruled step,
+  // at most once per pair per local day (the row tracks the day).
+  if (world === "great-station") {
+    const dayKey = localDateKey(ctx.tz, stepMs);
+    for (const other of CAPTAIN_DEFINITIONS) {
+      if (!other.active || other.id === ctx.captainId) continue;
+      const os = ctx.captains.state(other.id);
+      if (os && os.currentWorld === "great-station" && os.sessionKey !== null && !os.stopped) {
+        addAffinity(ctx.h, ctx.spaceId, ctx.captainId, other.id, CAPTAIN_AFFINITY_ENCOUNTER, stepMs, {
+          encounterDay: dayKey,
+        });
+      }
+    }
+  }
   // One idle bark per day, on the day's first arrival — Chronicle
   // color, grounded in the voice profile, stored with its source.
   const dayKey = localDateKey(ctx.tz, stepMs);
@@ -411,6 +444,19 @@ function openLeg(
   let kind = args.kind;
   let steps = args.steps;
   let fuel = st.fuel;
+  // P3 (R10): a Director lane closure refuses the WARP on its pair
+  // — the leg departs as a drift instead (drift and the home route
+  // always remain; nobody is stranded), with the closure cause
+  // logged once the leg is open.
+  let closureNote: { from: CaptainWorld; to: CaptainWorld } | null = null;
+  if (kind === "warp") {
+    const closure = laneClosureFor(ctx.h, ctx.spaceId, localDateKey(ctx.tz, stepMs));
+    if (closure && closure.from === args.from && closure.to === args.to) {
+      kind = "drift";
+      steps = CAPTAIN_LEG_DRIFT_STEPS;
+      closureNote = closure;
+    }
+  }
   if (kind === "warp") {
     if (fuel < WARP_COST) {
       kind = "drift";
@@ -471,6 +517,25 @@ function openLeg(
     legVisitKey: args.visitKey,
   });
   ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
+  if (closureNote) {
+    logActUnbudgeted(
+      ctx,
+      "travel",
+      `The warp lane from ${worldNamePlain(closureNote.from)} to ${worldNamePlain(closureNote.to)} is closed today — drifting instead.`,
+      "Director: the lane closure holds until the day boundary; drift and the home route stay open, and nobody is stranded.",
+      stepMs,
+    );
+  }
+  // P3 (T7): convoy co-travel — another captain's open leg on the
+  // same ordered pair means they fly it together; the pair warms
+  // by the ruled step.
+  for (const other of CAPTAIN_DEFINITIONS) {
+    if (!other.active || other.id === ctx.captainId) continue;
+    const os = ctx.captains.state(other.id);
+    if (os && os.legTo === args.to && os.legFrom === args.from) {
+      addAffinity(ctx.h, ctx.spaceId, ctx.captainId, other.id, CAPTAIN_AFFINITY_CONVOY, stepMs);
+    }
+  }
   return true;
 }
 
@@ -538,6 +603,11 @@ function resolveArrival(ctx: StepCtx, stepMs: number, summarized: boolean): void
     onPurposeArrival(ctx.h, ctx.spaceId, ctx.captainId, to, arrival?.id ?? null, stepMs);
     ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
   }
+  if (isEconomyCaptain(ctx.def)) {
+    const arrival = ctx.log.recentLog(ctx.captainId, 5).find((e) => e.kind === "arrive");
+    onEconomyArrival(ctx.h, ctx.spaceId, ctx.captainId, to, arrival?.id ?? null, stepMs);
+    ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
+  }
 }
 
 /** The planned visit an open leg is travelling to: the recorded
@@ -566,7 +636,15 @@ function findLegVisit(ctx: StepCtx, st: CaptainStateRow, stepMs: number): Captai
 function purposeExec(ctx: StepCtx): PurposeExec {
   return {
     logAct: (kind, act, cause, ms) => logAct(ctx, kind, act, cause, ms),
-    logBookkeeping: (kind, act, cause, ms) => logActUnbudgeted(ctx, kind, act, cause, ms),
+    // "plan" lines are the two drivers' own bookkeeping narration
+    // (plan built / mismatch / milestone) — never a world act the
+    // captain performs — so they are logged unfenced: P2 carried
+    // "plan" on the purpose allow-list, but P3's economy captains
+    // hold no plan verb (R5 keeps their list to real acts), and
+    // their plans still deserve their Chronicle lines. Every other
+    // bookkeeping kind keeps the fence.
+    logBookkeeping: (kind, act, cause, ms) =>
+      kind === "plan" ? ctx.log.appendLog(ctx.captainId, kind, act, cause, ms) : logActUnbudgeted(ctx, kind, act, cause, ms),
     openLeg: (to, kind, cause, ms) => {
       const from = ctx.state.currentWorld;
       if (!from) return false;
@@ -587,6 +665,160 @@ function purposeExec(ctx: StepCtx): PurposeExec {
     state: () => ctx.state,
     searchDraw: ctx.searchDraw,
   };
+}
+
+// --- P3: economy perception + decider-driven economy acts ---
+
+/** Her market perception for this step (T5): her own facts (hold,
+ *  balance, savings distance), the posted prices, the NPC pool's
+ *  remaining demand as the service's guide view reports it, and
+ *  her affinities. Belief-shaped — execution re-reads state. */
+function buildEconomyPerception(ctx: StepCtx, world: CaptainWorld, stepStartMs: number): CaptainEconomyPerception {
+  const svc = new NpcEconomy(ctx.h, ctx.spaceId, ctx.captainId);
+  const st = ctx.state;
+  const cargo = svc.cargoReadOnly();
+  const credits = Math.round(st.credits);
+  const target = captainSavingsTarget(ctx.def, credits);
+  let bestSale: CaptainEconomyPerception["bestSale"] = null;
+  if (world === "great-station") {
+    for (const c of cargo) {
+      for (const buyerId of ["station-foundry", "salvage-yard", "archive-broker", "fleet-quartermaster", "station-exchange"] as const) {
+        const price = postedPrice(buyerId, c.good);
+        if (price === null) continue;
+        const remaining = svc.demandRemaining(buyerId, c.good, stepStartMs);
+        const qty = Math.min(c.qty, remaining ?? c.qty);
+        if (qty <= 0) continue;
+        if (!bestSale || qty * price > bestSale.qty * bestSale.unitPrice) {
+          bestSale = { buyerId, good: c.good, qty, unitPrice: price };
+        }
+      }
+    }
+  }
+  const refineRecipe = RECIPES.find(
+    (r) =>
+      credits >= r.feeCredits &&
+      Object.entries(r.inputs).every(([g, n]) => (cargo.find((c) => c.good === g)?.qty ?? 0) >= (n as number)),
+  );
+  return {
+    credits,
+    savingsGoalCredits: target,
+    savingsGoalLabel: ctx.def.savingsGoalLabel,
+    holdUsed: cargo.reduce((sum, c) => sum + c.qty, 0),
+    holdCapacity: HOLD_CAPACITY,
+    cargo,
+    nodes: svc
+      .nodes(stepStartMs)
+      .filter((n) => n.remaining > 0)
+      .map((n) => ({ nodeId: n.nodeId, kind: n.kind, good: n.good, remaining: n.remaining })),
+    atStation: world === "great-station",
+    bestSale,
+    refineOption: refineRecipe ? { recipeId: refineRecipe.id, output: refineRecipe.output, fee: refineRecipe.feeCredits } : null,
+    affinities: affinitiesOf(ctx.h, ctx.spaceId, ctx.captainId),
+  };
+}
+
+/** Execute a decider-chosen economy act inside this step — through
+ *  the fence + budgets (logAct), the NPC service, the memory
+ *  rubric, and her knowledge store, atomically with the advance.
+ *  A refusal is an honest log line, never a partial write (the
+ *  service refuses before it writes). */
+function executeEconomyDecision(
+  ctx: StepCtx,
+  decision: Extract<CaptainDecision, { act: "gather" | "sell" | "refine" }>,
+  stepStartMs: number,
+): void {
+  const world = ctx.state.currentWorld ?? ctx.state.homeWorld;
+  if (ctx.captains.actsToday(ctx.captainId, stepStartMs) >= CAPTAIN_MAX_ACTS_PER_DAY) return;
+  const svc = new NpcEconomy(ctx.h, ctx.spaceId, ctx.captainId);
+  const stepKey = `${ctx.captainId}:${stepStartMs}:${decision.act}`;
+  const store = new PurposeStore(ctx.h, ctx.spaceId);
+
+  if (decision.act === "gather") {
+    const nodes = svc.nodes(stepStartMs);
+    const node =
+      (decision.nodeId ? nodes.find((n) => n.nodeId === decision.nodeId) : undefined) ??
+      (decision.nodeKind ? nodes.find((n) => n.kind === decision.nodeKind && n.remaining > 0) : undefined) ??
+      nodes.find((n) => n.remaining > 0);
+    if (!node) {
+      logAct(ctx, "gather", "Gathering came to nothing: the shadow supply is worked out for today.", decision.cause, stepStartMs);
+      return;
+    }
+    const out = svc.gather(node.nodeId, stepKey, stepStartMs, decision.qty);
+    if (!out.ok) {
+      logAct(ctx, "gather", `Gathering came to nothing: ${out.message}`, decision.cause, stepStartMs);
+      return;
+    }
+    const entry = logAct(
+      ctx,
+      "gather",
+      `Gathered ${out.gathered} ${GAME_GOOD_LABELS[out.good]} from a ${node.kind} site in the shadow supply.`,
+      decision.cause,
+      stepStartMs,
+    );
+    if (entry) {
+      ctx.captains.addMemory(
+        ctx.captainId, "outcome",
+        `Gathered ${out.gathered} ${GAME_GOOD_LABELS[out.good]} from the shadow supply.`,
+        CAPTAIN_ROUTINE_IMPORTANCE, [world], stepStartMs, { originLogId: entry.id },
+      );
+    }
+    return;
+  }
+
+  if (decision.act === "sell") {
+    const before = svc.credits();
+    const out = svc.sell(decision.buyerId, decision.good, decision.qty, stepKey, stepStartMs);
+    if (!out.ok) {
+      logAct(ctx, "sell", `The sale came to nothing: ${out.message}`, decision.cause, stepStartMs);
+      return;
+    }
+    const buyerName = buyerById(decision.buyerId)?.name ?? decision.buyerId;
+    const entry = logAct(
+      ctx,
+      "sell",
+      `Sold ${out.accepted} ${GAME_GOOD_LABELS[decision.good]} to ${buyerName} at ${out.unitPrice} Credits each${out.declined > 0 ? `; ${out.declined} stayed in her hold — the premium demand was spent` : ""}.`,
+      decision.cause,
+      stepStartMs,
+    );
+    if (entry) {
+      ctx.captains.addMemory(
+        ctx.captainId, "outcome",
+        `Sold ${out.accepted} ${GAME_GOOD_LABELS[decision.good]} to ${buyerName} for ${out.totalCredits} Credits.`,
+        CAPTAIN_ROUTINE_IMPORTANCE, [world], stepStartMs, { originLogId: entry.id },
+      );
+      store.addKnowledge(
+        ctx.captainId,
+        `${buyerName} paid ${out.unitPrice} Credits for ${GAME_GOOD_LABELS[decision.good]}${out.demandRemaining !== null ? `; its pool demand for ${GAME_GOOD_LABELS[decision.good]} then stood at ${out.demandRemaining} remaining` : ""}.`,
+        "firsthand", "seen-at-execution", entry.id, stepStartMs,
+      );
+      if (out.demandRemaining === 0 && out.accepted > 0) {
+        recordPremiumTaken(ctx.h, ctx.spaceId, ctx.captainId, decision.buyerId, decision.good, stepStartMs);
+      }
+      maybeLogSavingsMilestone(ctx.h, ctx.spaceId, ctx.captainId, before, svc.credits(), purposeExec(ctx), stepStartMs);
+    }
+    return;
+  }
+
+  // refine
+  const out = svc.refine(decision.recipeId, decision.count, stepKey, stepStartMs);
+  if (!out.ok) {
+    logAct(ctx, "refine", `The refine came to nothing: ${out.message}`, decision.cause, stepStartMs);
+    return;
+  }
+  const entry = logAct(
+    ctx,
+    "refine",
+    `Refined ${decision.recipeId} at the Station refinery — a ${GAME_GOOD_LABELS[out.output]} came out; the ${out.feeCharged}-Credit fee is burned.`,
+    decision.cause,
+    stepStartMs,
+  );
+  if (entry) {
+    ctx.captains.addMemory(
+      ctx.captainId, "outcome",
+      `Refined a ${GAME_GOOD_LABELS[out.output]} at the Station refinery.`,
+      CAPTAIN_ROUTINE_IMPORTANCE, [world], stepStartMs, { originLogId: entry.id },
+    );
+  }
 }
 
 // --- one hourly step of a live session ---
@@ -634,6 +866,21 @@ function stepSession(ctx: StepCtx, stepStartMs: number, stepEndMs: number): void
     }
   }
 
+  // P3 (T5): a non-purpose economy captain's point runs her stored
+  // economy plan first — Ambition's standing instrument. When the
+  // driver declines (no plan business), the ordinary decider runs
+  // with the economy perception below. Two yields, both principled:
+  // an injected decider is this advance's steering authority, and a
+  // pending greeting comes first — a captain greets a present
+  // visitor before she does market work.
+  const greetPending = present && visitKey !== null && st.lastGreetVisitKey !== visitKey;
+  if (!ctx.deciderInjected && !greetPending && isEconomyCaptain(ctx.def) && !isPurposeCaptain(ctx.def)) {
+    if (runEconomyDecisionPoint(ctx.h, ctx.spaceId, ctx.captainId, stepStartMs, purposeExec(ctx))) {
+      ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
+      return;
+    }
+  }
+
   // Drive inputs for this step (perception, design §4.1).
   const sessionAgeRatio = Math.min(1, Math.max(0, (stepStartMs - sessionStart) / Math.max(1, sessionEnd - sessionStart)));
   const stepsLeftInSession = Math.max(1, Math.ceil((sessionEnd - stepStartMs) / CAPTAIN_ADVANCE_STEP_MS));
@@ -641,7 +888,7 @@ function stepSession(ctx: StepCtx, stepStartMs: number, stepEndMs: number): void
   const sociability = present ? 0.85 : 0.4;
 
   const destinations = CAPTAIN_TRAVEL_WORLDS.filter((w) => w !== world);
-  const decision: CaptainDecision = ctx.decider.decide(ctx.def, {
+  const perception = {
     stepStartMs,
     world,
     destinations,
@@ -654,7 +901,23 @@ function stepSession(ctx: StepCtx, stepStartMs: number, stepEndMs: number): void
     greetedThisVisit: visitKey !== null && st.lastGreetVisitKey === visitKey,
     curiosity,
     sociability,
-  });
+    ...(isEconomyCaptain(ctx.def)
+      ? { economy: buildEconomyPerception(ctx, world, stepStartMs) }
+      : {}),
+  };
+  // A purpose captain's fallback is greet/wait only — but her
+  // ECONOMY acts are ordinary utility business, so a declined
+  // purpose point consults the utility decider with the economy
+  // perception. Its travel/depart impulses are then refused below:
+  // her travel belongs to her planner, never to idle utility.
+  const decision: CaptainDecision =
+    isPurposeCaptain(ctx.def) && isEconomyCaptain(ctx.def)
+      ? utilityDecider.decide(ctx.def, perception)
+      : ctx.decider.decide(ctx.def, perception);
+  if (isPurposeCaptain(ctx.def) && (decision.act === "travel" || decision.act === "depart")) {
+    logAct(ctx, "wait", `Stayed at ${worldNamePlain(world)}, watching the lanes.`, "The purpose driver holds her course this step — her travel belongs to her plan.", stepStartMs);
+    return;
+  }
 
   switch (decision.act) {
     case "greet": {
@@ -720,6 +983,13 @@ function stepSession(ctx: StepCtx, stepStartMs: number, stepEndMs: number): void
     }
     case "depart": {
       endSessionToRest(ctx, stepStartMs, decision.cause);
+      return;
+    }
+    case "gather":
+    case "sell":
+    case "refine": {
+      executeEconomyDecision(ctx, decision, stepStartMs);
+      ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
       return;
     }
     case "wait": {
@@ -803,6 +1073,22 @@ export function advanceCaptain(
 
   h.sqlite.exec("BEGIN");
   try {
+    // P3 first touch (R4): an economy captain's genesis ledger row
+    // is written inside her first advance's transaction, anchored
+    // at her then-live balance.
+    if (isEconomyCaptain(def)) {
+      new NpcEconomy(h, spaceId, captainId).ensureGenesis(fromMs);
+    }
+    // P3 (R7): affinity cooling at her local-day rollover — an
+    // explicit advance step, never a timer.
+    const fromDay = localDateKey(tz, fromMs);
+    const nowDay = localDateKey(tz, nowMs);
+    if (fromDay !== nowDay) {
+      const elapsedDays = Math.round(
+        (Date.parse(`${nowDay}T00:00:00Z`) - Date.parse(`${fromDay}T00:00:00Z`)) / 86_400_000,
+      );
+      if (elapsedDays > 0) coolAffinities(h, spaceId, captainId, elapsedDays, nowMs);
+    }
     if (steps > CAPTAIN_ADVANCE_MAX_STEPS) {
       // Summarized jump (§3): beyond the cap the interval is not
       // replayed hour by hour; it is summarized honestly. An open
@@ -841,6 +1127,10 @@ export function advanceCaptain(
           onPurposeArrival(ctx.h, ctx.spaceId, ctx.captainId, legTo, arrivalEntry.id, nowMs);
           ctx.state = captains.state(captainId) ?? ctx.state;
         }
+        if (isEconomyCaptain(ctx.def)) {
+          onEconomyArrival(ctx.h, ctx.spaceId, ctx.captainId, legTo, arrivalEntry.id, nowMs);
+          ctx.state = captains.state(captainId) ?? ctx.state;
+        }
         ctx.captains.addMemory(
           ctx.captainId,
           "session",
@@ -871,6 +1161,23 @@ export function advanceCaptain(
       while (t < nowMs) {
         const stepEnd = Math.min(t + CAPTAIN_ADVANCE_STEP_MS, nowMs);
         stepOnce(ctx, t, stepEnd);
+        // P3 (T8): Director-lite evaluates once per stepped step,
+        // only while the visitor is present in a public world —
+        // its incidents are log records inside this transaction.
+        if (
+          ctx.playerWorld !== null &&
+          !ctx.playerEnRoute &&
+          (CAPTAIN_TRAVEL_WORLDS as readonly string[]).includes(ctx.playerWorld)
+        ) {
+          const incident = evaluateDirector(ctx.h, ctx.spaceId, t, {
+            presentWorld: ctx.playerWorld as CaptainWorld,
+            captainId,
+          });
+          if (incident) {
+            logActUnbudgeted(ctx, incident.actKind, incident.act, incident.cause, t);
+            ctx.state = ctx.captains.state(ctx.captainId) ?? ctx.state;
+          }
+        }
         t = stepEnd;
       }
     }
@@ -1117,6 +1424,25 @@ function toWireState(h: DbHandle, spaceId: string, st: CaptainStateRow, nowMs: n
           gateView: captainGateView(h, spaceId, st.captainId),
         }
       : {}),
+    // P3 (T9): visible cargo + her savings goal + her affinities,
+    // read from the NPC pool (advance-first, like every read here).
+    ...(isEconomyCaptain(def) && def.active
+      ? (() => {
+          const svc = new NpcEconomy(h, spaceId, st.captainId);
+          const cargo = svc.cargoReadOnly();
+          const credits = Math.round(st.credits);
+          const target = captainSavingsTarget(def, credits);
+          return {
+            cargo,
+            holdUsed: cargo.reduce((sum, c) => sum + c.qty, 0),
+            holdCapacity: HOLD_CAPACITY,
+            savingsGoal: { label: def.savingsGoalLabel, target, distance: Math.max(0, target - credits) },
+            affinities: affinitiesOf(h, spaceId, st.captainId),
+            ...(isPurposeCaptain(def) ? {} : { plan: captainPlanView(h, spaceId, st.captainId) }),
+          };
+        })()
+      : {}),
+    directorEnabled: getDirectorState(h, spaceId).enabled,
   };
 }
 
@@ -1128,6 +1454,7 @@ export function askCaptain(
   captainId: CaptainId,
   question: CaptainQuestionKind,
   nowMs: number = Date.now(),
+  aboutCaptainId?: CaptainId,
 ): { answer: string; state: CaptainState } {
   const def = captainDefinition(captainId);
   if (!def) {
@@ -1169,6 +1496,21 @@ export function askCaptain(
       const next = nextVisit(captainId, nowMs, tz, st.homeWorld);
       answer = `I'm away from the public worlds just now. My next visit is ${worldNamePlain(next.world)}, ${whenPlain(tz, nowMs, next.startMs)}.`;
     }
+  } else if (question === "about") {
+    askedPlain = "what the captain thinks of another captain";
+    const other = aboutCaptainId ? captainDefinition(aboutCaptainId) : undefined;
+    if (!other || other.id === captainId) {
+      throw new CaptainError(
+        "INVALID_QUESTION",
+        400,
+        `"Tell me about [captain]" needs another captain's name — that is the question this kind answers (P3).`,
+      );
+    }
+    const value = getAffinity(h, spaceId, captainId, other.id);
+    answer =
+      `My honest read on ${other.name}? ${affinityLabel(value).replace(/^a captain/, "A captain")} — ` +
+      `that is my opinion of them, from market and road events between us as they were written down: premium sales contested, tows flown, convoys shared, dockside meetings. ` +
+      `It colours where I trade and whose company I seek. It is not a verdict, and it touches nobody's business but ours.`;
   } else if (question === "met") {
     askedPlain = "whether you've met";
     const meetings = captains.meetings(captainId);

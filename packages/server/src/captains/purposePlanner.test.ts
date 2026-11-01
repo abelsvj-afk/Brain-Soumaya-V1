@@ -5,7 +5,7 @@ import { CaptainRepo } from "./repo.js";
 import {
   GATE_GOAL_ID,
   GATE_GOAL_TEXT,
-  P2_LOCKED_ACTIONS,
+  P3_PLAN_ACTIONS,
   P2_PLAN_ACTIONS,
   planForGoal,
   type CaptainWorldState,
@@ -72,7 +72,12 @@ describe("P2 planner — the action set and the plan it builds (B1.1)", () => {
       "talk-greet",
       "wait",
     ]);
-    for (const locked of P2_LOCKED_ACTIONS) expect(kinds).not.toContain(locked);
+    // P3 re-scope: the formerly phase-locked economy verbs are
+    // unlocked in the P3 action set (P3_PLAN_ACTIONS = the P2 set
+    // + gather/sell/refine) and remain absent from the P2 set.
+    const p3Kinds = P3_PLAN_ACTIONS.map((a) => a.kind);
+    expect(p3Kinds).toEqual([...kinds, "gather", "sell", "refine"]);
+    for (const verb of ["gather", "sell", "refine"]) expect(kinds).not.toContain(verb);
   });
 
   it("P-1: a scripted goal produces a plan whose every step carries an expected outcome", () => {

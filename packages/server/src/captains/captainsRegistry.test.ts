@@ -162,19 +162,18 @@ describe("P1 registry — the cohort of eight (F01, spec §8 T3)", () => {
     expect(captainDefinition("bex")?.shipModelKey).toBe("bob");
   });
 
-  it("allow-lists: the six L1 kinds for seven captains; Veyra adds exactly the P2 kinds (P1 spec §7, widened by the P2 spec)", () => {
+  it("allow-lists: the six L1 kinds for five captains; Bex + Junia add exactly the P3 economy kinds; Veyra adds the P2 kinds plus the P3 kinds (P1 spec §7, widened by the P2 spec, widened by P3 R5)", () => {
+    const L1 = ["arrive", "depart", "greet", "speak", "travel", "wait"];
+    const ECONOMY = ["gather", "refine", "sell"];
     for (const def of CAPTAIN_DEFINITIONS) {
       if (def.id === "veyra") {
-        // P2 (Purpose): the seeker's list is the L1 six plus the
-        // six P2 kinds — and nothing else. The P3 economy verbs
-        // (gather/sell/refine) are on NO captain's list.
         expect([...def.allowList].sort(), def.id).toEqual(
-          ["arrive", "commission", "deed", "depart", "gate-check", "gate-passage", "greet", "plan", "search", "speak", "travel", "wait"],
+          [...L1, "commission", "deed", "gate-check", "gate-passage", "plan", "search", ...ECONOMY].sort(),
         );
+      } else if (def.id === "bex" || def.id === "junia") {
+        expect([...def.allowList].sort(), def.id).toEqual([...L1, ...ECONOMY].sort());
       } else {
-        expect([...def.allowList].sort(), def.id).toEqual(
-          ["arrive", "depart", "greet", "speak", "travel", "wait"],
-        );
+        expect([...def.allowList].sort(), def.id).toEqual([...L1].sort());
       }
     }
   });
