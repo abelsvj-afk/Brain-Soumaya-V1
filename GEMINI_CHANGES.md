@@ -1,3 +1,52 @@
+### 2026-10-31 (Claude): G0 B4 — restore procedure + drill support (restore.ts / reconcile.ts / restore-cli.ts, index restoreLog)
+- [ ] Verified by Claude
+- Owner-authorized increment B4 of the G0 backup program (spec §8):
+  the restore half of "a backup is proven when it has been restored".
+  New `backup/restore.ts`: store-alone index read → select latest-good
+  (or a specified PROMOTED backup; anything else is refused) →
+  ciphertext download with SHA-256 verified against the manifest
+  before decryption → AES-256-GCM decrypt via B2's strict key loader
+  (missing/malformed key fails closed at the decrypt stage; no
+  plaintext path) → standalone verification of the staged snapshot
+  (tiers 1+2, MUST enforcement ON) → tier-3 staged digests → the
+  target's existing database moved aside as `brain.db.pre-restore-*`
+  → atomic same-directory rename swap → post-install proof (file
+  SHA-256 + tier-3 digests + ledger summaries) with rollback to the
+  safety copy on any divergence. Every failure stage (index / select
+  / download / decrypt / verify / reconcile / install) leaves the
+  target byte-for-byte untouched and is still recorded.
+- New `backup/reconcile.ts` (B0 amendment C tier 3 + K4): content
+  digests over canonical row serializations for the identity-
+  sensitive classes that exist at drill time (travel_journeys +
+  travel_journey_events, space_meta, npc_relic_holdings, codex_*,
+  notification outbox/dedup tables, the fin_* history) — same RECORDS,
+  not same counts — plus ledger reconciliation recomputed read-only
+  from the records: per-space current world derived by TravelRepo's
+  own rule (without its lazy-settle writes), fuel balances, finance
+  totals, and travel event-chain consistency.
+- `backup/index.ts`: the index gains `restoreLog` (G0-AC-13 records:
+  backup, operator, times, verification + per-tier outcome) with
+  strict validation on read, []-normalization for pre-B4 indexes, and
+  `appendRestoreRecord` (fresh-read append; never moves latest-good).
+  Pre-B4 writers spread the index, so the log survives their writes
+  only once all writers are B4+ — recorded honestly in the type doc.
+- New `backup/restore-cli.ts`: the operator's runnable form
+  (`--preflight` prints store-alone latest-good/manifest facts + key
+  PRESENCE only; a restore prints the full report and always writes
+  `<target dir>/restore-records/<id>.json`, the durable record when
+  the store credentials are read-only). New runbook
+  `docs/G0_BACKUP_RESTORE_RUNBOOK.md`: the §8 procedure as drilled,
+  secrets by NAME only (G0-AC-14), failure-stage table, AC-15
+  revalidation note. No schema changes; no changes to B1–B3 behavior.
+- Tests: `__tests__/g0BackupRestore.test.ts` (18 tests) mapping
+  G0-AC-06/07/08/10/13/14 + tier-3/K4 — flipped-byte and two
+  tampered-manifest cases rejected before install with the target
+  byte-identical; store-alone restore after the source directory is
+  destroyed; specified-id restore; safety-copy preservation;
+  same-count/different-records digest proof. The galaxy-render and
+  cited-chat halves of G0-AC-08 are exercised live in the drill
+  against the scratch app (see the B4 PR body), not in the gate.
+
 ### 2026-10-31 (Claude): G0 B5 — deploy-gate wiring (spec §10) + the §9 exit gate run
 - [ ] Verified by Claude
 - The deploy gate (`packages/server/src/backup/deployGate.ts` + operator CLI
