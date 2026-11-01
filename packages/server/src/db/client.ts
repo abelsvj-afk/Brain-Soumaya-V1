@@ -8,6 +8,7 @@ import * as schema from "./schema.js";
 import { bootstrapVec, setVectorEnabled, type RawDb } from "./vec.js";
 import { bootstrapFts } from "./fts.js";
 import { BOOTSTRAP_SQL } from "./schemaSql.js";
+import { CAPTAIN_DEFINITIONS } from "@brain/shared";
 
 export type Schema = typeof schema;
 export type Db = BetterSQLite3Database<Schema>;
@@ -863,6 +864,27 @@ export function migrateSchema(sqlite: RawDb): void {
     if (!haveNpcCol("leg_arrives_step")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_arrives_step TEXT`);
     if (!haveNpcCol("leg_steps")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_steps INTEGER`);
     if (!haveNpcCol("leg_visit_key")) sqlite.exec(`ALTER TABLE npc_player_state ADD COLUMN leg_visit_key TEXT`);
+    // P1-1 backfill: the ALTERs above fill EXISTING rows with the
+    // placeholder defaults ('berth' / ''), and nothing else would
+    // ever replace them — ensureState returns an existing row
+    // unchanged and patch() enforces the stored anchor write-once.
+    // Heal exactly the placeholder rows (empty label) from the
+    // captain definitions — the same registry ensureState seeds
+    // fresh rows from, so there is one source of truth. A row whose
+    // anchor was genuinely written has a non-empty label and is
+    // never touched; a row for an id outside the registry has no
+    // definition to heal from and is left alone. migrateSchema runs
+    // once per database file at boot and npc_player_state rows are
+    // per-space rows inside that file, so the per-npc_id UPDATE
+    // heals each space's row for that captain and no other row.
+    // Idempotent: after the first heal no row matches the '' test.
+    const healAnchor = sqlite.prepare(
+      `UPDATE npc_player_state SET home_anchor_kind = ?, home_anchor_label = ?
+       WHERE npc_id = ? AND home_anchor_label = ''`,
+    );
+    for (const def of CAPTAIN_DEFINITIONS) {
+      healAnchor.run(def.homeAnchor.kind, def.homeAnchor.label, def.id);
+    }
   }
   // Relics I-2: relic_holdings gains copy_id + location on volumes whose
   // relic_holdings table predates them (guarded, the space_meta pattern).
