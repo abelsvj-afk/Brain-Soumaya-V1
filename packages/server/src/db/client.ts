@@ -2094,6 +2094,86 @@ export function migrateSchema(sqlite: RawDb): void {
       sqlite.exec(`ALTER TABLE sources ADD COLUMN capture_params TEXT`);
     }
   }
+  // G1 "The Hold" economy: same DDL as db/schemaSql.ts BOOTSTRAP_SQL
+  // (see the notes there — O-1 Credits/Fuel wall, per-space census, and
+  // the G0 backup-census amendment owed at the main landing).
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS game_credits (
+      space_id TEXT PRIMARY KEY,
+      balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE TABLE IF NOT EXISTS game_cargo (
+      space_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
+      PRIMARY KEY (space_id, good_id)
+    );
+    CREATE TABLE IF NOT EXISTS game_storage (
+      space_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
+      PRIMARY KEY (space_id, good_id)
+    );
+    CREATE TABLE IF NOT EXISTS game_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      good_id TEXT,
+      qty_delta INTEGER NOT NULL DEFAULT 0,
+      credits_delta INTEGER NOT NULL DEFAULT 0,
+      balance_after INTEGER NOT NULL,
+      buyer_id TEXT,
+      unit_price INTEGER,
+      recipe_id TEXT,
+      node_id TEXT,
+      idempotency_key TEXT,
+      actor_kind TEXT NOT NULL DEFAULT 'owner',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_game_ledger_space_created ON game_ledger (space_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_game_ledger_space_kind ON game_ledger (space_id, kind, created_at);
+    CREATE TABLE IF NOT EXISTS game_action_results (
+      space_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      args_hash TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, action, idempotency_key)
+    );
+    CREATE TABLE IF NOT EXISTS game_resource_nodes (
+      space_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('belt','signal','wreck')),
+      good_id TEXT NOT NULL,
+      capacity INTEGER NOT NULL CHECK (capacity >= 0),
+      remaining INTEGER NOT NULL CHECK (remaining >= 0),
+      period_start_ms INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, node_id)
+    );
+    CREATE TABLE IF NOT EXISTS game_periods (
+      space_id TEXT NOT NULL,
+      period_start_ms INTEGER NOT NULL,
+      period_end_ms INTEGER NOT NULL,
+      local_date TEXT NOT NULL,
+      timezone TEXT NOT NULL,
+      PRIMARY KEY (space_id, period_start_ms)
+    );
+    CREATE TABLE IF NOT EXISTS game_demand (
+      space_id TEXT NOT NULL,
+      period_start_ms INTEGER NOT NULL,
+      buyer_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
+      PRIMARY KEY (space_id, period_start_ms, buyer_id, good_id)
+    );
+    CREATE TABLE IF NOT EXISTS game_dock_state (
+      space_id TEXT PRIMARY KEY,
+      docked INTEGER NOT NULL DEFAULT 0 CHECK (docked IN (0,1)),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+  `);
 }
 
 /**

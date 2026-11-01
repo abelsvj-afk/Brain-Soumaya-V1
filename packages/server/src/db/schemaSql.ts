@@ -1755,4 +1755,114 @@ export const BOOTSTRAP_SQL = `
       space_id TEXT PRIMARY KEY,
       stopped INTEGER NOT NULL DEFAULT 0
     );
+    -- G1 "The Hold" economy (requirements v0.2.1, signed off 2026-10-29):
+    -- the Credits ledger and goods state for the civilization program.
+    -- Credits are a SEPARATE ledger beside Fuel (O-1): no table here
+    -- references fuel, and no code path converts between the two. Every
+    -- table is per-space (space_id in every key) and dies with the brain
+    -- (all nine are listed in SPACE_SCOPED_TABLES, auth/spaces.ts).
+    -- BACKUP CENSUS: the G0 backup census lives on main
+    -- (packages/server/src/backup/inventory.ts), which this branch does
+    -- not carry; at the main landing these nine tables must be added to
+    -- that census as INCLUDED + MAY-BE-EMPTY with a version bump, exactly
+    -- as the 12 relic_* tables were in the v6 amendment — a table missing
+    -- from the census fails production backups loudly by design.
+    -- Same DDL runs in db/client.ts migrateSchema().
+    CREATE TABLE IF NOT EXISTS game_credits (
+      space_id TEXT PRIMARY KEY,
+      balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE TABLE IF NOT EXISTS game_cargo (
+      space_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
+      PRIMARY KEY (space_id, good_id)
+    );
+    CREATE TABLE IF NOT EXISTS game_storage (
+      space_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
+      PRIMARY KEY (space_id, good_id)
+    );
+    -- Append-only transaction ledger (architecture I-9): game data only,
+    -- never memory content; corrections are compensating entries, never
+    -- edits or deletes. qty_delta is the signed goods movement in the
+    -- named location pair's terms (see game/economy.ts per-kind notes);
+    -- credits_delta is the signed Credits movement; balance_after is the
+    -- Credits balance the transaction committed.
+    CREATE TABLE IF NOT EXISTS game_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      good_id TEXT,
+      qty_delta INTEGER NOT NULL DEFAULT 0,
+      credits_delta INTEGER NOT NULL DEFAULT 0,
+      balance_after INTEGER NOT NULL,
+      buyer_id TEXT,
+      unit_price INTEGER,
+      recipe_id TEXT,
+      node_id TEXT,
+      idempotency_key TEXT,
+      actor_kind TEXT NOT NULL DEFAULT 'owner',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_game_ledger_space_created ON game_ledger (space_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_game_ledger_space_kind ON game_ledger (space_id, kind, created_at);
+    -- Idempotency result records (architecture I-3): the committed result
+    -- stored under (space, action, key) inside the same transaction that
+    -- committed the action; a retry returns THIS, never a re-run.
+    CREATE TABLE IF NOT EXISTS game_action_results (
+      space_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      args_hash TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, action, idempotency_key)
+    );
+    -- Resource nodes (§7): per-space world supply. period_start_ms is the
+    -- demand/supply period the node's current remaining belongs to;
+    -- renewable kinds refill to capacity when a new period opens, wreck
+    -- rows are replaced by a fresh set (rotation touches ONLY uncollected
+    -- supply — holdings in cargo/storage are never touched, I-10).
+    CREATE TABLE IF NOT EXISTS game_resource_nodes (
+      space_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('belt','signal','wreck')),
+      good_id TEXT NOT NULL,
+      capacity INTEGER NOT NULL CHECK (capacity >= 0),
+      remaining INTEGER NOT NULL CHECK (remaining >= 0),
+      period_start_ms INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (space_id, node_id)
+    );
+    -- Demand/supply periods (§5/R2): when a period opens, its start/end
+    -- instants are computed from the space's timezone THEN in effect and
+    -- STORED here. A later timezone change never reopens, extends, or
+    -- shortens the active period; it applies from the next period onward.
+    CREATE TABLE IF NOT EXISTS game_periods (
+      space_id TEXT NOT NULL,
+      period_start_ms INTEGER NOT NULL,
+      period_end_ms INTEGER NOT NULL,
+      local_date TEXT NOT NULL,
+      timezone TEXT NOT NULL,
+      PRIMARY KEY (space_id, period_start_ms)
+    );
+    -- Premium demand consumption (§5/R2): per (space, period, buyer,
+    -- good) — the exact tracking tuple the requirements name.
+    CREATE TABLE IF NOT EXISTS game_demand (
+      space_id TEXT NOT NULL,
+      period_start_ms INTEGER NOT NULL,
+      buyer_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
+      PRIMARY KEY (space_id, period_start_ms, buyer_id, good_id)
+    );
+    -- Dock state: station services (sell, refine, cargo↔storage) require
+    -- the ship docked at the Great Station (§3/§4/§5, G1-AC-07).
+    CREATE TABLE IF NOT EXISTS game_dock_state (
+      space_id TEXT PRIMARY KEY,
+      docked INTEGER NOT NULL DEFAULT 0 CHECK (docked IN (0,1)),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
 `;
