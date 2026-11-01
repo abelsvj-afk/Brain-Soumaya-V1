@@ -15,6 +15,7 @@ import {
   WITNESS_HAULER_POSITION,
   beaconRing,
   dockedPoseAt,
+  bexBerthPose,
   dockingMooringPose,
   harborControllerBerthPose,
   heroMooringPose,
@@ -90,6 +91,9 @@ export interface StationScene {
   group: THREE.Group;
   update: (elapsedMs: number, opts?: { reducedMotion?: boolean }) => void;
   dispose: () => void;
+  /** NPC-Player L1: show or hide Bex's ship at her berth, driven
+   *  by her server state (Present at the Station or not). */
+  setBexPresent: (present: boolean) => void;
 }
 
 function proxyHull(): THREE.Group {
@@ -407,6 +411,16 @@ export function createStationScene(opts: { hull?: THREE.Object3D; onRelicVisible
   // The docking shuttle shares the dispatcher's geometry (one load,
   // no second fetch). It is built inside the dispatcher lane's load.
   let dockingMesh: THREE.Mesh | null = null;
+
+  // Bex's ship (NPC-Player Layer L1) rides the bob lane's geometry
+  // (TRAFFIC_MODELS[0] — one load, no second fetch) and moors at her
+  // berth. It is visible ONLY while her server state says Present at
+  // the Station: the host pushes that fact through setBexPresent,
+  // and the flag is remembered here so a GLB that lands after the
+  // fact still appears correctly. The berth stays empty until the
+  // bob GLB lands — no faked captain.
+  let bexShip: THREE.Mesh | null = null;
+  let bexPresent = false;
   const dockingLane = lanes[DOCKING_MODEL_INDEX];
 
   const scaleToForward = (geometry: THREE.BufferGeometry, target: number): number => {
@@ -479,6 +493,20 @@ export function createStationScene(opts: { hull?: THREE.Object3D; onRelicVisible
         controller.rotation.y = berth.rotationY;
         controller.scale.setScalar(scale);
         station.add(controller);
+      }
+      // Bex's ship rides the bob's geometry (see the declaration at
+      // the docking shuttle): moored at her berth, attached to the
+      // Station, visible only while she is Present here.
+      if (index === 0) {
+        const bex = new THREE.Mesh(single.geometry, single.material);
+        bex.name = "bex-ship";
+        const berth = bexBerthPose();
+        bex.position.set(berth.position[0], berth.position[1], berth.position[2]);
+        bex.rotation.y = berth.rotationY;
+        bex.scale.setScalar(scale);
+        bex.visible = bexPresent;
+        station.add(bex);
+        bexShip = bex;
       }
       removeFallbackTraffic();
     });
@@ -836,6 +864,12 @@ export function createStationScene(opts: { hull?: THREE.Object3D; onRelicVisible
       disposed = true;
       cancelRelics();
       disposeObject3D(group);
+    },
+    /** NPC-Player L1: show or hide Bex's ship at her berth, driven
+     *  by her server state (Present at the Station or not). */
+    setBexPresent: (present: boolean) => {
+      bexPresent = present;
+      if (bexShip) bexShip.visible = present;
     },
   };
 }

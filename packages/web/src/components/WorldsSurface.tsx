@@ -79,6 +79,8 @@ import {
 } from "../graph/scaleScene.js";
 import WorldCredits from "./WorldCredits.js";
 import HarborControllerPanel from "./HarborControllerPanel.js";
+import CaptainsPanel from "./CaptainsPanel.js";
+import { getCaptain } from "../api/captains.js";
 import { pushToast } from "./Toasts.js";
 import { markRelicFound, replaceFoundRelics, useFoundRelics } from "./relicsFound.js";
 import { findRelic, sampleRelicClaimStart, type RelicsState } from "../api/relics.js";
@@ -200,6 +202,9 @@ interface WorldSceneHandle {
   skipAnimations?: () => void;
   /** Garden only (Phase 4): the fog tint for the warmth now rendered. */
   getWarmthFogColor?: () => number | null;
+  /** Great Station only (NPC-Player L1): show or hide Bex's ship at
+   *  her berth, driven by her server state. Absent on other scenes. */
+  setBexPresent?: (present: boolean) => void;
 }
 
 /**
@@ -519,6 +524,12 @@ export default function WorldsSurface({
   const [archivedRetry, setArchivedRetry] = useState(0);
   const [guided, setGuided] = useState(false);
   const [showController, setShowController] = useState(false);
+  const [showCaptains, setShowCaptains] = useState(false);
+  /** Bex's presence at the Station (NPC-Player L1): her ship shows
+   *  at her berth only while her server state says Present here.
+   *  The ref carries the fact into the scene-build effect, which
+   *  may run before or after the fetch resolves. */
+  const bexPresentRef = useRef(false);
   // Station interior (Wave 2, settled design): a mode of the Station
   // stay, not a world. `inside` swaps the exterior scene for the hall;
   // `interiorRoom` jumps instantly between the four rooms (no walking,
@@ -613,6 +624,7 @@ export default function WorldsSurface({
     setVisibleRelics([]);
     setGuided(false);
     setShowController(false);
+    setShowCaptains(false);
     setInside(false);
     setInteriorRoom("hangar-bay");
     interiorRoomRef.current = "hangar-bay";
@@ -874,6 +886,30 @@ export default function WorldsSurface({
     return buildScaleLayout();
   }, [atScale]);
 
+  // Bex's presence at the Station (NPC-Player L1): read her server
+  // state on arrival at the Station and push the fact into the
+  // scene — her ship rides the bob at her berth only while she is
+  // Present here. The read itself advances her on the server
+  // (lazily, as every captain read does). Away from the Station the
+  // fact is simply false; the Station scene is rebuilt per stay, so
+  // nothing stale can linger.
+  useEffect(() => {
+    if (!atStation || mode !== "world") {
+      bexPresentRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    void getCaptain("bex").then((bex) => {
+      if (cancelled) return;
+      const present = !!bex && bex.present && bex.currentWorld === "great-station";
+      bexPresentRef.current = present;
+      sceneHandleRef.current?.setBexPresent?.(present);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [atStation, mode, journeyId]);
+
   // Station interior: the hall is the same for every traveler, every
   // visit — it surfaces no memories of its own, so it needs no graph.
   // The docked ship's skin is the HangarPanel pick (the same
@@ -1111,6 +1147,10 @@ export default function WorldsSurface({
     if (!world) return;
     scene.add(world.group);
     sceneHandleRef.current = world;
+    // NPC-Player L1: a world scene built after Bex's state was read
+    // picks her presence up from the ref (the read applies it live
+    // when the handle already exists). Transit scenes have no berth.
+    if (mode !== "transit" && built) built.setBexPresent?.(bexPresentRef.current);
     const eternityCtl = currentWorld === "eternity" ? built?.eternity : undefined;
     if (gardenScene) {
       gardenSceneRef.current = gardenScene;
@@ -1310,6 +1350,11 @@ export default function WorldsSurface({
             {showController ? "Hide the harbor controller" : "Harbor controller"}
           </button>
         )}
+        {(atStation || atScale) && (
+          <button type="button" onClick={() => setShowCaptains((v) => !v)}>
+            {showCaptains ? "Hide the captains" : "Captains"}
+          </button>
+        )}
         {atStation && !inside && (
           <button type="button" onClick={() => setInside(true)}>
             Step inside the Station
@@ -1492,6 +1537,13 @@ export default function WorldsSurface({
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
       {mode === "world" && atStation && showController && (
         <HarborControllerPanel enabled onClose={() => setShowController(false)} />
+      )}
+      {mode === "world" && (atStation || atScale) && showCaptains && (
+        <CaptainsPanel
+          world={atStation ? "great-station" : "scale"}
+          enabled
+          onClose={() => setShowCaptains(false)}
+        />
       )}
       {mode === "world" && atStation && inside && interiorRoomInfo && (
         <p className="worlds-surface-fallback">

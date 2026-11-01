@@ -43,6 +43,12 @@ describe("createStationScene", () => {
     // The harbor controller's berth stays empty until the dispatcher
     // GLB lands — no faked controller.
     expect(find(scene.group, "harbor-controller-ship")).toBeUndefined();
+    // Bex's berth likewise stays empty until the bob GLB lands —
+    // no faked captain (NPC-Player L1). Her presence flag can be
+    // pushed before the hull exists without error.
+    expect(find(scene.group, "bex-ship")).toBeUndefined();
+    expect(() => scene.setBexPresent(true)).not.toThrow();
+    expect(() => scene.setBexPresent(false)).not.toThrow();
     scene.dispose();
   });
 
