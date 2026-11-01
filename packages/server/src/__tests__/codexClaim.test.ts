@@ -81,23 +81,36 @@ describe("codex-claim covers the real Codex catalog (IM-93)", () => {
     }
   });
 
-  it("awards a relic entry once it is found in its world", async () => {
+  // Relic Buffs v2 (design note v2 §7, criterion A4): the old trust-me
+  // door is closed. POST /api/maintenance/codex-claim refuses EVERY
+  // relic-* key and points at the verified find endpoint — the scenario
+  // "a relic entry is awarded once it is found in its world" now lives
+  // on that endpoint and is covered in relicBuffsV2.test.ts ("A1/A3 over
+  // HTTP: wrong world refused; standing in the world, the find lands
+  // once and pays once", plus its own A4 test). What this file pins is
+  // the refusal itself: no award, no exception, with the pointer.
+  it("refuses a relic entry — relic finds go through the verified find endpoint (v2 A4)", async () => {
     const r = await claim("relic-harbor-nail");
-    expect(r.status).toBe(200);
-    expect(r.body.awarded).toBe(true);
+    expect(r.status).toBe(400);
+    expect(r.body.awarded).toBeUndefined();
+    expect(r.body.error).toMatch(/relics\/found/);
+    // The refusal is not a one-time state: a repeat is refused identically.
+    const again = await claim("relic-harbor-nail");
+    expect(again.status).toBe(400);
+    expect(again.body.error).toMatch(/relics\/found/);
   });
 
-  // Trust shape (relics increment): the server validates a claim by key
-  // membership alone, the same as every other static Codex entry — the
-  // client gates the find on the relic's GLB actually loading in its
-  // world. A crafted client CAN claim a relic whose world has not opened
-  // yet (e.g. relic-star-hanger, whose world is Scale); verifying the find
-  // server-side belongs with scarcity (B-03), not this increment. The
-  // acceptance below is recorded deliberately, not an oversight.
-  it("accepts a deferred relic's key (find verification is a later increment)", async () => {
+  // The relic-* refusal has no exceptions — not even for a deferred
+  // relic whose world has not opened yet (e.g. relic-star-hanger, whose
+  // world is Scale). Under the pre-v2 contract this key was accepted on
+  // key membership alone (the B-03 hole); v2 §7 closes that door for all
+  // relics, and the find endpoint separately refuses not-yet-findable
+  // relics (relicBuffsV2.test.ts, criterion A2).
+  it("refuses a deferred relic's key too — the relic-* refusal has no exceptions (v2 A4)", async () => {
     const r = await claim("relic-star-hanger");
-    expect(r.status).toBe(200);
-    expect(r.body.awarded).toBe(true);
+    expect(r.status).toBe(400);
+    expect(r.body.awarded).toBeUndefined();
+    expect(r.body.error).toMatch(/relics\/found/);
   });
 
   it("awards a fieldnote-* entry Soumaya actually charted for this space", async () => {
@@ -112,12 +125,28 @@ describe("codex-claim covers the real Codex catalog (IM-93)", () => {
     expect(r.body.awarded).toBe(true);
   });
 
-  it("accepts every key in the shared static catalog (the set the client generates)", async () => {
+  it("accepts every non-relic key in the shared static catalog, and refuses every relic key in it (v2 A4)", async () => {
     expect(CODEX_STATIC_KEYS.size).toBeGreaterThan(0);
+    let nonRelicKeys = 0;
+    let relicKeys = 0;
     for (const key of CODEX_STATIC_KEYS) {
       const r = await claim(key);
-      expect(r.status, key).toBe(200);
+      if (key.startsWith("relic-")) {
+        // Relic keys stay IN the shared catalog (the client still
+        // generates them) — but since Relic Buffs v2 they are refused
+        // here and awarded only through the verified find endpoint.
+        relicKeys += 1;
+        expect(r.status, key).toBe(400);
+        expect(r.body.error, key).toMatch(/relics\/found/);
+      } else {
+        // Every non-relic catalog key is accepted exactly as before.
+        nonRelicKeys += 1;
+        expect(r.status, key).toBe(200);
+      }
     }
+    // Both halves of the catalog were actually exercised.
+    expect(nonRelicKeys).toBeGreaterThan(0);
+    expect(relicKeys).toBeGreaterThan(0);
   });
 
   it("still rejects invented keys and uncharted field notes (no fuel farming)", async () => {

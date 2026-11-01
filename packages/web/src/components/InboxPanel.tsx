@@ -103,6 +103,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   digest: "🌅 Daily digest",
   insight: "💡 Insights",
   discovery: "✦ Discoveries",
+  // Relics I-5: a stirring's delivery — the hunt's invitation.
+  "relic-stirring": "✦ Stirrings",
   "bill-risk": "💸 Bill risk",
   eternity: "✦ Eternity",
   // Fix round 2: the permanent-failure item is a supported category now,

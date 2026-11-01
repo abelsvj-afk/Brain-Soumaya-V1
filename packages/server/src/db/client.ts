@@ -525,6 +525,18 @@ export function migrateSchema(sqlite: RawDb): void {
     if (!metaCols.some((c) => c.name === "research_enabled")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN research_enabled TEXT`);
     }
+    if (!metaCols.some((c) => c.name === "relic_scarcity_off")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN relic_scarcity_off TEXT`);
+    }
+    if (!metaCols.some((c) => c.name === "relic_legacy_synced")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN relic_legacy_synced INTEGER NOT NULL DEFAULT 0`);
+    }
+    // P1 fix: legacy-sync eligibility marker. Default 0 = NOT eligible; the
+    // one-time ship migration (RelicHoldingsStore.migrateLegacyClaims) sets
+    // it to 1 only for spaces that existed when that migration first ran.
+    if (!metaCols.some((c) => c.name === "relic_legacy_eligible")) {
+      sqlite.exec(`ALTER TABLE space_meta ADD COLUMN relic_legacy_eligible INTEGER NOT NULL DEFAULT 0`);
+    }
     // Last UTC day a dream-cycle belief was consolidated (Level 2).
     if (!metaCols.some((c) => c.name === "last_dream_date")) {
       sqlite.exec(`ALTER TABLE space_meta ADD COLUMN last_dream_date TEXT`);
@@ -676,6 +688,174 @@ export function migrateSchema(sqlite: RawDb): void {
   // Batch E (REG-197 / REG-051): same DDL as BOOTSTRAP_SQL in
   // db/schemaSql.ts — CREATE TABLE IF NOT EXISTS makes this a no-op on fresh
   // volumes and the creation path on volumes that predate the tables.
+  sqlite.exec(`
+    -- Relic Buffs v2: holdings + returns. Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_holdings (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      found_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      test_only INTEGER NOT NULL DEFAULT 0,
+      held INTEGER NOT NULL DEFAULT 0,
+      held_at TEXT,
+      anchor_key TEXT NOT NULL DEFAULT '',
+      copy_id TEXT,
+      location TEXT NOT NULL DEFAULT 'carried' CHECK (location IN ('carried','station')),
+      PRIMARY KEY (space_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      reason TEXT NOT NULL CHECK (reason IN ('release','brain-deleted')),
+      from_anchor TEXT,
+      to_anchor TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    -- Relics I-2: physical copies + their append-only event chains. One
+    -- chain per copy is both its provenance and its placement history
+    -- (approved design §2.1/R3-4). Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_copies (
+      copy_id TEXT PRIMARY KEY,
+      relic_id TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('placed','held','return-pool','consumed')),
+      world TEXT,
+      anchor_key TEXT,
+      holder_kind TEXT CHECK (holder_kind IN ('space','npc')),
+      holder_id TEXT,
+      holder_space_id TEXT,
+      scope_space_id TEXT,
+      test_only INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS relic_copies_relic_state_idx ON relic_copies(relic_id, state);
+    CREATE INDEX IF NOT EXISTS relic_copies_holder_idx ON relic_copies(holder_space_id, holder_kind);
+    CREATE TABLE IF NOT EXISTS relic_copy_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      copy_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('genesis','placed','claimed','exchanged','returned','consumed','brain-deleted')),
+      space_id TEXT,
+      world TEXT,
+      anchor_key TEXT,
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS relic_copy_events_copy_idx ON relic_copy_events(copy_id, id);
+    -- Relics I-3 (fix (a)): gate permanence recorded at SET COMPLETION —
+    -- the moment a space's found set completes B-01 — mirroring npc_gate
+    -- one subsystem over. TravelRepo reads this record first; the
+    -- arrived-journey derivation remains as the legacy fallback.
+    CREATE TABLE IF NOT EXISTS relic_gate_opened (
+      space_id TEXT PRIMARY KEY,
+      opened_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    -- Relics I-4 (§4.7/§4.4): claim-time sampling + claim receipts.
+    -- Samples are validation evidence stamped by the SERVER on receipt
+    -- (client clocks are never consulted); attempts are the
+    -- review_grade_attempts receipt pattern for claims — a replay
+    -- returns the recorded outcome and re-executes nothing. The layer
+    -- table's L1 rows are written at a validated in-radius sample
+    -- (source='arrival'); first discoveries are written inside the
+    -- claim transaction, first writer wins. Same DDL runs in
+    -- the other established place.
+    CREATE TABLE IF NOT EXISTS relic_position_samples (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      world TEXT NOT NULL,
+      x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('scan','claim-start','claim-end')),
+      received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS relic_samples_space_world_idx
+      ON relic_position_samples(space_id, world, id);
+    CREATE TABLE IF NOT EXISTS relic_claim_attempts (
+      space_id TEXT NOT NULL,
+      attempt_key TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT,
+      outcome TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, attempt_key)
+    );
+    CREATE TABLE IF NOT EXISTS relic_codex_layers (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      layer TEXT NOT NULL CHECK (layer IN ('L0','L1','L3')),
+      thread_id TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL CHECK (source IN ('stirring','arrival','discovery','exchange')),
+      unlocked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, relic_id, layer, thread_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_first_discoveries (
+      scope TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      world TEXT NOT NULL, anchor_key TEXT NOT NULL,
+      discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (scope, relic_id)
+    );
+    -- Relics I-5 (§4.6): stirrings — the hunt's invitations. A stirring
+    -- promises ONE specific placed copy (copy_id — the copy it binds
+    -- at issuance); its states are the honest endings (claimed when
+    -- its relic is claimed, quiet when the pool empties beneath it,
+    -- expired when its window ends), and expiry is evaluated inside
+    -- serialized transactions and at read time — no background
+    -- sweeper. The partial unique index enforces one OPEN stirring
+    -- per (space, relic) at the database level. Same DDL runs in
+    -- the other established place.
+    CREATE TABLE IF NOT EXISTS relic_stirrings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      source TEXT NOT NULL CHECK (source IN ('ambient','chart')),
+      chart_exchange_id INTEGER,
+      issued_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      open_until TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','claimed','quiet','expired')),
+      resolved_at TEXT,
+      resolved_reason TEXT
+    );
+    CREATE INDEX IF NOT EXISTS relic_stirrings_open_idx ON relic_stirrings(relic_id, state, open_until);
+    CREATE UNIQUE INDEX IF NOT EXISTS relic_stirrings_one_open_idx
+      ON relic_stirrings(space_id, relic_id) WHERE state = 'open';
+    -- Relics I-6 (§4.5, §4.9): Seed effects + exchange receipts. A
+    -- seed's permanent effect is recorded exactly once per space —
+    -- the primary key IS the idempotency (a duplicate seed inserts
+    -- nothing and is consumed without effect, R3-3). An exchange
+    -- receipt records one atomic exchange, so a replayed attempt key
+    -- answers with the same committed outcome and grants nothing
+    -- twice. Same DDL runs in the other established place.
+    CREATE TABLE IF NOT EXISTS relic_seed_effects (
+      space_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, relic_id)
+    );
+    CREATE TABLE IF NOT EXISTS relic_exchange_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      attempt_key TEXT NOT NULL,
+      copy_id TEXT NOT NULL,
+      relic_id TEXT NOT NULL,
+      option TEXT NOT NULL CHECK (option IN ('lore','credits','chart')),
+      chart_target_relic_id TEXT,
+      outcome TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (space_id, attempt_key)
+    );
+  `);
+  // Relics I-2: relic_holdings gains copy_id + location on volumes whose
+  // relic_holdings table predates them (guarded, the space_meta pattern).
+  const relicHoldingCols = sqlite.prepare(`PRAGMA table_info(relic_holdings)`).all() as { name: string }[];
+  if (relicHoldingCols.length > 0 && !relicHoldingCols.some((c) => c.name === "copy_id")) {
+    sqlite.exec(`ALTER TABLE relic_holdings ADD COLUMN copy_id TEXT`);
+  }
+  if (relicHoldingCols.length > 0 && !relicHoldingCols.some((c) => c.name === "location")) {
+    sqlite.exec(`ALTER TABLE relic_holdings ADD COLUMN location TEXT NOT NULL DEFAULT 'carried' CHECK (location IN ('carried','station'))`);
+  }
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS review_grade_attempts (
       space_id TEXT NOT NULL DEFAULT 'legacy',

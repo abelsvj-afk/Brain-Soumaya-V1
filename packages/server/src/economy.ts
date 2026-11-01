@@ -1,6 +1,22 @@
 import type { Fuel, TravelKind } from "@brain/shared";
 import type { DbHandle } from "./db/client.js";
+import { buffsForSpace } from "./relics/buffs.js";
 import { DEFAULT_SPACE } from "./db/schema.js";
+
+/**
+ * Relics I-6 (§4.7, §9 ruling 1): the exchange's Credits option reads
+ * its price from ONE place — a posted value. No posted value exists:
+ * there is no Credits ledger anywhere in the app and the G0 D-07
+ * value decisions have not priced a Legacy, so this seam reports
+ * "not offered" for every relic and no caller can invent a number.
+ * When a real posted value exists, this is where it lands
+ * (offered: true, value: the posted amount), and the exchange is
+ * where it would be paid.
+ */
+export type PostedExchangeValue = { offered: false } | { offered: true; value: number };
+export function postedExchangeValue(_relicId: string): PostedExchangeValue {
+  return { offered: false };
+}
 
 /**
  * The "Celestial Economy": Fuel is a free, in-app energy that powers Soumaya's
@@ -75,15 +91,16 @@ export class EconomyRepo {
     const row = this.h.sqlite
       .prepare(`SELECT fuel, updated_at FROM space_meta WHERE space_id = ?`)
       .get(this.spaceId) as { fuel: number; updated_at: string } | undefined;
-    if (!row || row.fuel >= FUEL_CAP) return; // already full — nothing to accrue
+    const buffs = buffsForSpace(this.h, this.spaceId); const cap = buffs.fuelCap;
+    if (!row || row.fuel >= cap) return; // already full — nothing to accrue
     const ts = row.updated_at;
     const ms = Date.parse(ts?.includes("T") ? ts : `${(ts ?? "").replace(" ", "T")}Z`);
     if (Number.isNaN(ms)) return;
     const hours = (Date.now() - ms) / 3_600_000;
     if (hours <= 0) return;
-    const regen = hours * FUEL_REGEN_PER_HOUR;
+    const regen = hours * buffs.fuelRegenPerHour;
     if (regen < 0.1) return; // wait for a meaningful chunk; updated_at stays so it keeps accruing
-    const next = clamp(row.fuel + regen, 0, FUEL_CAP);
+    const next = clamp(row.fuel + regen, 0, cap);
     this.h.sqlite
       .prepare(`UPDATE space_meta SET fuel = ?, updated_at = CURRENT_TIMESTAMP WHERE space_id = ?`)
       .run(next, this.spaceId);
@@ -102,7 +119,7 @@ export class EconomyRepo {
   add(amount: number): number {
     if (!(amount > 0)) return this.get();
     this.ensure();
-    const next = clamp(this.get() + amount, 0, FUEL_CAP);
+    const next = clamp(this.get() + amount, 0, buffsForSpace(this.h, this.spaceId).fuelCap);
     this.h.sqlite
       .prepare(`UPDATE space_meta SET fuel = ?, updated_at = CURRENT_TIMESTAMP WHERE space_id = ?`)
       .run(next, this.spaceId);
@@ -141,7 +158,7 @@ export class EconomyRepo {
   }
 
   toFuel(): Fuel {
-    return { fuel: Math.round(this.get() * 10) / 10, capacity: FUEL_CAP, jobCost: FUEL_JOB_COST, warpCost: WARP_COST };
+    return { fuel: Math.round(this.get() * 10) / 10, capacity: buffsForSpace(this.h, this.spaceId).fuelCap, jobCost: FUEL_JOB_COST, warpCost: WARP_COST };
   }
 }
 

@@ -131,10 +131,10 @@ afterEach(() => {
 });
 
 describe("G0 B1 inventory", () => {
-  it("pins 115 named tables: 114 included + tts_audio_cache excluded", () => {
+  it("pins 127 named tables: 126 included + tts_audio_cache excluded", () => {
     const names = Object.keys(BACKUP_TABLE_INVENTORY);
-    expect(names.length).toBe(115);
-    expect(INCLUDED_TABLES.length).toBe(114);
+    expect(names.length).toBe(127);
+    expect(INCLUDED_TABLES.length).toBe(126);
     expect(INCLUDED_TABLES).not.toContain("tts_audio_cache");
     expect(BACKUP_TABLE_INVENTORY["tts_audio_cache"]).toBe("excluded");
     expect(MUST_BE_NONEMPTY_TABLES.length).toBe(26);
@@ -150,12 +150,31 @@ describe("G0 B1 inventory", () => {
     }
     // This increment's own lifecycle table.
     expect(BACKUP_TABLE_INVENTORY["backup_attempts"]).toBe("may-be-empty");
-    // v4 removals (owner-authorized 2026-10-30): the deploy-line relic
-    // tables (Relics I-1/I-2) exist neither on main nor in production —
-    // verified read-only against production — so they leave the
-    // inventory until the relics increments land on main.
-    for (const t of ["relic_holdings", "relic_returns", "relic_copies", "relic_copy_events"]) {
-      expect(BACKUP_TABLE_INVENTORY[t]).toBeUndefined();
+    // v4 removals (owner-authorized 2026-10-30) SUPERSEDED by v6: the
+    // deploy-line relic tables existed neither on main nor in
+    // production, so v4 removed them "until the relics increments land
+    // on main" — v6 (below) is that landing.
+    // v6 additions (owner-authorized 2026-10-31): the Relics program
+    // landed on main — all 12 relic_* tables its union schema creates
+    // (cross-checked against the DDL in both schema locations),
+    // INCLUDED + MAY-BE-EMPTY: exclusion would silently drop the relic
+    // collection from backups; a MUST would break every fresh brain.
+    for (const t of [
+      "relic_claim_attempts",
+      "relic_codex_layers",
+      "relic_copies",
+      "relic_copy_events",
+      "relic_exchange_attempts",
+      "relic_first_discoveries",
+      "relic_gate_opened",
+      "relic_holdings",
+      "relic_position_samples",
+      "relic_returns",
+      "relic_seed_effects",
+      "relic_stirrings",
+    ]) {
+      expect(BACKUP_TABLE_INVENTORY[t]).toBe("may-be-empty");
+      expect(INCLUDED_TABLES).toContain(t);
     }
     // v4 addition: daily_quests — production carries the table (3 rows)
     // though main's schema never created it; its DDL is now reconciled
@@ -191,7 +210,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     // Manifest basics (spec §1).
     expect(res.manifest.backupId).toBe(res.attempt.id);
     expect(res.manifest.appCommit).toBe("test-commit");
-    expect(res.manifest.inventoryVersion).toBe(5);
+    expect(res.manifest.inventoryVersion).toBe(6);
     expect(typeof res.manifest.schemaVersion).toBe("number");
     // SHA-256 in the manifest is the hash of the actual snapshot file.
     const fileBytes = fs.readFileSync(res.attempt.snapshotPath!);
@@ -199,7 +218,9 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     expect(res.manifest.snapshotSha256).toBe(sha);
     expect(res.manifest.snapshotBytes).toBe(fileBytes.length);
     // Per-table counts for every included table; excluded table absent.
-    expect(Object.keys(res.manifest.tableCounts).length).toBe(114);
+    // (126 = inventory v6's included count: 114 at v5 + the 12 relic_*
+    // tables the Relics landing added — see the census pin above.)
+    expect(Object.keys(res.manifest.tableCounts).length).toBe(126);
     expect(res.manifest.tableCounts["spaces"]).toBe(1);
     expect(res.manifest.tableCounts["nodes"]).toBe(1);
     expect(res.manifest.tableCounts["travel_journeys"]).toBe(0);
@@ -218,7 +239,7 @@ describe("G0 B1 snapshot + manifest + local verification", () => {
     expect(v.ok).toBe(true);
     expect(v.integrity).toBe("ok");
     expect(v.foreignKeyViolations).toBe(0);
-    expect(v.countsChecked).toBe(114);
+    expect(v.countsChecked).toBe(126);
   });
 
   it("G0-AC-04 wiped-DB guard: an empty brain fails verification at the verify stage when enforcement is on", () => {

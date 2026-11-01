@@ -71,7 +71,12 @@ describe("C2 — the loop is provable", () => {
     const first = runNpcTick(handle, "spaceA", "harbor-controller", T0);
     expect(first.acted).toBe(true);
     expect(first.entry?.kind).toBe("explore");
-    expect(first.entry?.act).toContain("found no relic");
+    // Relics I-5 (§5.5): the explore is a real find attempt through
+    // the unified claim core now — the first explore FINDS the
+    // Harbor Nail and the log names the find. (Before I-5 an explore
+    // could find nothing, and this asserted the fixed "found no
+    // relic" outcome string.)
+    expect(first.entry?.act).toContain("Harbor Nail");
     expect(first.entry?.cause).toBeTruthy();
 
     const second = runNpcTick(handle, "spaceA", "harbor-controller", AFTER_TICK);
@@ -131,15 +136,25 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     expect(getNpcState(handle, "spaceA", "harbor-controller", T0).gateOpen).toBe(false);
     repo().addHolding("harbor-controller", "witness-without-a-name", "great-station", T0);
     repo().addHolding("harbor-controller", "mooring-ring", "great-station", T0);
-    const stillClosed = runNpcTick(handle, "spaceA", "harbor-controller", T0);
+    // Witness + ONE other is not the set — still closed before any tick.
     expect(getNpcState(handle, "spaceA", "harbor-controller", T0).gateOpen).toBe(false);
-    expect(stillClosed.entry?.act).toContain("found no relic");
+    // Relics I-5 (§5.5): the tick's explore is a real hunt — the
+    // controller finds the Harbor Nail through the unified claim
+    // core, and THAT find completes the set (Witness + two others),
+    // so the gate opens on this very tick and is marked in it.
+    // (Before I-5 the explore could find nothing — "found no relic" —
+    // and the gate stayed shut until a third holding was seeded.)
+    const huntTick = runNpcTick(handle, "spaceA", "harbor-controller", T0);
+    expect(huntTick.entry?.act).toContain("Harbor Nail");
+    const afterHunt = getNpcState(handle, "spaceA", "harbor-controller", T0);
+    expect(afterHunt.gateOpen).toBe(true);
+    expect(afterHunt.relicsHeld).toBe(3);
 
     repo().addHolding("harbor-controller", "dawn-leaf", "great-station", T0);
     runNpcTick(handle, "spaceA", "harbor-controller", AFTER_TICK);
     const st = getNpcState(handle, "spaceA", "harbor-controller", AFTER_TICK);
     expect(st.gateOpen).toBe(true);
-    expect(st.relicsHeld).toBe(3);
+    expect(st.relicsHeld).toBe(4);
     // Once opened it stays open even if the holdings row is read later.
     expect(repo().gateOpen("harbor-controller")).toBe(true);
   });
@@ -149,8 +164,57 @@ describe("C4 — cannot find the way, so it explores, leaves, comes back", () =>
     const tables = handle.sqlite
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE '%relic%'`)
       .all() as { name: string }[];
-    expect(tables.map((t) => t.name)).toEqual(["npc_relic_holdings"]);
+    // Relic Buffs v2 (design note v2 §5, lines 195–210): the PLAYER pool
+    // now exists by design — `relic_holdings` (one row per found copy)
+    // and its `relic_returns` audit table are created by the established
+    // bootstrap + migration dual DDL and join SPACE_SCOPED_TABLES. So
+    // the pre-v2 proxy for this test's invariant ("the only relic table
+    // is the NPC one") is obsolete: all three tables are expected. The
+    // invariant itself — an NPC holding lives ONLY in the NPC pool and
+    // consumes no player/scarcity copy — is unchanged, and is asserted
+    // directly below instead.
+    // Relics I-2 adds `relic_copies` + `relic_copy_events` (the physical
+    // copy pool and its chains) via the same dual DDL. addHolding itself
+    // still writes ONLY npc_relic_holdings; conversion of NPC holdings
+    // into unified-pool copies happens in the holdings store's backfill
+    // (holder_kind='npc'), which this test never invokes — the direct
+    // assertions below (no player-pool rows) are the invariant.
+    // Relics I-3 adds `relic_gate_opened` (the player's gate-permanence
+    // record, mirroring npc_gate) via the same dual DDL. It is a player
+    // record; the NPC invariant below is untouched.
+    // Relics I-4 adds `relic_position_samples`, `relic_claim_attempts`,
+    // `relic_codex_layers`, and `relic_first_discoveries` (the sampled
+    // claim's evidence, receipts, layer unlocks, and world discovery
+    // record) via the same dual DDL. All are player/world records; the
+    // NPC invariant below is untouched (NPC claims join this core in
+    // I-5, by design).
+    // Relics I-5 adds `relic_stirrings` (the hunt's invitations, each
+    // promising one specific placed copy) via the same dual DDL, and
+    // unifies the pool: an NPC CLAIM (relics/claims.ts claimForNpc)
+    // binds a real copy from the shared pool with holder_kind='npc'
+    // while writing its npc_relic_holdings row in the same
+    // transaction. addHolding — the direct seed this test uses —
+    // still writes ONLY the NPC table, so the invariant below (no
+    // player-pool rows from an NPC holding) stands as written.
+    // Relics I-6 adds `relic_seed_effects` (a Seed's permanent effect,
+    // recorded once per space) and `relic_exchange_attempts` (the
+    // Legacy exchange's receipts) via the same dual DDL. Both are
+    // player records; the NPC invariant below is untouched.
+    expect(new Set(tables.map((t) => t.name))).toEqual(
+      new Set(["npc_relic_holdings", "relic_holdings", "relic_returns", "relic_copies", "relic_copy_events", "relic_gate_opened", "relic_position_samples", "relic_claim_attempts", "relic_codex_layers", "relic_first_discoveries", "relic_stirrings", "relic_seed_effects", "relic_exchange_attempts"]),
+    );
     expect(repo().holdings("harbor-controller")).toEqual(["witness-without-a-name"]);
+    // No row for this space (or any space) appeared in the player pool:
+    // the NPC's Witness copy does not count against the player's
+    // 3-copy Eternity scarcity pool.
+    const playerRows = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS n FROM relic_holdings`)
+      .get() as { n: number };
+    expect(playerRows.n).toBe(0);
+    const playerWitness = handle.sqlite
+      .prepare(`SELECT COUNT(*) AS n FROM relic_holdings WHERE space_id = ? AND relic_id = ?`)
+      .get("spaceA", "witness-without-a-name") as { n: number };
+    expect(playerWitness.n).toBe(0);
   });
 });
 

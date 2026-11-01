@@ -6,7 +6,7 @@ import {
   fitRelicToAnchor,
   relicGlowTexture,
 } from "./relicAssets.js";
-import { discoverableRelics } from "@brain/shared";
+import { RELICS, RELIC_ANCHOR_POINTS, discoverableRelics } from "@brain/shared";
 import { DEEP_PAST_BASIN_Y, DEEP_PAST_BASIN_RADIUS, deepPastFloorY } from "./deepPastLayout.js";
 import { GARDEN_TERRACE_HEIGHT, GARDEN_TERRACE_COUNT } from "./gardenLayout.js";
 import { PEOPLE_FIELD_RADIUS } from "./peopleLayout.js";
@@ -92,6 +92,35 @@ describe("relic anchors", () => {
     expect(threadR - 22).toBeGreaterThan(540);
     expect(threadR + 22).toBeLessThan(620);
     expect(thread.position[1]).toBeGreaterThan(0);
+  });
+});
+
+describe("shared anchor points parity (I-1, sets since I-2)", () => {
+  it("the server's first anchor per relic agrees with the scene anchor", () => {
+    // One truth, two readers (implementation design §3.2): the scene
+    // derives placement from the world layout constants; the shared
+    // registry carries the evaluated facts for the server. I-2 expanded
+    // the shared side to anchor SETS (physical copies need several
+    // resting places); the scene keeps placing the relic at its FIRST
+    // resting place, so parity is asserted on the first entry. If either
+    // side changes alone, this test fails — the two cannot drift.
+    for (const def of RELICS) {
+      const shared = RELIC_ANCHOR_POINTS[def.id];
+      expect(shared, def.id).toBeDefined();
+      const scene = RELIC_ANCHORS[def.id];
+      if (!scene) {
+        // Unplaced on the scene side = empty set on the server side.
+        expect(shared, def.id).toEqual([]);
+        continue;
+      }
+      expect(shared!.length, def.id).toBeGreaterThan(0);
+      expect([...shared![0]!.position]).toEqual([...scene.position]);
+      expect(shared![0]!.world).toBe(def.world);
+    }
+    // And no scene anchor exists for a relic the registry doesn't know.
+    for (const id of Object.keys(RELIC_ANCHORS)) {
+      expect(RELIC_ANCHOR_POINTS[id]?.length, id).toBeGreaterThan(0);
+    }
   });
 });
 

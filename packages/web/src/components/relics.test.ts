@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   RELICS,
+  RELIC_ANCHOR_POINTS,
+  RELIC_ANCHOR_RADIUS,
   RELIC_BY_ID,
   RELIC_CODEX_KEYS,
+  RELIC_THREADS,
+  WORLD_BEARING_SECTORS,
   discoverableRelics,
   eternityGateOpen,
   relicCodexKey,
@@ -108,5 +112,155 @@ describe("relic registry", () => {
     expect(
       eternityGateOpen(["witness-without-a-name", "harbor-nail", "not-a-relic"]),
     ).toBe(false);
+  });
+});
+
+/**
+ * The I-1 vocabulary (implementation design §3): tier classes, lore-layer
+ * structures, and server-known anchor points — data only, shipped dark.
+ * NO lore text exists yet anywhere in the new structures (O-R1: the
+ * owner approves every canon line before it becomes text). The tier
+ * classes themselves were ruled by the O-R5 worksheet session (tier
+ * decisions, 2026-10-30): all fifteen are assigned — 4 Keystones,
+ * 3 Seeds, 8 Legacies — and this parity test now pins the full map.
+ */
+describe("relic vocabulary (I-1)", () => {
+  it("assigns every relic its ruled tier class — the full O-R5 map, none null", () => {
+    expect(RELICS.map((r) => `${r.id}:${r.tierClass}`)).toEqual([
+      "harbor-nail:keystone",
+      "mooring-ring:seed",
+      "dawn-leaf:seed",
+      "witness-seed:keystone",
+      "first-light-shard:legacy",
+      "basin-stone:legacy",
+      "lantern-of-keeping:legacy",
+      "witness-without-a-name:keystone",
+      "hearth-ember:legacy",
+      "thread-of-many:keystone",
+      "star-hanger:legacy",
+      "sunward-compass:legacy",
+      "stillness-seal:seed",
+      "unopened-fold:legacy",
+      "unnumbered-fragment:legacy",
+    ]);
+    for (const r of RELICS) {
+      // The field is PRESENT on every def — a stated value, never a
+      // missing property a consumer could misread as a class.
+      expect("tierClass" in r, r.id).toBe(true);
+      expect(r.tierClass, r.id).not.toBeNull();
+    }
+    // The naming trap, ruled: class follows nature, not name — the
+    // relic NAMED Witness Seed is a Keystone, and no relic with
+    // "Seed" in its name is in the Seed class.
+    expect(RELIC_BY_ID.get("witness-seed")!.tierClass).toBe("keystone");
+  });
+
+  it("carries the entered canon in the lore structures (O-R1, entered 2026-10-31)", () => {
+    // The canon entry: every def now carries its approved L0 stirring
+    // and the approved L2 expansion. Character-exact parity against
+    // the owner's approvals ledger is pinned server-side in
+    // relicCanon.test.ts; this suite pins the structure and the ids.
+    for (const r of RELICS) {
+      expect(typeof r.loreStirring, r.id).toBe("string");
+      expect(r.loreStirring!.length, r.id).toBeGreaterThan(0);
+      expect(r.lore.length, r.id).toBeGreaterThan(0);
+    }
+    // Exactly the seven fully-placed threads, under their permanent
+    // ids; the four NOT-YET threads (T8–T11) stay absent until O-R6
+    // placement (design §3.3).
+    expect(RELIC_THREADS.map((t) => t.threadId)).toEqual([
+      "harbor-nail--mooring-ring",
+      "witness-seed--dawn-leaf",
+      "first-light-shard--witness-without-a-name",
+      "basin-stone--lantern-of-keeping",
+      "hearth-ember--thread-of-many",
+      "harbor-nail--basin-stone",
+      "witness-seed--witness-without-a-name",
+    ]);
+    for (const t of RELIC_THREADS) {
+      expect(t.condition, t.threadId).toBe("discovery");
+      expect(t.approved, t.threadId).toBe(true);
+      expect(t.text!.length, t.threadId).toBeGreaterThan(0);
+    }
+    const worlds = Object.keys(WORLD_BEARING_SECTORS).sort();
+    expect(worlds).toEqual([
+      "deep-past",
+      "great-station",
+      "growing-place",
+      "people",
+      "quiet-archive",
+      "scale",
+    ]);
+    for (const sectors of Object.values(WORLD_BEARING_SECTORS)) {
+      expect(sectors).toEqual([]);
+    }
+  });
+
+  it("gives every placed relic a server-known anchor SET (I-2); the unplaced get empty sets", () => {
+    // The FIRST anchor key per relic is a stable id — provenance records
+    // cite anchor keys, so the first entries are pinned exactly, not just
+    // by prefix. Set sizes follow the design's §3.2 minimums: a set must
+    // hold at least the definition's copy limit (7 public, 3
+    // Eternity-class) or at least 3 for private-class relics, and every
+    // pair of anchors in a set sits at least a claim diameter apart
+    // (2 × RELIC_ANCHOR_RADIUS) so two copies never overlap.
+    const expectedKeys: Record<string, string> = {
+      "harbor-nail": "harbor-nail:lower-rim",
+      "mooring-ring": "mooring-ring:harbor-road",
+      "dawn-leaf": "dawn-leaf:witness-roots",
+      "witness-seed": "witness-seed:trunk-base",
+      "first-light-shard": "first-light-shard:basin-floor",
+      "basin-stone": "basin-stone:basin-floor",
+      "lantern-of-keeping": "lantern-of-keeping:lowest-alcove",
+      "witness-without-a-name": "witness-without-a-name:basin-center",
+      "hearth-ember": "hearth-ember:first-hearths",
+      "thread-of-many": "thread-of-many:field-edge",
+    };
+    const minSizes: Record<string, number> = {
+      "harbor-nail": 7, "mooring-ring": 7,
+      "witness-without-a-name": 3, "unnumbered-fragment": 3,
+    };
+    for (const r of RELICS) {
+      const points = RELIC_ANCHOR_POINTS[r.id];
+      expect(points, r.id).toBeDefined();
+      if (!r.discoverable) {
+        expect(points, r.id).toEqual([]);
+        continue;
+      }
+      expect(points!.length, r.id).toBeGreaterThanOrEqual(minSizes[r.id] ?? 3);
+      const keys = points!.map((p) => p.anchorKey);
+      expect(new Set(keys).size, r.id).toBe(keys.length);
+      const a = points![0]!;
+      expect(a.anchorKey).toBe(expectedKeys[r.id]);
+      expect(a.world).toBe(r.world);
+      // The first anchor's placeName is the registry's own place words.
+      expect(a.placeName).toBe(r.place);
+      // Canon entry (Decision 1A): the FIRST anchor carries the
+      // relic's approved L1 place text; later anchors carry none yet.
+      expect(typeof a.placeText, r.id).toBe("string");
+      expect(a.placeText!.length, r.id).toBeGreaterThan(0);
+      for (const p of points!) {
+        expect(p.world, r.id).toBe(r.world);
+        expect(p.radius, r.id).toBe(RELIC_ANCHOR_RADIUS);
+        if (p !== a) expect(p.placeText, r.id).toBeUndefined();
+        for (const v of p.position) expect(Number.isFinite(v)).toBe(true);
+      }
+      for (let i = 0; i < points!.length; i++) {
+        for (let j = i + 1; j < points!.length; j++) {
+          const d = Math.hypot(
+            points![i]!.position[0] - points![j]!.position[0],
+            points![i]!.position[1] - points![j]!.position[1],
+            points![i]!.position[2] - points![j]!.position[2],
+          );
+          expect(d, `${r.id} anchors ${i}/${j}`).toBeGreaterThanOrEqual(2 * RELIC_ANCHOR_RADIUS);
+        }
+      }
+    }
+  });
+
+  it("the anchor-points record covers exactly the fifteen relics — no stray keys", () => {
+    expect(Object.keys(RELIC_ANCHOR_POINTS).sort()).toEqual(
+      RELICS.map((r) => r.id).sort(),
+    );
   });
 });

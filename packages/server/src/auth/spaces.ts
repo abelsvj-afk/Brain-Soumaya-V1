@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { DbHandle } from "../db/client.js";
 import { DEFAULT_SPACE, spaces, type SpaceRow } from "../db/schema.js";
+import { RelicHoldingsStore } from "../relics/holdings.js";
 
 /**
  * Lightweight per-brain auth: a space is opened by name + passcode and works
@@ -182,6 +183,41 @@ export const SPACE_SCOPED_TABLES = [
   "notification_outbox",
   "travel_journey_events",
   "travel_journeys",
+  "relic_holdings",
+  "relic_returns",
+  // Relics I-2: a copy's event rows that name this space are the space's
+  // data and die with it (D-05 census). relic_copies itself is NOT
+  // listed: copies are world objects with no space_id column — a
+  // returned copy outlives the brain that held it, and test/private
+  // copies are removed by releaseAllForSpace before the census runs.
+  "relic_copy_events",
+  // Relics I-3: the gate-permanence record is the space's own row
+  // (space_id is its primary key) — it dies with the brain like every
+  // other per-space record.
+  "relic_gate_opened",
+  // Relics I-4: the space's position samples (its own movement
+  // evidence), its claim receipts, and its Codex layer unlocks are
+  // per-space rows — they die with the brain. relic_first_discoveries
+  // joins them under the same rule (the I-2 copy-events precedent):
+  // a row naming this space as discoverer is the space's data and is
+  // erased with it, even for the public scope — erasure takes
+  // precedence over world-history preservation, and a later claim may
+  // then record the earliest SURVIVING discovery.
+  "relic_position_samples",
+  "relic_claim_attempts",
+  "relic_codex_layers",
+  "relic_first_discoveries",
+  // Relics I-5: a stirring is the space's own invitation (its open
+  // window, its promised copy) — a per-space row that dies with the
+  // brain like every other. The promised copy itself is a world
+  // object and is NOT erased: it simply rests on, unpromised.
+  "relic_stirrings",
+  // Relics I-6: a space's recorded Seed effects and its exchange
+  // receipts are per-space rows (the space's own permanent effects
+  // and its own exchange history) — they die with the brain under
+  // the same erasure rule as every other relic record above.
+  "relic_seed_effects",
+  "relic_exchange_attempts",
   // NPC autonomy (Wave 2): the loop's log, state, separate-pool
   // holdings, and gate rows are per-space rows — brain deletion must
   // remove them too.
@@ -335,8 +371,12 @@ export class SpacesRepo {
         // fallback exists for pre-migration brains; without this row, a fresh
         // space would inherit whatever the legacy owner set (fail-open to paid
         // autonomous work if that was "true").
+        // Relic Buffs v2 (P1 fix): a space created after the relics ship
+        // migration is born already legacy-synced (relic_legacy_synced = 1)
+        // and carries no legacy-eligibility marker (column default 0), so
+        // the one-time pre-ship legacy sync refuses it from its first call.
         this.h.sqlite
-          .prepare(`INSERT OR IGNORE INTO space_meta (space_id, research_enabled) VALUES (?, 'false')`)
+          .prepare(`INSERT OR IGNORE INTO space_meta (space_id, research_enabled, relic_legacy_synced) VALUES (?, 'false', 1)`)
           .run(id);
       }
     });
@@ -432,6 +472,17 @@ export class SpacesRepo {
       `SELECT 1 AS x FROM sqlite_master WHERE name = ?`,
     );
     const tx = sqlite.transaction(() => {
+      // Relic Buffs v2 §6 / Relics I-2: a deleted brain's COUNTED relic
+      // copies return to their pools first — releaseAllForSpace returns
+      // them through their event chains before any space rows are deleted
+      // below. The census then removes this space's event rows like any
+      // other space data (D-05): a returned copy keeps its post-return
+      // 'placed' events (they name no space), so its placement history
+      // continues from its return placement; the deleted brain's own
+      // events are erased with the brain. relic_copies is not a census
+      // table — copies are world objects, and releaseAllForSpace has
+      // already removed this brain's test/private copies above.
+      new RelicHoldingsStore(this.h).releaseAllForSpace(id);
       // Derived indexes first, while the entity rows still exist to select
       // the space's ids from.
       for (const [indexTable, keyColumn, entityTable] of DERIVED_INDEXES) {

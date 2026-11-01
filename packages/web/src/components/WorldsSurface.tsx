@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { TRAVEL_CANCEL_WINDOW_SECONDS, WORLDS_TRAVEL_ENABLED, relicCodexKey, relicsForWorld } from "@brain/shared";
+import { TRAVEL_CANCEL_WINDOW_SECONDS, WORLDS_TRAVEL_ENABLED, RELIC_ANCHOR_POINTS, RELIC_DWELL_MS, relicCodexKey, relicsForWorld } from "@brain/shared";
 import { useTravel } from "../hooks/useTravel.js";
 import { recallHome } from "../api/travel.js";
 import { getJourneys, journeyLinks } from "../api/journeys.js";
@@ -123,7 +123,10 @@ import { pushToast } from "./Toasts.js";
 import { useStoryNotice } from "../hooks/useStoryNotice.js";
 import { inspectablesHere, locateLandmarks, makeReach } from "../graph/storySpots.js";
 import { STORY_TRIGGERS, hourBand } from "@brain/shared";
-import { markRelicFound, useFoundRelics } from "./relicsFound.js";
+import { markRelicFound, replaceFoundRelics, useFoundRelics } from "./relicsFound.js";
+import { findRelic, sampleRelicClaimStart, type RelicsState } from "../api/relics.js";
+import { RelicHuntControls } from "./RelicHuntControls.js";
+import { useRelicBuffs } from "../hooks/useRelicBuffs.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { renderIcon } from "./icons/Icon.js";
@@ -802,6 +805,21 @@ export default function WorldsSurface({
   equippedTrail?: string;
 }) {
   const travel = useTravel(enabled);
+  const { state: relicBuffs } = useRelicBuffs(enabled);
+  const stickyRisenRef = useRef<Set<number>>(new Set());
+  const [stickyRisenTick, setStickyRisenTick] = useState(0);
+  const [findError, setFindError] = useState<string | null>(null);
+  // Relics I-4: the relic whose dwell-and-claim moment is in progress.
+  const [settlingRelic, setSettlingRelic] = useState<string | null>(null);
+  // Relics I-7: the hunt's visible state — the latest relics state view
+  // (the buffs hook's, refreshed by every claim answer, which carries a
+  // fresh state on success AND refusal) and the per-relic claim notices
+  // (the server's plain refusal sentences, shown beside their glimmer).
+  const [relicState, setRelicState] = useState<RelicsState | null>(null);
+  // Adopt the hook's view only as the FIRST load (review P2-3): a late
+  // hook fetch must never overwrite a fresher claim answer's state.
+  useEffect(() => { if (relicBuffs) setRelicState((prev) => prev ?? relicBuffs); }, [relicBuffs]);
+  const [claimNotices, setClaimNotices] = useState<Record<string, string>>({});
   const [dismissed, setDismissed] = useState(false);
   // The scene layer never takes over the screen just because the SERVER remembers where you
   // were (a saved world, or a journey the last session never finished — the old build never
@@ -1662,8 +1680,21 @@ export default function WorldsSurface({
   // the helix still renders, honestly, without it.
   const deepPastLayout = useMemo<DeepPastLayout | undefined>(() => {
     if (!atDeepPast || !graph) return undefined;
-    return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map());
-  }, [atDeepPast, graph, journeys, journeyLinksMap]);
+    return buildDeepPastLayout(graph, journeys ?? [], journeyLinksMap ?? new Map(), new Date(), {
+      warmDays: relicBuffs?.buffs.riseWindowDays ?? 30,
+      stickyRisenIds: relicBuffs?.buffs.risenHold ? stickyRisenRef.current : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atDeepPast, graph, journeys, journeyLinksMap, relicBuffs, stickyRisenTick]);
+
+  // Lantern of Keeping: risen members stay risen for the visit; leaving clears the set.
+  useEffect(() => {
+    if (!atDeepPast) { stickyRisenRef.current.clear(); return; }
+    if (!relicBuffs?.buffs.risenHold || !deepPastLayout) return;
+    let grew = false;
+    for (const mm of deepPastLayout.members) if (mm.risen && !stickyRisenRef.current.has(mm.nodeId)) { stickyRisenRef.current.add(mm.nodeId); grew = true; }
+    if (grew) setStickyRisenTick((n) => n + 1);
+  }, [atDeepPast, deepPastLayout, relicBuffs?.buffs.risenHold]);
 
   const deepPastLayoutRef = useRef<DeepPastLayout | undefined>(undefined);
   deepPastLayoutRef.current = deepPastLayout;
@@ -1896,11 +1927,54 @@ export default function WorldsSurface({
     );
   }, [atWorld, currentWorld, visibleRelics, foundRelics]);
 
-  const onFindRelic = (relic: RelicDef) => {
-    if (!spaceId) return;
-    markRelicFound(spaceId, relicCodexKey(relic.id));
-    pushToast(`You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
+  // A5: a find is recorded locally ONLY on server success. A failure leaves
+  // the glimmer in place with a plain retry line and no celebration.
+  // Relics I-4: the glimmer button is now the dwell-and-claim moment.
+  // The scene rests the relic at its first anchor (the parity-held
+  // scene position), so "Look closer" reports the settling sample at
+  // that anchor, dwells while the server measures the dwell from its
+  // own receipt stamps, then claims under a fresh claimId. The full
+  // hunt surface (scan pulse readout, free movement) is I-7.
+  const onFindRelic = async (relic: RelicDef) => {
+    if (!spaceId || settlingRelic) return;
+    const anchor = RELIC_ANCHOR_POINTS[relic.id]?.[0];
+    if (!anchor) {
+      setFindError("That glimmer has no resting place yet — it cannot be claimed.");
+      return;
+    }
+    const position = [...anchor.position];
+    const sampled = await sampleRelicClaimStart(position);
+    if (!sampled.ok) {
+      setFindError(sampled.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready.");
+      return;
+    }
+    setSettlingRelic(relic.id);
+    setFindError(null);
+    // A breath of margin over the dwell the server measures.
+    await new Promise((r) => setTimeout(r, RELIC_DWELL_MS + 250));
+    const claimId = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `claim-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const out = await findRelic(relic.id, claimId, position);
+    setSettlingRelic(null);
+    // I-7: every claim answer carries a fresh state — refusals included —
+    // so a stirring that resolved (claimed / gone quiet) shows its new
+    // state beside the glimmer at once, in the server's own vocabulary.
+    if (out.state) setRelicState(out.state);
+    if (!out.ok) {
+      setClaimNotices((m) => ({ ...m, [relic.id]: out.error ?? "That find didn't go through — the glimmer is still here. Try again when you're ready." }));
+      if (out.state) replaceFoundRelics(spaceId, out.state.found.map((id) => relicCodexKey(id)));
+      return;
+    }
+    setClaimNotices((m) => { const next = { ...m }; delete next[relic.id]; return next; });
+    if (out.state) replaceFoundRelics(spaceId, out.state.found.map((id) => relicCodexKey(id)));
+    else markRelicFound(spaceId, relicCodexKey(relic.id));
     void storyRef.current.onRelic(relic.id);
+    // The claim celebration carries the L2 fragment the server just
+    // unlocked for this viewer — text it sent, never text invented here.
+    const frag = out.state?.codex?.find((c) => c.relicId === relic.id)?.layers.description;
+    const fragText = frag?.state === "unlocked" ? frag.text : undefined;
+    pushToast(fragText ? `You found ${relic.name}. ${fragText}` : `You found ${relic.name} — it's in your Codex now.`, "🏺", 6000, "high");
   };
   findRelicRef.current = onFindRelic;
 
@@ -3570,9 +3644,12 @@ export default function WorldsSurface({
         </p>
       )}
       {mode === "world" && glimmers.length > 0 && (() => {
-        // Glimmer region (§8 fix): ONE container, at most 3 rows, never
-        // overlapping. Deep Past orders by closeness to the traveller's
-        // current depth — its relics rest at the basin (stratum 8).
+        // Union (main landing): the program's hunt surface renders the
+        // glimmers inside main's §8 containment (ONE container, at most
+        // 3 rows, "+N more" overflow), ordered by main's Deep Past
+        // closeness rule; "Look closer" routes through
+        // onGlimmerLookCloser so a Deep Past find still flies to the
+        // basin first and claims on arrival.
         const currentStratum = !atDeepPast
           ? 0
           : dpMode === "perch"
@@ -3587,12 +3664,17 @@ export default function WorldsSurface({
         return (
           <div className="worlds-glimmers" role="group" aria-label="Something glimmers">
             {ordered.slice(0, 3).map((r) => (
-              <div key={r.id} className="worlds-glimmer-row">
-                Something glimmers {r.glimmer}.{" "}
-                <button type="button" onClick={() => onGlimmerLookCloser(r)}>
-                  Look closer
-                </button>
-              </div>
+              <RelicHuntControls
+                key={r.id}
+                relicId={r.id}
+                relicName={r.name}
+                glimmer={r.glimmer}
+                settling={settlingRelic === r.id}
+                onLookCloser={() => onGlimmerLookCloser(r)}
+                scanPosition={RELIC_ANCHOR_POINTS[r.id]?.[0] ? [...RELIC_ANCHOR_POINTS[r.id]![0]!.position] : [0, 0, 0]}
+                stirring={(() => { const list = (relicState?.stirrings ?? []).filter((s) => s.relicId === r.id); return list.find((s) => s.state === "open") ?? list[list.length - 1] ?? null; })()}
+                notice={claimNotices[r.id] ?? null}
+              />
             ))}
             {glimmers.length > 3 && (
               <div className="worlds-glimmer-row">
@@ -3602,6 +3684,9 @@ export default function WorldsSurface({
           </div>
         );
       })()}
+      {mode === "world" && findError && (
+        <p className="worlds-surface-fallback" role="alert">{findError}</p>
+      )}
       {mode === "world" && atDeepPast && (dpMode === "perch" || (dpMode === "walk" && dpAtLanding !== null)) && (() => {
         // Stratum label (§7.2): the landing names itself, from the layout.
         const n = dpMode === "perch" ? dpPerchStratum : dpAtLanding;

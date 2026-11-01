@@ -6,6 +6,7 @@ import { EdgesRepo } from "../repositories/edges.repo.js";
 import { knn, getEmbedding, upsertEmbedding } from "../db/vec.js";
 import { ftsUpsert } from "../db/fts.js";
 import { isRejected, recordRejection } from "./rejections.js";
+import { buffsForSpace, applyGrowthMultiplier } from "../relics/buffs.js";
 // Pure token / name-matching helpers live in cognitiveTokens.ts (Post-MVP D4). Import
 // what this module uses internally; re-export the public ones so people/candidates/
 // identity's `import … from "./cognitive.js"` are unchanged.
@@ -398,12 +399,14 @@ export function setCognitiveProgress(
   id: number,
   value: number,
 ): boolean {
-  const v = Math.max(0, Math.min(1, value));
   const s = ctx.handle.sqlite;
   const row = s
-    .prepare(`SELECT kind, label, completed_at AS completedAt FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
-    .get(id, spaceId) as { kind: string; label: string; completedAt: string | null } | undefined;
+    .prepare(`SELECT kind, label, completed_at AS completedAt, progress FROM nodes WHERE id = ? AND space_id = ? AND deleted_at IS NULL`)
+    .get(id, spaceId) as { kind: string; label: string; completedAt: string | null; progress: number | null } | undefined;
   if (!row) return false;
+  // Relic Buffs v2 §10: growth-slowing held relics scale INCREASES only;
+  // a self-made decrease is applied unscaled. Computed fresh, never stored.
+  const v = applyGrowthMultiplier(row.progress ?? 0, value, buffsForSpace(ctx.handle, spaceId).growthMultiplier);
 
   const justCompleted = row.kind === "goal" && row.completedAt == null && v >= GOAL_COMPLETE_THRESHOLD;
   s.prepare(

@@ -59,6 +59,7 @@ export const DEEP_PAST_STRATA_COUNT = 9;
 export const DEEP_PAST_MIN_AGE_YEARS = 1;
 /** Context stays warm for this long after a tend or a link (named, owner-correctable). */
 export const DEEP_PAST_WARM_DAYS = 30;
+export type DeepPastRiseReason = "tended recently" | "linked recently" | "held risen";
 
 /** Helix geometry (rework design note §3: the pre-asset mockup's ×1
  *  proportions): radius shrinks and depth grows toward the basin; the arc
@@ -239,7 +240,7 @@ export interface DeepPastMember {
   homeZ: number;
   /** The rise (A22): warm context brought this member forward, in presentation only. */
   risen: boolean;
-  riseReason: "tended recently" | "linked recently" | null;
+  riseReason: DeepPastRiseReason | null;
   /** P6: one plain line naming the rule inputs that placed this member here. */
   why: string;
 }
@@ -386,8 +387,9 @@ function warmContext(
   node: GraphNode,
   touchingEdges: { createdAt: string }[],
   now: Date,
+  warmDays: number = DEEP_PAST_WARM_DAYS,
 ): "tended recently" | "linked recently" | null {
-  const warmMs = DEEP_PAST_WARM_DAYS * 24 * 60 * 60 * 1000;
+  const warmMs = warmDays * 24 * 60 * 60 * 1000;
   const tended = parseDate(node.lastTendedAt);
   if (tended && now.getTime() >= tended.getTime() && now.getTime() - tended.getTime() <= warmMs) {
     return "tended recently";
@@ -405,7 +407,7 @@ function whyLine(
   placedAt: Date,
   yearsAgo: number,
   stratum: number,
-  riseReason: "tended recently" | "linked recently" | null,
+  riseReason: DeepPastRiseReason | null,
   stillYear: number,
 ): string {
   const year = utcYear(placedAt);
@@ -414,6 +416,9 @@ function whyLine(
   }
   if (riseReason === "linked recently") {
     return `Kept since ${year} — risen because it was linked again recently; it rests at the rim while its context is warm, and returns to depth ${stratum + 1} of ${DEEP_PAST_STRATA_COUNT} when that cools.`;
+  }
+  if (riseReason === "held risen") {
+    return `Kept since ${year} — risen and held at the rim for this visit; it returns to depth ${stratum + 1} of ${DEEP_PAST_STRATA_COUNT} when the visit ends.`;
   }
   return `Kept since ${year} — ${yearsAgo} year${yearsAgo === 1 ? "" : "s"} old, quiet since ${stillYear}, resting at depth ${stratum + 1} of ${DEEP_PAST_STRATA_COUNT}.`;
 }
@@ -436,6 +441,7 @@ export function buildDeepPastLayout(
   journeys: Journey[],
   journeyLinks: Map<number, JourneyLinkSummary[]>,
   now: Date = new Date(),
+  opts: { warmDays?: number; stickyRisenIds?: ReadonlySet<number> } = {},
 ): DeepPastLayout {
   // Canonical input ordering (C1): id-ascending before anything is derived,
   // so the same logical data in any arrival order lays out identically.
@@ -465,7 +471,8 @@ export function buildDeepPastLayout(
     if (placedAt === null || stratum === null) continue; // too young, or age unreadable: excluded, never guessed
     const yearsAgo = utcYear(now) - utcYear(placedAt);
     const still = parseDate(node.lastTendedAt) ?? placedAt;
-    const riseReason = warmContext(node, touching.get(node.id) ?? [], now);
+    const warm = warmContext(node, touching.get(node.id) ?? [], now, opts.warmDays ?? DEEP_PAST_WARM_DAYS);
+    const riseReason: DeepPastRiseReason | null = warm ?? (opts.stickyRisenIds?.has(node.id) ? "held risen" : null);
     const home = alcovePosition(node.id, stratum);
     const pos = riseReason ? shelfPosition(node.id) : home;
     const member: DeepPastMember = {
