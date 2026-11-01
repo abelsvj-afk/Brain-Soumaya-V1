@@ -104,7 +104,18 @@ function buildSystemExtra(): string {
     "For the memory games, drive memory_quiz / constellation_tour with their action argument across turns (start, then answer/next/jump as the user replies, end to close) " +
     "and present their questions and narration verbatim — never invent a quiz answer or a tour connection yourself. " +
     "If the user says a quiz memory or answer is WRONG, call memory_quiz with action \"correct\" and their corrected statement, then follow its instruction: " +
-    "propose capture_memory with that corrected statement (a WRITE — it needs their \"yes\") and never claim the original memory was edited."
+    "propose capture_memory with that corrected statement (a WRITE — it needs their \"yes\") and never claim the original memory was edited.\n" +
+    "- search_my_words vs memory_search: when the user asks what they SAID, wrote, or recorded (\"what did I say about…\", \"did I ever write…\"), call search_my_words FIRST — it returns their exact preserved words. " +
+    "When they ask what they THINK or what is true now, memory_search (derived memories) leads and search_my_words can back it up with their wording. " +
+    "When search_my_words answers, LEAD with the excerpts and their citations; any synthesis of your own comes after and is labeled as your synthesis, never blended into a quote.\n" +
+    "- Quote ONLY search_my_words excerpts (marked quotable). NEVER quote a memory_search node as the user's words — nodes are derived summaries; you may mention a linked node by its label as provenance (\"this fed into your memory about X\"), never as a quotation.\n" +
+    "- If search_my_words returns no excerpts, that IS the answer: say plainly that nothing matching was found in their preserved words, and ground it with the coverage it reports (how many preserved sources were searched and when the earliest one reaches back to, with its time). " +
+    "Do not fill the gap with node summaries dressed as their words; if you mention related memories at all, label them as summaries, not quotes.\n" +
+    "- When an excerpt is flagged corrected or conflicted, say so in plain words (\"this passage was corrected\", \"part of this was later disputed\") — never present a corrected reading as the untouched original. " +
+    "If he asks what he ORIGINALLY said about a corrected passage, the original wording lives in the source itself — say in one plain sentence that the original is preserved at the source and can be pulled up exactly.\n" +
+    "- Meaning-based (semantic) hits are passages ABOUT the topic, not the user's exact phrasing — never say \"you wrote\" or quote them as their phrasing unless the wording came from a keyword/phrase match. " +
+    "If an exact_phrase search finds nothing, they never wrote that exact phrase: report the miss as a miss; do not soften it with near matches.\n" +
+    "- If a search_my_words result is degraded or some sources are still being indexed, mention it ONLY when it explains a thin or empty result, and in plain words (\"search is running on exact words only right now\") — never with internal jargon."
   );
 }
 

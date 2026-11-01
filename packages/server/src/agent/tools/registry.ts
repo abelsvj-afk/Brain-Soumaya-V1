@@ -11,6 +11,7 @@ import { billRiskTool } from "./billRisk.js";
 import { financeFreshnessTool } from "./financeFreshness.js";
 import { goalFundingTrendTool } from "./goalFundingTrend.js";
 import { memorySearchTool } from "./memorySearch.js";
+import { searchMyWordsTool } from "./searchMyWords.js";
 import { brainStatsTool } from "./brainStats.js";
 import { peopleLookupTool } from "./peopleLookup.js";
 import { entityLookupTool } from "./entityLookup.js";
@@ -48,6 +49,7 @@ export const TOOLS: Tool[] = [
   financeFreshnessTool,
   goalFundingTrendTool,
   memorySearchTool,
+  searchMyWordsTool,
   brainStatsTool,
   peopleLookupTool,
   entityLookupTool,
@@ -77,6 +79,9 @@ export interface AgentToolEntry {
 
 export const AGENT_TOOLS: AgentToolEntry[] = [
   { tool: memorySearchTool, isWrite: false },
+  // Verbatim-Recall V2: the user's own preserved words (sources), the
+  // quotable counterpart to memory_search's derived nodes. Read-only.
+  { tool: searchMyWordsTool, isWrite: false },
   { tool: webLookupTool, isWrite: false },
   { tool: checkinTool, isWrite: false },
   // Telegram Parity Phase 1 (owner decision): exact-answer READ tools — the
