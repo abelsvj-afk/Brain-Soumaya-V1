@@ -3,6 +3,7 @@ import type { CaptainQuestionKind, CaptainState, ChronicleLine } from "@brain/sh
 import {
   CaptainClientError,
   askCaptain,
+  setDirectorEnabled,
   getCaptains,
   getChronicle,
   resetCaptain,
@@ -34,7 +35,8 @@ export interface UseCaptains {
   failed: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  ask: (id: string, question: CaptainQuestionKind) => Promise<void>;
+  ask: (id: string, question: CaptainQuestionKind, about?: string) => Promise<void>;
+  toggleDirector: (enabled: boolean) => Promise<void>;
   stop: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   wipeMeetings: (id: string) => Promise<void>;
@@ -97,9 +99,9 @@ export function useCaptains(enabled: boolean, withChronicle: boolean): UseCaptai
   );
 
   const ask = useCallback(
-    async (id: string, question: CaptainQuestionKind) => {
+    async (id: string, question: CaptainQuestionKind, about?: string) => {
       await run(async () => {
-        const out = await askCaptain(id, question);
+        const out = await askCaptain(id, question, about);
         adopt(out.captain);
         setAnswers((prev) => new Map(prev).set(id, out.answer));
       });
@@ -135,5 +137,15 @@ export function useCaptains(enabled: boolean, withChronicle: boolean): UseCaptai
     [run, adopt],
   );
 
-  return { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings, reset };
+  const toggleDirector = useCallback(
+    async (enabled: boolean) => {
+      await run(async () => {
+        await setDirectorEnabled(enabled);
+        await refresh();
+      });
+    },
+    [run, refresh],
+  );
+
+  return { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings, reset, toggleDirector };
 }

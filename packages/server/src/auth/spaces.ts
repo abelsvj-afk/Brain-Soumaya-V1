@@ -245,6 +245,18 @@ export const SPACE_SCOPED_TABLES = [
   "npc_commissions",
   "npc_knowledge",
   "npc_gate_decisions",
+  // P3 (Economy & the Waking Market): the NPC economy instance —
+  // her cargo, the shadow supply, the NPC pool's own periods and
+  // demand, her economy ledger — plus captain affinities and the
+  // Director's per-space state. All per-space rows; brain erasure
+  // erases the NPC market completely, exactly like the player's.
+  "npc_game_cargo",
+  "npc_game_nodes",
+  "npc_game_periods",
+  "npc_game_demand",
+  "npc_game_ledger",
+  "npc_affinity",
+  "npc_director_state",
   // Guided tours (Wave 2, N7): the saved route, its rail log, and its
   // playback sessions are per-space rows — brain deletion removes them.
   "tours",

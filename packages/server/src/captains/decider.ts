@@ -1,4 +1,12 @@
-import { WARP_COST, type CaptainDefinition, type CaptainWorld } from "@brain/shared";
+import {
+  GAME_GOOD_LABELS,
+  WARP_COST,
+  type CaptainDefinition,
+  type CaptainWorld,
+  type GameBuyerId,
+  type GameGood,
+  type GameNodeKind,
+} from "@brain/shared";
 import { rngFor } from "./seed.js";
 
 /**
@@ -64,13 +72,48 @@ export interface CaptainPerception {
   /** Drive inputs (0..1), computed by the engine's perception. */
   curiosity: number;
   sociability: number;
+  /** P3 (T5): Ambition's instruments — present only for captains
+   *  on the economy allow-list. Everything here is BELIEF-shaped:
+   *  her balance and hold are her own facts; prices are the posted
+   *  prices (public); demand figures are what she has seen of the
+   *  NPC pool, never the pool's raw rows and never the player's. */
+  economy?: CaptainEconomyPerception;
+}
+
+/** What a captain can know about the market when she decides
+ *  (Architecture §7.4: beliefs about prices and demand; execution
+ *  re-reads state). */
+export interface CaptainEconomyPerception {
+  credits: number;
+  /** Her current savings target (R6 — the goal, doubled per
+   *  completion) and its label. */
+  savingsGoalCredits: number;
+  savingsGoalLabel: string;
+  holdUsed: number;
+  holdCapacity: number;
+  cargo: readonly { good: GameGood; qty: number }[];
+  /** Shadow nodes she could gather from right now (pool views —
+   *  supply is world-less, R11). */
+  nodes: readonly { nodeId: string; kind: GameNodeKind; good: GameGood; remaining: number }[];
+  atStation: boolean;
+  /** The best sale she believes she can make from her hold, or
+   *  null when her hold is empty / she is not at the Station. */
+  bestSale: { buyerId: GameBuyerId; good: GameGood; qty: number; unitPrice: number } | null;
+  /** A refine she could run right now (inputs + fee in hand). */
+  refineOption: { recipeId: string; output: GameGood; fee: number } | null;
+  /** Her affinities — considerations only (prefer the buyer a
+   *  rival doesn't haunt; seek out a friend's world). */
+  affinities: readonly { captainId: string; value: number }[];
 }
 
 export type CaptainDecision =
   | { act: "greet"; cause: string }
   | { act: "travel"; travelKind: "warp" | "drift"; toWorld: CaptainWorld; cause: string }
   | { act: "depart"; cause: string }
-  | { act: "wait"; cause: string };
+  | { act: "wait"; cause: string }
+  | { act: "gather"; nodeId?: string; nodeKind?: GameNodeKind; qty?: number; cause: string }
+  | { act: "sell"; buyerId: GameBuyerId; good: GameGood; qty: number; cause: string }
+  | { act: "refine"; recipeId: string; count: number; cause: string };
 
 export interface CaptainDecider {
   decide(def: CaptainDefinition, p: CaptainPerception): CaptainDecision;
@@ -107,8 +150,10 @@ function causeOf(considerations: readonly Consideration[], fallback: string): st
   return ranked.length > 0 ? `${ranked.join("; ")}.` : fallback;
 }
 
-const has = (def: CaptainDefinition, trait: "Sociable" | "Restless" | "Cautious"): boolean =>
-  (def.traits as readonly string[]).includes(trait);
+const has = (
+  def: CaptainDefinition,
+  trait: "Sociable" | "Restless" | "Cautious" | "Greedy" | "Methodical",
+): boolean => (def.traits as readonly string[]).includes(trait);
 
 export const utilityDecider: CaptainDecider = {
   decide(def, p) {
@@ -197,6 +242,85 @@ export const utilityDecider: CaptainDecider = {
             cause: causeOf(considerations, "The slow way over was time enough."),
           },
           value: score(considerations, rng()) * 0.9,
+        });
+      }
+    }
+
+    // P3 (T5): the economy candidates — Ambition instrumented at
+    // last (Layer §4.2: the Ambition curve's SHAPE is trait-set —
+    // Greedy runs logistic, the steady traits run a gentle linear).
+    // A captain AT her savings target has no Ambition pull to
+    // gather more (the curve is distance-shaped: pull falls as she
+    // closes), while a laden hold at the Station pulls to sell.
+    if (p.economy) {
+      const eco = p.economy;
+      const target = Math.max(1, eco.savingsGoalCredits);
+      const distance = Math.min(1, Math.max(0, eco.credits / target));
+      const pull = 1 - distance;
+      const ambitionCurve = has(def, "Greedy") ? logistic : linear;
+      if (eco.bestSale) {
+        const sale = eco.bestSale;
+        const progress = Math.min(1, (sale.qty * sale.unitPrice) / Math.max(1, target - eco.credits));
+        const considerations: Consideration[] = [
+          {
+            value: Math.max(0.05, progress),
+            weight: 2.0,
+            plain: `ambition — selling ${sale.qty} ${GAME_GOOD_LABELS[sale.good]} closes on ${eco.savingsGoalLabel}`,
+          },
+          { value: 1, weight: 0.3, plain: "the cargo is aboard and the buyer is here at the Station" },
+        ];
+        candidates.push({
+          decision: {
+            act: "sell",
+            buyerId: sale.buyerId,
+            good: sale.good,
+            qty: sale.qty,
+            cause: causeOf(considerations, "The hold wanted selling."),
+          },
+          value: score(considerations, rng()),
+        });
+      }
+      if (eco.refineOption) {
+        const considerations: Consideration[] = [
+          {
+            value: Math.max(0.05, ambitionCurve(pull)),
+            weight: 1.2 * (has(def, "Methodical") ? 1.3 : 1),
+            plain: `ambition — refining toward ${eco.savingsGoalLabel}; the refined good is worth more than its parts`,
+          },
+          { value: 1, weight: 0.3, plain: "the inputs are in her hold and the fee is in her ledger" },
+        ];
+        candidates.push({
+          decision: {
+            act: "refine",
+            recipeId: eco.refineOption.recipeId,
+            count: 1,
+            cause: causeOf(considerations, "The refinery wanted a run."),
+          },
+          value: score(considerations, rng()),
+        });
+      }
+      const node = eco.nodes.find((n) => n.remaining > 0);
+      if (node && eco.holdUsed < eco.holdCapacity) {
+        const considerations: Consideration[] = [
+          {
+            value: ambitionCurve(pull),
+            weight: 1.6,
+            plain: `ambition — ${eco.savingsGoalLabel} is still ${Math.max(0, target - eco.credits)} Credits off, and gathering is free`,
+          },
+          {
+            value: 1 - eco.holdUsed / Math.max(1, eco.holdCapacity),
+            weight: 0.5,
+            plain: "her hold has room",
+          },
+        ];
+        candidates.push({
+          decision: {
+            act: "gather",
+            nodeId: node.nodeId,
+            nodeKind: node.kind,
+            cause: causeOf(considerations, "The supply wanted gathering."),
+          },
+          value: score(considerations, rng()),
         });
       }
     }

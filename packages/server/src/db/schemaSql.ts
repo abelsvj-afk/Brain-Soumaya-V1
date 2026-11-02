@@ -2024,4 +2024,85 @@ export const BOOTSTRAP_SQL = `
       docked INTEGER NOT NULL DEFAULT 0 CHECK (docked IN (0,1)),
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
+    -- P3 (Economy & the Waking Market): the NPC-side economy instance —
+    -- five tables keyed (space, captain) or (space) alone, written ONLY
+    -- by the captains' NPC economy service inside the advance
+    -- transaction. The player's nine game tables are untouched by it:
+    -- two disjoint instances sharing G1's constants and postedPrice().
+    CREATE TABLE IF NOT EXISTS npc_game_cargo (
+      space_id TEXT NOT NULL,
+      npc_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
+      PRIMARY KEY (space_id, npc_id, good_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_game_nodes (
+      space_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      capacity INTEGER NOT NULL CHECK (capacity >= 0),
+      remaining INTEGER NOT NULL CHECK (remaining >= 0),
+      period_start_ms INTEGER NOT NULL,
+      PRIMARY KEY (space_id, node_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_game_periods (
+      space_id TEXT NOT NULL,
+      period_start_ms INTEGER NOT NULL,
+      period_end_ms INTEGER NOT NULL,
+      PRIMARY KEY (space_id, period_start_ms)
+    );
+    CREATE TABLE IF NOT EXISTS npc_game_demand (
+      space_id TEXT NOT NULL,
+      period_start_ms INTEGER NOT NULL,
+      buyer_id TEXT NOT NULL,
+      good_id TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
+      rush_allowance INTEGER NOT NULL DEFAULT 0 CHECK (rush_allowance >= 0),
+      PRIMARY KEY (space_id, period_start_ms, buyer_id, good_id)
+    );
+    CREATE TABLE IF NOT EXISTS npc_game_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id TEXT NOT NULL,
+      npc_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      good_id TEXT,
+      qty_delta INTEGER NOT NULL DEFAULT 0,
+      credits_delta INTEGER NOT NULL DEFAULT 0,
+      balance_after INTEGER NOT NULL,
+      buyer_id TEXT,
+      unit_price INTEGER,
+      recipe_id TEXT,
+      node_id TEXT,
+      step_key TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_npc_game_ledger_space_npc
+      ON npc_game_ledger(space_id, npc_id, id);
+    -- P3: captain<->captain trait affinity (R7) — one row per canonical
+    -- pair, value capped in service, cooling toward zero per local day.
+    CREATE TABLE IF NOT EXISTS npc_affinity (
+      space_id TEXT NOT NULL,
+      captain_a TEXT NOT NULL,
+      captain_b TEXT NOT NULL,
+      value REAL NOT NULL DEFAULT 0,
+      last_encounter_day TEXT,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (space_id, captain_a, captain_b),
+      CHECK (captain_a < captain_b)
+    );
+    -- P3: Director-lite state (R14) — one row per space: the owner
+    -- switch (default ON), the last incident, the per-day count, and
+    -- the live lane closure (R10), if any.
+    CREATE TABLE IF NOT EXISTS npc_director_state (
+      space_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+      last_incident_at_ms INTEGER,
+      incidents_day TEXT,
+      incidents_today INTEGER NOT NULL DEFAULT 0,
+      closed_from TEXT,
+      closed_to TEXT,
+      closed_day TEXT,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
 `;

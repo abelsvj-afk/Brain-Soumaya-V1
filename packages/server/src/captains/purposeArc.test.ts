@@ -43,6 +43,10 @@ const NPC_TABLES = new Set([
   "npc_relic_holdings", "npc_gate", "npc_plans", "npc_plan_steps", "npc_mismatches",
   "npc_stirrings", "npc_sim_nodes", "npc_sim_edges", "npc_sim_journey", "npc_sim_inbox",
   "npc_commissions", "npc_knowledge", "npc_gate_decisions", "sqlite_sequence",
+  // P3: her own economy + affinity + Director state are captain-side
+  // too (her genesis, cargo, ledger, regard) — never the player's.
+  "npc_game_cargo", "npc_game_nodes", "npc_game_periods", "npc_game_demand",
+  "npc_game_ledger", "npc_affinity", "npc_director_state",
 ]);
 
 /** Everything that is NOT hers: the §7.1 snapshot set, maximally —

@@ -83,7 +83,10 @@ export type NpcActKind =
   | "plan"
   | "commission"
   | "gate-check"
-  | "gate-passage";
+  | "gate-passage"
+  | "gather"
+  | "sell"
+  | "refine";
 
 /** The kinds the framework knows. Anything outside this list is not
  *  a tool — it cannot happen, and the executor rejects it.
@@ -96,9 +99,11 @@ export type NpcActKind =
  *  and the two gate kinds are the B-01 wiring. They sit on NO
  *  roster NPC's allow-list and on exactly one captain's (the
  *  seeker's) in P2. The P3 economy verbs (gather / sell / refine)
- *  are deliberately ABSENT — not kinds at all in P2, so no code
- *  path can log or execute them; the fence names them only as a
- *  phase-lock refusal (P2-B1.9). */
+ *  joined the vocabulary with the Waking Market (P3): they sit on
+ *  the separate economy allow-list of the captains active at P3
+ *  and execute ONLY against the NPC pools (shadow supply + NPC
+ *  demand pool) inside an advance — never through the player's
+ *  economy service or its tables. */
 export const NPC_ACT_KINDS: readonly NpcActKind[] = [
   "speak",
   "announce-route",
@@ -119,6 +124,9 @@ export const NPC_ACT_KINDS: readonly NpcActKind[] = [
   "commission",
   "gate-check",
   "gate-passage",
+  "gather",
+  "sell",
+  "refine",
 ] as const;
 
 /**

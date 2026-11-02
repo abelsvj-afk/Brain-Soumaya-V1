@@ -148,12 +148,15 @@ describe("F25 — Junia is a second LIVING captain, resident at the Growing Plac
     );
   });
 
-  it("resident life uses only the L1 verbs — no tend, no gather, no work act of any kind", () => {
+  it("resident life uses only the L1 verbs plus her P3 economy verbs — no tend, no work act of any other kind", () => {
     advanceCaptain(handle, SPACE, "junia", T0);
     advanceCaptain(handle, SPACE, "junia", T0 + 72 * H);
     const kinds = new Set(juniaLog().map((e) => e.kind));
     for (const k of kinds) {
-      expect(["travel", "arrive", "depart", "greet", "wait", "speak"]).toContain(k);
+      // P3 re-scope (R5): Junia is an economy captain — gather,
+      // sell, refine and the drivers' plan bookkeeping are hers
+      // now. "tend" remains on no list, hers included.
+      expect(["travel", "arrive", "depart", "greet", "wait", "speak", "gather", "sell", "refine", "plan"]).toContain(k);
     }
     expect(captainDefinition("junia")?.allowList).not.toContain("tend" as never);
     // The kindness rule binds her world's text: nothing wilts, browns, dies.
