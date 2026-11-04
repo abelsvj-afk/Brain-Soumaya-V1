@@ -7,7 +7,6 @@ import {
   CAPTAIN_GATE_IMPORTANCE,
   CAPTAIN_MEMORY_KEEP_IMPORTANCE,
   CAPTAIN_MEMORY_RETENTION,
-  CAPTAIN_PHASE_LOCKED_VERBS,
   CAPTAIN_REFLECTION_TRIGGER,
   CAPTAIN_ROUTINE_IMPORTANCE,
   CAPTAIN_SEARCH_FIND_PROBABILITY,
@@ -25,6 +24,7 @@ import {
   type NpcActKind,
 } from "@brain/shared";
 import { CaptainRepo, type CaptainStateRow } from "./repo.js";
+import { NpcEconomy } from "./npcEconomy.js";
 import { rngFor } from "./seed.js";
 import {
   GATE_GOAL_ID,
@@ -67,14 +67,18 @@ import {
  * retrieval run on captain-namespaced tables only — enforced by
  * the byte-identical real-brain snapshots in the test suites.
  *
- * Phase-lock (P2-B1.9): the P3 economy verbs are refused here and
- * in the engine fence with a PHASE_LOCKED cause. This module never
- * imports the G1 economy code and never writes its tables — and
- * NEVER routes a captain through the player's economy service:
- * its dormant "npc" actor kind would execute against the player's
- * cargo, credits, and demand (prep finding S-P3-3). Her Credits
- * live only on her own state row's ledger, moved only by her
- * board's payments (§6.4 of the spec).
+ * Phase-lock history (P2-B1.9 → P3 T1): through P2 the economy
+ * verbs were refused here and in the engine fence with a
+ * PHASE_LOCKED cause. P3 removes the lock: gather/sell/refine are
+ * admitted for the captains on the economy allow-list (R5) and
+ * execute ONLY in the NPC economy service (captains/npcEconomy.ts)
+ * against the NPC pools. This module never imports the player
+ * economy code and never writes its tables — and NEVER routes a
+ * captain through the player's economy service: its dormant "npc"
+ * actor kind would execute against the player's cargo, credits,
+ * and demand (prep finding S-P3-3). Her Credits live only on her
+ * own state row, moved by her board's payments (§6.4 of the spec)
+ * and, from P3, by her NPC-pool sales and refinery fees.
  */
 
 export class PurposeError extends Error {
@@ -96,21 +100,15 @@ export function isPurposeCaptain(def: CaptainDefinition): boolean {
 
 /**
  * The narrow fence admission helper (build-brief ruling
- * D-FENCE-SHAPE): kind admission for P2 acts, in one place — the
- * phase-lock first (its cause is distinct by design), then her
- * allow-list, then the D-1 travel set for any world involved. The
- * engine's own fence applies the same rules inside the advance;
- * this helper is what the P2 executors and the phase-lock proofs
- * call. Pure: it proposes nothing and writes nothing.
+ * D-FENCE-SHAPE): kind admission for captain acts, in one place —
+ * her allow-list first (which, from P3, includes the economy verbs
+ * for exactly the captains R5 names), then the D-1 travel set for
+ * any world involved. The engine's own fence applies the same
+ * rules inside the advance; this helper is what the executors and
+ * the fence proofs call. Pure: it proposes nothing and writes
+ * nothing.
  */
 export function admitPurposeAct(def: CaptainDefinition, kind: string, world?: CaptainWorld | string): void {
-  if (CAPTAIN_PHASE_LOCKED_VERBS.includes(kind)) {
-    throw new PurposeError(
-      "PHASE_LOCKED",
-      403,
-      `"${kind}" is locked until P3 — the economy verbs open with the Waking Market, not in P2.`,
-    );
-  }
   if (!(def.allowList as readonly string[]).includes(kind)) {
     throw new PurposeError(
       "FENCE_REFUSAL",
@@ -345,7 +343,15 @@ export class PurposeStore {
         index,
         s.kind,
         s.label,
-        JSON.stringify({ world: s.world ?? null, deed: s.deed ?? null, branch: s.branch }),
+        JSON.stringify({
+          world: s.world ?? null,
+          deed: s.deed ?? null,
+          branch: s.branch,
+          good: s.good ?? null,
+          qty: s.qty ?? null,
+          recipeId: s.recipeId ?? null,
+          buyerId: s.buyerId ?? null,
+        }),
         s.expected,
       );
   }
@@ -385,13 +391,14 @@ export class PurposeStore {
     return rows.map((r) => this.toPlan(r));
   }
 
-  activePlan(captainId: CaptainId): PlanRow | null {
-    const r = this.h.sqlite
+  activePlan(captainId: CaptainId, goalIds?: readonly string[]): PlanRow | null {
+    const all = this.h.sqlite
       .prepare(
-        `SELECT * FROM npc_plans WHERE space_id = ? AND npc_id = ? AND state IN ('active', 'unplanned') ORDER BY id DESC LIMIT 1`,
+        `SELECT * FROM npc_plans WHERE space_id = ? AND npc_id = ? AND state IN ('active', 'unplanned') ORDER BY id DESC`,
       )
-      .get(this.spaceId, captainId) as (PlanDbRow & { npc_id: string }) | undefined;
-    return r ? this.toPlan(r) : null;
+      .all(this.spaceId, captainId) as (PlanDbRow & { npc_id: string })[];
+    const row = goalIds ? all.find((r) => goalIds.includes(r.goal_id)) : all[0];
+    return row ? this.toPlan(row) : null;
   }
 
   stepsOf(planId: number): PlanStepRow[] {
@@ -990,9 +997,17 @@ export class PurposeStore {
               nowMs,
             );
             if (payment > 0) {
-              const repo = this.captains();
-              const st = repo.state(captainId);
-              if (st) repo.update(captainId, { credits: st.credits + payment });
+              // P3-R1: the payment goes through her NPC ledger
+              // (NpcEconomy.recordCommissionPayment) — credit and
+              // `commission` row together — so reconcile() stays
+              // exact after genesis. A zero payment writes no
+              // row: nothing the ledger tracks has moved, and the
+              // completion is recorded below in npc_log.
+              new NpcEconomy(this.h, this.spaceId, captainId).recordCommissionPayment(
+                payment,
+                `${captainId}:commission:${c.id}:${event.logId}`,
+                nowMs,
+              );
             }
             this.npc().appendLog(
               captainId,
@@ -1560,6 +1575,18 @@ export function resetCaptainPurpose(
   for (const t of P2_CAPTAIN_TABLES) {
     h.sqlite.prepare(`DELETE FROM ${t} WHERE space_id = ? AND npc_id = ?`).run(spaceId, captainId);
   }
+  // P3: her economy instance and her affinity pairs die with the
+  // reset too — a reset captain starts with an empty hold and no
+  // ledger (her next first touch writes a fresh genesis row).
+  h.sqlite
+    .prepare(`DELETE FROM npc_game_cargo WHERE space_id = ? AND npc_id = ?`)
+    .run(spaceId, captainId);
+  h.sqlite
+    .prepare(`DELETE FROM npc_game_ledger WHERE space_id = ? AND npc_id = ?`)
+    .run(spaceId, captainId);
+  h.sqlite
+    .prepare(`DELETE FROM npc_affinity WHERE space_id = ? AND (captain_a = ? OR captain_b = ?)`)
+    .run(spaceId, captainId, captainId);
   h.sqlite
     .prepare(`DELETE FROM npc_player_memory WHERE space_id = ? AND npc_id = ?`)
     .run(spaceId, captainId);

@@ -95,12 +95,14 @@ export async function getChronicle(limit = 30): Promise<ChronicleLine[] | null> 
   }
 }
 
-/** Ask a captain one of the L1 questions. Returns her answer. */
-export async function askCaptain(id: string, question: CaptainQuestionKind): Promise<CaptainAskResult> {
+/** Ask a captain one of the fixed questions. Returns her answer.
+ *  The P3 "about" kind names the other captain in `about` — her
+ *  answer is her affinity opinion, labelled as her opinion. */
+export async function askCaptain(id: string, question: CaptainQuestionKind, about?: string): Promise<CaptainAskResult> {
   const res = await afetch(`${API}/captains/${encodeURIComponent(id)}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify(about ? { question, about } : { question }),
   });
   const data = (await res.json().catch(() => null)) as CaptainResponse | null;
   if (!res.ok || !data?.state || typeof data.answer !== "string") throw errFrom(res.status, data);
@@ -138,4 +140,17 @@ export async function wipeCaptainMeetings(id: string): Promise<CaptainState> {
  *  advance starts her fresh. */
 export async function resetCaptain(id: string): Promise<CaptainState> {
   return captainAction(id, "reset");
+}
+
+/** The Director switch (P3, R14): flip Director-lite for this
+ *  space. Returns the switch's new state. */
+export async function setDirectorEnabled(enabled: boolean): Promise<boolean> {
+  const res = await afetch(`${API}/captains/director`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  const data = (await res.json().catch(() => null)) as { director?: { enabled?: boolean }; error?: string; code?: string } | null;
+  if (!res.ok || typeof data?.director?.enabled !== "boolean") throw errFrom(res.status, data);
+  return data.director.enabled;
 }
