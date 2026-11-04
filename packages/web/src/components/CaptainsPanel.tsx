@@ -45,6 +45,17 @@ const KIND_VERB: Record<string, string> = {
   commission: "Commission",
   "gate-check": "Asked the gate",
   "gate-passage": "Gate passage",
+  gather: "Gathered",
+  sell: "Sold",
+  refine: "Refined",
+};
+
+const GOOD_LABEL: Record<string, string> = {
+  ore: "Ore",
+  salvage: "Salvage",
+  data: "Data",
+  component: "Component",
+  circuit: "Circuit",
 };
 
 const WORLD_PLAIN: Record<string, string> = {
@@ -62,6 +73,7 @@ function worldPlain(key: string | null): string {
 
 function CaptainCard({
   captain,
+  others,
   answer,
   ask,
   stop,
@@ -70,8 +82,9 @@ function CaptainCard({
   reset,
 }: {
   captain: CaptainState;
+  others: CaptainState[];
   answer: string | null;
-  ask: (id: string, q: CaptainQuestionKind) => Promise<void>;
+  ask: (id: string, q: CaptainQuestionKind, about?: string) => Promise<void>;
   stop: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   wipeMeetings: (id: string) => Promise<void>;
@@ -106,6 +119,34 @@ function CaptainCard({
             {c.speaksToday} spoken.
           </p>
 
+          {c.cargo !== undefined && (
+            <p>
+              Hold:{" "}
+              {c.cargo.length === 0
+                ? "empty"
+                : c.cargo.map((g) => `${g.qty} ${GOOD_LABEL[g.good] ?? g.good}`).join(" · ")}{" "}
+              ({c.holdUsed ?? 0} of {c.holdCapacity ?? 20} units) — visible cargo, from her own hold.
+              {c.savingsGoal && (
+                <>
+                  {" "}
+                  Saving for {c.savingsGoal.label}: {c.savingsGoal.distance > 0
+                    ? `${c.savingsGoal.distance} Credits to the ${c.savingsGoal.target} mark.`
+                    : `the ${c.savingsGoal.target} mark is funded.`}
+                </>
+              )}
+            </p>
+          )}
+
+          {c.affinities && c.affinities.length > 0 && (
+            <p>
+              Her regard, as the market and the road have written it:{" "}
+              {c.affinities
+                .map((a) => `${others.find((o) => o.id === a.captainId)?.name ?? a.captainId} ${a.value > 0 ? "+" : ""}${a.value}`)
+                .join(" · ")}
+              .
+            </p>
+          )}
+
           {(c.plan || c.gateView) && (
             <>
               {c.gateView && <p>{c.gateView.line}</p>}
@@ -136,6 +177,19 @@ function CaptainCard({
                 {q.label}
               </button>
             ))}
+            {c.cargo !== undefined &&
+              others
+                .filter((o) => o.active)
+                .map((o) => (
+                  <button
+                    key={`about-${o.id}`}
+                    type="button"
+                    disabled={c.stopped}
+                    onClick={() => void ask(c.id, "about", o.id)}
+                  >
+                    Tell me about {o.name}
+                  </button>
+                ))}
           </div>
 
           {c.stopped ? (
@@ -191,8 +245,11 @@ export default function CaptainsPanel({
   onClose?: () => void;
 }) {
   const atStation = world === "great-station";
-  const { captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings, reset } =
-    useCaptains(enabled, atStation);
+  const {
+    captains, chronicle, answers, loading, failed, error, refresh, ask, stop, resume, wipeMeetings, reset,
+    toggleDirector,
+  } = useCaptains(enabled, atStation);
+  const directorEnabled = captains?.find((c) => c.directorEnabled !== undefined)?.directorEnabled;
 
   return (
     <section className="captains" aria-label="Captains">
@@ -222,10 +279,20 @@ export default function CaptainsPanel({
             pretend to be. They keep to the public worlds, live on their own ledgers, and everything
             they do is logged where you can read it.
           </p>
+          {atStation && directorEnabled !== undefined && (
+            <p>
+              Director-lite is {directorEnabled ? "on" : "off"} — it stages small market-and-lane moments
+              while you are here, and touches nothing of yours.{" "}
+              <button type="button" onClick={() => void toggleDirector(!directorEnabled)}>
+                Turn the Director {directorEnabled ? "off" : "on"}
+              </button>
+            </p>
+          )}
           {captains.map((c) => (
             <CaptainCard
               key={c.id}
               captain={c}
+              others={captains.filter((o) => o.id !== c.id)}
               answer={answers.get(c.id) ?? null}
               ask={ask}
               stop={stop}

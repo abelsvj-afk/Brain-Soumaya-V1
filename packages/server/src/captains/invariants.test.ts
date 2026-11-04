@@ -11,6 +11,7 @@ import {
 } from "@brain/shared";
 import { NpcRepo } from "../npcs/repo.js";
 import { CaptainRepo } from "./repo.js";
+import { NpcEconomy } from "./npcEconomy.js";
 import { dayPlan } from "./seed.js";
 import { advanceCaptain, getCaptainState } from "./engine.js";
 
@@ -85,15 +86,21 @@ describe("I-2 — no walking, no new locomotion (shape audit)", () => {
   });
 });
 
-describe("I-3 + I-6a — nothing decays; Credits never move; fuel moves only as warp charges", () => {
-  it("30-day soak: Credits byte-identical, every fuel delta matched 1:1 to a warp departure", { timeout: 300_000 }, () => {
+describe("I-3 + I-6a — nothing decays; Credits move ONLY through the NPC ledger (P3 re-scope); fuel moves only as warp charges", () => {
+  it("30-day soak: every Credit delta reconciles through her npc_game_ledger, every fuel delta matched 1:1 to a warp departure", { timeout: 300_000 }, () => {
     for (const id of ["bex", "junia"] as const) {
       advanceCaptain(handle, SPACE, id, T0);
       for (let t = T0 + H; t <= T0 + 30 * 24 * H; t += 12 * H) {
         advanceCaptain(handle, SPACE, id, t);
       }
       const st = captains().state(id);
-      expect(st?.credits, id).toBe(CAPTAIN_START_CREDITS);
+      // P1/P2's "Credits never move" is superseded by P3's economy:
+      // the invariant that survives is stronger — every movement is
+      // a ledger row in her own npc_game_ledger, and the books
+      // reconcile to the Credit at every read.
+      const econ = new NpcEconomy(handle, SPACE, id);
+      expect(econ.reconcile().ok, id).toBe(true);
+      expect(st?.credits, id).toBe(econ.credits());
       const warpDeparts = log(id).filter(
         (e) => e.kind === "depart" && /by warp/.test(e.act),
       ).length;
@@ -169,18 +176,24 @@ describe("I-6b — fuel buys speed, never access; home is free; drift always exi
   });
 });
 
-describe("I-6c — the two economy separations (VACUITY proof, honestly labelled)", () => {
-  it("the P3 economy verbs exist on NO captain allow-list; P2's one work kind (search) is the seeker's alone", () => {
+describe("I-6c — the two economy separations (P3: the verbs are live, on the R5 lists only)", () => {
+  it("the P3 economy verbs sit on exactly the R5 captains' allow-lists; P2's one work kind (search) is the seeker's alone", () => {
+    // P3 re-scope (R5): gather/sell/refine unlocked — on the
+    // economy allow-list of exactly Bex, Junia, and Veyra, carried
+    // as the separate CAPTAIN_ECONOMY_ALLOW_LIST constant composed
+    // into their lists. The deed verbs tend/delve/keep remain on
+    // NO list (deeds ride the single "deed" kind, Veyra's only).
+    // The live pool-isolation proof is npcEconomy.test.ts C-4/C-5
+    // plus npcEconomyAdvance C-1/X-2.
     for (const def of CAPTAIN_DEFINITIONS) {
-      // gather/sell/refine stay phase-locked until P3 — they are
-      // not act kinds at all in P2, and no list carries them (nor
-      // the deed verbs tend/delve/keep as kinds: deeds ride the
-      // single "deed" kind). In P1 this proof was vacuous (no work
-      // kinds existed); P2 gives it one real edge: "search" exists,
-      // on Veyra's list only, fenced to her NPC-scoped supply —
-      // the live pool-isolation proof is purposeSearchGate's P-1
-      // byte-identity suite, and P3 inherits the soak (spec §9).
-      for (const kind of ["gather", "sell", "refine", "tend", "delve", "keep"]) {
+      for (const kind of ["gather", "sell", "refine"]) {
+        if (def.id === "bex" || def.id === "junia" || def.id === "veyra") {
+          expect(def.allowList as readonly string[], `${def.id}:${kind}`).toContain(kind);
+        } else {
+          expect(def.allowList as readonly string[], `${def.id}:${kind}`).not.toContain(kind);
+        }
+      }
+      for (const kind of ["tend", "delve", "keep"]) {
         expect(def.allowList as readonly string[], `${def.id}:${kind}`).not.toContain(kind);
       }
       if (def.id !== "veyra") {

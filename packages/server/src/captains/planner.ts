@@ -1,8 +1,14 @@
 import {
   CAPTAIN_PLAN_WARP_MIN_FUEL,
   CAPTAIN_TRAVEL_WORLDS,
+  GAME_GOOD_LABELS,
+  HOLD_CAPACITY,
+  RECIPES,
   WARP_COST,
+  postedPrice,
   type CaptainWorld,
+  type GameBuyerId,
+  type GameGood,
 } from "@brain/shared";
 
 /**
@@ -15,12 +21,11 @@ import {
  * (spec §5, enforced by the plan store in purpose.ts).
  *
  * The catalog below is the galaxy-scope catalog of spec §4. The
- * three P3 verbs are carried in P2_LOCKED_ACTIONS — present so the
- * catalog is complete and the phase boundary is unmissable,
- * excluded from the planner's action set, and refused by the fence
- * with a phase-lock cause (P2-B1.9). They have no action entry, no
- * preconditions, no effects: in P2 they cannot be planned, only
- * named as locked.
+ * three economy verbs (Gather / Sell / Refine) were P3-locked
+ * through P2 (P2-B1.9); P3 unlocks them — they join the action set
+ * as P3_PLAN_ACTIONS with the Layer §5.2 catalog's preconditions
+ * and effects, planning against the NPC pools only (shadow supply
+ * + NPC demand pool, priced by G1's postedPrice()).
  *
  * Catalogue rules honored here (spec §4): player-rule parity (the
  * player's chart and prices on her own tank — warp costs WARP_COST
@@ -38,7 +43,8 @@ export const GATE_GOAL_ID = "gate-worthy";
 export const GATE_GOAL_TEXT = "hold Witness + any two";
 
 /** The planner's action vocabulary (spec §4's fourteen unlocked
- *  actions, grouped exactly as the table groups them). */
+ *  actions, grouped exactly as the table groups them — plus, from
+ *  P3, the three economy verbs the Waking Market unlocks). */
 export type PlanActionKind =
   | "warp"
   | "drift"
@@ -53,7 +59,10 @@ export type PlanActionKind =
   | "gate-check"
   | "attempt-gate-passage"
   | "talk-greet"
-  | "wait";
+  | "wait"
+  | "gather"
+  | "sell"
+  | "refine";
 
 export interface PlannerAction {
   kind: PlanActionKind;
@@ -78,12 +87,21 @@ export const P2_PLAN_ACTIONS: readonly PlannerAction[] = [
   { kind: "wait", owner: "C2 Decider / C1 Advance" },
 ] as const;
 
-/** The P3-locked verbs (spec §4, struck through in the catalog):
- *  listed here so a reviewer can diff code against spec line by
- *  line — and so the fence's phase-lock refusal has one source.
- *  ~~Gather~~ / ~~Sell~~ / ~~Refine~~ — P3, against G1's
- *  instruments, shadow supply, and the NPC demand pool. */
-export const P2_LOCKED_ACTIONS: readonly string[] = ["gather", "sell", "refine"] as const;
+/** The P3 action set: P2's unlocked catalog plus exactly the
+ *  three economy verbs (T1's done-test — the enumeration is the
+ *  P2 set + gather/sell/refine, nothing else). The verbs plan
+ *  against G1's instruments, the shadow supply, and the NPC
+ *  demand pool. */
+export const P3_PLAN_ACTIONS: readonly PlannerAction[] = [
+  ...P2_PLAN_ACTIONS,
+  { kind: "gather", owner: "L3 NPC Economy (shadow supply)" },
+  { kind: "sell", owner: "L3 NPC Economy (NPC demand pool)" },
+  { kind: "refine", owner: "L3 NPC Economy (Station refinery)" },
+] as const;
+
+/** The P3 economy goals the planner knows. */
+export const ECONOMY_COMPONENT_GOAL_ID = "hold-component";
+export const ECONOMY_SAVINGS_GOAL_ID = "savings-goal";
 
 export const PLAN_MAX_DEPTH = 6;
 
@@ -118,6 +136,16 @@ export interface CaptainWorldState {
   priorNoFinds: number;
   /** Her home anchor world (for go-home legs). */
   homeWorld?: CaptainWorld;
+  /** P3: her hold, per good (the NPC pool's cargo — planner truth
+   *  from her own store, exactly like holdings). */
+  cargo?: Partial<Record<GameGood, number>>;
+  /** P3: her Credits balance (her own ledger). */
+  credits?: number;
+  /** P3: gathered goods with shadow supply remaining somewhere in
+   *  the pool right now (gather itself is world-less, R11). */
+  nodeGoods?: readonly GameGood[];
+  /** P3: her current savings target (R6, doubling per completion). */
+  savingsGoalCredits?: number;
 }
 
 export interface PlannedStep {
@@ -133,6 +161,16 @@ export interface PlannedStep {
   /** Search steps declare their branch handling in advance
    *  (spec §5.2 rule 4). */
   branch: "find-branch" | "two-branch";
+  /** P3: the good an economy step works with. */
+  good?: GameGood;
+  /** P3: the count an economy step plans to move. */
+  qty?: number;
+  /** P3: the recipe a refine step runs. */
+  recipeId?: string;
+  /** P3: the buyer a sell step plans to sell to (execution
+   *  re-prices and re-checks demand — a stale pick becomes a
+   *  partial sale and a mismatch, never a silent swap). */
+  buyerId?: GameBuyerId;
 }
 
 export type PlanDraft = { steps: PlannedStep[] } | { unplanned: string };
@@ -291,16 +329,192 @@ function successors(
   return out;
 }
 
+/* ------------------------------------------------------------------ */
+/* P3: the economy goals (Layer §5.2 catalog rows, un-struck)          */
+/* ------------------------------------------------------------------ */
+
+interface EconState {
+  at: CaptainWorld;
+  cargo: Partial<Record<GameGood, number>>;
+  credits: number;
+}
+
+const econKey = (s: EconState, goalCap: number): string =>
+  `${s.at}|${Object.entries(s.cargo).filter(([, q]) => (q ?? 0) > 0).sort().map(([g, q]) => `${g}:${q}`).join(",")}|${Math.min(s.credits, goalCap)}`;
+
+const holdOf = (cargo: Partial<Record<GameGood, number>>): number =>
+  Object.values(cargo).reduce((sum, q) => sum + (q ?? 0), 0);
+
+/** The best posted price a good can plan on (execution re-prices
+ *  and re-checks the NPC pool's demand — the plan is a prediction,
+ *  priced from G1's own postedPrice()). */
+function bestBuyerFor(good: GameGood): { buyerId: GameBuyerId; price: number } {
+  let best: { buyerId: GameBuyerId; price: number } = { buyerId: "station-exchange", price: postedPrice("station-exchange", good) ?? 0 };
+  for (const b of ["station-foundry", "salvage-yard", "archive-broker", "fleet-quartermaster"] as GameBuyerId[]) {
+    const p = postedPrice(b, good);
+    if (p !== null && p > best.price) best = { buyerId: b, price: p };
+  }
+  return best;
+}
+
+function econSuccessors(
+  s: EconState,
+  input: CaptainWorldState,
+  goalId: string,
+): { next: EconState; step: PlannedStep }[] {
+  const out: { next: EconState; step: PlannedStep }[] = [];
+  const home = input.homeWorld ?? input.world;
+  const hold = holdOf(s.cargo);
+  const space = HOLD_CAPACITY - hold;
+  const nodeGoods = input.nodeGoods ?? [];
+
+  // Gather (shadow supply; world-less, R11): at a present world,
+  //  shadow node with remaining > 0, hold space → +goods, 1 act.
+  //  For the Component goal the plan gathers what R-1 needs; for a
+  //  savings goal it fills toward a saleable load.
+  for (const good of nodeGoods) {
+    let qty = 0;
+    if (goalId === ECONOMY_COMPONENT_GOAL_ID) {
+      const need = good === "ore" ? 3 : good === "salvage" ? 2 : 0;
+      qty = Math.min(Math.max(0, need - (s.cargo[good] ?? 0)), space);
+    } else {
+      qty = Math.min(10, space);
+    }
+    if (qty <= 0) continue;
+    const cargo = { ...s.cargo, [good]: (s.cargo[good] ?? 0) + qty };
+    out.push({
+      next: { ...s, cargo },
+      step: {
+        kind: "gather",
+        label: `Gather ${qty} ${GAME_GOOD_LABELS[good]} from the shadow supply`,
+        expected: `${qty} ${GAME_GOOD_LABELS[good]} in her hold`,
+        good,
+        qty,
+        branch: "find-branch",
+      },
+    });
+  }
+
+  // Travel to the Station (sell/refine are Station services): the
+  // ordinary leg kinds — warp when her tank is comfortable, the
+  // home route home, drift otherwise. Drift and home are free, so
+  // a 0-fuel route to the market always exists.
+  if (s.at !== "great-station") {
+    const isHome = home === "great-station";
+    const kind: PlanActionKind =
+      input.fuel >= CAPTAIN_PLAN_WARP_MIN_FUEL ? "warp" : isHome ? "go-home" : "drift";
+    out.push({
+      next: { ...s, at: "great-station" },
+      step: {
+        kind,
+        label:
+          kind === "warp"
+            ? `Warp to the Great Station (−${WARP_COST} of her own fuel; drift was free and available)`
+            : isHome
+              ? "Go home — the home route to the Great Station"
+              : "Drift to the Great Station (free — the market keeps)",
+        expected: "arrival at the Great Station",
+        world: "great-station",
+        branch: "find-branch",
+      },
+    });
+  }
+
+  if (s.at === "great-station") {
+    // Refine (R-1/R-2 exactly): inputs in hold, Credits ≥ fee →
+    //  inputs consumed, +output, fee burned in her ledger.
+    for (const recipe of RECIPES) {
+      const inputs = Object.entries(recipe.inputs) as [GameGood, number][];
+      if (!inputs.every(([g, n]) => (s.cargo[g] ?? 0) >= n)) continue;
+      if (s.credits < recipe.feeCredits) continue;
+      const cargo = { ...s.cargo };
+      for (const [g, n] of inputs) cargo[g] = (cargo[g] ?? 0) - n;
+      cargo[recipe.output] = (cargo[recipe.output] ?? 0) + 1;
+      out.push({
+        next: { ...s, cargo, credits: s.credits - recipe.feeCredits },
+        step: {
+          kind: "refine",
+          label: `Refine ${recipe.id} — ${inputs.map(([g, n]) => `${n} ${GAME_GOOD_LABELS[g]}`).join(" + ")} → ${GAME_GOOD_LABELS[recipe.output]} (fee ${recipe.feeCredits} Credits)`,
+          expected: `1 ${GAME_GOOD_LABELS[recipe.output]} in her hold`,
+          recipeId: recipe.id,
+          branch: "find-branch",
+        },
+      });
+    }
+    // Sell: present at Station, cargo ≥ qty → −goods, +Credits at
+    //  the posted price, NPC-pool demand consumed (execution
+    //  re-checks the pool; a partial sale is an observed outcome,
+    //  not a planning error).
+    for (const good of Object.keys(s.cargo) as GameGood[]) {
+      const qty = s.cargo[good] ?? 0;
+      if (qty <= 0) continue;
+      const { buyerId, price } = bestBuyerFor(good);
+      const cargo = { ...s.cargo, [good]: 0 };
+      out.push({
+        next: { ...s, cargo, credits: s.credits + qty * price },
+        step: {
+          kind: "sell",
+          label: `Sell ${qty} ${GAME_GOOD_LABELS[good]} at the posted price`,
+          expected: `${qty * price} Credits from the sale`,
+          good,
+          qty,
+          buyerId,
+          branch: "find-branch",
+        },
+      });
+    }
+  }
+  return out;
+}
+
+/** Plan an economy goal: breadth by depth ≤ PLAN_MAX_DEPTH, the
+ *  same honesty rule — no route within depth is `unplanned`, the
+ *  goal retained, no step fabricated. */
+export function planEconomyGoal(state: CaptainWorldState, goalId: string): PlanDraft {
+  const start: EconState = {
+    at: state.world,
+    cargo: { ...(state.cargo ?? {}) },
+    credits: state.credits ?? 0,
+  };
+  const goalCap = goalId === ECONOMY_SAVINGS_GOAL_ID ? (state.savingsGoalCredits ?? Number.POSITIVE_INFINITY) : 10_000;
+  const isGoal = (s: EconState): boolean =>
+    goalId === ECONOMY_COMPONENT_GOAL_ID
+      ? (s.cargo.component ?? 0) >= 1
+      : s.credits >= (state.savingsGoalCredits ?? Number.POSITIVE_INFINITY);
+  if (isGoal(start)) return { steps: [] };
+  const seen = new Map<string, number>([[econKey(start, goalCap), 0]]);
+  let frontier: { s: EconState; steps: PlannedStep[] }[] = [{ s: start, steps: [] }];
+  while (frontier.length > 0) {
+    const nextFrontier: typeof frontier = [];
+    for (const node of frontier) {
+      if (node.steps.length >= PLAN_MAX_DEPTH) continue;
+      for (const { next, step } of econSuccessors(node.s, state, goalId)) {
+        const steps = [...node.steps, step];
+        if (isGoal(next)) return { steps };
+        const k = econKey(next, goalCap);
+        if (seen.has(k) && seen.get(k)! <= steps.length) continue;
+        seen.set(k, steps.length);
+        nextFrontier.push({ s: next, steps });
+      }
+    }
+    frontier = nextFrontier;
+  }
+  return { unplanned: "unplanned — no route within depth" };
+}
+
 /**
  * Plan toward `goalId` from the captain's actual state. The gate
  * goal (B-01: hold Witness + any two, then a recorded decision) is
  * P2's one goal; when her gate already stands open, the goal's
  * plan is the passage chain — three ordinary legs, gated on the
- * open decision (spec §3.2).
+ * open decision (spec §3.2). P3 adds the two economy goals above.
  */
 export function planForGoal(state: CaptainWorldState, goalId: string): PlanDraft {
+  if (goalId === ECONOMY_COMPONENT_GOAL_ID || goalId === ECONOMY_SAVINGS_GOAL_ID) {
+    return planEconomyGoal(state, goalId);
+  }
   if (goalId !== GATE_GOAL_ID) {
-    return { unplanned: `no route within depth — "${goalId}" is not a goal the P2 planner knows` };
+    return { unplanned: `no route within depth — "${goalId}" is not a goal the planner knows` };
   }
   if (state.gateOpen) {
     // The passage chain: three ordinary legs to three distinct

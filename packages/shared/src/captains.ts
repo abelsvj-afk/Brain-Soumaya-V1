@@ -174,6 +174,14 @@ export interface CaptainDefinition {
   shipModelKey: string;
   /** The only act kinds this captain may perform in L1/P1. */
   allowList: readonly NpcActKind[];
+  /** P3 (R6): Ambition's target — the savings goal her economy
+   *  acts measure distance to, in her own Credits, with its plain
+   *  label. Existence is settled by the Layer design (§4.1: "a
+   *  named goal per captain"); the numbers are build-time tuning,
+   *  scaled to G1's price reality. Completion re-aims Ambition at
+   *  the next multiple (goal ×2) rather than finishing her. */
+  savingsGoalCredits: number;
+  savingsGoalLabel: string;
   voice: CaptainVoiceProfile;
   /** P1 flies exactly Bex and Junia; the others are defined, not
    *  flying. Flipping any other flag is out of spec (spec §7). */
@@ -206,12 +214,53 @@ const CAPTAIN_P2_ALLOW_LIST: readonly NpcActKind[] = [
   "gate-passage",
 ] as const;
 
-/** The P3-locked verbs, named ONLY so the fence can refuse them
- *  with a phase-lock cause (P2-B1.9). They are not act kinds, they
- *  are on no allow-list, and the P2 planner's action set excludes
- *  them — the list exists so "locked until P3" is a distinct,
- *  testable refusal from "never allowed". */
-export const CAPTAIN_PHASE_LOCKED_VERBS: readonly string[] = ["gather", "sell", "refine"] as const;
+/** The P3 economy allow-list (R5, coordinator ruling): a SEPARATE
+ *  named constant, composed into the definitions of the captains
+ *  active at P3 (Bex, Junia, Veyra) — inactive definitions do not
+ *  receive the economy kinds until their activation phase. Keeping
+ *  it separate is what lets P1's F25 wording be re-scoped honestly
+ *  (S-P3-8): Junia gains "gather" as a market verb in P3; she still
+ *  has no "tend" kind, in any phase so far, for anyone. Through P2
+ *  these three verbs were phase-locked (P2-B1.9); P3 removes the
+ *  lock and admits them only through the NPC-pool executor. */
+export const CAPTAIN_ECONOMY_ALLOW_LIST: readonly NpcActKind[] = ["gather", "sell", "refine"] as const;
+
+/** L1 verbs + the P3 economy verbs (Bex's and Junia's list in P3). */
+const CAPTAIN_L1_ECONOMY_ALLOW_LIST: readonly NpcActKind[] = [
+  ...CAPTAIN_L1_ALLOW_LIST,
+  ...CAPTAIN_ECONOMY_ALLOW_LIST,
+] as const;
+
+/** The seeker's list in P3: the P2 list + the economy verbs. */
+const CAPTAIN_P2_ECONOMY_ALLOW_LIST: readonly NpcActKind[] = [
+  ...CAPTAIN_P2_ALLOW_LIST,
+  ...CAPTAIN_ECONOMY_ALLOW_LIST,
+] as const;
+
+/** Trait affinities (P3, R7 — coordinator ruling): a pair's value
+ *  is capped at ±10, moves by the ruled event deltas, and cools
+ *  toward zero by 1 point per local day. Effects are economic and
+ *  social only (Layer §4.3) — never combat, never the player. */
+export const CAPTAIN_AFFINITY_CAP = 10;
+export const CAPTAIN_AFFINITY_PREMIUM_TAKEN = -1;
+export const CAPTAIN_AFFINITY_TOW_ASSIST = 2;
+export const CAPTAIN_AFFINITY_CONVOY = 1;
+export const CAPTAIN_AFFINITY_ENCOUNTER = 0.5;
+export const CAPTAIN_AFFINITY_COOLING_PER_DAY = 1;
+
+/** Director-lite tunables (P3, R8–R10): named constants at the
+ *  conservative end — the tuning surface for a system no doc
+ *  numbers. At most one incident per evaluation; a 12-step
+ *  cooldown; two incidents per space-local day at most; a stretch
+ *  counts as quiet when fewer than two non-wait captain acts were
+ *  logged in the last six advance steps. */
+export const DIRECTOR_COOLDOWN_STEPS = 12;
+export const DIRECTOR_DAILY_CAP = 2;
+export const DIRECTOR_QUIET_WINDOW_STEPS = 6;
+export const DIRECTOR_QUIET_MAX_ACTS = 2;
+/** A buying rush adds half the (buyer, good) premium cap, rounded
+ *  down, as a same-day allowance in the NPC pool only (R9). */
+export const DIRECTOR_RUSH_FRACTION = 0.5;
 
 /** Dain — the Hauler (settled 2026-10-31, owner's tap, Set A).
  *  Defined in L1; flies in a later increment. */
@@ -227,6 +276,8 @@ export const DAIN: CaptainDefinition = {
   homeAnchor: { kind: "berth", world: "great-station", label: "his Station berth" },
   shipModelKey: "challenger",
   allowList: CAPTAIN_L1_ALLOW_LIST,
+  savingsGoalCredits: 800,
+  savingsGoalLabel: "a berth of his own",
   active: false,
   voice: {
     pronouns: "he",
@@ -261,7 +312,9 @@ export const VEYRA: CaptainDefinition = {
   homeWorld: "scale",
   homeAnchor: { kind: "ship", world: "scale", label: "her ship" },
   shipModelKey: "omen",
-  allowList: CAPTAIN_P2_ALLOW_LIST,
+  allowList: CAPTAIN_P2_ECONOMY_ALLOW_LIST,
+  savingsGoalCredits: 600,
+  savingsGoalLabel: "a gate-worthy outfitting",
   active: true,
   voice: {
     pronouns: "she",
@@ -293,7 +346,9 @@ export const BEX: CaptainDefinition = {
   homeWorld: "great-station",
   homeAnchor: { kind: "quarter", world: "great-station", label: "her Station quarter" },
   shipModelKey: "bob",
-  allowList: CAPTAIN_L1_ALLOW_LIST,
+  allowList: CAPTAIN_L1_ECONOMY_ALLOW_LIST,
+  savingsGoalCredits: 300,
+  savingsGoalLabel: "a cargo of Circuits, bought honest",
   active: true,
   voice: {
     pronouns: "she",
@@ -329,7 +384,9 @@ export const JUNIA: CaptainDefinition = {
   homeWorld: "growing-place",
   homeAnchor: { kind: "terrace", world: "growing-place", label: "a tender's cottage-terrace at the Growing Place" },
   shipModelKey: "pancake",
-  allowList: CAPTAIN_L1_ALLOW_LIST,
+  allowList: CAPTAIN_L1_ECONOMY_ALLOW_LIST,
+  savingsGoalCredits: 250,
+  savingsGoalLabel: "the terrace's winter store",
   active: true,
   voice: {
     pronouns: "she",
@@ -362,6 +419,8 @@ export const HOLLIS: CaptainDefinition = {
   homeAnchor: { kind: "ship", world: "great-station", label: "his ship, berthed at the Great Station" },
   shipModelKey: "wato",
   allowList: CAPTAIN_L1_ALLOW_LIST,
+  savingsGoalCredits: 500,
+  savingsGoalLabel: "a delver's deep kit, paid for outright",
   active: false,
   voice: {
     pronouns: "he",
@@ -394,6 +453,8 @@ export const SORREL: CaptainDefinition = {
   homeAnchor: { kind: "cell", world: "quiet-archive", label: "a keeper's cell at the Archive" },
   shipModelKey: "zenith",
   allowList: CAPTAIN_L1_ALLOW_LIST,
+  savingsGoalCredits: 400,
+  savingsGoalLabel: "the Archive's quiet reserve",
   active: false,
   voice: {
     pronouns: "they",
@@ -430,6 +491,8 @@ export const YARA: CaptainDefinition = {
   },
   shipModelKey: "imperial",
   allowList: CAPTAIN_L1_ALLOW_LIST,
+  savingsGoalCredits: 700,
+  savingsGoalLabel: "a convoy fund of her own",
   active: false,
   voice: {
     pronouns: "she",
@@ -461,6 +524,8 @@ export const FELIX: CaptainDefinition = {
   homeAnchor: { kind: "workshop-berth", world: "great-station", label: "a workshop-adjacent berth at the Great Station" },
   shipModelKey: "spitfire",
   allowList: CAPTAIN_L1_ALLOW_LIST,
+  savingsGoalCredits: 450,
+  savingsGoalLabel: "a workshop of his own",
   active: false,
   voice: {
     pronouns: "he",
@@ -533,13 +598,23 @@ export const CAPTAIN_START_CREDITS = 120;
  * stream, in plain words (design §9, L1 subset). There is no
  * free-text question: the model/key question is still the owner's.
  */
-export type CaptainQuestionKind = "doing" | "met" | "headed";
+export type CaptainQuestionKind = "doing" | "met" | "headed" | "about";
 
 export const CAPTAIN_QUESTION_KINDS: readonly CaptainQuestionKind[] = [
   "doing",
   "met",
   "headed",
+  "about",
 ] as const;
+
+/** Her current savings target (R6): the definition's goal, doubled
+ *  for each completion her balance has already passed — completion
+ *  re-aims Ambition at the next multiple instead of finishing her. */
+export function captainSavingsTarget(def: CaptainDefinition, credits: number): number {
+  let target = def.savingsGoalCredits;
+  while (credits >= target) target *= 2;
+  return target;
+}
 
 /** The memory stream (design §6.2): in L1 a captain writes meetings,
  *  observations, and session markers only. Importance is a fixed
@@ -725,6 +800,22 @@ export interface CaptainState {
   plan?: CaptainPlanView | null;
   /** P2 (purpose captains only): her B-01 progress, or null. */
   gateView?: CaptainGateView | null;
+  /** P3 (economy captains): her hold, read from the NPC pool —
+   *  visible cargo (T9). Per-good counts, alphabetical. */
+  cargo?: { good: string; qty: number }[];
+  /** P3: units in her hold right now, and the hold's capacity. */
+  holdUsed?: number;
+  holdCapacity?: number;
+  /** P3: her savings goal (R6) — the label, the current target
+   *  (doubled per completion), and how far she stands from it. */
+  savingsGoal?: { label: string; target: number; distance: number };
+  /** P3: her affinities toward the other captains (R7) — her
+   *  opinions, readable as such; never a player-facing effect. */
+  affinities?: { captainId: CaptainId; value: number }[];
+  /** P3: the Director's owner switch for this space (R14) — the
+   *  same value on every captain's wire; the Station panel renders
+   *  the toggle once. */
+  directorEnabled?: boolean;
 }
 
 /** One Chronicle line (design §8.1): a read model over the shared

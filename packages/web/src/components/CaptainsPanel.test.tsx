@@ -128,12 +128,12 @@ describe("CaptainsPanel", () => {
     render(<CaptainsPanel world="great-station" />);
     await screen.findByRole("heading", { name: "Bex — Regular" });
     fireEvent.click(screen.getByRole("button", { name: "What are you doing?" }));
-    await waitFor(() => expect(mockAsk).toHaveBeenCalledWith("bex", "doing"));
+    await waitFor(() => expect(mockAsk).toHaveBeenCalledWith("bex", "doing", undefined));
     expect(await screen.findByText(/I'm at Scale just now/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Have we met?" }));
-    await waitFor(() => expect(mockAsk).toHaveBeenCalledWith("bex", "met"));
+    await waitFor(() => expect(mockAsk).toHaveBeenCalledWith("bex", "met", undefined));
     fireEvent.click(screen.getByRole("button", { name: "Where are you headed?" }));
-    await waitFor(() => expect(mockAsk).toHaveBeenCalledWith("bex", "headed"));
+    await waitFor(() => expect(mockAsk).toHaveBeenCalledWith("bex", "headed", undefined));
   });
 
   it("stop, resume, and forget-our-meetings are the owner's controls", async () => {
