@@ -6638,10 +6638,11 @@ button.mindspace-more { cursor: pointer; }
   }
 }
 /* UX review #8: the perf prompt (z 58) used to sit on top of the open
-   dock's tab bar on phones. While the dock sheet is open it steps aside;
-   it comes back when the dock closes. */
+   dock's tab bar on phones (and over the Add-a-memory sheet's submit
+   button). While either sheet is open it steps aside; it comes back when
+   the sheet closes. */
 @media (max-width: 720px) {
-  .app:has(.dock) .perf-suggest { display: none; }
+  .app:has(.dock, .ingest) .perf-suggest { display: none; }
 }
 
 /* Worlds surface (Phase 2, P2-4): the Great Station scene overlay.
