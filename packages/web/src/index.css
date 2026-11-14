@@ -6700,7 +6700,9 @@ button.mindspace-more { cursor: pointer; }
   .tools-item.tools-phone-only { display: flex; }
   .fab-chat { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
   .ship-status-stack .audio-state-chip { display: none; }
-  .notifications-bar { top: 64px; left: 76px; max-width: min(320px, calc(100vw - 160px)); }
+  /* Header notices go top-RIGHT (under Tools, left of the right column) so
+     they never share the left side with the status stack. */
+  .notifications-bar { top: 64px; left: auto; right: calc(76px + env(safe-area-inset-right, 0px)); max-width: min(320px, calc(100vw - 480px)); }
   .toast-wrap { top: calc(12px + env(safe-area-inset-top, 0px)); max-width: min(420px, calc(100vw - 180px)); }
   .app:has(.notifications-bar .notification-chip) .toast-wrap { top: calc(12px + env(safe-area-inset-top, 0px)); }
   /* Right of the Notes/Views sheet, left of Chat/Add. */
@@ -6735,7 +6737,7 @@ button.mindspace-more { cursor: pointer; }
     left: calc(76px + env(safe-area-inset-left, 0px));
     bottom: calc(84px + env(safe-area-inset-bottom, 0px));
     width: min(40vw, 300px);
-    max-height: 150px;
+    max-height: 140px;
   }
 }
 
