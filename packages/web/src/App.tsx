@@ -115,6 +115,7 @@ import {
   type ProactiveContextSource,
 } from "./api/client.js";
 import { lazyPanel } from "./lib/lazyPanel.js";
+import { loadHealthWithBackoff } from "./lib/healthRetry.js";
 import { createPerfMonitor, browserPerfMonitorDeps, perfOfferDismissed, dismissPerfOffer } from "./lib/perfMonitor.js";
 import { Icon } from "./components/icons/Icon.js";
 
@@ -1048,6 +1049,17 @@ export default function App() {
     return Math.round(lvl * 100) / 100;
   }, [view.nodes, streak]);
 
+  // /api/health can answer 429 (rate-limited) or 5xx; retry with backoff and
+  // fall back to "status unknown" instead of crashing on a missing body.
+  const healthLoadSeqRef = useRef(0);
+  const loadHealthWithRetry = () => {
+    const seq = ++healthLoadSeqRef.current;
+    void loadHealthWithBackoff(getHealth, { isCancelled: () => seq !== healthLoadSeqRef.current }).then((h) => {
+      if (seq !== healthLoadSeqRef.current) return;
+      if (h) setHealth(h);
+    });
+  };
+
   const refresh = useCallback(async (newIds?: number[], fuelEarned?: number, linkCount?: number) => {
     const sequence = ++graphRefreshSequenceRef.current;
     try {
@@ -1113,9 +1125,7 @@ export default function App() {
     } finally {
       console.info("[BOOT] loaded complete");
     }
-    getHealth()
-      .then(setHealth)
-      .catch(() => {});
+    loadHealthWithRetry();
   }, []);
 
   // If every beacon fades (its memory got tended) while we're watching one, the
@@ -2198,7 +2208,7 @@ export default function App() {
     });
   };
 
-  const llmStatus = health
+  const llmStatus = health?.llm
     ? health.llm.available
       ? health.llm.model
       : health.llm.degraded
