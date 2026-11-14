@@ -17,7 +17,6 @@ import {
   type BeaconStatusLike,
   type SceneIdentity,
 } from "../graph/sceneIdentity.js";
-import { isPhonePortraitViewport } from "../graph/labelFrame.js";
 
 /**
  * CL-1b — the galaxy shell's identity & ambience readouts (IM-19..IM-23).
@@ -131,6 +130,9 @@ function stackLines(children: ReactNode): StackLine[] {
  * never auto-expands (the noticing 💭 precedent: glow, wait, don't open).
  * Without `onToggle` the stack renders exactly as it always has.
  */
+/** How long the expanded ship-status stack stays open before folding back to its pill. */
+export const SHIP_STATUS_AUTO_COLLAPSE_MS = 8000;
+
 export function ShipStatusStack({
   belowNoticing,
   collapsed,
@@ -157,7 +159,25 @@ export function ShipStatusStack({
     return () => clearTimeout(t);
   }, [collapsed, signature]);
 
+  // Owner request (t38u): the expanded stack folds itself away after a few
+  // seconds so it never parks over the galaxy. Hovering or focusing inside
+  // it pauses the timer; leaving restarts it.
+  const onToggleRef = useRef(onToggle);
+  onToggleRef.current = onToggle;
+  const [held, setHeld] = useState(false);
+  const expanded = !collapsed && !!onToggle;
+  useEffect(() => {
+    if (!expanded || held) return;
+    const t = setTimeout(() => onToggleRef.current?.(), SHIP_STATUS_AUTO_COLLAPSE_MS);
+    return () => clearTimeout(t);
+  }, [expanded, held]);
+  useEffect(() => {
+    if (!expanded) setHeld(false);
+  }, [expanded]);
+
   if (collapsed && onToggle) {
+    // Nothing to report (no visitor, beacon idle): no pill at all.
+    if (lines.length === 0) return null;
     const shown = lines[0];
     const hidden = Math.max(0, lines.length - 1);
     return (
@@ -182,6 +202,16 @@ export function ShipStatusStack({
       className={`ship-status-stack${belowNoticing ? " below-noticing" : ""}`}
       role="group"
       aria-label="Ship status"
+      onPointerEnter={expanded ? () => setHeld(true) : undefined}
+      onPointerLeave={expanded ? () => setHeld(false) : undefined}
+      onFocus={expanded ? () => setHeld(true) : undefined}
+      onBlur={
+        expanded
+          ? (e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHeld(false);
+            }
+          : undefined
+      }
     >
       {children}
       {onToggle && (
@@ -211,89 +241,33 @@ export function shipStatusSeenKey(spaceId: string): string {
 }
 
 /**
- * Resolve the stack's open state for a space with no stored preference:
- * expanded on desktop; on phone portrait, expanded for the ONE-TIME
- * first-run reveal (`reveal: true` — the caller marks it seen, the
- * GalaxyViews `brain.viewsSeen` pattern) and collapsed on every later
- * mount. A stored preference always wins and never reveals.
+ * Owner request (t38u): the stack ALWAYS starts as the compact pill — on
+ * desktop it used to start expanded (a big box over the stars and labels)
+ * and phones had a first-run expanded reveal. It now opens only on tap and
+ * folds itself away (SHIP_STATUS_AUTO_COLLAPSE_MS), so there is no open
+ * preference to persist; old `ship.status.<id>` values are ignored.
+ * Kept as a function so callers/tests have one place that states the default.
  */
 export function resolveShipStatusOpen(
-  spaceId: string,
-  viewW: number,
-  viewH: number,
+  _spaceId: string,
+  _viewW: number,
+  _viewH: number,
 ): { open: boolean; reveal: boolean } {
-  try {
-    const pref = localStorage.getItem(shipStatusPrefKey(spaceId));
-    if (pref != null) return { open: pref !== "0", reveal: false };
-  } catch {
-    /* storage unavailable — fall through to the viewport default */
-  }
-  if (!isPhonePortraitViewport(viewW, viewH)) return { open: true, reveal: false };
-  try {
-    if (!localStorage.getItem(shipStatusSeenKey(spaceId))) return { open: true, reveal: true };
-  } catch {
-    /* storage unavailable — the collapsed phone default still applies */
-  }
   return { open: false, reveal: false };
 }
 
 /**
- * The stack's open state, persisted PER BRAIN like every other HUD
- * preference (mirrors App's `ship.task.${space.id}` pattern): written
- * only on the owner's explicit toggle, under `ship.status.${spaceId}`
- * ("1" = expanded, "0" = collapsed).
- *
- * Batch I (REG-068 / GH-14): the state is resolved BEFORE the first
- * paint — the old useState(true) + effect flashed the stack expanded
- * for one frame even with a stored collapsed preference. `override` is
- * the owner's explicit toggle, keyed by space so a brain switch
- * re-resolves; `revealedId` is sticky for the space currently in its
- * one-time first-run reveal, so marking it seen does not immediately
- * collapse the reveal under the owner — and it clears when the space
- * changes, so a returned-to brain never re-reveals.
+ * The stack's open state: collapsed on first paint for every brain and
+ * viewport; the toggle opens/closes it for the current brain only, and a
+ * brain switch starts collapsed again.
  */
 export function useShipStatusOpen(spaceId: string | null): [boolean, (v: boolean) => void] {
-  const [override, setOverride] = useState<{ id: string; open: boolean } | null>(null);
-  const [revealedId, setRevealedId] = useState<string | null>(null);
-  const resolved = spaceId
-    ? resolveShipStatusOpen(spaceId, window.innerWidth, window.innerHeight)
-    : { open: true, reveal: false };
-  useEffect(() => {
-    if (!spaceId) return;
-    if (resolved.reveal) {
-      setRevealedId(spaceId);
-      try {
-        localStorage.setItem(shipStatusSeenKey(spaceId), "1");
-      } catch {
-        /* private mode */
-      }
-    } else {
-      setRevealedId(null);
-    }
-    // Resolved from spaceId + the viewport at mount — same as before.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spaceId]);
+  const [override, setOverride] = useState<{ id: string | null; open: boolean } | null>(null);
   const setShipStatusOpen = useCallback(
-    (v: boolean) => {
-      if (spaceId) {
-        setOverride({ id: spaceId, open: v });
-        try {
-          localStorage.setItem(shipStatusPrefKey(spaceId), v ? "1" : "0");
-        } catch {
-          /* private mode */
-        }
-      } else {
-        setOverride(null);
-      }
-    },
+    (v: boolean) => setOverride({ id: spaceId, open: v }),
     [spaceId],
   );
-  const open =
-    override && spaceId && override.id === spaceId
-      ? override.open
-      : revealedId === spaceId
-        ? true
-        : resolved.open;
+  const open = override && override.id === spaceId ? override.open : false;
   return [open, setShipStatusOpen];
 }
 

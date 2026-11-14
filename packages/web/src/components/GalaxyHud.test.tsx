@@ -7,6 +7,7 @@ import {
   ModelFallbackNote,
   SceneIdentityCard,
   ShipStatusStack,
+  SHIP_STATUS_AUTO_COLLAPSE_MS,
   VisitorChip,
   resolveShipStatusOpen,
   useShipStatusOpen,
@@ -213,7 +214,7 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
   });
 });
 
-describe("HUD round 3 — useShipStatusOpen (per-brain persistence + defaults)", () => {
+describe("Warming card (t38u) — useShipStatusOpen always starts as the pill", () => {
   const realW = window.innerWidth;
   const realH = window.innerHeight;
   const setViewport = (w: number, h: number) => {
@@ -226,66 +227,67 @@ describe("HUD round 3 — useShipStatusOpen (per-brain persistence + defaults)",
     localStorage.clear();
   });
 
-  it("a stored preference wins, and the toggle round-trips it under ship.status.<id>", () => {
-    localStorage.setItem("ship.status.brain-a", "0");
-    const { result } = renderHook(() => useShipStatusOpen("brain-a"));
-    expect(result.current[0]).toBe(false);
+  it("starts collapsed on desktop and phone, even with an old stored 'expanded' preference", () => {
+    for (const [w, h] of [[1440, 900], [390, 844], [844, 390]] as const) {
+      setViewport(w, h);
+      localStorage.setItem("ship.status.brain-a", "1");
+      const seen: boolean[] = [];
+      function Probe() {
+        const [open] = useShipStatusOpen("brain-a");
+        seen.push(open);
+        return null;
+      }
+      const { unmount } = render(<Probe />);
+      expect(seen[0]).toBe(false);
+      expect(seen[seen.length - 1]).toBe(false);
+      unmount();
+    }
+    expect(resolveShipStatusOpen("brain-a", 1440, 900)).toEqual({ open: false, reveal: false });
+  });
+
+  it("the toggle opens and closes it for the current brain; a brain switch starts collapsed", () => {
+    const { result, rerender } = renderHook(({ id }) => useShipStatusOpen(id), { initialProps: { id: "brain-b" } });
     act(() => result.current[1](true));
     expect(result.current[0]).toBe(true);
-    expect(localStorage.getItem("ship.status.brain-a")).toBe("1");
+    rerender({ id: "brain-c" });
+    expect(result.current[0]).toBe(false);
+    act(() => result.current[1](true));
     act(() => result.current[1](false));
     expect(result.current[0]).toBe(false);
-    expect(localStorage.getItem("ship.status.brain-a")).toBe("0");
-  });
-
-  it("phone, no preference: the first run reveals expanded and marks seen; the next mount defaults collapsed", () => {
-    setViewport(390, 780);
-    const first = renderHook(() => useShipStatusOpen("brain-b"));
-    expect(first.result.current[0]).toBe(true);
-    expect(localStorage.getItem("ship.statusSeen.brain-b")).toBe("1");
-    first.unmount();
-    const second = renderHook(() => useShipStatusOpen("brain-b"));
-    expect(second.result.current[0]).toBe(false);
-  });
-
-  it("desktop, no preference: starts expanded and does not consume the phone reveal", () => {
-    setViewport(1440, 900);
-    const { result } = renderHook(() => useShipStatusOpen("brain-c"));
-    expect(result.current[0]).toBe(true);
-    expect(localStorage.getItem("ship.statusSeen.brain-c")).toBeNull();
-  });
-
-  it("resolveShipStatusOpen: a stored preference beats every default, both ways", () => {
-    localStorage.setItem("ship.status.brain-d", "1");
-    expect(resolveShipStatusOpen("brain-d", 390, 780)).toEqual({ open: true, reveal: false });
-    localStorage.setItem("ship.status.brain-d", "0");
-    expect(resolveShipStatusOpen("brain-d", 1440, 900)).toEqual({ open: false, reveal: false });
   });
 });
 
-describe("Batch I — useShipStatusOpen resolves before the first paint (REG-068 / GH-14)", () => {
-  it("a stored collapsed preference is already collapsed on the FIRST render — no expanded flash", () => {
-    localStorage.setItem("ship.status.brain-flash", "0");
-    const seen: boolean[] = [];
-    function Probe() {
-      const [open] = useShipStatusOpen("brain-flash");
-      seen.push(open);
-      return null;
-    }
-    render(<Probe />);
-    expect(seen[0]).toBe(false);
-    expect(seen[seen.length - 1]).toBe(false);
+describe("Warming card (t38u) — the expanded stack folds itself away", () => {
+  afterEach(() => vi.useRealTimers());
+  it(`calls onToggle after ${SHIP_STATUS_AUTO_COLLAPSE_MS}ms, but not while hovered`, () => {
+    vi.useFakeTimers();
+    const onToggle = vi.fn();
+    const { container } = render(
+      <ShipStatusStack onToggle={onToggle}>
+        <div>x</div>
+      </ShipStatusStack>,
+    );
+    const stack = container.querySelector(".ship-status-stack")!;
+    fireEvent.pointerEnter(stack);
+    act(() => { vi.advanceTimersByTime(SHIP_STATUS_AUTO_COLLAPSE_MS + 100); });
+    expect(onToggle).not.toHaveBeenCalled();
+    fireEvent.pointerLeave(stack);
+    act(() => { vi.advanceTimersByTime(SHIP_STATUS_AUTO_COLLAPSE_MS - 100); });
+    expect(onToggle).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
-
-  it("a stored expanded preference is already expanded on the FIRST render", () => {
-    localStorage.setItem("ship.status.brain-open", "1");
-    const seen: boolean[] = [];
-    function Probe() {
-      const [open] = useShipStatusOpen("brain-open");
-      seen.push(open);
-      return null;
-    }
-    render(<Probe />);
-    expect(seen[0]).toBe(true);
+  it("never auto-folds a stack rendered without onToggle", () => {
+    vi.useFakeTimers();
+    render(<ShipStatusStack><div>x</div></ShipStatusStack>);
+    act(() => { vi.advanceTimersByTime(SHIP_STATUS_AUTO_COLLAPSE_MS * 3); });
+  });
+  it("collapsed with nothing to report renders no pill at all", () => {
+    const { container } = render(
+      <ShipStatusStack collapsed onToggle={() => {}}>
+        <BeaconReadout status={null} />
+      </ShipStatusStack>,
+    );
+    expect(container.querySelector(".ship-status-mini")).toBeNull();
   });
 });
