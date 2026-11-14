@@ -468,6 +468,10 @@ body,
   color: var(--muted);
   text-transform: capitalize;
 }
+/* Sentence-style meta lines ("Planet · no links yet") keep their own casing. */
+.meta.meta-plain {
+  text-transform: none;
+}
 
 /* Weight (gravity) slider in the inspector */
 .weight {

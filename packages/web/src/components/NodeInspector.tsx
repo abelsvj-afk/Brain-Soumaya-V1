@@ -14,6 +14,10 @@ import { DeepDive } from "./DeepDive.js";
 import { parseTolerantMs } from "../utils/dueReminders.js";
 import { visionTargetDateKey, formatCalendarDate } from "../utils/localDay.js";
 
+/** "A planet" / "An asteroid" — the size-reason sentence used a hard-coded "A". */
+const articleFor = (word: string): string => (/^[aeiou]/i.test(word) ? "An" : "A");
+const capitalizeFirst = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+
 interface Props {
   node: GraphNode | null;
   graph: GraphData;
@@ -355,17 +359,19 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
       )}
       {node.celestial && node.kind !== "belief" && node.kind !== "moc" && (
         <>
-          <span className="meta">
+          {/* meta-plain: the generic .meta capitalize rule turned "no links yet" into
+              "No Links Yet"; this line is a sentence, so only its first word is capitalized. */}
+          <span className="meta meta-plain">
             {/* REG-106: the derived figure is named mass, never weight — the
                 slider below sets importance, a different quantity. */}
             {/* UX review #4: the raw mass % moved into "More details" below — the
                 plain line says what it is and how connected it is. */}
-            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]}
+            {CELESTIAL_ICON[node.celestial]} {capitalizeFirst(CELESTIAL_LABEL[node.celestial])}
             {node.degree ? ` · ${node.degree} link${node.degree === 1 ? "" : "s"}` : " · no links yet"}
           </span>
           {/* Why it's this size — the legend, applied in context so it sticks. */}
           <span className="size-reason" title="What gives this memory its gravitational mass">
-            {CELESTIAL_ICON[node.celestial]} A {CELESTIAL_LABEL[node.celestial]} because {sizeReason(node)}.
+            {CELESTIAL_ICON[node.celestial]} {articleFor(CELESTIAL_LABEL[node.celestial])} {CELESTIAL_LABEL[node.celestial]} because {sizeReason(node)}.
           </span>
         </>
       )}
@@ -598,7 +604,7 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
               <p className="node-when">⚖️ Size · mass {Math.round(node.mass * 100)}% — from links, importance, age and feeling</p>
             )}
             {typeof node.entropy === "number" && (
-              <p className="node-when">🌡️ Cooling · entropy {Math.round(node.entropy * 100)}% — rises when it goes unvisited</p>
+              <p className="node-when">🌡️ Fade level · entropy {Math.round(node.entropy * 100)}% — rises the longer it goes unvisited</p>
             )}
             {typeof node.reviewStrength === "number" && (
               <p className="node-when">🧠 Review strength {Math.round(node.reviewStrength * 100)}% — how well you remember it</p>

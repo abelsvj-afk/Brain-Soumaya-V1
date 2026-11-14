@@ -1128,7 +1128,7 @@ export function DigestPanel({
       )}
       {!(failedSources.has("insights") && items.length === 0) && items.length === 0 && (
         <p className="empty">
-          No insights yet. Dump a few related thoughts, then hit "🔍 Find new links" above to surface
+          No insights yet. Add a few related memories, then hit "🔍 Find new links" above to surface
           connections you haven&apos;t drawn.
         </p>
       )}

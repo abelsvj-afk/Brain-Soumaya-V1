@@ -390,11 +390,11 @@ export class SpacesRepo {
     // Reject if gamerTag is case-insensitively "soumaya" (unless it is the first brain)
     if (!isFirst) {
       if (trimmedGamerTag.toLowerCase() === "soumaya") {
-        throw new UserFacingError("The name/username 'Soumaya' is reserved.");
+        throw new UserFacingError("The username 'Soumaya' is reserved.");
       }
       // Reject if name is case-insensitively "soumaya" (unless it is the first brain)
       if (trimmedName.toLowerCase() === "soumaya") {
-        throw new UserFacingError("The name/username 'Soumaya' is reserved.");
+        throw new UserFacingError("The brain name 'Soumaya' is reserved.");
       }
     }
     const id = randomBytes(16).toString("hex");

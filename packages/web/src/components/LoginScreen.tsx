@@ -31,11 +31,11 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
 
     if (isSignUp) {
       if (trimmedGamerTag.toLowerCase() === "soumaya") {
-        setError("The name/username 'Soumaya' is reserved.");
+        setError("The username 'Soumaya' is reserved.");
         return;
       }
       if (trimmedBrainName.toLowerCase() === "soumaya") {
-        setError("The name/username 'Soumaya' is reserved.");
+        setError("The brain name 'Soumaya' is reserved.");
         return;
       }
       if (!trimmedBrainName) {

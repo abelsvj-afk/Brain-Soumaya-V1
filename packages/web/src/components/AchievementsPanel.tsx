@@ -153,7 +153,7 @@ export function AchievementsPanel({
               </>
             ) : (
               <>
-                No active streak — log a memory to start one
+                No active streak — add a memory to start one
                 {streak.best > 0 ? ` (best ${streak.best})` : ""}
               </>
             )}
