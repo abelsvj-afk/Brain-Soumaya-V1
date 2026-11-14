@@ -90,3 +90,31 @@ describe("HeuristicProvider.extract — offline labels don't end mid-phrase (UX 
     expect(await labelOf("   ")).toBe("Thought");
   });
 });
+
+describe("HeuristicProvider.extract — labels survive abbreviations and short openers", () => {
+  const labelOf = async (t: string) => (await llm.extract(t, [])).nodes[0]!.label;
+  it("doesn't stop at a title abbreviation", async () => {
+    expect(await labelOf("Dr. Patel moved my appointment to Friday")).toBe("Dr. Patel moved my appointment");
+  });
+  it("doesn't stop at a place abbreviation", async () => {
+    expect(await labelOf("St. Louis trip planning for next spring")).toBe("St. Louis trip planning for next");
+  });
+  it("keeps going past a one-word exclamation", async () => {
+    expect(await labelOf("Wow! Got the job offer today")).toBe("Wow! Got the job offer today");
+  });
+  it("skips Mr./Mrs./Ms./Jr./Sr./vs./etc./e.g./i.e.", async () => {
+    expect(await labelOf("Mr. Smith vs. Mrs. Jones")).toBe("Mr. Smith vs. Mrs. Jones");
+    expect(await labelOf("Ms. Lee and Sr. Diaz met")).toBe("Ms. Lee and Sr. Diaz met");
+    expect(await labelOf("Bob Jr. called me")).toBe("Bob Jr. called me");
+    expect(await labelOf("Buy fruit, e.g. apples")).toBe("Buy fruit, e.g. apples");
+    expect(await labelOf("Pack snacks, cables, etc. tonight")).toBe("Pack snacks, cables, etc. tonight");
+    expect(await labelOf("One task i.e. laundry")).toBe("One task i.e. laundry");
+  });
+  it("still trims a dangling tail and stops at a real sentence end", async () => {
+    expect(await labelOf("I want to learn guitar this year")).toBe("I want to learn guitar");
+    expect(await labelOf("Met Sara today. She is moving to Austin next month")).toBe("Met Sara today.");
+  });
+  it("stops at a line break once it has three words", async () => {
+    expect(await labelOf("Grocery list for Sunday\nmilk eggs bread")).toBe("Grocery list for Sunday");
+  });
+});
