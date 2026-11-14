@@ -4,6 +4,7 @@ import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
 import { isReminderDue } from "../utils/dueReminders.js";
 import { formatDueLocal } from "./cl1a.helpers.js";
+import { ownMemoryCount } from "../utils/welcomeSeed.js";
 
 interface NotificationsBarProps {
   fuel: Fuel | null;
@@ -67,11 +68,18 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
   // uses (describeLlmStatus), so the two surfaces never say different things about
   // the same underlying state. Specific to WHY, not one generic line, so "it's not
   // working" has an actual answer (see resilient.ts's DegradeReason).
-  if (health && health.llm && (health.llm.degraded || !health.llm.available)) {
+  // UX review #3 (first-run calm): a missing key on a brand-new brain is not an
+  // emergency — the offline mode works. That notice waits until the user has
+  // added a memory of their own (when replies start to matter) and shows as
+  // info, not an error. A DEGRADED provider (quota, timeout, budget) still
+  // alerts at once — that is a real, changed state.
+  const llmMissingOnly = !!health?.llm && !health.llm.degraded && !health.llm.available;
+  const holdForFirstRun = llmMissingOnly && ownMemoryCount(nodes) === 0;
+  if (health && health.llm && (health.llm.degraded || !health.llm.available) && !holdForFirstRun) {
     const status = describeLlmStatus(health);
     alerts.push({
       id: "llm-degraded",
-      type: "error",
+      type: llmMissingOnly ? "info" : "error",
       icon: status.icon,
       text: status.text,
       actionText: "Diagnostics",

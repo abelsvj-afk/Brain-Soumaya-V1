@@ -143,7 +143,8 @@ export function describeLlmStatus(health: Health | null): { icon: string; tone: 
     };
   }
   if (!available) {
-    return { icon: "🔌", tone: "warning", text: "No cloud AI key configured — running in offline fallback mode." };
+    // UX review #3: plain words, not an alarm — offline mode works; a key just makes answers smarter.
+    return { icon: "🔌", tone: "warning", text: "Offline mode — Soumaya works without a cloud AI key; add one in Diagnostics for smarter answers." };
   }
   return { icon: "✅", tone: "ok", text: `Connected — ${provider ?? model} (${model}).` };
 }

@@ -38,6 +38,7 @@ import WorldChangesView from "./components/WorldChangesView.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
+import { ownMemoryCount } from "./utils/welcomeSeed.js";
 import { NoticingCard } from "./components/NoticingCard.js";
 import { playSfx, sfxEnabled } from "./graph/sfx.js";
 import { isVoiceEnabled } from "./voice.js";
@@ -2430,7 +2431,9 @@ export default function App() {
         </div>
       )}
 
-      {perfSuggest && !showIntro && !showObs && !showLegend && !legendPending && (obsSettled || !space) && (
+      {/* UX review #3: on a brand-new brain the perf offer also waits until the
+          user has added a memory of their own — not in the first-run pile-up. */}
+      {perfSuggest && !showIntro && !showObs && !showLegend && !legendPending && (obsSettled || !space) && ownMemoryCount(data.nodes) > 0 && (
         <div className="perf-suggest">
           <span>Soumaya noticed some lag — switch to Performance Mode?</span>
           <button
@@ -2770,7 +2773,10 @@ export default function App() {
           galaxy itself once you're standing in it. Batch I (REG-068 /
           GH-15): same shared hide rule — the cue used to stay up over
           Connections and the Timeline. */}
-      {loaded && data.nodes.length === 0 && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
+      {/* UX review #3: the server's seeded welcome star ("The first light") is
+          Soumaya's, not the user's — counting it meant a new user never saw
+          this cue. It shows beside the welcome star, after the Welcome card. */}
+      {loaded && ownMemoryCount(data.nodes) === 0 && !showIntro && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
         <EmptyGalaxyCue onAdd={() => toggle("ingest")} />
       )}
 
