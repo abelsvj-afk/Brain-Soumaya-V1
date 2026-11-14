@@ -35,7 +35,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
         return;
       }
       if (trimmedBrainName.toLowerCase() === "soumaya") {
-        setError("The brain name 'Soumaya' is reserved.");
+        setError("The Brain / Companion name 'Soumaya' is reserved — pick another.");
         return;
       }
       if (!trimmedBrainName) {
@@ -105,6 +105,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
               value={gamerTag}
               onChange={(e) => setGamerTag(e.target.value)}
               placeholder="e.g. pilot77"
+              autoComplete="username"
               autoCapitalize="none"
               autoCorrect="off"
               minLength={2}
@@ -133,6 +134,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
             Passcode
             <input
               type="password"
+              autoComplete={isSignUp ? "new-password" : "current-password"}
               value={passcode}
               onChange={(e) => setPasscode(e.target.value)}
               placeholder="at least 4 characters"

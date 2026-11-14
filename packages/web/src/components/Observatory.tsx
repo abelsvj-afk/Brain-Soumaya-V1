@@ -446,9 +446,9 @@ export function Observatory({
         <div className="obs-stack">
           <div className="obs-card obs-hero">
             <h2>Welcome, {spaceName}.</h2>
-            <p>Your galaxy is empty. Drop your first thought and watch it become a star.</p>
+            <p>Your galaxy is empty. Add your first memory and watch it become a star.</p>
             <button className="obs-primary" onClick={onCapture}>
-              ✍️ Drop your first thought
+              ✍️ Add your first memory
             </button>
             <button className="obs-enter" onClick={onEnter}>
               Enter the galaxy →

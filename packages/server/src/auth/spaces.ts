@@ -394,7 +394,7 @@ export class SpacesRepo {
       }
       // Reject if name is case-insensitively "soumaya" (unless it is the first brain)
       if (trimmedName.toLowerCase() === "soumaya") {
-        throw new UserFacingError("The brain name 'Soumaya' is reserved.");
+        throw new UserFacingError("The Brain / Companion name 'Soumaya' is reserved — pick another.");
       }
     }
     const id = randomBytes(16).toString("hex");

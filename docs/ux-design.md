@@ -57,11 +57,11 @@ a visible FAB or the header. No screen is URL-only.
 ### 1. Login — private brains (`components/LoginScreen.tsx`)
 
 Two-tab card: **Enter My Galaxy** (login, default) / **Create New Galaxy** (signup).
-Fields: **Gamer tag** (2–40, lowercased, no autocorrect; placeholder "e.g. pilot77"),
+Fields: **Username** (2–40, lowercased, no autocorrect, `autocomplete="username"`; placeholder "e.g. pilot77"),
 **Passcode** (≥4; "at least 4 characters"), and on signup **Brain / Companion name**
 ("e.g. Luna"). Submit is disabled until valid; button reads "Enter my galaxy" /
 "Create my galaxy" → "Opening…" while busy. **Error state:** red text below the form
-(e.g. the reserved-name guard "The name/gamer tag 'Soumaya' is reserved."). Footer
+(e.g. the reserved-name guard "The Brain / Companion name 'Soumaya' is reserved — pick another."). Footer
 note: the passcode is hashed, never stored in clear — "it's the only way back into
 this brain." (This is the `x-space-id` auth from architecture: the brain id lives in
 `localStorage`.)
@@ -87,20 +87,20 @@ menu** 🎯 (stacking popup: Ship 🛸, Station 🌐, Beacons 🛰️ "N deploye
 
 Fades in once ~3.2s after the cinematic fly-in (never interrupts the intro);
 reopen via 🔭; skipped in demo mode.
-- **Empty (0 memories):** hero card — "Welcome, [name]. Your galaxy is empty. Drop
-  your first thought and watch it become a star." → "✍️ Drop your first thought" /
+- **Empty (0 memories):** hero card — "Welcome, [name]. Your galaxy is empty. Add
+  your first memory and watch it become a star." → "✍️ Add your first memory" /
   "Enter the galaxy →".
 - **Established:** "Welcome back, [name]." + "N memories · 🔥 X-day streak", then
-  cards: **Capture a thought**; **Today's tending** (🎯 daily quests, each flips to ✓
+  cards: **Add a memory**; **Today's tending** (🎯 daily quests, each flips to ✓
   when done); **Soumaya surfaced a connection** (✨ latest insight snippet → flies to
   cited node); **Your constellations** (✦ clickable chips); **Jump back in** (🛰️
   recent-memory chips); "Enter the galaxy →".
   This is the Stage-2 "observatory" north-star entry, built as progressive
   disclosure (a few calm starting points, detail pushed into the dock).
 
-### 4. Ingest — "Dump a thought" (`components/IngestPanel.tsx`)
+### 4. Ingest — "Add a memory" (`components/IngestPanel.tsx`)
 
-Heading "Dump a thought". Required textarea ("A business idea, a reflection, a
+Heading "Add a memory". Required textarea ("A business idea, a reflection, a
 random thought…"); collapsible **＋ Add more context**; **tag row** (curated
 `SUGGESTED_TAGS` toggle chips + free "＋ tag" input); collapsible **＋ When / remind
 me** (datetime-local "When did this happen?" + "Remind me"); **📌 Action item**
@@ -157,7 +157,7 @@ persists per-brain in `localStorage`. Optional spoken replies use the response `
 
 ### 8. Settings (`components/SettingsPanel.tsx`)
 
-"⚙️ Settings" modal. **Account:** Display name + Gamer tag (unique) → "Save profile"
+"⚙️ Settings" modal. **Account:** Display name + Username (unique) → "Save profile"
 ("Saved ✓"). **Preferences (toggles):** **Research Mode** ("Lets Soumaya spend fuel
 on deep-dive research & charting" — the gate from the architecture/gamification
 specs), **Voice replies**, **Show Soumaya's task label**.
