@@ -6710,6 +6710,9 @@ button.mindspace-more { cursor: pointer; }
 @media (max-width: 720px) {
   .app:has(.notifications-bar .notification-chip) .toast-wrap {
     top: calc(170px + env(safe-area-inset-top, 0px));
+    /* Reviewer r3: the banner can wrap to 4 lines at 390px; sit 8px under its
+       REAL bottom edge (NotificationsBar publishes --notices-bottom). */
+    top: max(calc(170px + env(safe-area-inset-top, 0px)), calc(var(--notices-bottom, 0px) + 8px));
   }
 }
 
@@ -6774,6 +6777,28 @@ button.mindspace-more { cursor: pointer; }
   }
   /* Reviewer r2 (#171): the no-key banner also covered the open dock's tab row. */
   .app:has(.dock, .ingest) .notifications-bar { display: none; }
+  /* Reviewer r3: after a save the sheet scrolled and its × went off-screen.
+     Keep the header (title + ×) pinned at the top of the scrolling sheet.
+     The negative top/margins cancel the sheet's own padding so content does
+     not peek above the pinned header. */
+  .ingest .panel-head {
+    position: sticky;
+    top: calc(-1 * var(--ingest-pad, 16px));
+    margin: calc(-1 * var(--ingest-pad, 16px)) calc(-1 * var(--ingest-pad, 16px)) 0;
+    padding: var(--ingest-pad, 16px) var(--ingest-pad, 16px) 6px;
+    background: rgb(12, 16, 34);
+    border-radius: 16px 16px 0 0;
+    z-index: 5;
+  }
+  /* Reviewer r3: Music (bottom 74–120px) covered the gauge's numbers. In this
+     short viewport the gauge hangs from the bottom instead, ending 128px up —
+     above Music — with a shorter tube so it clears the header. */
+  .fuel-gauge {
+    top: auto;
+    bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+  }
+  .fuel-gauge .fg-tube { height: 72px; }
   /* The status stack's desktop anchor is height-based and lands it over the
      title on a 390 px-tall screen; pin it mid-left, above the Views sheet. */
   .ship-status-stack,

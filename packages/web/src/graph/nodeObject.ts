@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { type GraphNode, classify, deriveMass, SECTOR_MASS } from "@brain/shared";
 import { bodyColor } from "./theme.js";
 import { makeStarMaterial, makePlanetMaterial, type ShaderTier } from "./shaders.js";
+import { isPhonePortraitViewport } from "./labelFrame.js";
 
 // --- Sector-title threshold (far-zoom labels) ---
 // Effective mass threshold for awarding a far-zoom sector title. Defaults to
@@ -158,9 +159,28 @@ export function drawLabelBacking(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 /**
- * Build a floating text label as a lightweight sprite (no polygons).
+ * Reviewer r3 (phone label size): at phone-portrait width a memory label used
+ * the desktop world size, so "Wow! Got the job offer" became a ~320×110 px
+ * block mid-screen — heavier still with the r2 backing pill. On phone portrait
+ * (the same predicate as the CSS breakpoint and the label safe frame) memory
+ * labels render at PHONE_LABEL_SCALE of their desktop size. The canvas texture
+ * is unchanged (still 44px text), so the smaller sprite stays crisp, and the
+ * pill shrinks with it. Sector titles keep their own phone cap in Graph3D.
  */
-function makeLabel(rawText: string): THREE.Sprite {
+export const PHONE_LABEL_SCALE = 0.55;
+export function labelScaleForViewport(viewW: number, viewH: number): number {
+  return isPhonePortraitViewport(viewW, viewH) ? PHONE_LABEL_SCALE : 1;
+}
+function currentLabelScale(): number {
+  if (typeof window === "undefined") return 1;
+  return labelScaleForViewport(window.innerWidth, window.innerHeight);
+}
+
+/**
+ * Build a floating text label as a lightweight sprite (no polygons).
+ * `viewportScale` shrinks memory labels on phone portrait (see PHONE_LABEL_SCALE).
+ */
+function makeLabel(rawText: string, viewportScale = 1): THREE.Sprite {
   const cacheKey = rawText;
   let cached = labelTexCache.get(cacheKey);
   
@@ -214,7 +234,7 @@ function makeLabel(rawText: string): THREE.Sprite {
   });
   const sprite = new THREE.Sprite(material);
   sprite.renderOrder = 999;
-  sprite.scale.set(width * WORLD_SCALE, height * WORLD_SCALE, 1);
+  sprite.scale.set(width * WORLD_SCALE * viewportScale, height * WORLD_SCALE * viewportScale, 1);
   sprite.position.set(0, 9, 0);
 
   sprite.userData.isLabel = true;
@@ -581,7 +601,7 @@ export function makeNodeObject(node: GraphNode, tier: ShaderTier = "quality"): T
     const glow = makeGlow(col, 12);
     glow.userData.isFidelity = true;
     g.add(glow);
-    g.add(makeLabel(`⏰ ${node.label}`));
+    g.add(makeLabel(`⏰ ${node.label}`, currentLabelScale()));
     g.userData.nodeId = node.id;
     return g;
   }
@@ -827,7 +847,7 @@ export function makeNodeObject(node: GraphNode, tier: ShaderTier = "quality"): T
     nodeGroup.add(sectorLabel);
   }
 
-  nodeGroup.add(makeLabel(node.label));
+  nodeGroup.add(makeLabel(node.label, currentLabelScale()));
   nodeGroup.add(macro);
   nodeGroup.userData.nodeId = node.id;
   // Performance Program Stage 5: lets Graph3D's tick loop skip the ENTIRE per-child

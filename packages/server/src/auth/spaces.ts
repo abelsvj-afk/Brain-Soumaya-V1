@@ -390,7 +390,7 @@ export class SpacesRepo {
     // Reject if gamerTag is case-insensitively "soumaya" (unless it is the first brain)
     if (!isFirst) {
       if (trimmedGamerTag.toLowerCase() === "soumaya") {
-        throw new UserFacingError("The username 'Soumaya' is reserved.");
+        throw new UserFacingError("The username 'Soumaya' is reserved — pick another.");
       }
       // Reject if name is case-insensitively "soumaya" (unless it is the first brain)
       if (trimmedName.toLowerCase() === "soumaya") {
@@ -445,7 +445,7 @@ export class SpacesRepo {
     if (opts.gamerTag !== undefined) {
       const tag = opts.gamerTag.trim();
       if (tag.length < 2 || tag.length > 40) throw new UserFacingError("Username must be 2–40 characters.");
-      if (tag.toLowerCase() === "soumaya") throw new UserFacingError("The username 'Soumaya' is reserved.");
+      if (tag.toLowerCase() === "soumaya") throw new UserFacingError("The username 'Soumaya' is reserved — pick another.");
       const taken = this.getByGamerTag(tag);
       if (taken && taken.id !== id) throw new UserFacingError("That username is already taken — pick another.");
       next.gamerTag = tag;

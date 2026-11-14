@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type GraphNode, type Fuel, LOW_FUEL_THRESHOLD } from "@brain/shared";
 import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
@@ -159,10 +159,12 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
   }
 
   const visible = alerts.filter((a) => !dismissed.has(a.id));
+  const barRef = useRef<HTMLDivElement>(null);
+  useNoticesBottomVar(barRef, visible.length);
   if (visible.length === 0) return null;
 
   return (
-    <div className="notifications-bar">
+    <div className="notifications-bar" ref={barRef}>
       {visible.map((alert) => (
         <div key={alert.id} className={`notification-chip ${alert.type}`}>
           <span className="nc-icon">{alert.icon}</span>
@@ -177,4 +179,39 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
       ))}
     </div>
   );
+}
+
+/** CSS custom property holding the bar's real bottom edge (px from the viewport top). */
+export const NOTICES_BOTTOM_VAR = "--notices-bottom";
+
+/**
+ * Reviewer r3: on a 390px phone the offline banner wraps to 4 lines, but the
+ * toasts below it were placed at a fixed top:170px and covered its last line.
+ * Publish the bar's real bottom edge as a CSS variable so the phone toast rule
+ * can sit just under it, whatever its height. Cleared when the bar unmounts.
+ */
+export function useNoticesBottomVar(ref: { current: HTMLElement | null }, count: number): void {
+  useEffect(() => {
+    const root = typeof document !== "undefined" ? document.documentElement : null;
+    const el = ref.current;
+    if (!root) return;
+    if (!el || count === 0) {
+      root.style.removeProperty(NOTICES_BOTTOM_VAR);
+      return;
+    }
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) root.style.setProperty(NOTICES_BOTTOM_VAR, `${Math.ceil(r.bottom)}px`);
+    };
+    update();
+    const RO = typeof ResizeObserver !== "undefined" ? ResizeObserver : null;
+    const ro = RO ? new RO(update) : null;
+    ro?.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", update);
+      root.style.removeProperty(NOTICES_BOTTOM_VAR);
+    };
+  }, [ref, count]);
 }

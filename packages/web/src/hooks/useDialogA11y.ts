@@ -27,7 +27,14 @@ function focusableIn(container: HTMLElement): HTMLElement[] {
  * tall card whose first focusable sits far down (UX review #7: the Welcome
  * card opened scrolled to its Help link on phones). The element that had
  * focus BEFORE the dialog opened is captured first either way, so closing
- * always returns focus there.
+ * returns focus there.
+ *
+ * Focus fallback (applies to EVERY dialog using this hook, not only the
+ * Welcome card): if the element that had focus is gone from the document, or
+ * was <body>, closing moves focus to the first of FALLBACK_FOCUS_SELECTORS
+ * that exists and can take focus (the first-star cue's button, then the
+ * "Add a memory" FAB). If none can, focus is left where the browser puts it.
+ * See restoreFocus below.
  */
 export function useDialogA11y(
   containerRef: RefObject<HTMLElement | null>,
