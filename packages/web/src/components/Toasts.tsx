@@ -229,7 +229,47 @@ export function pushToast(
   }
 }
 
+/** UX review #2 (phone crowding): phones show ONE toast at a time. */
+export const PHONE_TOAST_QUERY = "(max-width: 560px), (max-height: 500px) and (orientation: landscape)";
+
+function usePhoneToasts(): boolean {
+  const [phone, setPhone] = useState(() => {
+    try {
+      return typeof window !== "undefined" && !!window.matchMedia?.(PHONE_TOAST_QUERY).matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    let mq: MediaQueryList | undefined;
+    try {
+      mq = window.matchMedia?.(PHONE_TOAST_QUERY);
+    } catch {
+      return;
+    }
+    if (!mq) return;
+    const on = () => setPhone(mq!.matches);
+    mq.addEventListener?.("change", on);
+    return () => mq!.removeEventListener?.("change", on);
+  }, []);
+  return phone;
+}
+
+/**
+ * Which toasts render, and how many more wait behind them. Desktop shows the whole
+ * (already capped) stack plus the overflow chip; a phone shows only the NEWEST toast
+ * — three stacked cards used to cover the header notices and the new star's label —
+ * and folds everything else into a small "+N" on that one card (all of them are in
+ * the Inbox regardless).
+ */
+export function visibleToasts<T>(items: T[], overflowCount: number, phone: boolean): { shown: T[]; more: number } {
+  if (!phone) return { shown: items, more: overflowCount };
+  const shown = items.slice(-1);
+  return { shown, more: overflowCount + (items.length - shown.length) };
+}
+
 export function Toasts() {
+  const phone = usePhoneToasts();
   const [items, setItems] = useState<(Toast & { remaining: number })[]>([]);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const hoveredIdRef = useRef<number | null>(null);
@@ -319,9 +359,11 @@ export function Toasts() {
   };
 
   if (items.length === 0 && overflowCount === 0) return null;
+  const { shown, more } = visibleToasts(items, overflowCount, phone);
+  if (phone && shown.length === 0) return null;
   return (
-    <div className="toast-wrap" role="status" aria-live="polite">
-      {items.map((t) => (
+    <div className={`toast-wrap${phone ? " toast-wrap-phone" : ""}`} role="status" aria-live="polite">
+      {shown.map((t) => (
         <div
           key={t.id}
           className={`toast ${t.action ? "actionable" : ""} ${t.priority ? `priority-${t.priority}` : ""}`}
@@ -350,6 +392,17 @@ export function Toasts() {
             )}
             <time className="toast-time" dateTime={new Date(t.createdAt).toISOString()}>{formatToastTime(t.createdAt)}</time>
             {t.action && <span className="toast-go" aria-hidden>›</span>}
+            {phone && more > 0 && (
+              <button
+                type="button"
+                className="toast-more"
+                onClick={(e) => { e.stopPropagation(); openInbox(); }}
+                aria-label={`${more} more notification${more === 1 ? "" : "s"} — open Inbox`}
+                title="Open the Inbox to see them all"
+              >
+                +{more}
+              </button>
+            )}
           </div>
           <button
             className="toast-dismiss"
@@ -361,7 +414,7 @@ export function Toasts() {
           </button>
         </div>
       ))}
-      {overflowCount > 0 && (
+      {!phone && overflowCount > 0 && (
         <div
           className="toast toast-overflow actionable"
           role="button"
