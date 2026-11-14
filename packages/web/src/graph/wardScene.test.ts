@@ -35,8 +35,13 @@ describe("the Faded Ward scene", () => {
   it("shows no face and no body: sleepers are only faint translucent shapes", () => {
     const s = createWardScene();
     const sl = s.group.getObjectByName("ward-sleepers") as THREE.InstancedMesh;
-    expect((sl.material as THREE.MeshBasicMaterial).transparent).toBe(true);
-    expect((sl.material as THREE.MeshBasicMaterial).opacity).toBeLessThan(0.5);
+    // The Faded are drawn in two passes (depth, then colour) so each reads as one body; the colour pass is the see-through one.
+    const mats = Array.isArray(sl.material) ? sl.material : [sl.material];
+    const colour = mats[mats.length - 1]!;
+    expect(colour.transparent).toBe(true);
+    expect(colour.opacity).toBeLessThan(0.5);
+    // Some lie and some sit up: both are built, and neither is ever a single flat shape.
+    expect(s.group.getObjectByName("ward-sitters")).toBeTruthy();
     s.dispose();
   });
 });

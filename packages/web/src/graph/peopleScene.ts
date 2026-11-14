@@ -1,6 +1,10 @@
 import { createProceduralPlanet, TOY_REPLACEMENTS } from "./proceduralPlanet.js";
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { groundMist, horizonGlow, lightPools, surfaceMaterial } from "./worldCraft.js";
+
+/** How far the hearth country reaches: past the fog, so no edge is ever seen. */
+const HEARTH_COUNTRY_REACH = 5200;
 import { PEOPLE_BACKDROP_PLANETS, PEOPLE_FORMS, PEOPLE_HEARTH, PEOPLE_PALETTE, loadPeopleAsset } from "./peopleAssets.js";
 import { placeWorldRelics } from "./relicAssets.js";
 import {
@@ -152,22 +156,29 @@ export function createPeopleScene(
 
   // The ground: warm dark, finished in every direction the camera can
   // reach — a neighborhood at dusk, not a void with lights pasted on it.
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(PEOPLE_FIELD_RADIUS + 40, 48),
-    new THREE.MeshStandardMaterial({ color: PEOPLE_PALETTE.ground, roughness: 1, metalness: 0 }),
-  );
+  // Warm packed earth reaching to a dusk horizon — the hearth-field is a piece of country, not a disc in space. Ember light on the skyline, woodsmoke haze lying low and far.
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(HEARTH_COUNTRY_REACH, 64), surfaceMaterial("soil", { tint: 0xc6a688, repeat: [90, 90], roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -1;
   ground.name = "field-ground";
   group.add(ground);
   const groundRing = new THREE.Mesh(
-    new THREE.RingGeometry(PEOPLE_FIELD_RADIUS + 38, PEOPLE_FIELD_RADIUS + 42, 48),
-    new THREE.MeshBasicMaterial({ color: PEOPLE_PALETTE.memory, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
+    new THREE.RingGeometry(PEOPLE_FIELD_RADIUS + 38, PEOPLE_FIELD_RADIUS + 40, 96),
+    new THREE.MeshBasicMaterial({ color: PEOPLE_PALETTE.memory, transparent: true, opacity: 0.12, side: THREE.DoubleSide }),
   );
   groundRing.rotation.x = -Math.PI / 2;
   groundRing.position.y = -0.5;
   groundRing.name = "field-ring";
   group.add(groundRing);
+  group.add(horizonGlow(HEARTH_COUNTRY_REACH * 0.92, 0x1a120c, 0xc8733a, 0x1a120c, 0.6, "hearth-horizon"));
+  group.add(lightPools([{ x: 0, z: 0 }], 0xffb070, PEOPLE_FIELD_RADIUS * 1.2, 0.22, "hearth-warmth"));
+  const haze: { x: number; y: number; z: number }[] = [];
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const r = PEOPLE_FIELD_RADIUS + 240 + (i % 3) * 180;
+    haze.push({ x: Math.cos(a) * r, y: 18, z: Math.sin(a) * r });
+  }
+  group.add(groundMist(haze, 0xb08a68, 640, 0.07, "hearth-haze").object);
 
   // Hearths: one warm central presence per person — the same form, the
   // same light, for every cluster. No cluster is larger or brighter.
