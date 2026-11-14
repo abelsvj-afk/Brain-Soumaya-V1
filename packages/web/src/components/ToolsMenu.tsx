@@ -39,18 +39,15 @@ export interface ToolsMenuProps {
   onFocusMode: () => void;
   focusMode: boolean;
   onHelp: () => void;
-  /** UX review #2: on phone-portrait screens the camera / music / briefing /
-   *  settings FABs fold away so the Add button can never be clipped. These
+  /** UX review #2: on phone screens the recenter / briefing / settings FABs
+   *  fold away so the Add button can never be clipped (zoom and music stay
+   *  on screen as their own buttons — owner request). These
    *  entries carry them into the menu; CSS shows them only on phones
    *  (`.tools-phone-only`), so desktop keeps its dedicated buttons. */
   phoneExtras?: {
     onBriefing: () => void;
     onSettings: () => void;
     onRecenter: () => void;
-    onZoomIn: () => void;
-    onZoomOut: () => void;
-    onMusic: () => void;
-    musicOn: boolean;
   };
 }
 
@@ -65,9 +62,6 @@ export function ToolsMenu(p: ToolsMenuProps) {
     ? [
         { icon: "i:observatory", label: "Briefing", on: x.onBriefing, phoneOnly: true },
         { icon: "i:recenter", label: "Recenter", on: x.onRecenter, phoneOnly: true },
-        { icon: "i:zoom-in", label: "Zoom in", on: x.onZoomIn, phoneOnly: true },
-        { icon: "i:zoom-out", label: "Zoom out", on: x.onZoomOut, phoneOnly: true },
-        { icon: x.musicOn ? "i:music" : "i:music-off", label: x.musicOn ? "Music off" : "Music on", on: x.onMusic, phoneOnly: true },
         { icon: "i:settings", label: "Settings", on: x.onSettings, phoneOnly: true },
       ]
     : [];

@@ -50,11 +50,15 @@ interface Bucket {
  * (especially the LLM-backed routes) from runaway loops or abuse. Per-process
  * only — fine for a single Fly machine; move to Redis if we scale horizontally.
  */
+export const DEFAULT_RATE_LIMIT_MAX = 300;
+
 export function rateLimit(
   opts: { windowMs?: number; max?: number } = {},
 ): (req: Request, res: Response, next: NextFunction) => void {
   const windowMs = opts.windowMs ?? 60_000;
-  const max = opts.max ?? Number(process.env.RATE_LIMIT_MAX ?? 120);
+  // 300/min: a normal session (galaxy + panels + ingest) peaked ~155/min
+  // before the next-job throttle; this leaves headroom without opening abuse.
+  const max = opts.max ?? Number(process.env.RATE_LIMIT_MAX ?? DEFAULT_RATE_LIMIT_MAX);
   const buckets = new Map<string, Bucket>();
 
   return (req, res, next) => {

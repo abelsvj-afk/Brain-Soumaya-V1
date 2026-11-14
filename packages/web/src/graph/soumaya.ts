@@ -6,6 +6,7 @@ import { vecOf, smooth, makeTaskLabel, makeSpeechBubble, bodyRadius } from "./so
 import { gltfLoader, fadeSwapIn, noteModelFallback } from "./gltf.js";
 import { SUN_RADIUS_MAX } from "./sun.js";
 import { getNextMaintenanceJob, completeMaintenanceJob, type MaintenanceJob } from "../api/client.js";
+import { createJobFetchGate } from "./jobFetchGate.js";
 import { playSfx } from "./sfx.js";
 import { shipTaskLabel } from "../lib/jobLabels.js";
 
@@ -412,6 +413,9 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
   let currentJob: MaintenanceJob | null = null;
   let isFetching = false;
   let lastMaintenanceRefresh = 0;
+  // One server next-job fetch per 15s across the planner and the idle loop;
+  // in between she flies local patrols (see jobFetchGate.ts).
+  const jobFetchGate = createJobFetchGate();
   let demoMode = false; // demo galaxy: local patrols only, no real backend jobs
   // Throttles the idle-mode "clean taskOrder + pick next task" scan below (a Set +
   // several array builds) to 5Hz. She's idle a lot, and none of that bookkeeping needs
@@ -527,7 +531,7 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
       // Demo galaxy: never fetch real jobs — the server would hand out REAL-brain
       // node ids that don't exist here (and demo completions would mutate the real
       // brain). Local patrols only.
-      if (!demoMode) {
+      if (!demoMode && jobFetchGate.tryAcquire()) {
         try {
           isFetching = true;
           const serverJob = await getNextMaintenanceJob();
@@ -571,6 +575,7 @@ export function makeSoumaya(initialSkin = "default"): SoumayaHandle {
     isFetching = true;
     try {
       if (demoMode) throw new Error("demo"); // demo → local patrol fallback below
+      if (!jobFetchGate.tryAcquire()) throw new Error("throttled"); // → local patrol
       currentJob = await getNextMaintenanceJob();
       announceDecision(currentJob);
     } catch (err) {
