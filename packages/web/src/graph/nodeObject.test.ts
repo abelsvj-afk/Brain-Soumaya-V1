@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import * as THREE from "three";
-import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures } from "./nodeObject.js";
+import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, wrapLabelLines } from "./nodeObject.js";
 import type { GraphNode } from "@brain/shared";
 
 /**
@@ -434,5 +434,48 @@ describe("nodeObject — Round 3 node-object cache key (entropy bucketing)", () 
   it("Test B — entropy is clamped to [0,1] before bucketing (out-of-range input can't collapse into the wrong bucket)", () => {
     expect(nodeVisualCacheKey(baseNode({ entropy: -5 }))).toBe(nodeVisualCacheKey(baseNode({ entropy: 0 })));
     expect(nodeVisualCacheKey(baseNode({ entropy: 5 }))).toBe(nodeVisualCacheKey(baseNode({ entropy: 1 })));
+  });
+});
+
+
+describe("wrapLabelLines (UX review #5 — no mid-word marquee slices)", () => {
+  const measure = (s: string) => s.length * 10; // 10px per char
+  it("ellipsizes a long first word (e.g. a URL) instead of overflowing line 1", () => {
+    const url = "https://example.com/a/very/long/path/that/never/ends";
+    const lines = wrapLabelLines(`${url} saved for later`, 200, measure);
+    expect(lines.length).toBeLessThanOrEqual(2);
+    for (const ln of lines) expect(measure(ln)).toBeLessThanOrEqual(200);
+    expect(lines[0]!.endsWith("…")).toBe(true);
+    expect(lines[1]).toBe("saved for later");
+  });
+  it("never returns a line wider than maxWidth", () => {
+    const texts = ["supercalifragilisticexpialidocious and more words here", "a bb ccc dddddddddddddddddddddddddddd e", "x".repeat(90)];
+    for (const t of texts) for (const ml of [1, 2, 3]) {
+      const lines = wrapLabelLines(t, 120, measure, ml);
+      expect(lines.length).toBeLessThanOrEqual(ml);
+      for (const ln of lines) expect(measure(ln)).toBeLessThanOrEqual(120);
+    }
+  });
+  it("maxLines=1 returns a single (ellipsized) line", () => {
+    expect(wrapLabelLines("I want to learn guitar this year", 150, measure, 1)).toEqual(["I want to…"]);
+    expect(wrapLabelLines("short", 150, measure, 1)).toEqual(["short"]);
+  });
+  it("keeps a short label on one line", () => {
+    expect(wrapLabelLines("The first light", 400, measure)).toEqual(["The first light"]);
+  });
+  it("wraps a long label at word boundaries, never mid-word, first letter intact", () => {
+    const lines = wrapLabelLines("I want to learn guitar this year and practice", 200, measure);
+    expect(lines.length).toBe(2);
+    expect(lines[0]!.startsWith("I want")).toBe(true);
+    for (const l of lines) expect(measure(l)).toBeLessThanOrEqual(200);
+    expect(lines[1]!.endsWith("…")).toBe(true);
+    // Every word that is shown is a whole word from the source.
+    const src = new Set("I want to learn guitar this year and practice".split(" "));
+    for (const w of lines.join(" ").replace("…", "").split(" ")) expect(src.has(w)).toBe(true);
+  });
+  it("ellipsizes a single over-long word instead of overflowing", () => {
+    const [only] = wrapLabelLines("Supercalifragilisticexpialidocious", 100, measure);
+    expect(measure(only!)).toBeLessThanOrEqual(100);
+    expect(only!.endsWith("…")).toBe(true);
   });
 });

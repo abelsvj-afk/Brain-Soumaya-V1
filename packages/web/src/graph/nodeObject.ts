@@ -80,7 +80,7 @@ export function pickSectorHubIds(nodes: GraphNodeWithPosition[], maxSectors = 5)
 const FONT_SIZE = 44;
 const PADDING = 14;
 const WORLD_SCALE = 0.11; // canvas px -> world units
-const WINDOW_PX = 470; // max on-screen label width before it scrolls (marquee)
+const WINDOW_PX = 470; // max on-screen label width; longer names wrap (wrapLabelLines)
 const MAX_CHARS = 80; // cap canvas width for very long entries
 
 const labelTexCache = new Map<string, { map: THREE.CanvasTexture; width: number; height: number }>();
@@ -99,6 +99,51 @@ const labelRefCount = new Map<string, number>();
 const glowRefCount = new Map<string, number>();
 
 /**
+ * UX review #5: wrap a label into at most `maxLines` lines no wider than `maxWidth`,
+ * breaking at spaces. Any line that still overflows (a single very long word such as
+ * a URL, or the leftover words on the last line) is cut with an ellipsis, so no line
+ * is ever wider than `maxWidth`. Long names used to render as one wide strip scrolled
+ * through a fixed window, so any still frame showed a mid-word slice with the first
+ * letters cut off ("vant to learn guitar this"). Pure — `measure` is injected for tests.
+ */
+export function wrapLabelLines(
+  text: string,
+  maxWidth: number,
+  measure: (s: string) => number,
+  maxLines = 2,
+): string[] {
+  const limit = Math.max(1, Math.floor(maxLines));
+  const fit = (line: string): string => {
+    if (measure(line) <= maxWidth) return line;
+    // Prefer dropping whole words; fall back to trimming characters.
+    const lw = line.split(" ");
+    while (lw.length > 1 && measure(`${lw.join(" ")}…`) > maxWidth) lw.pop();
+    let out = lw.join(" ");
+    while (out.length > 1 && measure(`${out}…`) > maxWidth) out = out.slice(0, -1);
+    return `${out}…`;
+  };
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+  const lines: string[] = [];
+  let cur = "";
+  let i = 0;
+  for (; i < words.length && lines.length < limit - 1; i++) {
+    const w = words[i]!;
+    const next = cur ? `${cur} ${w}` : w;
+    if (!cur || measure(next) <= maxWidth) {
+      cur = next;
+    } else {
+      lines.push(fit(cur));
+      cur = w;
+    }
+  }
+  // Whatever is left (cur + any unplaced words) is the last line.
+  const last = [cur, ...words.slice(i)].filter(Boolean).join(" ");
+  if (last) lines.push(fit(last));
+  return lines.slice(0, limit);
+}
+
+/**
  * Build a floating text label as a lightweight sprite (no polygons).
  */
 function makeLabel(rawText: string): THREE.Sprite {
@@ -111,16 +156,20 @@ function makeLabel(rawText: string): THREE.Sprite {
     const ctx = canvas.getContext("2d")!;
     const font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
     ctx.font = font;
-    const textWidth = Math.ceil(ctx.measureText(text).width);
+    const measure = (s: string) => Math.ceil(ctx.measureText(s).width);
+    // Wrap to the on-screen window instead of scrolling (see wrapLabelLines).
+    const lines = wrapLabelLines(text, WINDOW_PX - PADDING * 2, measure, 2);
+    const textWidth = Math.max(...lines.map(measure));
+    const lineH = Math.round(FONT_SIZE * 1.18);
     canvas.width = textWidth + PADDING * 2;
-    canvas.height = FONT_SIZE + PADDING * 2;
+    canvas.height = lineH * lines.length + PADDING * 2;
 
     ctx.font = font;
     ctx.textBaseline = "middle";
     ctx.shadowColor = "rgba(0,0,0,0.85)";
     ctx.shadowBlur = 8;
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fillText(text, PADDING, canvas.height / 2);
+    lines.forEach((ln, idx) => ctx.fillText(ln, PADDING, PADDING + lineH * (idx + 0.5)));
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
@@ -142,41 +191,13 @@ function makeLabel(rawText: string): THREE.Sprite {
   });
   const sprite = new THREE.Sprite(material);
   sprite.renderOrder = 999;
-
-  const tooWide = width > WINDOW_PX;
-  const displayPx = tooWide ? WINDOW_PX : width;
-  sprite.scale.set(displayPx * WORLD_SCALE, height * WORLD_SCALE, 1);
+  sprite.scale.set(width * WORLD_SCALE, height * WORLD_SCALE, 1);
   sprite.position.set(0, 9, 0);
 
   sprite.userData.isLabel = true;
   // Tags which cache entry this sprite holds a reference against, so
-  // `releaseNodeTextures` can decrement it correctly when this sprite is discarded —
-  // regardless of whether the sprite ends up rendering the shared `map` directly or its
-  // own exclusive marquee clone below (the clone is a SEPARATE, already-disposable
-  // resource; this tag is about the underlying cache entry, not which texture object
-  // the material currently points at).
+  // `releaseNodeTextures` can decrement it correctly when this sprite is discarded.
   sprite.userData.labelCacheKey = cacheKey;
-  if (tooWide) {
-    // `map` is the CACHED texture (labelTexCache), shared by every sprite built from the
-    // same text — e.g. two different bodies that happen to share a name, or a sector title
-    // vs. its regular label. The marquee below scrolls by mutating the texture's own
-    // `offset`/`repeat`, which are texture-level (not per-material) state; sharing that
-    // texture across sprites meant multiple marquees fought over the same offset, each
-    // frame jumping between scroll positions and rendering a corrupted, overlapping slice
-    // of text — the reported "smudged / only half the name" look. Give this sprite its own
-    // texture instance (cheap: shares the underlying canvas image, no re-render) so its
-    // scroll state is exclusively its own.
-    const marqueeMap = map.clone();
-    marqueeMap.needsUpdate = true;
-    // Texture.clone() deep-copies userData, so this clone would otherwise inherit
-    // `shared: true` from the cached source above — it must NOT, since this clone
-    // belongs exclusively to this one sprite and has to be individually disposable.
-    marqueeMap.userData.shared = false;
-    marqueeMap.wrapS = THREE.ClampToEdgeWrapping;
-    marqueeMap.repeat.x = WINDOW_PX / width;
-    material.map = marqueeMap;
-    sprite.userData.marquee = { range: 1 - WINDOW_PX / width, t: 0 };
-  }
   return sprite;
 }
 

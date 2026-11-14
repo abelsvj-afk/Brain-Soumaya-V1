@@ -74,3 +74,19 @@ describe("HeuristicProvider.interpretClarificationAnswer (I2)", () => {
     expect(r.confirmedStatement).toBe("I started a new job last week.");
   });
 });
+
+describe("HeuristicProvider.extract — offline labels don't end mid-phrase (UX review #5)", () => {
+  const labelOf = async (t: string) => (await llm.extract(t, [])).nodes[0]!.label;
+  it("drops a dangling connector left by the six-word cut", async () => {
+    expect(await labelOf("I want to learn guitar this year")).toBe("I want to learn guitar");
+  });
+  it("keeps short memories whole", async () => {
+    expect(await labelOf("Call mom about the trip")).toBe("Call mom about the trip");
+  });
+  it("labels from the first sentence only", async () => {
+    expect(await labelOf("Met Sara today. She is moving to Austin next month")).toBe("Met Sara today.");
+  });
+  it("falls back to 'Thought' for blank text", async () => {
+    expect(await labelOf("   ")).toBe("Thought");
+  });
+});

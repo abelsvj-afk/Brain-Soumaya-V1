@@ -24,9 +24,11 @@ export function addBloom(
   const size = fg.renderer().getSize(new THREE.Vector2());
   const bloom = new UnrealBloomPass(
     size,
-    opts.strength ?? 0.35,
+    opts.strength ?? 0.28,
     opts.radius ?? 0.5,
-    opts.threshold ?? 0.7,
+    // UX review #5: 0.7 let mid-bright surfaces (nebulae, labels' white text) bloom
+    // into a haze; only genuinely bright cores glow now.
+    opts.threshold ?? 0.82,
   );
   composer.addPass(bloom);
   return bloom; // returned so callers can ramp .strength (e.g. focus-dim)

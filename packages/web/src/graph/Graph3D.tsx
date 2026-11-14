@@ -2672,14 +2672,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                 }
                 child.scale.set(base.x * k, base.y * k, 1);
               }
-              const mq = child.userData.marquee;
-              if (mq) {
-                // motionDt (not raw dt) — same reduced-motion slowdown orbit motion already
-                // gets (calmMotionRef ? dt*0.12 : dt); this marquee scroll previously ran at
-                // full speed regardless of prefers-reduced-motion.
-                mq.t += motionDt * 0.36;
-                mat.map!.offset.x = (Math.sin(mq.t) * 0.5 + 0.5) * mq.range;
-              }
               // Batch I (REG-061 / GH-02): sector titles get the same
               // whole-box edge clamp the planet labels carry — a wide
               // title anchored near the screen edge slides its CENTRE
@@ -2837,14 +2829,6 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
               if (child.visible) {
                 const mat = child.material as THREE.SpriteMaterial;
                 mat.opacity = sunOpacity;
-                const mq = child.userData.marquee;
-                if (mq) {
-                  // motionDt (not raw dt) — same reduced-motion slowdown orbit motion already
-                // gets (calmMotionRef ? dt*0.12 : dt); this marquee scroll previously ran at
-                // full speed regardless of prefers-reduced-motion.
-                mq.t += motionDt * 0.36;
-                  mat.map!.offset.x = (Math.sin(mq.t) * 0.5 + 0.5) * mq.range;
-                }
               }
               // Mobile HUD pass (round 2, S6): on phone portrait, slide the
               // label inside the dock-inset safe frame (labelFrame.ts) so
