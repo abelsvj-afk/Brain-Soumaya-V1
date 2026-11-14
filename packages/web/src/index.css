@@ -6212,7 +6212,9 @@ div.float-tooltip-kap {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(56vw, 340px);
+  /* Expanded (on tap, auto-folds): narrower so it stays in the left third,
+     clear of the planet labels around the scene centre. */
+  width: min(56vw, 300px);
   max-height: var(--hud-status-max-h);
 }
 /* §6.5.5 coordination: while the "Soumaya noticed" card is up (top-centre),
@@ -6319,7 +6321,10 @@ div.visitor-chip { cursor: default; }
   left: calc(var(--hud-status-left) + env(safe-area-inset-left, 0px));
   bottom: calc(var(--hud-status-bottom) + env(safe-area-inset-bottom, 0px));
   z-index: var(--hud-z-status);
-  width: min(56vw, 340px);
+  /* Owner request (t38u): a compact pill hugging the left control column,
+     not a full-width bar reaching toward the scene centre. */
+  width: auto;
+  max-width: min(56vw, 260px);
   height: var(--hud-status-mini-h);
   display: flex;
   align-items: center;
@@ -6563,7 +6568,8 @@ button.mindspace-more { cursor: pointer; }
      is not. The gauge gate asserts against the EXPANDED state. */
   .ship-status-mini {
     bottom: calc(var(--hud-cam-toggle-bottom) + env(safe-area-inset-bottom, 0px));
-    width: min(calc(100vw - 140px), 340px);
+    width: auto;
+    max-width: min(calc(100vw - 140px), 260px);
   }
   /* Overflow contract, phone mechanics: the yielding targets are
      clamped to whole lines with a clamp ellipsis (never a mid-glyph
@@ -6805,8 +6811,16 @@ button.mindspace-more { cursor: pointer; }
   .ship-status-stack.below-noticing {
     left: calc(76px + env(safe-area-inset-left, 0px));
     bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-    width: min(40vw, 300px);
+    width: min(34vw, 250px); /* t38u: stay in the left third, off the labels */
     max-height: 140px;
+  }
+  /* The pill shares the landscape stack's anchor (the desktop anchor,
+     bottom 354px, would sit off the top of a 390px-tall screen). */
+  .ship-status-mini,
+  .ship-status-mini.below-noticing {
+    left: calc(76px + env(safe-area-inset-left, 0px));
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    max-width: min(40vw, 260px);
   }
 }
 

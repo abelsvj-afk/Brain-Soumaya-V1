@@ -44,7 +44,6 @@ import { NoticingCard } from "./components/NoticingCard.js";
 import { playSfx, sfxEnabled } from "./graph/sfx.js";
 import { isVoiceEnabled } from "./voice.js";
 import {
-  AudioStateChip,
   BeaconReadout,
   ShipStatusStack,
   EmptyGalaxyCue,
@@ -600,9 +599,9 @@ export default function App() {
   );
   // HUD round 3: the ship-status stack is SUMMONABLE — collapsed to a
   // one-line mini-bar until he brings it up, so the galaxy's centre is
-  // his again. Open state persisted PER BRAIN (ship.status.<id>, the
-  // useShipStatusOpen hook in GalaxyHud); the phone default is collapsed
-  // after a one-time first-run expanded reveal, desktop starts expanded.
+  // his again. Owner request (t38u): it always starts as a compact pill on
+  // every screen, expands on tap, and folds itself away after a few seconds
+  // (useShipStatusOpen / ShipStatusStack in GalaxyHud).
   const [shipStatusOpen, setShipStatusOpen] = useShipStatusOpen(space?.id ?? null);
   // Camera mode persists PER BRAIN like the ship-task label beside it
   // (REG-171/SF-06 — it used to be a plain useState, so a locked cockpit
@@ -2816,15 +2815,9 @@ export default function App() {
             />
           )}
           <BeaconReadout status={fleetStatusHud} onFocus={(id) => focus(id)} />
-          <AudioStateChip
-            sfx={sfxOnHud}
-            voice={voiceOnHud}
-            music={music}
-            onOpenAudioSettings={() => {
-              setSettingsFocusAudio(true);
-              setShowSettings(true);
-            }}
-          />
+          {/* Owner request (t39u): the "Sounds on · Voice off · Music off" tile is
+              gone from the HUD — the Music button already shows and controls
+              what's playing; sound/voice toggles stay in Settings. */}
         </ShipStatusStack>
       )}
 

@@ -161,7 +161,9 @@ describe("HUD dock — ship-status stack", () => {
     expect(open).toBeGreaterThan(-1);
     const inner = appSrc.slice(open, close);
     expect(inner.indexOf("VisitorChip")).toBeLessThan(inner.indexOf("BeaconReadout"));
-    expect(inner.indexOf("BeaconReadout")).toBeLessThan(inner.indexOf("AudioStateChip"));
+    // Owner request (t39u): the "Sounds on · Voice off · Music off" tile is no
+    // longer rendered — the Music button shows and controls what's playing.
+    expect(inner).not.toContain("<AudioStateChip");
   });
 });
 
