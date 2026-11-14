@@ -360,7 +360,24 @@ export function Toasts() {
 
   if (items.length === 0 && overflowCount === 0) return null;
   const { shown, more } = visibleToasts(items, overflowCount, phone);
-  if (phone && shown.length === 0) return null;
+  // Phone with no live toast but some waiting in the Inbox: keep a compact
+  // "N in Inbox" chip so the count doesn't silently vanish.
+  if (phone && shown.length === 0) {
+    if (more <= 0) return null;
+    return (
+      <div className="toast-wrap toast-wrap-phone toast-wrap-chip" role="status" aria-live="polite">
+        <button
+          type="button"
+          className="toast-more toast-inbox-chip"
+          onClick={openInbox}
+          aria-label={`${more} notification${more === 1 ? "" : "s"} in your Inbox — open Inbox`}
+          title="Open the Inbox to see them all"
+        >
+          🔔 {more} in Inbox
+        </button>
+      </div>
+    );
+  }
   return (
     <div className={`toast-wrap${phone ? " toast-wrap-phone" : ""}`} role="status" aria-live="polite">
       {shown.map((t) => (
@@ -373,6 +390,9 @@ export function Toasts() {
           onKeyDown={
             t.action
               ? (e) => {
+                  // Enter/Space on the nested "+N" or × buttons must run THAT
+                  // button, not bubble up and fire the toast's own action.
+                  if (e.target !== e.currentTarget) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     runAction(t);

@@ -4948,9 +4948,12 @@ button {
    spring toasts. All gated behind prefers-reduced-motion at the bottom.
    ============================================================================ */
 
+/* No scale step: a 0.985 start shrank every 44 px control to 43.3 px until the
+   animation's first frame ran — on a busy phone (WebGL galaxy starting up)
+   that took seconds (Reviewer r2, #172). A slide + fade reads the same. */
 @keyframes panel-in {
-  from { opacity: 0; transform: translateY(10px) scale(0.985); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(8px); }
@@ -6132,7 +6135,16 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 .toast-priority.priority-low { color: #9fb4d8; }
 .fuel-gauge .fg-meta { font-size: 9px; line-height: 1.1; color: rgba(255,255,255,0.72); text-align: center; font-variant-numeric: tabular-nums; }
 .fuel-gauge .fg-cost { color: #ffcf6b; }
-.streak-ember.tappable { cursor: pointer; font: inherit; }
+.streak-ember.tappable {
+  cursor: pointer; font: inherit; color: inherit;
+  /* It's a <button>: without these it painted the browser's default white box. */
+  appearance: none; -webkit-appearance: none;
+  background: rgba(20, 14, 10, 0.62);
+  border: 1px solid rgba(255, 150, 70, 0.4);
+  border-radius: 14px;
+  padding: 4px 6px;
+  backdrop-filter: blur(6px);
+}
 .streak-ember .se-best { font-size: 10px; color: #ffd98c; opacity: 0.9; white-space: nowrap; }
 .streak-ember .se-shields { letter-spacing: 0; }
 .noticing-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; opacity: 0.85; margin-bottom: 2px; }
@@ -6760,7 +6772,8 @@ button.mindspace-more { cursor: pointer; }
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .app:has(.ingest) .notifications-bar { display: none; }
+  /* Reviewer r2 (#171): the no-key banner also covered the open dock's tab row. */
+  .app:has(.dock, .ingest) .notifications-bar { display: none; }
   /* The status stack's desktop anchor is height-based and lands it over the
      title on a 390 px-tall screen; pin it mid-left, above the Views sheet. */
   .ship-status-stack,
@@ -8002,9 +8015,9 @@ button.mindspace-more { cursor: pointer; }
 .ingest-more { min-height: 44px; padding: 0 6px; }
 .tag-chip { min-height: 44px; display: inline-flex; align-items: center; }
 .ingest .row button { min-height: 44px; }
-.ingest .row .tag-input { min-height: 44px; }
+.ingest .tag-row .tag-input { min-height: 44px; }
 .welcome-help-link { min-height: 44px; }
-.obs-chip, .obs-retry, .obs-primary, .obs-enter, .obs-answer-send { min-height: 44px; }
+.obs-chip, .obs-retry, .obs-primary, .obs-enter, .obs-answer-send, .obs-quest { min-height: 44px; }
 .obs-chip { display: inline-flex; align-items: center; }
 .obs-close, .obs-search { min-width: 44px; min-height: 44px; }
 /* Phones: 44 px chips wrapping onto 3–4 rows made the Add sheet much taller.
