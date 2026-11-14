@@ -416,7 +416,7 @@ export function EmptyGalaxyCue({ onAdd, hasWelcomeStar = false }: { onAdd: () =>
       <p className="empty-galaxy-sub">
         {/* UX review #3: don't call the sky "empty" while Soumaya's welcome star shines in it. */}
         {hasWelcomeStar
-          ? "Soumaya lit one star to welcome you — every memory you add lights another."
+          ? "Soumaya lit up your sky to welcome you — every memory you add lights a star of your own."
           : "This sky is empty for now — every memory you add lights a new star in it."}
       </p>
       <button className="empty-galaxy-add" onClick={onAdd}>

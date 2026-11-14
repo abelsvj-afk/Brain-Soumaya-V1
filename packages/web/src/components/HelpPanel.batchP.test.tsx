@@ -33,7 +33,7 @@ describe("REG-219 — Help says all three tabs unlock with the first real memory
   it("names the first real memory as the only trigger, not a synthesized connection", () => {
     render(<HelpPanel onClose={() => {}} />);
     openTab("Organize & Explore");
-    expect(screen.getByText(/appear once you log your first real memory/i)).toBeTruthy();
+    expect(screen.getByText(/appear once you add your first real memory/i)).toBeTruthy();
     expect(screen.getByText(/only trigger for all three/i)).toBeTruthy();
     expect(screen.queryByText(/first synthesized connection/i)).toBeNull();
   });

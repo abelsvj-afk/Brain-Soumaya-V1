@@ -39,6 +39,7 @@ import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
 import { ownContentCount, hasAgentStar } from "./utils/welcomeSeed.js";
+import { useQuietWindow, useFirstRunToastHold } from "./hooks/useQuietWindow.js";
 import { NoticingCard } from "./components/NoticingCard.js";
 import { playSfx, sfxEnabled } from "./graph/sfx.js";
 import { isVoiceEnabled } from "./voice.js";
@@ -293,7 +294,6 @@ export default function App() {
   }, [focusMode]);
   useEffect(() => {
     setFocusCalm(focusMode);
-    setToastsQuiet(focusMode);
   }, [focusMode]);
   const obsShownRef = useRef(false);
   // True once we're past the Observatory gate (it was shown+closed, or won't show).
@@ -458,19 +458,7 @@ export default function App() {
   // appears if the lag is still real. Gated on first-run being DONE plus a timer —
   // not on the user having added anything, so a slow device that never adds a
   // memory still gets the offer.
-  const [perfQuiet, setPerfQuiet] = useState(false);
-  const perfQuietTimer = useRef<number | null>(null);
-  const quietPerfOffer = useCallback((ms: number) => {
-    setPerfQuiet(true);
-    if (perfQuietTimer.current !== null) window.clearTimeout(perfQuietTimer.current);
-    perfQuietTimer.current = window.setTimeout(() => {
-      perfQuietTimer.current = null;
-      setPerfQuiet(false);
-    }, ms);
-  }, []);
-  useEffect(() => () => {
-    if (perfQuietTimer.current !== null) window.clearTimeout(perfQuietTimer.current);
-  }, []);
+  const [perfQuiet, quietPerfOffer] = useQuietWindow();
   const [history, setHistory] = useState<number[]>([]);
   const [aiBusy, setAiBusy] = useState(0);
   const [music, setMusic] = useState(false);
@@ -1271,7 +1259,7 @@ export default function App() {
     greetedRef.current = true;
     const memories = (data.nodes as GraphNode[]).filter((n) => n.kind !== "action");
     if (memories.length === 0) {
-      pushToast(`Welcome, ${space.name}. Drop your first thought to begin.`, "🛰️", 10000);
+      pushToast(`Welcome, ${space.name}. Add your first memory to begin.`, "🛰️", 10000);
       return;
     }
     const cooling = memories.filter((n) => (n.entropy ?? 0) >= COOLING_ENTROPY).length;
@@ -2213,6 +2201,15 @@ export default function App() {
       return next;
     });
   };
+
+  // Reviewer r2 (#173): hold routine toasts during a first run until the user's
+  // first memory (or a 3-minute cap) — see useFirstRunToastHold.
+  const firstRunToastHold = useFirstRunToastHold(
+    !!space && loaded && !showIntro && ownContentCount(data.nodes) === 0,
+  );
+  useEffect(() => {
+    setToastsQuiet(focusMode || firstRunToastHold);
+  }, [focusMode, firstRunToastHold]);
 
   const llmStatus = health?.llm
     ? health.llm.available
