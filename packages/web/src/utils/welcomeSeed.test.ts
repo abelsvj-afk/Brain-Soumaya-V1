@@ -1,20 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { isWelcomeSeed, ownMemoryCount } from "./welcomeSeed.js";
+import { isOwnContent, ownContentCount, hasAgentStar } from "./welcomeSeed.js";
 
-describe("welcome seed (UX review #3)", () => {
-  it("recognises the server's seeded first star only", () => {
-    expect(isWelcomeSeed({ label: "The first light", type: "daily" })).toBe(true);
-    expect(isWelcomeSeed({ label: "The first light", type: "idea" })).toBe(false);
-    expect(isWelcomeSeed({ label: "Guitar", type: "daily" })).toBe(false);
+describe("first-run authorship (UX review #3)", () => {
+  it("reads authorship from origin, not the label", () => {
+    expect(isOwnContent({ origin: "agent" })).toBe(false);
+    expect(isOwnContent({ origin: "user" })).toBe(true);
+    expect(isOwnContent({})).toBe(true); // legacy rows without origin are the user's
   });
-  it("counts only the user's own memories", () => {
-    expect(ownMemoryCount([{ label: "The first light", type: "daily" }])).toBe(0);
-    expect(
-      ownMemoryCount([
-        { label: "The first light", type: "daily" },
-        { label: "Guitar", type: "idea" },
-        { label: "Call mum", type: "daily", kind: "action" },
-      ]),
-    ).toBe(1);
+  it("a user note titled like the welcome star still counts as theirs", () => {
+    expect(ownContentCount([{ origin: "agent" }, { origin: "user" }])).toBe(1);
+  });
+  it("counts action items / to-dos as the user's own content", () => {
+    expect(ownContentCount([{ origin: "agent" }, { kind: "action" }])).toBe(1);
+  });
+  it("detects Soumaya's seeded star", () => {
+    expect(hasAgentStar([{ origin: "agent" }])).toBe(true);
+    expect(hasAgentStar([{ origin: "user" }])).toBe(false);
   });
 });

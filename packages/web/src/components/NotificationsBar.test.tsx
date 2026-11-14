@@ -44,3 +44,24 @@ describe("NotificationsBar — dismissals are scoped per space", () => {
     expect(screen.queryByText(/Low fuel/)).toBeNull();
   });
 });
+
+describe("NotificationsBar — no-key notice waits for the user's own content (UX review #3)", () => {
+  const noKey = { ok: true, embeddings: { model: "hash", dim: 8 }, llm: { model: "heuristic", available: false }, nodes: 1 };
+  const base = { fuel: null, onFocusNode: vi.fn(), onOpenTab: vi.fn(), spaceId: "s1" };
+  const seed = { id: 1, label: "The first light", type: "daily", content: "", origin: "agent" } as any;
+
+  it("holds the notice while only Soumaya's welcome star exists", () => {
+    render(<NotificationsBar {...base} health={noKey as any} nodes={[seed]} />);
+    expect(screen.queryByText(/Offline mode/)).toBeNull();
+  });
+  it("shows the calm offline line once the user adds a to-do (action items count)", () => {
+    const todo = { id: 2, label: "Call mum", type: "daily", content: "", kind: "action" } as any;
+    render(<NotificationsBar {...base} health={noKey as any} nodes={[seed, todo]} />);
+    expect(screen.getByText(/Offline mode — Soumaya works without a cloud AI key/)).toBeTruthy();
+  });
+  it("a degraded provider still alerts immediately with its specific reason", () => {
+    const degraded = { ...noKey, llm: { model: "gemini-2", available: true, degraded: true, degradedReason: null } };
+    render(<NotificationsBar {...base} health={degraded as any} nodes={[seed]} />);
+    expect(screen.getByText(/Running in offline fallback/)).toBeTruthy();
+  });
+});

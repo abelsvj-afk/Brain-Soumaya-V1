@@ -409,12 +409,15 @@ export function AudioStateChip({
 }
 
 /** IM-23 — the empty galaxy's in-scene cue: where the first star goes. */
-export function EmptyGalaxyCue({ onAdd }: { onAdd: () => void }) {
+export function EmptyGalaxyCue({ onAdd, hasWelcomeStar = false }: { onAdd: () => void; hasWelcomeStar?: boolean }) {
   return (
     <div className="empty-galaxy-cue" role="status">
       <p className="empty-galaxy-title">✦ Your first star goes here</p>
       <p className="empty-galaxy-sub">
-        This sky is empty for now — every memory you add lights a new star in it.
+        {/* UX review #3: don't call the sky "empty" while Soumaya's welcome star shines in it. */}
+        {hasWelcomeStar
+          ? "Soumaya lit one star to welcome you — every memory you add lights another."
+          : "This sky is empty for now — every memory you add lights a new star in it."}
       </p>
       <button className="empty-galaxy-add" onClick={onAdd}>
         ＋ Add your first memory
