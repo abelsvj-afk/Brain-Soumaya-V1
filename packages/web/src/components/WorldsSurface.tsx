@@ -151,6 +151,7 @@ import {
   type WalkState,
 } from "../graph/gardenWalk.js";
 import { portraitFit } from "../graph/worldCamera.js";
+import { WORLD_MOOD } from "../graph/worldMood.js";
 import type { TransitScene } from "../graph/transitScene.js";
 import { createShipAvatar, type ShipAvatar } from "../graph/shipAvatar.js";
 import { createEnginePlume } from "../graph/enginePlume.js";
@@ -569,12 +570,9 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   people: {
     title: "The People",
-    light: { env: 0.6, hemi: { sky: 0xffdcb0, ground: 0x3a2a20, intensity: 1.0 } },
-    background: 0x1a120c,
-    fogDensity: 0.00016,
+    ...WORLD_MOOD["people"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: 700,
     orbitHeight: 140,
-    lookAtY: 0,
     fallback: "The People view needs graphics support on this device — your people are unaffected.",
     build: (layout, onRelicVisible) =>
       createPeopleScene(isPeopleLayout(layout) ? layout : EMPTY_PEOPLE_LAYOUT, {
@@ -583,12 +581,9 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   "quiet-archive": {
     title: "Quiet/Archive",
-    light: { env: 0.6, hemi: { sky: 0xa8c0d8, ground: 0x1a2028, intensity: 1.0 } },
-    background: 0x0d1117,
-    fogDensity: 0.00016,
+    ...WORLD_MOOD["quiet-archive"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: 700,
     orbitHeight: 140,
-    lookAtY: 0,
     fallback: "The Archive view needs graphics support on this device — your memories are unaffected.",
     build: (layout) =>
       createQuietArchiveScene(isQuietArchiveLayout(layout) ? layout : EMPTY_QUIET_ARCHIVE_LAYOUT),
@@ -596,25 +591,18 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   // The Faded Ward (a door in the story, opened by finding Tamsin's Ward): one long hall of cots, pale green and ember gold, the far end lost in fog.
   "faded-ward": {
     title: "The Faded Ward",
-    // Measured in a real browser: env 0.6 + a bright fill washed the hall to flat grey. Dimmer fill, a warm key, thinner fog — the lanterns carry the light.
-    light: { env: 0.3, hemi: { sky: 0x9fb8a8, ground: 0x0e1612, intensity: 0.55 }, key: { color: 0xffd9a0, intensity: 0.8, from: [120, 400, 300] } },
-    background: 0x0a100e,
-    fogDensity: 0.00035,
+    ...WORLD_MOOD["faded-ward"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: WARD_ORBIT_RADIUS,
     orbitHeight: WARD_ORBIT_HEIGHT,
-    lookAtY: 42, // eye level, looking along the rows rather than down at the floor
     fallback: "The ward view needs graphics support on this device — your memories are unaffected.",
     build: () => createWardScene(),
   },
   // The Road to the Seam (a door in the story, opened by finding Teru's Harbor Nail): one long road under the Station, lamps and nails and chalk, going on into fog.
   "road-to-the-seam": {
     title: "The Road to the Seam",
-    light: { env: 0.5, hemi: { sky: 0x9aaac8, ground: 0x2a2e38, intensity: 1.0 }, key: { color: 0xffd9a0, intensity: 1.0, from: [-100, 380, 260] } },
-    background: 0x0a0c10,
-    fogDensity: 0.00045,
+    ...WORLD_MOOD["road-to-the-seam"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: ROAD_ORBIT_RADIUS,
     orbitHeight: ROAD_ORBIT_HEIGHT,
-    lookAtY: 38, // eye level along the road, as measured in the Ward
     fallback: "The road view needs graphics support on this device — your memories are unaffected.",
     build: () => createRoadScene(),
   },
@@ -626,67 +614,49 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   // The Folded Letter (the last room, a door in the story opened by holding the Unopened Fold; reached only by choice): a small bare room with a letter on the floor, still folded.
   "the-folded-letter": {
     title: "The Folded Letter",
-    light: { env: 0.4, hemi: { sky: 0x8890a8, ground: 0x4a3f34, intensity: 0.7 }, key: { color: 0xffd9a0, intensity: 0.8, from: [-60, 300, 120] } },
-    background: 0x0a0a10,
-    fogDensity: 0.0003,
+    ...WORLD_MOOD["the-folded-letter"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: FOLD_ORBIT_RADIUS,
     orbitHeight: FOLD_ORBIT_HEIGHT,
-    lookAtY: 14,
     fallback: "The room needs graphics support on this device — your memories are unaffected.",
     build: () => createFoldScene(),
   },
   "the-long-morning": {
     title: "The Long Morning",
-    light: { env: 1.0, hemi: { sky: 0xfff4d8, ground: 0xe8cc90, intensity: 1.0 }, key: { color: 0xfff6e0, intensity: 0.8, from: [-200, 400, 220] } },
-    background: LONG_SKY,
-    fogDensity: 0.0011,
+    ...WORLD_MOOD["the-long-morning"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: LONG_ORBIT_RADIUS,
     orbitHeight: LONG_ORBIT_HEIGHT,
-    lookAtY: 40,
     fallback: "The light needs graphics support on this device — your memories are unaffected.",
     build: () => createLongScene(),
   },
   "the-yard": {
     title: "The Unlit Hulls",
-    light: { env: 0.8, hemi: { sky: 0xb8c0d8, ground: 0x4a4238, intensity: 1.0 }, key: { color: 0xffe8c8, intensity: 1.1, from: [-220, 400, 200] } },
-    background: 0x12141c,
-    fogDensity: 0.0004,
+    ...WORLD_MOOD["the-yard"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: YARD_ORBIT_RADIUS,
     orbitHeight: YARD_ORBIT_HEIGHT,
-    lookAtY: 26,
     fallback: "The yard needs graphics support on this device — your memories are unaffected.",
     build: () => createYardScene(),
   },
   "the-siege": {
     title: "The Siege of the First Light",
-    light: { env: 0.8, hemi: { sky: 0xd8d4e8, ground: 0x4a4638, intensity: 1.0 }, key: { color: 0xfff0d0, intensity: 1.1, from: [-200, 420, 260] } },
-    background: 0x1a1620,
-    fogDensity: 0.0004,
+    ...WORLD_MOOD["the-siege"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: SIEGE_ORBIT_RADIUS,
     orbitHeight: SIEGE_ORBIT_HEIGHT,
-    lookAtY: 24,
     fallback: "The field needs graphics support on this device — your memories are unaffected.",
     build: () => createSiegeScene(),
   },
   "the-unmade-hour": {
     title: "The Unmade Hour",
-    light: { env: 0.7, hemi: { sky: 0xb8b4d8, ground: 0x3a3648, intensity: 1.0 }, key: { color: 0xf0e8ff, intensity: 1.0, from: [-150, 400, 200] } },
-    background: 0x14121e,
-    fogDensity: 0.0004,
+    ...WORLD_MOOD["the-unmade-hour"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: UNMADE_ORBIT_RADIUS,
     orbitHeight: UNMADE_ORBIT_HEIGHT,
-    lookAtY: 30,
     fallback: "The pale floor needs graphics support on this device — your memories are unaffected.",
     build: () => createUnmadeScene(),
   },
   "the-village": {
     title: "The Village",
-    light: { env: 0.5, hemi: { sky: 0x9aaac8, ground: 0x1c2420, intensity: 0.9 }, key: { color: 0xffd9a0, intensity: 0.9, from: [-200, 420, 300] } },
-    background: 0x0a0e14,
-    fogDensity: 0.0003,
+    ...WORLD_MOOD["the-village"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: VILLAGE_ORBIT_RADIUS,
     orbitHeight: VILLAGE_ORBIT_HEIGHT,
-    lookAtY: 40,
     fallback: "The village view needs graphics support on this device — your memories are unaffected.",
     build: () => createVillageScene(),
   },

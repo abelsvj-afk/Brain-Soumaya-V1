@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { groundMist, horizonGlow, lightPools, surfaceMaterial } from "./worldCraft.js";
+
+/** How far the still water reaches: past the fog, so no edge is ever seen. */
+const STILL_WATER_REACH = 5200;
 import {
   QUIET_ARCHIVE_ARTIFACT,
   QUIET_ARCHIVE_BACKDROP_PLANETS,
@@ -155,24 +159,33 @@ export function createQuietArchiveScene(layout: QuietArchiveLayout): QuietArchiv
   const clusters = layout.clusters;
   const fieldRadius = layout.fieldRadius;
 
-  // The ground: dim cool stone, finished in every direction the camera
-  // can reach — a still field at night, not a void with lamps pasted on it.
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(fieldRadius + 40, 48),
-    new THREE.MeshStandardMaterial({ color: QUIET_ARCHIVE_PALETTE.ground, roughness: 1, metalness: 0 }),
-  );
+  // The ground is still water (the world's seed is "still-water"): dark, smooth, reaching past sight in every direction, so the field has a horizon instead of an edge. It was a
+  // disc with a rim hanging in space — the opposite of rest. The lamps and the sky lie on it faintly; a pale band of light sits where water meets night; mist lies low and far.
+  const waterMat = surfaceMaterial("pale", { tint: 0x1a2a38, repeat: [70, 70], roughness: 0.42, metalness: 0 });
+  waterMat.normalScale.set(0.18, 0.18); // barely moved: a glint, never a glare
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(STILL_WATER_REACH, 64), waterMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -1;
   ground.name = "field-ground";
   group.add(ground);
+  // Where the resting things are: the faintest line on the water, a suggestion of the field's extent and not a wall.
   const groundRing = new THREE.Mesh(
-    new THREE.RingGeometry(fieldRadius + 38, fieldRadius + 42, 48),
-    new THREE.MeshBasicMaterial({ color: QUIET_ARCHIVE_PALETTE.memory, transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
+    new THREE.RingGeometry(fieldRadius + 38, fieldRadius + 40, 96),
+    new THREE.MeshBasicMaterial({ color: QUIET_ARCHIVE_PALETTE.memory, transparent: true, opacity: 0.1, side: THREE.DoubleSide }),
   );
   groundRing.rotation.x = -Math.PI / 2;
   groundRing.position.y = -0.5;
   groundRing.name = "field-ring";
   group.add(groundRing);
+  group.add(horizonGlow(STILL_WATER_REACH * 0.92, 0x0d1117, 0x5d7890, 0x0d1117, 0.55, "still-horizon"));
+  group.add(lightPools([{ x: 0, z: 0 }], 0x9fc0dc, fieldRadius * 1.5, 0.16, "still-sheen"));
+  const mistRing: { x: number; y: number; z: number }[] = [];
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const r = fieldRadius + 260 + (i % 3) * 170;
+    mistRing.push({ x: Math.cos(a) * r, y: 16, z: Math.sin(a) * r });
+  }
+  group.add(groundMist(mistRing, 0x8fa8bc, 620, 0.07, "still-mist").object); // never moved: this is the still place
 
   // The low still threshold (adopted amendment, Rev 123): a quiet doorway
   // of dim light, low and wide, at the field's edge by the arrival side.
