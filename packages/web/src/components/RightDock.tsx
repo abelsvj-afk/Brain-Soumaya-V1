@@ -347,20 +347,12 @@ export function RightDock({
         )}
       </div>
       {/* Persistent ambient status strip — real graph state + local time only (IM-02) */}
-      <div className="dock-ambient-strip" style={{
-        padding: "6px 16px",
-        background: "rgba(10, 12, 28, 0.4)",
-        borderBottom: "1px solid var(--glass-border)",
-        fontSize: "11px",
-        color: "#7ac8ff",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        fontFamily: "monospace",
-        opacity: 0.85
-      }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><SoumayaEye state="idle" mood="thoughtful" size={22} />{ambientInfo.greeting}</span>
-        <span>{ambientInfo.location}</span>
+      {/* UX review #8: greeting and counts used to share one justified
+          monospace row and jumbled into each other in the narrow dock. Now
+          two tidy lines — greeting, then the real counts (ellipsized). */}
+      <div className="dock-ambient-strip">
+        <span className="das-greeting"><SoumayaEye state="idle" mood="thoughtful" size={20} />{ambientInfo.greeting}</span>
+        <span className="das-detail" title={ambientInfo.location}>{ambientInfo.location}</span>
       </div>
       <div className="dock-content">
         {tab === "details" && (
