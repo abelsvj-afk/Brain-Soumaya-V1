@@ -436,3 +436,27 @@ describe("nodeObject — Round 3 node-object cache key (entropy bucketing)", () 
     expect(nodeVisualCacheKey(baseNode({ entropy: 5 }))).toBe(nodeVisualCacheKey(baseNode({ entropy: 1 })));
   });
 });
+
+import { wrapLabelLines } from "./nodeObject.js";
+
+describe("wrapLabelLines (UX review #5 — no mid-word marquee slices)", () => {
+  const measure = (s: string) => s.length * 10; // 10px per char
+  it("keeps a short label on one line", () => {
+    expect(wrapLabelLines("The first light", 400, measure)).toEqual(["The first light"]);
+  });
+  it("wraps a long label at word boundaries, never mid-word, first letter intact", () => {
+    const lines = wrapLabelLines("I want to learn guitar this year and practice", 200, measure);
+    expect(lines.length).toBe(2);
+    expect(lines[0]!.startsWith("I want")).toBe(true);
+    for (const l of lines) expect(measure(l)).toBeLessThanOrEqual(200);
+    expect(lines[1]!.endsWith("…")).toBe(true);
+    // Every word that is shown is a whole word from the source.
+    const src = new Set("I want to learn guitar this year and practice".split(" "));
+    for (const w of lines.join(" ").replace("…", "").split(" ")) expect(src.has(w)).toBe(true);
+  });
+  it("ellipsizes a single over-long word instead of overflowing", () => {
+    const [only] = wrapLabelLines("Supercalifragilisticexpialidocious", 100, measure);
+    expect(measure(only!)).toBeLessThanOrEqual(100);
+    expect(only!.endsWith("…")).toBe(true);
+  });
+});

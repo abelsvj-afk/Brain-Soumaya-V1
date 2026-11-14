@@ -202,7 +202,7 @@ export function resolveGraphics(s: GraphicsSettings = getGraphics(), rung?: Rung
 
   return {
     bloom,
-    bloomStrength: bloom ? (useRung ? rung!.bloomStrength : eff.animationQuality === "high" ? 0.4 : 0.3) : 0,
+    bloomStrength: bloom ? (useRung ? rung!.bloomStrength : eff.animationQuality === "high" ? 0.3 : 0.22) : 0, // UX review #5: was 0.4/0.3 — glow washed out labels and the scene
     starCount: STAR[eff.starDensity],
     particleScale: PARTICLE[eff.particles],
     animationScale: ANIM[eff.animationQuality],
