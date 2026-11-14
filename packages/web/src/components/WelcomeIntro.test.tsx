@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import * as React from "react";
 import { WelcomeIntro } from "./WelcomeIntro.js";
 
 afterEach(() => cleanup());
@@ -50,6 +51,22 @@ describe("WelcomeIntro", () => {
     const dlg = screen.getByRole("dialog", { name: "Welcome to Soumaya" });
     expect(dlg.getAttribute("aria-modal")).toBe("true");
     expect(dlg.contains(document.activeElement)).toBe(true);
+  });
+
+  it("returns focus to the element that had it before opening, after Escape", () => {
+    const opener = document.createElement("button");
+    opener.textContent = "opener";
+    document.body.appendChild(opener);
+    opener.focus();
+    function Host() {
+      const [open, setOpen] = React.useState(true);
+      return open ? <WelcomeIntro companionName="Soumaya" onClose={() => setOpen(false)} /> : null;
+    }
+    render(<Host />);
+    expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "Welcome to Soumaya" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
   });
 
   it("is an accessible dialog", () => {

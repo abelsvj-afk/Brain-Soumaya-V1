@@ -12,7 +12,7 @@
  * the full Help manual (`onSeeHelp`) for anyone who wants more than this one-screen framing —
  * deliberately NOT expanded into a tour or manual itself.
  */
-import { useLayoutEffect, useRef } from "react";
+import { useRef } from "react";
 import { SoumayaEye } from "./SoumayaEye.js";
 import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { placeName } from "../graph/worldPurpose.js";
@@ -39,12 +39,10 @@ export function WelcomeIntro({
   // "Let's go" button and Escape are the ways out.
   const cardRef = useRef<HTMLDivElement>(null);
   // Focus the card itself (not its first button): focusing the Help link at the
-  // bottom scrolled a phone-height card past its opening lines. Runs before
-  // useDialogA11y's effect, which then leaves focus where it is.
-  useLayoutEffect(() => {
-    cardRef.current?.focus({ preventScroll: true });
-  }, []);
-  useDialogA11y(cardRef, onClose);
+  // bottom scrolled a phone-height card past its opening lines. The hook saves
+  // the previously focused element BEFORE moving focus, so Escape/"Let's go"
+  // hand focus back to it (not to <body>).
+  useDialogA11y(cardRef, onClose, true, { initialFocus: "container" });
   return (
     <div className="welcome-overlay">
       <div

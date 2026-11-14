@@ -17,9 +17,20 @@ describe("tap targets (44 px)", () => {
     expect(css).toMatch(/\.gv-chip \{ min-height: 44px; \}/);
   });
   it("UX review #7: close buttons, ingest links and tag chips reach 44 px", () => {
-    expect(css).toMatch(/\.panel-close \{ min-width: 44px; min-height: 44px;/);
+    expect(css).toMatch(/\.panel-close:not\(\.tab-close\) \{ min-width: 44px; min-height: 44px; \}/);
+    // the old `display: inline-flex !important` beat every hide rule — gone
+    expect(css).not.toMatch(/\.panel-close \{ min-width: 44px; min-height: 44px; display: inline-flex !important/);
     expect(css).toMatch(/\.legend-close \{ width: 44px; height: 44px; \}/);
     expect(css).toMatch(/\.ingest-more \{ min-height: 44px;/);
     expect(css).toMatch(/\.tag-chip \{ min-height: 44px;/);
+  });
+  it("UX review #7 (round 2): ingest row, Welcome Help link and Observatory controls reach 44 px", () => {
+    expect(css).toMatch(/\.ingest \.row button \{ min-height: 44px; \}/);
+    expect(css).toMatch(/\.ingest \.row \.tag-input \{ min-height: 44px; \}/);
+    expect(css).toMatch(/\.welcome-help-link \{ min-height: 44px; \}/);
+    expect(css).toMatch(/\.obs-chip, \.obs-retry, \.obs-primary, \.obs-enter, \.obs-answer-send \{ min-height: 44px; \}/);
+    expect(css).toMatch(/\.obs-close, \.obs-search \{ min-width: 44px; min-height: 44px; \}/);
+    // phones: the suggested-tag chips scroll in one row instead of stacking
+    expect(css).toMatch(/\.ingest \.tag-row \{\s*flex-wrap: nowrap;\s*overflow-x: auto;/);
   });
 });
