@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { dustMotes, groundMist, lightPools, rockWall, rolledGround, surfaceMaterial, surfaceTextures, tileFbm, type SurfaceKind } from "./worldCraft.js";
 
-const KINDS: SurfaceKind[] = ["rock", "flagstone", "plaster", "wood", "metal", "soil", "pale", "brass"];
+const KINDS: SurfaceKind[] = ["rock", "flagstone", "plaster", "wood", "metal", "soil", "pale", "brass", "grass"];
 
 describe("world craft kit", () => {
   it("every surface has real variation (never one flat colour) and is built once", () => {

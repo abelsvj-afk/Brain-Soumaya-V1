@@ -548,12 +548,9 @@ const WORLD_SCENES: Record<string, WorldSceneEntry> = {
   },
   "growing-place": {
     title: "The Growing Place",
-    light: { env: 0.5 },
-    background: 0x0a2420,
-    fogDensity: 0.00016,
+    ...WORLD_MOOD["growing-place"]!, // light, background, fog and look height: graph/worldMood.ts
     orbitRadius: 1150,
     orbitHeight: 300,
-    lookAtY: 60,
     cameraFloorY: GARDEN_CAMERA_FLOOR_Y,
     fallback: "The garden view needs graphics support on this device — your memories are unaffected.",
     build: (layout, onRelicVisible) =>
