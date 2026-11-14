@@ -339,6 +339,7 @@ export function IngestPanel({
       </div>
       <textarea
         autoFocus
+        aria-label="What's on your mind? Write the memory to add"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="A business idea, a reflection, a random thought…"
@@ -378,6 +379,7 @@ export function IngestPanel({
       {showDetails ? (
         <textarea
           className="ingest-details"
+          aria-label="More context (optional)"
           value={details}
           onChange={(e) => setDetails(e.target.value)}
           placeholder="More context (optional) — the why, the backstory, related people, how it makes you feel…"

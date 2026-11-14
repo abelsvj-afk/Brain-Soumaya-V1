@@ -7968,6 +7968,39 @@ button.mindspace-more { cursor: pointer; }
 .toast.actionable { min-height: 44px; }
 .perf-suggest button { min-height: 44px; min-width: 44px; }
 .gv-chip { min-height: 44px; }
+/* UX review #7 — the controls the 2026-11 pass still measured under 44 px:
+   panel/legend close buttons (22–30 px), the ingest "＋ more" links (~16 px
+   tall), the ingest/inspector tag chips (~26 px), the ingest primary row
+   (Add to brain 38 px, Speak 40 px, "+ tag" 25 px), the Welcome Help link
+   (40 px) and the Observatory's chips and buttons (25–37 px).
+   No display/!important here: hide rules (display:none) must keep winning.
+   The dock's own tab-row close (.tab-close) is sized with the dock tabs in
+   the mobile-layout PR, so it is left out of this rule. */
+.panel-close:not(.tab-close) { min-width: 44px; min-height: 44px; }
+.legend-close { width: 44px; height: 44px; }
+.ingest-more { min-height: 44px; padding: 0 6px; }
+.tag-chip { min-height: 44px; display: inline-flex; align-items: center; }
+.ingest .row button { min-height: 44px; }
+.ingest .row .tag-input { min-height: 44px; }
+.welcome-help-link { min-height: 44px; }
+.obs-chip, .obs-retry, .obs-primary, .obs-enter, .obs-answer-send { min-height: 44px; }
+.obs-chip { display: inline-flex; align-items: center; }
+.obs-close, .obs-search { min-width: 44px; min-height: 44px; }
+/* Phones: 44 px chips wrapping onto 3–4 rows made the Add sheet much taller.
+   The suggested tags become one horizontally scrollable row instead. */
+@media (max-width: 560px) {
+  .ingest .tag-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, #000 88%, transparent);
+    padding-bottom: 2px;
+  }
+  .ingest .tag-row::-webkit-scrollbar { display: none; }
+  .ingest .tag-row .tag-chip { flex: 0 0 auto; white-space: nowrap; }
+}
 
 /* ======== Persistent HUD (docs/specs/persistent-hud-2026-10-30.md) ========
    The HUD is one shell above every scene. The worlds layer now sits BELOW the HUD tiers (30–57) and every panel/dialog (≥ 45),

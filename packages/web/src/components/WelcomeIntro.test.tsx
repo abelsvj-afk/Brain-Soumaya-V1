@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import * as React from "react";
 import { WelcomeIntro } from "./WelcomeIntro.js";
 
 afterEach(() => cleanup());
@@ -28,13 +29,44 @@ describe("WelcomeIntro", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("dismisses on clicking the backdrop, but not the card itself (same pattern as Legend)", () => {
+  // UX review #7: a stray backdrop tap used to throw the card away before a
+  // first-run user had read it. The ways out are the button and Escape.
+  it("does NOT dismiss on a backdrop or card click", () => {
     const onClose = vi.fn();
     const { container } = render(<WelcomeIntro companionName="Soumaya" onClose={onClose} />);
     fireEvent.click(container.querySelector(".welcome-card")!);
-    expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(container.querySelector(".welcome-overlay")!);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("dismisses on Escape (standard modal keyboard behaviour)", () => {
+    const onClose = vi.fn();
+    render(<WelcomeIntro companionName="Soumaya" onClose={onClose} />);
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a modal dialog that takes focus", () => {
+    render(<WelcomeIntro companionName="Soumaya" onClose={() => {}} />);
+    const dlg = screen.getByRole("dialog", { name: "Welcome to Soumaya" });
+    expect(dlg.getAttribute("aria-modal")).toBe("true");
+    expect(dlg.contains(document.activeElement)).toBe(true);
+  });
+
+  it("returns focus to the element that had it before opening, after Escape", () => {
+    const opener = document.createElement("button");
+    opener.textContent = "opener";
+    document.body.appendChild(opener);
+    opener.focus();
+    function Host() {
+      const [open, setOpen] = React.useState(true);
+      return open ? <WelcomeIntro companionName="Soumaya" onClose={() => setOpen(false)} /> : null;
+    }
+    render(<Host />);
+    expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "Welcome to Soumaya" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
   });
 
   it("is an accessible dialog", () => {

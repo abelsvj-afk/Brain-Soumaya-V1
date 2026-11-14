@@ -3023,6 +3023,10 @@ export default function App() {
             const layout = fanLayout(fanVw, fanVh, targets.length, safeBottomInset);
             const win = fanWindow(targets.length, layout, fanPage);
             const visible = targets.slice(win.start, win.start + win.count);
+            // UX review #7: a closed fan's targets are invisible (scaled to 0.4, opacity 0) but were
+            // still Tab stops / screen-reader buttons measuring 18×18 px — they now leave the
+            // tab order and the accessibility tree until the fan opens.
+            const fanClosedA11y = focusMenuOpen ? {} : { tabIndex: -1, "aria-hidden": true as const };
             return (
               <div className={`focus-cluster ${focusMenuOpen ? "open" : ""}`}>
                 {visible.map((t, i) => (
@@ -3030,6 +3034,7 @@ export default function App() {
                     key={t.key}
                     className={t.className}
                     style={focusItemStyle(i, focusMenuOpen, layout.step, layout.direction)}
+                    {...fanClosedA11y}
                     onClick={t.onClick}
                     aria-label={t.ariaLabel}
                     title={t.title}
@@ -3042,6 +3047,7 @@ export default function App() {
                   <button
                     className="fab focus-item fan-more"
                     style={focusItemStyle(visible.length, focusMenuOpen, layout.step, layout.direction)}
+                    {...fanClosedA11y}
                     onClick={() => setFanPage((p) => (p + 1) % layout.pageCount)}
                     aria-label={`More focus targets (page ${win.page + 1} of ${layout.pageCount})`}
                     title="More focus targets"

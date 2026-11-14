@@ -21,12 +21,21 @@ function focusableIn(container: HTMLElement): HTMLElement[] {
  * mounted while open (the parent conditionally renders the whole
  * component) — pass `active` explicitly for a component that stays mounted
  * and toggles its own open state internally (e.g. a popover menu).
+ *
+ * `initialFocus: "container"` focuses the dialog element itself (it needs
+ * tabIndex={-1}) without scrolling, instead of its first focusable — for a
+ * tall card whose first focusable sits far down (UX review #7: the Welcome
+ * card opened scrolled to its Help link on phones). The element that had
+ * focus BEFORE the dialog opened is captured first either way, so closing
+ * always returns focus there.
  */
 export function useDialogA11y(
   containerRef: RefObject<HTMLElement | null>,
   onClose: () => void,
   active = true,
+  options: { initialFocus?: "first" | "container" } = {},
 ): void {
+  const initialFocus = options.initialFocus ?? "first";
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -36,8 +45,8 @@ export function useDialogA11y(
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
     if (container && !container.contains(document.activeElement)) {
-      const first = focusableIn(container)[0] ?? container;
-      first.focus();
+      if (initialFocus === "container") container.focus({ preventScroll: true });
+      else (focusableIn(container)[0] ?? container).focus();
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -64,5 +73,5 @@ export function useDialogA11y(
       document.removeEventListener("keydown", onKeyDown, true);
       if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
     };
-  }, [active, containerRef]);
+  }, [active, containerRef, initialFocus]);
 }
