@@ -358,9 +358,10 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
           <span className="meta">
             {/* REG-106: the derived figure is named mass, never weight — the
                 slider below sets importance, a different quantity. */}
-            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]} · mass{" "}
-            {Math.round((node.mass ?? 0) * 100)}%
-            {node.degree ? ` · ${node.degree} link${node.degree === 1 ? "" : "s"}` : ""}
+            {/* UX review #4: the raw mass % moved into "More details" below — the
+                plain line says what it is and how connected it is. */}
+            {CELESTIAL_ICON[node.celestial]} {CELESTIAL_LABEL[node.celestial]}
+            {node.degree ? ` · ${node.degree} link${node.degree === 1 ? "" : "s"}` : " · no links yet"}
           </span>
           {/* Why it's this size — the legend, applied in context so it sticks. */}
           <span className="size-reason" title="What gives this memory its gravitational mass">
@@ -584,11 +585,25 @@ export function NodeInspector({ node, graph, onFocus, onChanged, onDeleted, onIs
         {node.lastTendedAt && <p className="node-when">🌱 Last tended {fmtWhen(node.lastTendedAt)}</p>}
         {typeof node.entropy === "number" && (
           <p className="node-when">
-            {node.entropy >= 0.66 ? "❄️ Cooling" : node.entropy >= 0.33 ? "🌗 Fading" : "🔥 Warm"} · entropy {Math.round(node.entropy * 100)}%
+            {node.entropy >= 0.66 ? "❄️ Cooling — not visited in a while" : node.entropy >= 0.33 ? "🌗 Fading — worth a look soon" : "🔥 Warm — recently visited"}
           </p>
         )}
-        {typeof node.reviewStrength === "number" && (
-          <p className="node-when">🧠 Review strength {Math.round(node.reviewStrength * 100)}%</p>
+        {/* UX review #4: the simulation's raw numbers (mass, entropy, review
+            strength) are still here for the curious, folded behind one
+            disclosure instead of greeting every user as jargon. */}
+        {(typeof node.mass === "number" || typeof node.entropy === "number" || typeof node.reviewStrength === "number") && (
+          <details className="node-numbers">
+            <summary>More details</summary>
+            {typeof node.mass === "number" && node.celestial && (
+              <p className="node-when">⚖️ Size · mass {Math.round(node.mass * 100)}% — from links, importance, age and feeling</p>
+            )}
+            {typeof node.entropy === "number" && (
+              <p className="node-when">🌡️ Cooling · entropy {Math.round(node.entropy * 100)}% — rises when it goes unvisited</p>
+            )}
+            {typeof node.reviewStrength === "number" && (
+              <p className="node-when">🧠 Review strength {Math.round(node.reviewStrength * 100)}% — how well you remember it</p>
+            )}
+          </details>
         )}
         {node.kind === "moc" && typeof node.memberCount === "number" && (
           <p className="node-when">🌌 {node.memberCount} member{node.memberCount === 1 ? "" : "s"} in this constellation</p>

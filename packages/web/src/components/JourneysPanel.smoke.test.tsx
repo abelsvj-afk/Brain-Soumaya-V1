@@ -198,7 +198,7 @@ describe("JourneysPanel — an empty links list is no longer a dead end", () => 
     render(<JourneysPanel />);
     const head = await screen.findByText("Recover Financially");
     act(() => head.click());
-    const captureBtn = await screen.findByText("➕ Dump a thought to link here");
+    const captureBtn = await screen.findByText("➕ Add a memory to link here");
     act(() => captureBtn.click());
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "panel", value: "ingest" } }));
     window.removeEventListener("brain-toast-action", onAction);

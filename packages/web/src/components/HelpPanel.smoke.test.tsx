@@ -145,7 +145,7 @@ describe("HelpPanel — IM-131 remainder: Connections card, Getting Started land
     render(<HelpPanel onClose={() => {}} />);
     // The Getting Started cards are visible without touching the sidebar.
     expect(screen.getByText("Your private brain")).toBeTruthy();
-    expect(screen.getByText("Dump a thought")).toBeTruthy();
+    expect(screen.getByText("Add a memory")).toBeTruthy();
   });
 
   it("has a Help card for the Connections panel", () => {

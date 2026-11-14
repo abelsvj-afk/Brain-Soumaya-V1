@@ -27,14 +27,14 @@ const input = () => screen.getByPlaceholderText(/Search memories or jump to/);
 describe("CommandPalette — IM-142", () => {
   it("lists the jump-to/action commands before any query is typed", () => {
     renderPalette();
-    expect(screen.getByText("Capture a thought")).toBeTruthy();
+    expect(screen.getByText("Add a memory")).toBeTruthy();
     expect(screen.getByText(/Money/)).toBeTruthy();
     expect(screen.getByText(/Journeys/)).toBeTruthy();
   });
 
   it("runs a command on click", () => {
     const { onCommand } = renderPalette();
-    act(() => screen.getByText("Capture a thought").click());
+    act(() => screen.getByText("Add a memory").click());
     expect(onCommand).toHaveBeenCalledTimes(1);
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ id: "capture" });
   });
@@ -43,7 +43,7 @@ describe("CommandPalette — IM-142", () => {
     renderPalette();
     fireEvent.change(input(), { target: { value: "money" } });
     expect(screen.getByText(/Money/)).toBeTruthy();
-    expect(screen.queryByText("Capture a thought")).toBeNull();
+    expect(screen.queryByText("Add a memory")).toBeNull();
   });
 
   it("searches memories via the existing search API and focuses a hit on Enter", async () => {

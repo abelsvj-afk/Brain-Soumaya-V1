@@ -755,19 +755,19 @@ export function SoumayaPanel({
               {/* REG-173/SF-08: this is a TEMPLATE, not a copyable command —
                   the old "Tap to copy" wrote the literal placeholder. The
                   client cannot fill in the login name: /link takes the
-                  gamer tag, and the client only stores the brain's display
+                  username, and the client only stores the brain's display
                   name (which may differ from the tag) — inserting it could
                   mis-link or create a stray brain. So the block is
                   labelled as a template to fill in. */}
               <code
                 className="brain-id"
-                title="Template — fill in your gamer tag and passcode"
+                title="Template — fill in your username and passcode"
                 style={{ cursor: "default", display: "block", margin: "6px 0", padding: "4.5px", background: "rgba(0,0,0,0.35)", borderRadius: "4px", fontSize: "11px" }}
               >
                 /link &lt;name&gt; &lt;passcode&gt;
               </code>
               <p className="budget-note" style={{ fontSize: "11px" }}>
-                Template — replace &lt;name&gt; with the gamer tag you signed in with, and
+                Template — replace &lt;name&gt; with the username you signed in with, and
                 &lt;passcode&gt; with your passcode. After that I'll answer
                 from this brain, log what you send, and bring you a daily digest.
               </p>

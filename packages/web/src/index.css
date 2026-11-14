@@ -6009,6 +6009,8 @@ button.jn-link-row:hover { background: rgba(122,249,255,0.1); }
 
 /* NodeInspector: dates/state facts, members drill-in, edit form (IM-26/27/29). */
 .node-facts { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.node-numbers { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.node-numbers summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
 .node-members h3, .research-answers h3 { font-size: 13px; margin: 14px 0 6px; color: var(--accent); }
 .research-answer { margin: 0 0 8px; }
 .research-answer-q { margin: 0; font-size: 12px; font-weight: 600; color: #eaf2ff; }

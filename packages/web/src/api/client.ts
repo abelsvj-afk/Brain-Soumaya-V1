@@ -40,7 +40,7 @@ export async function authSpace(gamerTag: string, passcode: string, name?: strin
   if (!res.ok || !body.id) {
     // IM-18: never surface the raw HTTP status as user copy — a human
     // fallback here; LoginScreen humanizes further by category.
-    throw new Error(body.error ?? "Couldn't open that brain. Check your gamer tag and passcode and try again.");
+    throw new Error(body.error ?? "Couldn't open that brain. Check your username and passcode and try again.");
   }
   storeSpace(body.id, body.name);
   return { id: body.id, name: body.name ?? name ?? gamerTag, created: !!body.created };
@@ -64,7 +64,7 @@ export function logoutSpace(): void {
   storeSpace(null);
 }
 
-/** Update this brain's gamer tag and/or display name (tag stays unique). */
+/** Update this brain's username and/or display name (tag stays unique). */
 export async function updateProfile(opts: { gamerTag?: string; name?: string }): Promise<{ id: string; name: string; gamerTag: string }> {
   const res = await afetch(`${API}/space/profile`, {
     method: "PATCH",

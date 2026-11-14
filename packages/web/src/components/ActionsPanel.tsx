@@ -304,7 +304,7 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
           No action items or reminders. Add one above, add a thought and tick "📌 Action item", or set a reminder when you log a memory.
         </p>
         <button className="mini" onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "panel", value: "ingest" } }))}>
-          ➕ Dump a thought
+          ➕ Add a memory
         </button>
       </div>
     );

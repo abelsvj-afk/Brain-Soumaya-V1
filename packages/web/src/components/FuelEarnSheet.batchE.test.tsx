@@ -38,7 +38,7 @@ describe("REG-053 — earn sheet covers every earn/spend path", () => {
     expect(screen.getByText("Deep jobs (her research)")).toBeTruthy();
     expect(screen.getByText("−2 each")).toBeTruthy();
     // Memory row wording untouched (REG-039 rides after).
-    expect(screen.getByText("Log a memory")).toBeTruthy();
+    expect(screen.getByText("Add a memory")).toBeTruthy();
     expect(screen.getByText("+15")).toBeTruthy();
   });
 });

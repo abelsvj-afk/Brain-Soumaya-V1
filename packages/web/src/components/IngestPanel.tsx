@@ -330,7 +330,7 @@ export function IngestPanel({
       data-testid="ingest-panel"
     >
       <div className="panel-head">
-        <h2>Dump a thought</h2>
+        <h2>Add a memory</h2>
         {onClose && (
           <button className="panel-close" onClick={requestClose} aria-label="Close">
             ×

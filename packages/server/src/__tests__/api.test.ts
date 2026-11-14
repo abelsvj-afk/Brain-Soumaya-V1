@@ -130,7 +130,7 @@ describe("REST API", () => {
     expect(body.summaries.some((s: string) => s.trim() === "ok?")).toBe(false);
   });
 
-  it("updates the profile name freely and keeps the gamer tag unique", async () => {
+  it("updates the profile name freely and keeps the username unique", async () => {
     const patch = (id: string, body: unknown) =>
       fetch(`${base}/api/space/profile`, {
         method: "PATCH",
@@ -141,7 +141,7 @@ describe("REST API", () => {
     const r1 = await patch(spaceId, { name: "Renamed Brain" });
     expect(r1.status).toBe(200);
     expect(((await r1.json()) as { name: string }).name).toBe("Renamed Brain");
-    // A second brain, then try to steal its gamer tag → 409.
+    // A second brain, then try to steal its username → 409.
     const other = await fetch(`${base}/api/space/auth`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

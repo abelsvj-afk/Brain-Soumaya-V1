@@ -615,7 +615,7 @@ function JourneyLinksSection({
           className="mini"
           onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "panel", value: "ingest" } }))}
         >
-          ➕ Dump a thought to link here
+          ➕ Add a memory to link here
         </button>
         {picker}
       </div>

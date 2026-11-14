@@ -390,11 +390,11 @@ export class SpacesRepo {
     // Reject if gamerTag is case-insensitively "soumaya" (unless it is the first brain)
     if (!isFirst) {
       if (trimmedGamerTag.toLowerCase() === "soumaya") {
-        throw new UserFacingError("The name/gamer tag 'Soumaya' is reserved.");
+        throw new UserFacingError("The name/username 'Soumaya' is reserved.");
       }
       // Reject if name is case-insensitively "soumaya" (unless it is the first brain)
       if (trimmedName.toLowerCase() === "soumaya") {
-        throw new UserFacingError("The name/gamer tag 'Soumaya' is reserved.");
+        throw new UserFacingError("The name/username 'Soumaya' is reserved.");
       }
     }
     const id = randomBytes(16).toString("hex");
@@ -433,7 +433,7 @@ export class SpacesRepo {
   }
 
   /**
-   * Update a brain's display name and/or gamer tag. Gamer tag must stay UNIQUE
+   * Update a brain's display name and/or username. Username must stay UNIQUE
    * (case-insensitive) and isn't the reserved "Soumaya"; name can be anything.
    * Throws a user-facing message on conflict/validation.
    */
@@ -444,10 +444,10 @@ export class SpacesRepo {
 
     if (opts.gamerTag !== undefined) {
       const tag = opts.gamerTag.trim();
-      if (tag.length < 2 || tag.length > 40) throw new UserFacingError("Gamer tag must be 2–40 characters.");
-      if (tag.toLowerCase() === "soumaya") throw new UserFacingError("The gamer tag 'Soumaya' is reserved.");
+      if (tag.length < 2 || tag.length > 40) throw new UserFacingError("Username must be 2–40 characters.");
+      if (tag.toLowerCase() === "soumaya") throw new UserFacingError("The username 'Soumaya' is reserved.");
       const taken = this.getByGamerTag(tag);
-      if (taken && taken.id !== id) throw new UserFacingError("That gamer tag is already taken — pick another.");
+      if (taken && taken.id !== id) throw new UserFacingError("That username is already taken — pick another.");
       next.gamerTag = tag;
     }
     if (opts.name !== undefined) {
@@ -512,7 +512,7 @@ export class SpacesRepo {
     if (!row) return false;
     if (!verifyPasscode(row, passcode)) return false;
     if (confirmation !== row.gamerTag) {
-      throw new UserFacingError("Confirmation does not match this brain's gamer tag — nothing was deleted.");
+      throw new UserFacingError("Confirmation does not match this brain's username — nothing was deleted.");
     }
 
     const sqlite = this.h.sqlite;

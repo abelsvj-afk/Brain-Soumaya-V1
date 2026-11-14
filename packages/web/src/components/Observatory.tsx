@@ -764,7 +764,7 @@ export function Observatory({
         <button className="obs-card obs-action" onClick={onCapture}>
           <span className="obs-ic">✍️</span>
           <span className="obs-body">
-            <span className="obs-title">Capture a thought</span>
+            <span className="obs-title">Add a memory</span>
             <span className="obs-line">Add to your galaxy — it links itself.</span>
           </span>
         </button>

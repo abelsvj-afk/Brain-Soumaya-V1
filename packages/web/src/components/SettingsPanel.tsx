@@ -130,7 +130,7 @@ function copyTextWithFeedback(text: string, successMessage: string): void {
 }
 
 /**
- * Settings overlay (⚙️). Account (display name + unique gamer tag) plus app
+ * Settings overlay (⚙️). Account (display name + unique username) plus app
  * preferences. Opened from a FAB; floats over the galaxy like the Observatory.
  * IM-128: Research Mode lives HERE too now — the same server setting the
  * Soumaya tab flips (one store, two surfaces, no duplicate state) — alongside
@@ -452,7 +452,7 @@ export function SettingsPanel({
             />
           </label>
           <label className="settings-field">
-            <span>Gamer tag <em>(unique)</em></span>
+            <span>Username <em>(unique)</em></span>
             <input
               value={gamerTag}
               maxLength={40}
@@ -472,7 +472,7 @@ export function SettingsPanel({
         </section>
 
         {/* Account security (IM-129): passcode change + brain deletion. Self-
-            contained in AccountSettings; it confirms against the gamer tag
+            contained in AccountSettings; it confirms against the username
             loaded above (the same value the server checks). */}
         <OwnerAccess />
         <EternityAutonomyPanel />
@@ -1037,7 +1037,7 @@ export function SettingsPanel({
             <button
               className={`switch ${liteOn ? "on" : ""}`}
               onClick={() => {
-                // A reload wipes any unsaved Display name/Gamer tag or
+                // A reload wipes any unsaved Display name/Username or
                 // notification-settings edit sitting in the fields above
                 // with no warning — this used to fire regardless.
                 if (!confirmDiscardUnsaved()) return;
@@ -1131,7 +1131,7 @@ export function SettingsPanel({
               className={`switch ${boundedLinksOn ? "on" : ""}`}
               onClick={() => {
                 // Same guard as Lite mode below — a reload wipes an unsaved Display
-                // name/Gamer tag or notification-settings edit with no warning otherwise.
+                // name/Username or notification-settings edit with no warning otherwise.
                 if (!confirmDiscardUnsaved()) return;
                 const next = !boundedLinksOn;
                 setBoundedLinksOnState(next);

@@ -26,7 +26,7 @@ export async function changePasscode(currentPasscode: string, newPasscode: strin
 
 /** Permanently delete this brain and ALL of its data. The server requires
  *  BOTH the passcode re-entered (401 when wrong) AND `confirmation` exactly
- *  equal to the brain's gamer tag (400 when mismatched) — either failure
+ *  equal to the brain's username (400 when mismatched) — either failure
  *  deletes nothing. DELETE-with-body follows the same afetch pattern as the
  *  other DELETE calls in the client; the body carries the two proofs. */
 export async function deleteBrain(passcode: string, confirmation: string): Promise<void> {

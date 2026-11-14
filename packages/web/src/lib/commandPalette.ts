@@ -43,7 +43,7 @@ const TAB_COMMANDS: { tab: DockTab; icon: string; name: string; keywords: string
 ];
 
 export const PALETTE_COMMANDS: PaletteCommand[] = [
-  { id: "capture", icon: "📝", title: "Capture a thought", hint: "C", keywords: "new add memory dump ingest note quick write" },
+  { id: "capture", icon: "📝", title: "Add a memory", hint: "C", keywords: "new add memory dump ingest note quick write" },
   { id: "chat", icon: "💬", title: "Ask Soumaya", hint: "", keywords: "chat talk conversation maya question" },
   { id: "search", icon: "🔍", title: "Search your mind", hint: "", keywords: "find lookup memories full search box" },
   { id: "observatory", icon: "🔭", title: "Open the Observatory", hint: "", keywords: "home overview digest today" },

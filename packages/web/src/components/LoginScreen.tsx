@@ -4,7 +4,7 @@ import { SoumayaEye } from "./SoumayaEye.js";
 import { humanizeAuthError } from "./cl1a.helpers.js";
 
 /**
- * The gate to a private brain. A gamer tag + passcode opens an existing brain (on any
+ * The gate to a private brain. A username + passcode opens an existing brain (on any
  * device) or creates a new one with a custom companion name.
  *
  * IM-18: galaxy ambience + preview (star field + her eye), design-system styling
@@ -31,11 +31,11 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
 
     if (isSignUp) {
       if (trimmedGamerTag.toLowerCase() === "soumaya") {
-        setError("The name/gamer tag 'Soumaya' is reserved.");
+        setError("The name/username 'Soumaya' is reserved.");
         return;
       }
       if (trimmedBrainName.toLowerCase() === "soumaya") {
-        setError("The name/gamer tag 'Soumaya' is reserved.");
+        setError("The name/username 'Soumaya' is reserved.");
         return;
       }
       if (!trimmedBrainName) {
@@ -71,8 +71,8 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
         </h1>
         <p className="login-sub">
           {isSignUp
-            ? "Create a new private galaxy — each memory you add becomes a star in it. Choose a unique gamer tag and name your companion."
-            : "Open your private galaxy with your gamer tag and passcode."}
+            ? "Create a new private galaxy — each memory you add becomes a star in it. Choose a unique username and name your companion."
+            : "Open your private galaxy with your username and passcode."}
         </p>
 
         <div className="login-tabs">
@@ -100,7 +100,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: (space: { id: string; name
 
         <form onSubmit={submit} className="login-form">
           <label>
-            Gamer tag
+            Username
             <input
               value={gamerTag}
               onChange={(e) => setGamerTag(e.target.value)}

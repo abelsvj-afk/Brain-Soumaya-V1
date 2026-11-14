@@ -25,19 +25,19 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("isBrainDeleteReady — the hard-confirm gate (pure helper)", () => {
-  it("is false until BOTH the exact gamer tag and a passcode are present", () => {
+  it("is false until BOTH the exact username and a passcode are present", () => {
     expect(isBrainDeleteReady("", TAG, "")).toBe(false);
     expect(isBrainDeleteReady(TAG, TAG, "")).toBe(false); // no passcode yet
     expect(isBrainDeleteReady("", TAG, "some-pass")).toBe(false); // no confirmation yet
   });
 
-  it("requires the confirmation to match the gamer tag EXACTLY (case-sensitive, like the server)", () => {
+  it("requires the confirmation to match the username EXACTLY (case-sensitive, like the server)", () => {
     expect(isBrainDeleteReady(TAG.toLowerCase(), TAG, "some-pass")).toBe(false);
     expect(isBrainDeleteReady("DELETE", TAG, "some-pass")).toBe(false);
     expect(isBrainDeleteReady(`${TAG} `, TAG, "some-pass")).toBe(false);
   });
 
-  it("can never be satisfied when the gamer tag is unknown/empty", () => {
+  it("can never be satisfied when the username is unknown/empty", () => {
     expect(isBrainDeleteReady("", "", "some-pass")).toBe(false);
   });
 

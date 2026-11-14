@@ -6,7 +6,7 @@
  * Configured by the OWNER_SPACE_IDS secret (comma-separated space ids),
  * read on every call so a `fly secrets set` takes effect on restart with
  * no code change and tests can flip it per case. It is deliberately keyed
- * on the space id, not the gamer tag: a tag can be re-registered by
+ * on the space id, not the username: a tag can be re-registered by
  * anyone once its owner deletes or renames the account, whereas a space
  * id is an unguessable bearer key that must already exist. Unset or empty
  * means nobody is exempt — the default, so an unconfigured deployment

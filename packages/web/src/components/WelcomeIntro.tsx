@@ -70,8 +70,8 @@ export function WelcomeIntro({
             life chapters (journeys) it actually belongs to.
           </li>
           <li>
-            <b>Capture</b> is how a memory becomes a star: tap ＋, dump a thought, and it lands in
-            your galaxy, linked to what it relates to. Capturing also earns the fuel your ship
+            <b>Add a memory</b> to light a star: tap <b>Add</b> (bottom right), write a thought, and it lands in
+            your galaxy, linked to what it relates to. Each one also earns the fuel your ship
             spends on warps.
           </li>
           {placeLine && <li>{placeLine}</li>}
