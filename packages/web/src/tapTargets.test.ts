@@ -26,9 +26,9 @@ describe("tap targets (44 px)", () => {
   });
   it("UX review #7 (round 2): ingest row, Welcome Help link and Observatory controls reach 44 px", () => {
     expect(css).toMatch(/\.ingest \.row button \{ min-height: 44px; \}/);
-    expect(css).toMatch(/\.ingest \.row \.tag-input \{ min-height: 44px; \}/);
+    expect(css).toMatch(/\.ingest \.tag-row \.tag-input \{ min-height: 44px; \}/);
     expect(css).toMatch(/\.welcome-help-link \{ min-height: 44px; \}/);
-    expect(css).toMatch(/\.obs-chip, \.obs-retry, \.obs-primary, \.obs-enter, \.obs-answer-send \{ min-height: 44px; \}/);
+    expect(css).toMatch(/\.obs-chip, \.obs-retry, \.obs-primary, \.obs-enter, \.obs-answer-send, \.obs-quest \{ min-height: 44px; \}/);
     expect(css).toMatch(/\.obs-close, \.obs-search \{ min-width: 44px; min-height: 44px; \}/);
     // phones: the suggested-tag chips scroll in one row instead of stacking
     expect(css).toMatch(/\.ingest \.tag-row \{\s*flex-wrap: nowrap;\s*overflow-x: auto;/);

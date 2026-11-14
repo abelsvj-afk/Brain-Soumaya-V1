@@ -71,7 +71,35 @@ export function useDialogA11y(
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
-      if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
+      restoreFocus(previouslyFocused);
     };
   }, [active, containerRef, initialFocus]);
+}
+
+/**
+ * Where focus lands when a dialog closes and the element that opened it is gone
+ * (or was <body>), e.g. the first-run Welcome card, whose opener was the signup
+ * button that unmounted with the login screen. Without a fallback focus fell to
+ * <body> and keyboard users had to Tab from the top of the page.
+ */
+export const FALLBACK_FOCUS_SELECTORS = [
+  '.empty-galaxy-cue button',
+  'button[aria-label="Add a memory"]',
+];
+
+export function restoreFocus(previouslyFocused: HTMLElement | null): void {
+  if (
+    previouslyFocused &&
+    previouslyFocused !== document.body &&
+    document.contains(previouslyFocused)
+  ) {
+    previouslyFocused.focus();
+    return;
+  }
+  for (const sel of FALLBACK_FOCUS_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(sel);
+    if (!el) continue;
+    el.focus();
+    if (document.activeElement === el) return;
+  }
 }

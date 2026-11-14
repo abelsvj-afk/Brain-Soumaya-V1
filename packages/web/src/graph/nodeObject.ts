@@ -143,6 +143,20 @@ export function wrapLabelLines(
   return lines.slice(0, limit);
 }
 
+/** Dark translucent rounded "pill" behind a label (exported for tests). */
+export const LABEL_BACKING_FILL = "rgba(6,10,24,0.55)";
+export function drawLabelBacking(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const r = Math.min(h / 2, 22);
+  ctx.fillStyle = LABEL_BACKING_FILL;
+  if (typeof ctx.roundRect === "function") {
+    ctx.beginPath();
+    ctx.roundRect(1, 1, w - 2, h - 2, r);
+    ctx.fill();
+  } else if (typeof ctx.fillRect === "function") {
+    ctx.fillRect(1, 1, w - 2, h - 2);
+  }
+}
+
 /**
  * Build a floating text label as a lightweight sprite (no polygons).
  */
@@ -166,6 +180,15 @@ function makeLabel(rawText: string): THREE.Sprite {
 
     ctx.font = font;
     ctx.textBaseline = "middle";
+    // Reviewer r2 (#175): white text over the bright sun was unreadable. A dark
+    // translucent pill behind the text plus a dark outline keeps it legible on
+    // any background without changing the label's size.
+    drawLabelBacking(ctx, canvas.width, canvas.height);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(4,8,20,0.75)";
+    if (typeof ctx.strokeText === "function")
+      lines.forEach((ln, idx) => ctx.strokeText(ln, PADDING, PADDING + lineH * (idx + 0.5)));
     ctx.shadowColor = "rgba(0,0,0,0.85)";
     ctx.shadowBlur = 8;
     ctx.fillStyle = "rgba(255,255,255,0.95)";

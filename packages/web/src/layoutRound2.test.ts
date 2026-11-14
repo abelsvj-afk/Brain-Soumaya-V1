@@ -18,8 +18,9 @@ describe("UX review #1/#2 round 2 — login, phone toasts, landscape phones", ()
     expect(PHONE_TOAST_QUERY).toContain("orientation: landscape");
   });
   it("landscape phones get the same declutter (FABs fold into Tools)", () => {
-    const block = css.slice(css.indexOf("@media (max-height: 500px) and (orientation: landscape)"));
-    expect(block.length).toBeGreaterThan(0);
+    const at = css.indexOf("@media (max-height: 500px) and (orientation: landscape)");
+    expect(at).toBeGreaterThanOrEqual(0);
+    const block = css.slice(at);
     expect(block).toMatch(/\.fab-settings \{ display: none; \}/);
     expect(block).toMatch(/\.tools-item\.tools-phone-only \{ display: flex; \}/);
     // the Add sheet fits under the brand row and scrolls instead of running off the top
