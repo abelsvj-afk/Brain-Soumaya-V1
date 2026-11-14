@@ -634,9 +634,49 @@ export async function investigateNode(nodeId: number): Promise<InvestigationRepo
   return res.json() as Promise<InvestigationReport>;
 }
 
+/** Thrown by `getHealth` when the server answered but not with a usable health
+ *  body (e.g. 429 rate-limit, 5xx, or an HTML error page). `status` is the
+ *  HTTP status; `retryAfterMs` comes from a Retry-After header when present. */
+export class HealthUnavailableError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly retryAfterMs: number | null = null,
+  ) {
+    super(`Health check unavailable (${status})`);
+    this.name = "HealthUnavailableError";
+  }
+}
+
+/** True only for a body shaped like `Health` (the fields the UI reads). */
+export function isHealth(value: unknown): value is Health {
+  if (!value || typeof value !== "object") return false;
+  const llm = (value as { llm?: unknown }).llm;
+  if (!llm || typeof llm !== "object") return false;
+  const l = llm as { model?: unknown; available?: unknown };
+  return typeof l.model === "string" && typeof l.available === "boolean";
+}
+
+function parseRetryAfterMs(res: Response): number | null {
+  const raw = res.headers?.get?.("Retry-After");
+  if (!raw) return null;
+  const secs = Number(raw);
+  if (Number.isFinite(secs) && secs >= 0) return secs * 1000;
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+}
+
+/**
+ * GET /api/health. THROWS `HealthUnavailableError` on a non-OK status (429
+ * rate-limit included) or a malformed body, so callers never receive an
+ * object without `llm` — previously a 429's `{ error }` body was handed to
+ * App as `Health` and crashed it reading `health.llm.available`.
+ */
 export async function getHealth(): Promise<Health> {
   const res = await afetch(`${API}/health`, {}, BOOT_TIMEOUT_MS);
-  return res.json() as Promise<Health>;
+  if (!res.ok) throw new HealthUnavailableError(res.status, parseRetryAfterMs(res));
+  const body: unknown = await res.json().catch(() => null);
+  if (!isHealth(body)) throw new HealthUnavailableError(res.status);
+  return body;
 }
 
 export async function getDigest(): Promise<Insight[]> {
