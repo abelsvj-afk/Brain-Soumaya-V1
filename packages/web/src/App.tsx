@@ -2150,6 +2150,21 @@ export default function App() {
     void refresh();
   }, [refresh]);
 
+  // One recenter routine shared by the NavRail button and (on phones, where
+  // the camera buttons fold away) the Tools menu entry.
+  const recenterGalaxy = () => {
+    graphRef.current?.recenter();
+    setFollowShip(false);
+    setFollowStation(false);
+    setFollowSatellite(false);
+    setFollowVisitor(false);
+    setFollowFleet(false);
+    setFollowFig1(false);
+    setFollowFig2(false);
+    setFocusMenuOpen(false);
+    setClustered(false);
+    setActiveLens(null);
+  };
   const toggle = (p: Exclude<Panel, null>) => {
     setPanel((cur) => {
       const next = cur === p ? null : p;
@@ -2820,23 +2835,23 @@ export default function App() {
             onFocusMode={() => setFocusMode((v) => !v)}
             focusMode={focusMode}
             onHelp={() => setHelp(true)}
+            // UX review #2: on phones the camera/music/briefing/settings FABs
+            // fold away (CSS) so Add, Chat, Panels and Tools always fit —
+            // these entries keep every one of them one tap away.
+            phoneExtras={{
+              onBriefing: () => setShowObs(true),
+              onSettings: () => setShowSettings(true),
+              onRecenter: recenterGalaxy,
+              onZoomIn: () => graphRef.current?.zoomBy(0.8),
+              onZoomOut: () => graphRef.current?.zoomBy(1.25),
+              onMusic: toggleMusic,
+              musicOn: music,
+            }}
           />
           <NavRail
             onSearch={() => toggle("search")}
             onDock={() => toggle("dock")}
-            onRecenter={() => {
-              graphRef.current?.recenter();
-              setFollowShip(false);
-              setFollowStation(false);
-              setFollowSatellite(false);
-              setFollowVisitor(false);
-              setFollowFleet(false);
-              setFollowFig1(false);
-              setFollowFig2(false);
-              setFocusMenuOpen(false);
-              setClustered(false);
-              setActiveLens(null);
-            }}
+            onRecenter={recenterGalaxy}
             onZoomIn={() => graphRef.current?.zoomBy(0.8)}
             onZoomOut={() => graphRef.current?.zoomBy(1.25)}
           />

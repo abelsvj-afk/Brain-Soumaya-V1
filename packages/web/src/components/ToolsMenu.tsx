@@ -39,6 +39,19 @@ export interface ToolsMenuProps {
   onFocusMode: () => void;
   focusMode: boolean;
   onHelp: () => void;
+  /** UX review #2: on phone-portrait screens the camera / music / briefing /
+   *  settings FABs fold away so the Add button can never be clipped. These
+   *  entries carry them into the menu; CSS shows them only on phones
+   *  (`.tools-phone-only`), so desktop keeps its dedicated buttons. */
+  phoneExtras?: {
+    onBriefing: () => void;
+    onSettings: () => void;
+    onRecenter: () => void;
+    onZoomIn: () => void;
+    onZoomOut: () => void;
+    onMusic: () => void;
+    musicOn: boolean;
+  };
 }
 
 export function ToolsMenu(p: ToolsMenuProps) {
@@ -47,7 +60,18 @@ export function ToolsMenu(p: ToolsMenuProps) {
   // Escape/focus-trap/focus-restore — this popover previously had none of the
   // three, only a scrim click to dismiss.
   useDialogA11y(menuRef, () => setOpen(false), open);
-  const items: { icon: string; label: string; on: () => void; badge?: number | null }[] = [
+  const x = p.phoneExtras;
+  const phoneItems: { icon: string; label: string; on: () => void; badge?: number | null; phoneOnly?: boolean }[] = x
+    ? [
+        { icon: "i:observatory", label: "Briefing", on: x.onBriefing, phoneOnly: true },
+        { icon: "i:recenter", label: "Recenter", on: x.onRecenter, phoneOnly: true },
+        { icon: "i:zoom-in", label: "Zoom in", on: x.onZoomIn, phoneOnly: true },
+        { icon: "i:zoom-out", label: "Zoom out", on: x.onZoomOut, phoneOnly: true },
+        { icon: x.musicOn ? "i:music" : "i:music-off", label: x.musicOn ? "Music off" : "Music on", on: x.onMusic, phoneOnly: true },
+        { icon: "i:settings", label: "Settings", on: x.onSettings, phoneOnly: true },
+      ]
+    : [];
+  const items: { icon: string; label: string; on: () => void; badge?: number | null; phoneOnly?: boolean }[] = [
     { icon: "i:lenses", label: "Lenses", on: p.onLenses },
     { icon: "i:connections", label: "Connections", on: p.onConnections, badge: p.candCount },
     { icon: "i:recall", label: "Recall", on: p.onReview, badge: p.dueCount },
@@ -60,6 +84,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
     { icon: "i:comet", label: "Flashback", on: p.onFlashback },
     { icon: p.focusMode ? "i:sun" : "i:calm", label: p.focusMode ? "Exit calm" : "Calm mode", on: p.onFocusMode },
     { icon: "i:help", label: "Help", on: p.onHelp },
+    ...phoneItems,
   ];
   const alerts = (p.candCount ?? 0) + (p.dueCount ?? 0);
   // Batch H (REG-201 / CN-02, F1 from the Batch G review): the closed FAB's
@@ -109,7 +134,7 @@ export function ToolsMenu(p: ToolsMenuProps) {
           <div className="tools-scrim" onClick={() => setOpen(false)} aria-hidden />
           <div className="tools-menu" role="menu" aria-label="Tools" ref={menuRef}>
             {items.map((it) => (
-              <button key={it.label} className="tools-item" role="menuitem" onClick={() => tap(it.on)}>
+              <button key={it.label} className={`tools-item${it.phoneOnly ? " tools-phone-only" : ""}`} role="menuitem" onClick={() => tap(it.on)}>
                 <span className="tools-ic">{renderIcon(it.icon, 20)}</span>
                 <span className="tools-lbl">{it.label}</span>
                 {it.badge !== undefined && (it.badge === null || it.badge > 0) && (
