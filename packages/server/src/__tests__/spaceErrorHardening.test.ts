@@ -150,7 +150,7 @@ describe("space routes — curated throws keep their exact message + original st
       body: { gamerTag: "soumaya" },
     });
     expect(r.status).toBe(409);
-    expect(r.body.error).toBe("The username 'Soumaya' is reserved.");
+    expect(r.body.error).toBe("The username 'Soumaya' is reserved — pick another.");
   });
 
   it("POST /api/space/passcode: too-short new passcode → 400 curated", async () => {
