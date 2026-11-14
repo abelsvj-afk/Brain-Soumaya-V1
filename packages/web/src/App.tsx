@@ -2204,8 +2204,15 @@ export default function App() {
 
   // Reviewer r2 (#173): hold routine toasts during a first run until the user's
   // first memory (or a 3-minute cap) — see useFirstRunToastHold.
+  // The hold also covers the Add sheet while it is still open after that first
+  // memory: releasing on save dropped the held pile ("N more in your Inbox")
+  // straight onto the top of the open sheet on phones. It releases when the
+  // sheet closes (the sheet's own result line already confirms the save).
+  const firstRunNoContent = !!space && loaded && !showIntro && ownContentCount(data.nodes) === 0;
+  const firstRunSeenRef = useRef(false);
+  if (firstRunNoContent) firstRunSeenRef.current = true;
   const firstRunToastHold = useFirstRunToastHold(
-    !!space && loaded && !showIntro && ownContentCount(data.nodes) === 0,
+    firstRunNoContent || (firstRunSeenRef.current && panel === "ingest"),
   );
   useEffect(() => {
     setToastsQuiet(focusMode || firstRunToastHold);
