@@ -6715,6 +6715,19 @@ button.mindspace-more { cursor: pointer; }
     border-radius: 16px;
   }
   .app:has(.dock, .ingest) .perf-suggest { display: none; }
+  /* The Add sheet had no height cap: on a 390 px-tall screen its header and ×
+     sat above the top edge, under the brand row. It now fits between the brand
+     row and the bottom edge and scrolls inside; header notices step aside. */
+  .ingest {
+    top: calc(96px + env(safe-area-inset-top, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    left: calc(76px + env(safe-area-inset-left, 0px));
+    right: auto;
+    width: min(440px, calc(100vw - 160px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .app:has(.ingest) .notifications-bar { display: none; }
   /* The status stack's desktop anchor is height-based and lands it over the
      title on a 390 px-tall screen; pin it mid-left, above the Views sheet. */
   .ship-status-stack,

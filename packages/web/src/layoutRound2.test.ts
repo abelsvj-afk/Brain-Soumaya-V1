@@ -22,6 +22,8 @@ describe("UX review #1/#2 round 2 — login, phone toasts, landscape phones", ()
     expect(block.length).toBeGreaterThan(0);
     expect(block).toMatch(/\.fab-settings \{ display: none; \}/);
     expect(block).toMatch(/\.tools-item\.tools-phone-only \{ display: flex; \}/);
+    // the Add sheet fits under the brand row and scrolls instead of running off the top
+    expect(block).toMatch(/\.ingest \{\s*top: calc\(96px[^}]*overflow-y: auto;/);
   });
   it("the dock tab row owns its 44 px height, scoped to the dock", () => {
     expect(css).toMatch(/\.dock \.tabs button:not\(\.tab-close\) \{ min-height: 44px; \}/);
