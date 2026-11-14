@@ -84,6 +84,13 @@ const DANGLING_TAIL = new Set([
   "is", "are", "was", "be", "i", "i'm", "we", "it", "some", "very", "just",
 ]);
 
+const MIN_LABEL_WORDS = 3;
+const MAX_LABEL_WORDS = 6;
+/** Tokens ending in "." that are not sentence ends. */
+const ABBREVIATIONS = new Set([
+  "dr.", "mr.", "mrs.", "ms.", "st.", "jr.", "sr.", "vs.", "etc.", "e.g.", "i.e.", "prof.", "mt.", "ft.", "approx.",
+]);
+
 export class HeuristicProvider implements LlmProvider {
   readonly available = false;
   readonly model = "heuristic";
@@ -108,12 +115,31 @@ export class HeuristicProvider implements LlmProvider {
   }
 
   private deriveLabel(text: string): string {
-    // First six words of the first sentence, minus a dangling connector/article at
-    // the end — "I want to learn guitar this year" used to become the half-phrase
-    // "I want to learn guitar this"; now it reads "I want to learn guitar".
-    const firstSentence = text.trim().split(/(?<=[.!?])\s+|\n/)[0] ?? "";
-    const words = firstSentence.split(/\s+/).filter(Boolean).slice(0, 6);
-    const truncated = words.length < firstSentence.split(/\s+/).filter(Boolean).length;
+    // Up to six words from the start, ending at the first real sentence break
+    // once the label has at least three words. Abbreviations ("Dr.", "St.",
+    // "e.g.") never count as a break, and a short opener ("Wow!") keeps going,
+    // so "Dr. Patel moved my appointment to Friday" no longer collapses to
+    // "Dr.". A dangling connector/article at a cut is dropped: "I want to
+    // learn guitar this year" reads "I want to learn guitar".
+    // Tokens in order; the last word of each line counts as a sentence break.
+    const all: { w: string; lineEnd: boolean }[] = [];
+    for (const line of text.trim().split(/\n+/)) {
+      const ws = line.split(/\s+/).filter(Boolean);
+      ws.forEach((w, i) => all.push({ w, lineEnd: i === ws.length - 1 }));
+    }
+    const words: string[] = [];
+    let endedAtBreak = false;
+    for (const { w, lineEnd } of all) {
+      words.push(w);
+      const bare = w.toLowerCase().replace(/["')\]]+$/, "");
+      const isBreak = lineEnd || (/[.!?]$/.test(bare) && !ABBREVIATIONS.has(bare));
+      if (isBreak && words.length >= MIN_LABEL_WORDS) {
+        endedAtBreak = true;
+        break;
+      }
+      if (words.length >= MAX_LABEL_WORDS) break;
+    }
+    const truncated = !endedAtBreak && words.length < all.length;
     if (truncated) {
       while (words.length > 2 && DANGLING_TAIL.has(words[words.length - 1]!.toLowerCase().replace(/[^a-z']/g, ""))) words.pop();
     }
