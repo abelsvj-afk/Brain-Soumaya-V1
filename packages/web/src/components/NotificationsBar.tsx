@@ -4,6 +4,10 @@ import { type Health, describeLlmStatus } from "../api/client.js";
 import { type DockTab } from "./RightDock.js";
 import { isReminderDue } from "../utils/dueReminders.js";
 import { formatDueLocal } from "./cl1a.helpers.js";
+import { ownContentCount } from "../utils/welcomeSeed.js";
+
+/** UX review #3: the banner line for "no cloud key" — plain words, not an alarm. */
+export const OFFLINE_BANNER_TEXT = "Offline mode — Soumaya works without a cloud AI key; add one in Diagnostics for smarter answers.";
 
 interface NotificationsBarProps {
   fuel: Fuel | null;
@@ -67,13 +71,22 @@ export function NotificationsBar({ fuel, nodes, health, onFocusNode, onOpenTab, 
   // uses (describeLlmStatus), so the two surfaces never say different things about
   // the same underlying state. Specific to WHY, not one generic line, so "it's not
   // working" has an actual answer (see resilient.ts's DegradeReason).
-  if (health && health.llm && (health.llm.degraded || !health.llm.available)) {
+  // UX review #3 (first-run calm): a missing key on a brand-new brain is not an
+  // emergency — the offline mode works. That notice waits until the user has
+  // added something of their own — a memory or a to-do — (when replies start to matter) and shows as
+  // info, not an error. A DEGRADED provider (quota, timeout, budget) still
+  // alerts at once — that is a real, changed state.
+  const llmMissingOnly = !!health?.llm && !health.llm.degraded && !health.llm.available;
+  const holdForFirstRun = llmMissingOnly && ownContentCount(nodes) === 0;
+  if (health && health.llm && (health.llm.degraded || !health.llm.available) && !holdForFirstRun) {
     const status = describeLlmStatus(health);
     alerts.push({
       id: "llm-degraded",
-      type: "error",
+      type: llmMissingOnly ? "info" : "error",
       icon: status.icon,
-      text: status.text,
+      // A missing key gets a calmer banner line; Diagnostics keeps the precise
+      // describeLlmStatus wording, and a degraded provider keeps its specific reason.
+      text: llmMissingOnly ? OFFLINE_BANNER_TEXT : status.text,
       actionText: "Diagnostics",
       onClick: () => {
         onOpenTab("soumaya");

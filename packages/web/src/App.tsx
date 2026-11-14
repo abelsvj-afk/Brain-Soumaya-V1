@@ -38,6 +38,7 @@ import WorldChangesView from "./components/WorldChangesView.js";
 import { getMoneySky } from "./api/finance.js";
 import { galaxyEntity, galaxyEntityKindFromRef } from "./api/graph.js";
 import { MindSpace } from "./components/MindSpace.js";
+import { ownContentCount, hasAgentStar } from "./utils/welcomeSeed.js";
 import { NoticingCard } from "./components/NoticingCard.js";
 import { playSfx, sfxEnabled } from "./graph/sfx.js";
 import { isVoiceEnabled } from "./voice.js";
@@ -142,6 +143,10 @@ const PROACTIVE_TOAST_SOURCE: Record<string, ProactiveContextSource> = {
   "tool:goal_trend": "goal_trend",
   "tool:bill_risk": "bill_risk",
 };
+
+/** UX review #3: quiet windows for the Performance Mode offer (see perfQuiet). */
+const PERF_QUIET_AFTER_INTRO_MS = 45_000;
+const PERF_QUIET_AFTER_INGEST_MS = 30_000;
 
 export default function App() {
   const renderCount = useRef(0);
@@ -443,6 +448,25 @@ export default function App() {
   });
   const [showDiag, setShowDiag] = useState(false);
   const [perfSuggest, setPerfSuggest] = useState(false);
+  // UX review #3: the Performance Mode offer never lands in the first-run pile-up.
+  // It stays quiet for a while after the Welcome card is dismissed and right after
+  // a memory is added (the moment that already shows toasts + the new star), then
+  // appears if the lag is still real. Gated on first-run being DONE plus a timer —
+  // not on the user having added anything, so a slow device that never adds a
+  // memory still gets the offer.
+  const [perfQuiet, setPerfQuiet] = useState(false);
+  const perfQuietTimer = useRef<number | null>(null);
+  const quietPerfOffer = useCallback((ms: number) => {
+    setPerfQuiet(true);
+    if (perfQuietTimer.current !== null) window.clearTimeout(perfQuietTimer.current);
+    perfQuietTimer.current = window.setTimeout(() => {
+      perfQuietTimer.current = null;
+      setPerfQuiet(false);
+    }, ms);
+  }, []);
+  useEffect(() => () => {
+    if (perfQuietTimer.current !== null) window.clearTimeout(perfQuietTimer.current);
+  }, []);
   const [history, setHistory] = useState<number[]>([]);
   const [aiBusy, setAiBusy] = useState(0);
   const [music, setMusic] = useState(false);
@@ -1510,6 +1534,7 @@ export default function App() {
 
   const dismissIntro = () => {
     setShowIntro(false);
+    quietPerfOffer(PERF_QUIET_AFTER_INTRO_MS);
     if (space) {
       try {
         localStorage.setItem(`brain.introSeen.${space.id}`, "1");
@@ -2445,7 +2470,9 @@ export default function App() {
         </div>
       )}
 
-      {perfSuggest && !showIntro && !showObs && !showLegend && !legendPending && (obsSettled || !space) && (
+      {/* UX review #3: first run done (intro/Observatory/legend gone) and not
+          inside the quiet window after the intro or a fresh memory (perfQuiet). */}
+      {perfSuggest && !perfQuiet && !showIntro && !showObs && !showLegend && !legendPending && (obsSettled || !space) && (
         <div className="perf-suggest">
           <span>Soumaya noticed some lag — switch to Performance Mode?</span>
           <button
@@ -2476,7 +2503,7 @@ export default function App() {
         <div className="brand-row">
           {health && (
             <span className="status">
-              {memCountShown} memories · {llmStatus}
+              {memCountShown} {memCountShown === 1 ? "memory" : "memories"} · {llmStatus}
             </span>
           )}
           {/* Fuel now lives in the always-visible <FuelGauge> on the left edge (below),
@@ -2785,8 +2812,12 @@ export default function App() {
           galaxy itself once you're standing in it. Batch I (REG-068 /
           GH-15): same shared hide rule — the cue used to stay up over
           Connections and the Timeline. */}
-      {loaded && data.nodes.length === 0 && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
-        <EmptyGalaxyCue onAdd={() => toggle("ingest")} />
+      {/* UX review #3: the server's seeded welcome star is Soumaya's
+          (origin "agent"), not the user's — counting it meant a new user never
+          saw this cue. It shows beside the welcome star, after the Welcome card,
+          and its copy acknowledges that star when it is there. */}
+      {loaded && ownContentCount(data.nodes) === 0 && !showIntro && !hudChromeHidden({ panel, showChat, showObs, showSettings, showConnections, showTimeline }) && (
+        <EmptyGalaxyCue onAdd={() => toggle("ingest")} hasWelcomeStar={hasAgentStar(data.nodes)} />
       )}
 
       {/* Right-side-up: a clearly-visible pill (not a buried FAB) whenever you're following
@@ -3319,7 +3350,10 @@ export default function App() {
         <IngestPanel
           key={ingestSeed ? `share-${ingestSeed.nonce}` : "capture"}
           initialText={ingestSeed?.text}
-          onIngested={refresh}
+          onIngested={(newIds, fuelEarned, linkCount) => {
+            quietPerfOffer(PERF_QUIET_AFTER_INGEST_MS);
+            void refresh(newIds, fuelEarned, linkCount);
+          }}
           onClose={() => {
             setPanel(null);
             setIngestSeed(null);
