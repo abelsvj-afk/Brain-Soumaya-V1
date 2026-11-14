@@ -6717,6 +6717,16 @@ button.mindspace-more { cursor: pointer; }
     border-radius: 16px;
   }
   .app:has(.dock, .ingest) .perf-suggest { display: none; }
+  /* The first-star cue sat centred, under the status stack, which covered its
+     "Add your first memory" button; it moves into the right half. */
+  .empty-galaxy-cue {
+    left: auto;
+    right: calc(76px + env(safe-area-inset-right, 0px));
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    transform: none;
+    width: min(380px, calc(100vw - 470px));
+    padding: 14px 16px;
+  }
   /* The Add sheet had no height cap: on a 390 px-tall screen its header and ×
      sat above the top edge, under the brand row. It now fits between the brand
      row and the bottom edge and scrolls inside; header notices step aside. */
