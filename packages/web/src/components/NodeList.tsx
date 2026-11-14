@@ -301,7 +301,7 @@ export function NodeList({ nodes, onFocus, initialTag, onTagChange }: Props) {
     : "";
 
   if (memories.length === 0) {
-    return <p className="empty">No memories yet — dump a thought to begin.</p>;
+    return <p className="empty">No memories yet — tap Add to add your first memory.</p>;
   }
 
   const renderRow = (n: GraphNode) => {

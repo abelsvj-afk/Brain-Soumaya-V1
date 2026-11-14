@@ -244,7 +244,7 @@ export function LibraryPanel({
   if (total === 0) {
     return (
       <div className="dock-body">
-        <p className="empty">Your library is empty. Dump a few thoughts and they'll file themselves into folders here.</p>
+        <p className="empty">Your library is empty. Add a few memories and they'll file themselves into folders here.</p>
       </div>
     );
   }

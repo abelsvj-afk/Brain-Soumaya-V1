@@ -128,7 +128,7 @@ describe("ActionsPanel — a fully empty agenda is no longer a dead end", () => 
     const onAction = vi.fn();
     window.addEventListener("brain-toast-action", onAction);
     render(<ActionsPanel nodes={[]} onFocus={() => {}} />);
-    const captureBtn = await screen.findByText("➕ Dump a thought");
+    const captureBtn = await screen.findByText("➕ Add a memory");
     act(() => captureBtn.click());
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ detail: { kind: "panel", value: "ingest" } }));
     window.removeEventListener("brain-toast-action", onAction);

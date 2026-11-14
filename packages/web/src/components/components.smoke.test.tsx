@@ -41,7 +41,7 @@ describe("FuelEarnSheet", () => {
     const onClose = vi.fn();
     render(<FuelEarnSheet fuel={fuel} onAction={vi.fn()} onClose={onClose} />);
     expect(screen.getByText("Ways to earn Fuel")).toBeTruthy();
-    expect(screen.getByText("Log a memory")).toBeTruthy();
+    expect(screen.getByText("Add a memory")).toBeTruthy();
     expect(screen.getByText("+15")).toBeTruthy(); // the bumped memory reward
     fireEvent.click(screen.getByLabelText("Close"));
     expect(onClose).toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe("FuelEarnSheet", () => {
   it("routes a 'Go' button to the right earn action", () => {
     const onAction = vi.fn();
     render(<FuelEarnSheet fuel={fuel} onAction={onAction} onClose={vi.fn()} />);
-    // The first actionable row is "Log a memory" → kind "memory".
+    // The first actionable row is "Add a memory" → kind "memory".
     fireEvent.click(screen.getAllByText("Go")[0]!);
     expect(onAction).toHaveBeenCalledWith("memory");
   });

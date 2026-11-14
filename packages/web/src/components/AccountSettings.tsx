@@ -10,12 +10,12 @@ import {
 /**
  * Account security (IM-129, Q8 → option a): passcode change + brain deletion.
  * Mounted as one section inside the Settings panel; all of its state lives
- * here so the (very large) SettingsPanel only passes the brain's gamer tag
+ * here so the (very large) SettingsPanel only passes the brain's username
  * and a deletion callback down.
  *
  * Deletion has NO one-click path: a destructive button first opens a
  * hard-confirm step, and the final delete button stays disabled until the
- * user types the brain's exact gamer tag AND re-enters the passcode — the
+ * user types the brain's exact username AND re-enters the passcode — the
  * same two proofs the server checks (DELETE /api/space). On success the
  * local credential is cleared via the app's existing logout mechanism
  * (logoutSpace → storeSpace(null) removes `brain.spaceId`) and
@@ -26,7 +26,7 @@ export function AccountSettings({
   gamerTag,
   onBrainDeleted,
 }: {
-  /** This brain's gamer tag — the exact confirmation value for deletion. */
+  /** This brain's username — the exact confirmation value for deletion. */
   gamerTag: string;
   /** Called after a successful deletion + local logout, so the app can
    *  clear its in-memory space and show the login screen. */
@@ -141,7 +141,7 @@ export function AccountSettings({
           {pcError && <span className="msg" role="alert" style={{ color: "#ff9b9b" }}>{pcError}</span>}
         </div>
         <p className="settings-note" style={{ fontSize: "12px", opacity: 0.75, margin: "10px 0 0" }}>
-          Changing the passcode changes how you sign in with your gamer tag. Devices already
+          Changing the passcode changes how you sign in with your username. Devices already
           signed in to this brain stay signed in.
         </p>
       </section>
@@ -169,11 +169,11 @@ export function AccountSettings({
             <p style={{ fontSize: "13px", margin: "0 0 10px" }}>
               <b>This is IRREVERSIBLE.</b> Deleting this brain permanently removes{" "}
               <b>everything</b> — all memories, connections, documents, chats, and settings.
-              There is no undo and no recovery. If you are sure, type your gamer tag{" "}
+              There is no undo and no recovery. If you are sure, type your username{" "}
               <b>{gamerTag}</b> exactly as shown and re-enter your passcode.
             </p>
             <label className="settings-field">
-              <span>Type your gamer tag to confirm <em>({gamerTag})</em></span>
+              <span>Type your username to confirm <em>({gamerTag})</em></span>
               <input
                 value={confirmation}
                 disabled={delBusy}

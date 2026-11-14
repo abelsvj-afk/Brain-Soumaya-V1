@@ -20,11 +20,11 @@ export function isPasscodeChangeReady(current: string, next: string, confirm: st
 /**
  * The final brain-deletion action stays disabled until BOTH proofs are
  * present and exact:
- *  - `confirmation` is EXACTLY the brain's gamer tag (case-sensitive — the
+ *  - `confirmation` is EXACTLY the brain's username (case-sensitive — the
  *    same comparison the server makes in SpacesRepo.deleteSpace), and
  *  - the passcode has been re-entered (non-empty; the server verifies it
  *    against the stored hash and returns 401 on a mismatch).
- * An empty/unknown gamer tag can never satisfy the gate.
+ * An empty/unknown username can never satisfy the gate.
  */
 export function isBrainDeleteReady(confirmation: string, gamerTag: string, passcode: string): boolean {
   return gamerTag.length > 0 && confirmation === gamerTag && passcode.length > 0;

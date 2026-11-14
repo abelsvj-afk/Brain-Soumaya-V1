@@ -96,7 +96,7 @@ export function spaceRoutes(ctx: AppContext): Router {
     try {
       const result = repo.authOrCreate(gamerTag, passcode, name);
       if (!result) {
-        res.status(401).json({ error: "Incorrect passcode for this gamer tag." });
+        res.status(401).json({ error: "Incorrect passcode for this username." });
         return;
       }
       // Endowed progress: a genuinely new, empty brain opens with its first star already
@@ -173,7 +173,7 @@ export function spaceRoutes(ctx: AppContext): Router {
 
   // DELETE /api/space { passcode, confirmation } -> permanently delete this
   // brain and all of its data. Requires BOTH the passcode re-entered (401
-  // when wrong) AND `confirmation` exactly equal to the brain's gamer tag
+  // when wrong) AND `confirmation` exactly equal to the brain's username
   // (400 when mismatched) — either failure deletes nothing. There is no
   // undo and no recovery path; the client gates this behind a typed
   // hard-confirm flow for the same reason.

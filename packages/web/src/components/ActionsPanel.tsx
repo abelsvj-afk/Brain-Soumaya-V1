@@ -301,10 +301,10 @@ export function ActionsPanel({ nodes, onFocus, onChanged }: Props) {
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
         {createForm}
         <p className="empty" style={{ margin: 0 }}>
-          No action items or reminders. Add one above, add a thought and tick "📌 Action item", or set a reminder when you log a memory.
+          No action items or reminders. Add one above, add a memory and tick "📌 Action item", or set a reminder when you add a memory.
         </p>
         <button className="mini" onClick={() => window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "panel", value: "ingest" } }))}>
-          ➕ Dump a thought
+          ➕ Add a memory
         </button>
       </div>
     );

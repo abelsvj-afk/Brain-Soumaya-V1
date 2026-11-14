@@ -21,11 +21,11 @@ interface Row {
 }
 
 const ROWS: Row[] = [
-  { kind: "memory", icon: "＋", label: "Log a memory", amount: "+15", hint: "Your main income — dump a thought and she grows the galaxy." },
+  { kind: "memory", icon: "＋", label: "Add a memory", amount: "+15", hint: "Your main income — add a memory and she grows the galaxy." },
   { icon: "🔗", label: "Links you forge", amount: "+2 each", hint: "Every associative link on a logged memory pays +2." },
   { kind: "mind", icon: "🧠", label: "Add to your Mind", amount: "+6", hint: "A goal, person, skill, identity or idea — building your mind pays." },
   { kind: "action", icon: "✅", label: "Clear an action item", amount: "+3", hint: "Tick off a day-to-day to-do in the Agenda (one you didn't just create — real follow-through pays)." },
-  { kind: "thought", icon: "💭", label: "Capture a thought", amount: "+2", hint: "Drop a fleeting thought into the mind space." },
+  { kind: "thought", icon: "💭", label: "Drop a quick thought", amount: "+2", hint: "Drop a fleeting thought into the mind space." },
   { kind: "recall", icon: "🧠", label: "Recall a fading memory", amount: "+3", hint: "Do a recall in the 🧠 Recall session — it also keeps your streak alive, +2 more the first time you tend your brain each day." },
   { icon: "🔥", label: "Daily streak", amount: "+2", hint: "Automatic the first time you tend your brain each day." },
   { kind: "codex", icon: "🔦", label: "Codex discoveries", amount: "+4", hint: "Your own galaxy states, discovered as you tend it — claimed the moment they're found, one-time per entry." },

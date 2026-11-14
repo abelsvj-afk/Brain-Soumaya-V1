@@ -59,7 +59,7 @@ describe("deleteBrain", () => {
 
   it("throws the server's message on a 400 refusal (wrong confirmation)", async () => {
     responder = () =>
-      jsonResponse({ error: "Confirmation does not match this brain's gamer tag — nothing was deleted." }, false, 400);
+      jsonResponse({ error: "Confirmation does not match this brain's username — nothing was deleted." }, false, 400);
     await expect(deleteBrain("alpha-pass-123", "DELETE")).rejects.toThrow(/nothing was deleted/);
   });
 });

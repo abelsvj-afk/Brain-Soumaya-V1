@@ -75,8 +75,8 @@ export function flashbackLoreLine(node: { label: string; celestialTitle?: string
 /** IM-18 — human auth error copy. Raw HTTP status text never reaches the user. */
 export function humanizeAuthError(message: string): string {
   const m = message ?? "";
-  if (/401|403|unauthor|invalid.*(passcode|tag|credential)/i.test(m)) return "That gamer tag and passcode didn't match. Check them and try again.";
-  if (/409|already (exists|taken)|taken/i.test(m)) return "That gamer tag is already taken — pick another, or sign in if it's yours.";
+  if (/401|403|unauthor|invalid.*(passcode|tag|credential)/i.test(m)) return "That username and passcode didn't match. Check them and try again.";
+  if (/409|already (exists|taken)|taken/i.test(m)) return "That username is already taken — pick another, or sign in if it's yours.";
   if (/400/.test(m)) return "Something in that form needs a fix — check each field and try again.";
   if (/failed to fetch|network|timeout|aborted/i.test(m)) return "Couldn't reach Soumaya just now. Check your connection and try again.";
   if (/\(\d{3}\)|HTTP \d{3}|status \d{3}/i.test(m)) return "Something went wrong opening your galaxy. Please try again.";

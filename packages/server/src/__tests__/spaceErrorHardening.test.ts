@@ -144,13 +144,13 @@ describe("space routes — curated throws keep their exact message + original st
     expect(r.body.error).toBe("Passcode must be at least 8 characters for a new brain.");
   });
 
-  it("PATCH /api/space/profile: reserved gamer tag → 409 curated", async () => {
+  it("PATCH /api/space/profile: reserved username → 409 curated", async () => {
     const r = await call("PATCH", "/api/space/profile", {
       spaceId: idOwner,
       body: { gamerTag: "soumaya" },
     });
     expect(r.status).toBe(409);
-    expect(r.body.error).toBe("The gamer tag 'Soumaya' is reserved.");
+    expect(r.body.error).toBe("The username 'Soumaya' is reserved.");
   });
 
   it("POST /api/space/passcode: too-short new passcode → 400 curated", async () => {
@@ -168,7 +168,7 @@ describe("space routes — curated throws keep their exact message + original st
       body: { passcode: OWNER_PASS, confirmation: "WRONG" },
     });
     expect(r.status).toBe(400);
-    expect(r.body.error).toBe("Confirmation does not match this brain's gamer tag — nothing was deleted.");
+    expect(r.body.error).toBe("Confirmation does not match this brain's username — nothing was deleted.");
     expect((await call("GET", "/api/space/me", { spaceId: idOwner })).status).toBe(200);
   });
 });

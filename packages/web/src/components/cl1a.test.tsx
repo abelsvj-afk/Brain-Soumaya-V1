@@ -137,11 +137,12 @@ describe("IM-12 ObjectLore", () => {
 });
 
 describe("IM-17/IM-13 WelcomeIntro", () => {
-  it("has galaxy star language, mentions Capture, and shows her eye", () => {
+  // UX review #4: one capture verb everywhere — the card names the Add button, not "Capture".
+  it("has galaxy star language, names the Add button, and shows her eye", () => {
     const { container } = render(<WelcomeIntro companionName="Luna" onClose={() => {}} />);
     expect(container.querySelector(".welcome-stars")).toBeTruthy();
     expect(container.querySelector(".soumaya-eye")).toBeTruthy();
-    expect(screen.getByText("Capture", { exact: false })).toBeTruthy();
+    expect(screen.getAllByText("Add a memory", { exact: false }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/becomes a star/).length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -169,6 +170,6 @@ describe("IM-18 human auth errors", () => {
   it("never passes a raw HTTP status through as user copy", () => {
     expect(humanizeAuthError("Couldn't open that brain (401)")).not.toContain("401");
     expect(humanizeAuthError("Failed to fetch")).toMatch(/reach Soumaya/);
-    expect(humanizeAuthError("That gamer tag and passcode didn't match.")).toContain("didn't match");
+    expect(humanizeAuthError("That username and passcode didn't match.")).toContain("didn't match");
   });
 });
