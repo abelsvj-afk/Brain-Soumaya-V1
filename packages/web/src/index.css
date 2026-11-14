@@ -6623,20 +6623,28 @@ button.mindspace-more { cursor: pointer; }
   }
   .streak-ember .se-flame { font-size: 16px; }
   .streak-ember .se-warn { max-width: none; margin-top: 0; }
-  /* 6 — UX review #2: a phone keeps FOUR always-visible actions — Add,
-     Chat, Panels, Tools (plus Search and the 🎯/Views pair). Zoom, recenter,
-     music, Briefing and Settings fold into the Tools
-     menu (their .tools-phone-only entries), which ends the right-hand
-     ladder that pushed Add off the bottom edge and clipped it to "Ad". */
-  .fab-zoom-in,
-  .fab-zoom-out,
+  /* 6 — UX review #2: a phone keeps its always-visible actions — Add,
+     Chat, Panels, Tools, Zoom +/− and Music (plus Search and the 🎯/Views
+     pair). Recenter, Briefing and Settings fold into the Tools menu (their
+     .tools-phone-only entries), which ends the right-hand ladder that pushed
+     Add off the bottom edge and clipped it to "Ad". Owner request: zoom and
+     music stay on screen, never in Tools. */
   .fab-recenter,
-  .fab-music,
   .fab-observatory,
   .fab-settings { display: none; }
   .tools-item.tools-phone-only { display: flex; }
-  /* Chat takes the slot directly above Add (where zoom-out used to be). */
+  /* Right column, bottom-up: Add 18 · Chat 74 · Zoom − 130 · Zoom + 186. */
   .fab-chat { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+  .fab-zoom-out { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
+  .fab-zoom-in { bottom: calc(186px + env(safe-area-inset-bottom, 0px)); }
+  /* Left column: Music takes the freed Recenter slot directly above Panels. */
+  .fab-music { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+  .now-playing { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+  /* Reviewer r2 (merged main): the no-key banner's dismiss sat exactly on the
+     open Add sheet's × (both ~317,145), so tapping × dismissed the banner and
+     the sheet couldn't be closed. While Add or the dock is open the header
+     notices step aside, as they already do in landscape. */
+  .app:has(.dock, .ingest) .notifications-bar { display: none; }
   /* 7 — The Views sheet stops short of the right-hand column (Add at
      right 14–60) so an open "📝 Notes" chip can never cover Add. */
   .gv-sheet { width: min(calc(100vw - 66px - 76px), 300px); }
@@ -6650,6 +6658,11 @@ button.mindspace-more { cursor: pointer; }
     max-width: none;
     border-radius: 16px;
   }
+}
+/* Desktop too: the header notice (top-left, from 90px) painted over the Add
+   sheet's header and ×, which sits in the same top-left corner. */
+@media (min-width: 721px) {
+  .app:has(.ingest) .notifications-bar { display: none; }
 }
 /* UX review #8: the perf prompt (z 58) used to sit on top of the open
    dock's tab bar on phones (and over the Add-a-memory sheet's submit
@@ -6697,14 +6710,16 @@ button.mindspace-more { cursor: pointer; }
    perf prompt is a compact card in the bottom gap — so the short right column
    is just Tools, Chat and Add. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .fab-zoom-in,
-  .fab-zoom-out,
   .fab-recenter,
-  .fab-music,
   .fab-observatory,
   .fab-settings { display: none; }
   .tools-item.tools-phone-only { display: flex; }
   .fab-chat { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+  /* Zoom +/− and Music stay on screen (owner request), same slots as portrait. */
+  .fab-zoom-out { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
+  .fab-zoom-in { bottom: calc(186px + env(safe-area-inset-bottom, 0px)); }
+  .fab-music { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+  .now-playing { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
   .ship-status-stack .audio-state-chip { display: none; }
   /* Header notices go top-RIGHT (under Tools, left of the right column) so
      they never share the left side with the status stack. */

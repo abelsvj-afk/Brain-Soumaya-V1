@@ -172,6 +172,9 @@ export default function App() {
   const graphRefreshSequenceRef = useRef(0);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
+  // True once the health check gave up (429/5xx after retries): the status
+  // line still shows the memory count, with "status unknown".
+  const [healthUnknown, setHealthUnknown] = useState(false);
   // Fuel on the main HUD (was buried in the Soumaya tab) — polled while signed in.
   const [fuel, setFuel] = useState<Fuel | null>(null);
   // Batch I (REG-067 / GH-09): whether the fuel load has FAILED. The
@@ -1056,7 +1059,10 @@ export default function App() {
     const seq = ++healthLoadSeqRef.current;
     void loadHealthWithBackoff(getHealth, { isCancelled: () => seq !== healthLoadSeqRef.current }).then((h) => {
       if (seq !== healthLoadSeqRef.current) return;
-      if (h) setHealth(h);
+      if (h) {
+        setHealth(h);
+        setHealthUnknown(false);
+      } else setHealthUnknown(true);
     });
   };
 
@@ -2511,9 +2517,10 @@ export default function App() {
           {space?.name ?? "Soumaya"} <span className="sep">·</span> Second Brain
         </h1>
         <div className="brand-row">
-          {health && (
+          {(health || healthUnknown || loaded) && (
             <span className="status">
-              {memCountShown} {memCountShown === 1 ? "memory" : "memories"} · {llmStatus}
+              {memCountShown} {memCountShown === 1 ? "memory" : "memories"}
+              {llmStatus ? ` · ${llmStatus}` : healthUnknown ? " · status unknown" : ""}
             </span>
           )}
           {/* Fuel now lives in the always-visible <FuelGauge> on the left edge (below),
@@ -2876,17 +2883,13 @@ export default function App() {
             onFocusMode={() => setFocusMode((v) => !v)}
             focusMode={focusMode}
             onHelp={() => setHelp(true)}
-            // UX review #2: on phones the camera/music/briefing/settings FABs
+            // UX review #2: on phones the recenter/briefing/settings FABs
             // fold away (CSS) so Add, Chat, Panels and Tools always fit —
             // these entries keep every one of them one tap away.
             phoneExtras={{
               onBriefing: () => setShowObs(true),
               onSettings: () => setShowSettings(true),
               onRecenter: recenterGalaxy,
-              onZoomIn: () => graphRef.current?.zoomBy(0.8),
-              onZoomOut: () => graphRef.current?.zoomBy(1.25),
-              onMusic: toggleMusic,
-              musicOn: music,
             }}
           />
           <NavRail

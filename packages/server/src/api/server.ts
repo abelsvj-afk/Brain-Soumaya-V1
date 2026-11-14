@@ -74,7 +74,6 @@ export function createApp(ctx: AppContext): Express {
   // Raised from 1mb to accommodate knowledge-document text uploads (per-route zod
   // `max` bounds each endpoint independently). Env-overridable.
   app.use(express.json({ limit: process.env.JSON_BODY_LIMIT ?? "8mb" }));
-  app.use("/api", rateLimit());
 
   // Health is unauthenticated — provider status only, no data facts (the global
   // node count spanned every tenant's brain).
@@ -102,6 +101,10 @@ export function createApp(ctx: AppContext): Express {
       },
     });
   });
+
+  // General API limiter. Registered AFTER /api/health so uptime probes and the
+  // client's health check never spend (or get refused by) the per-IP budget.
+  app.use("/api", rateLimit());
 
   // Auth (open): log in to or create a private brain. A much tighter limit than
   // the general API one — 4-char passcodes at 120 guesses/min was a brute-force
