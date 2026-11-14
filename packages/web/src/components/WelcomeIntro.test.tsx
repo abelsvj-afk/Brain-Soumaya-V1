@@ -28,13 +28,28 @@ describe("WelcomeIntro", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("dismisses on clicking the backdrop, but not the card itself (same pattern as Legend)", () => {
+  // UX review #7: a stray backdrop tap used to throw the card away before a
+  // first-run user had read it. The ways out are the button and Escape.
+  it("does NOT dismiss on a backdrop or card click", () => {
     const onClose = vi.fn();
     const { container } = render(<WelcomeIntro companionName="Soumaya" onClose={onClose} />);
     fireEvent.click(container.querySelector(".welcome-card")!);
-    expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(container.querySelector(".welcome-overlay")!);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("dismisses on Escape (standard modal keyboard behaviour)", () => {
+    const onClose = vi.fn();
+    render(<WelcomeIntro companionName="Soumaya" onClose={onClose} />);
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a modal dialog that takes focus", () => {
+    render(<WelcomeIntro companionName="Soumaya" onClose={() => {}} />);
+    const dlg = screen.getByRole("dialog", { name: "Welcome to Soumaya" });
+    expect(dlg.getAttribute("aria-modal")).toBe("true");
+    expect(dlg.contains(document.activeElement)).toBe(true);
   });
 
   it("is an accessible dialog", () => {

@@ -12,7 +12,9 @@
  * the full Help manual (`onSeeHelp`) for anyone who wants more than this one-screen framing —
  * deliberately NOT expanded into a tour or manual itself.
  */
+import { useRef } from "react";
 import { SoumayaEye } from "./SoumayaEye.js";
+import { useDialogA11y } from "../hooks/useDialogA11y.js";
 import { placeName } from "../graph/worldPurpose.js";
 import type { WorldPlace } from "../lib/worldPlace.js";
 
@@ -31,9 +33,22 @@ export function WelcomeIntro({
   onSeeHelp?: () => void;
 }) {
   const placeLine = place?.world && !place.transit ? `You are in ${placeName(place.world)} right now.` : null;
+  // UX review #7: a real modal — Escape closes it, Tab stays inside the card,
+  // focus returns to where it was. A stray tap on the backdrop no longer
+  // dismisses it (first-run users lost the card before reading it); the
+  // "Let's go" button and Escape are the ways out.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(cardRef, onClose);
   return (
-    <div className="welcome-overlay" role="dialog" aria-label="Welcome to Soumaya" onClick={onClose}>
-      <div className="welcome-card" onClick={(e) => e.stopPropagation()}>
+    <div className="welcome-overlay">
+      <div
+        className="welcome-card"
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Welcome to Soumaya"
+        tabIndex={-1}
+      >
         {/* IM-17: the card speaks galaxy visually too — a small star field,
             each dot a memory-as-star, matching its own copy below. */}
         <div className="welcome-stars" aria-hidden="true">

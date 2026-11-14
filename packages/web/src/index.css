@@ -7775,6 +7775,13 @@ button.mindspace-more { cursor: pointer; }
 .toast.actionable { min-height: 44px; }
 .perf-suggest button { min-height: 44px; min-width: 44px; }
 .gv-chip { min-height: 44px; }
+/* UX review #7 — the controls the 2026-11 pass still measured under 44 px:
+   panel/legend close buttons (22–30 px), the ingest "＋ more" links (~16 px
+   tall) and the ingest/inspector tag chips (~26 px). */
+.panel-close { min-width: 44px; min-height: 44px; display: inline-flex !important; align-items: center; justify-content: center; }
+.legend-close { width: 44px; height: 44px; }
+.ingest-more { min-height: 44px; padding: 0 6px; }
+.tag-chip { min-height: 44px; display: inline-flex; align-items: center; }
 
 /* ======== Persistent HUD (docs/specs/persistent-hud-2026-10-30.md) ========
    The HUD is one shell above every scene. The worlds layer now sits BELOW the HUD tiers (30–57) and every panel/dialog (≥ 45),

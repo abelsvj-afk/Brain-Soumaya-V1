@@ -16,4 +16,10 @@ describe("tap targets (44 px)", () => {
     expect(css).toMatch(/\.perf-suggest button \{ min-height: 44px; min-width: 44px; \}/);
     expect(css).toMatch(/\.gv-chip \{ min-height: 44px; \}/);
   });
+  it("UX review #7: close buttons, ingest links and tag chips reach 44 px", () => {
+    expect(css).toMatch(/\.panel-close \{ min-width: 44px; min-height: 44px;/);
+    expect(css).toMatch(/\.legend-close \{ width: 44px; height: 44px; \}/);
+    expect(css).toMatch(/\.ingest-more \{ min-height: 44px;/);
+    expect(css).toMatch(/\.tag-chip \{ min-height: 44px;/);
+  });
 });
