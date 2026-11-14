@@ -72,7 +72,7 @@ export function fbm(x: number, y: number, seed: number, octaves = 4): number {
 
 // ---------- surfaces ----------
 
-export type SurfaceKind = "rock" | "flagstone" | "plaster" | "wood" | "metal" | "soil" | "pale" | "brass";
+export type SurfaceKind = "rock" | "flagstone" | "plaster" | "wood" | "metal" | "soil" | "pale" | "brass" | "grass";
 
 interface SurfaceDef {
   /** Height 0..1 at (u, v) — drives the normal map and the shading of the colour. */
@@ -182,6 +182,14 @@ const SURFACES: Record<SurfaceKind, SurfaceDef> = {
     high: 0xf0ece6,
     tint: 0.12,
     bump: 0.7,
+  },
+  // Meadow turf: fine blades (high-frequency) over soft tufts and worn patches, so a lawn is never one flat green.
+  grass: {
+    height: (u, v) => tileFbm(u, v, 6, 3, 501) * 0.5 + tileFbm(u, v, 40, 2, 509) * 0.35 + Math.pow(tileFbm(u, v, 3, 2, 517), 2) * 0.3,
+    low: 0x2c4a22,
+    high: 0x9cc060,
+    tint: 0.35,
+    bump: 1.3,
   },
   // Worked brass: hammered dimples.
   brass: {

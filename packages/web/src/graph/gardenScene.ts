@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { createEngineFlame } from "./enginePlume.js";
 import { disposeObject3D } from "./graph3dHelpers.js";
-import { GARDEN_BACKDROP_PLANETS, loadGardenAsset } from "./gardenAssets.js";
+import { GARDEN_BACKDROP_PLANETS, GARDEN_WITNESS_TREE_URL, loadGardenAsset } from "./gardenAssets.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { glowTexture } from "./softGlow.js";
+import { fbm, groundMist, horizonGlow, surfaceMaterial } from "./worldCraft.js";
 import { buildHygStarfield } from "./hygStars.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
 import { buildProceduralShip } from "./transitScene.js";
@@ -530,13 +533,21 @@ export function createGardenScene(
   const presentTerraces = new Set(Array.from({ length: GARDEN_TERRACE_COUNT }, (_, t) => t));
   // What a tap can land on as "ground" (walk targets).
   const groundMeshes: THREE.Object3D[] = [];
-  const riserMat = new THREE.MeshLambertMaterial({ color: 0x2e4d2a, side: THREE.DoubleSide });
+  // Dry-stone retaining walls between the terraces, and turf on top (docs/specs/worlds-redesign-2026-11-14.md): the garden was flat green stripes with dark green bands between.
+  const riserMat = surfaceMaterial("flagstone", { tint: 0xb9ad94, repeat: [60, 1], side: THREE.DoubleSide });
+  /** Lay a flat ring's texture by its place in the world, so the turf keeps one scale on every terrace. */
+  const turfUv = (geo: THREE.BufferGeometry): THREE.BufferGeometry => {
+    const pos = geo.getAttribute("position");
+    const uv = geo.getAttribute("uv");
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / 110, pos.getY(i) / 110);
+    return geo;
+  };
   for (const t of [...presentTerraces].sort((a, b) => a - b)) {
     const inner = t + 1 < GARDEN_TERRACE_COUNT ? GARDEN_TERRACE_RADIUS[t + 1]! : 60;
     const outer = GARDEN_TERRACE_RADIUS[t]!;
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(inner, outer, 64),
-      new THREE.MeshLambertMaterial({ color: TERRACE_GREENS[t]!, side: THREE.DoubleSide }),
+      turfUv(new THREE.RingGeometry(inner, outer, 64)),
+      surfaceMaterial("grass", { tint: new THREE.Color(TERRACE_GREENS[t]!).multiplyScalar(2.1).getHex(), side: THREE.DoubleSide }),
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = GARDEN_TERRACE_HEIGHT[t]!;
@@ -558,8 +569,8 @@ export function createGardenScene(
   }
   // Crown disc under the tree.
   const crownDisc = new THREE.Mesh(
-    new THREE.CircleGeometry(60, 48),
-    new THREE.MeshLambertMaterial({ color: TERRACE_GREENS[GARDEN_TERRACE_COUNT - 1]! }),
+    turfUv(new THREE.CircleGeometry(60, 48)),
+    surfaceMaterial("grass", { tint: new THREE.Color(TERRACE_GREENS[GARDEN_TERRACE_COUNT - 1]!).multiplyScalar(2.1).getHex() }),
   );
   crownDisc.rotation.x = -Math.PI / 2;
   crownDisc.position.y = GARDEN_TERRACE_HEIGHT[GARDEN_TERRACE_COUNT - 1]!;
@@ -569,12 +580,7 @@ export function createGardenScene(
   // Finished underside: the garden is a solid, not flat rings over void.
   // A stone skirt drops from the lowest terrace (y=0) to the solid floor,
   // and a bottom cap closes it — from below, the garden reads as ground.
-  const undersideMat = new THREE.MeshStandardMaterial({
-    color: 0x3a2f24,
-    roughness: 1,
-    metalness: 0,
-    side: THREE.DoubleSide,
-  });
+  const undersideMat = surfaceMaterial("rock", { tint: 0x9a8670, repeat: [40, 2], side: THREE.DoubleSide });
   const skirt = new THREE.Mesh(
     new THREE.CylinderGeometry(
       GARDEN_TERRACE_RADIUS[0]!,
@@ -635,9 +641,60 @@ export function createGardenScene(
   halo.name = "witness-halo";
   halo.raycast = () => {}; // a glow is never a pick target (and Sprite.raycast needs a camera)
   tree.add(halo);
+  // The Blender-built witness tree (bark, boughs, a real crown) replaces the trunk-and-blobs once it has loaded; until then, and if it never loads, the simple tree stands.
+  const simpleTree = tree.children.filter((c) => c !== halo);
+  void loadGardenAsset(GARDEN_WITNESS_TREE_URL).then((loaded) => {
+    if (!loaded || disposed) {
+      if (loaded) disposeObject3D(loaded);
+      return;
+    }
+    loaded.name = "witness-tree-model";
+    loaded.traverse((o) => {
+      o.raycast = () => {}; // the tree is scenery: taps fall through to the ground and plots, as before
+    });
+    for (const c of simpleTree) c.visible = false;
+    // The Blender tree is modelled smaller than the app's witness tree; bring it up to the same height, growing from its foot on the crown terrace.
+    const k = 1.45;
+    loaded.scale.setScalar(k);
+    loaded.position.y = crownY * (1 - k);
+    tree.add(loaded);
+  });
   // The whole tree sways as one — a sphere alone would show nothing.
   swaying.push(tree);
   group.add(tree);
+  // Dusk on the skyline and mist lying out past the lowest terrace: the garden sits in an evening, not in a void.
+  const dusk = horizonGlow(5200, 0x0a2420, 0xe08a4a, 0x0a1a18, 0.55, "garden-dusk");
+  dusk.raycast = () => {};
+  const atmosphere = new THREE.Group();
+  atmosphere.name = "garden-atmosphere";
+  atmosphere.add(dusk);
+  const mistOut: { x: number; y: number; z: number }[] = [];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    mistOut.push({ x: Math.cos(a) * (GARDEN_TERRACE_RADIUS[0]! + 220), y: -20, z: Math.sin(a) * (GARDEN_TERRACE_RADIUS[0]! + 220) });
+  }
+  const outMist = groundMist(mistOut, 0xd8b890, 700, 0.08, "garden-far-mist").object;
+  outMist.raycast = () => {};
+  atmosphere.add(outMist);
+  // The hillside falling away below the lowest terrace: the garden is the top of a hill in open country, not an island with an edge. Scenery only — never a walk or tap target.
+  const slopeGeo = new THREE.CylinderGeometry(GARDEN_TERRACE_RADIUS[0]! + 2, 4200, 620, 72, 6, true);
+  {
+    const pos = slopeGeo.getAttribute("position");
+    const uv = slopeGeo.getAttribute("uv");
+    for (let i = 0; i < pos.count; i++) {
+      const t = 0.5 - pos.getY(i) / 620; // 0 at the terrace, 1 far out
+      const roll = (fbm(pos.getX(i) / 500, pos.getZ(i) / 500, 41, 3) - 0.5) * 240 * t; // rolling ground, growing with distance
+      pos.setY(i, pos.getY(i) + roll - t * t * 60);
+      uv.setXY(i, pos.getX(i) / 160, pos.getZ(i) / 160);
+    }
+    slopeGeo.computeVertexNormals();
+  }
+  const slope = new THREE.Mesh(slopeGeo, surfaceMaterial("grass", { tint: 0x86a868, side: THREE.DoubleSide }));
+  slope.position.y = -310;
+  slope.name = "garden-hillside";
+  slope.raycast = () => {};
+  atmosphere.add(slope);
+  group.add(atmosphere);
 
   // Vegetation: instanced, seeded across the terraces — the recipe's named
   // perf risk, instancing mandatory; density is the fallback dial.
@@ -646,15 +703,31 @@ export function createGardenScene(
   const vegBlocked = [...layout.plots, ...layout.landmarks];
   const groves = layout.groves ?? [];
   const trunks = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(2.5, 3.9, 22, 5),
-    new THREE.MeshLambertMaterial({ color: 0x54402e }),
+    new THREE.CylinderGeometry(1.7, 3.6, 22, 7),
+    surfaceMaterial("wood", { tint: 0x8a6a50, repeat: [0.5, 1] }),
     vegCount,
   );
-  const veg = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(16, 0),
-    new THREE.MeshLambertMaterial({ color: 0x5c8a42 }),
-    vegCount,
-  );
+  // A crown of three soft lobes, roughened by noise and smooth-shaded — the same family as the witness tree, where the faceted single ball read as a toy.
+  const lobes = [
+    { x: 0, y: 3, z: 0, r: 13 },
+    { x: 8, y: -2, z: 4, r: 9.5 },
+    { x: -7, y: -1, z: -5, r: 10 },
+  ].map((l) => {
+    const g = new THREE.SphereGeometry(l.r, 10, 7);
+    const pos = g.getAttribute("position");
+    for (let i = 0; i < pos.count; i++) {
+      const k = 1 + (fbm(pos.getX(i) / 6 + l.x, pos.getY(i) / 6 + pos.getZ(i) / 6, 77, 2) - 0.5) * 0.5;
+      pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k * 0.82, pos.getZ(i) * k);
+    }
+    g.translate(l.x, l.y, l.z);
+    g.computeVertexNormals();
+    return g;
+  });
+  const crownGeo = mergeGeometries(lobes);
+  for (const l of lobes) l.dispose();
+  const veg = new THREE.InstancedMesh(crownGeo, surfaceMaterial("grass", { tint: 0xffffff, repeat: [2, 2] }), vegCount);
+  const leaf = new THREE.Color();
+  const LEAF_TINTS = [0xb8e08a, 0xa4d27c, 0xc6e494, 0x98c874, 0xb0d890];
   const dummy = new THREE.Object3D();
   for (let i = 0; i < vegCount; i++) {
     // Rejection-sample so a tree never stands on a memory: plots are tiny
@@ -684,6 +757,7 @@ export function createGardenScene(
     dummy.position.y = GARDEN_TERRACE_HEIGHT[terrace]! + 30 * sc;
     dummy.updateMatrix();
     veg.setMatrixAt(i, dummy.matrix);
+    veg.setColorAt(i, leaf.setHex(LEAF_TINTS[i % LEAF_TINTS.length]!));
   }
   trunks.name = "vegetation-trunks";
   group.add(trunks);
@@ -907,10 +981,11 @@ export function createGardenScene(
   group.add(key);
   const ambient = new THREE.AmbientLight(0xffd9b0, 1.15);
   group.add(ambient);
-  const mistMat = new THREE.MeshBasicMaterial({ color: 0xcfd8b8, transparent: true, opacity: 0.08, side: THREE.DoubleSide });
+  // Soft-edged banks (a radial falloff), not flat rectangles: the old planes showed as grey slabs standing behind the garden.
+  const mistMat = new THREE.MeshBasicMaterial({ color: 0xcfd8b8, map: glowTexture(), transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
   const mists: THREE.Mesh[] = [];
   for (let i = 0; i < 3; i++) {
-    const mist = new THREE.Mesh(new THREE.PlaneGeometry(1200, 260), mistMat);
+    const mist = new THREE.Mesh(new THREE.PlaneGeometry(1900, 420), mistMat);
     mist.position.set(0, 30 + i * 40, -500 + i * 260);
     mist.name = `mist-${i}`;
     group.add(mist);

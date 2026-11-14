@@ -95,7 +95,12 @@ export const GARDEN_BACKDROP_TRIS_TOTAL = GARDEN_BACKDROP_PLANETS.reduce(
 );
 
 /** Every GLB URL this world loads (the upload manifest for this increment). */
-export const GARDEN_ASSET_URLS: readonly string[] = GARDEN_BACKDROP_PLANETS.map((m) => m.url);
+/**
+ * The witness tree, from the Blender world production (branch blender/worlds-production, growing-place.glb → the `witness-tree` holder alone, welded, simplified, 512 px WebP,
+ * Draco: 58 KB). The scene's own trunk-and-canopy stays as the instant placeholder and the load-failure fallback.
+ */
+export const GARDEN_WITNESS_TREE_URL = "/garden-witness-tree.glb";
+export const GARDEN_ASSET_URLS: readonly string[] = [...GARDEN_BACKDROP_PLANETS.map((m) => m.url), GARDEN_WITNESS_TREE_URL];
 
 /**
  * Load a backdrop planet through the app's shared glTF loader.

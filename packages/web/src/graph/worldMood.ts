@@ -17,6 +17,14 @@ export interface WorldMood {
 }
 
 export const WORLD_MOOD: Readonly<Record<string, WorldMood>> = {
+  // The Growing Place: evening in a garden. The scene carries its own warm key and ambient; the host adds only a little reflected sky.
+  "growing-place": {
+    light: { env: 0.5 },
+    background: 0x0a2420,
+    fogDensity: 0.00016,
+    lookAtY: 60,
+    sky: false,
+  },
   // Quiet/Archive: still water under a cold night. Low, even, nothing warm but the resting lamps.
   "quiet-archive": {
     light: { env: 0.55, hemi: { sky: 0x8fb0cc, ground: 0x0c1218, intensity: 0.7 }, key: { color: 0xbfd4ee, intensity: 0.5, from: [-400, 300, -500] } },

@@ -59,3 +59,9 @@ The Faded Ward follows the lore paintings instead (`docs/lore/art/23-…`, `42-�
 - **Faded Ward** — the Faded drawn as whole translucent figures (two-pass, so each reads as one body), windows down both walls, warmer palette.
 - **Quiet/Archive** — the disc in space is now still water to a horizon, with a pale horizon band, a sheen and far mist.
 - **The People** — the disc is now warm earth to a dusk horizon with ember skyline and haze.
+
+## 8. Growing Place (third pass) — Blender and code together
+Slimming changes the weight verdict in §6: `growing-place.glb` 16.7 MB → 626 KB and `deep-past.glb` 6.7 MB → 313 KB (weld, simplify, 512 px WebP, Draco). But the Blender garden is a fixed snapshot with made-up groves, while the app builds groves and plots from the brain's own Journeys and memories — so it cannot replace the scene whole.
+Used from Blender: the witness tree alone (`public/garden-witness-tree.glb`, 58 KB), scaled 1.45× to the app's tree height; the simple tree stays as placeholder and load-failure fallback.
+In code: turf terraces with dry-stone risers, soft three-lobed forest crowns, a dusk horizon, a rolling hillside below the lowest terrace, soft-edged mist (the old mist planes showed as grey slabs).
+Groves, plots, paths, walking and tending are unchanged.
