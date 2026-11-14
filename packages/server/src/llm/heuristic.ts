@@ -77,6 +77,13 @@ export function heuristicImportance(text: string): number {
  *   keywords. (No LLM-typed edges; associative similarity linking still runs.)
  * - validateLink(): approves links purely on cosine similarity.
  */
+/** Words that read as a cut-off phrase when they end an auto-derived label. */
+const DANGLING_TAIL = new Set([
+  "a", "an", "the", "this", "that", "these", "those", "my", "your", "our", "their", "his", "her", "its",
+  "to", "of", "for", "with", "at", "in", "on", "by", "from", "about", "into", "and", "or", "but", "so",
+  "is", "are", "was", "be", "i", "i'm", "we", "it", "some", "very", "just",
+]);
+
 export class HeuristicProvider implements LlmProvider {
   readonly available = false;
   readonly model = "heuristic";
@@ -101,8 +108,17 @@ export class HeuristicProvider implements LlmProvider {
   }
 
   private deriveLabel(text: string): string {
-    const words = text.trim().split(/\s+/).slice(0, 6).join(" ");
-    return words.length > 0 ? words : "Thought";
+    // First six words of the first sentence, minus a dangling connector/article at
+    // the end — "I want to learn guitar this year" used to become the half-phrase
+    // "I want to learn guitar this"; now it reads "I want to learn guitar".
+    const firstSentence = text.trim().split(/(?<=[.!?])\s+|\n/)[0] ?? "";
+    const words = firstSentence.split(/\s+/).filter(Boolean).slice(0, 6);
+    const truncated = words.length < firstSentence.split(/\s+/).filter(Boolean).length;
+    if (truncated) {
+      while (words.length > 2 && DANGLING_TAIL.has(words[words.length - 1]!.toLowerCase().replace(/[^a-z']/g, ""))) words.pop();
+    }
+    const label = words.join(" ").replace(/[,;:\-–—]+$/, "");
+    return label.length > 0 ? label : "Thought";
   }
 
   async extract(text: string, _context: ContextNode[]): Promise<ExtractionResult> {

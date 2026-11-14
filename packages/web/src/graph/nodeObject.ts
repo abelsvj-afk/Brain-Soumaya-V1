@@ -80,7 +80,7 @@ export function pickSectorHubIds(nodes: GraphNodeWithPosition[], maxSectors = 5)
 const FONT_SIZE = 44;
 const PADDING = 14;
 const WORLD_SCALE = 0.11; // canvas px -> world units
-const WINDOW_PX = 470; // max on-screen label width before it scrolls (marquee)
+const WINDOW_PX = 470; // max on-screen label width; longer names wrap (wrapLabelLines)
 const MAX_CHARS = 80; // cap canvas width for very long entries
 
 const labelTexCache = new Map<string, { map: THREE.CanvasTexture; width: number; height: number }>();
@@ -100,10 +100,11 @@ const glowRefCount = new Map<string, number>();
 
 /**
  * UX review #5: wrap a label into at most `maxLines` lines no wider than `maxWidth`,
- * breaking only at spaces, with an ellipsis on the last line when it still overflows.
- * Long names used to render as one wide strip scrolled through a fixed window (a
- * marquee), so any still frame showed a mid-word slice with the first letters cut
- * off ("vant to learn guitar this"). Pure — `measure` is injected for tests.
+ * breaking at spaces. Any line that still overflows (a single very long word such as
+ * a URL, or the leftover words on the last line) is cut with an ellipsis, so no line
+ * is ever wider than `maxWidth`. Long names used to render as one wide strip scrolled
+ * through a fixed window, so any still frame showed a mid-word slice with the first
+ * letters cut off ("vant to learn guitar this"). Pure — `measure` is injected for tests.
  */
 export function wrapLabelLines(
   text: string,
@@ -111,37 +112,35 @@ export function wrapLabelLines(
   measure: (s: string) => number,
   maxLines = 2,
 ): string[] {
+  const limit = Math.max(1, Math.floor(maxLines));
+  const fit = (line: string): string => {
+    if (measure(line) <= maxWidth) return line;
+    // Prefer dropping whole words; fall back to trimming characters.
+    const lw = line.split(" ");
+    while (lw.length > 1 && measure(`${lw.join(" ")}…`) > maxWidth) lw.pop();
+    let out = lw.join(" ");
+    while (out.length > 1 && measure(`${out}…`) > maxWidth) out = out.slice(0, -1);
+    return `${out}…`;
+  };
   const words = text.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return [""];
   const lines: string[] = [];
   let cur = "";
   let i = 0;
-  for (; i < words.length; i++) {
+  for (; i < words.length && lines.length < limit - 1; i++) {
     const w = words[i]!;
     const next = cur ? `${cur} ${w}` : w;
-    if (measure(next) <= maxWidth || !cur) {
+    if (!cur || measure(next) <= maxWidth) {
       cur = next;
     } else {
-      lines.push(cur);
+      lines.push(fit(cur));
       cur = w;
-      if (lines.length === maxLines - 1) {
-        i++;
-        break;
-      }
     }
   }
   // Whatever is left (cur + any unplaced words) is the last line.
-  let last = [cur, ...words.slice(i)].filter(Boolean).join(" ");
-  if (measure(last) > maxWidth) {
-    const lw = last.split(" ");
-    while (lw.length > 1 && measure(`${lw.join(" ")}…`) > maxWidth) lw.pop();
-    last = lw.join(" ");
-    // A single very long word: trim characters as a last resort.
-    while (last.length > 1 && measure(`${last}…`) > maxWidth) last = last.slice(0, -1);
-    last = `${last}…`;
-  }
-  lines.push(last);
-  return lines;
+  const last = [cur, ...words.slice(i)].filter(Boolean).join(" ");
+  if (last) lines.push(fit(last));
+  return lines.slice(0, limit);
 }
 
 /**
@@ -192,8 +191,6 @@ function makeLabel(rawText: string): THREE.Sprite {
   });
   const sprite = new THREE.Sprite(material);
   sprite.renderOrder = 999;
-  // Wrapped labels always fit the window, so no marquee clone is needed any more
-  // (Graph3D's marquee tick simply finds no `userData.marquee` on these sprites).
   sprite.scale.set(width * WORLD_SCALE, height * WORLD_SCALE, 1);
   sprite.position.set(0, 9, 0);
 
