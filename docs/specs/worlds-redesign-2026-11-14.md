@@ -71,3 +71,6 @@ The strata hold the brain's own memories, so the Blender model was not brought i
 
 ## 10. The Village (fifth pass)
 Rolling night turf reaching past sight (flat down the way and in the square), a trodden way from gate to doorway, limewashed houses in four wall tones under true pitched roofs, lit window panes each spilling light on the ground, stone gate and well, a hearth that really lights the square, a deep-blue horizon, low mist and warm motes over the square. Holders, hooks and the doorway are unchanged.
+
+## 11. The Unlit Hulls (sixth pass)
+Plated hull steel with seams and rivets, seasoned timber, worked brass, a flagged yard running past the slips into the dark, an open timber shed (posts and a ring beam) round it, one cold shaft of night light on the seventh slip with its pool on the flags, a steel-blue skyline and still mist. The seventh slip's ribs now stand as a hull's ribs do (a U open to the sky on the keel beam). Nothing is lit and nothing moves, as before.

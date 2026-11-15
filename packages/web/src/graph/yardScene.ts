@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { groundMist, horizonGlow, lightPools, lightShaft, surfaceMaterial } from "./worldCraft.js";
 import { YARD, YARD_BLANK_AT, YARD_CRANE_AT, YARD_DESK_AT, YARD_HULL_LENGTH, YARD_PLATES_AT, YARD_SEVENTH_AT, YARD_TOOLS_AT, yardHulls, yardLamps, yardPlateStrokes, yardRibs } from "./yardLayout.js";
 
 /**
@@ -30,12 +31,21 @@ export function createYardScene(): YardScene {
   const group = new THREE.Group();
   group.name = "the-yard";
   const dummy = new THREE.Object3D();
-  const wood = new THREE.MeshStandardMaterial({ color: C.wood, roughness: 1 });
-  const steel = new THREE.MeshStandardMaterial({ color: C.hull, roughness: 0.55, metalness: 0.4 });
-  const part = new THREE.MeshStandardMaterial({ color: C.part, roughness: 0.4, metalness: 0.5 });
-  const brass = new THREE.MeshStandardMaterial({ color: C.brass, roughness: 0.35, metalness: 0.6 });
+  // Surfaces (look: docs/specs/worlds-redesign-2026-11-14.md): seasoned timber, plated hull steel with seams and rivets, worked brass, a stone-flagged yard. Nothing here is lit — the
+  // only light is the night's, falling cold from above — so surface and shape have to carry the place.
+  const wood = surfaceMaterial("wood", { tint: 0xa88a6c, repeat: [1, 0.4] });
+  const steel = surfaceMaterial("metal", { tint: 0xb4bcc8, repeat: [1.5, 3], roughness: 0.55, metalness: 0.55 });
+  const part = surfaceMaterial("metal", { tint: 0xe8ecf4, repeat: [1, 1], roughness: 0.35, metalness: 0.6 });
+  const brass = surfaceMaterial("brass", { repeat: [1, 1], roughness: 0.4 });
 
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(YARD.radius, 72), new THREE.MeshStandardMaterial({ color: C.floor, roughness: 1 }));
+  // The yard floor runs past the slips into the dark (no rim), flagged and dead flat.
+  const floorGeo = new THREE.CircleGeometry(YARD.radius * 5, 72);
+  {
+    const pos = floorGeo.getAttribute("position");
+    const uv = floorGeo.getAttribute("uv");
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / 26, pos.getY(i) / 26);
+  }
+  const floor = new THREE.Mesh(floorGeo, surfaceMaterial("flagstone", { tint: 0x8a8e98 }));
   floor.rotation.x = -Math.PI / 2;
   floor.name = "yard-floor";
   group.add(floor);
@@ -100,10 +110,11 @@ export function createYardScene(): YardScene {
 
   // The seventh slip: a frame of ribs on a keel beam, no plating.
   const ribs = yardRibs();
-  const ribMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(15, 1.1, 5, 14, Math.PI), new THREE.MeshStandardMaterial({ color: C.rib, roughness: 0.6, metalness: 0.4 }), ribs.length);
+  const ribMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(15, 1.1, 5, 14, Math.PI), wood, ribs.length);
   ribs.forEach((r, i) => {
-    dummy.position.set(YARD_SEVENTH_AT.x, 12, r.z);
-    dummy.rotation.set(0, 0, 0);
+    // Ribs stand as a hull's ribs do — a U open to the sky, its foot on the keel beam (they stood as hoops, arch upward, which read as a row of croquet hoops).
+    dummy.position.set(YARD_SEVENTH_AT.x, 3.5 + 15 * r.scale, r.z);
+    dummy.rotation.set(0, 0, Math.PI);
     dummy.scale.set(r.scale, r.scale, 1);
     dummy.updateMatrix();
     ribMesh.setMatrixAt(i, dummy.matrix);
@@ -230,7 +241,7 @@ export function createYardScene(): YardScene {
   // The crane over the seventh slip: its hook empty at the height of a flank.
   const crane = new THREE.Group();
   crane.name = "yard-crane";
-  const craneMat = new THREE.MeshStandardMaterial({ color: C.crane, roughness: 0.6, metalness: 0.4 });
+  const craneMat = surfaceMaterial("metal", { tint: 0x8a909c, repeat: [0.3, 2], roughness: 0.6, metalness: 0.5 });
   for (const sx of [-1, 1]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 120, 4), craneMat);
     leg.position.set(sx * 46, 60, 0);
@@ -247,6 +258,37 @@ export function createYardScene(): YardScene {
   crane.add(hook);
   crane.position.set(YARD_CRANE_AT.x, 0, YARD_CRANE_AT.z);
   group.add(crane);
+
+  // The great shed the slips stand in: tall timber posts round the yard carrying a ring beam, open to the sky — a frame, never a wall.
+  const posts = 18;
+  const shed = new THREE.InstancedMesh(new THREE.BoxGeometry(7, 210, 7), wood, posts);
+  for (let i = 0; i < posts; i++) {
+    const a = (i / posts) * Math.PI * 2 + 0.17;
+    dummy.rotation.set(0, -a, 0);
+    dummy.scale.set(1, 1, 1);
+    dummy.position.set(Math.cos(a) * YARD.radius * 1.12, 105, Math.sin(a) * YARD.radius * 1.12);
+    dummy.updateMatrix();
+    shed.setMatrixAt(i, dummy.matrix);
+  }
+  shed.name = "yard-shed-posts";
+  shed.frustumCulled = false;
+  const ringBeam = new THREE.Mesh(new THREE.TorusGeometry(YARD.radius * 1.12, 4, 5, posts), wood);
+  ringBeam.rotation.x = Math.PI / 2;
+  ringBeam.position.y = 208;
+  ringBeam.name = "yard-shed-beam";
+  group.add(shed, ringBeam);
+
+  // The night's light: one cold shaft falling through the open roof onto the seventh slip, its pool on the flags, a steel-blue skyline and mist lying between the slips. All still.
+  const moon = lightShaft(260, 30, 74, 0xa8c0e8, 0.16, "yard-moon-shaft");
+  moon.position.set(YARD_SEVENTH_AT.x, 0, YARD_SEVENTH_AT.z);
+  group.add(moon, lightPools([{ x: YARD_SEVENTH_AT.x, z: YARD_SEVENTH_AT.z }], 0xa8c0e8, 120, 0.3, "yard-moon-pool"));
+  group.add(horizonGlow(5200, 0x12141c, 0x3c4c66, 0x12141c, 0.55, "yard-horizon"));
+  const low: { x: number; y: number; z: number }[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    low.push({ x: Math.cos(a) * YARD.radius * 0.8, y: 12, z: Math.sin(a) * YARD.radius * 0.8 });
+  }
+  group.add(groundMist(low, 0x8a98b0, 420, 0.06, "yard-mist").object);
 
   return { group, update: () => {}, dispose: () => disposeObject3D(group) };
 }

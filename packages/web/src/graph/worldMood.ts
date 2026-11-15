@@ -72,9 +72,10 @@ export const WORLD_MOOD: Readonly<Record<string, WorldMood>> = {
     lookAtY: 24,
   },
   "the-yard": {
-    light: { env: 0.8, hemi: { sky: 0xb8c0d8, ground: 0x4a4238, intensity: 1.0 }, key: { color: 0xffe8c8, intensity: 1.1, from: [-220, 400, 200] } },
+    // Nothing in the yard is lit: a cold, one-sided night light and a little reflected sky on the steel.
+    light: { env: 0.45, hemi: { sky: 0x7c8cac, ground: 0x1a1814, intensity: 0.6 }, key: { color: 0xb4c8f0, intensity: 1.5, from: [-260, 520, 160] } },
     background: 0x12141c,
-    fogDensity: 0.0004,
+    fogDensity: 0.0007,
     lookAtY: 26,
   },
   "the-long-morning": {
