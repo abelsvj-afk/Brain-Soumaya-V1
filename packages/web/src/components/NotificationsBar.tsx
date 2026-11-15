@@ -201,7 +201,11 @@ export function useNoticesBottomVar(ref: { current: HTMLElement | null }, count:
     }
     const update = () => {
       const r = el.getBoundingClientRect();
+      // Reviewer r4: when the bar is hidden (Add sheet / dock open sets it
+      // display:none) it measures 0 — clear the offset instead of keeping the
+      // old one, or the toasts float with a gap under a banner that isn't there.
       if (r.height > 0) root.style.setProperty(NOTICES_BOTTOM_VAR, `${Math.ceil(r.bottom)}px`);
+      else root.style.removeProperty(NOTICES_BOTTOM_VAR);
     };
     update();
     const RO = typeof ResizeObserver !== "undefined" ? ResizeObserver : null;

@@ -6811,8 +6811,19 @@ button.mindspace-more { cursor: pointer; }
   .ship-status-stack.below-noticing {
     left: calc(76px + env(safe-area-inset-left, 0px));
     bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-    width: min(34vw, 250px); /* t38u: stay in the left third, off the labels */
+    width: min(26vw, 218px); /* t38u + r4: stay left of the centre band, off the labels */
     max-height: 140px;
+  }
+  /* Reviewer r4: the streak chip's mid-left anchor put it behind Focus and
+     Views. In landscape it moves to the empty right-column slot between
+     Tools (ends ~60px) and Zoom + (starts ~158px), clear of the header
+     notices (which end 76px from the right edge). */
+  .streak-ember {
+    top: calc(68px + env(safe-area-inset-top, 0px));
+    left: auto;
+    right: calc(14px + env(safe-area-inset-right, 0px));
+    min-width: 46px;
+    max-height: 84px;
   }
   /* The pill shares the landscape stack's anchor (the desktop anchor,
      bottom 354px, would sit off the top of a 390px-tall screen). */
