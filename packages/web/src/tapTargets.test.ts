@@ -11,7 +11,7 @@ describe("tap targets (44 px)", () => {
     expect(css).toContain(`${sel} { content: ""; position: absolute; inset:`);
   });
   it("the growable controls have a 44 px minimum", () => {
-    expect(css).toMatch(/\.nc-action-btn, \.nc-dismiss, \.beacon-target, \.audio-state-chip, \.streak-ember \{\s*display: inline-flex; align-items: center; justify-content: center; min-height: 44px;/);
+    expect(css).toMatch(/\.nc-action-btn, \.nc-dismiss, \.beacon-target, \.streak-ember \{\s*display: inline-flex; align-items: center; justify-content: center; min-height: 44px;/);
     expect(css).toMatch(/\.toast\.actionable \{ min-height: 44px; \}/);
     expect(css).toMatch(/\.perf-suggest button \{ min-height: 44px; min-width: 44px; \}/);
     expect(css).toMatch(/\.gv-chip \{ min-height: 44px; \}/);

@@ -41,8 +41,7 @@ import { MindSpace } from "./components/MindSpace.js";
 import { ownContentCount, hasAgentStar } from "./utils/welcomeSeed.js";
 import { useQuietWindow, useFirstRunToastHold } from "./hooks/useQuietWindow.js";
 import { NoticingCard } from "./components/NoticingCard.js";
-import { playSfx, sfxEnabled } from "./graph/sfx.js";
-import { isVoiceEnabled } from "./voice.js";
+import { playSfx } from "./graph/sfx.js";
 import {
   BeaconReadout,
   ShipStatusStack,
@@ -493,9 +492,6 @@ export default function App() {
     { variantName: string; targetId: number | null; targetLabel: string | null }[]
   >([]);
   const [sceneCardDismissed, setSceneCardDismissed] = useState(false);
-  const [sfxOnHud, setSfxOnHud] = useState(sfxEnabled());
-  const [voiceOnHud, setVoiceOnHud] = useState(isVoiceEnabled());
-  const [settingsFocusAudio, setSettingsFocusAudio] = useState(false);
   const hudJsonRef = useRef("");
   useEffect(() => {
     if (!loaded) return;
@@ -506,8 +502,6 @@ export default function App() {
         fleet: g.getFleetStatus(),
         identity: g.getSceneIdentity(),
         visitors: g.getActiveVisitors(),
-        sfx: sfxEnabled(),
-        voice: isVoiceEnabled(),
       };
       const json = JSON.stringify(next);
       if (json === hudJsonRef.current) return; // no visible change — skip the re-render
@@ -515,8 +509,6 @@ export default function App() {
       setFleetStatusHud(next.fleet);
       setSceneIdentity(next.identity);
       setActiveVisitors(next.visitors);
-      setSfxOnHud(next.sfx);
-      setVoiceOnHud(next.voice);
     };
     poll();
     const t = setInterval(poll, 2500);
@@ -3198,10 +3190,7 @@ export default function App() {
 
       {showSettings && space && (
         <SettingsPanel
-          onClose={() => {
-            setShowSettings(false);
-            setSettingsFocusAudio(false);
-          }}
+          onClose={() => setShowSettings(false)}
           onProfileUpdated={(name) => setSpace((s) => (s ? { ...s, name } : s))}
           onBrainDeleted={() => {
             // The brain is deleted server-side and AccountSettings already
@@ -3220,7 +3209,6 @@ export default function App() {
             setPendingJourneyTitle(null);
             setShowSettings(false);
           }}
-          focusAudio={settingsFocusAudio}
         />
       )}
 
