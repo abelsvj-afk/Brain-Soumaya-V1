@@ -1044,7 +1044,7 @@ export function SettingsPanel({
                 const next = !liteOn;
                 setLiteOn(next);
                 try { localStorage.setItem("brain.lite", next ? "1" : "0"); } catch { /* ignore */ }
-                setTimeout(() => window.location.reload(), 150); // remount without/with the galaxy
+                setTimeout(() => { if (typeof window !== "undefined") window.location.reload(); }, 150); // remount without/with the galaxy
               }}
               aria-pressed={liteOn}
             >

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, renderHook, act, screen, cleanup, fireEvent } from "@testing-library/react";
 import {
-  AudioStateChip,
   BeaconReadout,
   EmptyGalaxyCue,
   ModelFallbackNote,
@@ -65,19 +64,6 @@ describe("IM-19 visitor + fleet identity in the shell", () => {
   });
 });
 
-describe("IM-21 AudioStateChip", () => {
-  it("shows all three channel states and opens audio settings on tap", () => {
-    const open = vi.fn();
-    render(<AudioStateChip sfx={false} voice={false} music={false} onOpenAudioSettings={open} />);
-    const chip = screen.getByRole("button", { name: /Audio:/ });
-    expect(chip.textContent).toContain("Sounds off");
-    expect(chip.textContent).toContain("Voice off");
-    expect(chip.textContent).toContain("Music off");
-    fireEvent.click(chip);
-    expect(open).toHaveBeenCalled();
-  });
-});
-
 describe("IM-23 EmptyGalaxyCue", () => {
   it("gives the first-star cue and an add action", () => {
     const onAdd = vi.fn();
@@ -101,7 +87,6 @@ describe("IM-24 ModelFallbackNote", () => {
 });
 
 describe("HUD round 3 — the summonable ShipStatusStack", () => {
-  const audioProps = { sfx: true, voice: true, music: false, onOpenAudioSettings: () => {} };
   const beacon = (detail: string) => ({
     beacon: { active: true, detail, targets: [{ id: 5, label: "Old house" }], pending: 0 },
   });
@@ -111,14 +96,13 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
       <ShipStatusStack collapsed onToggle={() => {}}>
         <VisitorChip visitors={[{ variantName: "Void Wanderer", targetLabel: "Heavy day" }]} />
         <BeaconReadout status={beacon("3 warming memories")} />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
     const mini = container.querySelector(".ship-status-mini");
     expect(mini).not.toBeNull();
     expect(container.querySelector(".ship-status-stack")).toBeNull();
     expect(mini!.textContent).toContain("Void Wanderer");
-    expect(mini!.textContent).toContain("＋2"); // beacon + audio folded away
+    expect(mini!.textContent).toContain("＋1"); // the beacon line is folded away
     expect(mini!.textContent).not.toContain("3 warming memories");
     expect(mini!.getAttribute("aria-expanded")).toBe("false");
   });
@@ -127,28 +111,24 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
     const { container } = render(
       <ShipStatusStack collapsed onToggle={() => {}}>
         <BeaconReadout status={beacon("3 warming memories")} />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
     const mini = container.querySelector(".ship-status-mini")!;
     expect(mini.textContent).toContain("📡 3 warming memories");
     expect(mini.textContent).not.toContain("Old house");
     expect(mini.textContent).not.toContain("Visit a beamed memory");
-    expect(mini.textContent).toContain("＋1"); // only the audio line is folded
+    expect(mini.textContent).not.toContain("＋"); // nothing else to fold
   });
 
-  it("collapsed with nothing but audio shows the audio line and no count", () => {
+  it("collapsed with an idle beacon and no visitor shows no pill at all", () => {
     const { container } = render(
       <ShipStatusStack collapsed onToggle={() => {}}>
         <BeaconReadout
           status={{ beacon: { active: false, detail: "None deployed", targets: [], pending: 0 } }}
         />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
-    const mini = container.querySelector(".ship-status-mini")!;
-    expect(mini.textContent).toContain("Sounds on");
-    expect(mini.textContent).not.toContain("＋");
+    expect(container.querySelector(".ship-status-mini")).toBeNull();
   });
 
   it("the whole mini-bar is the expand target", () => {
@@ -156,7 +136,6 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
     const { container } = render(
       <ShipStatusStack collapsed onToggle={onToggle}>
         <BeaconReadout status={beacon("3 warming memories")} />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
     fireEvent.click(container.querySelector(".ship-status-mini")!);
@@ -169,7 +148,6 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
       <ShipStatusStack onToggle={onToggle}>
         <VisitorChip visitors={[{ variantName: "Void Wanderer", targetLabel: "Heavy day" }]} />
         <BeaconReadout status={beacon("3 warming memories")} />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
     expect(container.querySelector(".ship-status-stack")).not.toBeNull();
@@ -195,7 +173,6 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
         <BeaconReadout
           status={{ beacon: { active: true, detail: "1 warming a memory", targets: [], pending: 0 } }}
         />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
     expect(container.querySelector(".ship-status-mini")!.classList.contains("pulse")).toBe(false);
@@ -204,7 +181,6 @@ describe("HUD round 3 — the summonable ShipStatusStack", () => {
         <BeaconReadout
           status={{ beacon: { active: true, detail: "Dispatching 1…", targets: [], pending: 1 } }}
         />
-        <AudioStateChip {...audioProps} />
       </ShipStatusStack>,
     );
     const mini = container.querySelector(".ship-status-mini")!;

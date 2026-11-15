@@ -137,15 +137,15 @@ describe("HUD dock — ship-status stack", () => {
     expect(stackBottom + hudVar("hud-status-max-h")).toBeLessThanOrEqual(VIEW_H - 60);
   });
 
-  it("the three readouts are in-flow lines of the stack — no private fixed positions", () => {
-    for (const sel of [".beacon-readout", ".visitor-chip", ".audio-state-chip"]) {
+  it("the readouts are in-flow lines of the stack — no private fixed positions", () => {
+    // (The sounds pill footer was removed by owner request, t39u.)
+    for (const sel of [".beacon-readout", ".visitor-chip"]) {
       expect(ruleBody(sel), sel).not.toContain("position: fixed");
       expect(ruleBody(sel), sel).not.toMatch(/bottom:\s*\d+px/);
     }
     // Overflow policy: header + footer never shrink; the beacon body
     // shrinks/clips first instead of painting over a neighbour.
     expect(ruleBody(".visitor-chip")).toContain("flex: none");
-    expect(ruleBody(".audio-state-chip")).toContain("flex: none");
     expect(ruleBody(".beacon-readout")).toContain("flex: 0 1 auto");
     expect(ruleBody(".beacon-readout")).toContain("overflow: hidden");
   });
@@ -374,11 +374,8 @@ describe("Mobile HUD — stack overflow contract under the shrunken cap (PR #89 
     expect(ruleBodyIn(phoneCss, ".beacon-readout-hint")).toContain("text-overflow: ellipsis");
     // 3 — the readout HEAD (highest-priority status) never shrinks…
     expect(ruleBody(".beacon-readout-head")).toContain("flex: none");
-    // …and neither do the stack's header chip or footer pill
-    // (Package B's discipline, restated here because the contract
-    // depends on it: the sounds pill stays whole and tappable).
+    // …and neither does the stack's header chip (Package B's discipline).
     expect(ruleBody(".visitor-chip")).toContain("flex: none");
-    expect(ruleBody(".audio-state-chip")).toContain("flex: none");
   });
 
   it("at the worst grid point the essential lines still fit whole inside the shrunken cap", () => {
@@ -534,10 +531,14 @@ describe("Mobile HUD — streak ember leaves the mid-left band (S7)", () => {
     expect(streak).toContain("left: auto");
     expect(streak).toMatch(/right:\s*calc\(/);
   });
-  it("clears the toolbox FAB above it and stays out of the vertical middle", () => {
+  it("sits beside the toolbox FAB in the header row (Reviewer r5) and stays out of the vertical middle", () => {
+    // Reviewer r5: below Tools (top 76) it ran 16px under the offline banner
+    // (top 104). It now sits level with Tools, to its LEFT with an 8px gap.
     const top = parseInt(/top:\s*calc\((\d+)px/.exec(streak)![1]!, 10);
-    const toolsBottom = pxIn(ruleBody(".fab-tools"), "top") + CIRCLE;
-    expect(top).toBeGreaterThanOrEqual(toolsBottom + 8);
+    const right = parseInt(/right:\s*calc\((\d+)px/.exec(streak)![1]!, 10);
+    const toolsTop = pxIn(ruleBody(".fab-tools"), "top");
+    expect(right).toBeGreaterThanOrEqual(14 + CIRCLE + 8);
+    expect(top).toBeLessThanOrEqual(toolsTop + 8);
     for (const v of PHONE_VIEWS) {
       expect((top + 24) / v.h).toBeLessThanOrEqual(0.25); // chip ≈24px tall
     }

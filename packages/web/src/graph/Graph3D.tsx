@@ -45,7 +45,7 @@ import {
 import { selectDetailedLinks, isBoundedLinksEnabled, getDetailedLinkBudget, type LinkSelectionInput } from "./renderModel.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { GraphData, GraphNode } from "@brain/shared";
-import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds, applyLabelViewportScale, labelScaleForViewport } from "./nodeObject.js";
+import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds, applyLabelViewportScale, labelScaleForViewport, rescaleCachedLabels } from "./nodeObject.js";
 import { makeStarfield, makeGalaxies, makeMilkyWay } from "./starfield.js";
 import { withSkySeed } from "./homeSky.js";
 import { buildEternityHalo, type EternityHalo } from "./eternityHalo.js";
@@ -1972,7 +1972,14 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       frameCount++;
       if (typeof window !== "undefined") {
         IS_PHONE_PORTRAIT = isPhonePortraitViewport(window.innerWidth, window.innerHeight);
-        labelViewportScale = labelScaleForViewport(window.innerWidth, window.innerHeight);
+        const nextLabelScale = labelScaleForViewport(window.innerWidth, window.innerHeight);
+        if (nextLabelScale !== labelViewportScale) {
+          labelViewportScale = nextLabelScale;
+          // Reviewer r5: on a flip, rescale EVERY cached node's labels at once
+          // — culled / far / currently-hidden nodes skip the per-frame label
+          // pass, and a cached node can be handed back to the graph later.
+          rescaleCachedLabels(nodeThreeObjCacheRef.current.values(), nextLabelScale);
+        }
       }
       const cap = gfxRef.current?.fpsCap ?? 60;
       if (nowMs - lastFrameMs < 1000 / cap - 1.5) return;

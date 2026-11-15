@@ -6291,22 +6291,6 @@ div.visitor-chip { cursor: default; }
 .scene-id-card { animation: cl1a-rise 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
 .scene-id-line { margin: 2px 0 4px; font-size: 0.82rem; color: #ffd98c; }
 
-/* IM-21: audio state chip — bottom-left, under the music FAB column. */
-.audio-state-chip {
-  /* Footer line of the ship-status stack — in-flow pill, never shrinks. */
-  flex: none;
-  align-self: flex-start;
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: rgba(12, 20, 40, 0.66);
-  border: 1px solid rgba(143, 200, 255, 0.28);
-  color: #cfe4ff;
-  font-size: 0.68rem;
-  backdrop-filter: blur(6px);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.audio-state-chip.all-off { border-color: rgba(255, 150, 120, 0.55); color: #ffd9cf; }
 
 /* HUD round 3 — the SUMMONABLE stack. Collapsed, the stack is this
    one-line mini-bar on the stack's OWN anchor and width (desktop slot
@@ -6635,9 +6619,19 @@ button.mindspace-more { cursor: pointer; }
     flex-direction: row;
     align-items: center;
     gap: 5px;
-    top: calc(76px + env(safe-area-inset-top, 0px));
+    /* Reviewer r5: at top 76 the chip ran 16px under the offline banner
+       (which starts at 104). It now sits IN the header row, just left of
+       the Tools button (right 14 + 46 + 8 gap), level with the title. */
+    top: calc(14px + env(safe-area-inset-top, 0px));
     left: auto;
-    right: calc(14px + env(safe-area-inset-right, 0px));
+    right: calc(68px + env(safe-area-inset-right, 0px));
+  }
+  /* …and a long brain name ellipsizes before it can run under the chip. */
+  .app:has(.streak-ember) .brand h1 {
+    max-width: calc(100vw - 180px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .streak-ember .se-flame { font-size: 16px; }
   .streak-ember .se-warn { max-width: none; margin-top: 0; }
@@ -6681,6 +6675,24 @@ button.mindspace-more { cursor: pointer; }
    sheet's header and ×, which sits in the same top-left corner. */
 @media (min-width: 721px) {
   .app:has(.ingest) .notifications-bar { display: none; }
+}
+/* Reviewer r5 (desktop): the streak chip sat on the top of the fuel gauge, and
+   the gauge's numbers ran behind the Focus button. The chip moves to the right
+   column under Tools (empty down to Settings), and the gauge hangs from the
+   bottom so it ends 12px above the left button rail (Focus top =
+   --hud-cam-focus-bottom + 46). Phones keep their own rules (portrait block,
+   landscape block: max-height 500). */
+@media (min-width: 721px) and (min-height: 501px) {
+  .streak-ember {
+    top: calc(76px + env(safe-area-inset-top, 0px));
+    left: auto;
+    right: calc(14px + env(safe-area-inset-right, 0px));
+  }
+  .fuel-gauge {
+    top: auto;
+    bottom: calc(var(--hud-cam-focus-bottom) + 58px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+  }
 }
 /* UX review #8: the perf prompt (z 58) used to sit on top of the open
    dock's tab bar on phones (and over the Add-a-memory sheet's submit
@@ -6741,7 +6753,6 @@ button.mindspace-more { cursor: pointer; }
   .fab-zoom-in { bottom: calc(186px + env(safe-area-inset-bottom, 0px)); }
   .fab-music { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
   .now-playing { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
-  .ship-status-stack .audio-state-chip { display: none; }
   /* Header notices go top-RIGHT (under Tools, left of the right column) so
      they never share the left side with the status stack. */
   .notifications-bar { top: 64px; left: auto; right: calc(76px + env(safe-area-inset-right, 0px)); max-width: min(320px, calc(100vw - 480px)); }
@@ -8044,7 +8055,7 @@ button.mindspace-more { cursor: pointer; }
 .toast-dismiss::after { content: ""; position: absolute; inset: -13px; }
 .chip-btn::after { content: ""; position: absolute; inset: -10px -4px; }
 .ship-status-collapse::after { content: ""; position: absolute; inset: -10px; }
-.nc-action-btn, .nc-dismiss, .beacon-target, .audio-state-chip, .streak-ember {
+.nc-action-btn, .nc-dismiss, .beacon-target, .streak-ember {
   display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
 }
 .nc-dismiss { min-width: 44px; }
@@ -8120,7 +8131,10 @@ body.in-transit .tools-btn { opacity: 0.55; }
 /* Found by looking at real screenshots (not by the control-presence script): the streak ember sat on the world's ← Galaxy
    button and the notification banner covered its dock. Both are home-only; their content is in Notices / the Inbox. */
 body.in-world .streak-ember,
-body.in-world .notifications-bar { display: none; }
+body.in-world .notifications-bar,
+/* Reviewer r5: the first-star cue is a galaxy prompt — on a new account it sat
+   over the Great Station / Growing Place world and covered the gauge. */
+body.in-world .empty-galaxy-cue { display: none; }
 .garden-groves { left: var(--hud-rail); width: min(300px, calc(100% - 2 * var(--hud-rail))); }
 /* The "switch to Performance Mode?" offer never covers the warp cinematic (it comes back after). */
 body.in-transit .perf-suggest { display: none; }

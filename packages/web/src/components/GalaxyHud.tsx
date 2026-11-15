@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  audioSummary,
   beaconReadout,
   fleetCard,
   modelFallbackLine,
@@ -22,8 +21,8 @@ import {
  * CL-1b — the galaxy shell's identity & ambience readouts (IM-19..IM-23).
  *
  * Small glass overlays that live where the scene is seen: who the visitors
- * and fleet craft are, which memories the Aura beacon beam is warming, the
- * shell's audio state, and the empty-galaxy cue. All data is derived by
+ * and fleet craft are, which memories the Aura beacon beam is warming,
+ * and the empty-galaxy cue. All data is derived by
  * Graph3D/App from live scene state — nothing here invents scene facts.
  */
 
@@ -63,15 +62,8 @@ export function beaconHeadText(
   return r ? beaconHeadLine(r) : null;
 }
 
-/** The audio chip's one line of text — shared by AudioStateChip and the
- *  mini-bar. */
-export function audioLineText(p: { sfx: boolean; voice: boolean; music: boolean }): string {
-  const s = audioSummary(p);
-  return `${s.allOff ? "🔇" : "🔊"} ${s.text}`;
-}
-
 interface StackLine {
-  key: "visitor" | "beacon" | "audio";
+  key: "visitor" | "beacon";
   text: string;
 }
 
@@ -98,11 +90,6 @@ function stackLines(children: ReactNode): StackLine[] {
     );
     if (head) lines.push({ key: "beacon", text: head });
   }
-  const audioEl = els.find((el) => el.type === AudioStateChip);
-  if (audioEl) {
-    const p = audioEl.props as { sfx: boolean; voice: boolean; music: boolean };
-    lines.push({ key: "audio", text: audioLineText(p) });
-  }
   return lines;
 }
 
@@ -120,7 +107,7 @@ function stackLines(children: ReactNode): StackLine[] {
  * HUD round 3 — the stack is SUMMONABLE. With `onToggle` wired (App owns
  * the state, see useShipStatusOpen), the collapsed form is a one-line
  * mini-bar on the SAME anchor and width: it shows the first present line
- * in the stack's precedence (Drifter → beacon head → audio), a ＋N count
+ * in the stack's precedence (Drifter → beacon head), a ＋N count
  * of the lines it folds away, and a ▸ — the whole pill is the tap target
  * that brings the full stack up. The expanded form is the stack verbatim
  * plus a corner ▾ that folds it back (the header line's own tap already
@@ -204,7 +191,23 @@ export function ShipStatusStack({
       aria-label="Ship status"
       onPointerEnter={expanded ? () => setHeld(true) : undefined}
       onPointerLeave={expanded ? () => setHeld(false) : undefined}
-      onFocus={expanded ? () => setHeld(true) : undefined}
+      onFocus={
+        expanded
+          ? (e) => {
+              // Reviewer r5: only KEYBOARD focus holds it open. A tap also
+              // focuses the button it lands on, which kept the card open on
+              // phones; :focus-visible is true only for keyboard-style focus.
+              const t = e.target as HTMLElement;
+              let kb = false;
+              try {
+                kb = t.matches(":focus-visible");
+              } catch {
+                kb = false;
+              }
+              if (kb) setHeld(true);
+            }
+          : undefined
+      }
       onBlur={
         expanded
           ? (e) => {
@@ -228,16 +231,6 @@ export function ShipStatusStack({
       )}
     </div>
   );
-}
-
-/** localStorage key for the stack's per-space open preference. */
-export function shipStatusPrefKey(spaceId: string): string {
-  return `ship.status.${spaceId}`;
-}
-
-/** localStorage key marking that the one-time first-run reveal happened. */
-export function shipStatusSeenKey(spaceId: string): string {
-  return `ship.statusSeen.${spaceId}`;
 }
 
 /**
@@ -349,36 +342,6 @@ export function SceneIdentityCard({
       <p className="scene-id-line">{card.line}</p>
       {card.lore && <p className="object-lore-log">✦ {card.lore}</p>}
     </div>
-  );
-}
-
-/**
- * IM-21 — a visible audio state in the shell. SFX/engine/voice otherwise
- * live only in Settings, so a silently-muted galaxy had no explanation.
- * The chip shows all three channels and deep-links to the Settings audio
- * section (the Preferences section holding the voice + sounds toggles).
- */
-export function AudioStateChip({
-  sfx,
-  voice,
-  music,
-  onOpenAudioSettings,
-}: {
-  sfx: boolean;
-  voice: boolean;
-  music: boolean;
-  onOpenAudioSettings: () => void;
-}) {
-  const s = audioSummary({ sfx, voice, music });
-  return (
-    <button
-      className={`audio-state-chip ${s.allOff ? "all-off" : ""}`}
-      onClick={onOpenAudioSettings}
-      aria-label={`Audio: ${s.text}. Open sound settings.`}
-      title={s.allOff ? "Everything is muted — tap for sound settings" : "Sound settings"}
-    >
-      {audioLineText({ sfx, voice, music })}
-    </button>
   );
 }
 

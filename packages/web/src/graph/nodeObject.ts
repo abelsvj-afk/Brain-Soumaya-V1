@@ -186,6 +186,23 @@ export function applyLabelViewportScale(sprite: THREE.Object3D, scale: number): 
   sprite.userData.labelViewportScale = scale;
   return true;
 }
+/**
+ * Reviewer r5: apply the viewport scale to every memory label under each
+ * object (Graph3D calls this once when the phone-portrait check flips, over
+ * its whole node-object cache). Returns how many sprites changed.
+ */
+export function rescaleCachedLabels(
+  entries: Iterable<{ obj: THREE.Object3D }>,
+  scale: number,
+): number {
+  let changed = 0;
+  for (const { obj } of entries) {
+    obj.traverse((c) => {
+      if (c.userData?.isLabel && applyLabelViewportScale(c, scale)) changed++;
+    });
+  }
+  return changed;
+}
 function currentLabelScale(): number {
   if (typeof window === "undefined") return 1;
   return labelScaleForViewport(window.innerWidth, window.innerHeight);
