@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { disposeObject3D } from "./graph3dHelpers.js";
+import { surfaceMaterial } from "./worldCraft.js";
 import { fadeSwapIn } from "./gltf.js";
 import { placeWorldRelics } from "./relicAssets.js";
 import { loadSoumayaShip } from "./soumayaShip.js";
@@ -365,15 +366,34 @@ export function createDeepPastScene(
     strataGeos.push(colored(stand, new THREE.Color(STONE)));
   }
 
+  // Stone, not painted card (docs/specs/worlds-redesign-2026-11-14.md): the strata and the stair wear the kit's rock surface, laid by world position so one grain runs through
+  // every slab. Each stratum keeps its own colour (the vertex colours); the rock only adds the surface. The material's colour is raised above 1 to give back the light the
+  // texture's mid-grey takes away.
+  const stoneUv = (geo: THREE.BufferGeometry): void => {
+    const pos = geo.getAttribute("position");
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uv[i * 2] = pos.getX(i) / 26;
+      uv[i * 2 + 1] = (pos.getZ(i) + pos.getY(i)) / 26;
+    }
+    geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  };
+  const strataStone = (): THREE.MeshStandardMaterial => {
+    const m = surfaceMaterial("rock", { vertexColors: true, roughness: 0.92 });
+    m.color.setScalar(2.6);
+    return m;
+  };
   const strataMerged = mergeGeometries(strataGeos, false);
   if (strataMerged) {
-    const strata = new THREE.Mesh(strataMerged, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    stoneUv(strataMerged);
+    const strata = new THREE.Mesh(strataMerged, strataStone());
     strata.name = "strata";
     group.add(strata);
   }
   const stairMerged = mergeGeometries(stairGeos, false);
   if (stairMerged) {
-    const stair = new THREE.Mesh(stairMerged, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    stoneUv(stairMerged);
+    const stair = new THREE.Mesh(stairMerged, strataStone());
     stair.name = "stair";
     group.add(stair);
   }
@@ -387,14 +407,15 @@ export function createDeepPastScene(
   // ---- Basin: generated floor + rock, pool glow, halo, light shaft ----
   const basinFloor = new THREE.Mesh(
     new THREE.CylinderGeometry(DEEP_PAST_BASIN_RADIUS, DEEP_PAST_BASIN_RADIUS, 2.6, 48),
-    new THREE.MeshLambertMaterial({ color: 0x6b4a2e }),
+    // Polished by the First Light: a smooth warm floor that takes the glow above it (the idea kept from the Blender basin).
+    surfaceMaterial("pale", { tint: 0x9a6a44, repeat: [3, 3], roughness: 0.22, metalness: 0.35 }),
   );
   basinFloor.position.y = DEEP_PAST_BASIN_Y;
   basinFloor.name = "basin-floor";
   group.add(basinFloor);
   const basinRock = new THREE.Mesh(
     new THREE.CylinderGeometry(74, 84, 60, 32, 1, true),
-    new THREE.MeshLambertMaterial({ color: 0x241a33, side: THREE.DoubleSide }),
+    surfaceMaterial("rock", { tint: 0x7a62a8, repeat: [10, 2], side: THREE.DoubleSide }),
   );
   basinRock.position.y = BASIN_FLOOR_TOP - 1.3 - 30;
   basinRock.name = "basin-rock";

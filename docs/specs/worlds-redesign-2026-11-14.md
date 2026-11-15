@@ -65,3 +65,6 @@ Slimming changes the weight verdict in §6: `growing-place.glb` 16.7 MB → 626 
 Used from Blender: the witness tree alone (`public/garden-witness-tree.glb`, 58 KB), scaled 1.45× to the app's tree height; the simple tree stays as placeholder and load-failure fallback.
 In code: turf terraces with dry-stone risers, soft three-lobed forest crowns, a dusk horizon, a rolling hillside below the lowest terrace, soft-edged mist (the old mist planes showed as grey slabs).
 Groves, plots, paths, walking and tending are unchanged.
+
+## 9. Deep Past (fourth pass)
+The strata hold the brain's own memories, so the Blender model was not brought in; its best idea was. Strata and stair wear the kit's rock surface laid by world position (each stratum keeps its colour), the basin floor is polished so it takes the First Light's reflection, and the basin's rock wall is textured.
