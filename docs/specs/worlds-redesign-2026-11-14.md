@@ -68,3 +68,6 @@ Groves, plots, paths, walking and tending are unchanged.
 
 ## 9. Deep Past (fourth pass)
 The strata hold the brain's own memories, so the Blender model was not brought in; its best idea was. Strata and stair wear the kit's rock surface laid by world position (each stratum keeps its colour), the basin floor is polished so it takes the First Light's reflection, and the basin's rock wall is textured.
+
+## 10. The Village (fifth pass)
+Rolling night turf reaching past sight (flat down the way and in the square), a trodden way from gate to doorway, limewashed houses in four wall tones under true pitched roofs, lit window panes each spilling light on the ground, stone gate and well, a hearth that really lights the square, a deep-blue horizon, low mist and warm motes over the square. Holders, hooks and the doorway are unchanged.

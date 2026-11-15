@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { disposeObject3D } from "./graph3dHelpers.js";
 import { glowTexture, softGlowPoints } from "./softGlow.js";
+import { dustMotes, groundMist, horizonGlow, lightPools, rolledGround, surfaceMaterial } from "./worldCraft.js";
 import { VILLAGE, VILLAGE_CHAIR_Z, VILLAGE_DOOR_Z, VILLAGE_GATE_Z, VILLAGE_SQUARE_Z, VILLAGE_VIEW_Z, VILLAGE_WELL_Z, villageHooks, villageHouses } from "./villageLayout.js";
 
 /**
@@ -31,16 +32,38 @@ export function createVillageScene(): VillageScene {
   const dummy = new THREE.Object3D();
   const length = VILLAGE.zEnd - VILLAGE.zStart;
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(VILLAGE.halfWidth * 2, length), new THREE.MeshStandardMaterial({ color: C.ground, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
+  // The hill: rolling night turf reaching well past the houses (no edge in sight), dead flat down the way and in the square so everything sits true (look: docs/specs/worlds-redesign-2026-11-14.md).
+  const ground = new THREE.Mesh(
+    rolledGround(VILLAGE.halfWidth * 6, length * 2.4, { amp: 16, seed: 23, texScale: 120, segments: 56, flat: (x) => Math.min(1, Math.max(0, (Math.abs(x) - 380) / 500)) }),
+    surfaceMaterial("grass", { tint: 0x5c7a66 }),
+  );
   ground.position.set(0, 0, (VILLAGE.zEnd + VILLAGE.zStart) / 2);
   ground.name = "village-ground";
   raw.add(ground);
 
-  // Houses: boxes and pitched roofs, instanced; windows lit on every house.
+  // The way through the village: trodden earth, paler than the turf, from the gate through the square and on up toward the doorway.
+  const way = new THREE.Mesh(new THREE.PlaneGeometry(24, length), surfaceMaterial("soil", { tint: 0x9a9a84, repeat: [0.3, length / 80] }));
+  way.rotation.x = -Math.PI / 2;
+  way.position.set(0, 0.5, (VILLAGE.zEnd + VILLAGE.zStart) / 2);
+  way.name = "village-way";
+  raw.add(way);
+
+  // Houses: limewashed walls under pitched roofs, instanced; every window lit, each throwing its light on the ground outside.
   const houses = villageHouses();
-  const bodies = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: C.house, roughness: 0.95 }), houses.length);
-  const roofs = new THREE.InstancedMesh(new THREE.ConeGeometry(0.75, 0.5, 4), new THREE.MeshStandardMaterial({ color: C.roof, roughness: 0.95 }), houses.length);
+  const bodies = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), surfaceMaterial("plaster", { tint: 0x9aa0b0, repeat: [0.7, 0.5] }), houses.length);
+  // A true pitched roof (a ridge along the house) with eaves — the four-sided cone read as a tent.
+  const gable = new THREE.Shape();
+  gable.moveTo(-0.5, 0);
+  gable.lineTo(0.5, 0);
+  gable.lineTo(0, 1);
+  gable.closePath();
+  const roofGeo = new THREE.ExtrudeGeometry(gable, { depth: 1, bevelEnabled: false });
+  roofGeo.translate(0, 0, -0.5);
+  const roofs = new THREE.InstancedMesh(roofGeo, surfaceMaterial("wood", { tint: 0x8a6a58, repeat: [1.5, 1.5] }), houses.length);
+  const panes = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: C.window, side: THREE.DoubleSide, toneMapped: false }), houses.length * 2);
+  const spill: { x: number; z: number }[] = [];
+  const wall = new THREE.Color();
+  const WALLS = [0xffffff, 0xe6e0d4, 0xd8dce6, 0xf0e6d6];
   const windowPts: { x: number; y: number; z: number }[] = [];
   houses.forEach((h, i) => {
     dummy.position.set(h.x, h.h / 2, h.z);
@@ -48,21 +71,33 @@ export function createVillageScene(): VillageScene {
     dummy.scale.set(h.w, h.h, h.d);
     dummy.updateMatrix();
     bodies.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(h.x, h.h + h.h * 0.22, h.z);
-    dummy.rotation.set(0, h.yaw + Math.PI / 4, 0);
-    dummy.scale.set(h.w * 1.15, h.h * 0.9, h.d * 1.15);
+    bodies.setColorAt(i, wall.setHex(WALLS[i % WALLS.length]!));
+    dummy.position.set(h.x, h.h, h.z);
+    dummy.rotation.set(0, h.yaw, 0);
+    dummy.scale.set(h.w * 1.14, h.h * 0.6, h.d * 1.12);
     dummy.updateMatrix();
     roofs.setMatrixAt(i, dummy.matrix);
     // Two lit windows on the face toward the way.
     const face = h.x < 0 ? 1 : -1;
-    for (const dz of [-0.22, 0.22]) windowPts.push({ x: h.x + face * (h.w / 2 + 0.6), y: h.h * 0.55, z: h.z + dz * h.d });
+    [-0.22, 0.22].forEach((dz, k) => {
+      const wx = h.x + face * (h.w / 2 + 0.6);
+      windowPts.push({ x: wx, y: h.h * 0.55, z: h.z + dz * h.d });
+      dummy.position.set(wx, h.h * 0.55, h.z + dz * h.d);
+      dummy.rotation.set(0, Math.PI / 2, 0);
+      dummy.scale.set(h.d * 0.16, h.h * 0.24, 1);
+      dummy.updateMatrix();
+      panes.setMatrixAt(i * 2 + k, dummy.matrix);
+    });
+    spill.push({ x: h.x + face * (h.w / 2 + 34), z: h.z });
   });
+  panes.name = "village-window-panes";
+  raw.add(panes, lightPools(spill, 0xffb060, 62, 0.42, "village-window-spill"));
   dummy.rotation.set(0, 0, 0);
   dummy.scale.set(1, 1, 1);
   bodies.name = "village-houses";
   roofs.name = "village-roofs";
   raw.add(bodies, roofs);
-  const windows = softGlowPoints(windowPts, C.window, 46, 0.95, "village-window-glows");
+  const windows = softGlowPoints(windowPts, C.window, 30, 0.8, "village-window-glows");
   const windowMat = windows.material as THREE.PointsMaterial;
   raw.add(windows);
   raw.add(proxy("village-windows", 400, 30, 1100, 0, 18, 650));
@@ -70,7 +105,7 @@ export function createVillageScene(): VillageScene {
   // The gate: two stone posts and a bar, where a count was kept.
   const gate = new THREE.Group();
   gate.name = "village-gate";
-  const stone = new THREE.MeshStandardMaterial({ color: C.stone, roughness: 1 });
+  const stone = surfaceMaterial("flagstone", { tint: 0xb0b2ba, repeat: [0.5, 0.5] });
   for (const sx of [-1, 1]) {
     const p = new THREE.Mesh(new THREE.BoxGeometry(10, 60, 10), stone);
     p.position.set(sx * 46, 30, 0);
@@ -135,6 +170,10 @@ export function createVillageScene(): VillageScene {
   ember.position.y = 3;
   ember.name = "village-ember";
   hearth.add(ember);
+  hearth.add(lightPools([{ x: 0, z: 0 }], C.ember, 110, 0.3, "village-hearth-pool"));
+  const fire = new THREE.PointLight(C.ember, 900, 420, 1.6);
+  fire.position.set(0, 16, 0);
+  hearth.add(fire);
   hearth.position.set(0, 0, VILLAGE_SQUARE_Z);
   raw.add(hearth);
 
@@ -182,6 +221,14 @@ export function createVillageScene(): VillageScene {
   door.position.set(0, 90, VILLAGE_DOOR_Z);
   raw.add(door);
 
+  // The night round it: a deep-blue band where the hills meet the sky, mist in the low ground, and small warm motes over the square (they hang still under reduced motion).
+  raw.add(horizonGlow(5200, 0x0a0e14, 0x33486e, 0x0a0e14, 0.6, "village-horizon"));
+  const low: { x: number; y: number; z: number }[] = [];
+  for (let z = -100; z < VILLAGE.zEnd; z += 190) low.push({ x: ((z / 190) % 2 ? 1 : -1) * 300, y: 14, z });
+  raw.add(groundMist(low, 0x8a9ab8, 520, 0.07, "village-mist").object);
+  const motes = dustMotes({ min: [-180, 6, VILLAGE_SQUARE_Z - 200], max: [180, 90, VILLAGE_SQUARE_Z + 260] }, 90, 0xffd890, 3, 0.7, "village-motes");
+  raw.add(motes.object);
+
   // Centre the host's orbit on the square.
   const group = new THREE.Group();
   group.name = "the-village";
@@ -191,6 +238,7 @@ export function createVillageScene(): VillageScene {
 
   const update = (ms: number, opts?: { reducedMotion?: boolean }) => {
     windowMat.opacity = opts?.reducedMotion ? 0.9 : 0.9 + Math.sin((ms / 1000) * 0.6) * 0.06;
+    motes.update(ms, opts?.reducedMotion);
   };
   return { group, update, dispose: () => disposeObject3D(group) };
 }

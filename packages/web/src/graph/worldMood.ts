@@ -53,9 +53,10 @@ export const WORLD_MOOD: Readonly<Record<string, WorldMood>> = {
     lookAtY: 38,
   },
   "the-village": {
-    light: { env: 0.5, hemi: { sky: 0x9aaac8, ground: 0x1c2420, intensity: 0.9 }, key: { color: 0xffd9a0, intensity: 0.9, from: [-200, 420, 300] } },
+    // Night: the windows, the hearth and the doorway are the light. A low cool fill and a faint moon so the roofs keep their shape.
+    light: { env: 0.2, hemi: { sky: 0x5c6c94, ground: 0x10140f, intensity: 0.55 }, key: { color: 0x9db4e0, intensity: 0.7, from: [-300, 500, -200] } },
     background: 0x0a0e14,
-    fogDensity: 0.0003,
+    fogDensity: 0.00055,
     lookAtY: 40,
   },
   "the-unmade-hour": {
