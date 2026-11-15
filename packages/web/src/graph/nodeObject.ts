@@ -171,6 +171,21 @@ export const PHONE_LABEL_SCALE = 0.55;
 export function labelScaleForViewport(viewW: number, viewH: number): number {
   return isPhonePortraitViewport(viewW, viewH) ? PHONE_LABEL_SCALE : 1;
 }
+/**
+ * Reviewer r4: the phone scale used to be read only when a label was built,
+ * so rotating the phone (or resizing the window across the breakpoint) left
+ * existing labels at the old size. Graph3D's label pass calls this every
+ * frame with the current viewport's scale; it only touches the sprite when
+ * the scale actually changed. Labels built without a viewport scale (sector
+ * titles) carry no labelBaseScale and are left alone.
+ */
+export function applyLabelViewportScale(sprite: THREE.Object3D, scale: number): boolean {
+  const base = sprite.userData?.labelBaseScale as [number, number] | undefined;
+  if (!base || sprite.userData.labelViewportScale === scale) return false;
+  sprite.scale.set(base[0] * scale, base[1] * scale, 1);
+  sprite.userData.labelViewportScale = scale;
+  return true;
+}
 function currentLabelScale(): number {
   if (typeof window === "undefined") return 1;
   return labelScaleForViewport(window.innerWidth, window.innerHeight);
@@ -180,7 +195,8 @@ function currentLabelScale(): number {
  * Build a floating text label as a lightweight sprite (no polygons).
  * `viewportScale` shrinks memory labels on phone portrait (see PHONE_LABEL_SCALE).
  */
-function makeLabel(rawText: string, viewportScale = 1): THREE.Sprite {
+function makeLabel(rawText: string, phoneScale?: number): THREE.Sprite {
+  const viewportScale = phoneScale ?? 1;
   const cacheKey = rawText;
   let cached = labelTexCache.get(cacheKey);
   
@@ -235,6 +251,12 @@ function makeLabel(rawText: string, viewportScale = 1): THREE.Sprite {
   const sprite = new THREE.Sprite(material);
   sprite.renderOrder = 999;
   sprite.scale.set(width * WORLD_SCALE * viewportScale, height * WORLD_SCALE * viewportScale, 1);
+  if (phoneScale !== undefined) {
+    // Memory labels only (not sector titles): remember the unscaled size so
+    // applyLabelViewportScale can follow rotation/resize.
+    sprite.userData.labelBaseScale = [width * WORLD_SCALE, height * WORLD_SCALE];
+    sprite.userData.labelViewportScale = viewportScale;
+  }
   sprite.position.set(0, 9, 0);
 
   sprite.userData.isLabel = true;

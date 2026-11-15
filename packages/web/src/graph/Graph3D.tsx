@@ -45,7 +45,7 @@ import {
 import { selectDetailedLinks, isBoundedLinksEnabled, getDetailedLinkBudget, type LinkSelectionInput } from "./renderModel.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { GraphData, GraphNode } from "@brain/shared";
-import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds } from "./nodeObject.js";
+import { makeNodeObject, nodeVisualCacheKey, releaseNodeTextures, setSectorTitleIds, pickSectorHubIds, applyLabelViewportScale, labelScaleForViewport } from "./nodeObject.js";
 import { makeStarfield, makeGalaxies, makeMilkyWay } from "./starfield.js";
 import { withSkySeed } from "./homeSky.js";
 import { buildEternityHalo, type EternityHalo } from "./eternityHalo.js";
@@ -1790,7 +1790,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
     // and the title pass additionally caps a phone title's width at ~55% of the screen.
     const viewW = typeof window !== "undefined" ? window.innerWidth : 1024;
     const viewH = typeof window !== "undefined" ? window.innerHeight : 768;
-    const IS_PHONE_PORTRAIT = isPhonePortraitViewport(viewW, viewH);
+    // Reviewer r4: re-read every frame (see tick) so rotating the phone or
+    // resizing the window flips the label safe-frame clamp and label scale.
+    let IS_PHONE_PORTRAIT = isPhonePortraitViewport(viewW, viewH);
+    let labelViewportScale = labelScaleForViewport(viewW, viewH);
     const SECTOR_LABEL_BOOST = sectorLabelBoost(viewW, viewH);
 
     // Galaxy render recovery pass (2026-09-10): lowered from 2600. Two independent
@@ -1967,6 +1970,10 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
       // phones without touching functionality.
       const nowMs = performance.now();
       frameCount++;
+      if (typeof window !== "undefined") {
+        IS_PHONE_PORTRAIT = isPhonePortraitViewport(window.innerWidth, window.innerHeight);
+        labelViewportScale = labelScaleForViewport(window.innerWidth, window.innerHeight);
+      }
       const cap = gfxRef.current?.fpsCap ?? 60;
       if (nowMs - lastFrameMs < 1000 / cap - 1.5) return;
       lastFrameMs = nowMs;
@@ -2736,9 +2743,19 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                     child.position.copy(titleBasePos);
                   }
                 }
+              } else if (child.userData.titleBasePos) {
+                // Reviewer r4: left phone portrait (rotation / resize) — drop the
+                // clamp so the label returns to its own anchor.
+                child.position.copy(child.userData.titleBasePos as THREE.Vector3);
+                delete child.userData.titleBasePos;
               }
             }
           }
+
+          // Reviewer r4: memory labels follow the CURRENT viewport's
+          // phone-portrait scale — before any skip below, so hidden/far labels
+          // are already right when they come back (no-op unless it changed).
+          if (child.userData?.isLabel) applyLabelViewportScale(child, labelViewportScale);
 
           // Skip individual label processing if too far, not selected, and not focused.
           // Raised from a bare MACRO_DIST to MACRO_DIST + MACRO_HYST so this can never cut a
@@ -2908,6 +2925,11 @@ export const Graph3D = forwardRef<Graph3DHandle, Props>(function Graph3D(
                     }
                   }
                 }
+              } else if (child.userData.labelBasePos) {
+                // Reviewer r4: left phone portrait (rotation / resize) — drop the
+                // clamp so the label returns to its own anchor.
+                child.position.copy(child.userData.labelBasePos as THREE.Vector3);
+                delete child.userData.labelBasePos;
               }
             }
 
