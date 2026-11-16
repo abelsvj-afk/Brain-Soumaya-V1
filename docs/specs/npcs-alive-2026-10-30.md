@@ -14,8 +14,8 @@ So: this increment is **presence**, not new acts. Movement and ambient descripti
 **Cross-world roaming** (an NPC visiting the home galaxy or another world) would cross the fence — it is NOT built; it needs the owner's explicit OK (§5).
 
 ## Design
-1. **Roaming (Station):** the controller keeps a daily-rhythm patrol: docked at her berth → leaves → one lap round the Station → returns, on a 5-minute cycle keyed
-   to the wall clock (a reload resumes mid-lap; same for every viewer). Pure maths (`graph/npcPresence.ts`: `patrolAt`), continuous at every phase boundary
+1. **Roaming (Station):** the controller keeps a daily-rhythm patrol: docked at her berth → leaves → wanders her patrol inside the Station → returns, on a 5-minute cycle keyed
+   to the wall clock (a reload resumes mid-patrol; same for every viewer). Pure maths (`graph/npcPresence.ts`: `patrolAt`), continuous at every phase boundary
    (tested), reduced motion = she stays docked (no motion) but is still found, tagged and met.
 2. **Seen:** every NPC in the world you are in wears a **name tag** (icon + name + what she's doing: "patrolling" / "docked") that follows her on screen; it is a
    real 44 px button (tap = open her panel). Never colour alone.

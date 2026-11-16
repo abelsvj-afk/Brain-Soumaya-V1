@@ -35,9 +35,32 @@ describe("patrol", () => {
     const home = patrolAt(0, BERTH);
     expect(home.phase).toBe("docked");
     expect(dist(patrolAt(PATROL_PERIOD_MS - 1, BERTH).pos, home.pos)).toBeLessThan(2);
-    const mid = patrolAt(PATROL_PERIOD_MS * 0.6, BERTH);
-    expect(mid.phase).toBe("patrolling");
-    expect(dist(mid.pos, home.pos)).toBeGreaterThan(100);
+    let farthest = 0;
+    let sawPatrolling = false;
+    for (let t = 0; t < PATROL_PERIOD_MS; t += 1000) {
+      const p = patrolAt(t, BERTH);
+      if (p.phase === "patrolling") {
+        sawPatrolling = true;
+        farthest = Math.max(farthest, dist(p.pos, home.pos));
+      }
+    }
+    expect(sawPatrolling).toBe(true);
+    expect(farthest).toBeGreaterThan(100);
+  });
+  it("wanders her patrol rather than circling it: her distance from the centre varies", () => {
+    let minR = Infinity;
+    let maxR = 0;
+    for (let t = 0; t < PATROL_PERIOD_MS; t += 1000) {
+      const p = patrolAt(t, BERTH);
+      if (p.phase !== "patrolling") continue;
+      const r = Math.hypot(p.pos[0], p.pos[2]);
+      minR = Math.min(minR, r);
+      maxR = Math.max(maxR, r);
+    }
+    expect(maxR - minR).toBeGreaterThan(50);
+  });
+  it("holds at her berth while stopped (the kill switch)", () => {
+    expect(patrolAt(PATROL_PERIOD_MS * 0.6, BERTH, { stopped: true })).toEqual(patrolAt(0, BERTH));
   });
   it("is deterministic and periodic", () => {
     expect(patrolAt(123_456, BERTH)).toEqual(patrolAt(123_456 + PATROL_PERIOD_MS, BERTH));
@@ -91,17 +114,23 @@ describe("the cast in a world", () => {
 
 describe("roaming", () => {
   const anchor = { center: [10, 20, 30] as [number, number, number], radius: 400 };
-  it("is continuous, periodic per NPC, and keeps to a lap round the anchor", () => {
+  it("flies between chosen places inside the anchor, never tracing one circle", () => {
     let prev = roamAt(0, "keeper", anchor).pos;
     let maxStep = 0;
+    let minR = Infinity;
+    let maxR = 0;
     for (let t = 1000; t <= 300_000; t += 1000) {
       const p = roamAt(t, "keeper", anchor).pos;
       maxStep = Math.max(maxStep, Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]));
-      expect(Math.hypot(p[0] - anchor.center[0], p[2] - anchor.center[2])).toBeGreaterThan(anchor.radius * 0.8);
-      expect(Math.hypot(p[0] - anchor.center[0], p[2] - anchor.center[2])).toBeLessThan(anchor.radius * 1.15);
+      const r = Math.hypot(p[0] - anchor.center[0], p[2] - anchor.center[2]);
+      minR = Math.min(minR, r);
+      maxR = Math.max(maxR, r);
+      expect(r).toBeLessThan(anchor.radius); // every destination, and every chord between two, stays inside the fence
+      expect(Math.abs(p[1] - anchor.center[1])).toBeLessThan(anchor.radius * 0.03); // near the anchor's height, never far above or below
       prev = p;
     }
-    expect(maxStep).toBeLessThan(60);
+    expect(maxStep).toBeLessThan(60); // continuous: no teleports between legs
+    expect(maxR - minR).toBeGreaterThan(anchor.radius * 0.3); // the radius varies — this is not one circle
   });
   it("gives each NPC their own start, so a crowd does not move in step", () => {
     const a = roamAt(5000, "keeper", anchor).pos;
@@ -110,6 +139,11 @@ describe("roaming", () => {
   });
   it("holds still under reduced motion", () => {
     expect(roamAt(0, "keeper", anchor, { reducedMotion: true })).toEqual(roamAt(99_000, "keeper", anchor, { reducedMotion: true }));
+  });
+  it("holds at its start point while stopped (the kill switch)", () => {
+    const parked = roamAt(0, "keeper", anchor);
+    expect(roamAt(99_000, "keeper", anchor, { stopped: true })).toEqual(parked);
+    expect(roamAt(250_000, "keeper", anchor, { stopped: true })).toEqual(parked);
   });
 });
 

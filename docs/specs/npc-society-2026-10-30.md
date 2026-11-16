@@ -28,7 +28,7 @@ and people will really only invite other players, once there are other people."
 - **Autonomous** NPCs (the harbor controller, Eternity) keep their loops/allow-lists/budgets; the other cast members are **ambient**: presence, location, words — no act loop yet.
 - Provisional cast shipped now (clearly `canon: "provisional"` — placeholders so the world has people, to be rewritten or replaced once the owner defines the lore):
   the Keeper (Growing Place), the Archivist (Quiet), the Surveyor (Scale), the Wayfarer (no home world; roams everywhere, the lore's loose thread).
-- NPC bodies are real ships (Quaternius low-poly, already in the repo), each with an engine flame + trail like Soumaya's (graph/enginePlume.ts), roaming a lap of the
+- NPC bodies are real ships (Quaternius low-poly, already in the repo), each with an engine flame + trail like Soumaya's (graph/enginePlume.ts), wandering freely round the
   world they are in, with a name tag, a Who's-here entry, and meetings recorded per brain.
 
 ## Lore (the open-ring framework — content is the owner's, mechanism is ours)
