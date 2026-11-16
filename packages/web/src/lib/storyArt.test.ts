@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { STORY } from "@brain/shared";
-import { STORY_ART } from "./storyArt.js";
+import { NEW_ART_ENTRIES, STORY_ART } from "./storyArt.js";
 
 describe("the Book's pictures", () => {
   const ids = new Set(STORY.entries.map((e) => e.id));
@@ -17,5 +17,9 @@ describe("the Book's pictures", () => {
   });
   it("never explains what a picture means in its alt text", () => {
     for (const [id, art] of Object.entries(STORY_ART)) expect(art.alt, id).not.toMatch(/\b(means|represents|symboli[sz]es|because)\b/i);
+  });
+  it("new art is always wired art: every NEW_ART_ENTRIES id has a STORY_ART row (and so a real file, checked above)", () => {
+    for (const id of NEW_ART_ENTRIES) expect(STORY_ART[id], id).toBeDefined();
+    expect(new Set(NEW_ART_ENTRIES).size).toBe(NEW_ART_ENTRIES.length); // no entry listed twice
   });
 });

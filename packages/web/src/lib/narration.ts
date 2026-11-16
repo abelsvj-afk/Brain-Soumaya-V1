@@ -57,7 +57,17 @@ export function stopNarration(): void {
   stopSpeaking();
 }
 
-/** Resolve a clip URL for an entry, or null when the server has none (204) or anything fails. */
+/** Why the studio voice did not read a line — kept distinct so the Book can say which one it was, instead of one collapsed message. */
+export type ClipFailure = "not-found" | "no-clip" | "network";
+export const CLIP_FAILURE_WORDS: Record<ClipFailure, string> = {
+  // 403: the discovery rule — the entry has not been found (and this is not an owner space).
+  "not-found": "you have not found that yet, so the studio voice will not read it",
+  // 204: the narrator is up but there is no studio clip (no key / no voice / cap / ElevenLabs refusal).
+  "no-clip": "the server has no studio clip for this line",
+  // The request itself failed: offline, or the server could not be reached.
+  network: "the studio voice could not be reached just now",
+};
+
 /** A short hash of the exact words, put in the URL so the device cache can never replay a clip over changed text (the server ignores it). */
 export function textTag(text: string): string {
   let x = 2166136261;
@@ -65,7 +75,8 @@ export function textTag(text: string): string {
   return (x >>> 0).toString(36);
 }
 
-async function clipFor(entryId: string, register: Register, tide: CurrentKey | undefined, text: string, reaction?: { npc: string; holds: string }, say?: { npc: string; key: string }): Promise<string | null> {
+/** Resolve a clip URL for an entry, or the reason there is none. */
+async function clipFor(entryId: string, register: Register, tide: CurrentKey | undefined, text: string, reaction?: { npc: string; holds: string }, say?: { npc: string; key: string }): Promise<{ url: string | null; failure: ClipFailure | null }> {
   try {
     const q = new URLSearchParams({ register });
     if (tide) q.set("tide", tide);
@@ -74,11 +85,12 @@ async function clipFor(entryId: string, register: Register, tide: CurrentKey | u
     if (say) q.set("key", say.key);
     const path = say ? `say/${encodeURIComponent(say.npc)}` : reaction ? `react/${encodeURIComponent(reaction.npc)}` : encodeURIComponent(entryId);
     const res = await afetch(`${API}/story/narration/${path}?${q.toString()}`);
-    if (res.status !== 200) return null;
+    if (res.status === 403) return { url: null, failure: "not-found" };
+    if (res.status !== 200) return { url: null, failure: "no-clip" };
     const blob = await res.blob();
-    return blob.size > 0 ? URL.createObjectURL(blob) : null;
+    return blob.size > 0 ? { url: URL.createObjectURL(blob), failure: null } : { url: null, failure: "no-clip" };
   } catch {
-    return null;
+    return { url: null, failure: "network" };
   }
 }
 
@@ -116,8 +128,8 @@ export async function playNarration(o: NarrationOpts): Promise<"clip" | "voice" 
     current = null;
     o.onEnd?.();
   };
-  const url = await clipFor(o.entryId, o.register, o.tide, o.text, o.reaction, o.say);
-  if (!url) o.onFallback?.("the server has no studio clip for this line");
+  const { url, failure } = await clipFor(o.entryId, o.register, o.tide, o.text, o.reaction, o.say);
+  if (!url) o.onFallback?.(CLIP_FAILURE_WORDS[failure ?? "no-clip"]);
   if (url) {
     const audio = el ?? new Audio();
     audio.src = url;

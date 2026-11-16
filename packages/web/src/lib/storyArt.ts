@@ -93,4 +93,65 @@ export const STORY_ART: Readonly<Record<string, { src: string; alt: string }>> =
   "obj.village-bread": { src: "/lore/obj.village-bread.webp", alt: "On a village window-sill in morning light, a loaf of bread steams faintly beside a knife, its slices set out in a careful row; the quiet street lies beyond." },
   "echo.village-count": { src: "/lore/echo.village-count.webp", alt: "A still evening at a village gate: the notched bar across it, lit windows and the square beyond, nothing in the frame moving." },
   "obj.village-thread-end": { src: "/lore/obj.village-thread-end.webp", alt: "Close in evening light, an older woman's weathered hands give a short length of gold thread to a small hooded figure seen from behind; the village square's warm windows are soft behind them." },
+  // Sheets 6 & 10 (2026-11-15): settled single-pass QA picks — exactly one
+  // variant passed per entry (docs/lore/art/QA_SHEETS_6_AND_10.md), so no
+  // owner pick was needed for these six. The other 24 passes still await the
+  // owner's pick, and the 6 zero-pass entries await redos; never the three
+  // blocked entries (sight.siege-first-light §118, sight.siege-smile §116,
+  // sight.long-fray §141).
+  "sight.unmade-standing": { src: "/lore/sight.unmade-standing.webp", alt: "A pale patch of floor, worn smooth and light, with a small unlit oil lamp with a glass chimney standing at its edge; no one is there." },
+  "sight.unmade-frame": { src: "/lore/sight.unmade-frame.webp", alt: "A tall bright gold frame stands with no glass in it, the same pale floor continuing darker through the opening." },
+  "obj.unmade-tally": { src: "/lore/obj.unmade-tally.webp", alt: "A low curved wall cut with groups of short upright strokes, each group closed by a short crossing line, except the last group at the far right, left open." },
+  "sight.unmade-no-mark": { src: "/lore/sight.unmade-no-mark.webp", alt: "Only the shadow of a ship crosses a pale plank floor, the grain of the planks running clear; no track is left behind it." },
+  "sight.fold-letter": { src: "/lore/sight.fold-letter.webp", alt: "A much-handled letter folded in thirds lies flat, its soft creases worn, unopened, blank paper with no writing." },
+  "sight.fold-reader": { src: "/lore/sight.fold-reader.webp", alt: "A square cushion faces a letter lying flat and folded in thirds, the letter unopened and blank, in a pool of warm lamplight." },
 };
+
+/**
+ * New art (Item 5): entries whose picture is newly illustrated — the Book
+ * badges them in the sky and on their card and says so on first open, until
+ * each is seen. An entry joins this list ONLY when it is wired with a settled
+ * pick: exactly one on-brief variant passed QA (QA_SHEETS_6_AND_10.md), or the
+ * owner/Claude picked one of several passes. Never a guess, and never the
+ * three blocked entries (sight.siege-first-light §118, sight.siege-smile §116,
+ * sight.long-fray §141). The six below are the Sheets 6 & 10 single-pass
+ * settles (all v1 except the letter and reader, v2); the other 24 passes await
+ * the owner's pick and the 6 zero-pass entries await redos.
+ */
+export const NEW_ART_ENTRIES: readonly string[] = [
+  "sight.unmade-standing",
+  "sight.unmade-frame",
+  "obj.unmade-tally",
+  "sight.unmade-no-mark",
+  "sight.fold-letter",
+  "sight.fold-reader",
+];
+
+/** Per-device seen-set for new art (localStorage): an entry leaves the unseen set when it is opened. */
+const NEW_ART_SEEN_KEY = "book.newArtSeen";
+export function readNewArtSeen(): ReadonlySet<string> {
+  try {
+    const raw = localStorage.getItem(NEW_ART_SEEN_KEY);
+    if (!raw) return new Set();
+    const arr: unknown = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+export function markNewArtSeen(entryId: string): void {
+  try {
+    const seen = new Set(readNewArtSeen());
+    seen.add(entryId);
+    localStorage.setItem(NEW_ART_SEEN_KEY, JSON.stringify([...seen]));
+  } catch {
+    /* no storage: the notice just stays until it can be recorded */
+  }
+}
+
+/** Word-form counts for the Book (the Book shows no digits anywhere, so a notice never renders a numeral). */
+export function countWords(n: number): string {
+  const ones = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
+  if (n >= 0 && n <= 20) return ones[n]!;
+  return "many";
+}
