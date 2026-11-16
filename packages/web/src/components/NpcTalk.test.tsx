@@ -144,3 +144,44 @@ describe("A tapped line is the ask — it speaks unless the mode is Never", () =
     expect(narration.playNarration).not.toHaveBeenCalled();
   });
 });
+
+describe("the minimized talk panel (Item 3)", () => {
+  it("opens minimized with the header and the spoken line only — no choices covering the world", () => {
+    const { container } = render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={() => {}} startMinimized />);
+    const panel = container.querySelector(".npc-talk");
+    expect(panel?.classList.contains("npc-talk-min")).toBe(true);
+    expect(screen.getByRole("dialog", { name: /Talking with Calend/ })).toBeTruthy();
+    expect(container.querySelector(".npc-talk-say")?.textContent?.length).toBeGreaterThan(10); // the current spoken line stays visible
+    expect(screen.queryByText("Who are you?")).toBeNull();
+    expect(screen.getByText("Expand")).toBeTruthy();
+    expect(screen.getByText("Close")).toBeTruthy();
+  });
+
+  it("Expand restores the choices; Minimize hides them again; Escape closes from either state", () => {
+    const onClose = vi.fn();
+    render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={onClose} startMinimized />);
+    fireEvent.click(screen.getByText("Expand"));
+    expect(screen.getByText("Who are you?")).toBeTruthy();
+    expect(screen.queryByText("Expand")).toBeNull();
+    fireEvent.click(screen.getByText("Minimize"));
+    expect(screen.queryByText("Who are you?")).toBeNull();
+    expect(screen.getByText("Expand")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("narration still speaks a tapped line after expanding from minimized", () => {
+    vi.spyOn(narration, "playNarration").mockResolvedValue("voice");
+    localStorage.setItem("soumaya.story.narration", "ask");
+    render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={() => {}} startMinimized />);
+    fireEvent.click(screen.getByText("Expand"));
+    fireEvent.click(screen.getByText("Who are you?"));
+    expect(narration.playNarration).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens expanded by default when Talk starts on the spot (no startMinimized)", () => {
+    render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={() => {}} />);
+    expect(screen.getByText("Who are you?")).toBeTruthy();
+    expect(screen.getByText("Minimize")).toBeTruthy();
+  });
+});

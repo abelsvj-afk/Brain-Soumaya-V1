@@ -12,7 +12,7 @@ import { getNarrationMode, playNarration } from "../lib/narration.js";
  * you (the scene does that); closing it lets them go on. Nothing is spent, scored or gated: you may stop at any step and the thread simply rests.
  * Placed in the lower part of the screen, clear of the header and the dock; Escape closes; every choice is a 44 px button.
  */
-export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string; world: string | null; meetings: number; onClose: () => void }) {
+export default function NpcTalk({ npc, world, meetings, onClose, startMinimized = false }: { npc: string; world: string | null; meetings: number; onClose: () => void; startMinimized?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useDialogA11y(ref, onClose);
   const member = castMember(npc);
@@ -20,6 +20,10 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
   const { book } = useStoryBook(true);
   const found = useMemo(() => new Set(book.finds.map((f) => f.entryId)), [book.finds]);
   const [heard, setHeard] = useState(() => readHeard(getSpaceId(), npc));
+  // Minimized (Item 3): header + the current spoken line only, ~110 px, so the
+  // world stays visible while talking. Talk that starts from an approach
+  // opens minimized; narration still speaks the line shown, minimized or not.
+  const [minimized, setMinimized] = useState(startMinimized);
   // They open with a line of their own: the introduction at a first meeting, otherwise one of their greetings.
   const [said, setSaid] = useState(() => (member ? (meetings <= 1 ? member.intro : member.greetings[Math.floor(Date.now() / 60_000) % member.greetings.length]!) : ""));
   const [bye, setBye] = useState(false);
@@ -72,14 +76,26 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
   ];
 
   return (
-    <div className="npc-talk" role="dialog" aria-label={`Talking with ${member.name}`} ref={ref}>
+    <div className={`npc-talk${minimized ? " npc-talk-min" : ""}`} role="dialog" aria-label={`Talking with ${member.name}`} aria-expanded={!minimized} ref={ref}>
       <header className="npc-talk-head">
         <strong>{member.name}</strong>
         <span className="npc-talk-role">{member.job.split(".")[0]}</span>
+        <span className="npc-talk-head-btns">
+          <button type="button" className="npc-talk-toggle" onClick={() => setMinimized((m) => !m)} aria-expanded={!minimized}>
+            {minimized ? "Expand" : "Minimize"}
+          </button>
+          {minimized && (
+            <button type="button" className="npc-talk-toggle" onClick={onClose}>
+              Close
+            </button>
+          )}
+        </span>
       </header>
       <p className="npc-talk-say" aria-live="polite">
         {bye ? talk.farewell : `“${said}”`}
       </p>
+      {!minimized && (
+        <>
       {!bye && road && roadId === road.id && roadState !== "done" && !(view?.done && roadState === "taken") && (
         <div className="npc-talk-road" role="group" aria-label={road.title}>
           <strong>{road.title}</strong>
@@ -122,6 +138,8 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
       >
         {bye ? "Close" : "Goodbye"}
       </button>
+        </>
+      )}
     </div>
   );
 }

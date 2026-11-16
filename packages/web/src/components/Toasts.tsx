@@ -7,9 +7,11 @@ import { formatToastTime, toastPriorityLabel } from "./cl1a.helpers.js";
  * with `pushToast(...)`; the <Toasts/> overlay renders + auto-dismisses them.
  * Deliberately dependency-free + offline-safe — pure in-app, no network.
  */
-/** Where a clickable notification takes you when tapped. */
+/** Where a clickable notification takes you when tapped. `npc` opens that
+ *  NPC's card in the worlds layer (the surface listens for it) — the
+ *  encounter toast's way in, so the prompt outlives its 7 seconds. */
 export interface ToastAction {
-  kind: "focus" | "tab" | "panel" | "chat";
+  kind: "focus" | "tab" | "panel" | "chat" | "npc";
   value?: string | number;
 }
 
