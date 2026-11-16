@@ -132,7 +132,7 @@ import { useRelicBuffs } from "../hooks/useRelicBuffs.js";
 import { createTransitScene } from "../graph/transitScene.js";
 import { TRANSIT_MS } from "./TravelPanel.js";
 import { renderIcon } from "./icons/Icon.js";
-import { getNpcScript } from "../api/npcs.js";
+import { getNpcs, getNpcScript } from "../api/npcs.js";
 import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
 import { encounterLine, encounterStep, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
@@ -2570,6 +2570,8 @@ export default function WorldsSurface({
     let lastAnchorAt = 0;
     let npcAnchorTries = 0;
     let npcAnchor: ReturnType<typeof anchorFromBounds> = null;
+    let lastNpcStoppedAt = 0;
+    let npcStopped: ReadonlySet<string> = new Set();
     let flightPhaseShown = "";
     const BASE_ANGLE = 0.6;
     const frame = () => {
@@ -2584,7 +2586,7 @@ export default function WorldsSurface({
       lastFrameAt = now;
       // The worlds' orbit distances were tuned on a landscape screen; back off on a phone (graph/worldCamera.ts).
       const fit = portraitFit(camera.aspect);
-      // The cast lives here (docs/specs/npc-society-2026-10-30.md): whoever is in this world right now flies a lap of it with an engine flame and trail; the Station's
+      // The cast lives here (docs/specs/npc-society-2026-10-30.md): whoever is in this world right now flies freely round it with an engine flame and trail; the Station's
       // controller keeps her patrol from her berth. Each wears a tag, and coming near one is an encounter — they speak. Presentation only (graph/npcBodies.ts).
       if (mode === "world" && currentWorld && !inside && npcBodies) {
         if (now - lastNpcSyncAt > 1000) {
@@ -2595,11 +2597,19 @@ export default function WorldsSurface({
             // The Station draws her moored hull once its model lands; give it up to 12 s before flying a second copy.
             return world.group.getObjectByName("harbor-controller-ship") ?? (now - sceneStartedAt < 12_000 ? "wait" : null);
           });
-          // The lap is round what the world is: measured from its own bounds once its models have had time to land (and again as they do).
+          // The wander is round what the world is: measured from its own bounds once its models have had time to land (and again as they do).
           if (present.length > 0 && (!npcAnchor || (npcAnchorTries < 4 && now - lastAnchorAt > 5000))) {
             lastAnchorAt = now;
             npcAnchorTries++;
             npcAnchor = anchorFromBounds(world.group) ?? npcAnchor;
+          }
+          // Who the owner stopped (the kill switch): their ships park instead of flying. Read at most every 10 s — a stop is rare, and a
+          // few seconds before the ship parks is invisible in practice. Unreachable server: nobody is stopped (the loop still governs acts).
+          if (now - lastNpcStoppedAt > 10_000) {
+            lastNpcStoppedAt = now;
+            void getNpcs().then((list) => {
+              if (list) npcStopped = new Set(list.filter((n) => n.stopped).map((n) => n.id));
+            });
           }
         }
         const talking = talkNpcRef.current;
@@ -2608,6 +2618,7 @@ export default function WorldsSurface({
           reducedMotion,
           anchor: npcAnchor,
           berth: currentWorld === "great-station" ? HARBOR_CONTROLLER_BERTH : null,
+          stopped: npcStopped,
           hold: talking ? new Set([talking]) : undefined,
           faceToward: talking ? (flTalk ? flTalk.pos : [camera.position.x, camera.position.y, camera.position.z]) : null,
         });
@@ -2617,7 +2628,7 @@ export default function WorldsSurface({
           npcPosRef.current.set(f.id, [f.pos.x, f.pos.y, f.pos.z]);
           if (npcPhasesRef.current.get(f.id) !== f.phase) {
             npcPhasesRef.current.set(f.id, f.phase);
-            // On her own station lap the Station controller names the phase of the patrol (docked / casting off / patrolling) when she is not in company.
+            // On her own station patrol the Station controller names the phase of the patrol (docked / casting off / patrolling) when she is not in company.
             if (f.id === "harbor-controller" && member.home === currentWorld && f.phase !== "roaming") {
               const label = patrolLabel(f.phase);
               setPresentNpcs((list) => list.map((n) => (n.id === f.id && n.solo ? { ...n, activity: label } : n)));

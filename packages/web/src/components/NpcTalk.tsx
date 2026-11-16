@@ -31,11 +31,11 @@ export default function NpcTalk({ npc, world, meetings, onClose }: { npc: string
   const atHome = world === member.home;
   const steps = openSteps(talk, { meetings, heard });
   const point = pointerFor(talk, found);
-  /** Show the words; with narration on ("whenever I find something") the person's own voice reads the same line (the server names the canon line from `key`). */
+  /** Show the words; the person's own voice reads the same line (the server names the canon line from `key`). A tap is the ask — it plays in "when I ask" as well as "whenever I find something", and only "Never" leaves the panel silent (playNarration itself returns "none" then). */
   const say = (text: string, key?: string) => {
     setSaid(text);
     setBye(false);
-    if (key && getNarrationMode() === "on") void playNarration({ entryId: key, register: "plain", text, say: { npc, key } });
+    if (key && getNarrationMode() !== "off") void playNarration({ entryId: key, register: "plain", text, say: { npc, key } });
   };
   // A road this person can give, walked by what the Book and meetings already show — never a counter. A finished road is recorded once and just keeps its gift.
   const roadCtx = { found, meetings: { [npc]: meetings } };

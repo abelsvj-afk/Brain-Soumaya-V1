@@ -41,7 +41,7 @@ export interface NpcBodies {
   update: (
     nowMs: number,
     dtMs: number,
-    ctx: { reducedMotion: boolean; anchor: RoamAnchor | null; berth: PatrolBerth | null; /** People being talked to: they stop where they are and turn to face `faceToward` (presentation only — the clock is untouched, so they resume where it says they should be). */ hold?: ReadonlySet<string>; faceToward?: readonly [number, number, number] | null },
+    ctx: { reducedMotion: boolean; anchor: RoamAnchor | null; berth: PatrolBerth | null; /** People being talked to: they stop where they are and turn to face `faceToward` (presentation only — the clock is untouched, so they resume where it says they should be). */ hold?: ReadonlySet<string>; faceToward?: readonly [number, number, number] | null; /** People the owner stopped (the kill switch): they hold at their start point instead of flying. */ stopped?: ReadonlySet<string> },
   ) => NpcBodyFrame[];
   has: (id: string) => boolean;
   dispose: () => void;
@@ -123,13 +123,21 @@ export function createNpcBodies(parent: THREE.Object3D): NpcBodies {
         if (!b.ready) continue;
         let phase: PatrolPhase | "roaming" = "roaming";
         if (b.existing && ctx.berth) {
-          // The Station's own controller: docked → leaves → one lap → returns, in the Station's frame.
-          const pose = patrolAt(nowMs, ctx.berth, { reducedMotion: ctx.reducedMotion });
+          // The Station's own controller: docked → leaves → wanders her patrol → returns, in the Station's frame.
+          const pose = patrolAt(nowMs, ctx.berth, { reducedMotion: ctx.reducedMotion, stopped: ctx.stopped?.has(id) });
           b.existing.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
           b.existing.rotation.y = pose.rotationY;
           phase = pose.phase;
           b.existing.updateWorldMatrix(true, false);
           tmpV.setFromMatrixPosition(b.existing.matrixWorld);
+        } else if (ctx.anchor && ctx.stopped?.has(id)) {
+          // Stopped (the kill switch): parked at their start point, not flying.
+          const pose = roamAt(nowMs, id, ctx.anchor, { reducedMotion: ctx.reducedMotion, stopped: true });
+          b.holder.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
+          b.holder.rotation.y = pose.rotationY;
+          b.holder.updateWorldMatrix(true, false);
+          tmpV.setFromMatrixPosition(b.holder.matrixWorld);
+          phase = "docked";
         } else if (ctx.anchor && ctx.hold?.has(id)) {
           // Stopped to talk: keep the place they were in, and turn toward the one speaking to them.
           if (ctx.faceToward) b.holder.rotation.y = Math.atan2(ctx.faceToward[0] - b.holder.position.x, ctx.faceToward[2] - b.holder.position.z) + Math.PI;
@@ -168,7 +176,7 @@ export function createNpcBodies(parent: THREE.Object3D): NpcBodies {
   };
 }
 
-/** A roam anchor from a built world's own bounds: the middle of what is there, and a lap outside most of it. */
+/** A roam anchor from a built world's own bounds: the middle of what is there, and a fence round most of it. */
 export function anchorFromBounds(root: THREE.Object3D, exclude: readonly THREE.Object3D[] = []): RoamAnchor | null {
   const hidden = exclude.map((o) => [o, o.visible] as const);
   for (const [o] of hidden) o.visible = false;

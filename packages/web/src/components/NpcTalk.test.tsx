@@ -1,7 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { NPC_TALK_BY_ID } from "@brain/shared";
 import NpcTalk from "./NpcTalk.js";
 import * as api from "../api/story.js";
+import * as narration from "../lib/narration.js";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -108,5 +110,37 @@ describe("Rumours from a person", () => {
     fireEvent.click(screen.getByText("Heard anything lately?"));
     expect(screen.getByText(/count six hours and then six again/)).toBeTruthy();
     expect(container.textContent ?? "").not.toMatch(/\d/);
+  });
+});
+
+describe("A tapped line is the ask — it speaks unless the mode is Never", () => {
+  beforeEach(() => {
+    vi.spyOn(narration, "playNarration").mockResolvedValue("voice");
+  });
+  const who = NPC_TALK_BY_ID.get("wayfarer")!.who;
+  it("speaks a tapped line in 'when I ask' mode", () => {
+    localStorage.setItem("soumaya.story.narration", "ask");
+    render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Who are you?"));
+    expect(narration.playNarration).toHaveBeenCalledTimes(1);
+    expect(narration.playNarration).toHaveBeenCalledWith({
+      entryId: "who",
+      register: "plain",
+      text: who,
+      say: { npc: "wayfarer", key: "who" },
+    });
+  });
+  it("speaks a tapped line in 'whenever I find something' mode", () => {
+    localStorage.setItem("soumaya.story.narration", "on");
+    render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Who are you?"));
+    expect(narration.playNarration).toHaveBeenCalledTimes(1);
+  });
+  it("stays silent in 'never' mode but still shows the words", () => {
+    localStorage.setItem("soumaya.story.narration", "off");
+    render(<NpcTalk npc="wayfarer" world="great-station" meetings={1} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Who are you?"));
+    expect(screen.getByText(`“${who}”`)).toBeTruthy();
+    expect(narration.playNarration).not.toHaveBeenCalled();
   });
 });
