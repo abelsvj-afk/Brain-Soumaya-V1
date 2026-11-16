@@ -981,3 +981,75 @@ describe("free look — the first-time hint", () => {
     expect(screen.queryByText(/drag to look around/i)).toBeNull();
   });
 });
+
+describe("WorldsSurface — Talk is a rendezvous (Item 3)", () => {
+  // The Wayfarer is only at the Station in some 2-hour slots; pin the clock
+  // to one where he is there, or the talk auto-ends the moment it opens
+  // (the NPC-left-the-world effect). Slot verified against npcLocation.
+  const WAYFARER_AT_STATION = 1794765600000; // 2026-11-15T18:00:00Z
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+    mockUseHarborController.mockReset();
+    mockUseHarborController.mockReturnValue(fakeController());
+    mockUseCaptains.mockReturnValue(fakeCaptains());
+    vi.spyOn(Date, "now").mockReturnValue(WAYFARER_AT_STATION);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("an encounter toast's action opens the talk (minimized) instead of racing the 7-second toast", async () => {
+    mockUseTravel.mockReturnValue(atStation());
+    mountEngaged(<WorldsSurface enabled />);
+    act(() => {
+      window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "npc", value: "wayfarer" } }));
+    });
+    // No live NPC position exists in this harness, so Talk opens at once —
+    // the approach path (live position, far away) is covered by talkRange.
+    expect(await screen.findByRole("dialog", { name: /Talking with Calend/ })).toBeTruthy();
+    expect(document.querySelector(".npc-talk-min")).toBeTruthy();
+    expect(screen.queryByText("Who are you?")).toBeNull(); // minimized: the world stays visible
+    fireEvent.click(screen.getByText("Expand"));
+    expect(screen.getByText("Who are you?")).toBeTruthy();
+  });
+
+  it("an npc toast action for someone else is ignored", async () => {
+    mockUseTravel.mockReturnValue(atStation());
+    mountEngaged(<WorldsSurface enabled />);
+    act(() => {
+      window.dispatchEvent(new CustomEvent("brain-toast-action", { detail: { kind: "tab", value: "inbox" } }));
+    });
+    expect(screen.queryByRole("dialog", { name: /Talking with/ })).toBeNull();
+  });
+});
+
+describe("WorldsSurface — Harbor Ring hub life (Item 4, Stage 1)", () => {
+  beforeEach(() => {
+    mockUseTravel.mockReset();
+    mockUseHarborController.mockReset();
+    mockUseHarborController.mockReturnValue(fakeController());
+    mockUseCaptains.mockReturnValue(fakeCaptains());
+  });
+
+  it("past 4 present, tags cluster under one 'N more here' chip that opens a hidden person", async () => {
+    mockUseTravel.mockReturnValue(atStation());
+    mountEngaged(<WorldsSurface enabled />);
+    // The six background NPCs are always at the Station, so the Station
+    // always has more than 4 present and the chip always shows.
+    const chip = await screen.findByRole("button", { name: /more people here/ });
+    expect(chip.textContent).toMatch(/\d+ more here/);
+    fireEvent.click(chip);
+    await waitFor(() => expect(document.querySelector(".npc-card")).toBeTruthy());
+  });
+
+  it("a background person's card opens from Who's here — with no Talk button (silent by construction)", async () => {
+    mockUseTravel.mockReturnValue(atStation());
+    mountEngaged(<WorldsSurface enabled />);
+    const tile = await screen.findByRole("button", { name: /^Dockhand,/ });
+    fireEvent.click(tile);
+    const card = await screen.findByRole("dialog", { name: "Dockhand" });
+    expect(card.textContent).toMatch(/Works the dock crew/);
+    expect(card.querySelector("button")?.textContent).not.toMatch(/^Talk$/);
+    expect(screen.queryByText("Talk")).toBeNull();
+  });
+});

@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   SCALE_BELT_ASSETS,
   SCALE_BELT_PIECE_ASSETS,
@@ -269,5 +273,56 @@ describe("scaleAssets", () => {
     expect(SCALE_SKETCHFAB_URLS).toHaveLength(3);
     expect(new Set(SCALE_SKETCHFAB_URLS).size).toBe(3);
     expect(SCALE_SKETCHFAB_URLS.every((u) => u.startsWith("/sf-") && u.endsWith(".glb"))).toBe(true);
+  });
+
+  it("the three re-slimmed Scale files match what is actually on disk (Item 8) — the manifest was stale, the files are valid GLB", () => {
+    // 2026-11-15: the manifest recorded the old, larger uploads (2.0–4.6 MB);
+    // the files on disk are slim re-exports (94–572 KB) with different SHAs.
+    // All three still parse as valid GLB 2.0 (magic + length + JSON chunk),
+    // so the manifest is corrected to the true on-disk values — not the
+    // other way round. If a file ever stops parsing, this test must fail
+    // rather than the manifest being "fixed" to match a broken file.
+    // The test runs from packages/web, so the public files sit beside it.
+    // Resolved from this file's own location first, with the two cwd
+    // spellings as fallbacks: a bare process.cwd() reader broke (ENOENT)
+    // when vitest ran from the repo root instead of packages/web.
+    const onDisk = (url: string) => {
+      const rel = join("public", url.slice(1));
+      const candidates = [resolve(process.cwd(), rel), resolve(process.cwd(), "packages/web", rel)];
+      try {
+        candidates.unshift(resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", rel));
+      } catch {
+        // Some harnesses give import.meta.url as a non-file URL; the cwd
+        // candidates below still cover the gate's two invocations.
+      }
+      for (const c of candidates) if (existsSync(c)) return readFileSync(c);
+      throw new Error(`cannot find ${url} (tried ${candidates.join(", ")})`);
+    };
+    const glbOk = (buf: Buffer) => {
+      if (buf.toString("ascii", 0, 4) !== "glTF") return false;
+      if (buf.readUInt32LE(4) !== 2) return false;
+      if (buf.readUInt32LE(8) !== buf.length) return false;
+      const jsonLen = buf.readUInt32LE(12);
+      if (buf.toString("ascii", 16, 20) !== "JSON") return false;
+      try {
+        JSON.parse(buf.toString("utf8", 20, 20 + jsonLen));
+      } catch {
+        return false;
+      }
+      return true;
+    };
+    for (const m of [
+      SCALE_CENTERPIECE_ASSETS.find((a) => a.key === "pillars-1b")!,
+      SCALE_SKETCHFAB_CENTERPIECE_ASSETS.find((a) => a.key === "planetary-nebula")!,
+      SCALE_SKETCHFAB_PULSAR_ASSET,
+    ]) {
+      const buf = onDisk(m.url);
+      expect(glbOk(buf), m.url).toBe(true);
+      expect(m.bytes).toBe(buf.length);
+      expect(m.sha256).toBe(createHash("sha256").update(buf).digest("hex"));
+    }
+    expect(SCALE_CENTERPIECE_ASSETS.find((a) => a.key === "pillars-1b")!.bytes).toBe(94432);
+    expect(SCALE_SKETCHFAB_CENTERPIECE_ASSETS.find((a) => a.key === "planetary-nebula")!.bytes).toBe(571684);
+    expect(SCALE_SKETCHFAB_PULSAR_ASSET.bytes).toBe(302000);
   });
 });

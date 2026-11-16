@@ -38,10 +38,25 @@ describe("reading the lore aloud", () => {
     expect(events).toEqual([true, false]); // the bed ducks while it reads, and comes back
   });
 
-  it("falls back to the browser voice when the request fails outright", async () => {
+  it("falls back to the browser voice when the request fails outright — and says the voice could not be reached, not that there is no clip", async () => {
     (afetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("offline"));
-    expect(await playNarration({ entryId: "obj.kiths-drawing", register: "plain", text: "Offline words." })).toBe("voice");
+    const why: string[] = [];
+    expect(await playNarration({ entryId: "obj.kiths-drawing", register: "plain", text: "Offline words.", onFallback: (w) => why.push(w) })).toBe("voice");
     expect(speak).toHaveBeenCalled();
+    expect(why).toEqual(["the studio voice could not be reached just now"]);
+  });
+
+  it("says 'you have not found that yet' on a 403, and 'no studio clip' on a 204 — never the other way round", async () => {
+    const afetchMock = afetch as ReturnType<typeof vi.fn>;
+    afetchMock.mockResolvedValue(new Response(null, { status: 403 }));
+    const why403: string[] = [];
+    expect(await playNarration({ entryId: "sight.secret", register: "plain", text: "Secret words.", onFallback: (w) => why403.push(w) })).toBe("voice");
+    expect(why403).toEqual(["you have not found that yet, so the studio voice will not read it"]);
+
+    afetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    const why204: string[] = [];
+    expect(await playNarration({ entryId: "obj.kiths-drawing", register: "plain", text: "The words.", onFallback: (w) => why204.push(w) })).toBe("voice");
+    expect(why204).toEqual(["the server has no studio clip for this line"]);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   readMet,
   recordMeeting,
   roamAt,
+  talkRange,
 } from "./npcPresence.js";
 
 const BERTH = { radius: 222, angle: (Math.PI * 3) / 4, y: 0 };
@@ -177,5 +178,22 @@ describe("encounters — they speak", () => {
     expect(keeper.greetings.some((g) => line.includes(g))).toBe(true);
     expect(encounterLine(keeper, "growing-place", "roaming", true, null, 1)).toContain(keeper.intro);
     expect(encounterLine(hc, "great-station", "patrolling", false, { ...script, source: "fallback" }, 1)).toContain("Harbor controller: “");
+  });
+});
+
+describe("talkRange — Talk is a rendezvous, not a race (Item 3)", () => {
+  it("opens at once when the NPC is already within NEAR_ENTER", () => {
+    expect(talkRange([100, 0, 0], [0, 0, 0], null)).toBe("open");
+    expect(talkRange([299, 0, 0], [0, 0, 0], null)).toBe("open");
+  });
+  it("approaches when far from both the camera and the ship", () => {
+    expect(talkRange([500, 0, 0], [0, 0, 0], null)).toBe("approach");
+    expect(talkRange([500, 0, 0], [0, 0, 0], [0, 0, 0])).toBe("approach");
+  });
+  it("the ship's position counts: near the ship is near enough even when the camera is far", () => {
+    expect(talkRange([500, 0, 0], [0, 0, 0], [450, 0, 0])).toBe("open");
+  });
+  it("opens at once when there is no live position to fly to", () => {
+    expect(talkRange(undefined, [0, 0, 0], null)).toBe("unknown");
   });
 });

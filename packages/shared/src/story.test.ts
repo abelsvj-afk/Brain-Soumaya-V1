@@ -174,8 +174,8 @@ describe("Item Reactions", () => {
       expect(r.line).not.toMatch(/\d/);
     }
   });
-  it("every speaking cast member has at least three (the harbor controller only answers)", () => {
-    for (const c of NPC_CAST.filter((x) => x.id !== "harbor-controller")) {
+  it("every speaking cast member has at least three (the harbor controller only answers; silent background members have none)", () => {
+    for (const c of NPC_CAST.filter((x) => x.id !== "harbor-controller" && x.speaks)) {
       expect(STORY_REACTIONS.filter((r) => r.npc === c.id).length, c.id).toBeGreaterThanOrEqual(3);
     }
   });

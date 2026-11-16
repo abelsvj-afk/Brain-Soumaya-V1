@@ -209,6 +209,23 @@ export function encounterStep(wasNear: boolean, dist: number): { near: boolean; 
   return { near, entered: near && !wasNear };
 }
 
+/**
+ * Talk is a rendezvous, not a race (Item 3): tapping Talk from far away
+ * flies the ship to the NPC's live position first and opens the talk on
+ * arrival; near enough (or with no live position to fly to) it opens at
+ * once. The viewer is the nearer of the camera and the ship, when flying.
+ */
+export function talkRange(
+  npcPos: readonly [number, number, number] | undefined,
+  cameraPos: readonly [number, number, number],
+  flightPos: readonly [number, number, number] | null,
+): "open" | "approach" | "unknown" {
+  if (!npcPos) return "unknown";
+  const d = (a: readonly [number, number, number], b: readonly [number, number, number]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const nearest = Math.min(d(cameraPos, npcPos), flightPos ? d(flightPos, npcPos) : Infinity);
+  return nearest <= NEAR_ENTER ? "open" : "approach";
+}
+
 // --- Who you have met (presentation memory, per brain) ---
 
 export interface Meeting {

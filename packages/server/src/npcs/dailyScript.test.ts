@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NPC_CAST, NPC_SCRIPT_SPECS } from "@brain/shared";
+import { NPC_CAST, NPC_SCRIPT_SPECS, scriptSpecsFor } from "@brain/shared";
 import { createDb, type DbHandle } from "../db/client.js";
 import {
   SCRIPT_RETRY_DELAYS_MS,
@@ -12,6 +12,13 @@ import {
 } from "./dailyScript.js";
 
 const T0 = Date.parse("2026-10-30T12:00:00.000Z");
+// The scripted cast: members with daily-script situations. Item 4 Stage 1
+// added silent background NPCs (speaks: false) who get no situations at all —
+// no daily-script lines, no chatter, no voice — so they are deliberately NOT
+// in the prompt and get no offline greetings. The one-call-a-day budget stays
+// flat as the cast grows.
+const SCRIPTED_CAST = NPC_CAST.filter((d) => scriptSpecsFor(d).length > 0);
+const SILENT_CAST = NPC_CAST.filter((d) => scriptSpecsFor(d).length === 0);
 let h: DbHandle;
 beforeEach(() => {
   h = createDb(":memory:");
@@ -56,9 +63,11 @@ describe("one batched call per brain per day", () => {
     await getDayScript(h, "s2", { npcDayScript: call }, T0);
     expect(call).toHaveBeenCalledTimes(3);
   });
-  it("one prompt carries every NPC (roster size does not change the call count)", () => {
+  it("one prompt carries every scripted NPC (roster size does not change the call count)", () => {
     const prompt = buildScriptPrompt(h, "s1", "2026-10-30", T0);
-    for (const d of NPC_CAST) expect(prompt).toContain(`"${d.id}"`);
+    for (const d of SCRIPTED_CAST) expect(prompt).toContain(`"${d.id}"`);
+    // Silent background NPCs are deliberately absent from the prompt.
+    for (const d of SILENT_CAST) expect(prompt).not.toContain(`"${d.id}"`);
     // The controller's brief is travel facts only — no memory text goes to the model for her.
     expect(prompt).toMatch(/currently at home/);
   });
@@ -125,14 +134,14 @@ describe("assembling the script", () => {
     // The outer quotes are stripped by cleanLine (the UI adds its own); the words are kept — nothing is rejected for being spoken.
     expect(s.lines["harbor-controller"]!.encounter_patrolling).toEqual(["Clear skies, traveller.", "Another line."]);
   });
-  it("covers every cast member from the one prompt, and gives everyone their own offline greetings", () => {
+  it("covers every scripted cast member from the one prompt, and gives everyone their own offline greetings", () => {
     const prompt = buildScriptPrompt(h, "s1", "2026-10-30", T0);
-    for (const c of NPC_CAST) {
+    for (const c of SCRIPTED_CAST) {
       expect(prompt).toContain(`"${c.id}"`);
       expect(prompt).toContain(c.job);
     }
     const s = assembleScript("d", T0, []);
-    for (const c of NPC_CAST.filter((x) => x.id !== "eternity")) expect(s.lines[c.id]?.encounter_first?.length).toBeGreaterThan(0);
+    for (const c of SCRIPTED_CAST.filter((x) => x.id !== "eternity")) expect(s.lines[c.id]?.encounter_first?.length).toBeGreaterThan(0);
   });
   it("a model that returns nothing usable is a fallback, not a cached success", () => {
     expect(assembleScript("d", T0, []).source).toBe("fallback");

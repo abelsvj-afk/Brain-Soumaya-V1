@@ -14,6 +14,36 @@ import { PATROL_RADIUS, patrolAt, roamAt, type PatrolBerth, type PatrolPhase, ty
 /** How long an NPC ship is, nose to tail, in world units (the Station controller's panel says "28 across"). */
 export const NPC_SHIP_LENGTH = 28;
 
+/**
+ * Harbor Ring hub (Item 4, Stage 1): the docking band between the
+ * controller's berth (3π/4, radius 222) and Bex's berth (5π/4), centred
+ * near the docking arm (π/2, radius 228) — mooringPose gives [cos·r, y,
+ * sin·r], so the band sits around [-105, 0, 73]. The six background
+ * Station NPCs roam this ~175-radius disc; the main cast keeps the
+ * whole-world anchor. Radius is a measurement, not canon: it fits inside
+ * the 560 cap and inside the controller's 330 patrol disc.
+ */
+export const HARBOR_RING_HUB: RoamAnchor = { center: [-105, 0, 73], radius: 175 };
+
+/** The background Station NPCs (Item 4): they live in the Harbor Ring hub. */
+export const HUB_NPC_IDS: ReadonlySet<string> = new Set(["dockhand", "stallkeeper", "crate-counter", "net-mender", "lamp-trimmer", "berth-clerk"]);
+
+/** Which anchor a body roams: hub NPCs roam the Harbor Ring, everyone else the whole world. */
+export function anchorForNpc(id: string, anchor: RoamAnchor | null, hubAnchor: RoamAnchor | null): RoamAnchor | null {
+  return HUB_NPC_IDS.has(id) ? (hubAnchor ?? anchor) : anchor;
+}
+
+/**
+ * Crowd-aware roam radius (scale-lanes L18): the roam disc grows with
+ * the number present past 4, so a crowded world spreads out instead of
+ * stacking ships — capped by world size (the 560 anchor cap), never
+ * beyond it. At 4 or fewer present the radius is unchanged.
+ */
+export function crowdAwareRadius(baseRadius: number, presentCount: number): number {
+  if (presentCount <= 4) return baseRadius;
+  return Math.min(560, baseRadius * (1 + 0.08 * (presentCount - 4)));
+}
+
 export interface NpcBodyFrame {
   id: string;
   /** World-space position of the ship. */
@@ -41,7 +71,7 @@ export interface NpcBodies {
   update: (
     nowMs: number,
     dtMs: number,
-    ctx: { reducedMotion: boolean; anchor: RoamAnchor | null; berth: PatrolBerth | null; /** People being talked to: they stop where they are and turn to face `faceToward` (presentation only — the clock is untouched, so they resume where it says they should be). */ hold?: ReadonlySet<string>; faceToward?: readonly [number, number, number] | null; /** People the owner stopped (the kill switch): they hold at their start point instead of flying. */ stopped?: ReadonlySet<string> },
+    ctx: { reducedMotion: boolean; anchor: RoamAnchor | null; /** The Harbor Ring hub anchor (Station only): hub NPCs roam it, everyone else roams `anchor`. */ hubAnchor?: RoamAnchor | null; berth: PatrolBerth | null; /** People being talked to: they stop where they are and turn to face `faceToward` (presentation only — the clock is untouched, so they resume where it says they should be). */ hold?: ReadonlySet<string>; faceToward?: readonly [number, number, number] | null; /** People the owner stopped (the kill switch): they hold at their start point instead of flying. */ stopped?: ReadonlySet<string> },
   ) => NpcBodyFrame[];
   has: (id: string) => boolean;
   dispose: () => void;
@@ -121,6 +151,8 @@ export function createNpcBodies(parent: THREE.Object3D): NpcBodies {
       const out: NpcBodyFrame[] = [];
       for (const [id, b] of bodies) {
         if (!b.ready) continue;
+        // Hub NPCs roam the Harbor Ring; everyone else roams the whole world.
+        const anchor = anchorForNpc(id, ctx.anchor, ctx.hubAnchor ?? null);
         let phase: PatrolPhase | "roaming" = "roaming";
         if (b.existing && ctx.berth) {
           // The Station's own controller: docked → leaves → wanders her patrol → returns, in the Station's frame.
@@ -130,22 +162,22 @@ export function createNpcBodies(parent: THREE.Object3D): NpcBodies {
           phase = pose.phase;
           b.existing.updateWorldMatrix(true, false);
           tmpV.setFromMatrixPosition(b.existing.matrixWorld);
-        } else if (ctx.anchor && ctx.stopped?.has(id)) {
+        } else if (anchor && ctx.stopped?.has(id)) {
           // Stopped (the kill switch): parked at their start point, not flying.
-          const pose = roamAt(nowMs, id, ctx.anchor, { reducedMotion: ctx.reducedMotion, stopped: true });
+          const pose = roamAt(nowMs, id, anchor, { reducedMotion: ctx.reducedMotion, stopped: true });
           b.holder.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
           b.holder.rotation.y = pose.rotationY;
           b.holder.updateWorldMatrix(true, false);
           tmpV.setFromMatrixPosition(b.holder.matrixWorld);
           phase = "docked";
-        } else if (ctx.anchor && ctx.hold?.has(id)) {
+        } else if (anchor && ctx.hold?.has(id)) {
           // Stopped to talk: keep the place they were in, and turn toward the one speaking to them.
           if (ctx.faceToward) b.holder.rotation.y = Math.atan2(ctx.faceToward[0] - b.holder.position.x, ctx.faceToward[2] - b.holder.position.z) + Math.PI;
           b.holder.updateWorldMatrix(true, false);
           tmpV.setFromMatrixPosition(b.holder.matrixWorld);
           phase = "docked";
-        } else if (ctx.anchor) {
-          const pose = roamAt(nowMs, id, ctx.anchor, { reducedMotion: ctx.reducedMotion });
+        } else if (anchor) {
+          const pose = roamAt(nowMs, id, anchor, { reducedMotion: ctx.reducedMotion });
           b.holder.position.set(pose.pos[0], pose.pos[1], pose.pos[2]);
           b.holder.rotation.y = pose.rotationY;
           b.holder.updateWorldMatrix(true, false);

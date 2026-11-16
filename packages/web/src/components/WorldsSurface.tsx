@@ -121,7 +121,7 @@ import {
 import HarborControllerPanel from "./HarborControllerPanel.js";
 import CaptainsPanel from "./CaptainsPanel.js";
 import { getCaptain } from "../api/captains.js";
-import { pushToast } from "./Toasts.js";
+import { pushToast, type ToastAction } from "./Toasts.js";
 import { useStoryNotice } from "../hooks/useStoryNotice.js";
 import { inspectablesHere, locateLandmarks, makeReach } from "../graph/storySpots.js";
 import { STORY_TRIGGERS, hourBand } from "@brain/shared";
@@ -135,8 +135,8 @@ import { renderIcon } from "./icons/Icon.js";
 import { getNpcs, getNpcScript } from "../api/npcs.js";
 import type { NpcDayScript } from "@brain/shared";
 import { GO_HOME_EVENT, HOME_PLACE, announcePlace } from "../lib/worldPlace.js";
-import { encounterLine, encounterStep, npcIcon, readMet, recordMeeting, type NpcKey } from "../graph/npcPresence.js";
-import { anchorFromBounds, createNpcBodies, type NpcBodies } from "../graph/npcBodies.js";
+import { encounterLine, encounterStep, NEAR_ENTER, npcIcon, readMet, recordMeeting, talkRange, type NpcKey } from "../graph/npcPresence.js";
+import { anchorFromBounds, createNpcBodies, crowdAwareRadius, HARBOR_RING_HUB, type NpcBodies } from "../graph/npcBodies.js";
 import type { PlaceLore } from "@brain/shared";
 import { canTalkTo, castIn, castMember, faithLabel, hash01, worldLife, type SocietyDay } from "@brain/shared";
 import { useSociety } from "../hooks/useSociety.js";
@@ -163,12 +163,12 @@ import { createEnginePlume } from "../graph/enginePlume.js";
 import { findPlaces, PLACE_RULES, type Place } from "../graph/worldPlaces.js";
 import { pushOutOfShells, type Shell } from "../graph/bodyShell.js";
 import { chasePose, initialFlight, scaleNote, startFlight, stepFlight, type FlightState, type V3 } from "../graph/worldFlight.js";
-import { applyWorldLighting, TRANSIT_LIGHT_RIG, type WorldLightRig } from "../graph/worldLighting.js";
+import { applyWorldLighting, TRANSIT_LIGHT_RIG, type AppliedLighting, type WorldLightRig } from "../graph/worldLighting.js";
 import { NO_LOOK, applyLook, dragLook, isLooked, pinchDistance, zoomLook, type LookState } from "../graph/worldLook.js";
 import { makeEngineAudio } from "../graph/engineAudio.js";
 import { useEternityAutonomy } from "../hooks/useEternityAutonomy.js";
 import { purposeSeenKey, worldPurpose } from "../graph/worldPurpose.js";
-import { installHomeSky, releaseHomeSky } from "../graph/homeSky.js";
+import { installHomeSky, releaseHomeSky, type HomeSky } from "../graph/homeSky.js";
 import { loadSoumayaShip } from "../graph/soumayaShip.js";
 import { loadWarpGate } from "../graph/gateScene.js";
 import { WORLD_CHART } from "../lib/routeBoard.js";
@@ -833,6 +833,11 @@ export default function WorldsSurface({
     });
   }, [enabled, travel.state, travel.refresh]);
   const [graphicsFailed, setGraphicsFailed] = useState(false);
+  // The WebGL context was lost (Item 8): the tab is alive but the GPU
+  // surface is gone — show it plainly with a reload action, instead of a
+  // frozen canvas with no explanation. A restore clears it.
+  const [contextLost, setContextLost] = useState(false);
+  const contextLostRef = useRef(false);
   const [journeys, setJourneys] = useState<Journey[] | null>(null);
   const [journeysFailed, setJourneysFailed] = useState(false);
   const [dueReviews, setDueReviews] = useState<DueReview[] | null>(null);
@@ -906,9 +911,23 @@ export default function WorldsSurface({
   const [talkNpc, setTalkNpc] = useState<string | null>(null);
   const talkNpcRef = useRef<string | null>(null);
   talkNpcRef.current = talkNpc;
+  // Item 3 — Talk is a rendezvous: tapping Talk from far away flies the
+  // ship to the NPC's live position first and opens the talk on arrival.
+  // The ref carries the pending target into the frame loop, which re-targets
+  // toward the NPC's live position about once a second until within range.
+  const pendingTalkRef = useRef<{ id: string; lastRetargetAt: number } | null>(null);
+  // The orbit angle frozen at talk-open, so the camera frames the person
+  // instead of drifting round the world centre while talking (Item 3).
+  const talkAngleRef = useRef<number | null>(null);
+  const openTalk = (id: string) => {
+    pendingTalkRef.current = null;
+    setNpcCard(null);
+    setTalkNpc(id);
+  };
   // If they go (the clock moves them out of this world) the conversation ends with them.
   useEffect(() => {
     if (talkNpc && !presentNpcs.some((n) => n.id === talkNpc)) setTalkNpc(null);
+    if (pendingTalkRef.current && !presentNpcs.some((n) => n.id === pendingTalkRef.current!.id)) pendingTalkRef.current = null;
   }, [talkNpc, presentNpcs]);
   const [npcNote, setNpcNote] = useState<string | null>(null);
   const [showCaptains, setShowCaptains] = useState(false);
@@ -1241,6 +1260,7 @@ export default function WorldsSurface({
   useEffect(() => {
     flightRef.current = null;
     flightTargetRef.current = null;
+    pendingTalkRef.current = null; // a pending rendezvous does not survive leaving the world
     chaseCamRef.current = null;
     placesSigRef.current = "";
     placesRef.current = [];
@@ -1272,6 +1292,39 @@ export default function WorldsSurface({
   // Tap to fly (docs/specs/lore-physical-spots-2026-10-31.md): a tap on the scene sends the ship to that point — the way to traverse a world and reach the places the lore lives.
   const flyToPointRef = useRef<(p: V3) => void>(() => {});
   flyToPointRef.current = (p: V3) => flyTo({ id: "tap", label: "that spot", icon: "i:rocket", center: p, radius: 14 });
+  // Item 3 — Talk is a rendezvous: tapping Talk from far away flies the
+  // ship to the NPC's live position first and opens the talk on arrival.
+  const requestTalk = (id: string) => {
+    // Talking is a meeting too (the same 20-minute cooldown applies), so a thread can open from a conversation, not only from passing by.
+    const mt = recordMeeting(getSpaceId(), id);
+    if (mt.recorded) void storyRef.current.onMeeting(id, mt.count);
+    const m = castMember(id);
+    const pos = npcPosRef.current.get(id);
+    const fl = flightRef.current;
+    const range = talkRange(pos, overviewCamRef.current.pos, fl ? fl.pos : null);
+    if (range === "open" || range === "unknown") {
+      openTalk(id);
+      return;
+    }
+    pendingTalkRef.current = { id, lastRetargetAt: 0 };
+    flyTo({ id: `npc-${id}`, label: m?.name ?? id, icon: m ? npcIcon(m) : "i:soumaya", center: pos!, radius: 14 });
+  };
+  const requestTalkRef = useRef(requestTalk);
+  requestTalkRef.current = requestTalk;
+  // The encounter toast's action (kind "npc") opens the NPC's card and
+  // starts the same approach — the toast announces the durable card
+  // instead of being a 7-second race.
+  useEffect(() => {
+    const onToast = (e: Event) => {
+      const a = (e as CustomEvent).detail as ToastAction | undefined;
+      if (a?.kind === "npc" && typeof a.value === "string") {
+        setNpcCard(a.value);
+        requestTalkRef.current(a.value);
+      }
+    };
+    window.addEventListener("brain-toast-action", onToast);
+    return () => window.removeEventListener("brain-toast-action", onToast);
+  }, []);
   const backToOverview = () => {
     flightRef.current = null;
     flightTargetRef.current = null;
@@ -1338,6 +1391,8 @@ export default function WorldsSurface({
   useEffect(() => {
     setDismissed(false);
     setGraphicsFailed(false);
+    setContextLost(false);
+    contextLostRef.current = false;
     setVisibleRelics([]);
     setShowController(false);
     setShowCaptains(false);
@@ -2182,6 +2237,23 @@ export default function WorldsSurface({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(host.clientWidth, host.clientHeight);
     host.appendChild(renderer.domElement);
+    // A lost WebGL context used to read as "the app crashed" with no
+    // message at all (Item 8 — no handler existed anywhere in the app).
+    // Say so plainly, with a reload action; a restore clears it and the
+    // loop — which keeps running through the loss — draws again. Never
+    // auto-reload: a context that keeps dropping would loop forever.
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      console.error("[worlds] WebGL context lost");
+      contextLostRef.current = true;
+      setContextLost(true);
+    };
+    const onContextRestored = () => {
+      contextLostRef.current = false;
+      setContextLost(false);
+    };
+    renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+    renderer.domElement.addEventListener("webglcontextrestored", onContextRestored);
 
     const background = mode === "transit" ? 0x05070f : (entry?.background ?? 0x05070f);
     const fogDensity = mode === "transit" ? 0 : (entry?.fogDensity ?? 0);
@@ -2201,8 +2273,20 @@ export default function WorldsSurface({
     // knows nothing about tends, so the glow is passed here, and the built
     // garden scene is kept in a typed local for tap-to-tend raycasting.
     // (The branch is the proof it is a garden scene — no cast, no `in`.)
+    // A throw while a world builds used to reach the ErrorBoundary and the
+    // world simply vanished (Item 8: the owner saw "the app crashed and
+    // reloaded"). Guard it like the renderer: the world's own fallback text
+    // shows instead, and the journeys are unaffected. The frame loop below
+    // uses world/sky/lighting/props, so they live outside the try.
     let built: WorldSceneHandle | null = null;
     let gardenScene: GardenScene | null = null;
+    let world: WorldSceneHandle | null = null;
+    let sky: HomeSky | null = null;
+    let lighting: AppliedLighting | null = null;
+    let props: ReturnType<typeof attachWorldProps> | null = null;
+    let propsDone = true;
+    let propsTriedAt = 0;
+    try {
     if (mode === "transit") {
       // Transit builds its own scene in 'world' below; nothing to build here.
     } else if (entry) {
@@ -2250,7 +2334,7 @@ export default function WorldsSurface({
         built = entry.build(sceneLayout, handleRelicVisible);
       }
     }
-    const world =
+    world =
       mode === "transit"
         ? createTransitScene({
             kind: transitKind ?? "warp",
@@ -2265,27 +2349,37 @@ export default function WorldsSurface({
     if (!world) return;
     scene.add(world.group);
     // Story props (Draft 9 §5): small wordless things beside the holders, placed once each holder's model has loaded.
-    const props = mode === "world" && !inside ? attachWorldProps(currentWorld, world.group) : null;
-    let propsDone = props?.place() ?? true;
-    let propsTriedAt = 0;
+    props = mode === "world" && !inside ? attachWorldProps(currentWorld, world.group) : null;
+    propsDone = props?.place() ?? true;
+    propsTriedAt = 0;
     // Her hull is shown only once it is ready (never a placeholder), so warm it before anything needs it.
     void loadSoumayaShip();
     void loadWarpGate(); // null (and the generated ring stays) until public/warp-gate.glb exists
     // One universe: every world and the warp draw the same home sky. The garden keeps its own backdrop,
     // Eternity is a white void by design, and the Long Morning is warm light with no horizon (a starfield
     // would give it a black sky and a hard horizon, so it keeps its own background colour and matching fog).
-    const sky =
+    sky =
       mode === "transit" || (currentWorld !== "growing-place" && currentWorld !== "eternity" && currentWorld !== "the-long-morning")
         ? installHomeSky(renderer, scene)
         : null;
     if (sky) scene.add(sky.group);
     // Shared lighting for this world (the corridor only takes the environment map — it lights itself otherwise).
-    const lighting =
+    lighting =
       mode === "transit"
         ? applyWorldLighting(scene, renderer, TRANSIT_LIGHT_RIG)
         : mode === "world" && entry?.light
           ? applyWorldLighting(scene, renderer, tintRigForHour(entry.light, hourBand(new Date())))
           : null;
+    } catch (err) {
+      // The world could not be built — a bad model, a scene that throws on
+      // entry, a sky or lighting bake that fails. Say so in place, with the
+      // world's own fallback line, instead of vanishing and forcing a reload.
+      console.error(`[worlds] scene build failed for ${mode === "transit" ? "transit" : currentWorld}`, err);
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
+      setGraphicsFailed(true);
+      return;
+    }
     sceneHandleRef.current = world;
     // A measuring probe for scripts/spots-check.mjs ONLY: it exists when the page was opened with localStorage "soumaya.probe" = "1". It reports where each of this world's lore spots
     // resolves in the built scene, so spot placement can be MEASURED rather than assumed. Read-only; nothing in the product uses it.
@@ -2598,10 +2692,12 @@ export default function WorldsSurface({
             return world.group.getObjectByName("harbor-controller-ship") ?? (now - sceneStartedAt < 12_000 ? "wait" : null);
           });
           // The wander is round what the world is: measured from its own bounds once its models have had time to land (and again as they do).
+          // Crowd-aware (Item 4, scale-lanes L18): the disc grows with the number present past 4, so a crowded world spreads out.
           if (present.length > 0 && (!npcAnchor || (npcAnchorTries < 4 && now - lastAnchorAt > 5000))) {
             lastAnchorAt = now;
             npcAnchorTries++;
-            npcAnchor = anchorFromBounds(world.group) ?? npcAnchor;
+            const base = anchorFromBounds(world.group) ?? npcAnchor;
+            npcAnchor = base ? { center: base.center, radius: crowdAwareRadius(base.radius, present.length) } : base;
           }
           // Who the owner stopped (the kill switch): their ships park instead of flying. Read at most every 10 s — a stop is rare, and a
           // few seconds before the ship parks is invisible in practice. Unreachable server: nobody is stopped (the loop still governs acts).
@@ -2617,6 +2713,9 @@ export default function WorldsSurface({
         const frames = npcBodies.update(Date.now(), dt, {
           reducedMotion,
           anchor: npcAnchor,
+          // Harbor Ring hub (Item 4): the background Station NPCs roam the
+          // docking band, not the whole world.
+          hubAnchor: currentWorld === "great-station" ? HARBOR_RING_HUB : null,
           berth: currentWorld === "great-station" ? HARBOR_CONTROLLER_BERTH : null,
           stopped: npcStopped,
           hold: talking ? new Set([talking]) : undefined,
@@ -2646,7 +2745,7 @@ export default function WorldsSurface({
             metThisVisitRef.current.add(f.id);
             const m = recordMeeting(getSpaceId(), f.id);
             if (m.recorded) {
-              pushToast(encounterLine(member, currentWorld, f.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal");
+              pushToast(encounterLine(member, currentWorld, f.phase, m.first, npcScriptRef.current, m.count), "🛰️", 7000, "normal", { kind: "npc", value: f.id });
               void storyRef.current.onMeeting(f.id, m.count);
             }
           }
@@ -2664,6 +2763,29 @@ export default function WorldsSurface({
               const tw = tag.offsetWidth || 150;
               const x = Math.min(Math.max((sp.x * 0.5 + 0.5) * w - tw / 2, 6), Math.max(6, w - tw - 6));
               tag.style.transform = `translate(${x.toFixed(1)}px, calc(${((-sp.y * 0.5 + 0.5) * h).toFixed(1)}px - 130%))`;
+            }
+          }
+        }
+        // A pending talk (Item 3): re-target toward the NPC's live position
+        // about once a second until within range, then open the talk; cancel
+        // if the clock has moved them out of this world.
+        const pending = pendingTalkRef.current;
+        if (pending) {
+          const p = npcPosRef.current.get(pending.id);
+          if (!p || !castIn(currentWorld, Date.now()).some((mm) => mm.id === pending.id)) {
+            pendingTalkRef.current = null;
+          } else {
+            const fl = flightRef.current;
+            const d = Math.min(
+              Math.hypot(overviewCamRef.current.pos[0] - p[0], overviewCamRef.current.pos[1] - p[1], overviewCamRef.current.pos[2] - p[2]),
+              fl ? Math.hypot(fl.pos[0] - p[0], fl.pos[1] - p[1], fl.pos[2] - p[2]) : Infinity,
+            );
+            if (d <= NEAR_ENTER) {
+              openTalk(pending.id);
+            } else if (now - pending.lastRetargetAt > 1000) {
+              pending.lastRetargetAt = now;
+              const pm = castMember(pending.id);
+              flyTo({ id: `npc-${pending.id}`, label: pm?.name ?? pending.id, icon: pm ? npcIcon(pm) : "i:soumaya", center: p, radius: 14 });
             }
           }
         }
@@ -3103,13 +3225,27 @@ export default function WorldsSurface({
           pivot = pose.target;
           camera.lookAt(pivot[0], pivot[1], pivot[2]);
         } else {
-          const angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
+          // Talking frames the person (Item 3): the orbit angle freezes at
+          // its talk-open value and the camera looks at the NPC's live
+          // position, not the world centre. Free look still turns around
+          // them (pivot below); on close the elapsed-driven angle resumes.
+          const talking = talkNpcRef.current;
+          const npcPos = talking ? npcPosRef.current.get(talking) : undefined;
+          let angle = reducedMotion ? BASE_ANGLE : BASE_ANGLE + elapsed * 0.0000045;
+          if (talking) {
+            if (talkAngleRef.current === null) talkAngleRef.current = angle;
+            angle = talkAngleRef.current;
+          } else if (talkAngleRef.current !== null) {
+            talkAngleRef.current = null;
+          }
+          const look: [number, number, number] = npcPos ? [npcPos[0], npcPos[1], npcPos[2]] : [0, orbit.lookAtY, 0];
           camera.position.set(
             Math.sin(angle) * orbit.orbitRadius * fit,
             orbit.orbitHeight * fit,
             Math.cos(angle) * orbit.orbitRadius * fit,
           );
-          camera.lookAt(0, orbit.lookAtY, 0);
+          camera.lookAt(look[0], look[1], look[2]);
+          if (talking) pivot = look;
         }
         // AN16 gentle return (Deep Past only): after ~2.5 s without look
         // input, the traveller's offset eases back toward the mode's
@@ -3191,6 +3327,13 @@ export default function WorldsSurface({
         renderer.render(scene, camera);
       } catch (err) {
         console.error(`[worlds] render failed for ${mode === "transit" ? "transit" : currentWorld}`, err);
+        if (contextLostRef.current) {
+          // A render that fails only because the context is lost is not a
+          // broken world: keep the loop alive through the loss so the
+          // restore can draw again (the lost-context message is showing).
+          raf = requestAnimationFrame(frame);
+          return;
+        }
         setGraphicsFailed(true);
         return;
       }
@@ -3201,6 +3344,8 @@ export default function WorldsSurface({
     return () => {
       cancelAnimationFrame(raf);
       props?.dispose();
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
       window.removeEventListener("resize", onResize);
       host.removeEventListener("pointerdown", skipArrival);
       host.removeEventListener("pointerdown", onLookDown);
@@ -3525,9 +3670,20 @@ export default function WorldsSurface({
           {`Arrived · ${worldName(currentWorld ?? "home")}`}
         </div>
       )}
-      {mode === "world" && !inside && presentNpcs.map((pn) => {
-        const m = castMember(pn.id);
-        if (!m || !m.shipUrl || (pn.id === "harbor-controller" && showController)) return null;
+      {mode === "world" && !inside && (() => {
+        // Tag clustering (Item 4, scale-lanes L18): tags are dense at 4+,
+        // so past 4 present only the first four wear tags; the rest gather
+        // under one "N more here" chip that opens the first of them.
+        const taggable = presentNpcs.filter((pn) => {
+          const m = castMember(pn.id);
+          return m && m.shipUrl && !(pn.id === "harbor-controller" && showController);
+        });
+        const shown = taggable.slice(0, 4);
+        const hidden = taggable.slice(4);
+        return (
+          <>
+            {shown.map((pn) => {
+        const m = castMember(pn.id)!;
         return (
           <button
             key={pn.id}
@@ -3551,7 +3707,20 @@ export default function WorldsSurface({
             </span>
           </button>
         );
-      })}
+            })}
+            {hidden.length > 0 && (
+              <button
+                type="button"
+                className="npc-tag npc-tag-cluster"
+                aria-label={`${hidden.length} more people here — tap to meet one of them`}
+                onClick={() => setNpcCard(hidden[0]!.id)}
+              >
+                {hidden.length} more here
+              </button>
+            )}
+          </>
+        );
+      })()}
       {npcCard && mode === "world" && (() => {
         const m = castMember(npcCard);
         if (!m) return null;
@@ -3577,13 +3746,7 @@ export default function WorldsSurface({
               <button
                 type="button"
                 className="mini"
-                onClick={() => {
-                  // Talking is a meeting too (the same 20-minute cooldown applies), so a thread can open from a conversation, not only from passing by.
-                  const mt = recordMeeting(getSpaceId(), m.id);
-                  if (mt.recorded) void storyRef.current.onMeeting(m.id, mt.count);
-                  setNpcCard(null);
-                  setTalkNpc(m.id);
-                }}
+                onClick={() => requestTalk(m.id)}
               >
                 Talk
               </button>
@@ -3594,7 +3757,7 @@ export default function WorldsSurface({
           </div>
         );
       })()}
-      {talkNpc && mode === "world" && <NpcTalk npc={talkNpc} world={currentWorld ?? null} meetings={readMet(getSpaceId())[talkNpc]?.count ?? 1} onClose={() => setTalkNpc(null)} />}
+      {talkNpc && mode === "world" && <NpcTalk npc={talkNpc} world={currentWorld ?? null} meetings={readMet(getSpaceId())[talkNpc]?.count ?? 1} startMinimized onClose={() => setTalkNpc(null)} />}
       {inspect && !reading && mode === "world" && (
         <button type="button" className="place-inspect" onClick={() => setReading(inspect)}>
           Look closely: {inspect.title}
@@ -4023,6 +4186,14 @@ export default function WorldsSurface({
         );
       })()}
       {graphicsFailed && <p className="worlds-surface-fallback">{fallback}</p>}
+      {contextLost && (
+        <p className="worlds-surface-fallback" role="alert">
+          The graphics context was lost — reload to continue.{" "}
+          <button type="button" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        </p>
+      )}
       {mode === "world" && atStation && showController && (
         <HarborControllerPanel enabled onClose={() => setShowController(false)} />
       )}

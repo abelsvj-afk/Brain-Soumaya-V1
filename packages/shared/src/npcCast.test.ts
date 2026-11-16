@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { NPC_CAST, NPC_NEVER_WORLDS, NPC_SLOT_MS, castIn, castMember, npcLocation, scriptSpecsFor } from "./npcs.js";
+import { NPC_VOICE_ROLE, canTalkTo } from "./npcDialogue.js";
+import { societyDay } from "./society.js";
+import { worldLife } from "./societyLife.js";
+
+const HUB_BACKGROUND_IDS = ["dockhand", "stallkeeper", "crate-counter", "net-mender", "lamp-trimmer", "berth-clerk"] as const;
 
 const T0 = Date.parse("2026-10-30T00:00:00.000Z");
 
@@ -49,6 +54,12 @@ describe("the cast's data", () => {
       if (c.id === "harbor-controller" || c.id === "eternity") {
         expect(c.canon).toBe("provisional");
         expect(c.lore.layers).toEqual([]);
+      } else if (!c.speaks) {
+        // Harbor Ring background (Item 4, Stage 1): provisional placeholders
+        // with no lore layers, like the controller and Eternity — they are
+        // working people, not canon people, until the lore session names them.
+        expect(c.canon).toBe("provisional");
+        expect(c.lore.layers).toEqual([]);
       } else {
         expect(c.canon).toBe("canon");
         expect(c.lore.layers.length).toBeGreaterThan(0);
@@ -59,9 +70,49 @@ describe("the cast's data", () => {
       expect(c.homeShare).toBeLessThanOrEqual(1);
     }
   });
-  it("every member has script situations, so a bigger cast is still one call's worth of rows", () => {
-    for (const c of NPC_CAST) expect(scriptSpecsFor(c).length).toBeGreaterThan(0);
+  it("every speaking member has script situations, so a bigger cast is still one call's worth of rows — and silent background members have none", () => {
+    for (const c of NPC_CAST) {
+      if (c.speaks) expect(scriptSpecsFor(c).length).toBeGreaterThan(0);
+      else expect(scriptSpecsFor(c)).toEqual([]);
+    }
     expect(scriptSpecsFor(castMember("keeper")!).map((s) => s.situation)).toEqual(["encounter_near", "encounter_visiting", "encounter_first", "chatter"]);
+  });
+});
+
+describe("the Harbor Ring background (Item 4, Stage 1)", () => {
+  it("is six Station people who are always there, never leave, and are silent by construction", () => {
+    expect(HUB_BACKGROUND_IDS).toHaveLength(6);
+    for (const id of HUB_BACKGROUND_IDS) {
+      const c = castMember(id)!;
+      expect(c.home).toBe("great-station");
+      expect(c.roams).toEqual([]);
+      expect(c.homeShare).toBe(1);
+      expect(c.speaks).toBe(false);
+      expect(c.greetings).toEqual([]);
+      expect(c.canon).toBe("provisional");
+      expect(canTalkTo(id)).toBe(false); // no Talk button: no NPC_TALK entry
+      expect(NPC_VOICE_ROLE[id]).toBeUndefined(); // no voice role
+      expect(scriptSpecsFor(c)).toEqual([]); // no daily-script situations
+      // Always at the Station, in every slot.
+      for (let i = 0; i < 50; i++) expect(npcLocation(c, T0 + i * NPC_SLOT_MS)).toBe("great-station");
+      expect(castIn("great-station", T0).map((x) => x.id)).toContain(id);
+    }
+    // Factions spread across Ledger / Wardens / Open Hand, so the hub's
+    // captions trade, inspect and give — not six identical lines.
+    const factions = new Set(HUB_BACKGROUND_IDS.map((id) => castMember(id)!.faction));
+    expect(factions.has("ledger")).toBe(true);
+    expect(factions.has("wardens")).toBe(true);
+    expect(factions.has("open-hand")).toBe(true);
+  });
+  it("still gets a working life: worldLife gives each one a caption to do", () => {
+    const society = societyDay(null, "2026-10-30");
+    const T = Date.parse("2026-10-30T09:00:00.000Z");
+    const life = worldLife("great-station", T, society);
+    for (const id of HUB_BACKGROUND_IDS) {
+      const row = life.find((l) => l.member.id === id);
+      expect(row, id).toBeTruthy();
+      expect(row!.doing.caption.length).toBeGreaterThan(3);
+    }
   });
 });
 
