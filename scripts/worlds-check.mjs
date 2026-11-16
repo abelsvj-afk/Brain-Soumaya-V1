@@ -11,7 +11,12 @@
  * mounted, drew a canvas, showed no "needs graphics support" fallback, and the
  * page logged no errors and no failed (4xx/5xx) requests. It also reports how
  * long the canvas took and how many MB of 3D/image assets the load pulled —
- * the number that explains "slow" on a phone. A screenshot per world lands in
+ * the number that explains "slow" on a phone. A reload during the visit is a
+ * FAIL on its own (it is the reported bug: "the app crashed and reloaded") —
+ * the run counts page reloads and reads sessionStorage `brain.chunkReloadAt`
+ * (the chunk-reload guard's stamp) so a stale-chunk reload can be told apart
+ * from a tab/GPU crash: stamped = stale chunk after a deploy, unstamped = the
+ * world itself (or the GPU) took the tab down. A screenshot per world lands in
  * ./worlds-check-out/ so a human can still judge what it looks like.
  *
  * Needs the `playwright` package (not a repo dependency — `npm i -D playwright`
@@ -82,6 +87,19 @@ for (const world of worlds) {
   const errors = [];
   const bad = [];
   let bytes = 0;
+  // Reloads (Item 8): every navigation after the first load of this page is
+  // a reload — the reported crash. Counted on framenavigated (a reload is a
+  // navigation; load events fire with it and would double-count).
+  let reloads = 0;
+  let navigatedOnce = false;
+  page.on("framenavigated", (f) => {
+    if (f !== page.mainFrame()) return;
+    if (!navigatedOnce) {
+      navigatedOnce = true;
+      return;
+    }
+    reloads++;
+  });
   const t0 = Date.now();
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 140)));
   page.on("console", (m) => {
@@ -130,10 +148,18 @@ for (const world of worlds) {
     if (canvasAt !== null && Date.now() - t0 > canvasAt + 6000) break; // let late assets surface errors
   }
   await page.screenshot({ path: `worlds-check-out/${world}.png` });
+  // The chunk-reload guard's stamp: set only when the app itself reloaded for
+  // a stale chunk (lib/chunkReload.ts). Present + reloads = stale chunk after
+  // a deploy; absent + reloads = the world (or the GPU) took the tab down.
+  const chunkReloadAt = await page.evaluate(() => sessionStorage.getItem("brain.chunkReloadAt")).catch(() => null);
   await page.close();
   const problems = [];
   if (canvasAt === null) problems.push("no world canvas appeared");
   if (fallback) problems.push(fallback);
+  if (reloads > 0)
+    problems.push(
+      `${reloads} reload(s) during the visit${chunkReloadAt ? ` (chunk-reload guard stamped at ${chunkReloadAt} — stale chunk, not a world crash)` : " (no chunk-reload stamp — a tab crash or GPU failure, not a stale chunk)"}`,
+    );
   if (errors.length) problems.push(`${errors.length} console error(s): ${errors[0]}`);
   if (bad.length) problems.push(`${bad.length} failed request(s): ${bad.slice(0, 2).join(", ")}`);
   rows.push({
@@ -143,15 +169,17 @@ for (const world of worlds) {
     title,
     canvasMs: canvasAt,
     mb: (bytes / 1048576).toFixed(1),
+    reloads,
+    chunkReloadAt,
   });
   await sleep(8_000); // stay under the server's request rate limit between fresh page loads
 }
 await browser.close();
 
-console.log("\nWORLD            VERDICT  CANVAS    DOWNLOAD  NOTE");
+console.log("\nWORLD            VERDICT  CANVAS    DOWNLOAD  RELOADS  NOTE");
 for (const r of rows) {
   console.log(
-    `${r.world.padEnd(16)} ${r.verdict.padEnd(8)} ${(r.canvasMs != null ? r.canvasMs + "ms" : "-").padEnd(9)} ${(r.mb != null ? r.mb + " MB" : "-").padEnd(9)} ${r.note ?? ""}`,
+    `${r.world.padEnd(16)} ${r.verdict.padEnd(8)} ${(r.canvasMs != null ? r.canvasMs + "ms" : "-").padEnd(9)} ${(r.mb != null ? r.mb + " MB" : "-").padEnd(9)} ${String(r.reloads ?? "-").padEnd(8)} ${r.note ?? ""}`,
   );
 }
 console.log("\nScreenshots: ./worlds-check-out/  (the CANVAS time is a headless software renderer — compare worlds, not phones)");

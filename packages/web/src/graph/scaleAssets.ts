@@ -523,8 +523,8 @@ export const SCALE_CENTERPIECE_ASSETS: readonly ScaleHunt2Asset[] = [
     url: "/nasa-pillars-1b.glb",
     tris: 24576,
     materials: 1,
-    bytes: 2065448,
-    sha256: "10d9732bb21bb3ad24d0b446c8c32b111a3b82d7ea6abaef0d6d8891cf664c84",
+    bytes: 94432,
+    sha256: "c4fa390f0f5c0ec7797f1a1f999921edd1c3e8da5a99e96133cb001d9eab8d1c",
     license: "Public domain (NASA 3D Resources / STScI)",
   },
   {
@@ -660,8 +660,8 @@ export const SCALE_SKETCHFAB_CENTERPIECE_ASSETS: readonly ScaleSketchfabAsset[] 
     url: "/sf-planetary-nebula.glb",
     tris: 146636,
     materials: 4,
-    bytes: 4601184,
-    sha256: "74f8c0295453f1befebdfca882f1a3c8db4ced37a922ccd2fce5320f2e7259bf",
+    bytes: 571684,
+    sha256: "5f5c0ef86a2389e6a34f650cd2d1713f3202b6a1750345b9d15839491859f9b2",
     license: "CC-BY 4.0 (Tycho Magnetic Anomaly)",
   },
   {
@@ -684,8 +684,8 @@ export const SCALE_SKETCHFAB_PULSAR_ASSET: ScaleSketchfabAsset = {
   url: "/sf-pulsar.glb",
   tris: 11520,
   materials: 2,
-  bytes: 2146408,
-  sha256: "0d71903160b7e02d86c0f9ec160e2bc6f0c5e30943beb67afb7eb42c7b50ce71",
+  bytes: 302000,
+  sha256: "d5e6824a70f6f73899153a748ac09face21aaaf418e65bb8f85f257b478cfa0a",
   license: "CC-BY 4.0 (AstroRiah)",
 };
 

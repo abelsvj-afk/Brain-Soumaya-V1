@@ -112,6 +112,46 @@ describe("The Book's pictures", () => {
   });
 });
 
+describe("The Book's three zones (Item 7)", () => {
+  it("has a sticky mini-nav jumping to Story, Roads & Lines, and Voices", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [] });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".book-point").length).toBeGreaterThan(40));
+    const nav = screen.getByRole("navigation", { name: "Book sections" });
+    expect(nav.querySelector('a[href="#book-zone-story"]')).toBeTruthy();
+    expect(nav.querySelector('a[href="#book-zone-roads"]')).toBeTruthy();
+    expect(nav.querySelector('a[href="#book-zone-voices"]')).toBeTruthy();
+    expect(container.querySelector("#book-zone-story")).toBeTruthy();
+    expect(container.querySelector("#book-zone-roads")).toBeTruthy();
+    expect(container.querySelector("#book-zone-voices")).toBeTruthy();
+    const titles = [...container.querySelectorAll(".book-zone-title")].map((h) => h.textContent);
+    expect(titles).toContain("Roads & Lines");
+    expect(titles).toContain("Voices & reading");
+  });
+
+  it("keeps the foreword behind a 'How this book works' expand — words unchanged, one tap away", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [], links: [], notes: [] });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".book-point").length).toBeGreaterThan(40));
+    expect(screen.getByText("How this book works")).toBeTruthy();
+    expect(container.textContent).toMatch(/This book keeps what you notice/);
+    expect(container.querySelector(".book-how")).toBeTruthy();
+  });
+
+  it("puts the selected entry's card directly under the sky, before Roads & Lines", async () => {
+    vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("obj.doorkeepers-nail"), find("relic.harbor-nail")], links: [], notes: [] });
+    const { container } = render(<StoryBook onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".book-point.is-found").length).toBe(2));
+    fireEvent.click(screen.getByLabelText(/The Doorkeeper's Nail/));
+    await waitFor(() => expect(container.querySelector(".book-card")).toBeTruthy());
+    const sky = container.querySelector(".book-sky")!;
+    const card = container.querySelector(".book-card")!;
+    const roadsZone = container.querySelector("#book-zone-roads")!;
+    expect(sky.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(roadsZone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe("Roads in the Book", () => {
   it("shows only roads you took, in words, never a count; rest and resume are plain buttons", async () => {
     vi.spyOn(api, "getStoryBook").mockResolvedValue({ finds: [find("sight.open-alcove")], links: [], notes: [] });

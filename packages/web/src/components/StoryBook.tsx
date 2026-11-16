@@ -10,7 +10,7 @@ import { useEffect } from "react";
 import VoiceConsole from "./VoiceConsole.js";
 import BookRoads from "./BookRoads.js";
 import BookLines from "./BookLines.js";
-import { STORY_ART } from "../lib/storyArt.js";
+import { countWords, markNewArtSeen, NEW_ART_ENTRIES, readNewArtSeen, STORY_ART } from "../lib/storyArt.js";
 import { getNarrationStatus } from "../api/story.js";
 import { sentenceAt, splitCaptionSentences } from "../lib/captions.js";
 
@@ -85,6 +85,29 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
   }, [latest, foundSet, flavor.tide.first]);
   const sel = selected ? BY_ID.get(selected) : undefined;
   const selFind = selected ? foundById.get(selected) : undefined;
+  // New art (Item 5): which newly illustrated entries this device has
+  // already opened. Opening one clears it from the unseen set, so the
+  // first-open notice counts down and the sky badge goes away.
+  const [newArtSeen, setNewArtSeen] = useState<ReadonlySet<string>>(() => readNewArtSeen());
+  // The card badge: the entry opened while still unseen keeps its "New art"
+  // badge for this viewing, even though opening it already marked it seen.
+  // Only a found entry can be marked seen — tapping an unfound shape must not
+  // silently spend the pop-up before the picture can ever show.
+  const [justOpenedNew, setJustOpenedNew] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected || !NEW_ART_ENTRIES.includes(selected) || !foundSet.has(selected)) {
+      setJustOpenedNew(null);
+      return;
+    }
+    if (!readNewArtSeen().has(selected)) setJustOpenedNew(selected);
+    else setJustOpenedNew(null);
+    markNewArtSeen(selected);
+    setNewArtSeen(readNewArtSeen());
+  }, [selected, foundSet]);
+  const unseenNewArt = useMemo(
+    () => NEW_ART_ENTRIES.filter((id) => foundSet.has(id) && !newArtSeen.has(id)),
+    [foundSet, newArtSeen],
+  );
   const noteOf = (id: string) => book.notes.find((n) => n.entryId === id)?.note ?? "";
 
   const tap = async (id: string) => {
@@ -130,6 +153,10 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId, mode, foundSet, flavor]);
   useEffect(() => () => stopNarration(), []);
+  // The first-open notice, in words not digits (the Book shows no digits
+  // anywhere): how many found entries are newly illustrated and still unseen.
+  const newArtCount = countWords(unseenNewArt.length);
+  const newArtCountCap = newArtCount.charAt(0).toUpperCase() + newArtCount.slice(1);
 
   return (
     <div className="book-scrim" onClick={onClose}>
@@ -141,13 +168,29 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             <span>Close</span>
           </button>
         </header>
+        <nav className="book-nav" aria-label="Book sections">
+          <a href="#book-zone-story">Story</a>
+          <a href="#book-zone-roads">Roads &amp; Lines</a>
+          <a href="#book-zone-voices">Voices</a>
+        </nav>
+        <section id="book-zone-story" className="book-zone" aria-label="The story">
         <p className="book-lede">
-          What you notice in the worlds is kept here as a light. What you have not found is only a shape. Nothing here is counted, and nothing here can be lost.
+          What you notice in the worlds is kept here as a light.
         </p>
-        <p className="book-foreword">
-          This book keeps what you notice, and no two who tell it agree. Stand still where something feels wrong. Listen where it is quiet. Ask the people you meet what they carry.
-          What you find will be here, a light at a time.
-        </p>
+        <details className="book-how">
+          <summary>How this book works</summary>
+          <p className="book-foreword">
+            This book keeps what you notice, and no two who tell it agree. Stand still where something feels wrong. Listen where it is quiet. Ask the people you meet what they carry.
+            What you find will be here, a light at a time.
+          </p>
+        </details>
+        {unseenNewArt.length > 0 && (
+          <p className="book-new-art" role="status">
+            {unseenNewArt.length === 1
+              ? "One entry is newly illustrated — find its light in the sky."
+              : `${newArtCountCap} entries are newly illustrated — find their lights in the sky.`}
+          </p>
+        )}
         {book.owner && (
           <label className="book-preview">
             <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> Preview everything (owner — a view only; nothing is recorded)
@@ -169,12 +212,15 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
               const f = foundById.get(e.id);
               const glow = f ? brightness(f, now) : 1;
               const fading = !!f && glow < 0.7;
-              const label = f ? `${e.title}, ${KIND_WORD[e.kind]}${fading ? ", fading — recall it to relight" : ""}` : `Not found yet, ${KIND_WORD[e.kind]}`;
+              // New art (Item 5): a found, still-unseen newly illustrated
+              // entry wears a gold mark in the sky until it is opened.
+              const isNewArt = !!f && NEW_ART_ENTRIES.includes(e.id) && !newArtSeen.has(e.id);
+              const label = f ? `${e.title}, ${KIND_WORD[e.kind]}${fading ? ", fading — recall it to relight" : ""}${isNewArt ? ", newly illustrated" : ""}` : `Not found yet, ${KIND_WORD[e.kind]}`;
               return (
                 <g
                   key={e.id}
                   transform={`translate(${p.x} ${p.y})`}
-                  className={`book-point${f ? " is-found" : ""}${selected === e.id ? " is-selected" : ""}${tremor.has(e.id) ? " is-tremor" : ""}`}
+                  className={`book-point${f ? " is-found" : ""}${selected === e.id ? " is-selected" : ""}${tremor.has(e.id) ? " is-tremor" : ""}${isNewArt ? " is-new-art" : ""}`}
                   role="button"
                   tabIndex={0}
                   aria-label={label}
@@ -189,6 +235,12 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
                 >
                   <circle r={22} fill="transparent" />
                   <Mark kind={e.kind} found={!!f} glow={glow} />
+                  {isNewArt && (
+                    <>
+                      <circle r={3.5} cx={14} cy={-14} className="book-new-dot" />
+                      <text x={20} y={-11} className="book-new-label">new</text>
+                    </>
+                  )}
                   {selected === e.id && <circle r={13} className="book-ring" fill="none" />}
                 </g>
               );
@@ -196,11 +248,9 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
         </svg>
         <p className="book-legend" aria-hidden="true">● held · ◆ told · ◎ noticed · ○ heard · ✦ walked beside</p>
         <div className="book-said" role="status" aria-live="polite">{said}</div>
-        <BookRoads found={new Set(book.finds.map((f) => f.entryId))} />
-        <BookLines found={new Set(book.finds.map((f) => f.entryId))} />
-
         {sel && (
           <section className="book-card" aria-label={selFind ? sel.title : "A shape waiting"}>
+            {selFind && STORY_ART[sel.id] && justOpenedNew === sel.id && <p className="book-new-badge">New art</p>}
             {selFind && STORY_ART[sel.id] && <img className="book-art" src={STORY_ART[sel.id]!.src} alt={STORY_ART[sel.id]!.alt} loading="lazy" decoding="async" />}
             {selFind ? (
               <FoundCard
@@ -228,6 +278,14 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             )}
           </section>
         )}
+        </section>
+        <section id="book-zone-roads" className="book-zone" aria-label="Roads and lines">
+          <h3 className="book-zone-title">Roads &amp; Lines</h3>
+          <BookRoads found={new Set(book.finds.map((f) => f.entryId))} />
+          <BookLines found={new Set(book.finds.map((f) => f.entryId))} />
+        </section>
+        <section id="book-zone-voices" className="book-zone" aria-label="Voices and reading">
+          <h3 className="book-zone-title">Voices &amp; reading</h3>
         <VoiceConsole />
         <p className="book-voice" role="status">
           {studio === null
@@ -261,6 +319,7 @@ export default function StoryBook({ onClose, openId = null }: { onClose: () => v
             Let the telling lean toward me. It colours how the story speaks to you — its voice and which door shows first. It never changes the story, and nothing of yours is read for it.
           </span>
         </label>
+        </section>
       </div>
     </div>
   );
